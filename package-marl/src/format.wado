@@ -1,0 +1,12 @@
+//! Marl Format — a self-hosted Markdown formatter.
+//!
+//! See `docs/wep-2026-07-05-marl.md`. Pure and I/O-free, like
+//! `render`: parses to `fmt_ast.wado`'s tree, then prints it back out in
+//! canonical form.
+
+use { parse_document } from "./fmt_parse_block.wado";
+use { print_document } from "./fmt_print.wado";
+
+pub fn format(source: &String) -> String {
+    return print_document(&parse_document(source));
+}

@@ -1,0 +1,948 @@
+//! Block-level parsing: front matter, headings, paragraphs, blockquotes,
+//! fenced and indented code, thematic breaks, lists, tables, raw HTML
+//! blocks, and link reference definitions.
+//!
+//! A recursive, line-array scan (see `docs/wep-2026-07-05-marl.md`,
+//! "Parsing"): blocks are read from a `List<String>` of lines with an
+//! explicit index, sub-ranges recurse for blockquotes and list items, and
+//! reference definitions are collected in a first pass over the whole
+//! document so forward references resolve.
+
+use {
+    Node,
+    FrontMatterKind,
+    FrontMatterNode,
+    Heading,
+    Paragraph,
+    CodeBlock,
+    MdList,
+    MdItem,
+    TaskMarker,
+    MdTable,
+    MdTableRow,
+    ColumnAlign,
+    LinkReferenceDef,
+} from "./fmt_ast.wado";
+use { RefTable, new_ref_table, ref_table_insert, parse_dest_and_title } from "./fmt_links.wado";
+use { parse_inline } from "./fmt_parse_inline.wado";
+use { chars_of, slice_chars } from "./str_cursor.wado";
+
+/// A parsed document together with its link reference definition table. The
+/// HTML backend (`fmt_html.wado`) needs the table to resolve reference-style
+/// links; the formatter (`format.wado`) discards it.
+internal struct Parsed {
+    internal document: Node,
+    internal refs: RefTable,
+}
+
+pub fn parse(source: &String) -> Parsed {
+    let lines: List<String> = source.lines().collect();
+    let refs = collect_ref_defs(&lines);
+    return Parsed { document: build_document(&lines, &refs), refs };
+}
+
+pub fn parse_document(source: &String) -> Node {
+    let lines: List<String> = source.lines().collect();
+    let refs = collect_ref_defs(&lines);
+    return build_document(&lines, &refs);
+}
+
+fn build_document(lines: &List<String>, refs: &RefTable) -> Node {
+    let mut children: List<Node> = [];
+    let mut start = 0;
+    if let Some([fm, consumed]) = try_front_matter(lines) {
+        children.push(Node::FrontMatter(fm));
+        start = consumed;
+    }
+    children.extend(&parse_blocks(lines, start, lines.len(), refs));
+    return Node::Document(children);
+}
+
+// --- link reference definitions (first pass) ---
+
+fn collect_ref_defs(lines: &List<String>) -> RefTable {
+    let mut table = new_ref_table();
+    let n = lines.len();
+    let mut start = 0;
+    if let Some([_, consumed]) = try_front_matter(lines) {
+        start = consumed;
+    }
+    let mut in_fence = false;
+    let mut fence_ch = '`';
+    let mut fence_len = 0;
+    for let mut i = start; i < n; i += 1 {
+        let line = &lines[i];
+        if in_fence {
+            if is_code_fence_close(line, fence_ch, fence_len) {
+                in_fence = false;
+            }
+            continue;
+        }
+        let chars = chars_of(line);
+        if let Some([ch, flen, _info]) = fence_marker(&chars) {
+            in_fence = true;
+            fence_ch = ch;
+            fence_len = flen;
+            continue;
+        }
+        if let Some(def) = try_ref_def_line(line) {
+            ref_table_insert(&mut table, def);
+        }
+    }
+    return table;
+}
+
+/// A `[label]: url "title"` line, or `null` if `line` isn't one. Reference
+/// definitions in this codebase's Markdown are always single-line (see
+/// `docs/wep-2026-07-05-marl.md`, "One parser, two backends").
+fn try_ref_def_line(line: &String) -> Option<LinkReferenceDef> {
+    let chars = chars_of(line);
+    let len = chars.len();
+    let mut p = skip_indent(&chars, len);
+    if p >= len || chars[p] != '[' {
+        return null;
+    }
+    // A footnote definition (`[^id]:`) is not a link reference definition —
+    // must not be misparsed as one.
+    if p + 1 < len && chars[p + 1] == '^' {
+        return null;
+    }
+    let mut j = p + 1;
+    while j < len && chars[j] != ']' {
+        if chars[j] == '\\' {
+            j += 2;
+            continue;
+        }
+        j += 1;
+    }
+    if j >= len {
+        return null;
+    }
+    let label = slice_chars(&chars, p + 1, j);
+    if label.trim().len() == 0 {
+        return null;
+    }
+    let mut q = j + 1;
+    if !(q < len && chars[q] == ':') {
+        return null;
+    }
+    q += 1;
+    while q < len && chars[q] matches { ' ' | '\t' } {
+        q += 1;
+    }
+    if q >= len {
+        return null;
+    }
+    let [url, title] = parse_dest_and_title(&slice_chars(&chars, q, len));
+    if url.len() == 0 {
+        return null;
+    }
+    return Option::Some(LinkReferenceDef { label: label.trim(), url, title });
+}
+
+// --- front matter ---
+
+fn try_front_matter(lines: &List<String>) -> Option<[FrontMatterNode, i32]> {
+    if lines.len() == 0 {
+        return null;
+    }
+    let first = lines[0].trim_end();
+    let [k, delim] = match first {
+        "---" => [FrontMatterKind::Yaml, "---"],
+        "+++" => [FrontMatterKind::Toml, "+++"],
+        _ => {
+            return null;
+        },
+    };
+    let mut body_lines: List<String> = [];
+    for let mut i = 1; i < lines.len(); i += 1 {
+        if lines[i].trim_end() == delim {
+            return Option::Some([
+                FrontMatterNode { kind: k, body: body_lines.join("\n") },
+                i + 1,
+            ]);
+        }
+        body_lines.push(lines[i]);
+    }
+    return null;
+}
+
+// --- the main block scanner ---
+
+fn parse_blocks(lines: &List<String>, start: i32, end: i32, refs: &RefTable) -> List<Node> {
+    let mut out: List<Node> = [];
+    let mut para: List<String> = [];
+    let mut i = start;
+    while i < end {
+        let line = &lines[i];
+        if is_blank(line) {
+            flush_paragraph(&mut out, &mut para, refs);
+            i += 1;
+            continue;
+        }
+        if let Some(def) = try_ref_def_line(line) {
+            // Emitted as a node in place (not just recorded in `refs`, which
+            // only exists to resolve forward references) so the printer
+            // reproduces the definition — otherwise every reference-style
+            // link in the document would lose its target.
+            flush_paragraph(&mut out, &mut para, refs);
+            out.push(Node::LinkReferenceDef(def));
+            i += 1;
+            continue;
+        }
+        let chars = chars_of(line);
+        if is_html_block_start(&chars) {
+            flush_paragraph(&mut out, &mut para, refs);
+            let block_end = html_block_bounds(lines, i, end);
+            out.push(Node::Html(lines_slice(lines, i, block_end).join("\n").trim_end()));
+            i = block_end;
+            continue;
+        }
+        if let Some([ch, fence_len, info]) = fence_marker(&chars) {
+            flush_paragraph(&mut out, &mut para, refs);
+            i = parse_fenced_code(lines, i, end, ch, fence_len, &info, &mut out);
+            continue;
+        }
+        if para.is_empty() && line_indent(line) >= 4 {
+            i = parse_indented_code(lines, i, end, &mut out);
+            continue;
+        }
+        let level = heading_level(&chars);
+        if level > 0 {
+            flush_paragraph(&mut out, &mut para, refs);
+            let content = heading_content(&chars, level);
+            out.push(Node::Heading(Heading { level, children: parse_inline(&content, refs) }));
+            i += 1;
+            continue;
+        }
+        if is_thematic_break(line) {
+            flush_paragraph(&mut out, &mut para, refs);
+            out.push(Node::ThematicBreak);
+            i += 1;
+            continue;
+        }
+        if is_blockquote(&chars) {
+            flush_paragraph(&mut out, &mut para, refs);
+            i = parse_blockquote(lines, i, end, refs, &mut out);
+            continue;
+        }
+        if is_list_marker(&chars) {
+            flush_paragraph(&mut out, &mut para, refs);
+            i = parse_list(lines, i, end, refs, &mut out);
+            continue;
+        }
+        if i + 1 < end && line_has_pipe(line) && line_has_pipe(&lines[i + 1]) && is_table_header(line, &lines[i + 1]) {
+            flush_paragraph(&mut out, &mut para, refs);
+            i = parse_table(lines, i, end, refs, &mut out);
+            continue;
+        }
+        para.push(*line);
+        i += 1;
+    }
+    flush_paragraph(&mut out, &mut para, refs);
+    return out;
+}
+
+fn flush_paragraph(out: &mut List<Node>, para: &mut List<String>, refs: &RefTable) {
+    if para.is_empty() {
+        return;
+    }
+    let joined = para.join("\n");
+    para.clear();
+    out.push(Node::Paragraph(Paragraph { children: parse_inline(&joined, refs) }));
+}
+
+fn lines_slice(lines: &List<String>, s: i32, e: i32) -> List<String> {
+    let mut out: List<String> = [];
+    for let mut k = s; k < e; k += 1 {
+        out.push(lines[k]);
+    }
+    return out;
+}
+
+// --- raw HTML blocks ---
+
+/// A line starting (after up to 3 spaces of indent) with a syntactically
+/// plausible HTML tag open/close, comment, or processing instruction. A
+/// "tag name" is only ever followed by whitespace, `>`, `/`, or end of line
+/// — never `:`, which distinguishes it from a scheme-prefixed autolink like
+/// `<https://example.com>`.
+fn is_html_block_start(chars: &List<char>) -> bool {
+    let len = chars.len();
+    let mut p = skip_indent(chars, len);
+    if p >= len || chars[p] != '<' {
+        return false;
+    }
+    p += 1;
+    if p < len && chars[p] matches { '!' | '?' } {
+        return true;
+    }
+    if p < len && chars[p] == '/' {
+        p += 1;
+    }
+    if !(p < len && is_ascii_alpha(chars[p])) {
+        return false;
+    }
+    p += 1;
+    while p < len && (is_ascii_alnum(chars[p]) || chars[p] == '-') {
+        p += 1;
+    }
+    return p >= len || chars[p] matches { ' ' | '\t' | '>' | '/' };
+}
+
+/// A raw HTML block ends at the next blank line (or the end of the current
+/// range) — matches CommonMark's HTML block types 6/7, which cover this
+/// codebase's actual usage (badge markup, anchor `<div>`s).
+fn html_block_bounds(lines: &List<String>, start: i32, end: i32) -> i32 {
+    let mut k = start + 1;
+    while k < end && !is_blank(&lines[k]) {
+        k += 1;
+    }
+    return k;
+}
+
+// --- fenced and indented code ---
+
+fn parse_fenced_code(
+    lines: &List<String>,
+    open: i32,
+    end: i32,
+    ch: char,
+    fence_len: i32,
+    info: &String,
+    out: &mut List<Node>,
+) -> i32 {
+    let tag = first_word(info);
+    let mut code = String::new();
+    let mut k = open + 1;
+    while k < end {
+        if is_code_fence_close(&lines[k], ch, fence_len) {
+            k += 1;
+            break;
+        }
+        code.push_str(&lines[k]);
+        code.push('\n');
+        k += 1;
+    }
+    out.push(Node::CodeBlock(CodeBlock { fenced: true, tag, code }));
+    return k;
+}
+
+fn parse_indented_code(lines: &List<String>, start: i32, end: i32, out: &mut List<Node>) -> i32 {
+    let mut code = String::new();
+    let mut k = start;
+    loop {
+        if k >= end || line_indent(&lines[k]) < 4 {
+            break;
+        }
+        code.push_str(&dedent(&lines[k], 4));
+        code.push('\n');
+        k += 1;
+        let mut peek = k;
+        while peek < end && is_blank(&lines[peek]) {
+            peek += 1;
+        }
+        if peek > k && peek < end && line_indent(&lines[peek]) >= 4 {
+            for let mut _b = k; _b < peek; _b += 1 {
+                code.push('\n');
+            }
+            k = peek;
+        }
+    }
+    out.push(Node::CodeBlock(CodeBlock { fenced: false, tag: "", code }));
+    return k;
+}
+
+fn fence_marker(chars: &List<char>) -> Option<[char, i32, String]> {
+    let len = chars.len();
+    let mut p = skip_indent(chars, len);
+    if p >= len {
+        return null;
+    }
+    let ch = chars[p];
+    if !ch matches { '`' | '~' } {
+        return null;
+    }
+    let mut run = 0;
+    while p < len && chars[p] == ch {
+        run += 1;
+        p += 1;
+    }
+    if run < 3 {
+        return null;
+    }
+    let info = slice_chars(chars, p, len).trim();
+    if ch == '`' && info.contains("`") {
+        return null;
+    }
+    return Option::Some([ch, run, info]);
+}
+
+fn is_code_fence_close(line: &String, ch: char, fence_len: i32) -> bool {
+    let chars = chars_of(line);
+    let len = chars.len();
+    let mut p = skip_indent(&chars, len);
+    let mut run = 0;
+    while p < len && chars[p] == ch {
+        run += 1;
+        p += 1;
+    }
+    if run < fence_len {
+        return false;
+    }
+    for let q of p..<len {
+        if !chars[q] matches { ' ' | '\t' } {
+            return false;
+        }
+    }
+    return true;
+}
+
+fn first_word(s: &String) -> String {
+    let mut out = String::new();
+    for let c of s.chars() {
+        if c matches { ' ' | '\t' } {
+            break;
+        }
+        out.push(c);
+    }
+    return out;
+}
+
+// --- headings and thematic breaks ---
+
+fn heading_level(chars: &List<char>) -> i32 {
+    let len = chars.len();
+    let mut p = skip_indent(chars, len);
+    let mut hashes = 0;
+    while p < len && chars[p] == '#' {
+        hashes += 1;
+        p += 1;
+    }
+    let next_is_space = p >= len || is_indent(chars[p]);
+    if 1 <= hashes <= 6 && next_is_space {
+        return hashes;
+    }
+    return 0;
+}
+
+fn heading_content(chars: &List<char>, level: i32) -> String {
+    let len = chars.len();
+    let start = skip_indent(chars, len) + level;
+    return strip_atx_closing(&slice_chars(chars, start, len).trim());
+}
+
+fn strip_atx_closing(s: &String) -> String {
+    let chars = chars_of(s);
+    let len = chars.len();
+    let mut e = len;
+    while e > 0 && chars[e - 1] == '#' {
+        e -= 1;
+    }
+    if e == len {
+        return *s;
+    }
+    if e == 0 {
+        return "";
+    }
+    if chars[e - 1] matches { ' ' | '\t' } {
+        return slice_chars(&chars, 0, e).trim();
+    }
+    return *s;
+}
+
+fn is_thematic_break(line: &String) -> bool {
+    let trimmed = line.trim();
+    if trimmed.len() < 3 {
+        return false;
+    }
+    let mut marker = '-';
+    let mut has_marker = false;
+    let mut count = 0;
+    for let c of trimmed.chars() {
+        if c matches { ' ' | '\t' } {
+            continue;
+        }
+        if c matches { '-' | '*' | '_' } {
+            if !has_marker {
+                marker = c;
+                has_marker = true;
+            } else if c != marker {
+                return false;
+            }
+            count += 1;
+        } else {
+            return false;
+        }
+    }
+    return count >= 3;
+}
+
+// --- blockquotes ---
+
+fn is_blockquote(chars: &List<char>) -> bool {
+    let len = chars.len();
+    let mut p = skip_indent(chars, len);
+    return p < len && chars[p] == '>';
+}
+
+fn strip_blockquote_marker(line: &String) -> String {
+    let chars = chars_of(line);
+    let len = chars.len();
+    let mut p = skip_indent(&chars, len);
+    if p < len && chars[p] == '>' {
+        p += 1;
+        if p < len && is_indent(chars[p]) {
+            p += 1;
+        }
+    }
+    return slice_chars(&chars, p, len);
+}
+
+fn parse_blockquote(lines: &List<String>, start: i32, end: i32, refs: &RefTable, out: &mut List<Node>) -> i32 {
+    let mut inner: List<String> = [];
+    let mut k = start;
+    while k < end && is_blockquote(&chars_of(&lines[k])) {
+        inner.push(strip_blockquote_marker(&lines[k]));
+        k += 1;
+    }
+    let children = parse_blocks(&inner, 0, inner.len(), refs);
+    out.push(Node::BlockQuote(children));
+    return k;
+}
+
+// --- lists (ordered/unordered, nested, task markers, loose/tight) ---
+
+struct ListMarker {
+    indent: i32,
+    content_col: i32,
+    ordered: bool,
+    delim: char,
+    number: i32,
+}
+
+fn is_list_marker(chars: &List<char>) -> bool {
+    return parse_list_marker(chars) matches { Some(_) };
+}
+
+fn parse_list_marker(chars: &List<char>) -> Option<ListMarker> {
+    let len = chars.len();
+    let mut p = 0;
+    let mut indent = 0;
+    while p < len && is_indent(chars[p]) {
+        indent += 1;
+        p += 1;
+    }
+    if p >= len {
+        return null;
+    }
+    let c = chars[p];
+    let mut ordered = false;
+    let mut delim = c;
+    let mut number = 0;
+    if c matches { '-' | '+' | '*' } {
+        p += 1;
+    } else if is_digit(c) {
+        let mut q = p;
+        while q < len && is_digit(chars[q]) {
+            number = number * 10 + (chars[q] as i32 - '0' as i32);
+            q += 1;
+        }
+        if q < len && chars[q] matches { '.' | ')' } {
+            ordered = true;
+            delim = chars[q];
+            p = q + 1;
+        } else {
+            return null;
+        }
+    } else {
+        return null;
+    }
+    if p < len && !chars[p] matches { ' ' | '\t' } {
+        return null;
+    }
+    let mut content_col = p;
+    if content_col < len && chars[content_col] matches { ' ' | '\t' } {
+        content_col += 1;
+    }
+    return Option::Some(ListMarker { indent, content_col, ordered, delim, number });
+}
+
+fn parse_list(lines: &List<String>, start: i32, end: i32, refs: &RefTable, out: &mut List<Node>) -> i32 {
+    let mut base_indent = 0;
+    let mut ordered = false;
+    let mut base_delim = '-';
+    let mut start_number = 1;
+    match parse_list_marker(&chars_of(&lines[start])) {
+        Some(m) => {
+            base_indent = m.indent;
+            ordered = m.ordered;
+            base_delim = m.delim;
+            start_number = m.number;
+        },
+        None => {
+            return start;
+        },
+    }
+
+    let mut items: List<MdItem> = [];
+    let mut k = start;
+    while k < end {
+        let mut item_start = k;
+        while item_start < end && is_blank(&lines[item_start]) {
+            item_start += 1;
+        }
+        if item_start >= end {
+            break;
+        }
+        let mut content_col = -1;
+        match parse_list_marker(&chars_of(&lines[item_start])) {
+            Some(m) => {
+                if m.indent == base_indent && m.ordered == ordered && m.delim == base_delim {
+                    content_col = m.content_col;
+                }
+            },
+            None => {
+            },
+        }
+        if content_col < 0 {
+            break;
+        }
+        let loose = items.len() > 0 && item_start > k;
+
+        let mut inner: List<String> = [];
+        let [marker, first_rest] = strip_task_marker(&cut_prefix(&lines[item_start], content_col));
+        inner.push(first_rest);
+        let mut j = item_start + 1;
+        loop {
+            if j >= end {
+                break;
+            }
+            if is_blank(&lines[j]) {
+                let continues = j + 1 < end
+                    && !is_blank(&lines[j + 1])
+                    && line_indent(&lines[j + 1]) >= content_col
+                    && parse_list_marker(&chars_of(&lines[j + 1])) matches { None };
+                if continues {
+                    inner.push("");
+                    j += 1;
+                    continue;
+                }
+                break;
+            }
+            if line_indent(&lines[j]) >= content_col {
+                inner.push(dedent(&lines[j], content_col));
+                j += 1;
+                continue;
+            }
+            // Lazy continuation: an under-indented line still belongs to the
+            // item's open paragraph, regardless of container indent, as long
+            // as it doesn't itself start a new block (CommonMark's "lazy
+            // continuation line" rule — the same reason a top-level
+            // paragraph line needs no minimum indentation at all).
+            let can_lazy = match inner.get(inner.len() - 1) {
+                Some(prev) => !is_blank(&prev) && !interrupts_paragraph(&lines[j]),
+                None => false,
+            };
+            if can_lazy {
+                inner.push(dedent(&lines[j], content_col));
+                j += 1;
+                continue;
+            }
+            break;
+        }
+
+        let children = parse_blocks(&inner, 0, inner.len(), refs);
+        items.push(MdItem { marker, children, loose });
+        k = j;
+    }
+
+    out.push(Node::List(MdList { ordered, start: start_number, items }));
+    return k;
+}
+
+fn strip_task_marker(line: &String) -> [Option<TaskMarker>, String] {
+    let chars = chars_of(line);
+    let len = chars.len();
+    if len >= 3 && chars[0] == '[' && chars[2] == ']' && chars[1] matches { ' ' | 'x' | 'X' } {
+        let checked = chars[1] matches { 'x' | 'X' };
+        let mut rest_start = 3;
+        if rest_start < len && chars[rest_start] == ' ' {
+            rest_start += 1;
+        }
+        return [
+            Option::Some(TaskMarker { checked }),
+            slice_chars(&chars, rest_start, len),
+        ];
+    }
+    return [null, *line];
+}
+
+fn cut_prefix(line: &String, n: i32) -> String {
+    let chars = chars_of(line);
+    return slice_chars(&chars, n, chars.len());
+}
+
+fn dedent(line: &String, n: i32) -> String {
+    let chars = chars_of(line);
+    let len = chars.len();
+    let mut p = 0;
+    while p < len && p < n && is_indent(chars[p]) {
+        p += 1;
+    }
+    return slice_chars(&chars, p, len);
+}
+
+/// Whether `line` would start a block that can interrupt an open paragraph —
+/// the same dispatch conditions `parse_blocks` checks before falling
+/// through to plain paragraph text, reused here to decide whether an
+/// under-indented list-item line is a lazy continuation or the item's end.
+fn interrupts_paragraph(line: &String) -> bool {
+    let chars = chars_of(line);
+    if is_html_block_start(&chars) {
+        return true;
+    }
+    if fence_marker(&chars) matches { Some(_) } {
+        return true;
+    }
+    if heading_level(&chars) > 0 {
+        return true;
+    }
+    if is_thematic_break(line) {
+        return true;
+    }
+    if is_blockquote(&chars) {
+        return true;
+    }
+    if is_list_marker(&chars) {
+        return true;
+    }
+    return false;
+}
+
+fn line_indent(line: &String) -> i32 {
+    let mut n = 0;
+    for let c of line.chars() {
+        if is_indent(c) {
+            n += 1;
+        } else {
+            break;
+        }
+    }
+    return n;
+}
+
+// --- tables (GFM) ---
+
+fn line_has_pipe(line: &String) -> bool {
+    return line.contains("|");
+}
+
+/// A GFM table requires a well-formed delimiter row whose column count equals
+/// the header's; otherwise the two lines are not a table (they stay a
+/// paragraph), matching pulldown-cmark / dprint.
+fn is_table_header(header: &String, delim: &String) -> bool {
+    return is_delimiter_row(delim) && split_row(header).len() == split_row(delim).len();
+}
+
+fn is_delimiter_row(line: &String) -> bool {
+    let cells = split_row(line);
+    if cells.is_empty() {
+        return false;
+    }
+    for let cell of cells {
+        if !is_delim_cell(&cell) {
+            return false;
+        }
+    }
+    return true;
+}
+
+fn is_delim_cell(cell: &String) -> bool {
+    let chars = chars_of(cell);
+    let len = chars.len();
+    if len == 0 {
+        return false;
+    }
+    let mut p = 0;
+    if chars[p] == ':' {
+        p += 1;
+    }
+    let mut dashes = 0;
+    while p < len && chars[p] == '-' {
+        dashes += 1;
+        p += 1;
+    }
+    if dashes == 0 {
+        return false;
+    }
+    if p < len && chars[p] == ':' {
+        p += 1;
+    }
+    return p == len;
+}
+
+fn column_alignment(cell: &String) -> ColumnAlign {
+    let left = cell.starts_with(":");
+    let right = cell.ends_with(":");
+    return match [left, right] {
+        [true, true] => ColumnAlign::Center,
+        [true, false] => ColumnAlign::Left,
+        [false, true] => ColumnAlign::Right,
+        [false, false] => ColumnAlign::None,
+    };
+}
+
+fn split_row(line: &String) -> List<String> {
+    let chars = chars_of(line);
+    let len = chars.len();
+    let mut s = 0;
+    let mut e = len;
+    while s < e && chars[s] matches { ' ' | '\t' } {
+        s += 1;
+    }
+    while e > s && chars[e - 1] matches { ' ' | '\t' } {
+        e -= 1;
+    }
+    if s < e && chars[s] == '|' {
+        s += 1;
+    }
+    if e > s && chars[e - 1] == '|' {
+        e -= 1;
+    }
+    let mut cells: List<String> = [];
+    let mut cur = String::new();
+    let mut k = s;
+    while k < e {
+        let c = chars[k];
+        if c == '\\' && k + 1 < e && chars[k + 1] == '|' {
+            // Keep the escape intact (rather than resolving it to a bare
+            // `|`) so `parse_inline` sees the same `\|` the source has and
+            // round-trips it verbatim — a bare `|` in the cell's printed
+            // text would itself become an unintended column separator.
+            cur.push('\\');
+            cur.push('|');
+            k += 2;
+            continue;
+        }
+        if c == '`' {
+            // A pipe inside a code span (even an unbalanced-looking one, per
+            // GFM) is not a cell separator — consume the whole span
+            // verbatim so its `|` characters don't get mistaken for column
+            // boundaries.
+            let span_end = code_span_end(&chars, k, e);
+            for let q of k..<span_end {
+                cur.push(chars[q]);
+            }
+            k = span_end;
+            continue;
+        }
+        if c == '|' {
+            cells.push(cur.trim());
+            cur = String::new();
+            k += 1;
+            continue;
+        }
+        cur.push(c);
+        k += 1;
+    }
+    cells.push(cur.trim());
+    return cells;
+}
+
+/// The end (exclusive) of the backtick-delimited code span opening at
+/// `start`, or `start + run` (just past the opening run) if it has no
+/// matching close within `[start, end)` — the opening backticks are then
+/// just literal characters, consumed as-is.
+fn code_span_end(chars: &List<char>, start: i32, end: i32) -> i32 {
+    let run = backtick_run_length(chars, start, end);
+    let mut p = start + run;
+    while p < end {
+        if chars[p] == '`' {
+            let m = backtick_run_length(chars, p, end);
+            if m == run {
+                return p + run;
+            }
+            p += m;
+        } else {
+            p += 1;
+        }
+    }
+    return start + run;
+}
+
+fn backtick_run_length(chars: &List<char>, start: i32, end: i32) -> i32 {
+    let mut n = 0;
+    let mut p = start;
+    while p < end && chars[p] == '`' {
+        n += 1;
+        p += 1;
+    }
+    return n;
+}
+
+fn parse_table(lines: &List<String>, start: i32, end: i32, refs: &RefTable, out: &mut List<Node>) -> i32 {
+    let header_cells = split_row(&lines[start]);
+    let delims = split_row(&lines[start + 1]);
+    let mut align: List<ColumnAlign> = [];
+    for let d of delims {
+        align.push(column_alignment(&d));
+    }
+    let ncol = header_cells.len();
+    let header = MdTableRow { cells: cells_to_nodes(&header_cells, ncol, refs) };
+
+    let mut rows: List<MdTableRow> = [];
+    let mut k = start + 2;
+    while k < end && !is_blank(&lines[k]) && line_has_pipe(&lines[k]) {
+        let row_cells = split_row(&lines[k]);
+        rows.push(MdTableRow { cells: cells_to_nodes(&row_cells, ncol, refs) });
+        k += 1;
+    }
+    out.push(Node::Table(MdTable { align, header, rows }));
+    return k;
+}
+
+fn cells_to_nodes(cells: &List<String>, ncol: i32, refs: &RefTable) -> List<List<Node>> {
+    let mut out: List<List<Node>> = [];
+    for let idx of 0..<ncol {
+        let text = match cells.get(idx) {
+            Some(c) => c,
+            None => "",
+        };
+        out.push(parse_inline(&text, refs));
+    }
+    return out;
+}
+
+// --- character classification ---
+
+fn is_blank(line: &String) -> bool {
+    return line.trim().len() == 0;
+}
+
+fn is_digit(c: char) -> bool {
+    return c matches { '0'..='9' };
+}
+
+fn is_ascii_alnum(c: char) -> bool {
+    return c matches { '0'..='9' | 'a'..='z' | 'A'..='Z' };
+}
+
+fn is_ascii_alpha(c: char) -> bool {
+    return c matches { 'a'..='z' | 'A'..='Z' };
+}
+
+/// A leading-indentation whitespace column. A tab counts as one column, the
+/// same as a space (no tab-stop expansion) — an intentional simplification.
+fn is_indent(c: char) -> bool {
+    return c matches { ' ' | '\t' };
+}
+
+/// Skip up to three leading indentation columns, returning the new index.
+fn skip_indent(chars: &List<char>, len: i32) -> i32 {
+    let mut p = 0;
+    while p < len && p < 3 && is_indent(chars[p]) {
+        p += 1;
+    }
+    return p;
+}

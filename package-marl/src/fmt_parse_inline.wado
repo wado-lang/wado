@@ -1,0 +1,748 @@
+//! Inline parsing: text, emphasis/strong/strikethrough (delimiter-stack
+//! resolution), code spans, links, images, autolinks, raw HTML spans, and
+//! hard/soft breaks — producing `fmt_ast.wado` nodes.
+//!
+//! A tokenize -> resolve -> build-tree pipeline (see
+//! `docs/wep-2026-07-05-marl.md`, "One parser, two backends"): tokenize into a flat
+//! stream, resolve the delimiter stack in place (turning matched delimiter
+//! runs into `Open`/`Close` markers), then walk the flat stream once more
+//! with an explicit stack to build the tree.
+
+use {
+    Node,
+    EmphasisNode,
+    LinkNode,
+    ImageNode,
+    ReferenceLinkNode,
+    ReferenceImageNode,
+    AutoLinkNode,
+} from "./fmt_ast.wado";
+use { RefTable, ref_table_get, parse_dest_and_title } from "./fmt_links.wado";
+use { StrCursor, chars_of } from "./str_cursor.wado";
+
+internal variant InlineTok {
+    TextRun(String),
+    Resolved(Node),
+    Delim(DelimTok),
+    Open(OpenTok),
+    Close,
+}
+
+internal struct DelimTok {
+    internal ch: char,
+    internal count: i32,
+    internal orig: i32,
+    internal open: bool,
+    internal close: bool,
+    /// The character immediately after this run, in the source, is ASCII
+    /// alphanumeric — used by the GitHub-compatibility "keep asterisk" rule.
+    internal next_is_alnum: bool,
+}
+
+internal struct OpenTok {
+    internal strong: bool,
+    internal strike: bool,
+    internal keep_asterisk: bool,
+}
+
+internal struct Frame {
+    internal parent: List<Node>,
+    internal open: OpenTok,
+}
+
+pub fn parse_inline(text: &String, refs: &RefTable) -> List<Node> {
+    let chars = chars_of(text);
+    return parse_inline_chars(StrCursor::over(&chars), refs);
+}
+
+internal fn parse_inline_chars(cursor: StrCursor, refs: &RefTable) -> List<Node> {
+    let mut toks: List<InlineTok> = [];
+    tokenize(cursor, refs, &mut toks);
+    process_emphasis(&mut toks);
+    return build_tree(&toks);
+}
+
+fn tokenize(cursor: StrCursor, refs: &RefTable, toks: &mut List<InlineTok>) {
+    let mut cur = cursor;
+    let mut buf = String::new();
+    while !cur.eof() {
+        let i = cur.position();
+        let c = char_at(&cur, i);
+        match c {
+            '\\' && is_escapable(&cur, i + 1) => {
+                // Keep the backslash: printing must not silently turn an
+                // escaped `1\. item` into an unescaped `1. item`, which
+                // would re-parse as a different construct (a list). The
+                // pair is still consumed as one opaque unit here, so the
+                // escaped character never re-enters this dispatch.
+                buf.push('\\');
+                buf.push(char_at(&cur, i + 1));
+                cur.set_position(i + 2);
+            },
+            '\\' && cur.is_at(i + 1, '\n') => {
+                flush_text(&mut buf, toks);
+                toks.push(InlineTok::Resolved(Node::HardBreak));
+                cur.set_position(i + 2);
+            },
+            '\n' => {
+                flush_text(&mut buf, toks);
+                toks.push(InlineTok::Resolved(Node::SoftBreak));
+                cur.set_position(i + 1);
+            },
+            ' ' | '\t' => {
+                // Collapse a run of spaces/tabs to one, and drop it entirely
+                // at a line boundary (leading/trailing whitespace around a
+                // soft break, or at the start/end of this range, is
+                // insignificant). Checked against the actual source
+                // characters, not `buf`'s state — `buf` is also empty right
+                // after any resolved token (an emphasis close, a link, …),
+                // which is not a line boundary and must still get its space.
+                let mut j = i;
+                while cur.is_at(j, ' ') || cur.is_at(j, '\t') {
+                    j += 1;
+                }
+                let at_start = match cur.at(i - 1) {
+                    Some(pc) => pc == '\n',
+                    None => true,
+                };
+                let at_end = j >= cur.end() || cur.is_at(j, '\n');
+                if !at_start && !at_end {
+                    buf.push(' ');
+                }
+                cur.set_position(j);
+            },
+            '`' => {
+                cur.set_position(push_construct(try_code_span(&cur, i), c, i, &mut buf, toks));
+            },
+            '<' => {
+                cur.set_position(push_construct(try_angle_construct(&cur, i), c, i, &mut buf, toks));
+            },
+            'h' => {
+                cur.set_position(push_construct(try_bare_autolink(&cur, i), c, i, &mut buf, toks));
+            },
+            '!' && cur.is_at(i + 1, '[') => {
+                cur.set_position(push_construct(try_image(&cur, i + 1, refs), c, i, &mut buf, toks));
+            },
+            '[' => {
+                cur.set_position(push_construct(try_link(&cur, i, refs), c, i, &mut buf, toks));
+            },
+            '*' | '_' | '~' => {
+                flush_text(&mut buf, toks);
+                cur.set_position(push_delim(&cur, i, c, toks));
+            },
+            _ => {
+                buf.push(c);
+                cur.bump();
+            },
+        }
+    }
+    flush_text(&mut buf, toks);
+}
+
+fn char_at(cur: &StrCursor, idx: i32) -> char {
+    return match cur.at(idx) {
+        Some(c) => c,
+        None => ' ',
+    };
+}
+
+fn is_escapable(cur: &StrCursor, idx: i32) -> bool {
+    return match cur.at(idx) {
+        Some(c) => is_ascii_punct(c),
+        None => false,
+    };
+}
+
+fn flush_text(buf: &mut String, toks: &mut List<InlineTok>) {
+    if buf.len() == 0 {
+        return;
+    }
+    let text = *buf;
+    *buf = String::new();
+    toks.push(InlineTok::TextRun(text));
+}
+
+fn push_construct(result: Option<[Node, i32]>, c: char, i: i32, buf: &mut String, toks: &mut List<InlineTok>) -> i32 {
+    match result {
+        Some([node, next]) => {
+            flush_text(buf, toks);
+            toks.push(InlineTok::Resolved(node));
+            return next;
+        },
+        None => {
+            buf.push(c);
+            return i + 1;
+        },
+    }
+}
+
+fn push_delim(cur: &StrCursor, i: i32, d: char, toks: &mut List<InlineTok>) -> i32 {
+    let n = run_length(cur, i, d);
+    let prev = cur.at(i - 1);
+    let next = cur.at(i + n);
+    let next_is_alnum = match next {
+        Some(c) => is_ascii_alnum(c),
+        None => false,
+    };
+    toks.push(InlineTok::Delim(DelimTok {
+        ch: d,
+        count: n,
+        orig: n,
+        open: can_open(d, prev, next),
+        close: can_close(d, prev, next),
+        next_is_alnum,
+    }));
+    return i + n;
+}
+
+// --- delimiter-stack resolution (CommonMark "process emphasis") ---
+
+fn process_emphasis(toks: &mut List<InlineTok>) {
+    let mut ci = 0;
+    while ci < toks.len() {
+        match toks[ci] {
+            InlineTok::Delim(d) => {
+                if d.close && d.count > 0 {
+                    match find_opener(toks, ci, &d) {
+                        Some(oi) => ci = resolve_pair(toks, oi, ci),
+                        None => ci += 1,
+                    }
+                } else {
+                    ci += 1;
+                }
+            },
+            _ => ci += 1,
+        }
+    }
+}
+
+fn find_opener(toks: &List<InlineTok>, ci: i32, closer: &DelimTok) -> Option<i32> {
+    for let mut oi = ci - 1; oi >= 0; oi -= 1 {
+        match toks[oi] {
+            InlineTok::Delim(o) => {
+                if o.open && o.count > 0 && o.ch == closer.ch && rule_of_three(&o, closer) {
+                    return Option::Some(oi);
+                }
+            },
+            _ => {
+            },
+        }
+    }
+    return null;
+}
+
+fn rule_of_three(opener: &DelimTok, closer: &DelimTok) -> bool {
+    let both = opener.open && opener.close || closer.open && closer.close;
+    let sum = opener.orig + closer.orig;
+    if both && sum % 3 == 0 && !(opener.orig % 3 == 0 && closer.orig % 3 == 0) {
+        return false;
+    }
+    return true;
+}
+
+fn resolve_pair(toks: &mut List<InlineTok>, oi: i32, ci: i32) -> i32 {
+    let opener = get_delim_unchecked(toks, oi);
+    let closer = get_delim_unchecked(toks, ci);
+    let strong = opener.count >= 2 && closer.count >= 2;
+    let use_n = if strong { 2 } else { 1 };
+    let strike = closer.ch == '~';
+    let keep_asterisk = !strong && closer.ch == '*' && closer.next_is_alnum;
+
+    for let mut bi = oi + 1; bi < ci; bi += 1 {
+        match toks[bi] {
+            InlineTok::Delim(d) => {
+                let mut d2 = d;
+                d2.open = false;
+                d2.close = false;
+                toks[bi] = InlineTok::Delim(d2);
+            },
+            _ => {
+            },
+        }
+    }
+
+    toks.insert(ci, InlineTok::Close);
+    toks.insert(oi + 1, InlineTok::Open(OpenTok { strong, strike, keep_asterisk }));
+    let closer_idx = ci + 2;
+
+    let mut op = get_delim_unchecked(toks, oi);
+    op.count -= use_n;
+    toks[oi] = InlineTok::Delim(op);
+    let mut cl = get_delim_unchecked(toks, closer_idx);
+    cl.count -= use_n;
+    toks[closer_idx] = InlineTok::Delim(cl);
+
+    return closer_idx;
+}
+
+fn get_delim_unchecked(toks: &List<InlineTok>, idx: i32) -> DelimTok {
+    return match toks[idx] {
+        InlineTok::Delim(d) => d,
+        _ => panic("marl-format: expected a delimiter token"),
+    };
+}
+
+// --- flat token stream -> tree ---
+
+fn build_tree(toks: &List<InlineTok>) -> List<Node> {
+    let mut stack: List<Frame> = [];
+    let mut current: List<Node> = [];
+    for let tok of toks {
+        match tok {
+            InlineTok::TextRun(s) => current.push(Node::Text(*s)),
+            InlineTok::Resolved(n) => current.push(*n),
+            InlineTok::Delim(d) => {
+                if d.count > 0 {
+                    current.push(Node::Text(repeat_char(d.ch, d.count)));
+                }
+            },
+            InlineTok::Open(o) => {
+                stack.push(Frame { parent: current, open: *o });
+                current = [];
+            },
+            InlineTok::Close => {
+                match stack.pop() {
+                    Some(frame) => {
+                        let node = wrap(&frame.open, current);
+                        current = frame.parent;
+                        current.push(node);
+                    },
+                    None => {
+                    },
+                }
+            },
+        }
+    }
+    while let Some(frame) = stack.pop() {
+        let node = wrap(&frame.open, current);
+        current = frame.parent;
+        current.push(node);
+    }
+    return current;
+}
+
+fn wrap(open: &OpenTok, children: List<Node>) -> Node {
+    if open.strike {
+        return Node::Strikethrough(children);
+    }
+    if open.strong {
+        return Node::Strong(children);
+    }
+    return Node::Emphasis(EmphasisNode { children, keep_asterisk: open.keep_asterisk });
+}
+
+fn repeat_char(ch: char, count: i32) -> String {
+    let mut s = String::new();
+    for let _ of 0..<count {
+        s.push(ch);
+    }
+    return s;
+}
+
+// --- code spans ---
+
+fn try_code_span(cur: &StrCursor, i: i32) -> Option<[Node, i32]> {
+    let n = run_length(cur, i, '`');
+    let end = cur.end();
+    let mut j = i + n;
+    while j < end {
+        if cur.is_at(j, '`') {
+            let m = run_length(cur, j, '`');
+            if m == n {
+                let content = code_content(cur, i + n, j);
+                return Option::Some([Node::Code(content), j + n]);
+            }
+            j += m;
+        } else {
+            j += 1;
+        }
+    }
+    return null;
+}
+
+fn code_content(cur: &StrCursor, s: i32, e: i32) -> String {
+    let mut a = s;
+    let mut b = e;
+    if b - a >= 2 && cur.is_at(a, ' ') && cur.is_at(b - 1, ' ') && !all_spaces(cur, a, b) {
+        a += 1;
+        b -= 1;
+    }
+    let mut raw = String::new();
+    for let k of a..<b {
+        let c = char_at(cur, k);
+        raw.push(if c == '\n' { ' ' } else { c });
+    }
+    return raw;
+}
+
+fn all_spaces(cur: &StrCursor, s: i32, e: i32) -> bool {
+    for let k of s..<e {
+        if !cur.is_at(k, ' ') {
+            return false;
+        }
+    }
+    return true;
+}
+
+// --- autolinks and raw HTML spans ---
+
+fn try_bare_autolink(cur: &StrCursor, i: i32) -> Option<[Node, i32]> {
+    if opt_is_alnum(cur.at(i - 1)) {
+        return null;
+    }
+    if !starts_with_at(cur, i, "http://") && !starts_with_at(cur, i, "https://") {
+        return null;
+    }
+    let mut j = url_run_end(cur, i);
+    while j > i && is_trailing_punct(char_at(cur, j - 1)) {
+        j -= 1;
+    }
+    if j <= i {
+        return null;
+    }
+    return Option::Some([Node::AutoLink(AutoLinkNode { url: cur.slice(i, j), bracketed: false }), j]);
+}
+
+fn url_run_end(cur: &StrCursor, start: i32) -> i32 {
+    let end = cur.end();
+    for let j of start..<end {
+        let c = char_at(cur, j);
+        if is_space(c) || c matches { '<' | '>' } {
+            return j;
+        }
+    }
+    return end;
+}
+
+fn is_trailing_punct(c: char) -> bool {
+    return c matches { '.' | ',' | ';' | ':' | '!' | '?' };
+}
+
+/// `<...>` is either a scheme-prefixed autolink (`<https://example.com>`) or
+/// a raw HTML span (`<div class="x">`, `</div>`, `<!-- comment -->`).
+fn try_angle_construct(cur: &StrCursor, i: i32) -> Option<[Node, i32]> {
+    match try_autolink_scheme(cur, i) {
+        Some(r) => {
+            return Option::Some(r);
+        },
+        None => {
+        },
+    }
+    return try_html_span(cur, i);
+}
+
+fn try_autolink_scheme(cur: &StrCursor, i: i32) -> Option<[Node, i32]> {
+    let end = cur.end();
+    let mut j = i + 1;
+    if !(j < end && is_ascii_alpha(char_at(cur, j))) {
+        return null;
+    }
+    let scheme_start = j;
+    j += 1;
+    while j < end && is_scheme_char(char_at(cur, j)) {
+        j += 1;
+    }
+    if j - scheme_start < 1 || j >= end || char_at(cur, j) != ':' {
+        return null;
+    }
+    j += 1;
+    while j < end {
+        let c = char_at(cur, j);
+        if c matches { ' ' | '\t' | '\n' | '<' } {
+            return null;
+        }
+        if c == '>' {
+            return Option::Some([Node::AutoLink(AutoLinkNode { url: cur.slice(i + 1, j), bracketed: true }), j + 1]);
+        }
+        j += 1;
+    }
+    return null;
+}
+
+fn try_html_span(cur: &StrCursor, i: i32) -> Option<[Node, i32]> {
+    if starts_with_at(cur, i, "<!--") {
+        return try_html_to_close(cur, i, "-->");
+    }
+    let end = cur.end();
+    let mut j = i + 1;
+    if j < end && char_at(cur, j) == '/' {
+        j += 1;
+    }
+    if !(j < end && is_ascii_alpha(char_at(cur, j))) {
+        return null;
+    }
+    while j < end {
+        let c = char_at(cur, j);
+        if c == '>' {
+            return Option::Some([Node::Html(cur.slice(i, j + 1)), j + 1]);
+        }
+        if c == '\n' {
+            return null;
+        }
+        j += 1;
+    }
+    return null;
+}
+
+fn try_html_to_close(cur: &StrCursor, i: i32, closer: String) -> Option<[Node, i32]> {
+    let end = cur.end();
+    let closer_len = chars_of(&closer).len();
+    let mut j = i;
+    while j < end {
+        if starts_with_at(cur, j, closer) {
+            return Option::Some([Node::Html(cur.slice(i, j + closer_len)), j + closer_len]);
+        }
+        j += 1;
+    }
+    return null;
+}
+
+fn starts_with_at(cur: &StrCursor, i: i32, pat: String) -> bool {
+    let mut k = 0;
+    for let pc of pat.chars() {
+        if !cur.is_at(i + k, pc) {
+            return false;
+        }
+        k += 1;
+    }
+    return true;
+}
+
+// --- links and images ---
+
+fn try_link(cur: &StrCursor, open: i32, refs: &RefTable) -> Option<[Node, i32]> {
+    let end = cur.end();
+    let close = match find_bracket_close(cur, open) {
+        Some(c) => c,
+        None => {
+            return null;
+        },
+    };
+    if close + 1 < end && cur.is_at(close + 1, '(') {
+        return try_inline_link_tail(cur, open, close, refs);
+    }
+    if close + 1 < end && cur.is_at(close + 1, '[') {
+        return try_reference_link(cur, open, close, refs);
+    }
+    let raw_label = cur.slice(open + 1, close);
+    return match ref_table_get(refs, &raw_label) {
+        Some(_) => {
+            let children = parse_inline_chars(cur.sub(open + 1, close), refs);
+            Option::Some([Node::ShortcutLink(ReferenceLinkNode { children, label: raw_label.trim() }), close + 1]);
+        },
+        None => null,
+    };
+}
+
+fn find_bracket_close(cur: &StrCursor, open: i32) -> Option<i32> {
+    let end = cur.end();
+    let mut depth = 0;
+    let mut j = open;
+    while j < end {
+        if cur.is_at(j, '\\') {
+            j += 2;
+            continue;
+        }
+        if cur.is_at(j, '[') {
+            depth += 1;
+        } else if cur.is_at(j, ']') {
+            depth -= 1;
+            if depth == 0 {
+                return Option::Some(j);
+            }
+        }
+        j += 1;
+    }
+    return null;
+}
+
+/// The closing `)` of a balanced-parenthesis link destination starting right
+/// after `open_paren` (which itself is at `close + 1`), or `-1` if unbalanced.
+fn find_paren_close(cur: &StrCursor, open_paren: i32) -> i32 {
+    let end = cur.end();
+    let mut k = open_paren + 1;
+    let mut depth = 1;
+    while k < end {
+        if cur.is_at(k, '\\') {
+            k += 2;
+            continue;
+        }
+        if cur.is_at(k, '(') {
+            depth += 1;
+        } else if cur.is_at(k, ')') {
+            depth -= 1;
+            if depth == 0 {
+                return k;
+            }
+        }
+        k += 1;
+    }
+    return -1;
+}
+
+fn try_inline_link_tail(cur: &StrCursor, open: i32, close: i32, refs: &RefTable) -> Option<[Node, i32]> {
+    let pclose = find_paren_close(cur, close + 1);
+    if pclose < 0 {
+        return null;
+    }
+    let dest_raw = cur.slice(close + 2, pclose);
+    let [url, title] = parse_dest_and_title(&dest_raw);
+    let children = parse_inline_chars(cur.sub(open + 1, close), refs);
+    return Option::Some([Node::InlineLink(LinkNode { children, url, title }), pclose + 1]);
+}
+
+/// The label of a `[label]` (or `[]`) pair starting at `open`, or `-1` for
+/// its close if unterminated.
+fn find_label_close(cur: &StrCursor, open: i32) -> i32 {
+    let end = cur.end();
+    let mut j = open + 1;
+    while j < end && !cur.is_at(j, ']') {
+        if cur.is_at(j, '\\') {
+            j += 2;
+            continue;
+        }
+        j += 1;
+    }
+    if j >= end {
+        return -1;
+    }
+    return j;
+}
+
+fn try_reference_link(cur: &StrCursor, open: i32, close: i32, refs: &RefTable) -> Option<[Node, i32]> {
+    let second_open = close + 1;
+    let second_close = find_label_close(cur, second_open);
+    if second_close < 0 {
+        return null;
+    }
+    let inner = cur.slice(second_open + 1, second_close);
+    let raw_label = if inner.trim().len() == 0 { cur.slice(open + 1, close) } else { inner };
+    return match ref_table_get(refs, &raw_label) {
+        Some(_) => {
+            let children = parse_inline_chars(cur.sub(open + 1, close), refs);
+            Option::Some([
+                Node::ReferenceLink(ReferenceLinkNode { children, label: raw_label.trim() }), second_close + 1,
+            ]);
+        },
+        None => null,
+    };
+}
+
+fn try_image(cur: &StrCursor, open: i32, refs: &RefTable) -> Option<[Node, i32]> {
+    let end = cur.end();
+    let close = match find_bracket_close(cur, open) {
+        Some(c) => c,
+        None => {
+            return null;
+        },
+    };
+    let alt = cur.slice(open + 1, close);
+    if close + 1 < end && cur.is_at(close + 1, '(') {
+        let pclose = find_paren_close(cur, close + 1);
+        if pclose < 0 {
+            return null;
+        }
+        let dest_raw = cur.slice(close + 2, pclose);
+        let [url, title] = parse_dest_and_title(&dest_raw);
+        return Option::Some([Node::InlineImage(ImageNode { alt, url, title }), pclose + 1]);
+    }
+    if close + 1 < end && cur.is_at(close + 1, '[') {
+        let second_open = close + 1;
+        let second_close = find_label_close(cur, second_open);
+        if second_close < 0 {
+            return null;
+        }
+        let inner = cur.slice(second_open + 1, second_close);
+        let raw_label = if inner.trim().len() == 0 { alt } else { inner };
+        return match ref_table_get(refs, &raw_label) {
+            Some(_) => Option::Some([
+                Node::ReferenceImage(ReferenceImageNode { alt, label: raw_label.trim() }), second_close + 1,
+            ]),
+            None => null,
+        };
+    }
+    return match ref_table_get(refs, &alt) {
+        Some(_) => Option::Some([Node::ReferenceImage(ReferenceImageNode { alt, label: alt.trim() }), close + 1]),
+        None => null,
+    };
+}
+
+// --- emphasis flanking (CommonMark "Emphasis and strong emphasis") ---
+
+fn can_open(d: char, prev: Option<char>, next: Option<char>) -> bool {
+    let lf = left_flanking(prev, next);
+    return match d {
+        '_' => lf && (!right_flanking(prev, next) || opt_is_punct(prev)),
+        _ => lf,
+    };
+}
+
+fn can_close(d: char, prev: Option<char>, next: Option<char>) -> bool {
+    let rf = right_flanking(prev, next);
+    return match d {
+        '_' => rf && (!left_flanking(prev, next) || opt_is_punct(next)),
+        _ => rf,
+    };
+}
+
+fn left_flanking(prev: Option<char>, next: Option<char>) -> bool {
+    return !opt_is_ws(next) && (!opt_is_punct(next) || opt_is_ws(prev) || opt_is_punct(prev));
+}
+
+fn right_flanking(prev: Option<char>, next: Option<char>) -> bool {
+    return !opt_is_ws(prev) && (!opt_is_punct(prev) || opt_is_ws(next) || opt_is_punct(next));
+}
+
+fn opt_is_ws(o: Option<char>) -> bool {
+    return match o {
+        Some(c) => is_space(c),
+        None => true,
+    };
+}
+
+fn opt_is_punct(o: Option<char>) -> bool {
+    return match o {
+        Some(c) => is_ascii_punct(c),
+        None => false,
+    };
+}
+
+fn opt_is_alnum(o: Option<char>) -> bool {
+    return match o {
+        Some(c) => is_ascii_alnum(c),
+        None => false,
+    };
+}
+
+fn is_space(c: char) -> bool {
+    return c matches { ' ' | '\t' | '\n' };
+}
+
+/// A backslash-escapable character, per CommonMark. `fmt_html.wado` shares
+/// this to reverse the escapes the tokenizer keeps in `Text` nodes, so the
+/// escapable set has a single definition.
+internal fn is_ascii_punct(c: char) -> bool {
+    return c matches { '!'..='/' | ':'..='@' | '['..='`' | '{'..='~' };
+}
+
+fn is_ascii_alnum(c: char) -> bool {
+    return c matches { '0'..='9' | 'a'..='z' | 'A'..='Z' };
+}
+
+fn is_ascii_alpha(c: char) -> bool {
+    return c matches { 'a'..='z' | 'A'..='Z' };
+}
+
+fn is_scheme_char(c: char) -> bool {
+    return is_ascii_alnum(c) || c matches { '+' | '-' | '.' };
+}
+
+fn run_length(cur: &StrCursor, from: i32, d: char) -> i32 {
+    let mut n = 0;
+    let mut i = from;
+    while cur.is_at(i, d) {
+        n += 1;
+        i += 1;
+    }
+    return n;
+}

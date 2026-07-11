@@ -654,7 +654,7 @@ fn collect_generic_variant_cases(
         .collect()
 }
 
-/// Collect non-generic struct info for Inspect/InspectAlt synthesis (excludes hidden fields).
+/// Collect non-generic struct info for Inspect/InspectAlt synthesis (excludes secret fields).
 fn collect_struct_visible_fields(module: &TirModule) -> Vec<(String, Vec<FieldInfo>, bool, Span)> {
     module
         .structs
@@ -664,16 +664,16 @@ fn collect_struct_visible_fields(module: &TirModule) -> Vec<(String, Vec<FieldIn
             let fields = s
                 .fields
                 .iter()
-                .filter(|f| !f.is_hidden)
+                .filter(|f| !f.is_secret)
                 .map(|f| (f.name.clone(), f.type_id, f.index))
                 .collect();
-            let has_hidden = s.fields.iter().any(|f| f.is_hidden);
-            (s.name.clone(), fields, has_hidden, s.span)
+            let has_secret = s.fields.iter().any(|f| f.is_secret);
+            (s.name.clone(), fields, has_secret, s.span)
         })
         .collect()
 }
 
-/// Collect generic struct info for Inspect/InspectAlt synthesis (excludes hidden fields).
+/// Collect generic struct info for Inspect/InspectAlt synthesis (excludes secret fields).
 fn collect_generic_struct_visible_fields(
     module: &TirModule,
 ) -> Vec<(String, Vec<TirTypeParam>, Vec<FieldInfo>, bool, Span)> {
@@ -685,15 +685,15 @@ fn collect_generic_struct_visible_fields(
             let fields = s
                 .fields
                 .iter()
-                .filter(|f| !f.is_hidden)
+                .filter(|f| !f.is_secret)
                 .map(|f| (f.name.clone(), f.type_id, f.index))
                 .collect();
-            let has_hidden = s.fields.iter().any(|f| f.is_hidden);
+            let has_secret = s.fields.iter().any(|f| f.is_secret);
             (
                 s.name.clone(),
                 s.type_params.clone(),
                 fields,
-                has_hidden,
+                has_secret,
                 s.span,
             )
         })
@@ -1127,7 +1127,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     // Non-generic structs
     let struct_infos = collect_struct_visible_fields(module);
 
-    for (name, fields, has_hidden, sspan) in &struct_infos {
+    for (name, fields, has_secret, sspan) in &struct_infos {
         if name == tt.compiler_struct_name(crate::compiler_item::CompilerItem::String)
             || name == &formatter_name
         {
@@ -1142,7 +1142,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
             name,
             &[],
             fields,
-            *has_hidden,
+            *has_secret,
             ref_type,
             fmt_type,
             string_type,
@@ -1159,7 +1159,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     }
 
     let generic_struct_infos = collect_generic_struct_visible_fields(module);
-    for (name, type_params, fields, has_hidden, sspan) in &generic_struct_infos {
+    for (name, type_params, fields, has_secret, sspan) in &generic_struct_infos {
         if ctx.has_methodful_impl_anywhere(name, &inspect_name) {
             continue;
         }
@@ -1171,7 +1171,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
             name,
             type_params,
             fields,
-            *has_hidden,
+            *has_secret,
             ref_type,
             fmt_type,
             string_type,
@@ -1515,7 +1515,7 @@ fn generate_struct_inspect_fn(
     struct_name: &str,
     impl_type_params: &[TirTypeParam],
     fields: &[(String, TypeId, u32)],
-    has_hidden: bool,
+    has_secret: bool,
     ref_struct_type: TypeId,
     fmt_type: TypeId,
     string_type: TypeId,
@@ -1534,7 +1534,7 @@ fn generate_struct_inspect_fn(
     let stmts = build_struct_inspect_body(
         struct_name,
         fields,
-        has_hidden,
+        has_secret,
         ref_struct_type,
         fmt_type,
         string_type,
@@ -1562,11 +1562,11 @@ fn generate_struct_inspect_fn(
 }
 
 /// Build the body statements for a struct `Inspect::inspect`: writes the type name,
-/// each visible field via `inspect`, plus a trailing `, ..` when hidden fields are present.
+/// each visible field via `inspect`, plus a trailing `, ..` when secret fields are present.
 fn build_struct_inspect_body(
     struct_name: &str,
     fields: &[(String, TypeId, u32)],
-    has_hidden: bool,
+    has_secret: bool,
     ref_struct_type: TypeId,
     fmt_type: TypeId,
     string_type: TypeId,
@@ -1585,7 +1585,7 @@ fn build_struct_inspect_body(
     let mut stmts = Vec::new();
 
     if fields.is_empty() {
-        let suffix = if has_hidden { " { .. }" } else { " {}" };
+        let suffix = if has_secret { " { .. }" } else { " {}" };
         stmts.push(write(format!("{struct_name}{suffix}")));
         return stmts;
     }
@@ -1617,7 +1617,7 @@ fn build_struct_inspect_body(
             inspect_method,
         ));
     }
-    if has_hidden {
+    if has_secret {
         stmts.push(write(", ..".to_string()));
     }
     stmts.push(write(" }".to_string()));
@@ -2299,7 +2299,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     // Non-generic structs — pretty-print with begin_block/end_block
     let struct_infos = collect_struct_visible_fields(module);
 
-    for (name, fields, has_hidden, sspan) in &struct_infos {
+    for (name, fields, has_secret, sspan) in &struct_infos {
         if name == tt.compiler_struct_name(crate::compiler_item::CompilerItem::String)
             || name == &formatter_name
         {
@@ -2314,7 +2314,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             name,
             &[],
             fields,
-            *has_hidden,
+            *has_secret,
             ref_type,
             fmt_type,
             string_type,
@@ -2331,7 +2331,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     }
 
     let generic_struct_infos = collect_generic_struct_visible_fields(module);
-    for (name, type_params, fields, has_hidden, sspan) in &generic_struct_infos {
+    for (name, type_params, fields, has_secret, sspan) in &generic_struct_infos {
         if ctx.has_methodful_impl_anywhere(name, &inspect_alt_name) {
             continue;
         }
@@ -2343,7 +2343,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             name,
             type_params,
             fields,
-            *has_hidden,
+            *has_secret,
             ref_type,
             fmt_type,
             string_type,
@@ -2549,7 +2549,7 @@ fn generate_struct_inspect_alt_fn(
     struct_name: &str,
     impl_type_params: &[TirTypeParam],
     fields: &[(String, TypeId, u32)],
-    has_hidden: bool,
+    has_secret: bool,
     ref_struct_type: TypeId,
     fmt_type: TypeId,
     string_type: TypeId,
@@ -2568,7 +2568,7 @@ fn generate_struct_inspect_alt_fn(
     let stmts = build_struct_inspect_alt_body(
         struct_name,
         fields,
-        has_hidden,
+        has_secret,
         ref_struct_type,
         fmt_type,
         string_type,
@@ -2600,7 +2600,7 @@ fn generate_struct_inspect_alt_fn(
 fn build_struct_inspect_alt_body(
     struct_name: &str,
     fields: &[(String, TypeId, u32)],
-    has_hidden: bool,
+    has_secret: bool,
     ref_struct_type: TypeId,
     fmt_type: TypeId,
     string_type: TypeId,
@@ -2637,7 +2637,7 @@ fn build_struct_inspect_alt_body(
     let mut stmts = Vec::new();
 
     if fields.is_empty() {
-        let suffix = if has_hidden { " { .. }" } else { " {}" };
+        let suffix = if has_secret { " { .. }" } else { " {}" };
         stmts.push(write_str_stmt(
             format!("{struct_name}{suffix}"),
             fmt(),
@@ -2688,7 +2688,7 @@ fn build_struct_inspect_alt_body(
         ));
         stmts.push(write(","));
     }
-    if has_hidden {
+    if has_secret {
         stmts.push(newline_indent());
         stmts.push(write(".."));
     }

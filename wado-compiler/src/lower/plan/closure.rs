@@ -526,7 +526,7 @@ impl ClosureLowerer {
                     type_id: cap.type_id,
                     index: i as u32,
                     span: collected.span,
-                    is_hidden: false,
+                    is_secret: false,
                     serde_rename: None,
                     serde_default: false,
                     serde_positional: false,

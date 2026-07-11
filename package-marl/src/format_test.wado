@@ -1,0 +1,24 @@
+use { format } from "./format.wado";
+
+test "format is idempotent" {
+    let source = "# Title\n\nSome *text* with a [link](https://example.com).\n\n- a\n- b\n";
+    let once = format(&source);
+    let twice = format(&once);
+    assert once == twice;
+}
+
+test "format normalizes a heading and collapses inline whitespace runs" {
+    assert format(&"#   Title   \n\nhello   world") == "# Title\n\nhello world\n";
+}
+
+test "format leaves a bare url as plain text" {
+    assert format(&"see https://example.com/x here\n") == "see https://example.com/x here\n";
+}
+
+test "format keeps a bare url in parentheses intact" {
+    assert format(&"a port of zlib (https://github.com/madler/zlib).\n") == "a port of zlib (https://github.com/madler/zlib).\n";
+}
+
+test "format preserves an angle-bracketed autolink" {
+    assert format(&"<https://example.com>\n") == "<https://example.com>\n";
+}

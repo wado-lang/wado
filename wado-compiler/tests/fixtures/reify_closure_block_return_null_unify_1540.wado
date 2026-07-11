@@ -1,0 +1,27 @@
+// Regression: a closure with a block body that mixes `return Option::Some(v)`
+// and a bare `return null` must reify the `null` return against the closure's
+// inferred `Option<T>` return type. `reify_closure` seeded the closure
+// context's return type with UNKNOWN and only computed the real return type
+// AFTER reifying the body, so `return null` emitted a bare nullref against the
+// non-null `(ref $Option)` return slot — an invalid closure module. See #1540.
+fn classify(x: i32) -> i32 {
+    let f = |n: i32| {
+        if n > 0 {
+            return Option::Some(n);
+        } else {
+            return null;
+        }
+    };
+    return match f(x) {
+        Some(v) => v,
+        None => -1,
+    };
+}
+
+test "closure block body returning Option::Some or null" {
+    assert classify(10) == 10;
+    assert classify(-3) == -1;
+}
+
+__DATA__
+{"test": {}}

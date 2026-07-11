@@ -1,0 +1,64 @@
+use { char_display_width, display_width } from "./unicode_width.wado";
+
+test "char_display_width treats ASCII as width 1" {
+    assert char_display_width('a') == 1;
+    assert char_display_width('Z') == 1;
+    assert char_display_width('0') == 1;
+    assert char_display_width(' ') == 1;
+    assert char_display_width('~') == 1;
+}
+
+test "char_display_width treats C0/C1 controls and NUL as width 0" {
+    assert char_display_width('\u{0000}') == 0;
+    assert char_display_width('\u{0001}') == 0;
+    assert char_display_width('\u{001F}') == 0;
+    assert char_display_width('\u{007F}') == 0;
+    assert char_display_width('\u{009F}') == 0;
+}
+
+test "char_display_width treats Latin-1 supplement as width 1" {
+    assert char_display_width('é') == 1;
+    assert char_display_width('ñ') == 1;
+    assert char_display_width('\u{00A0}') == 1;
+}
+
+test "char_display_width treats CJK ideographs, kana, and Hangul as width 2" {
+    assert char_display_width('中') == 2;
+    assert char_display_width('あ') == 2;
+    assert char_display_width('ア') == 2;
+    assert char_display_width('한') == 2;
+}
+
+test "char_display_width treats CJK punctuation and fullwidth forms as width 2" {
+    assert char_display_width('。') == 2;
+    assert char_display_width('、') == 2;
+    assert char_display_width('Ａ') == 2;
+}
+
+test "char_display_width treats emoji as width 2" {
+    assert char_display_width('\u{1F600}') == 2;
+    assert char_display_width('\u{2705}') == 2;
+    assert char_display_width('\u{1FAE0}') == 2;
+}
+
+test "char_display_width treats combining marks and variation selectors as width 0" {
+    assert char_display_width('\u{0301}') == 0;
+    assert char_display_width('\u{FE0F}') == 0;
+    assert char_display_width('\u{200D}') == 0;
+}
+
+test "display_width sums per-character widths" {
+    assert display_width(&"hello") == 5;
+    assert display_width(&"中文") == 4;
+    assert display_width(&"a中b") == 4;
+    assert display_width(&"") == 0;
+}
+
+test "display_width measures the tc39-temporal.md table cell case" {
+    // "⬆️ [-1]" (U+2B06 UPWARDS BLACK ARROW, U+FE0F VS-16, " [-1]") measures
+    // 6: the arrow is Neutral (width 1, not Wide), the variation selector is
+    // explicitly zero-width (unlike dprint's unicode-width dependency, which
+    // has no zero-width case at all — see the WEP's Unicode width section),
+    // and " [-1]" is 5 ASCII columns.
+    assert display_width(&"\u{2B06}\u{FE0F} [-1]") == 6;
+}

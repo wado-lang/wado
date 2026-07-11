@@ -808,7 +808,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 type_id,
                 index: index as u32,
                 span: field.span,
-                is_hidden: field.attrs.iter().any(|a| a.name == "hidden"),
+                is_secret: field.attrs.iter().any(|a| a.name == "secret"),
                 serde_rename,
                 serde_default,
                 serde_positional,
@@ -855,7 +855,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Field types and type-param bounds come from `sem.decls.local_struct_fields`
     /// — the durable, mangled-name-keyed fact `resolve_local_struct` recorded.
-    /// Field attributes (`#[serde(...)]`, `#[hidden]`) and default-value
+    /// Field attributes (`#[serde(...)]`, `#[secret]`) and default-value
     /// expressions are read straight from the AST here, exactly matching
     /// `reify_struct`'s handling for a top-level struct — `StructFieldInfo`
     /// doesn't carry attributes, only `(name, type, visibility)`.
@@ -895,7 +895,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     type_id: *type_id,
                     index: index as u32,
                     span: field.map_or(struct_decl.span, |f| f.span),
-                    is_hidden: attrs.iter().any(|a| a.name == "hidden"),
+                    is_secret: attrs.iter().any(|a| a.name == "secret"),
                     serde_rename: serde_rename_of(attrs),
                     serde_default: field.is_some_and(|f| f.default.is_some()),
                     serde_positional: attrs
@@ -4071,6 +4071,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         expected_type: Option<TypeId>,
         recorded_type: TypeId,
     ) -> TirExpr {
+        // When no expected type propagated from the use site (e.g. an
+        // unannotated `let x = if cond { Option::Some(v) } else { null };`),
+        // fall back to the if-expression's own already-unified `recorded_type`
+        // (computed by `Elaborator::resolve_if_expr`'s branch-agreement logic,
+        // expr.rs:1829-1858) so a bare `null` branch reifies with a concrete
+        // `Option<T>` type instead of `UNKNOWN` (`ann_expression_types`,
+        // reify.rs:317-329, discards UNKNOWN-containing recorded types and
+        // falls back to `expected_type` — which was `None` here without this).
+        // An inconsistency between the `If` node's own type and an untyped
+        // branch produces invalid Wasm at codegen (mismatched block/branch
+        // types). Mirrors the same fallback already used for labeled-block
+        // break values (reify.rs:2374-2381, `LabeledBlockTarget`).
+        let branch_expected = expected_type.or(Some(recorded_type));
         let cond_expr = match &if_expr.condition {
             ast::Condition::Expr(e) => e,
             ast::Condition::LetChain { elements, .. } => {
@@ -4084,14 +4097,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let else_block = if_expr
                     .else_block
                     .as_ref()
-                    .map(|b| self.reify_block_value(b, ctx, expected_type));
+                    .map(|b| self.reify_block_value(b, ctx, branch_expected));
                 ctx.enter_scope();
                 let stmts = self.reify_let_chain_stmts(
                     elements,
                     &if_expr.then_block,
                     else_block.as_ref(),
                     ctx,
-                    expected_type,
+                    branch_expected,
                     true,
                     if_expr.span,
                 );
@@ -4105,11 +4118,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         };
         let condition = self.reify_expr(cond_expr, ctx, Some(crate::tir::TypeTable::BOOL));
-        let then_branch = self.reify_block_value(&if_expr.then_block, ctx, expected_type);
+        let then_branch = self.reify_block_value(&if_expr.then_block, ctx, branch_expected);
         let else_branch = if_expr
             .else_block
             .as_ref()
-            .map(|b| self.reify_block_value(b, ctx, expected_type));
+            .map(|b| self.reify_block_value(b, ctx, branch_expected));
         TirExpr::new(
             crate::tir::TirExprKind::If {
                 condition: Box::new(condition),
@@ -5625,11 +5638,38 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .collect();
 
         // Step 4: reify the body in the closure scope.
-        let body_expected =
+        // An explicit `|params| -> Type ...` annotation is the authoritative
+        // return type; otherwise use the expected fn type's return.
+        let declared_return = closure.return_type.as_ref().map(|ty| self.resolve_type(ty));
+        let body_expected = declared_return.or_else(|| {
             expected_fn_type.and_then(|t| match self.tysys.type_table.borrow().get(t) {
                 ResolvedType::Function { return_type, .. } => Some(*return_type),
                 _ => None,
-            });
+            })
+        });
+
+        // A block body with explicit `return X` has a NEVER/UNIT tail, so its
+        // logical return type comes from the returned expressions, which
+        // annotate already recorded (independent of the body TIR). Compute it
+        // now, before reifying the body: a `return X` statement reifies its
+        // value against `ctx.return_type` (see the `ast::Stmt::Return` arm), so
+        // leaving it UNKNOWN makes a bare `return null` emit a nullref against
+        // the non-null `(ref $Option)` slot another arm's `return
+        // Option::Some(..)` fixes — an invalid closure. Prefer an explicit
+        // expected fn return type; fall back to the block-return type.
+        let block_return_type = if let crate::ast::Expr::Block(ref block) = closure.body {
+            let ctrl_ctx = super::control_flow::CtrlFlowCtx {
+                expression_types: &self.sem.types.expression_types,
+                type_table: &self.tysys.type_table,
+            };
+            super::control_flow::find_return_type_in_block(ctrl_ctx, block)
+        } else {
+            None
+        };
+        if let Some(rt) = body_expected.or(block_return_type) {
+            closure_ctx.return_type = rt;
+        }
+
         let body = self.reify_expr(&closure.body, &mut closure_ctx, body_expected);
 
         // Step 5: assemble the capture list from the recorded entries.
@@ -5644,23 +5684,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             })
             .collect();
 
-        // Block bodies with explicit `return X` have a NEVER/UNIT
-        // tail; the closure's logical return is the returned type.
-        // Use the AST-walker (consults `expression_types`) so this
-        // doesn't depend on the combined walk's body TIR. Block-gated
-        // to match the original TIR walker's
-        // `if let TirExprKind::Block(ref block) = body.kind` —
-        // single-expression closure bodies (e.g. `|c| c.method()`)
-        // take their body's type as the return type directly.
-        let return_type = if let crate::ast::Expr::Block(ref block) = closure.body {
-            let ctrl_ctx = super::control_flow::CtrlFlowCtx {
-                expression_types: &self.sem.types.expression_types,
-                type_table: &self.tysys.type_table,
-            };
-            super::control_flow::find_return_type_in_block(ctrl_ctx, block).unwrap_or(body.type_id)
-        } else {
-            body.type_id
-        };
+        // An explicit annotation wins; otherwise single-expression closure
+        // bodies (e.g. `|c| c.method()`) take their body's type as the return
+        // type directly, and block bodies use the return-expression type
+        // computed above.
+        let return_type = declared_return
+            .or(block_return_type)
+            .unwrap_or(body.type_id);
 
         let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
         let func_type = self.tysys.type_table.borrow_mut().make_function_with_mut(
@@ -6695,6 +6725,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let scrutinee = self.reify_expr(&match_expr.expr, ctx, None);
         let scrutinee_type = scrutinee.type_id;
 
+        // Same fallback as `reify_if_expr` (this file, above): without a
+        // top-down expected type, an arm body that is a bare `null` reifies
+        // as `UNKNOWN` unless it falls back to the match's own already-unified
+        // `recorded_type`, producing the same invalid-Wasm shape for
+        // `let x = match v { A => Option::Some(1), B => null };`.
+        let branch_expected = expected_type.or(Some(recorded_type));
+
         let arms: Vec<TirMatchArm> = match_expr
             .arms
             .iter()
@@ -6705,7 +6742,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .guard
                     .as_ref()
                     .map(|g| self.reify_expr(g, ctx, Some(TypeTable::BOOL)));
-                let body = self.reify_expr(&arm.body, ctx, expected_type);
+                let body = self.reify_expr(&arm.body, ctx, branch_expected);
                 ctx.exit_scope();
                 TirMatchArm {
                     pattern,

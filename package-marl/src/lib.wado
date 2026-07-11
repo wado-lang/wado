@@ -1,7 +1,10 @@
 //! Marl — Markdown Adaptive Rendering Layer.
 //!
-//! A GFM-subset Markdown-to-HTML renderer. The public surface is a single pure
-//! function, `render`, plus the HTML escaping helpers it is built on.
+//! A Markdown-to-HTML renderer (`render`) and a Markdown-to-Markdown
+//! formatter (`format`), sharing one parser and AST (`fmt_*.wado`): `render`
+//! walks the tree to safe HTML, `format` prints it back to canonical
+//! Markdown. See `docs/wep-2026-07-05-marl.md`.
 
-pub use { render } from "./marl.wado";
+pub use { render } from "./fmt_html.wado";
 pub use { escape_text, escape_attr } from "./html.wado";
+pub use { format } from "./format.wado";

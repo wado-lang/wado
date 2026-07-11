@@ -112,6 +112,7 @@ pub struct FieldMeta {
     has_default: bool,       // field has a default value `f: T = expr`
     doc: String,             // /// doc comment ("" if none)
     validate: List<ValidateEntry>,   // parsed #[validate(...)] (see §4)
+    secret: bool,            // field is #[secret]; its Fields slot is Secret<F_k>
 }
 
 #[comp_feature("reflect")]
@@ -126,7 +127,9 @@ pub trait Reflect {
 ```
 
 `field_meta()` keeps index correspondence with `field_names()` and the
-type-level `Fields` pack. Two channels are unavoidable and intentional: field
+type-level `Fields` pack. A `#[secret]` field occupies its slot in `Fields` as
+the value-opaque `Secret<F_k>` projection — see
+[Struct Walkability](./wep-2026-07-10-struct-walkability.md). Two channels are unavoidable and intentional: field
 **types** must stay a type-level pack (`Fields = [..F]`) so `[..F::method()]`
 can expand; everything else is value-level metadata (`field_meta()`). A
 derivation zips the two by index. Like the original, `Reflect` is
