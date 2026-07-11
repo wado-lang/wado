@@ -2314,10 +2314,9 @@ fn build_handler_op_closure(
     }];
 
     let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
-    let func_type =
-        type_table
-            .borrow_mut()
-            .make_function(param_types, closure_ret, vec![], vec![]);
+    let func_type = type_table
+        .borrow_mut()
+        .make_function(param_types, closure_ret, vec![], vec![]);
 
     TirExpr::new(
         TirExprKind::Closure {
@@ -2375,10 +2374,9 @@ fn build_trap_closure(
         span,
     );
     let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
-    let func_type =
-        type_table
-            .borrow_mut()
-            .make_function(param_types, closure_ret, vec![], vec![]);
+    let func_type = type_table
+        .borrow_mut()
+        .make_function(param_types, closure_ret, vec![], vec![]);
     TirExpr::new(
         TirExprKind::Closure {
             params: closure_params,

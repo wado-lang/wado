@@ -364,31 +364,34 @@ fn synthesize_async_wrap_function(
     outptr_size: u32,
     outptr_align: u32,
     lift_fn_ref: TirExpr,
-    entry_source: &ModuleSource,
     cm_interface_registry: &CmInterfaceRegistry,
     type_table: &RefCell<TypeTable>,
 ) -> Rc<RefCell<TirFunction>> {
-    let _ = entry_source;
     let span = synth_span();
     let mut next_local: u32 = 0;
     let mut locals: Vec<TirLocal> = Vec::new();
     let mut body_stmts: Vec<TirStmt> = Vec::new();
 
     let mut params: Vec<TirParam> = Vec::new();
-    if inner_type_id != TypeTable::UNIT {
-        let value_local = next_local;
-        locals.push(TirLocal::synth(value_local, inner_type_id, false));
+    let value_local: Option<u32> = if inner_type_id != TypeTable::UNIT {
+        let vl = next_local;
+        locals.push(TirLocal::synth(vl, inner_type_id, false));
         next_local += 1;
         params.push(TirParam {
             name: "__value".to_string(),
             type_id: inner_type_id,
-            local_index: value_local,
+            local_index: vl,
             is_mut: false,
             span,
         });
-    }
+        Some(vl)
+    } else {
+        None
+    };
 
     let outptr_expr = if outptr_size > 0 {
+        let value_local =
+            value_local.expect("outptr_size > 0 implies a non-unit result value to lower");
         let outptr_local = next_local;
         locals.push(TirLocal::synth(outptr_local, TypeTable::I32, false));
         next_local += 1;
@@ -413,7 +416,7 @@ fn synthesize_async_wrap_function(
             .expect("outptr_size > 0 implies a result type");
         body_stmts.extend(synthesize_lower_wasi_type_to_memory(
             return_type,
-            local_ref(params[0].local_index, "__value", inner_type_id),
+            local_ref(value_local, "__value", inner_type_id),
             local_ref(outptr_local, "__outptr", TypeTable::I32),
             &mut next_local,
             &mut locals,
@@ -1589,7 +1592,6 @@ pub(super) fn synthesize_adapter(
                 wrap_size,
                 wrap_align,
                 wrap_lift_ref,
-                entry_source,
                 cm_interface_registry,
                 type_table,
             ));

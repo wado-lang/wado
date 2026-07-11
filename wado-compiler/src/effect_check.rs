@@ -860,7 +860,15 @@ impl SemEffectWalker<'_> {
             return facts
                 .effects
                 .iter()
-                .filter_map(|entry| self.index.effect_by_name.get(&entry.name).cloned())
+                .filter_map(|entry| {
+                    let resolved = self.index.effect_by_name.get(&entry.name).cloned();
+                    debug_assert!(
+                        resolved.is_some(),
+                        "granted effect '{}' from handler_bindings facts is absent from effect_by_name",
+                        entry.name
+                    );
+                    resolved
+                })
                 .collect();
         }
         binding

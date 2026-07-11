@@ -736,6 +736,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .as_ref()
                 .map(|ty| scope.resolve_type(ty))
                 .unwrap_or(TypeTable::UNIT);
+            if method.is_async
+                && scope
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .as_async_call(return_type)
+                    .is_none()
+            {
+                let _ = scope.logger.error(TypeError::AsyncOpMustReturnAsyncCall {
+                    op_name: method.name.clone(),
+                    span: method.span,
+                });
+            }
             // Extract `#[cm("...")]` attribute payload, if any, so the
             // dispatch synthesis can map raw resource call sites back
             // to the right per-monomorphisation wrapper. Mirrors the
@@ -1717,37 +1730,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .effect_decl_index
                 .get(&canonical_key)
                 .cloned();
-            if effect_decl.is_some()
-                || scope
-                    .tysys
-                    .trait_env
-                    .resource_decl_index
-                    .contains_key(&canonical_key)
-            {
+            let resource_decl = scope
+                .tysys
+                .trait_env
+                .resource_decl_index
+                .get(&canonical_key)
+                .cloned();
+            if effect_decl.is_some() || resource_decl.is_some() {
                 ctx.in_handler_method = true;
             }
-            // A handled async op is repackaged as a completed `AsyncCall`
-            // through the import's canonical-ABI lower/lift pair; a
-            // user-defined effect has no such pair, so reject its async
-            // ops here rather than ICE in dispatch synthesis.
-            if let Some((decl_module, decl_id)) = effect_decl
+            let (decl_ref, is_resource_effect) = match (effect_decl, resource_decl) {
+                (Some(d), _) => (Some(d), false),
+                (None, Some(d)) => (Some(d), true),
+                (None, None) => (None, false),
+            };
+            if let Some((decl_module, decl_id)) = decl_ref
                 && let Some(module) = scope.loaded_modules.get(&decl_module)
-                && let Some(ast::Item::Interface(decl)) = module.item_by_id(decl_id)
-                && let Some(method) = decl.methods.iter().find(|m| m.name == func.name)
+                && let Some(methods) = match module.item_by_id(decl_id) {
+                    Some(ast::Item::Interface(d)) => Some(&d.methods),
+                    Some(ast::Item::Resource(d)) => Some(&d.methods),
+                    _ => None,
+                }
+                && let Some(method) = methods.iter().find(|m| m.name == func.name)
                 && method.is_async
-                && method
+            {
+                let cm_backed = method
                     .attrs
                     .iter()
                     .find_map(ast::Attribute::cm_identifier)
-                    .is_none()
-            {
-                let _ = scope
-                    .logger
-                    .error(TypeError::AsyncUserEffectHandlerUnsupported {
-                        interface_name: name.to_string(),
-                        op_name: func.name.clone(),
-                        span: func.span,
-                    });
+                    .is_some();
+                if is_resource_effect || !cm_backed {
+                    let _ = scope
+                        .logger
+                        .error(TypeError::AsyncUserEffectHandlerUnsupported {
+                            interface_name: name.to_string(),
+                            op_name: func.name.clone(),
+                            span: func.span,
+                        });
+                }
             }
         }
 

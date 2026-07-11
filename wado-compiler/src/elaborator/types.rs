@@ -449,6 +449,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An `async fn` effect/resource operation whose declared return type is
+    /// not `AsyncCall<T>`.
+    AsyncOpMustReturnAsyncCall {
+        op_name: String,
+        span: Span,
+    },
+
     /// Bundled-handler form `with &mut h do { ... }` where the handler value's
     /// underlying type does not implement any effect. There is nothing for
     /// `with h do` to install in this case — the user almost certainly meant
@@ -900,6 +907,11 @@ impl TypeError {
                 format!(
                     "cannot handle async operation '{interface_name}::{op_name}': only async operations backed by a Component Model import (e.g. wasi:http 'Client::send') can be handled"
                 ),
+                *span,
+            ),
+            TypeError::AsyncOpMustReturnAsyncCall { op_name, span } => (
+                Code::TypeMismatch,
+                format!("async operation '{op_name}' must return `AsyncCall<T>`"),
                 *span,
             ),
             TypeError::HandlerEffectNotImplemented {
