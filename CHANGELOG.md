@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.0.11](https://github.com/wado-lang/wado/compare/v0.0.10...v0.0.11) - 2026-07-11
+
+- refactor(sheaf): move the blog generator to wado-lang.github.io by @gfx in https://github.com/wado-lang/wado/pull/1547
+- refactor(lang)!: rename #[hidden] to #[secret], add struct walkability WEP by @gfx in https://github.com/wado-lang/wado/pull/1546
+- refactor(elaborator): dismantle the god object — Scope, dispatch outcomes, decl-first driver, signature digests (S1–S4) by @gfx in https://github.com/wado-lang/wado/pull/1550
+- feat(deps): git repository dependencies and a PubGrub resolver by @gfx in https://github.com/wado-lang/wado/pull/1552
+- chore(deps): drop flate2/crc32fast/adler; validate zlib interop against zlib-rs alone by @gfx in https://github.com/wado-lang/wado/pull/1554
+
 ## [v0.0.10](https://github.com/wado-lang/wado/compare/v0.0.9...v0.0.10) - 2026-07-10
 
 - fix: reject `&mut` to an enum-typed struct field by @gfx in https://github.com/wado-lang/wado/pull/1516
