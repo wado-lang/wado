@@ -85,7 +85,7 @@ impl Stream<u8> for MockStdio {
         let _ = this;
         let end = i32::min(self.input_pos + max, self.input.len());
         let mut chunk: List<u8> = [];
-        chunk.extend_from_slice(self.input.as_slice().slice(self.input_pos, end));
+        chunk.extend_from_slice(self.input.slice(self.input_pos, end));
         self.input_pos = end;
         resume chunk;
     }
@@ -157,7 +157,7 @@ fn read_all_stdin() -> String with Stdin {
 
 export fn run() with Stdout, Stderr {
     let mut mock = MockStdio {
-        input: "Ada\nTuring\n".as_bytes().to_array().into_iter().collect(),
+        input: b"Ada\nTuring\n",
     };
     with &mut mock do {
         print("prompt> ");
@@ -197,7 +197,7 @@ test "captures stderr independently from stdout" {
 
 test "scripted stdin is replayed to the guest reader" {
     let mut mock = MockStdio {
-        input: "hello\nstdin".as_bytes().to_array().into_iter().collect(),
+        input: b"hello\nstdin",
     };
     let got = with &mut mock do {
         read_all_stdin();
