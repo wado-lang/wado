@@ -445,19 +445,12 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// Handler method provided for an `async fn` operation of an effect
-    /// with no Component Model import binding. The dispatch wrapper
-    /// repackages a handler's resolved result through the import's
-    /// canonical-ABI lower/lift pair, which does not exist for a
-    /// user-defined effect.
     AsyncUserEffectHandlerUnsupported {
         interface_name: String,
         op_name: String,
         span: Span,
     },
 
-    /// An `async fn` effect/resource operation whose declared return type is
-    /// not `AsyncCall<T>`.
     AsyncOpMustReturnAsyncCall {
         op_name: String,
         span: Span,

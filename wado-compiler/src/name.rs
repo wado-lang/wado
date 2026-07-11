@@ -1378,12 +1378,6 @@ pub fn dispatch_field_name(op_name: &str) -> String {
     format!("op_{op_name}")
 }
 
-/// Build the per-import completed-`AsyncCall` wrap function name. Emitted by
-/// `cm_binding` next to each async import adapter; called by the effect
-/// dispatch wrapper to repackage a handler's resolved result as an
-/// already-completed `AsyncCall<T>`.
-///
-/// Example: `cm_wrap_async_func_name("Client", "send")` → `"__cm_wrap_async__Client_send"`
 pub fn cm_wrap_async_func_name(interface_name: &str, method_name: &str) -> String {
     format!("__cm_wrap_async__{interface_name}_{method_name}")
 }

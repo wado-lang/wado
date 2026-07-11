@@ -345,17 +345,6 @@ fn synthesize_async_lift_function(
     )
 }
 
-/// Synthesize the per-import completed-`AsyncCall` wrap function
-/// `__cm_wrap_async__<iface>_<method>(value: T) -> AsyncCall<T>`.
-///
-/// Called by the effect dispatch wrapper when a handler intercepts an async
-/// import operation: the handler resumes with the resolved `T`, and this
-/// function repackages it as an `AsyncCall<T>` indistinguishable from a
-/// synchronously-completed real call — the value is lowered into a
-/// realloc'd result buffer through the canonical ABI, and the returned
-/// struct carries subtask handle `0` plus the import's own `__cm_lift__*`
-/// function, so `AsyncCall::wait` follows its ordinary completed-call path
-/// (skip the wait, lift from the buffer, free the buffer).
 #[allow(clippy::too_many_arguments)]
 fn synthesize_async_wrap_function(
     name: String,
@@ -1573,11 +1562,6 @@ pub(super) fn synthesize_adapter(
         adapter_return_type = subtask_type;
         auxiliary.push(lift_fn);
 
-        // Truly async imports additionally get the completed-`AsyncCall`
-        // wrap function the effect dispatch wrapper calls when a handler
-        // mocks this operation. Sync-with-streaming imports also take this
-        // branch but are not `async fn` at the Wado level, so no dispatch
-        // wrapper ever asks for their wrap.
         if func_info.is_async {
             let (wrap_size, wrap_align) = match async_outptr_info {
                 Some((_, size, align)) => (size, align),

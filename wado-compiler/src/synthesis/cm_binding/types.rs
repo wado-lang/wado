@@ -439,9 +439,6 @@ pub(super) fn binary_ne(left: TirExpr, right: TirExpr) -> TirExpr {
     binary(TirBinaryOp::NotEq, left, right, TypeTable::BOOL)
 }
 
-/// Convert a WIT kebab-case case name to the Wado case name declared in the
-/// generated stdlib. Must match `wado-from-idl`'s `to_upper_camel_case`
-/// (heck), which lowercases acronym tails: `"DNS-timeout"` → `"DnsTimeout"`.
 pub(super) fn kebab_to_pascal(s: &str) -> String {
     use heck::ToUpperCamelCase;
     s.to_upper_camel_case()

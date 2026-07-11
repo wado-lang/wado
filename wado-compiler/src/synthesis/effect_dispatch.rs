@@ -207,11 +207,6 @@ fn instantiation_label(base: &str, type_args: &[TypeId], type_table: &TypeTable)
     }
 }
 
-/// The type a handler produces for `op`: async operations resume with the
-/// resolved `T` of their declared `AsyncCall<T>` return (`.wait()` in the
-/// guest is a synchronous call — the host does the async work), so their
-/// dispatch closures are typed `fn(<params>) -> T` and the dispatch wrapper
-/// repackages the result as a completed `AsyncCall<T>`.
 fn handler_return_type(op: &TirEffectOp, type_table: &TypeTable) -> TypeId {
     if op.is_async {
         type_table.as_async_call(op.return_type).unwrap_or_else(|| {
@@ -548,8 +543,6 @@ fn build_dispatch_wrapper_function(
     }
     let saved_local = alloc_local(&mut next_local, &mut locals, nullable_ref_type_id);
     let d_local = alloc_local(&mut next_local, &mut locals, inner_ref_type_id);
-    // Async ops: the handler closure yields the resolved `T` of the op's
-    // `AsyncCall<T>` return; the wrapper repackages it below.
     let closure_ret = handler_return_type(op, &type_table.borrow());
     let result_local = if closure_ret == TypeTable::UNIT {
         None
@@ -697,11 +690,6 @@ fn build_dispatch_wrapper_function(
     ));
 
     // return __result;  /  return;
-    //
-    // Async op: `__result` is the resolved `T`; repackage it as a completed
-    // `AsyncCall<T>` through the per-import `__cm_wrap_async__<E>_<op>`
-    // function that cm_binding emits next to the import's adapter, so the
-    // caller's `.wait()` follows the ordinary completed-call path.
     if op.is_async {
         assert!(
             op.cm_name.is_some() && !is_resource,

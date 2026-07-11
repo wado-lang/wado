@@ -49,9 +49,6 @@ pub struct EffectError {
     pub kind: EffectKind,
     /// Source location of the call
     pub span: Span,
-    /// Source path of the module the span belongs to. Carried on the error
-    /// so the emitted diagnostic never falls back to the logger's stale
-    /// file context (issue #1553).
     pub module: String,
 }
 
@@ -95,7 +92,6 @@ pub struct StoresError {
     pub message: String,
     /// Source location
     pub span: Span,
-    /// Source path of the module the span belongs to (see [`EffectError`]).
     pub module: String,
 }
 
@@ -128,7 +124,6 @@ impl From<StoresError> for crate::compiler_host::Diagnostic {
 pub struct DefaultPurityError {
     pub callee: String,
     pub span: Span,
-    /// Source path of the module the span belongs to (see [`EffectError`]).
     pub module: String,
 }
 
@@ -796,7 +791,6 @@ struct SemEffectWalker<'a> {
     /// indirect call through a function-typed parameter (which leaves no
     /// `references` edge or recorded expression type at the call site).
     param_types: IndexMap<String, TypeId>,
-    /// Source path of the module under check, stamped on every violation.
     module: String,
     out: &'a mut Vec<EffectError>,
 }
@@ -844,11 +838,6 @@ impl SemEffectWalker<'_> {
         self.index.method_effects(func_ref)
     }
 
-    /// Effects a single `with` binding grants to the do-block body. Read from
-    /// the elaborator's enumerated `handler_bindings` facts, which cover the
-    /// bundled form (`with handler do`, whose `binding.effect` is unset yet
-    /// installs one handler per effect the handler type implements); the
-    /// explicit-form fallback applies only when no facts were recorded.
     fn binding_granted_effects(
         &self,
         binding: &crate::ast::EffectHandlerBinding,
@@ -1251,7 +1240,6 @@ struct StoresWalker<'a> {
     ref_params: IndexSet<String>,
     /// `stores[...]`-declared parameter names — escapes of these are allowed.
     stores: IndexSet<String>,
-    /// Source path of the module under check, stamped on every violation.
     module: String,
     out: &'a mut Vec<StoresError>,
 }
@@ -1425,7 +1413,6 @@ struct PurityWalker<'a> {
     sem: &'a Semantics,
     annotations: Option<&'a crate::elaborator::sem::types::TypeAnnotations>,
     index: &'a EffectIndex<'a>,
-    /// Source path of the module under check, stamped on every violation.
     module: String,
     out: &'a mut Vec<DefaultPurityError>,
 }
