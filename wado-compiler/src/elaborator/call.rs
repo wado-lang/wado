@@ -1176,13 +1176,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // defining module too.
         else if let Some(fallback) = self.annotate_ctx.default_scope_module.clone()
             && fallback != self.current_module_source
-            && Self::lookup_func_in_loaded_module(
-                self.loaded_modules,
-                &self.tysys.loaded_module_func_indices,
-                &fallback,
-                effective_name,
-            )
-            .is_some()
+            && self.tysys.function_sig(&fallback, effective_name).is_some()
         {
             (
                 Some(CalleeRef::new(fallback, effective_name.to_string())),
@@ -1445,46 +1439,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return return_type;
         }
 
-        // Try looking up in loaded modules
-        if !callee_module.is_entry_point() {
-            // Clone the return type AST and type params to avoid borrow issues
-            let func_info = Self::lookup_func_in_loaded_module(
-                self.loaded_modules,
-                &self.tysys.loaded_module_func_indices,
-                callee_module,
-                func_name,
-            )
-            .map(|func| (func.return_type.clone(), func.type_params.clone()));
-
-            if let Some((ty, type_params)) = func_info
-                && let Some(return_type_ast) = ty
-            {
-                let in_current_module = *callee_module == self.current_module_source;
-
-                // Set up the function's type parameters in an inherited scope so we
-                // can resolve type parameter references (like T -> TypeParam { index: 0 }).
-                let mut scope = self.enter_inherited_type_param_scope();
-                scope.annotate_ctx.trait_ctx.type_params.clear();
-                scope.register_generic_params(&type_params, 0);
-
-                let resolved = if in_current_module {
-                    // Resolve in the live scope. Reconstructing a perspective for
-                    // the module already being walked would only replace it with
-                    // a lossier copy that drops namespace imports (issue #1415).
-                    scope.resolve_type(&return_type_ast)
-                } else {
-                    // Swap to the callee's perspective so its signature's type
-                    // names resolve to the callee's types, not same-named caller
-                    // types; the scope carries the callee's namespace imports.
-                    let callee_scope = scope.tysys.trait_env.import_scope(callee_module);
-                    scope.with_module_perspective(callee_module.clone(), callee_scope, |s| {
-                        s.resolve_type(&return_type_ast)
-                    })
-                };
-                drop(scope);
-
-                return resolved;
-            }
+        // The canonical signature (declaring-perspective resolution with
+        // the function's own `TypeParam` slots registered) carries the
+        // pre-resolved return type.
+        if !callee_module.is_entry_point()
+            && let Some(sig) = self.tysys.function_sig(callee_module, func_name)
+            && let Some(return_type) = sig.return_type
+        {
+            return return_type;
         }
 
         // Default to UNIT for unknown functions (they might be external/builtin)
@@ -1550,18 +1512,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             // Builtin functions: look up param types from core:builtin module
-            if prefix == "builtin" {
-                let module_source = ModuleSource::builtin();
-                let params = Self::lookup_func_in_loaded_module(
-                    self.loaded_modules,
-                    &self.tysys.loaded_module_func_indices,
-                    &module_source,
-                    suffix,
-                )
-                .map(|func| func.params.clone());
-                if let Some(params) = params {
-                    return params.iter().map(|p| self.resolve_type(&p.ty)).collect();
-                }
+            if prefix == "builtin"
+                && let Some(sig) = self.tysys.function_sig(&ModuleSource::builtin(), suffix)
+            {
+                return sig.param_types.clone();
             }
 
             if let Some((params, _)) = self.resolve_effect_op_signature(prefix, suffix) {
@@ -1592,49 +1546,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Check imported functions — resolve param types using
-        // the definition module's newtypes to avoid same-name collisions
+        // Check imported functions — the canonical signature is resolved
+        // in the definition module's perspective, so type names resolve to
+        // the correct module's types (e.g., "Direction" resolves to module
+        // B's Direction, not module A's).
         if let Some(symbol) = self.symbols.lookup(&self.current_module_source, name) {
             let src = symbol.module_source().clone();
             let sym_name = symbol.name.clone();
-            let params = Self::lookup_func_in_loaded_module(
-                self.loaded_modules,
-                &self.tysys.loaded_module_func_indices,
-                &src,
-                &sym_name,
-            )
-            .map(|func| func.params.clone());
-            if let Some(params) = params {
-                // Resolve types in the definition module's perspective
-                // so that type names resolve to the correct module's types
-                // (e.g., "Direction" resolves to module B's Direction, not module A's)
-                let scope = self.tysys.trait_env.import_scope(&src);
-                return self.with_module_perspective(src, scope, |s| {
-                    params.iter().map(|p| s.resolve_type(&p.ty)).collect()
-                });
+            if let Some(sig) = self.tysys.function_sig(&src, &sym_name) {
+                return sig.param_types.clone();
             }
         }
 
         // Fallback: a default expression may call a private free function
-        // of its declaring module (see `default_scope_module`). Resolve its
-        // parameter types in that module's perspective, mirroring the
-        // callee-resolution fallback in `resolve_call`.
+        // of its declaring module (see `default_scope_module`), whose
+        // canonical signature already resolved in that perspective.
         if let Some(fallback) = self.annotate_ctx.default_scope_module.clone()
             && fallback != self.current_module_source
+            && let Some(sig) = self.tysys.function_sig(&fallback, name)
         {
-            let params = Self::lookup_func_in_loaded_module(
-                self.loaded_modules,
-                &self.tysys.loaded_module_func_indices,
-                &fallback,
-                name,
-            )
-            .map(|func| func.params.clone());
-            if let Some(params) = params {
-                let scope = self.tysys.trait_env.import_scope(&fallback);
-                return self.with_module_perspective(fallback, scope, |s| {
-                    params.iter().map(|p| s.resolve_type(&p.ty)).collect()
-                });
-            }
+            return sig.param_types.clone();
         }
 
         Vec::new()
@@ -1746,16 +1677,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
-            if let Some(func) = Self::lookup_func_in_loaded_module(
-                self.loaded_modules,
-                &self.tysys.loaded_module_func_indices,
-                &src,
-                &name,
-            ) {
+            if let Some(sig) = self.tysys.function_sig(&src, &name) {
                 return (
-                    func.params
+                    sig.param_names
                         .iter()
-                        .map(|p| (p.name.clone(), p.default.clone()))
+                        .cloned()
+                        .zip(sig.param_defaults.iter().cloned())
                         .collect(),
                     Some(src),
                 );
@@ -1794,13 +1721,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
-            if let Some(func) = Self::lookup_func_in_loaded_module(
-                self.loaded_modules,
-                &self.tysys.loaded_module_func_indices,
-                &src,
-                &name,
-            ) {
-                return func.params.iter().map(|p| p.is_mut).collect();
+            if let Some(sig) = self.tysys.function_sig(&src, &name) {
+                return sig.param_is_mut.clone();
             }
         }
 
@@ -2283,53 +2205,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// for type-arg inference. Sets up the function's type params in scope while
     /// resolving param and return types.
     fn lookup_generic_func_for_inference(
-        &mut self,
+        &self,
         callee: &CalleeRef,
     ) -> Option<(Vec<(String, TypeId)>, Vec<TypeId>, Option<TypeId>)> {
-        let func_info: Option<(Vec<ast::GenericParam>, Vec<ast::Param>, Option<ast::Type>)> =
-            Self::lookup_func_in_loaded_module(
-                self.loaded_modules,
-                &self.tysys.loaded_module_func_indices,
-                &callee.module,
-                &callee.name,
-            )
-            .map(|func| {
-                (
-                    func.type_params.clone(),
-                    func.params.clone(),
-                    func.return_type.clone(),
-                )
-            });
-        let (type_params, params, return_type_ast) = func_info?;
-
-        if type_params.iter().all(|p| p.is_effect) {
+        let sig = self.tysys.function_sig(&callee.module, &callee.name)?;
+        if sig.type_params.iter().all(|p| p.is_effect) {
             return Some((vec![], vec![], None));
         }
-
-        // Temporarily register the function's type params so resolve_type produces
-        // TypeParam ids for parameter types like `T`. Inherited scope; only
-        // `type_params` is replaced, matching the original `mem::take` semantics.
-        let mut scope = self.enter_inherited_type_param_scope();
-        scope.annotate_ctx.trait_ctx.type_params.clear();
-        scope.register_generic_params(&type_params, 0);
-        let type_param_list: Vec<(String, TypeId)> = scope
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .iter()
-            .map(|(name, &(_, id))| (name.clone(), id))
-            .collect();
-
-        let resolved_param_types: Vec<TypeId> = params
-            .iter()
-            .filter(|p| p.self_kind == ast::SelfKind::None)
-            .map(|p| scope.resolve_type(&p.ty))
-            .collect();
-
-        let decl_return_type = return_type_ast.as_ref().map(|t| scope.resolve_type(t));
-
-        drop(scope);
-        Some((type_param_list, resolved_param_types, decl_return_type))
+        Some((
+            sig.type_param_ids.clone(),
+            sig.param_types.clone(),
+            sig.return_type,
+        ))
     }
 
     /// Returns true if `arg` is a numeric literal expression (`123`, `3.14`, `-5`)
@@ -2572,54 +2459,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Vec::new();
         };
 
-        let func_info: Option<(Vec<ast::GenericParam>, Vec<ast::Param>)> = if self
+        // The canonical signature already resolved parameter types under
+        // the callee's own effect / type-param bindings (effect params
+        // installed before `register_generic_params`, so an
+        // `fn each<effect E>(... fn() with E)` sees `E` as
+        // `EffectRef::Param`, not a phantom concrete effect).
+        let param_types: Vec<TypeId> = if self
             .sem
             .decls
             .function_return_types
             .contains_key(&ident.name)
         {
-            self.lookup_current_func(&ident.name)
-                .map(|func| (func.type_params.clone(), func.params.clone()))
+            match self
+                .tysys
+                .function_sig(&self.current_module_source, &ident.name)
+            {
+                Some(sig) => sig.param_types.clone(),
+                None => return Vec::new(),
+            }
         } else if let Some(symbol) = self
             .symbols
             .lookup(&self.current_module_source, &ident.name)
         {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
-            Self::lookup_func_in_loaded_module(
-                self.loaded_modules,
-                &self.tysys.loaded_module_func_indices,
-                &src,
-                &name,
-            )
-            .map(|func| (func.type_params.clone(), func.params.clone()))
+            match self.tysys.function_sig(&src, &name) {
+                Some(sig) => sig.param_types.clone(),
+                None => return Vec::new(),
+            }
         } else {
-            None
-        };
-
-        let Some((fn_type_params, fn_params)) = func_info else {
             return Vec::new();
         };
-
-        // Temporarily set up the callee's generic-param scope so its parameter
-        // types resolve under the same effect / type-param bindings as the
-        // callee itself would. Effect params have their own channel
-        // (`trait_ctx.effect_params`); without seeding it, names like the
-        // `E` in `fn each<effect E>(... fn() with E)` would re-resolve to
-        // `EffectRef::Concrete { name: "E" }` and leak out as a phantom
-        // local effect.
-        let mut scope = self.enter_inherited_type_param_scope();
-        scope.annotate_ctx.trait_ctx.type_params.clear();
-        scope
-            .annotate_ctx
-            .trait_ctx
-            .install_effect_params(&fn_type_params);
-        scope.register_generic_params(&fn_type_params, 0);
-        let param_types: Vec<TypeId> = fn_params
-            .iter()
-            .map(|p| scope.resolve_type(&p.ty))
-            .collect();
-        drop(scope);
 
         // Substitute type params with explicit type args
         param_types

@@ -21,9 +21,37 @@ use crate::tir::TypeId;
 
 use super::super::types::{EnumInfo, FlagsInfo, GenericNewtypeInfo, StructFieldInfo, VariantInfo};
 
+/// A function's canonical signature, resolved once by its module's decl
+/// pass: the function's own type params registered as `TypeParam` slots
+/// (fn-bound params eagerly realised, effect params installed), all types
+/// resolved in the declaring module's perspective. Use sites substitute
+/// into this frame; they never re-resolve the signature AST.
+#[derive(Clone)]
+pub(crate) struct FunctionSig {
+    /// The declared generic parameters (incl. effect / fn-bound params).
+    pub(crate) type_params: Vec<ast::GenericParam>,
+    /// Registered `(name, TypeId)` pairs, in registration order — real
+    /// params as `TypeParam` slots, fn-bound params as their realised
+    /// function type. Effect params are excluded (their own channel).
+    pub(crate) type_param_ids: Vec<(String, TypeId)>,
+    /// Parameter types in declaration order.
+    pub(crate) param_types: Vec<TypeId>,
+    pub(crate) param_names: Vec<String>,
+    pub(crate) param_is_mut: Vec<bool>,
+    /// Default-value expressions (irreducibly AST: re-resolved per call
+    /// site under the callee's scope, WEP 2026-04-11).
+    pub(crate) param_defaults: Vec<Option<ast::Expr>>,
+    /// Declared return type; `None` when the declaration has none.
+    pub(crate) return_type: Option<TypeId>,
+}
+
 /// Per-module declaration tables produced by elaboration.
 #[derive(Default, Clone)]
 pub(crate) struct ModuleDecls {
+    /// Canonical signatures of this module's own free functions, recorded
+    /// by the decl pass. The driver assembles the program-wide view
+    /// (`TypeSystem::all_function_sigs`) between the decl and body passes.
+    pub(crate) function_sigs: IndexMap<String, FunctionSig>,
     /// `func_name → return TypeId` for functions defined in this module.
     pub(crate) function_return_types: IndexMap<String, TypeId>,
     /// Names visible via `use` declarations in this module (the union of

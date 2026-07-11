@@ -1532,8 +1532,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // later in the file) to infer type arguments at the call site
         // during body resolution, without relying on a later
         // monomorphization-time fallback.
+        self.sem.decls.function_sigs.clear();
         for item in &module.items {
             if let Item::Function(func) = item {
+                self.record_function_sig(func);
                 self.precompute_generic_function_cache(func);
             }
         }

@@ -155,6 +155,13 @@ pub(crate) struct TypeSystem {
     pub(crate) all_effect_op_sigs:
         Rc<IndexMap<(ModuleSource, String, String), (Vec<TypeId>, Option<TypeId>)>>,
 
+    /// Program-wide canonical free-function signatures (see
+    /// [`super::sem::decls::FunctionSig`]), keyed declaring module →
+    /// function name. Assembled by the driver between the decl and body
+    /// passes from each module's `ModuleDecls::function_sigs`.
+    pub(crate) all_function_sigs:
+        Rc<IndexMap<ModuleSource, IndexMap<String, super::sem::decls::FunctionSig>>>,
+
     /// Per-module `__DATA__` section contents (modules without one have no
     /// entry). Read by the `#data` literal instead of fetching the module
     /// AST.
@@ -162,6 +169,16 @@ pub(crate) struct TypeSystem {
 }
 
 impl TypeSystem {
+    /// Canonical signature of the free function `name` declared in
+    /// `module`, if any. See [`super::sem::decls::FunctionSig`].
+    pub(crate) fn function_sig(
+        &self,
+        module: &ModuleSource,
+        name: &str,
+    ) -> Option<&super::sem::decls::FunctionSig> {
+        self.all_function_sigs.get(module)?.get(name)
+    }
+
     /// Check if a name refers to a known type (struct, variant, enum,
     /// flags, newtype, or primitive). Uses the pre-built cache for O(1)
     /// lookup instead of scanning all module maps.

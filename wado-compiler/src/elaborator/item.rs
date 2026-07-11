@@ -948,6 +948,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scope.populate_generic_function_cache(func);
     }
 
+    /// Resolve `func`'s canonical signature — its own type params
+    /// registered as `TypeParam` slots, effect params installed, all types
+    /// resolved in the declaring perspective — and record it on
+    /// [`super::sem::decls::ModuleDecls::function_sigs`]. The driver
+    /// assembles the program-wide `TypeSystem::all_function_sigs` between
+    /// the decl and body passes.
+    pub(super) fn record_function_sig(&mut self, func: &Function) {
+        let mut scope = self.enter_inherited_type_param_scope();
+        scope.annotate_ctx.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
+        scope
+            .annotate_ctx
+            .trait_ctx
+            .install_effect_params(&func.type_params);
+        scope.register_generic_params(&func.type_params, 0);
+        let type_param_ids: Vec<(String, TypeId)> = scope
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .iter()
+            .map(|(name, &(_, id))| (name.clone(), id))
+            .collect();
+        let param_types: Vec<TypeId> = func
+            .params
+            .iter()
+            .map(|p| scope.resolve_type(&p.ty))
+            .collect();
+        let return_type = func.return_type.as_ref().map(|t| scope.resolve_type(t));
+        drop(scope);
+        self.sem.decls.function_sigs.insert(
+            func.name.clone(),
+            super::sem::decls::FunctionSig {
+                type_params: func.type_params.clone(),
+                type_param_ids,
+                param_types,
+                param_names: func.params.iter().map(|p| p.name.clone()).collect(),
+                param_is_mut: func.params.iter().map(|p| p.is_mut).collect(),
+                param_defaults: func.params.iter().map(|p| p.default.clone()).collect(),
+                return_type,
+            },
+        );
+    }
+
     /// Populate the three generic-function inference caches
     /// (`generic_function_params`, `generic_function_resolved_param_types`,
     /// `generic_function_resolved_return_types`) for `func`, keyed by its
