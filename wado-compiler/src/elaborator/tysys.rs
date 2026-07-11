@@ -146,6 +146,19 @@ pub(crate) struct TypeSystem {
     /// map (own constants + namespace aliases) first so a module's own
     /// constant shadows a same-key foreign one.
     pub(crate) all_associated_constants: Rc<IndexMap<String, (ModuleSource, TypeId, Expr)>>,
+
+    /// Program-wide interface / resource operation signatures, keyed
+    /// `(declaring module, decl name, op name)` → `(param types, return
+    /// type)`. Each module's decl pass resolves its own operations in the
+    /// declaring perspective; the driver assembles this map between the
+    /// decl and body passes. Read by `resolve_effect_op_signature`.
+    pub(crate) all_effect_op_sigs:
+        Rc<IndexMap<(ModuleSource, String, String), (Vec<TypeId>, Option<TypeId>)>>,
+
+    /// Per-module `__DATA__` section contents (modules without one have no
+    /// entry). Read by the `#data` literal instead of fetching the module
+    /// AST.
+    pub(crate) data_sections: Rc<IndexMap<ModuleSource, String>>,
 }
 
 impl TypeSystem {

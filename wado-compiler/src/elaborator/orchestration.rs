@@ -1074,6 +1074,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         sem.decls
                             .associated_constants
                             .clone_from(&snap_sem.decls.associated_constants);
+                        sem.decls
+                            .effect_op_sigs
+                            .clone_from(&snap_sem.decls.effect_op_sigs);
                     }
                 }
             }
@@ -1181,6 +1184,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // Assembled by `build_tir_from_state` between the decl and body
             // passes, once every module's own constants are resolved.
             all_associated_constants: Rc::new(IndexMap::default()),
+            all_effect_op_sigs: Rc::new(IndexMap::default()),
+            data_sections: Rc::new(
+                modules
+                    .iter()
+                    .filter_map(|(ms, m)| m.data_section().map(|d| (ms.clone(), d.to_owned())))
+                    .collect(),
+            ),
         };
         Ok(AnnotateState {
             tysys,
@@ -1457,6 +1467,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
             }
             state.tysys.all_associated_constants = Rc::new(all_consts);
+            let mut all_ops: IndexMap<
+                (ModuleSource, String, String),
+                (Vec<TypeId>, Option<TypeId>),
+            > = IndexMap::default();
+            for module_source in &sorted_sources {
+                if let Some(sem) = state.module_semantics.get(module_source) {
+                    for ((effect, op), sig) in &sem.decls.effect_op_sigs {
+                        all_ops.insert(
+                            (module_source.clone(), effect.clone(), op.clone()),
+                            sig.clone(),
+                        );
+                    }
+                }
+            }
+            state.tysys.all_effect_op_sigs = Rc::new(all_ops);
             // Aliases read the *source module's* own map, not the assembled
             // one: two modules may declare a same-key constant (the bare key
             // collides in the assembled map, last-in-topo wins), yet each
@@ -1745,20 +1770,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         module_source: &ModuleSource,
         return_type: Option<&crate::ast::Type>,
     ) -> crate::tir::TypeId {
-        let scope = self
-            .loaded_modules
-            .get(module_source)
-            .map(|module| {
-                Self::build_imported_type_sources(
-                    &mut self.interner.borrow_mut(),
-                    module,
-                    module_source,
-                    Some(&self.entry_module_source),
-                    &self.invocations,
-                    self.symbols,
-                )
-            })
-            .unwrap_or_default();
+        let scope = self.tysys.trait_env.import_scope(module_source);
         self.with_module_perspective(module_source.clone(), scope, |s| {
             return_type
                 .map(|t| s.resolve_type(t))

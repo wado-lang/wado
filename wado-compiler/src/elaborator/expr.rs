@@ -414,10 +414,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Literal::DataSection => {
                 // #data - returns the __DATA__ section content as a String
                 let data = self
-                    .loaded_modules
+                    .tysys
+                    .data_sections
                     .get(&self.current_module_source)
-                    .and_then(|m| m.data_section())
-                    .map(str::to_owned);
+                    .cloned();
                 let string_type = self.get_string_struct_type();
                 if data.is_none() {
                     let _ = self.logger.error(TypeError::InvalidLiteral {

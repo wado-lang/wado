@@ -577,29 +577,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Vec::new();
         }
 
-        // Search all trait declarations for one containing this associated type
-        for (_, module) in self.loaded_modules {
-            for item in &module.items {
-                if let crate::ast::Item::Trait(trait_decl) = item {
-                    for assoc in &trait_decl.associated_types {
-                        if assoc.name == assoc_name {
-                            return assoc.bounds.clone();
-                        }
-                    }
-                }
-            }
-        }
-        for item in self.current_module_items {
-            if let crate::ast::Item::Trait(trait_decl) = item {
-                for assoc in &trait_decl.associated_types {
-                    if assoc.name == assoc_name {
-                        return assoc.bounds.clone();
-                    }
-                }
-            }
-        }
-
-        Vec::new()
+        self.tysys
+            .trait_env
+            .assoc_type_bound_index
+            .get(assoc_name)
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// Check if type parameter `param_name` has a bound that directly specifies `assoc_name`.

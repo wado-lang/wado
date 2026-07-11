@@ -48,6 +48,11 @@ pub(crate) struct ModuleDecls {
     /// re-running `resolve_type` at every use site.
     pub(crate) associated_constants:
         IndexMap<String, (crate::module_source::ModuleSource, TypeId, ast::Expr)>,
+    /// This module's own interface / resource operation signatures,
+    /// keyed `(decl name, op name)`, resolved once by the decl pass in the
+    /// declaring perspective. The driver assembles the program-wide view
+    /// (`TypeSystem::all_effect_op_sigs`) between the decl and body passes.
+    pub(crate) effect_op_sigs: IndexMap<(String, String), (Vec<TypeId>, Option<TypeId>)>,
 
     /// Names of generic structs declared in this module (used to decide
     /// whether a struct reference needs generic-instance handling).

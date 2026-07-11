@@ -399,6 +399,10 @@ pub struct TraitEnv {
     /// of rebuilding it from the module AST in `loaded_modules`. See
     /// [`module_import_scope`].
     pub(super) module_import_scopes: IndexMap<ModuleSource, ModuleImportScope>,
+    /// Associated-type name → the declaring trait's bounds for it, first
+    /// declaration wins (matching the previous whole-program scan order).
+    /// Consumed by `find_assoc_type_bounds` without an AST scan.
+    pub(super) assoc_type_bound_index: IndexMap<String, Vec<ast::TraitBound>>,
     /// `trait_name` → modules that host a blanket impl of that trait
     /// (`impl<T: Bound> Trait for T`). Used by the monomorphizer to find
     /// the home module of a generic dispatch when the receiver type
@@ -544,6 +548,8 @@ impl TraitEnv {
         let mut all_impl_index: TraitImplIndex = IndexMap::default();
         let mut decl_index: TraitDeclIndex = IndexMap::default();
         let mut effect_decl_index: EffectDeclIndex = IndexMap::default();
+        let mut assoc_type_bound_index: IndexMap<String, Vec<ast::TraitBound>> =
+            IndexMap::default();
         let mut resource_decl_index: ResourceDeclIndex = IndexMap::default();
         let mut blanket_impl_index: BlanketTraitImplIndex = Vec::new();
         let mut impl_headers: IndexMap<(ModuleSource, AstId), ImplHeader> = IndexMap::default();
@@ -584,6 +590,11 @@ impl TraitEnv {
                             (module_source.clone(), trait_decl.name.clone()),
                             (module_source.clone(), trait_decl.id),
                         );
+                        for assoc in &trait_decl.associated_types {
+                            assoc_type_bound_index
+                                .entry(assoc.name.clone())
+                                .or_insert_with(|| assoc.bounds.clone());
+                        }
                     }
                     Item::Interface(effect_decl) => {
                         effect_decl_index.insert(
@@ -889,6 +900,7 @@ impl TraitEnv {
                 struct_like_decl_modules,
                 newtype_decl_modules,
                 module_import_scopes,
+                assoc_type_bound_index,
                 blanket_trait_impl_modules,
                 static_method_index,
                 resource_static_method_index,

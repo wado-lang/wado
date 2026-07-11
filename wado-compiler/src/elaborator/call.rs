@@ -1498,33 +1498,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// store methods as `InterfaceMethod`s. Types resolve in the declaring
     /// module's import scope so they share identity with the call site.
     fn resolve_effect_op_signature(
-        &mut self,
+        &self,
         effect: &str,
         operation: &str,
     ) -> Option<(Vec<TypeId>, Option<TypeId>)> {
         let canonical_key = self.canonical_decl_key(effect);
-        let (module_source, item_id) = self
+        let (module_source, _item_id) = self
             .tysys
             .trait_env
             .effect_decl_index
             .get(&canonical_key)
             .or_else(|| self.tysys.trait_env.resource_decl_index.get(&canonical_key))?
             .clone();
-        let module = self.loaded_modules.get(&module_source)?;
-        let methods = match module.item_by_id(item_id)? {
-            crate::ast::Item::Interface(decl) => &decl.methods,
-            crate::ast::Item::Resource(decl) => &decl.methods,
-            _ => return None,
-        };
-        let method = methods.iter().find(|m| m.name == operation)?;
-        let param_asts: Vec<Type> = method.params.iter().map(|p| p.ty.clone()).collect();
-        let return_ast = method.return_type.clone();
-        let scope = self.tysys.trait_env.import_scope(&module_source);
-        Some(self.with_module_perspective(module_source, scope, |s| {
-            let params = param_asts.iter().map(|ty| s.resolve_type(ty)).collect();
-            let ret = return_ast.as_ref().map(|ty| s.resolve_type(ty));
-            (params, ret)
-        }))
+        self.tysys
+            .all_effect_op_sigs
+            .get(&(module_source, canonical_key.1, operation.to_string()))
+            .cloned()
     }
 
     /// Get the String struct type (from core:prelude/string.wado)
