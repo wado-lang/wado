@@ -92,20 +92,20 @@ fn parse_git_url(url: &str) -> Option<String> {
     let segments: Vec<&str> = trimmed.split('/').filter(|s| !s.is_empty()).collect();
     // A `file://` URL or a bare absolute path (used for local repos and tests)
     // has no `host/owner/repo` prefix, so key it on the trailing three path
-    // components. A remote URL must be exactly `host/owner/repo`.
+    // components. A remote URL keeps its full path so nested groups (GitLab
+    // subgroups `host/group/sub/repo`) stay distinct; `host/owner/repo` is the
+    // common three-segment case.
     let is_local = url.starts_with("file://") || after_scheme.starts_with('/');
-    let (host, owner, repo) = if is_local {
+    if is_local {
         match segments.as_slice() {
-            [.., host, owner, repo] => (*host, *owner, *repo),
-            _ => return None,
+            [.., host, owner, repo] => Some(format!("{host}/{owner}/{repo}")),
+            _ => None,
         }
+    } else if segments.len() >= 3 {
+        Some(segments.join("/"))
     } else {
-        match segments.as_slice() {
-            [host, owner, repo] => (*host, *owner, *repo),
-            _ => return None,
-        }
-    };
-    Some(format!("{host}/{owner}/{repo}"))
+        None
+    }
 }
 
 #[cfg(test)]
@@ -187,8 +187,20 @@ mod tests {
     #[test]
     fn git_rejects_remote_urls_without_owner_repo() {
         assert!(git_repo_relative("https://github.com/only-owner").is_none());
-        assert!(git_repo_relative("https://github.com/o/r/extra").is_none());
         assert!(git_repo_relative("not a url").is_none());
+    }
+
+    #[test]
+    fn git_remote_url_keeps_nested_subgroup_path() {
+        assert_eq!(
+            git_repo_relative("https://gitlab.com/group/sub/repo.git").as_deref(),
+            Some("gitlab.com/group/sub/repo")
+        );
+        assert_eq!(
+            git_worktree_relative("https://gitlab.com/group/sub/repo.git", "1.0.0", "abcd1234ef")
+                .as_deref(),
+            Some("gitlab.com/group/sub/repo/.worktrees/1.0.0-abcd1234")
+        );
     }
 
     #[test]

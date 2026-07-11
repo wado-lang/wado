@@ -257,14 +257,20 @@ fn git_dependency_entry(
     let root = cache_root().ok_or_else(|| format!("no cache root for {name:?}; set `WADO_ROOT`"))?;
     let relative = wado_manifest::cache::git_worktree_relative(url, &version, &resolved_ref)
         .ok_or_else(|| format!("cannot place {name:?} in the cache (bad git url {url:?})"))?;
-    let mut worktree = root.join(relative);
-    if let Some(dir) = directory {
-        worktree.push(dir);
-    }
-    if !worktree.exists() {
+    let worktree_root = root.join(relative);
+    // The `.ready` completion marker (written last by `wado-cli`'s materializer)
+    // guards against reading a partial worktree mid-materialize; without it, a
+    // cold or in-progress worktree points the user at `wado fetch`.
+    let mut marker = worktree_root.clone().into_os_string();
+    marker.push(".ready");
+    if !worktree_root.is_dir() || !Path::new(&marker).is_file() {
         return Err(format!("{name:?} is not cached; run `wado fetch`"));
     }
-    package_lib_entry(&worktree)
+    let pkg_dir = match directory {
+        Some(dir) => worktree_root.join(dir),
+        None => worktree_root,
+    };
+    package_lib_entry(&pkg_dir)
 }
 
 /// `lock id -> (version, resolved-ref)` for every git `[[package]]` in

@@ -94,15 +94,22 @@ pub fn materialize(url: &str, version: &str, sha: &str) -> Result<PathBuf, Provi
         .ok_or_else(|| bad_url(url))?;
     let root = wado_root()?;
     let worktree = root.join(&worktree_rel);
-    if worktree_is_valid(&worktree, sha) {
+    // Warm hit (lock-free): the marker means a prior materialize fully completed.
+    if worktree_is_valid(&worktree) {
         return Ok(worktree);
     }
     let repo = root.join(&repo_rel);
     let _lock = lock_repo(&repo_rel)?;
+    // Re-check under the lock: another process may have finished while we waited.
+    if worktree_is_valid(&worktree) {
+        return Ok(worktree);
+    }
     ensure_repo(url, &repo)?;
     ensure_commit(url, &repo, sha)?;
-    // A crash can leave a partial worktree or a dangling admin entry; prune and
-    // force-remove before re-adding so the add never trips over leftovers.
+    // A crash or an incomplete prior run can leave a partial worktree or a
+    // dangling admin entry; drop the (absent) marker, prune, and force-remove
+    // before re-adding so the add never trips over leftovers.
+    let _ = std::fs::remove_file(ready_marker(&worktree));
     let _ = run_git(Some(&repo), &["worktree", "prune"]);
     if worktree.exists() {
         let _ = run_git(
@@ -114,7 +121,8 @@ pub fn materialize(url: &str, version: &str, sha: &str) -> Result<PathBuf, Provi
         Some(&repo),
         &["worktree", "add", "--detach", &worktree.to_string_lossy(), sha],
     )?;
-    if !worktree_is_valid(&worktree, sha) {
+    let head = run_git(Some(&worktree), &["rev-parse", "HEAD"])?;
+    if !head.trim().starts_with(sha) {
         return Err(ProviderError::IoError {
             path: worktree.display().to_string(),
             message: format!("worktree did not check out to {sha}"),
@@ -122,12 +130,14 @@ pub fn materialize(url: &str, version: &str, sha: &str) -> Result<PathBuf, Provi
     }
     // Populate submodules by default (safe side): a dependency's submodules are
     // part of its source, so a checkout that omitted them would miss code the
-    // library needs. A no-op for a repo without submodules. Only on (re)create,
-    // not the warm-hit path above — a worktree this code built already has them.
+    // library needs. A no-op for a repo without submodules.
     run_git(
         Some(&worktree),
         &["submodule", "update", "--init", "--recursive"],
     )?;
+    // Publish the completion marker last: only now is the worktree fully usable.
+    let marker = ready_marker(&worktree);
+    std::fs::write(&marker, sha).map_err(|e| io_err(&marker, &e))?;
     Ok(worktree)
 }
 
@@ -208,13 +218,22 @@ fn commit_present(repo: &Path, sha: &str) -> bool {
     run_git(Some(repo), &["cat-file", "-e", &format!("{sha}^{{commit}}")]).is_ok()
 }
 
-fn worktree_is_valid(worktree: &Path, sha: &str) -> bool {
-    if !worktree.join("wado.toml").exists() && !worktree.exists() {
-        return false;
-    }
-    run_git(Some(worktree), &["rev-parse", "HEAD"])
-        .map(|head| head.trim().starts_with(sha))
-        .unwrap_or(false)
+/// A worktree is ready once its completion marker exists. The marker is written
+/// as the very last step of materialization — after the checkout, the `HEAD`
+/// verification, and submodules — so a partial worktree (a concurrent or crashed
+/// `worktree add`) is never mistaken for a warm hit and always carries its
+/// submodules.
+fn worktree_is_valid(worktree: &Path) -> bool {
+    worktree.is_dir() && ready_marker(worktree).is_file()
+}
+
+/// The completion marker beside the worktree, inside `.worktrees/` (so
+/// `wado clean` removes it and ghq ignores it), not in the checkout itself.
+/// Kept in sync with the reader in `wado_lsp::host`.
+fn ready_marker(worktree: &Path) -> PathBuf {
+    let mut marker = worktree.as_os_str().to_os_string();
+    marker.push(".ready");
+    PathBuf::from(marker)
 }
 
 /// Run `git`, returning stdout on success. A missing `git` binary or a non-zero
