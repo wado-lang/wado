@@ -73,11 +73,23 @@ pub fn fetch_manifest(
     let _lock = lock_repo(&repo_rel)?;
     ensure_repo(url, &repo)?;
     ensure_commit(url, &repo, sha)?;
-    let path = match directory {
-        Some(dir) => format!("{sha}:{}/wado.toml", dir.trim_matches('/')),
-        None => format!("{sha}:wado.toml"),
+    let manifest_path = match directory {
+        Some(dir) => format!("{}/wado.toml", dir.trim_matches('/')),
+        None => "wado.toml".to_string(),
     };
-    let text = run_git(Some(&repo), &["show", &path])?;
+    // A tag/commit that predates the manifest (or names a wrong `directory`) has
+    // no `wado.toml`, so `git show` fails; report that plainly rather than
+    // leaking raw git plumbing, so a resolver over a version range explains why
+    // a candidate version was rejected.
+    let text = run_git(Some(&repo), &["show", &format!("{sha}:{manifest_path}")]).map_err(|_| {
+        ProviderError::NotFound {
+            source: format!("{url}@{sha}"),
+            message: format!(
+                "no {manifest_path} at this commit (the tag/ref may predate the \
+                 manifest, or `directory` is wrong)"
+            ),
+        }
+    })?;
     text.parse::<Manifest>()
         .map_err(|e| ProviderError::InvalidManifest {
             source: format!("{url}@{sha}"),

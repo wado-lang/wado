@@ -294,6 +294,12 @@ precise conflict errors.
   (`tests/git_dependency.rs::inline_git_source_in_a_single_file_script`).
 - [ ] Workspace publish/resolve edge cases beyond what `publish` covers.
 - [ ] `wado.lock` integrity extensibility (algorithm prefix already in schema).
+- [ ] `[dev-dependencies]` are resolved and locked, but `dependency_index_from`
+      only indexes `[dependencies]`, so a dev dependency of any source
+      (path/registry/git) is not importable at compile/test time. Making
+      dev-dep imports resolve for `wado test` (scoped to the test tier so a dev
+      dep is not importable from production code) is a general follow-up, not a
+      git-specific gap.
 
 #### Registry Kiln generators
 

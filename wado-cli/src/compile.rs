@@ -725,6 +725,11 @@ async fn manifest_and_component_index(
 /// a git dep with no `wado.lock` entry is left for the offline arm to report
 /// (pointing at `wado update`); a warm worktree is a fast no-op inside
 /// [`crate::git::materialize`].
+///
+/// Only `[dependencies]` are materialized, mirroring `dependency_index_from`,
+/// which indexes only `[dependencies]`. `[dev-dependencies]` of any source are
+/// not importable at compile/test time yet — a general follow-up tracked in the
+/// dependency-management plan, not a git-specific gap.
 async fn materialize_git_dependencies(
     manifest: &wado_manifest::Manifest,
     manifest_root: &Path,
