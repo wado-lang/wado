@@ -230,15 +230,26 @@ Designed in detail in the
 source dependency (compiled in like a path dep), cloned to a ghq-compatible Wado
 root with per-version git worktrees, `wado clean` as their GC.
 
-- [ ] Parse the git `directory` field onto `DependencySource::Git`.
-- [ ] Implement the git methods of the CLI provider (`list_git_tags`,
-      `resolve_git_ref`, `fetch_git_manifest`) via `git` shell-out; remove the
-      `UnsupportedSource { kind: "git" }` path in `resolve.rs` and traverse a git
-      dep's transitive deps.
-- [ ] Cache git deps under the Wado root as a canonical clone
-      `{host}/{owner}/{repo}` with nested worktrees `.worktrees/{version}-{short-ref}/`;
-      resolve the root via `WADO_ROOT` → `$XDG_CONFIG_HOME/wado/config.toml` → `~/wado`.
-- [ ] Wire git deps into `dependency_index_from` and add `wado clean`.
+- [x] Parse the git `directory` field onto `DependencySource::Git`.
+- [x] Implement the git methods of the CLI provider (`list_git_tags`,
+      `resolve_git_ref`, `fetch_git_manifest`) via `git` shell-out
+      (`wado-cli/src/git.rs`); removed the `UnsupportedSource { kind: "git" }`
+      path in `resolve.rs` and the resolver now traverses a git dep's transitive
+      deps.
+- [x] Cache git deps under the Wado root as a canonical clone
+      `{host}/{owner}/{repo}` with nested worktrees `.worktrees/{version}-{short-ref}/`
+      (`git worktree`, per-repo `flock`); resolve the root via `WADO_ROOT` →
+      `$XDG_CONFIG_HOME/wado/config.toml` → `~/wado` (config parsed only in
+      wado-cli, exported as `WADO_ROOT`, so wasm-facing crates stay TOML-free).
+- [x] Wire git deps into `dependency_index_from`; `wado fetch` materializes
+      worktrees; added `wado clean`. Verified end to end
+      (`tests/git_dependency.rs`): `update` → `fetch` → `run`.
+- [ ] Auto-materialize git worktrees inside `build`/`run` (like registry
+      `fetch_component_dependencies`) so a git dep builds without an explicit
+      `wado fetch`; today the build path only reads the warm worktree cache.
+- [ ] Submodules (`--recurse-submodules`) and a bare-mirror/shallow-fetch
+      optimization; a git dep in a monorepo subgroup (`host/group/sub/repo`) is
+      currently keyed as local.
 
 ### Phase 7 — PubGrub resolver
 
