@@ -167,6 +167,7 @@ global global:core:prelude/format.wado::__const_obj_4: ref null "core:prelude/st
 
 fn "string_from_utf8_lossy_newtype.wado/run"() {
     let __b: ref "core:prelude//List<u8>";
+    let bytes: ref "core:prelude//List<u8>";
     let s: ref "core:prelude/string.wado//String";
     let __cond: bool;
     let __local_5: ref "core:prelude/string.wado//String";
@@ -179,13 +180,14 @@ fn "string_from_utf8_lossy_newtype.wado/run"() {
         global:string_from_utf8_lossy_newtype.wado::__modules_initialized = 1;
     };
     __b = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111), used: 5 };
-    s = "core:prelude/string.wado/String::from_utf8_lossy<string_from_utf8_lossy_newtype.wado/MyBytes>"(__b);
-    __cond = __inline_String_Eq__eq_9: block -> bool {
+    bytes = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = __b.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: 5 };
+    s = "core:prelude/string.wado/String::from_utf8_lossy<string_from_utf8_lossy_newtype.wado/MyBytes>"(bytes);
+    __cond = __inline_String_Eq__eq_10: block -> bool {
         len_a = s.used;
         if len_a != 5 {
-            break __inline_String_Eq__eq_9: 0;
+            break __inline_String_Eq__eq_10: 0;
         }
-        break __inline_String_Eq__eq_9: "core:prelude/string.wado/String^Eq::eq_bytes"(s.repr, array.new_data<u8>("Hello"), len_a);
+        break __inline_String_Eq__eq_10: "core:prelude/string.wado/String^Eq::eq_bytes"(s.repr, array.new_data<u8>("Hello"), len_a);
     };
     if @unlikely(__cond == 0) {
         cold_path;

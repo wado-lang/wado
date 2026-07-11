@@ -1003,6 +1003,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .ann_decl_type_params(variant_decl.id)
             .expect("resolve_variant_decl records the type params for every variant reify emits");
 
+        self.tysys.type_table.borrow_mut().register_variant_cases(
+            variant_decl.name.clone(),
+            self.current_module_source.clone(),
+            cases
+                .iter()
+                .map(|c| (c.name.clone(), c.index, c.payload))
+                .collect(),
+        );
+
         TirVariantDecl {
             name: variant_decl.name.clone(),
             module_source: self.current_module_source.clone(),
@@ -1129,6 +1138,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 type_id,
                 local_index: index,
                 is_mut: param.is_mut,
+                is_mut_ref: false,
                 span: param.span,
             });
         }
@@ -1556,6 +1566,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 type_id,
                 local_index,
                 is_mut: p.is_mut,
+                is_mut_ref: false,
                 span: p.span,
             });
         }

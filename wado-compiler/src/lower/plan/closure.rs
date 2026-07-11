@@ -558,6 +558,7 @@ impl ClosureLowerer {
                 type_id: self_ref_type,
                 local_index: 0,
                 is_mut: false,
+                is_mut_ref: false,
                 span: collected.span,
             });
             for (i, (name, type_id)) in collected.params.iter().enumerate() {
@@ -566,6 +567,7 @@ impl ClosureLowerer {
                     type_id: *type_id,
                     local_index: (i + 1) as u32,
                     is_mut: false,
+                    is_mut_ref: false,
                     span: collected.span,
                 });
             }
@@ -989,6 +991,7 @@ impl ClosureLowerer {
                     type_id: self_ref_type,
                     local_index: 0,
                     is_mut: false,
+                    is_mut_ref: false,
                     span,
                 },
                 TirParam {
@@ -996,6 +999,7 @@ impl ClosureLowerer {
                     type_id: formatter_mut_ref,
                     local_index: 1,
                     is_mut: false,
+                    is_mut_ref: false,
                     span,
                 },
             ],

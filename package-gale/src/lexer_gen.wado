@@ -1792,10 +1792,10 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
         }
         // Check if this group already exists
         let mut merged = false;
-        for let g of &mut groups {
-            if g.calls == matching {
+        for let mut gi = 0; gi < groups.len(); gi += 1 {
+            if groups[gi].calls == matching {
                 // Add char to existing group's guard
-                g.guard.push_str(&` || first_char == {char_lit(*c)}`);
+                groups[gi].guard.push_str(&` || first_char == {char_lit(*c)}`);
                 merged = true;
             }
         }
@@ -1841,17 +1841,17 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
                 let guard = `{char_lit(r[0])} <= first_char <= {char_lit(r[1])}`;
                 // Find or create group
                 let mut found_group = false;
-                for let g of &mut groups {
-                    if g.guard == guard {
+                for let mut gi = 0; gi < groups.len(); gi += 1 {
+                    if groups[gi].guard == guard {
                         let mut already = false;
-                        for let call_idx of &g.calls {
+                        for let call_idx of &groups[gi].calls {
                             if *call_idx == i {
                                 already = true;
                                 break;
                             }
                         }
                         if !already {
-                            g.calls.push(i);
+                            groups[gi].calls.push(i);
                         }
                         found_group = true;
                     }
@@ -1898,8 +1898,8 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
     // When wildcards and range-based calls are mixed in a group, the insertion order
     // may not match grammar order — sorting restores it so that same-length matches
     // respect ANTLR4-style "first rule in grammar wins" priority.
-    for let g of &mut groups {
-        g.calls.sort();
+    for let mut gi = 0; gi < groups.len(); gi += 1 {
+        groups[gi].calls.sort();
     }
 
     return groups;

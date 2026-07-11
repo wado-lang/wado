@@ -1,0 +1,19 @@
+// Error: assigning to a field of a place rooted at an immutable reference.
+// Only the explicit `*r = v` form was rejected before; the field projection
+// form went through and wrote into a temporary copy.
+
+struct Group {
+    n: i32,
+}
+
+fn set(g: &Group) {
+    g.n = 2;
+}
+
+export fn run() {
+    let g = Group { n: 1 };
+    set(&g);
+}
+
+__DATA__
+{"compile_error": "cannot assign through immutable reference"}

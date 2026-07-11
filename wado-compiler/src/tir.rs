@@ -671,6 +671,10 @@ pub struct TypeTable {
     /// `synthesis::traits::synthesize_traits`, each filtering for the trait
     /// names it owns.
     bound_driven_synth_requests: IndexSet<(String, ModuleSource, String)>,
+    /// Variant case templates: `(variant name, module)` → `(case name, case
+    /// index, payload TypeId)`. Payload ids are in the declaring template's
+    /// terms; unit cases use `TypeTable::UNIT`.
+    variant_case_index: IndexMap<(String, ModuleSource), Vec<(String, u32, TypeId)>>,
 }
 
 impl Default for TypeTable {
@@ -757,6 +761,7 @@ impl TypeTable {
             type_by_symbol: IndexMap::default(),
             symbol_by_type: TypeMap::default(),
             bound_driven_synth_requests: IndexSet::default(),
+            variant_case_index: IndexMap::default(),
         };
 
         // Pre-populate primitive types matching the constants above
@@ -826,6 +831,12 @@ impl TypeTable {
         self.types
             .get(id)
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
+    }
+
+    /// [`Self::get`] returning `None` for ids pruned by DCE's `retain`.
+    pub fn get_pruned(&self, id: TypeId) -> Option<&ResolvedType> {
+        let id = self.redirects.get(id).copied().unwrap_or(id);
+        self.types.get(id)
     }
 
     /// True when `id` resolves to the never type `!`. An expression of this type
@@ -1470,6 +1481,29 @@ impl TypeTable {
             base_name: None,
         };
         self.intern_map.get(&key).copied()
+    }
+
+    /// Register a variant declaration's case templates for
+    /// [`Self::variant_template_cases`].
+    pub fn register_variant_cases(
+        &mut self,
+        name: String,
+        module_source: ModuleSource,
+        cases: Vec<(String, u32, TypeId)>,
+    ) {
+        self.variant_case_index.insert((name, module_source), cases);
+    }
+
+    /// Case templates of a variant declaration (see `variant_case_index`).
+    /// `None` when `(name, module)` is not a registered variant.
+    pub fn variant_template_cases(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<&[(String, u32, TypeId)]> {
+        self.variant_case_index
+            .get(&(name.to_string(), module_source.clone()))
+            .map(Vec::as_slice)
     }
 
     /// Find a variant type by (name, `module_source`) pair via `intern_map` (O(1)).
@@ -4094,6 +4128,11 @@ pub struct TirParam {
     pub type_id: TypeId,
     pub local_index: u32,
     pub is_mut: bool,
+    /// The parameter is a `&mut T` borrow (captured here before the boxing
+    /// plan rewrites `&mut T` and `&T` to the same `Box<T>` type, erasing the
+    /// distinction). A `&T` cannot be written through, so only a `&mut`
+    /// parameter can mutate the caller's argument storage.
+    pub is_mut_ref: bool,
     pub span: Span,
 }
 

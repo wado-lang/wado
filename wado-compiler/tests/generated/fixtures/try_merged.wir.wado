@@ -599,6 +599,7 @@ fn "try_merged.wado/process"(io_ok, valid) {
     let __qm_v_5: i32;
     let __qm_e_6: ref "try_merged.wado//ParseError";
     let n: i32;
+    let v: ref "core:prelude/string.wado//String";
     let s: ref "core:prelude/string.wado//String";
     raw = __thread___inline_read_data_0: block -> ref "core:prelude/string.wado//String" {
         if @likely(io_ok) {
@@ -609,15 +610,16 @@ fn "try_merged.wado/process"(io_ok, valid) {
         cold_path;
         return 1, 0, ref.as_non_null("try_merged.wado/AppError^From<IoError>::from"(__qm_e_3));
     };
-    n = __thread___inline_parse_number_1: block -> i32 {
-        s = (if valid -> ref "core:prelude/string.wado//String" {
+    n = __thread___inline_parse_number_2: block -> i32 {
+        v = (if valid -> ref "core:prelude/string.wado//String" {
             raw;
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 97, 100), used: 3 };
         });
+        s = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_6: ref Array<u8>; __array_clone_src_6 = v.repr; let __array_clone_len_6: i32; __array_clone_len_6 = builtin::array_len(__array_clone_src_6); let __array_clone_dst_6: ref Array<u8>; __array_clone_dst_6 = builtin::array_new<u8>(__array_clone_len_6); builtin::array_copy<u8>(__array_clone_dst_6, 0, __array_clone_src_6, 0, __array_clone_len_6); __array_clone_dst_6), used: v.used };
         if @likely("core:prelude/string.wado/String^Eq::eq"(s, global:try_merged.wado::__const_obj_58)) {
             __qm_v_5 = 42;
-            break __thread___inline_parse_number_1: 42;
+            break __thread___inline_parse_number_2: 42;
         }
         __qm_e_6 = struct.new "try_merged.wado//ParseError" { input: s };
         cold_path;

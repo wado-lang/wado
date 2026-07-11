@@ -322,6 +322,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 &oracle,
                 &base.type_table.borrow(),
                 &base.value_copy.functions_with_stores,
+                &base.value_copy.mut_receiver_methods,
             )
         };
         Self {
@@ -960,11 +961,8 @@ impl FunctionTranslator<'_, '_> {
                 value,
                 skip_value_copy,
             } => {
-                // Address-taken primitive locals are box-typed at the
-                // declaration site (via `shadow_params`); retype the
-                // Let to match and wrap its initial value. Mutually
-                // exclusive with the value-copy wrap below: primitives
-                // are not value-semantic.
+                // Copy first, then box: a boxed local changes only its
+                // storage cell, not its value semantics.
                 let (effective_type, box_wrap_type) = if self.address_taken.contains(local_index)
                     && let Some(&box_type) = self.base.box_plan.box_struct_types.get(type_id)
                 {
@@ -972,8 +970,7 @@ impl FunctionTranslator<'_, '_> {
                 } else {
                     (*type_id, None)
                 };
-                let needs_value_copy_wrap = box_wrap_type.is_none()
-                    && !*skip_value_copy
+                let needs_value_copy_wrap = !*skip_value_copy
                     && (*is_mut
                         || !value_copy::analyze::is_source_immutable(
                             value,
@@ -981,10 +978,13 @@ impl FunctionTranslator<'_, '_> {
                         ))
                     && self.should_wrap_value_copy(value);
                 let value_op = self.convert_operand(value);
+                let value_op = if needs_value_copy_wrap {
+                    self.wrap_value_copy_operand(value_op, *type_id)
+                } else {
+                    value_op
+                };
                 let value_op = if let Some(box_type) = box_wrap_type {
                     self.wrap_in_box(value_op, box_type, value.span).into()
-                } else if needs_value_copy_wrap {
-                    self.wrap_value_copy_operand(value_op, *type_id)
                 } else {
                     value_op
                 };
@@ -1511,7 +1511,7 @@ impl FunctionTranslator<'_, '_> {
                 variant_type: *variant_type,
                 case_index: *case_index,
                 case_name: case_name.clone(),
-                payload: payload.as_ref().map(|p| self.convert_operand(p)),
+                payload: payload.as_ref().map(|p| self.convert_literal_element(p)),
             },
             TirExprKind::EnumConstruct {
                 enum_type,
@@ -1591,10 +1591,18 @@ impl FunctionTranslator<'_, '_> {
                 method_info: None,
             };
             let func_id = self.base.interner.borrow_mut().resolve(&func);
+            // Bypass `convert_call_arg`: wrapping a copy helper's own
+            // argument would emit copy(copy(x)).
             return ExprKind::Call {
                 func_id,
                 type_args: vec![],
-                args: args.iter().map(|a| self.convert_call_arg(a)).collect(),
+                args: args
+                    .iter()
+                    .map(|a| ArenaCallArg {
+                        expr: self.convert_specialized_arg_operand(&a.expr),
+                        is_mut: a.is_mut,
+                    })
+                    .collect(),
             };
         }
         let func = convert_function_ref(func);
@@ -1861,6 +1869,7 @@ impl FunctionTranslator<'_, '_> {
             type_id: param.type_id,
             local_index: param.local_index,
             is_mut: param.is_mut,
+            is_mut_ref: param.is_mut_ref,
             span: param.span,
         }
     }

@@ -142,6 +142,7 @@ fn generate_variant_from(
             type_id: from_type,
             local_index: 0,
             is_mut: false,
+            is_mut_ref: false,
             span,
         }],
         variant_type,

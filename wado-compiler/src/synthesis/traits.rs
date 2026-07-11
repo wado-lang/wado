@@ -188,6 +188,7 @@ fn binary_method_params(ref_type: TypeId, span: Span) -> Vec<TirParam> {
             type_id: ref_type,
             local_index: 0,
             is_mut: false,
+            is_mut_ref: false,
             span,
         },
         TirParam {
@@ -195,6 +196,7 @@ fn binary_method_params(ref_type: TypeId, span: Span) -> Vec<TirParam> {
             type_id: ref_type,
             local_index: 1,
             is_mut: false,
+            is_mut_ref: false,
             span,
         },
     ]
@@ -216,6 +218,7 @@ fn inspect_params(ref_type: TypeId, fmt_type: TypeId, span: Span) -> Vec<TirPara
             type_id: ref_type,
             local_index: 0,
             is_mut: false,
+            is_mut_ref: false,
             span,
         },
         TirParam {
@@ -223,6 +226,7 @@ fn inspect_params(ref_type: TypeId, fmt_type: TypeId, span: Span) -> Vec<TirPara
             type_id: fmt_type,
             local_index: 1,
             is_mut: false,
+            is_mut_ref: false,
             span,
         },
     ]
@@ -3010,6 +3014,7 @@ fn generate_display_fallback(
             type_id: ref_type,
             local_index: 0,
             is_mut: false,
+            is_mut_ref: false,
             span,
         },
         TirParam {
@@ -3017,6 +3022,7 @@ fn generate_display_fallback(
             type_id: fmt_type,
             local_index: 1,
             is_mut: false,
+            is_mut_ref: false,
             span,
         },
     ];

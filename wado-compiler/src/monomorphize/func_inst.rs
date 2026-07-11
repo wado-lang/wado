@@ -1223,6 +1223,7 @@ impl Monomorphizer {
                 type_id: self.substitute_type(param.type_id, &substitution, type_table),
                 local_index: param.local_index,
                 is_mut: param.is_mut,
+                is_mut_ref: false,
                 span: param.span,
             })
             .collect();

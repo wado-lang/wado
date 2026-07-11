@@ -1,0 +1,32 @@
+// A dense integer match is rewritten to a Switch inside the same peephole
+// session that runs value_copy_elide; the elide rule must still see the
+// Switch arms' values, or the binding copy of a live local is stripped and
+// a later mutation of the source leaks into the binding.
+
+#[inline(never)]
+fn pick(n: i32) -> i32 {
+    let mut a: List<i32> = [1, 2, 3];
+    let mut b: List<i32> = [4, 5, 6];
+    let x = match n {
+        0 => a,
+        1 => a,
+        2 => a,
+        3 => a,
+        4 => a,
+        5 => a,
+        6 => a,
+        7 => b,
+        _ => b,
+    };
+    a.push(999);
+    b.push(999);
+    return x.len();
+}
+
+test "dense match arm binds an independent copy" {
+    assert pick(0) == 3;
+    assert pick(7) == 3;
+}
+
+__DATA__
+{"test": {}}

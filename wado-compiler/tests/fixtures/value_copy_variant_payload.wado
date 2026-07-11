@@ -1,0 +1,92 @@
+// Value semantics for variants with value-typed payloads (WEP 2026-05-21,
+// M5 recursive/variant deep-copy). Copying a variant, constructing one from
+// a live binding, or copying an aggregate that contains one must deep-copy
+// the payload; mutation through one copy must not be observable in another.
+
+variant Wrapper {
+    Data(List<i32>),
+    Empty,
+}
+
+test "option copy is payload-independent" {
+    let list: List<i32> = [1, 2, 3];
+    let a = Option::Some(list);
+    let mut b = a;
+    if let Some(v) = &mut b {
+        v.push(4);
+    }
+    if let Some(v) = &a {
+        assert v.len() == 3;
+    }
+    if let Some(v) = &b {
+        assert v.len() == 4;
+    }
+}
+
+test "variant construction copies its payload" {
+    let mut list: List<i32> = [1];
+    let a = Option::Some(list);
+    list.push(2);
+    if let Some(v) = &a {
+        assert v.len() == 1;
+    }
+}
+
+test "user variant copy is payload-independent" {
+    let list: List<i32> = [1];
+    let a = Wrapper::Data(list);
+    let mut b = a;
+    if let Data(v) = &mut b {
+        v.push(2);
+    }
+    if let Data(v) = &a {
+        assert v.len() == 1;
+    }
+    if let Data(v) = &b {
+        assert v.len() == 2;
+    }
+}
+
+test "user variant construction copies its payload" {
+    let mut list: List<i32> = [1];
+    let w = Wrapper::Data(list);
+    list.push(2);
+    if let Data(v) = &w {
+        assert v.len() == 1;
+    }
+}
+
+test "unit case round-trips" {
+    let a = Wrapper::Empty;
+    let mut b = a;
+    b = Wrapper::Data([9] as List<i32>);
+    assert a matches { Empty };
+    assert b matches { Data(_) };
+}
+
+test "result payloads copy independently" {
+    let list: List<i32> = [1];
+    let a: Result<List<i32>, String> = Result::Ok(list);
+    let mut b = a;
+    if let Ok(v) = &mut b {
+        v.push(2);
+    }
+    if let Ok(v) = &a {
+        assert v.len() == 1;
+    }
+}
+
+test "string payload copy keeps values independent" {
+    let s: String = "hello";
+    let a = Option::Some(s);
+    let b = a;
+    if let Some(v) = &a {
+        assert *v == "hello";
+    }
+    if let Some(v) = &b {
+        assert *v == "hello";
+    }
+}
+
+__DATA__
+{"test": {}}

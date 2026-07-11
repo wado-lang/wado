@@ -370,10 +370,8 @@ pub(super) fn freeze_pure_arith(
             // constant freezes soundly; that is the in-loop `FieldAccess` recovery.
             let leaf_root_stable = match &engine.body.exprs[id].kind {
                 ExprKind::Local { index, .. } => !mut_escaped_leaf.contains(index),
-                ExprKind::FieldAccess { .. } => {
-                    super::arena_query::projection_root_local(engine.body, id)
-                        .is_none_or(|root| !mut_escaped_leaf.contains(&root))
-                }
+                ExprKind::FieldAccess { .. } => super::arena_query::storage_root(engine.body, id)
+                    .is_none_or(|root| !mut_escaped_leaf.contains(&root)),
                 _ => false,
             };
             if early

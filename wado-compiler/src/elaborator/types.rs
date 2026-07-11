@@ -226,6 +226,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// Mutation of a place rooted at an immutable reference (a `&mut self`
+    /// method call or a field/index assignment through a `&T`)
+    CannotMutate {
+        message: String,
+        span: Span,
+    },
+
     /// Trait bound not satisfied
     TraitBoundNotSatisfied {
         type_name: String,
@@ -664,6 +671,9 @@ impl TypeError {
                 format!("cannot assign: {message}"),
                 *span,
             ),
+            TypeError::CannotMutate { message, span } => {
+                (Code::ImmutableAssignment, message.clone(), *span)
+            }
             TypeError::TraitBoundNotSatisfied {
                 type_name,
                 trait_name,

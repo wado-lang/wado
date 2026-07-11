@@ -6,9 +6,11 @@
 //!
 //! For struct types the body is a `StructLiteral` with field-by-field
 //! shallow projections, plus `builtin::array_clone::<T>` for raw
-//! `Array<T>` fields — a one-level shallow copy that does not
-//! recurse into nested aggregates. For variant / option / fall-through
-//! types the body is `return v;` (identity).
+//! `Array<T>` fields. For variant types it is a `match` re-constructing
+//! the matched case with a copied payload. Fall-through types
+//! (references, resources) keep `return v;` (identity). Nested copies
+//! are calls to the nested type's own helper, so the helpers are
+//! mutually recursive.
 //!
 //! Synthesized helper bodies contain `builtin::copy_value::<NestedT>(x)`
 //! markers for nested value-typed fields. The translator rewrites those
@@ -26,8 +28,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBlock, TirExpr,
-    TirExprKind, TirField, TirFunction, TirLocal, TirParam, TirStmt, TirStmtKind, TirStruct,
-    TirStructField, TirUnaryOp, TypeId, TypeTable,
+    TirExprKind, TirField, TirFunction, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt,
+    TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -163,7 +165,6 @@ fn generate_copy_function(
     );
 
     let mut extra_locals: Vec<TirLocal> = Vec::new();
-    let mut address_taken: IndexSet<u32> = IndexSet::default();
     let body = build_copy_body(
         type_id,
         &resolved,
@@ -172,7 +173,6 @@ fn generate_copy_function(
         type_table,
         span,
         &mut extra_locals,
-        &mut address_taken,
     );
 
     let param = TirParam {
@@ -180,6 +180,7 @@ fn generate_copy_function(
         type_id,
         local_index: 0,
         is_mut: false,
+        is_mut_ref: false,
         span,
     };
 
@@ -210,7 +211,7 @@ fn generate_copy_function(
         span,
         local_count,
         locals,
-        address_taken_locals: address_taken,
+        address_taken_locals: IndexSet::default(),
         stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
         is_dispatch_wrapper: false,
@@ -235,7 +236,6 @@ fn build_copy_body(
     type_table: &Rc<RefCell<TypeTable>>,
     span: Span,
     extra_locals: &mut Vec<TirLocal>,
-    address_taken: &mut IndexSet<u32>,
 ) -> TirBlock {
     // A bare `Array<T>` deep-copies via `array_clone::<T>(&v)`,
     // the same intrinsic `make_field_copy` emits for the `repr` field of
@@ -245,17 +245,141 @@ fn build_copy_body(
         let clone = build_array_clone(v_local.clone(), type_id, *elem_type, type_table, span);
         return single_return_block(clone, span);
     }
+    if let Some(cases) = variant_cases_concrete(resolved, type_table) {
+        return build_variant_copy_body(type_id, &cases, v_local, type_table, span, extra_locals);
+    }
     let return_expr = build_copy_return_expr(type_id, resolved, v_local, project, type_table, span);
     if let Some(expr) = return_expr {
         return single_return_block(expr, span);
     }
-    // Variant payload deep-copy (`Option<T>` / `Result<T, E>` /
-    // user-defined variants) is intentionally not synthesized here —
-    // see `super::needs_value_copy` for why a non-identity match body
-    // hits a `(ref X) / (ref null X)` validation mismatch on null
-    // sources.
-    let _ = (extra_locals, address_taken, type_table);
     single_return_block(v_local.clone(), span)
+}
+
+/// Concrete `(case name, case index, payload type)` list for a variant
+/// type; `None` when `resolved` is not a variant. Reads the same case
+/// templates `needs_value_copy` classifies from, so classification and
+/// synthesis cannot drift.
+fn variant_cases_concrete(
+    resolved: &ResolvedType,
+    type_table: &Rc<RefCell<TypeTable>>,
+) -> Option<Vec<(String, u32, TypeId)>> {
+    match resolved {
+        ResolvedType::Variant {
+            name,
+            module_source,
+        } => type_table
+            .borrow()
+            .variant_template_cases(name, module_source)
+            .map(<[_]>::to_vec),
+        ResolvedType::GenericInstance {
+            name,
+            module_source,
+            type_args,
+        } => {
+            let cases = type_table
+                .borrow()
+                .variant_template_cases(name, module_source)
+                .map(<[_]>::to_vec)?;
+            let mut substitution = crate::hashmap::IndexMap::default();
+            for (idx, ty) in type_args.iter().enumerate() {
+                substitution.insert(idx as u32, *ty);
+            }
+            Some(
+                cases
+                    .into_iter()
+                    .map(|(case_name, index, payload)| {
+                        let payload = type_table
+                            .borrow_mut()
+                            .substitute_type_params(payload, &substitution);
+                        (case_name, index, payload)
+                    })
+                    .collect(),
+            )
+        }
+        _ => None,
+    }
+}
+
+/// Match each case and re-construct it, routing value-typed payloads
+/// through their own `$value_copy$T` helpers. A payload-free case is
+/// immutable, so its arm returns the input unchanged.
+fn build_variant_copy_body(
+    type_id: TypeId,
+    cases: &[(String, u32, TypeId)],
+    v_local: &TirExpr,
+    type_table: &Rc<RefCell<TypeTable>>,
+    span: Span,
+    extra_locals: &mut Vec<TirLocal>,
+) -> TirBlock {
+    let arms: Vec<TirMatchArm> = cases
+        .iter()
+        .map(|(case_name, case_index, payload_ty)| {
+            let (bindings, body) = if *payload_ty == TypeTable::UNIT {
+                (vec![], v_local.clone())
+            } else {
+                // Local 0 is the `v` parameter.
+                let local_index =
+                    u32::try_from(extra_locals.len() + 1).expect("local index fits u32");
+                let local_name = format!("__vc_payload_{case_index}");
+                extra_locals.push(TirLocal {
+                    name: local_name.clone(),
+                    type_id: *payload_ty,
+                    is_mut: false,
+                });
+                let payload_local = TirExpr::new(
+                    TirExprKind::Local {
+                        index: local_index,
+                        name: local_name.clone(),
+                    },
+                    *payload_ty,
+                    span,
+                );
+                let construct = TirExpr::new(
+                    TirExprKind::VariantConstruct {
+                        variant_type: type_id,
+                        case_index: *case_index,
+                        case_name: case_name.clone(),
+                        payload: Some(Box::new(make_value_copy(
+                            payload_local,
+                            *payload_ty,
+                            type_table,
+                            span,
+                        ))),
+                    },
+                    type_id,
+                    span,
+                );
+                (
+                    vec![TirPattern::Binding {
+                        name: local_name,
+                        local_index,
+                        type_id: *payload_ty,
+                    }],
+                    construct,
+                )
+            };
+            TirMatchArm {
+                pattern: TirPattern::Variant {
+                    enum_type: type_id,
+                    variant_name: case_name.clone(),
+                    bindings,
+                    payload_type: *payload_ty,
+                },
+                guard: None,
+                body,
+                span,
+            }
+        })
+        .collect();
+    let match_expr = TirExpr::new(
+        TirExprKind::Match {
+            expr: Box::new(v_local.clone()),
+            arms,
+        },
+        type_id,
+        span,
+    );
+    single_return_block(match_expr, span)
 }
 
 /// Identity / struct-literal helpers that produce a single expression
@@ -284,9 +408,7 @@ fn build_copy_return_expr(
         _ => None,
     };
     let mangled = type_table.borrow().mangle_type_name(type_id);
-    if let Some(struct_def) = lookup_struct(project, &mangled, module.as_ref())
-        && !struct_has_recursive_variant(type_id, type_table, project)
-    {
+    if let Some(struct_def) = lookup_struct(project, &mangled, module.as_ref()) {
         return Some(build_struct_copy(
             type_id, &mangled, struct_def, v_local, type_table, span,
         ));
@@ -365,139 +487,17 @@ fn lookup_struct<'a>(
     }
 }
 
-#[allow(dead_code)]
-fn generic_template_for<'a>(
-    resolved: &ResolvedType,
-    project: &'a FlatPackage,
-) -> Option<&'a TirStruct> {
-    if let ResolvedType::GenericInstance {
-        name,
-        module_source,
-        ..
-    } = resolved
-    {
-        project
-            .structs
-            .iter()
-            .find(|s| &s.name == name && &s.module_source == module_source)
-    } else {
-        None
-    }
-}
-
-/// True when `type_id` is part of a struct cycle that runs through a
-/// variant payload (e.g. `Object(TreeMap<String, Value>)` in the
-/// recursive `Value` variant). Concrete WIR registration for these
-/// cycles uses `AbstractRef(Struct)` placeholders that the
-/// post-registration fix-up only resolves *inside* struct field
-/// definitions — the `expr.type_id` on a synthesized helper's
-/// `StructLiteral` body therefore can still resolve to `AbstractRef`
-/// at WIR-translate time, hitting the hard panic in that arm.
-/// Skipping the non-identity body for these types is sound: the
-/// caller already routes through `$value_copy$T<id>` either way, and
-/// identity is a strict subset of the value-semantic deep copy
-/// behaviour the rest of the helper would have provided. The
-/// underlying gap (per-position deep copy of cyclic recursive types)
-/// is tracked as a follow-up.
-fn struct_has_recursive_variant(
-    type_id: TypeId,
-    type_table: &Rc<RefCell<TypeTable>>,
-    project: &FlatPackage,
-) -> bool {
-    let mut seen: IndexSet<TypeId> = IndexSet::default();
-    contains_variant_recursive(type_id, type_table, project, &mut seen, 0)
-}
-
-fn contains_variant_recursive(
-    type_id: TypeId,
-    type_table: &Rc<RefCell<TypeTable>>,
-    project: &FlatPackage,
-    seen: &mut IndexSet<TypeId>,
-    depth: usize,
-) -> bool {
-    if depth > 16 || !seen.insert(type_id) {
-        return false;
-    }
-    let resolved = type_table.borrow().get(type_id).clone();
-    match resolved {
-        ResolvedType::Variant { .. } => true,
-        ResolvedType::GenericInstance {
-            name,
-            module_source,
-            type_args,
-        } => {
-            // Generic-variant instance (`Option<T>` / `Result<T, E>` /
-            // user-defined recursive variants like `Value` from
-            // `core:value`): treat as a variant boundary, since
-            // its monomorphised registration in WIR may still be an
-            // `AbstractRef(Struct)` placeholder when the helper body
-            // is translated.
-            if type_table
-                .borrow()
-                .find_struct_type(&name, &module_source)
-                .is_none()
-            {
-                return true;
-            }
-            // Concrete monomorphised struct — recurse into its fields
-            // and type args.
-            for arg in &type_args {
-                if contains_variant_recursive(*arg, type_table, project, seen, depth + 1) {
-                    return true;
-                }
-            }
-            let mangled = type_table.borrow().mangle_type_name(type_id);
-            if let Some(struct_def) = lookup_struct(project, &mangled, Some(&module_source)) {
-                let mut substitution = crate::hashmap::IndexMap::default();
-                for (idx, ty) in type_args.iter().enumerate() {
-                    substitution.insert(idx as u32, *ty);
-                }
-                for field in &struct_def.fields {
-                    let concrete = type_table
-                        .borrow_mut()
-                        .substitute_type_params(field.type_id, &substitution);
-                    if contains_variant_recursive(concrete, type_table, project, seen, depth + 1) {
-                        return true;
-                    }
-                }
-            }
-            false
-        }
-        ResolvedType::Struct { module_source, .. } => {
-            let mangled = type_table.borrow().mangle_type_name(type_id);
-            if let Some(struct_def) = lookup_struct(project, &mangled, Some(&module_source)) {
-                for field in &struct_def.fields {
-                    if contains_variant_recursive(
-                        field.type_id,
-                        type_table,
-                        project,
-                        seen,
-                        depth + 1,
-                    ) {
-                        return true;
-                    }
-                }
-            }
-            false
-        }
-        ResolvedType::BuiltinArray(elem) => {
-            contains_variant_recursive(elem, type_table, project, seen, depth + 1)
-        }
-        _ => false,
-    }
-}
-
 /// `List<T>`'s wrapper-struct deep-copy emits a `StructLiteral`
 /// whose `type_id` is `List<T>`. WIR-level resolution of that
 /// `type_id` becomes `AbstractRef(Struct)` whenever `T` is a shape
 /// that the WIR struct registry never materialises a concrete entry
-/// for — variants, resources, function/closure types, and unmaterialised
+/// for — resources, function/closure types, and unmaterialised
 /// generic instances. The downstream `StructLiteral` translation
 /// only knows how to handle a concrete `WirType::Ref`, so we skip
 /// the non-identity body and fall through to identity for those `T`s.
-/// Built-in primitives, ordinary structs, and known wrapper shapes
-/// (`List<T>`, `String`, tuples) all have concrete WIR registrations
-/// and are passed through.
+/// Built-in primitives, ordinary structs, variants, and known wrapper
+/// shapes (`List<T>`, `String`, tuples) all have concrete WIR
+/// registrations and are passed through.
 fn is_synth_safe_element(
     elem_type: TypeId,
     type_table: &Rc<RefCell<TypeTable>>,
@@ -505,12 +505,12 @@ fn is_synth_safe_element(
 ) -> bool {
     let resolved = type_table.borrow().get(elem_type).clone();
     match resolved {
-        ResolvedType::Variant { .. }
-        | ResolvedType::Resource { .. }
+        ResolvedType::Resource { .. }
         | ResolvedType::GenericResource { .. }
         | ResolvedType::Function { .. }
         | ResolvedType::TypeParam { .. }
         | ResolvedType::TypePack { .. } => false,
+        ResolvedType::Variant { .. } => true,
         ResolvedType::GenericInstance {
             name,
             module_source,
@@ -518,7 +518,7 @@ fn is_synth_safe_element(
         } => {
             // Tuples / String / List<T> / known struct templates are
             // safe; unknown generic-instance names whose template
-            // isn't a registered struct are not.
+            // isn't a registered struct or variant are not.
             if TypeTable::is_tuple_type(&name) {
                 return true;
             }
@@ -546,18 +546,7 @@ fn is_synth_safe_element(
             if lookup_struct(project, &mangled, Some(&module_source)).is_some() {
                 return true;
             }
-            // Generic-variant instances (`Option<T>` / `Result<T, E>` /
-            // user-defined variants) are reference-shaped at WIR but
-            // their helper bodies are identity, so the call site never
-            // wraps a wrapper around them anyway. Treat as safe.
-            if type_table
-                .borrow()
-                .find_struct_type(&name, &module_source)
-                .is_none()
-            {
-                return false;
-            }
-            true
+            project.find_variant(&module_source, &name).is_some()
         }
         _ => true,
     }
@@ -647,58 +636,6 @@ fn build_tuple_copy(
                 name: field.name.clone(),
                 value: make_field_copy(v_local.clone(), &field, type_table, span),
                 field_index: idx as u32,
-            }
-        })
-        .collect();
-    TirExpr::new(
-        TirExprKind::StructLiteral {
-            struct_type: type_id,
-            struct_name: mangled_name.to_string(),
-            fields,
-        },
-        type_id,
-        span,
-    )
-}
-
-#[allow(dead_code)]
-fn build_struct_copy_with_substitution(
-    type_id: TypeId,
-    mangled_name: &str,
-    generic_struct: &TirStruct,
-    type_args: &[TypeId],
-    v_local: &TirExpr,
-    type_table: &Rc<RefCell<TypeTable>>,
-    span: Span,
-) -> TirExpr {
-    let mut substitution = crate::hashmap::IndexMap::default();
-    for (idx, ty) in type_args.iter().enumerate() {
-        substitution.insert(idx as u32, *ty);
-    }
-    let fields: Vec<TirStructField> = generic_struct
-        .fields
-        .iter()
-        .map(|field| {
-            let concrete_field_ty = type_table
-                .borrow_mut()
-                .substitute_type_params(field.type_id, &substitution);
-            let concrete_field = TirField {
-                name: field.name.clone(),
-                visibility: field.visibility,
-                type_id: concrete_field_ty,
-                index: field.index,
-                span: field.span,
-                is_secret: field.is_secret,
-                serde_rename: field.serde_rename.clone(),
-                serde_default: field.serde_default,
-                serde_positional: field.serde_positional,
-                default_expr: field.default_expr.clone(),
-            };
-            let value = make_field_copy(v_local.clone(), &concrete_field, type_table, span);
-            TirStructField {
-                name: field.name.clone(),
-                value,
-                field_index: field.index,
             }
         })
         .collect();
@@ -828,20 +765,25 @@ fn make_field_copy(
         field.type_id,
         span,
     );
-    let resolved = type_table.borrow().get(field.type_id).clone();
+    make_value_copy(field_access, field.type_id, type_table, span)
+}
+
+/// Route an already-projected value through the deep-copy machinery: a
+/// raw `Array<T>` via `array_clone`, a value-semantic type via its
+/// `$value_copy$T` helper (a `builtin::copy_value::<T>(...)` marker the
+/// TIR → NIR translator resolves), everything else as-is.
+fn make_value_copy(
+    expr: TirExpr,
+    type_id: TypeId,
+    type_table: &Rc<RefCell<TypeTable>>,
+    span: Span,
+) -> TirExpr {
+    let resolved = type_table.borrow().get(type_id).clone();
     if let ResolvedType::BuiltinArray(elem_type) = resolved {
-        return build_array_clone(field_access, field.type_id, elem_type, type_table, span);
+        return build_array_clone(expr, type_id, elem_type, type_table, span);
     }
-    // Nested value-semantic field (struct, List<T>, tuple, Option<T>
-    // / Result<T, E> with deep-copy payload, MutRef<T>, etc.). Without
-    // this wrap the generated body would do a one-level shallow copy
-    // and the inner type's own deep-copy via its `$value_copy$T` helper
-    // would never run — mutations through the copy would alias the
-    // original. Emit `builtin::copy_value::<FieldT>(field)`;
-    // The TIR → NIR translator resolves the marker to the helper that
-    // [`generate_copy_function`] synthesizes for `FieldT`.
-    if needs_value_copy(field.type_id, &type_table.borrow()) {
-        return wrap_copy_value(field_access, field.type_id, span);
+    if needs_value_copy(type_id, &type_table.borrow()) {
+        return wrap_copy_value(expr, type_id, span);
     }
-    field_access
+    expr
 }
