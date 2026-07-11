@@ -149,7 +149,7 @@ SHA via `git worktree add`, so it can be deleted and rebuilt at will (see
 [`wado clean`](#wado-clean)). The sources of truth are the canonical clone's
 object store and the lock's `resolved-ref` — never the checked-out files.
 
-### The Wado root and `~/.wadorc.toml`
+### The Wado root and its config
 
 The cache tree is the **Wado root** — the same concept ghq calls its "root", a
 flat `{host}/{owner}/{repo}` store of cloned source. Naming and control:
@@ -158,16 +158,18 @@ flat `{host}/{owner}/{repo}` store of cloned source. Naming and control:
   whole private state dir, whereas this is a source-checkout root meant to be
   interchangeable with ghq's. The existing `WADO_ROOT` env var and
   `cache_root()` resolver already use "root".
-- A global config file `~/.wadorc.toml` sets it:
+- An XDG config file `$XDG_CONFIG_HOME/wado/config.toml` (defaulting to
+  `~/.config/wado/config.toml` when `XDG_CONFIG_HOME` is unset) sets it:
 
   ```toml
   root = "~/ghq"   # point the Wado root at an existing ghq root
   ```
 
-- Resolution precedence: `WADO_ROOT` (env) → `root` in `~/.wadorc.toml` →
-  default `~/wado`. `~` and `$VARS` expand. The resolver lives where both the
-  CLI (which fetches) and the LSP (which reads offline) already share
-  `cache_root()`, so both agree on one location.
+- Resolution precedence: `WADO_ROOT` (env) → `root` in
+  `$XDG_CONFIG_HOME/wado/config.toml` → default `~/wado`. `~` and `$VARS`
+  expand. The resolver lives where both the CLI (which fetches) and the LSP
+  (which reads offline) already share `cache_root()`, so both agree on one
+  location.
 
 Pointing the root at `~/ghq` is a first-class use case, and it is precisely the
 nested-`.worktrees/` layout that makes it safe: a git dependency's canonical
@@ -431,10 +433,12 @@ impl stays pure.
    fetch, blob-read for resolution, `worktree add` for materialization, per-repo
    file lock + e2e tests.
 5. `dependency_index_from` git arm + `locked_git_refs` lock reader.
-6. `wado fetch` git branch; confirm `update` writes git lock entries.
-7. `wado clean` subcommand (`.worktrees/` eviction + `git worktree prune`,
+6. Wado-root resolver: `WADO_ROOT` env → `$XDG_CONFIG_HOME/wado/config.toml`
+   `root` → `~/wado`, in the shared `cache_root()` + tests.
+7. `wado fetch` git branch; confirm `update` writes git lock entries.
+8. `wado clean` subcommand (`.worktrees/` eviction + `git worktree prune`,
    `--all` for clones/components).
-8. `example/` e2e; docs (mark Phase 6 items done, note submodule limitation).
+9. `example/` e2e; docs (mark Phase 6 items done, note submodule limitation).
 
 ## Open questions
 
@@ -452,11 +456,10 @@ impl stays pure.
   (`.worktrees/` eviction + prune). Open only on the details: whether `--all`
   also evicts registry components, and whether a bare `wado clean` should prune
   worktrees not referenced by the current project's lock vs. all worktrees.
-- **`~/.wadorc.toml` conventions**: the `root` key and precedence are decided;
-  open only on the file's spelling (`~/.wadorc.toml` vs a visible `~/wadorc.toml`
-  matching the project's anti-hiding stance for `~/wado`, vs XDG
-  `$XDG_CONFIG_HOME/wado/config.toml`) and whether other machine-global settings
-  eventually share it.
+- **Config file scope**: location (`$XDG_CONFIG_HOME/wado/config.toml`), the
+  `root` key, and precedence are decided; open only on whether other
+  machine-global settings (default registry auth, `--offline` default, …)
+  eventually share this file.
 - **Submodules**: left unrecursed initially. Revisit if a real dependency needs
   them; would become a `--recurse-submodules`-style opt-in, not a default.
 - **Lock `directory`**: not recorded in the lock (the consumer's manifest still
