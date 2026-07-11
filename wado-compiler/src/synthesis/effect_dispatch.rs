@@ -207,6 +207,19 @@ fn instantiation_label(base: &str, type_args: &[TypeId], type_table: &TypeTable)
     }
 }
 
+fn handler_return_type(op: &TirEffectOp, type_table: &TypeTable) -> TypeId {
+    if op.is_async {
+        type_table.as_async_call(op.return_type).unwrap_or_else(|| {
+            panic!(
+                "async effect op `{}` must declare an `AsyncCall<T>` return",
+                op.name
+            )
+        })
+    } else {
+        op.return_type
+    }
+}
+
 /// Substitute the resource declaration's type parameters with the
 /// concrete `type_args` recorded on an `impl <Resource><Args> for <T>`
 /// block, producing per-instantiation operation signatures.
@@ -244,6 +257,7 @@ fn substitute_operations(
                 return_type: ctx.substitute(op.return_type, type_table),
                 span: op.span,
                 cm_name: op.cm_name.clone(),
+                is_async: op.is_async,
             }
         })
         .collect()
@@ -307,7 +321,8 @@ fn synthesize_dispatch_struct(
         nullable_ref_type_id = tt.make_option(inner_ref_type_id);
         for op in &meta.operations {
             let param_types: Vec<TypeId> = op.params.iter().map(|p| p.type_id).collect();
-            let op_func_type = tt.make_function(param_types, op.return_type, vec![], vec![]);
+            let closure_ret = handler_return_type(op, &tt);
+            let op_func_type = tt.make_function(param_types, closure_ret, vec![], vec![]);
             op_field_types.push(op_func_type);
         }
     }
@@ -528,10 +543,11 @@ fn build_dispatch_wrapper_function(
     }
     let saved_local = alloc_local(&mut next_local, &mut locals, nullable_ref_type_id);
     let d_local = alloc_local(&mut next_local, &mut locals, inner_ref_type_id);
-    let result_local = if return_type == TypeTable::UNIT {
+    let closure_ret = handler_return_type(op, &type_table.borrow());
+    let result_local = if closure_ret == TypeTable::UNIT {
         None
     } else {
-        Some(alloc_local(&mut next_local, &mut locals, return_type))
+        Some(alloc_local(&mut next_local, &mut locals, closure_ret))
     };
 
     let arg_exprs: Vec<TirExpr> = params
@@ -630,7 +646,7 @@ fn build_dispatch_wrapper_function(
             callee: Box::new(closure_field_access),
             args: arg_exprs.clone(),
         },
-        return_type,
+        closure_ret,
         span,
     );
 
@@ -641,7 +657,7 @@ fn build_dispatch_wrapper_function(
                 local_index: rl,
                 is_mut: false,
                 is_reactive: false,
-                type_id: return_type,
+                type_id: closure_ret,
                 value: indirect_call,
                 skip_value_copy: false,
             },
@@ -674,7 +690,47 @@ fn build_dispatch_wrapper_function(
     ));
 
     // return __result;  /  return;
-    if let Some(rl) = result_local {
+    if op.is_async {
+        assert!(
+            op.cm_name.is_some() && !is_resource,
+            "handled async op `{op_name}` without a CM import binding \
+             (the elaborator rejects handler impls for user-defined async effects)"
+        );
+        let wrap_args = match result_local {
+            Some(rl) => vec![CallArg::new(
+                TirExpr::new(
+                    TirExprKind::Local {
+                        index: rl,
+                        name: "__result".to_string(),
+                    },
+                    closure_ret,
+                    span,
+                ),
+                false,
+            )],
+            None => vec![],
+        };
+        let wrap_call = TirExpr::new(
+            TirExprKind::Call {
+                func: FunctionRef {
+                    module_source: entry_source.clone(),
+                    name: crate::name::cm_wrap_async_func_name(base_name, op_name),
+                    monomorph_info: None,
+                    method_info: None,
+                },
+                type_args: vec![],
+                args: wrap_args,
+            },
+            return_type,
+            span,
+        );
+        then_stmts.push(TirStmt::new(
+            TirStmtKind::Return {
+                value: Some(wrap_call),
+            },
+            span,
+        ));
+    } else if let Some(rl) = result_local {
         let result_expr = TirExpr::new(
             TirExprKind::Local {
                 index: rl,
@@ -2222,6 +2278,7 @@ fn build_handler_op_closure(
         .methods
         .get(&op.name)
         .expect("caller checked impl_info.methods.contains_key(&op.name)");
+    let closure_ret = handler_return_type(op, &type_table.borrow());
     let method_call = TirExpr::new(
         TirExprKind::method_call(
             Box::new(receiver),
@@ -2234,7 +2291,7 @@ fn build_handler_op_closure(
             vec![],
             arg_call_args,
         ),
-        op.return_type,
+        closure_ret,
         span,
     );
 
@@ -2246,10 +2303,9 @@ fn build_handler_op_closure(
     }];
 
     let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
-    let func_type =
-        type_table
-            .borrow_mut()
-            .make_function(param_types, op.return_type, vec![], vec![]);
+    let func_type = type_table
+        .borrow_mut()
+        .make_function(param_types, closure_ret, vec![], vec![]);
 
     TirExpr::new(
         TirExprKind::Closure {
@@ -2291,6 +2347,7 @@ fn build_trap_closure(
         .iter()
         .map(|p| (p.name.clone(), p.type_id))
         .collect();
+    let closure_ret = handler_return_type(op, &type_table.borrow());
     let trap_call = TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef {
@@ -2302,14 +2359,13 @@ fn build_trap_closure(
             type_args: vec![],
             args: vec![],
         },
-        op.return_type,
+        closure_ret,
         span,
     );
     let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
-    let func_type =
-        type_table
-            .borrow_mut()
-            .make_function(param_types, op.return_type, vec![], vec![]);
+    let func_type = type_table
+        .borrow_mut()
+        .make_function(param_types, closure_ret, vec![], vec![]);
     TirExpr::new(
         TirExprKind::Closure {
             params: closure_params,

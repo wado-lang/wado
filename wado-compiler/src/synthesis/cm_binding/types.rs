@@ -440,18 +440,8 @@ pub(super) fn binary_ne(left: TirExpr, right: TirExpr) -> TirExpr {
 }
 
 pub(super) fn kebab_to_pascal(s: &str) -> String {
-    s.split('-')
-        .map(|part| {
-            let mut chars = part.chars();
-            match chars.next() {
-                Some(c) => {
-                    let upper: String = c.to_uppercase().collect();
-                    upper + chars.as_str()
-                }
-                None => String::new(),
-            }
-        })
-        .collect()
+    use heck::ToUpperCamelCase;
+    s.to_upper_camel_case()
 }
 
 pub(super) fn is_unit_type(ty: &Type) -> bool {

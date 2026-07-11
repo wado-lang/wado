@@ -1378,6 +1378,10 @@ pub fn dispatch_field_name(op_name: &str) -> String {
     format!("op_{op_name}")
 }
 
+pub fn cm_wrap_async_func_name(interface_name: &str, method_name: &str) -> String {
+    format!("__cm_wrap_async__{interface_name}_{method_name}")
+}
+
 /// Convert a user-facing `test "name"` string into the snake-case segment used
 /// in the internal test function name (`__test_{index}_{snake}`).
 ///

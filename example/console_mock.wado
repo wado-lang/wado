@@ -1,0 +1,190 @@
+//! Mock and capture the real `core:cli` stdin / stdout / stderr with effect
+//! handlers. Application code uses ordinary `println` / `eprintln` / `print`
+//! and reads stdin through `wasi:cli`; one `MockStdio` handles every stdio
+//! resource those helpers touch, installed together via `with &mut mock do`.
+
+use { println, eprintln, print, Stdout, Stderr } from "core:cli";
+use { Stdin, ErrorCode } from "wasi:cli";
+
+struct MockStdio {
+    to_stderr: bool = false,
+    out: List<u8> = [],
+    err: List<u8> = [],
+    input: List<u8> = [],
+    input_pos: i32 = 0,
+}
+
+impl MockStdio {
+    fn stdout_text(&self) -> String {
+        return String::from_utf8_lossy(self.out);
+    }
+
+    fn stderr_text(&self) -> String {
+        return String::from_utf8_lossy(self.err);
+    }
+}
+
+impl Stdout for MockStdio {
+    fn write_via_stream(&mut self, data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
+        let _ = data;
+        self.to_stderr = false;
+        resume 0 as Future<Result<(), ErrorCode>>;
+    }
+}
+
+impl Stderr for MockStdio {
+    fn write_via_stream(&mut self, data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
+        let _ = data;
+        self.to_stderr = true;
+        resume 0 as Future<Result<(), ErrorCode>>;
+    }
+}
+
+impl Stdin for MockStdio {
+    fn read_via_stream(&mut self) -> [Stream<u8>, Future<Result<(), ErrorCode>>] {
+        resume [0 as Stream<u8>, 0 as Future<Result<(), ErrorCode>>];
+    }
+}
+
+impl Stream<u8> for MockStdio {
+    fn new(&mut self) -> [Stream<u8>, StreamWritable<u8>] {
+        resume [0 as Stream<u8>, 0 as StreamWritable<u8>];
+    }
+
+    fn read(&mut self, this: &Stream<u8>, max: i32) -> List<u8> {
+        let _ = this;
+        let end = i32::min(self.input_pos + max, self.input.len());
+        let mut chunk: List<u8> = [];
+        chunk.extend_from_slice(self.input.slice(self.input_pos, end));
+        self.input_pos = end;
+        resume chunk;
+    }
+
+    fn drop(&mut self, this: &Stream<u8>) {
+        let _ = this;
+    }
+
+    ..trap
+}
+
+impl StreamWritable<u8> for MockStdio {
+    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) {
+        let _ = this;
+        if self.to_stderr {
+            self.err.extend(&data);
+        } else {
+            self.out.extend(&data);
+        }
+    }
+
+    fn write_raw(&mut self, this: &StreamWritable<u8>, data: &Array<u8>, len: i32) {
+        let _ = this;
+        let chunk = data.slice(0, len);
+        if self.to_stderr {
+            self.err.extend_from_slice(chunk);
+        } else {
+            self.out.extend_from_slice(chunk);
+        }
+    }
+
+    fn drop(&mut self, this: &StreamWritable<u8>) {
+        let _ = this;
+    }
+
+    ..trap
+}
+
+impl Future<Result<(), ErrorCode>> for MockStdio {
+    fn drop(&mut self, this: &Future<Result<(), ErrorCode>>) {
+        let _ = this;
+    }
+
+    ..trap
+}
+
+fn greet(name: String) with Stdout, Stderr {
+    if name.is_empty() {
+        eprintln("warning: empty name");
+        return;
+    }
+    println(`Hello, {name}!`);
+}
+
+fn read_all_stdin() -> String with Stdin {
+    let [rx, _done] = Stdin::read_via_stream();
+    let mut buf: List<u8> = [];
+    loop {
+        let chunk = rx.read(1024);
+        if chunk.is_empty() {
+            break;
+        }
+        buf.extend(&chunk);
+    }
+    rx.drop();
+    return String::from_utf8_lossy(buf);
+}
+
+export fn run() with Stdout, Stderr {
+    let mut mock = MockStdio {
+        input: b"Ada\nTuring\n",
+    };
+    with &mut mock do {
+        print("prompt> ");
+        greet("Ada");
+        greet("");
+        let echoed = read_all_stdin();
+        eprintln(`read {echoed.len()} bytes of stdin`);
+    };
+
+    println("=== captured stdout ===");
+    print(mock.stdout_text());
+    println("=== captured stderr ===");
+    print(mock.stderr_text());
+}
+
+test "captures stdout written through println/print" {
+    let mut mock = MockStdio {};
+    with &mut mock do {
+        print("a");
+        println("b");
+        greet("Ada");
+    };
+    assert mock.stdout_text() == "ab\nHello, Ada!\n";
+    assert mock.stderr_text() == "";
+}
+
+test "captures stderr independently from stdout" {
+    let mut mock = MockStdio {};
+    with &mut mock do {
+        greet("Ada");
+        greet("");
+    };
+    assert mock.stdout_text() == "Hello, Ada!\n";
+    assert mock.stderr_text() == "warning: empty name\n";
+}
+
+test "scripted stdin is replayed to the guest reader" {
+    let mut mock = MockStdio {
+        input: b"hello\nstdin",
+    };
+    let got = with &mut mock do {
+        read_all_stdin();
+    };
+    assert got == "hello\nstdin";
+}
+
+test "empty stdin reads as end-of-stream immediately" {
+    let mut mock = MockStdio {};
+    let got = with &mut mock do {
+        read_all_stdin();
+    };
+    assert got == "";
+}
+
+test "unicode round-trips through the byte buffers" {
+    let mut mock = MockStdio {};
+    with &mut mock do {
+        println("こんにちは 🌍");
+    };
+    assert mock.stdout_text() == "こんにちは 🌍\n";
+}

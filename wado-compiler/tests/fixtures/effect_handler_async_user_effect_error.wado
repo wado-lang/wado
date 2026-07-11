@@ -1,0 +1,27 @@
+// A handler for an async operation of a user-defined effect is rejected:
+// only async operations backed by a CM import can be repackaged as a
+// completed `AsyncCall` (issue #1551's guard against the former ICE).
+interface Fetch {
+    async fn get(n: i32) -> AsyncCall<i32>;
+}
+
+struct MockFetch {
+}
+
+impl Fetch for MockFetch {
+    fn get(&self, n: i32) -> i32 {
+        resume n * 10;
+    }
+    ..trap
+}
+
+export fn run() {
+    let m = MockFetch {};
+    let r = with Fetch => &m do {
+        Fetch::get(5).wait();
+    };
+    assert r == 50;
+}
+
+__DATA__
+{"compile_error": "cannot handle async operation 'Fetch::get'"}
