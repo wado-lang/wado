@@ -25,7 +25,7 @@ use cranelift_entity::SecondaryMap;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FuncId, NirUnaryOp};
-use crate::nir_arena::{Body, ExprKind, NodeRef, Operand, StmtKind};
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::niri::{AliasInfo, LocalSet};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -604,6 +604,139 @@ fn compute_receiver_mutating(
     (mutating, has_body)
 }
 
+/// Whether `e`'s storage roots at self (`p0`) or an already-known
+/// self-derived local. `storage_root` sees through field, index,
+/// variant-payload, reference, deref, and cast projections.
+fn roots_self(body: &Body, self_derived: &IndexSet<u32>, e: ExprId, p0: u32) -> bool {
+    super::arena_query::storage_root(body, e).is_some_and(|r| r == p0 || self_derived.contains(&r))
+}
+
+/// Collect the locals a pattern binds into `set`, flagging `changed` when the
+/// set grows. Used to fixpoint self-derived locals through match arms.
+fn collect_pattern_locals(
+    body: &Body,
+    pat: crate::nir_arena::PatId,
+    set: &mut IndexSet<u32>,
+    changed: &mut bool,
+) {
+    use crate::nir_arena::PatKind;
+    match &body.pats[pat].kind {
+        PatKind::Binding { local_index, .. } => {
+            if set.insert(*local_index) {
+                *changed = true;
+            }
+        }
+        PatKind::Tuple(subs, _) | PatKind::Or(subs) => {
+            for &s in subs {
+                collect_pattern_locals(body, s, set, changed);
+            }
+        }
+        PatKind::Variant { bindings, .. } => {
+            for &s in bindings {
+                collect_pattern_locals(body, s, set, changed);
+            }
+        }
+        PatKind::Struct { fields, .. } => {
+            for f in fields {
+                collect_pattern_locals(body, f.pattern, set, changed);
+            }
+        }
+        PatKind::Wildcard
+        | PatKind::Literal(_)
+        | PatKind::Enum { .. }
+        | PatKind::ConstantValue { .. }
+        | PatKind::Range { .. } => {}
+    }
+}
+
+/// Locals whose storage aliases a projection of self (`p0`): the boxing rewrite
+/// lowers `&`/`&mut self.<proj>` to `Box { value: self.<proj> }` (a shared cell
+/// over the projected storage), then binds it and matches it. A mutation of any
+/// such local is a write through self that the syntactic self-projection scan
+/// ([`roots_self`] over the raw expression) misses. A least fixpoint over the
+/// bindings that hand out an alias: a projection of a known self alias, a `Box`
+/// literal wrapping one, or a match binding of a self-alias scrutinee. Only the
+/// eventual *mutation* of these (not their construction) counts as a write, so
+/// an immutable `&self.field` boxed and only read is not flagged.
+fn self_derived_locals(body: &Body, p0: u32, type_table: &TypeTable) -> IndexSet<u32> {
+    // A binding value that hands out an alias of self's storage.
+    fn value_aliases_self(
+        body: &Body,
+        set: &IndexSet<u32>,
+        value: ExprId,
+        p0: u32,
+        type_table: &TypeTable,
+    ) -> bool {
+        if roots_self(body, set, value, p0) {
+            return true;
+        }
+        if let ExprKind::StructLiteral {
+            struct_type,
+            fields,
+            ..
+        } = &body.exprs[value].kind
+        {
+            return type_table.box_payload_of(*struct_type).is_some()
+                && fields.iter().any(|f| {
+                    f.value
+                        .as_expr()
+                        .is_some_and(|fe| roots_self(body, set, fe, p0))
+                });
+        }
+        false
+    }
+    let mut set: IndexSet<u32> = IndexSet::default();
+    loop {
+        let mut changed = false;
+        walk_all(
+            body,
+            NodeRef::Block(body.root),
+            &mut |body, node| match node {
+                NodeRef::Stmt(s) => {
+                    if let StmtKind::Let {
+                        local_index, value, ..
+                    } = &body.stmts[s].kind
+                        && !set.contains(local_index)
+                        && let Some(ve) = value.as_expr()
+                        && value_aliases_self(body, &set, ve, p0, type_table)
+                    {
+                        set.insert(*local_index);
+                        changed = true;
+                    }
+                }
+                NodeRef::Expr(e) => match &body.exprs[e].kind {
+                    ExprKind::Assign { target, value } => {
+                        if let ExprKind::Local { index, .. } = &body.exprs[*target].kind
+                            && !set.contains(index)
+                            && let Some(ve) = value.as_expr()
+                            && value_aliases_self(body, &set, ve, p0, type_table)
+                        {
+                            set.insert(*index);
+                            changed = true;
+                        }
+                    }
+                    ExprKind::Match { expr: scrut, arms } => {
+                        if scrut
+                            .as_expr()
+                            .is_some_and(|se| roots_self(body, &set, se, p0))
+                        {
+                            for arm in arms {
+                                collect_pattern_locals(body, arm.pattern, &mut set, &mut changed);
+                            }
+                        }
+                    }
+                    _ => {}
+                },
+                NodeRef::Block(_) | NodeRef::Pat(_) => {}
+            },
+        );
+        if !changed {
+            break;
+        }
+    }
+    set
+}
+
 /// One walk of `body` extracting param-0's receiver-write summary:
 ///
 /// - `direct`: a fixpoint-invariant write through param-0's projection root
@@ -615,6 +748,9 @@ fn compute_receiver_mutating(
 ///   is `mutating[id]`, resolved by the fixpoint as the set grows. `direct`
 ///   short-circuits the walk; `pending` is collected only while no direct write
 ///   has been seen.
+///
+/// `projects_p0` broadens to [`roots_self`] over [`self_derived_locals`], so a
+/// mutation through a boxed self projection counts.
 fn summarize_receiver_writes(
     body: &Body,
     p0: u32,
@@ -622,9 +758,9 @@ fn summarize_receiver_writes(
     first_param_types: &FirstParamTypes,
     type_table: &TypeTable,
 ) -> (bool, Vec<FuncId>) {
-    let projects_p0 = |e: crate::nir_arena::ExprId| -> bool {
-        super::arena_query::storage_root(body, e) == Some(p0)
-    };
+    let self_derived = self_derived_locals(body, p0, type_table);
+    let projects_p0 =
+        |e: crate::nir_arena::ExprId| -> bool { roots_self(body, &self_derived, e, p0) };
     let mut direct = false;
     let mut pending: Vec<FuncId> = Vec::new();
     walk_all(body, NodeRef::Block(body.root), &mut |body, node| {

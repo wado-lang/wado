@@ -1,0 +1,36 @@
+// A `&mut self` method that mutates only through a boxed variant payload
+// (`if let Some(v) = &mut self.payload { v.push(..) }`, which the boxing
+// rewrite lowers to `Box { value: self.payload }`) must be seen as mutating
+// its receiver, so a field read is never forwarded across the call. Guards
+// the alias analysis' receiver-writes fixpoint against the boxed-mutation
+// shape the syntactic self-write scan misses.
+
+struct W { payload: Option<List<i32>> }
+
+impl W {
+    #[inline(never)]
+    fn grow(&mut self) {
+        if let Some(v) = &mut self.payload {
+            v.push(9);
+        }
+    }
+    #[inline(never)]
+    fn tag(&self) -> i32 {
+        if let Some(v) = &self.payload {
+            return v.len();
+        }
+        return 0;
+    }
+}
+
+test "non-inlinable boxed-mutation &mut-self call is not forwarded across" {
+    let mut w = W { payload: Option::Some([1] as List<i32>) };
+    let a = w.tag();
+    w.grow();
+    let b = w.tag();
+    assert a == 1;
+    assert b == 2;
+}
+
+__DATA__
+{"test": {}}
