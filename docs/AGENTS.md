@@ -136,7 +136,6 @@ It may include TODOs on WIP.
 - [Trait Derivation Policy — Bound-Driven Synthesis](./wep-2026-06-25-trait-derivation.md)
 - [Visibility — `internal` / `pub` / `export`](./wep-2026-06-25-visibility-internal-pub-export.md)
 - [Wasm CM Component Import (`use`-based)](./wep-2026-06-26-wasm-cm-component-import.md)
-- [Marl — A Minimal Markdown Processor](./wep-2026-07-05-marl.md)
+- [Marl — Markdown Renderer and Formatter](./wep-2026-07-05-marl.md)
 - [Iterator Reference Model](./wep-2026-07-05-iterator-reference-model.md)
 - [Local Item Definitions](./wep-2026-07-09-local-item-definitions.md)
-- [Marl Format — A Standalone Markdown Formatter CLI for Wado](./wep-2026-07-10-marl-format.md)
