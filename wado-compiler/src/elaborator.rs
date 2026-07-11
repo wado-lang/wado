@@ -976,23 +976,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.local_types.insert(def_id, type_id);
     }
 
-    /// Look up a function by name in a loaded module, returning the Item at that index.
-    fn lookup_func_in_loaded_module<'b>(
-        loaded_modules: &'b IndexMap<ModuleSource, Module>,
-        loaded_module_func_indices: &IndexMap<ModuleSource, IndexMap<String, usize>>,
-        module_source: &ModuleSource,
-        func_name: &str,
-    ) -> Option<&'b ast::Function> {
-        let idx_map = loaded_module_func_indices.get(module_source)?;
-        let &idx = idx_map.get(func_name)?;
-        let module = loaded_modules.get(module_source)?;
-        if let Item::Function(func) = &module.items[idx] {
-            Some(func)
-        } else {
-            None
-        }
-    }
-
     /// Look up an impl-associated constant by its `Type::NAME` key (or a
     /// `ns$Type::NAME` namespace alias). The current module's own map —
     /// its constants plus its namespace aliases — wins over the shared

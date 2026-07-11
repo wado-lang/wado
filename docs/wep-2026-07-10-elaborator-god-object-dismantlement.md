@@ -264,10 +264,20 @@ re-resolution (the reify Stage-7 precedent).
       `lookup_associated_constant`. The stdlib snapshot seeds
       `decls.associated_constants` so snapshot modules contribute without a
       decl pass.
-- [ ] S4 `Signatures` stage A — free functions, globals, effect ops, resource
-      statics, data sections, assoc-type bounds; convert `call.rs` /
-      `expr.rs` / `handlers.rs` / `type_resolution.rs` consumers; delete the
-      `ModuleDecls` signature caches they replace.
+- [x] S4 `Signatures` stage A — free functions, globals, effect ops, data
+      sections, assoc-type bounds; convert `call.rs` / `expr.rs` /
+      `type_resolution.rs` consumers. Landed as `FunctionSig`
+      (`TypeSystem::all_function_sigs`, canonical frame incl. resolved
+      `with` effects), `all_globals`, `all_effect_op_sigs`,
+      `data_sections`, and `TraitEnv::assoc_type_bound_index`; the
+      per-module halves live on `ModuleDecls` and are snapshot-seeded.
+      Deviations: resource statics ride the S5 impl/static digest instead
+      (their consumers are the `method_call.rs` static paths);
+      `function_return_types` / the generic caches are still populated for
+      own-module fast paths — consolidating them into `FunctionSig` reads
+      is S7-adjacent cleanup; the imported-globals decl loop still reads
+      the source module's AST (S5, needs visibility on the globals
+      digest).
 - [ ] S5 `Signatures` stage B — impl methods: extend `ImplHeader`
       (assoc types, `is_synthesize_request`, per-method canonical
       signatures + `AstId`s); convert `method_lookup` / `method_call` /

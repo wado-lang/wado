@@ -1080,6 +1080,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         sem.decls
                             .function_sigs
                             .clone_from(&snap_sem.decls.function_sigs);
+                        sem.decls
+                            .current_module_globals
+                            .clone_from(&snap_sem.decls.current_module_globals);
                     }
                 }
             }
@@ -1189,6 +1192,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             all_associated_constants: Rc::new(IndexMap::default()),
             all_effect_op_sigs: Rc::new(IndexMap::default()),
             all_function_sigs: Rc::new(IndexMap::default()),
+            all_globals: Rc::new(IndexMap::default()),
             data_sections: Rc::new(
                 modules
                     .iter()
@@ -1496,6 +1500,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
             }
             state.tysys.all_function_sigs = Rc::new(all_fn_sigs);
+            let mut all_globals: IndexMap<ModuleSource, IndexMap<String, (TypeId, bool)>> =
+                IndexMap::default();
+            for module_source in &sorted_sources {
+                if let Some(sem) = state.module_semantics.get(module_source) {
+                    all_globals.insert(
+                        module_source.clone(),
+                        sem.decls.current_module_globals.clone(),
+                    );
+                }
+            }
+            state.tysys.all_globals = Rc::new(all_globals);
             // Aliases read the *source module's* own map, not the assembled
             // one: two modules may declare a same-key constant (the bare key
             // collides in the assembled map, last-in-topo wins), yet each

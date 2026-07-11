@@ -43,6 +43,9 @@ pub(crate) struct FunctionSig {
     pub(crate) param_defaults: Vec<Option<ast::Expr>>,
     /// Declared return type; `None` when the declaration has none.
     pub(crate) return_type: Option<TypeId>,
+    /// Declared `with` effects, resolved in the declaring perspective
+    /// (effect parameters stay symbolic as `EffectRef::Param`).
+    pub(crate) effects: Vec<crate::tir::EffectRef>,
 }
 
 /// Per-module declaration tables produced by elaboration.

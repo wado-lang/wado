@@ -162,6 +162,12 @@ pub(crate) struct TypeSystem {
     pub(crate) all_function_sigs:
         Rc<IndexMap<ModuleSource, IndexMap<String, super::sem::decls::FunctionSig>>>,
 
+    /// Program-wide global-variable declarations, keyed declaring module →
+    /// global name → `(declared type, is_mut)`. Assembled by the driver
+    /// between the decl and body passes from each module's
+    /// `ModuleDecls::current_module_globals`.
+    pub(crate) all_globals: Rc<IndexMap<ModuleSource, IndexMap<String, (TypeId, bool)>>>,
+
     /// Per-module `__DATA__` section contents (modules without one have no
     /// entry). Read by the `#data` literal instead of fetching the module
     /// AST.

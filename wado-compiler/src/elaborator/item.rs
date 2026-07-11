@@ -976,6 +976,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|p| scope.resolve_type(&p.ty))
             .collect();
         let return_type = func.return_type.as_ref().map(|t| scope.resolve_type(t));
+        let effects = scope.resolve_effects(&func.effects, &func.effect_ids);
         drop(scope);
         self.sem.decls.function_sigs.insert(
             func.name.clone(),
@@ -987,6 +988,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_is_mut: func.params.iter().map(|p| p.is_mut).collect(),
                 param_defaults: func.params.iter().map(|p| p.default.clone()).collect(),
                 return_type,
+                effects,
             },
         );
     }
