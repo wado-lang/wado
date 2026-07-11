@@ -12,7 +12,7 @@ struct Point {
 }
 
 struct Ref {
-    p: &Point,
+    p: &mut Point,
 }
 
 // Small, no stores — will be inlined, field forwarding succeeds.
@@ -21,13 +21,13 @@ fn read_point(p: &Point) -> i32 {
 }
 
 // Stores the reference — causes aliasing after inlining.
-fn capture_point(p: &Point) -> Ref with stores[p] {
+fn capture_point(p: &mut Point) -> Ref with stores[p] {
     return Ref { p };
 }
 
 export fn run() with Stdout {
     let a = Point { x: 10, y: 20 };
-    let b = Point { x: 30, y: 40 };
+    let mut b = Point { x: 30, y: 40 };
 
     // a: non-stores call, inlined → field forwarding eliminates this assert.
     let _ = read_point(&a);
@@ -35,7 +35,7 @@ export fn run() with Stdout {
 
     // b: stores call, aliased; mutate through the stored ref, then read back.
     // Forwarding cannot eliminate this assert — `b.x` is now 70.
-    let r = capture_point(&b);
+    let r = capture_point(&mut b);
     r.p.x = 70;
     assert b.x == 70;
 
