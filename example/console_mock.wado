@@ -83,19 +83,15 @@ impl Stream<u8> for MockStdio {
 
     fn read(&mut self, this: &Stream<u8>, max: i32) -> List<u8> {
         let _ = this;
+        let end = i32::min(self.input_pos + max, self.input.len());
         let mut chunk: List<u8> = [];
-        let mut n = 0;
-        while self.input_pos < self.input.len() && n < max {
-            chunk.push(self.input[self.input_pos]);
-            self.input_pos += 1;
-            n += 1;
-        }
+        chunk.extend_from_slice(self.input.as_slice().slice(self.input_pos, end));
+        self.input_pos = end;
         resume chunk;
     }
 
     fn drop(&mut self, this: &Stream<u8>) {
         let _ = this;
-        resume ();
     }
 
     ..trap
@@ -104,32 +100,25 @@ impl Stream<u8> for MockStdio {
 impl StreamWritable<u8> for MockStdio {
     fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) {
         let _ = this;
-        for let b of data {
-            if self.to_stderr {
-                self.err.push(b);
-            } else {
-                self.out.push(b);
-            }
+        if self.to_stderr {
+            self.err.extend(&data);
+        } else {
+            self.out.extend(&data);
         }
-        resume ();
     }
 
     fn write_raw(&mut self, this: &StreamWritable<u8>, data: &Array<u8>, len: i32) {
         let _ = this;
-        for let mut i = 0; i < len; i += 1 {
-            let b = data.get(i);
-            if self.to_stderr {
-                self.err.push(b);
-            } else {
-                self.out.push(b);
-            }
+        let chunk = data.slice(0, len);
+        if self.to_stderr {
+            self.err.extend_from_slice(chunk);
+        } else {
+            self.out.extend_from_slice(chunk);
         }
-        resume ();
     }
 
     fn drop(&mut self, this: &StreamWritable<u8>) {
         let _ = this;
-        resume ();
     }
 
     ..trap
@@ -138,7 +127,6 @@ impl StreamWritable<u8> for MockStdio {
 impl Future<Result<(), ErrorCode>> for MockStdio {
     fn drop(&mut self, this: &Future<Result<(), ErrorCode>>) {
         let _ = this;
-        resume ();
     }
 
     ..trap
