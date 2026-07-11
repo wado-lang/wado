@@ -542,12 +542,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // cross-module collision, issue #1342). Reify produces the const's
         // TIR under `with_const_module_perspective(const_module)` and does
         // not read these consumer-side entries.
-        if let Some((_const_module, type_id, const_expr)) = self
-            .sem
-            .decls
-            .associated_constants
-            .get(&ident.name)
-            .cloned()
+        if let Some((_const_module, type_id, const_expr)) =
+            self.lookup_associated_constant(&ident.name)
         {
             // Resolve the constant body for its fact-recording side effects;
             // reify re-reifies it (`reify_ident`). Not an l-value.
@@ -2554,12 +2550,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && !self.is_known_case_of_type(scrutinee_type, &normalized, variant_qualifier)
         {
             let assoc_const_key = Self::exh_assoc_const_key(variant_name, variant_qualifier);
-            if let Some((_m, _type_id, const_expr)) = self
-                .sem
-                .decls
-                .associated_constants
-                .get(&assoc_const_key)
-                .cloned()
+            if let Some((_m, _type_id, const_expr)) =
+                self.lookup_associated_constant(&assoc_const_key)
             {
                 if let ast::Expr::Literal(lit) = &const_expr {
                     match &lit.value {

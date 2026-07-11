@@ -1067,6 +1067,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 for (ms, snap_sem) in &snap_state.module_semantics {
                     if let Some(sem) = module_semantics.get_mut(ms) {
                         sem.types = snap_sem.types.clone();
+                        // A snapshot module runs no decl pass this compile;
+                        // carry its own resolved associated constants over so
+                        // the driver's program-wide assembly (between the decl
+                        // and body passes) sees stdlib constants too.
+                        sem.decls
+                            .associated_constants
+                            .clone_from(&snap_sem.decls.associated_constants);
                     }
                 }
             }
@@ -1171,6 +1178,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             known_type_names_cache: Rc::new(known_type_names_cache),
             module_visible_types: Rc::new(module_visible_types),
             loaded_module_func_indices: Rc::new(loaded_module_func_indices),
+            // Assembled by `build_tir_from_state` between the decl and body
+            // passes, once every module's own constants are resolved.
+            all_associated_constants: Rc::new(IndexMap::default()),
         };
         Ok(AnnotateState {
             tysys,
@@ -1183,12 +1193,42 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         })
     }
 
+    /// Construct a per-module `Elaborator` over the shared driver state and
+    /// the module's owned `ModuleSemantics`. Used by both Phase 1a
+    /// (`annotate_module_decls`) and Phase 1b (`annotate_module_bodies`);
+    /// the module-identity fields are set by those entry points.
+    fn module_elaborator(
+        state: &AnnotateState,
+        sem: super::sem::ModuleSemantics,
+        symbols: &'a SymbolTable,
+        modules: &'a IndexMap<ModuleSource, Module>,
+        logger: &'a Logger<'a, H>,
+        entry_module_source: &ModuleSource,
+    ) -> Elaborator<'a, H> {
+        Elaborator {
+            tysys: state.tysys.clone(),
+            sem,
+            symbols,
+            loaded_modules: modules,
+            logger,
+            current_module_source: ModuleSource::entry_point_uninitialized(),
+            entry_module_source: entry_module_source.clone(),
+            current_module_items: &[],
+            annotate_ctx: super::scope::Scope::default(),
+            invocations: Rc::clone(&state.invocations),
+            interner: Rc::clone(&state.interner),
+            suppress_reference_recording: false,
+            infer_holes: super::infer_hole::InferHoleTable::default(),
+        }
+    }
+
     /// Lower phase: emit one [`TirModule`] per source module using the state
     /// produced by [`Elaborator::annotate_modules`]. Errors are collected in the
     /// logger; the function returns [`Bail`] if any module failed.
-    /// Run the body-level walk over every module (the `annotate_bodies` pass:
-    /// `resolve_module` populates each `ModuleSemantics` with facts), and —
-    /// when `build_tir` is set — reify each module to its final `TirModule`.
+    /// Run the per-module decl pass (`annotate_module_decls`) over every
+    /// module, then the body-level walk (`annotate_module_bodies`, which
+    /// populates each `ModuleSemantics` with facts), and — when `build_tir`
+    /// is set — reify each module to its final `TirModule`.
     ///
     /// The LSP path passes `build_tir = false`: it needs only the recorded
     /// facts (use→def edges, types, dispatch) and never reads TIR, so reify and
@@ -1244,10 +1284,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // well-formed — the set the reify pass emits.
         let mut reify_eligible: IndexSet<ModuleSource> = IndexSet::default();
 
-        // Phase 1 — `annotate_bodies`: run the body walk over every user
-        // module to populate `ModuleSemantics`. The combined walk's own TIR is
-        // discarded; reify (Phase 2, below) is the sole TIR source. Liveness
-        // runs between the two phases so reify can gate on it.
+        // Phase 1a — `annotate_decls`: populate every user module's
+        // declaration facts (imports, signatures, globals, associated
+        // constants) before any body walk, so bodies resolve against
+        // complete decl knowledge regardless of module order.
         for module_source in &sorted_sources {
             if is_stdlib_snapshot_hit(module_source) {
                 continue;
@@ -1384,31 +1424,100 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             sem.decls.function_return_types = function_return_types;
             sem.decls.imported_functions = imported_functions;
 
-            let mut elaborator = Elaborator {
-                tysys: state.tysys.clone(),
-                sem,
-                symbols,
-                loaded_modules: modules,
-                logger,
-                current_module_source: ModuleSource::entry_point_uninitialized(), // Set in Elaborator::resolve_module
-                entry_module_source: entry_module_source.clone(),
-                current_module_items: &[], // Set in Elaborator::resolve_module
-                annotate_ctx: super::scope::Scope::default(),
-                invocations: Rc::clone(&state.invocations),
-                interner: Rc::clone(&state.interner),
-                suppress_reference_recording: false,
-                infer_holes: super::infer_hole::InferHoleTable::default(),
-            };
+            let mut elaborator =
+                Self::module_elaborator(state, sem, symbols, modules, logger, &entry_module_source);
 
             // Set file context so diagnostics emitted during resolution
             // carry the correct module filename (not the entry module).
             logger.set_file(module_source.source_path());
 
-            // Phase 1 — `annotate_bodies`: run the body walk to populate
-            // `ModuleSemantics`. The combined walk's own TIR is discarded;
-            // reify (Phase 2) is the sole source of the final TIR for every
-            // module, stdlib and snapshot included (Stage 7).
-            let resolve_result = elaborator.resolve_module(module, module_source.clone());
+            elaborator.annotate_module_decls(module, module_source.clone());
+            let saved_sem = elaborator.sem;
+            state
+                .module_semantics
+                .insert(module_source.clone(), saved_sem);
+        }
+
+        // Assemble the program-wide associated-constant map: each module's
+        // decl pass resolved its own constants (snapshot modules were seeded
+        // from the snapshot), so one pass in topological order replaces the
+        // previous per-module rescan of every loaded module (O(modules²)).
+        // Then register each module's namespace-alias entries
+        // (`ns$Type::CONST`) against the assembled map — a namespace's
+        // source module always precedes its importer in topo order, so the
+        // map is complete for every alias.
+        {
+            let mut all_consts: IndexMap<String, (ModuleSource, TypeId, crate::ast::Expr)> =
+                IndexMap::default();
+            for module_source in &sorted_sources {
+                if let Some(sem) = state.module_semantics.get(module_source) {
+                    for (key, value) in &sem.decls.associated_constants {
+                        all_consts.insert(key.clone(), value.clone());
+                    }
+                }
+            }
+            state.tysys.all_associated_constants = Rc::new(all_consts);
+            // Aliases read the *source module's* own map, not the assembled
+            // one: two modules may declare a same-key constant (the bare key
+            // collides in the assembled map, last-in-topo wins), yet each
+            // namespace alias must still reach its own module's constant.
+            // All reads complete before any alias is inserted, so an alias
+            // never aliases another module's alias entries.
+            let per_module_aliases: Vec<(
+                ModuleSource,
+                Vec<(String, (ModuleSource, TypeId, crate::ast::Expr))>,
+            )> = sorted_sources
+                .iter()
+                .filter_map(|module_source| {
+                    let sem = state.module_semantics.get(module_source)?;
+                    let aliases: Vec<_> = sem
+                        .imports
+                        .namespace_imports
+                        .iter()
+                        .filter_map(|(ns, ns_src)| {
+                            let src_sem = state.module_semantics.get(ns_src)?;
+                            Some((ns, &src_sem.decls.associated_constants))
+                        })
+                        .flat_map(|(ns, consts)| {
+                            consts.iter().map(|(key, value)| {
+                                (crate::name::namespace_member_alias(ns, key), value.clone())
+                            })
+                        })
+                        .collect();
+                    (!aliases.is_empty()).then(|| (module_source.clone(), aliases))
+                })
+                .collect();
+            for (module_source, aliases) in per_module_aliases {
+                let Some(sem) = state.module_semantics.get_mut(&module_source) else {
+                    continue;
+                };
+                for (key, value) in aliases {
+                    sem.decls.associated_constants.insert(key, value);
+                }
+            }
+        }
+
+        // Phase 1b — `annotate_bodies`: run the body walk over every user
+        // module to populate `ModuleSemantics`. The combined walk's own TIR is
+        // discarded; reify (Phase 2, below) is the sole TIR source. Liveness
+        // runs between the two phases so reify can gate on it.
+        for module_source in &sorted_sources {
+            if is_stdlib_snapshot_hit(module_source) {
+                continue;
+            }
+            let module = modules.get(module_source).expect("module should exist");
+
+            // Take this module's `ModuleSemantics` (populated by Phase 1a)
+            // out of `state` so the elaborator can own it for the body walk.
+            let sem = state
+                .module_semantics
+                .swap_remove(module_source)
+                .expect("module_semantics is pre-populated by annotate_modules");
+            let mut elaborator =
+                Self::module_elaborator(state, sem, symbols, modules, logger, &entry_module_source);
+            logger.set_file(module_source.source_path());
+
+            let resolve_result = elaborator.annotate_module_bodies(module, module_source.clone());
             let saved_sem = elaborator.sem;
             // Re-install the (now-populated) `ModuleSemantics` even on bail
             // so the LSP can answer cursor queries against whatever bindings

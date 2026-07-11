@@ -993,6 +993,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
+    /// Look up an impl-associated constant by its `Type::NAME` key (or a
+    /// `ns$Type::NAME` namespace alias). The current module's own map —
+    /// its constants plus its namespace aliases — wins over the shared
+    /// program-wide map, so a module's own constant shadows a same-key
+    /// foreign one.
+    pub(super) fn lookup_associated_constant(
+        &self,
+        key: &str,
+    ) -> Option<(ModuleSource, TypeId, ast::Expr)> {
+        self.sem
+            .decls
+            .associated_constants
+            .get(key)
+            .or_else(|| self.tysys.all_associated_constants.get(key))
+            .cloned()
+    }
+
     /// Look up a function by name in current module items.
     ///
     /// Consults [`tysys::TypeSystem::loaded_module_func_indices`] — the
@@ -1297,18 +1314,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Resolve a module, converting AST to TIR
-    /// Walk a module for its fact-recording side effects (Stage 7-B:
-    /// records-only / `annotate_bodies`). reify (`reify_module`) is the sole
-    /// producer of the `TirModule`; this walk resolves every item body
-    /// (recording types / dispatch / signatures / desugar facts and emitting
-    /// diagnostics) so reify and the LSP can read them. Returns `Bail` on a
-    /// fatal logger error, matching the previous TIR-building contract.
-    pub fn resolve_module(
-        &mut self,
-        module: &'a Module,
-        module_source: ModuleSource,
-    ) -> Result<(), Bail> {
+    /// Per-module declaration pass (`annotate_decls`): effect sources,
+    /// use-specifier use→def edges, type / signature collection, globals,
+    /// imported globals, associated constants, and the generic-function
+    /// inference caches. Populates `ModuleSemantics.imports` / `.decls`;
+    /// walks no bodies. The driver runs this for every module before any
+    /// body walk ([`Self::annotate_module_bodies`]) so bodies resolve
+    /// against complete declaration facts.
+    pub fn annotate_module_decls(&mut self, module: &'a Module, module_source: ModuleSource) {
         // Set current module source for struct type creation
         self.current_module_source = module_source.clone();
         // Store current module items as a reference (no clone)
@@ -1435,80 +1448,47 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
-        // Collect associated constants from loaded modules and current
-        // module, tagging each with its defining `ModuleSource` so reify can
-        // reify the body under the right module perspective (the body's
-        // `AstId`s are only unique within that module).
-        //
-        // Resolve the const's type here, in the current module's perspective,
-        // so reify and the combined walk both read a ready `TypeId` instead
-        // of re-running `resolve_type` at every use site. The resolution
-        // context matches what the use sites would use today (assoc-const
-        // types are primitive or `Self`-substituted and resolve uniformly
-        // across modules).
+        // Collect THIS module's impl-associated constants, resolving each
+        // constant's declared type once in the declaring module's
+        // perspective (assoc-const types are primitive or `Self`-substituted
+        // and resolve uniformly, so consumers can reuse the `TypeId`
+        // as-is). The cross-module view is assembled by the driver after
+        // the decl pass ([`tysys::TypeSystem::all_associated_constants`],
+        // which also registers the `ns$Type::CONST` namespace aliases);
+        // lookups go through [`Self::lookup_associated_constant`].
         self.sem.decls.associated_constants.clear();
-        let assoc_const_inputs: Vec<(ModuleSource, String, ast::Type, ast::Expr)> = self
-            .loaded_modules
+        let assoc_const_inputs: Vec<(String, ast::Type, ast::Expr)> = module
+            .items
             .iter()
-            .map(|(src, m)| (src.clone(), &m.items))
-            .chain(std::iter::once((module_source, &module.items)))
-            .flat_map(|(src, module_items)| {
-                module_items
+            .filter_map(|item| {
+                if let Item::Impl(impl_block) = item {
+                    Some(impl_block)
+                } else {
+                    None
+                }
+            })
+            .flat_map(|impl_block| {
+                let type_name = self.get_type_name(&impl_block.ty);
+                impl_block
+                    .constants
                     .iter()
-                    .filter_map(|item| {
-                        if let Item::Impl(impl_block) = item {
-                            Some((src.clone(), impl_block))
-                        } else {
-                            None
-                        }
-                    })
-                    .flat_map(|(src, impl_block)| {
-                        let type_name = self.get_type_name(&impl_block.ty);
-                        impl_block
-                            .constants
-                            .iter()
-                            .map(move |assoc_const| {
-                                (
-                                    src.clone(),
-                                    MethodName::format_local(&type_name, None, &assoc_const.name),
-                                    assoc_const.ty.clone(),
-                                    assoc_const.value.clone(),
-                                )
-                            })
-                            .collect::<Vec<_>>()
+                    .map(move |assoc_const| {
+                        (
+                            MethodName::format_local(&type_name, None, &assoc_const.name),
+                            assoc_const.ty.clone(),
+                            assoc_const.value.clone(),
+                        )
                     })
                     .collect::<Vec<_>>()
             })
             .collect();
-        // Also register each constant reachable through a namespace import
-        // under its `ns$Type::member` alias, so `ns::Type::CONST` (which
-        // canonicalizes to `ns$Type::CONST`) resolves to the constant in that
-        // namespace's module.
-        let ns_aliases: Vec<(String, ModuleSource)> = self
-            .sem
-            .imports
-            .namespace_imports
-            .iter()
-            .map(|(ns, src)| (ns.clone(), src.clone()))
-            .collect();
-        for (src, key, ty, value) in assoc_const_inputs {
+        for (key, ty, value) in assoc_const_inputs {
             let type_id = self.resolve_type(&ty);
-            for (ns, ns_src) in &ns_aliases {
-                if *ns_src == src {
-                    self.sem.decls.associated_constants.insert(
-                        name::namespace_member_alias(ns, &key),
-                        (src.clone(), type_id, value.clone()),
-                    );
-                }
-            }
             self.sem
                 .decls
                 .associated_constants
-                .insert(key, (src, type_id, value));
+                .insert(key, (module_source.clone(), type_id, value));
         }
-
-        // Third pass: resolve functions
-        let _resolve_funcs_span = self.logger.span("elaborate/resolve_funcs");
 
         // Pre-populate the generic-function inference caches for every
         // generic function in the current module. This allows same-module
@@ -1521,6 +1501,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 self.precompute_generic_function_cache(func);
             }
         }
+    }
+
+    /// Per-module body walk (`annotate_bodies`, Stage 7-B: records-only).
+    /// reify (`reify_module`) is the sole producer of the `TirModule`; this
+    /// walk resolves every item body (recording types / dispatch /
+    /// signatures / desugar facts and emitting diagnostics) so reify and
+    /// the LSP can read them. Requires [`Self::annotate_module_decls`] to
+    /// have populated this module's `ModuleSemantics` first. Returns `Bail`
+    /// when any error has been logged, matching the previous contract.
+    pub fn annotate_module_bodies(
+        &mut self,
+        module: &'a Module,
+        module_source: ModuleSource,
+    ) -> Result<(), Bail> {
+        self.current_module_source = module_source;
+        self.current_module_items = &module.items;
+        let _resolve_funcs_span = self.logger.span("elaborate/resolve_funcs");
 
         let mut test_count = 0usize;
         for item in &module.items {

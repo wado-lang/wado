@@ -253,8 +253,17 @@ re-resolution (the reify Stage-7 precedent).
       the operator dispatcher takes `origin: Option<AstId>` threaded from
       `resolve_binary` / unary / compound-assign / comparison-chain sites —
       nested dispatches can no longer clobber a pending record.
-- [ ] S3 Decl work → decl pass: move the `resolve_module` preamble into
-      `annotate_decls`; associated-const collection becomes O(N).
+- [x] S3 Decl work → decl pass: move the `resolve_module` preamble into
+      `annotate_decls`; associated-const collection becomes O(N). Landed:
+      `resolve_module` split into `annotate_module_decls` /
+      `annotate_module_bodies`, and the driver runs all decl passes before
+      any body walk (Phase 1a / 1b). Each module resolves only its own
+      associated constants; the driver assembles
+      `TypeSystem::all_associated_constants` (plus per-module namespace
+      aliases) between the phases, and lookups go local-first through
+      `lookup_associated_constant`. The stdlib snapshot seeds
+      `decls.associated_constants` so snapshot modules contribute without a
+      decl pass.
 - [ ] S4 `Signatures` stage A — free functions, globals, effect ops, resource
       statics, data sections, assoc-type bounds; convert `call.rs` /
       `expr.rs` / `handlers.rs` / `type_resolution.rs` consumers; delete the

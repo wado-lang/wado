@@ -1468,12 +1468,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let assoc_const_key =
                         Self::format_assoc_const_key(variant_name, variant_qualifier.as_ref());
                     // Resolve to literal patterns when possible for switch optimization.
-                    if let Some((_const_module, type_id, const_expr)) = self
-                        .sem
-                        .decls
-                        .associated_constants
-                        .get(&assoc_const_key)
-                        .cloned()
+                    if let Some((_const_module, type_id, const_expr)) =
+                        self.lookup_associated_constant(&assoc_const_key)
                     {
                         // Resolve for side effects (records the const body's
                         // types for reify). Stage 7-B: `resolve_literal` is a

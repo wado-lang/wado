@@ -242,6 +242,18 @@ pub(crate) struct CallSiteLocation {
 }
 
 impl<'a, H: CompilerHost> Reify<'a, H> {
+    /// Look up an impl-associated constant by its `Type::NAME` key (own
+    /// module + namespace aliases first, then the program-wide map).
+    /// Mirrors `Elaborator::lookup_associated_constant`.
+    fn lookup_associated_constant(&self, key: &str) -> Option<(ModuleSource, TypeId, ast::Expr)> {
+        self.sem
+            .decls
+            .associated_constants
+            .get(key)
+            .or_else(|| self.tysys.all_associated_constants.get(key))
+            .cloned()
+    }
+
     /// Construct a per-module `Reify` for the orchestration driver.
     /// The `tysys` clone is the shallow Rc/Arc copy
     /// [`TypeSystem`] supports; per-module state (`sem`,
@@ -8407,12 +8419,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //    static expression in practice), so reify uses the
         //    surrounding `ctx` directly — matches the elaborator's
         //    `resolve_expr(&const_expr, ctx, …)` (expr.rs:594–605).
-        if let Some((const_module, type_id, const_expr)) = self
-            .sem
-            .decls
-            .associated_constants
-            .get(&ident.name)
-            .cloned()
+        if let Some((const_module, type_id, const_expr)) =
+            self.lookup_associated_constant(&ident.name)
         {
             // The constant's body lives in its *defining* module (e.g.
             // `pub const MAX: i32 = 2147483647;` in primitive.wado). Its
@@ -9216,8 +9224,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             Some(_) => variant_name.to_string(),
         };
 
-        let (const_module, type_id, const_expr) =
-            self.sem.decls.associated_constants.get(&key).cloned()?;
+        let (const_module, type_id, const_expr) = self.lookup_associated_constant(&key)?;
 
         // Reify the body under its defining module so colliding cross-module
         // `AstId`s can't mis-type the inlined constant (see `reify_ident`).
@@ -9293,8 +9300,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 Some(ast::Type::NamespacedGeneric(t)) => format!("{}::{}", t.name, variant_name),
                 Some(_) => variant_name.clone(),
             };
-            if let Some((const_module, type_id, const_expr)) =
-                self.sem.decls.associated_constants.get(&key).cloned()
+            if let Some((const_module, type_id, const_expr)) = self.lookup_associated_constant(&key)
             {
                 let resolved = self.with_const_module_perspective(&const_module, |this| {
                     this.reify_expr(&const_expr, ctx, Some(type_id))

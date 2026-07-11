@@ -135,6 +135,17 @@ pub(crate) struct TypeSystem {
     /// for O(1) lookup. Built globally during annotate; read-only
     /// afterwards.
     pub(crate) loaded_module_func_indices: Rc<IndexMap<ModuleSource, IndexMap<String, usize>>>,
+
+    /// Program-wide impl-associated constants, keyed `Type::NAME` →
+    /// `(defining module, declared type, value expr)`. Each module's decl
+    /// pass resolves its own constants (stdlib entries come from the
+    /// snapshot); the driver assembles this map once between the decl and
+    /// body passes, in module topological order (later modules win a key
+    /// collision, matching the previous per-module scan order). Lookups go
+    /// through `lookup_associated_constant`, which consults the per-module
+    /// map (own constants + namespace aliases) first so a module's own
+    /// constant shadows a same-key foreign one.
+    pub(crate) all_associated_constants: Rc<IndexMap<String, (ModuleSource, TypeId, Expr)>>,
 }
 
 impl TypeSystem {
