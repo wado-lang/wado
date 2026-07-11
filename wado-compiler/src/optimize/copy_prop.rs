@@ -27,6 +27,7 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::arena_query::{place_root_local, storage_root};
 use super::gate::{FunctionGate, GatedPass};
+use super::value_copy::mutation::{MutationOracle, Witness, expr_witnesses};
 
 #[derive(Debug, Clone)]
 struct CopyBinding {
@@ -210,12 +211,10 @@ struct AnalysisResult {
     usage: IndexMap<u32, LocalUsage>,
 }
 
-type FirstParamTypes = super::alias::FirstParamTypes;
-
 fn analyze_function_body(
     body: &Body,
     type_table: &TypeTable,
-    first_param_types: &FirstParamTypes,
+    oracle: &MutationOracle<'_>,
     copy_value_id: Option<FuncId>,
 ) -> AnalysisResult {
     let mut result = AnalysisResult {
@@ -227,7 +226,7 @@ fn analyze_function_body(
         body.root,
         &mut result,
         type_table,
-        first_param_types,
+        oracle,
         copy_value_id,
     );
     // A local read only through a promoted `Operand::Value` (`Opaque(Local)`) is
@@ -251,7 +250,7 @@ fn analyze_block(
     block: BlockId,
     result: &mut AnalysisResult,
     type_table: &TypeTable,
-    fpt: &FirstParamTypes,
+    oracle: &MutationOracle<'_>,
     copy_value_id: Option<FuncId>,
 ) {
     let stmts = body.blocks[block].stmts.clone();
@@ -271,7 +270,7 @@ fn analyze_block(
             &mut mut_indices,
             i,
             type_table,
-            fpt,
+            oracle,
         );
     }
     // Per-local earliest statement index whose subtree reads it. For a
@@ -314,7 +313,7 @@ fn analyze_block(
             };
             result.bindings.push(binding);
         }
-        analyze_stmt(body, stmt, result, type_table, fpt, copy_value_id);
+        analyze_stmt(body, stmt, result, type_table, oracle, copy_value_id);
     }
 }
 
@@ -333,7 +332,7 @@ fn collect_mutated_locals(
     mut_indices: &mut IndexMap<u32, Vec<usize>>,
     idx: usize,
     type_table: &TypeTable,
-    fpt: &FirstParamTypes,
+    oracle: &MutationOracle<'_>,
 ) {
     let mut note = |l: u32| {
         let v = mut_indices.entry(l).or_default();
@@ -342,46 +341,47 @@ fn collect_mutated_locals(
         }
     };
     if let NodeRef::Expr(id) = node {
-        match &body.exprs[id].kind {
-            ExprKind::Assign { target, .. } => {
-                if let Some(l) = place_root_local(body, *target) {
-                    note(l);
-                }
-            }
-            ExprKind::Unary {
-                op: NirUnaryOp::MutRef,
-                expr: inner,
-            } => {
+        expr_witnesses(body, id, oracle, &mut |w| match w {
+            Witness::Rebind(l) => note(l),
+            Witness::Write(inner) => {
                 if let Some(l) = inner.as_expr().and_then(|ie| place_root_local(body, ie)) {
                     note(l);
                 }
             }
-            ExprKind::MethodCall {
-                receiver, func_id, ..
+            Witness::MutBorrow(e) => {
+                if let Some(l) = place_root_local(body, e) {
+                    note(l);
+                }
+            }
+            Witness::CalleeArg {
+                expr,
+                verdict,
+                is_mut,
             } => {
-                if let Some(re) = receiver.as_expr()
-                    && super::alias::method_mutates_receiver(
-                        body, re, *func_id, fpt, type_table, false, None,
-                    )
-                    && let Some(l) = place_root_local(body, re)
+                if verdict.unwrap_or(is_mut)
+                    && let Some(l) = place_root_local(body, expr)
                 {
                     note(l);
                 }
             }
-            ExprKind::Call { args, .. } => {
-                for arg in args {
-                    if arg.is_mut
-                        && let Some(l) = arg.expr.as_expr().and_then(|e| place_root_local(body, e))
-                    {
-                        note(l);
-                    }
+            Witness::Receiver { expr, verdict } => {
+                if verdict.unwrap_or_else(|| may_mutate_through_arg(body, expr, type_table))
+                    && let Some(l) = place_root_local(body, expr)
+                {
+                    note(l);
                 }
             }
-            _ => {}
-        }
+            Witness::IndirectArg(e) => {
+                if may_mutate_through_arg(body, e, type_table)
+                    && let Some(l) = place_root_local(body, e)
+                {
+                    note(l);
+                }
+            }
+        });
     }
     body.for_each_child(node, |c| {
-        collect_mutated_locals(body, c, mut_indices, idx, type_table, fpt);
+        collect_mutated_locals(body, c, mut_indices, idx, type_table, oracle);
     });
 }
 
@@ -460,15 +460,15 @@ fn analyze_stmt(
     stmt: StmtId,
     result: &mut AnalysisResult,
     type_table: &TypeTable,
-    fpt: &FirstParamTypes,
+    oracle: &MutationOracle<'_>,
     copy_value_id: Option<FuncId>,
 ) {
     let mut kids = Vec::new();
     body.for_each_child(NodeRef::Stmt(stmt), |c| kids.push(c));
     for c in kids {
         match c {
-            NodeRef::Expr(e) => analyze_expr(body, e, result, type_table, fpt, copy_value_id),
-            NodeRef::Block(b) => analyze_block(body, b, result, type_table, fpt, copy_value_id),
+            NodeRef::Expr(e) => analyze_expr(body, e, result, type_table, oracle, copy_value_id),
+            NodeRef::Block(b) => analyze_block(body, b, result, type_table, oracle, copy_value_id),
             _ => {}
         }
     }
@@ -479,11 +479,11 @@ fn analyze_expr_operand(
     op: Operand,
     result: &mut AnalysisResult,
     type_table: &TypeTable,
-    fpt: &FirstParamTypes,
+    oracle: &MutationOracle<'_>,
     copy_value_id: Option<FuncId>,
 ) {
     if let Some(e) = op.as_expr() {
-        analyze_expr(body, e, result, type_table, fpt, copy_value_id);
+        analyze_expr(body, e, result, type_table, oracle, copy_value_id);
     }
 }
 
@@ -492,27 +492,51 @@ fn analyze_expr(
     id: ExprId,
     result: &mut AnalysisResult,
     type_table: &TypeTable,
-    fpt: &FirstParamTypes,
+    oracle: &MutationOracle<'_>,
     copy_value_id: Option<FuncId>,
 ) {
+    // Mutation-witness facts (shared recognizer + composite callee oracle);
+    // bodyless-callee fallbacks preserve this pass's historical defaults: a
+    // `mut` argument or receiver counts only when its own type is `&mut`.
+    expr_witnesses(body, id, oracle, &mut |w| match w {
+        Witness::Rebind(index) => {
+            result.usage.entry(index).or_default().is_assigned = true;
+        }
+        Witness::Write(inner) => {
+            mark_potentially_mutated_local_operand(body, inner, result);
+        }
+        Witness::MutBorrow(e) => {
+            mark_potentially_mutated_local(body, e, result);
+        }
+        Witness::CalleeArg {
+            expr,
+            verdict,
+            is_mut,
+        } => {
+            if verdict.unwrap_or_else(|| is_mut && may_mutate_through_arg(body, expr, type_table)) {
+                mark_potentially_mutated_local(body, expr, result);
+            }
+        }
+        Witness::Receiver { expr, verdict } => {
+            if verdict.unwrap_or_else(|| may_mutate_through_arg(body, expr, type_table)) {
+                mark_potentially_mutated_local(body, expr, result);
+            }
+        }
+        Witness::IndirectArg(e) => {
+            if may_mutate_through_arg(body, e, type_table) {
+                mark_potentially_mutated_local(body, e, result);
+            }
+        }
+    });
     match &body.exprs[id].kind {
         ExprKind::Local { index, .. } => {
             result.usage.entry(*index).or_default().read_count += 1;
         }
         ExprKind::Assign { target, value } => {
             let (target, value) = (*target, *value);
-            if let ExprKind::Local { index, .. } = &body.exprs[target].kind {
-                result.usage.entry(*index).or_default().is_assigned = true;
-            }
-            if let ExprKind::FieldAccess { expr: inner, .. } = &body.exprs[target].kind
-                && let Some(ExprKind::Local { index, .. }) =
-                    inner.as_expr().map(|e| &body.exprs[e].kind)
-            {
-                result.usage.entry(*index).or_default().has_field_mutation = true;
-            }
-            analyze_expr(body, target, result, type_table, fpt, copy_value_id);
+            analyze_expr(body, target, result, type_table, oracle, copy_value_id);
             if let Some(ve) = value.as_expr() {
-                analyze_expr(body, ve, result, type_table, fpt, copy_value_id);
+                analyze_expr(body, ve, result, type_table, oracle, copy_value_id);
             }
         }
         ExprKind::Unary { op, expr: inner } => {
@@ -521,54 +545,9 @@ fn analyze_expr(
                 && let Some(ie) = inner.as_expr()
                 && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
             {
-                let index = *index;
-                result.usage.entry(index).or_default().address_taken = true;
-                if matches!(op, NirUnaryOp::MutRef) {
-                    result.usage.entry(index).or_default().has_field_mutation = true;
-                }
+                result.usage.entry(*index).or_default().address_taken = true;
             }
-            analyze_expr_operand(body, inner, result, type_table, fpt, copy_value_id);
-        }
-        ExprKind::Call { args, .. } => {
-            let arg_data: Vec<(ExprId, bool)> = args
-                .iter()
-                .filter_map(|a| a.expr.as_expr().map(|e| (e, a.is_mut)))
-                .collect();
-            for (arg, is_mut) in arg_data {
-                if is_mut && may_mutate_through_arg(body, arg, type_table) {
-                    mark_potentially_mutated_local(body, arg, result);
-                }
-                analyze_expr(body, arg, result, type_table, fpt, copy_value_id);
-            }
-        }
-        ExprKind::MethodCall {
-            receiver,
-            func_id,
-            args,
-            ..
-        } => {
-            let receiver = *receiver;
-            let func_id = *func_id;
-            let arg_data: Vec<(ExprId, bool)> = args
-                .iter()
-                .filter_map(|a| a.expr.as_expr().map(|e| (e, a.is_mut)))
-                .collect();
-            // Copy propagation: a callee absent from `fpt` is assumed *not* to
-            // mutate the receiver (`conservative_on_unknown = false`).
-            if let Some(recv_e) = receiver.as_expr()
-                && super::alias::method_mutates_receiver(
-                    body, recv_e, func_id, fpt, type_table, false, None,
-                )
-            {
-                mark_potentially_mutated_local_operand(body, receiver, result);
-            }
-            analyze_expr_operand(body, receiver, result, type_table, fpt, copy_value_id);
-            for (arg, is_mut) in arg_data {
-                if is_mut && may_mutate_through_arg(body, arg, type_table) {
-                    mark_potentially_mutated_local(body, arg, result);
-                }
-                analyze_expr(body, arg, result, type_table, fpt, copy_value_id);
-            }
+            analyze_expr_operand(body, inner, result, type_table, oracle, copy_value_id);
         }
         _ => {
             let mut kids = Vec::new();
@@ -576,10 +555,10 @@ fn analyze_expr(
             for c in kids {
                 match c {
                     NodeRef::Expr(e) => {
-                        analyze_expr(body, e, result, type_table, fpt, copy_value_id);
+                        analyze_expr(body, e, result, type_table, oracle, copy_value_id);
                     }
                     NodeRef::Block(b) => {
-                        analyze_block(body, b, result, type_table, fpt, copy_value_id);
+                        analyze_block(body, b, result, type_table, oracle, copy_value_id);
                     }
                     _ => {}
                 }
@@ -834,13 +813,12 @@ fn emit_ref(
 fn propagate_at_root(
     engine: &mut Engine,
     type_table: &TypeTable,
-    first_param_types: &FirstParamTypes,
+    oracle: &MutationOracle<'_>,
     copy_value_id: Option<FuncId>,
 ) -> bool {
     let mut ever_changed = false;
     loop {
-        let analysis =
-            analyze_function_body(engine.body, type_table, first_param_types, copy_value_id);
+        let analysis = analyze_function_body(engine.body, type_table, oracle, copy_value_id);
         if analysis.bindings.is_empty() {
             break;
         }
@@ -889,7 +867,7 @@ fn propagate_at_root(
 /// function copy-propagation fixpoint at the body root.
 pub(super) struct CopyPropRule<'a> {
     type_table: &'a TypeTable,
-    first_param_types: &'a FirstParamTypes,
+    oracle: MutationOracle<'a>,
     copy_value_id: Option<FuncId>,
     applied: Cell<bool>,
 }
@@ -902,19 +880,15 @@ impl Rule for CopyPropRule<'_> {
         if self.applied.replace(true) {
             return false;
         }
-        propagate_at_root(
-            engine,
-            self.type_table,
-            self.first_param_types,
-            self.copy_value_id,
-        )
+        propagate_at_root(engine, self.type_table, &self.oracle, self.copy_value_id)
     }
 }
 
 pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let copy_value_id = project.builtin_func_id("copy_value");
     let type_table = project.type_table.borrow();
-    let first_param_types: FirstParamTypes = super::alias::first_param_types(project);
+    let param_mut = super::value_copy_elide::build_param_mut(project);
+    let call_immutability = super::alias::CallImmutability::new(project, &type_table);
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::CopyProp, len, |fid| {
@@ -924,7 +898,7 @@ pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bo
         }
         let rule = CopyPropRule {
             type_table: &type_table,
-            first_param_types: &first_param_types,
+            oracle: MutationOracle::new(&param_mut, &call_immutability),
             copy_value_id,
             applied: Cell::new(false),
         };
