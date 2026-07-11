@@ -561,8 +561,6 @@ fn classify_expr(
         Witness::MutBorrow(e) => {
             mark_root_field_mutated(body, e, type_table, usage);
         }
-        // Bodyless callee: fall back on the site's `mut` flag or the
-        // argument expression's own reference/box type.
         Witness::CalleeArg {
             expr: ae,
             verdict,
@@ -574,8 +572,8 @@ fn classify_expr(
                 mark_root_field_mutated(body, ae, type_table, usage);
             }
         }
-        // Auto-ref carries the receiver as `T` even for `&mut self`
-        // methods, so an unknown callee is treated as mutating.
+        // Auto-ref hides a `&mut self` receiver's mode, so an unknown callee is
+        // assumed to mutate.
         Witness::Receiver { expr: re, verdict } => {
             if verdict.unwrap_or(true) {
                 mark_root_field_mutated(body, re, type_table, usage);
@@ -917,10 +915,8 @@ impl ValueCopyElideRule<'_> {
                     ExprKind::Call { func_id, args, .. } => {
                         self.scan_call_args(body, *func_id, 0, None, args, out);
                     }
-                    // A method's parameter 0 is `self`; the i-th argument is
-                    // absolute parameter i + 1. A `&mut self` method mutates the
-                    // caller's receiver, so it is a sibling mutation for the
-                    // arguments.
+                    // Method parameter 0 is `self`; argument `i` is absolute
+                    // parameter `i + 1`.
                     ExprKind::MethodCall {
                         func_id,
                         receiver,
@@ -957,9 +953,7 @@ impl ValueCopyElideRule<'_> {
             escape: self.escape,
         };
         let oracle = MutationOracle::new(self.param_mut);
-        // A `&mut self` method mutates the caller's receiver storage during the
-        // call, so those roots are a sibling mutation too (unknown callee →
-        // conservatively assumed to mutate).
+        // A mutating receiver is a sibling mutation for the arguments.
         let receiver_roots = receiver
             .filter(|_| oracle.receiver_mutates(func_id).unwrap_or(true))
             .map(|re| aliasing.value_alias_roots(re))

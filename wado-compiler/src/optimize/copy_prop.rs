@@ -495,9 +495,8 @@ fn analyze_expr(
     oracle: &MutationOracle<'_>,
     copy_value_id: Option<FuncId>,
 ) {
-    // Mutation-witness facts (shared recognizer + composite callee oracle);
-    // bodyless-callee fallbacks preserve this pass's historical defaults: a
-    // `mut` argument or receiver counts only when its own type is `&mut`.
+    // Bodyless-callee fallbacks keep this pass's historical defaults: a `mut`
+    // argument or receiver counts only when its own type is `&mut`.
     expr_witnesses(body, id, oracle, &mut |w| match w {
         Witness::Rebind(index) => {
             result.usage.entry(index).or_default().is_assigned = true;

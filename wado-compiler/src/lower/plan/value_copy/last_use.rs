@@ -323,10 +323,8 @@ impl Analyzer<'_> {
     }
 
     /// Resolve the deferred sibling-alias checks now the alias chains are
-    /// complete: a by-value argument that transitively aliases storage its
-    /// call mutates keeps its copy. The match-binding → scrutinee-root edges
-    /// are indexed once so each resolution step is a map lookup, not a scan of
-    /// `match_sources`.
+    /// complete: a by-value argument that transitively aliases storage its call
+    /// mutates keeps its copy.
     fn resolve_pending_mut_aliases(&mut self) {
         let mut scrut_roots: IndexMap<u32, Vec<u32>> = IndexMap::default();
         for (binding, scrut) in &self.match_sources {
@@ -344,11 +342,10 @@ impl Analyzer<'_> {
     }
 
     /// Whether `local` transitively shares storage with one of `targets`,
-    /// following the alias edges recorded by the walk: a match binding shares
-    /// its scrutinee's interior (`scrut_roots`), and a `let x = <projection>`
-    /// shares its source root (`let_sources`, whose value is a non-fresh place
-    /// — `alias_root` returns `None` for a fresh rvalue, so a copied source is
-    /// not followed). The chains resolve the match-scrutinee hoist
+    /// following the recorded alias edges: a match binding shares its
+    /// scrutinee's interior (`scrut_roots`), a `let x = <projection>` shares its
+    /// source root (`let_sources`; `alias_root` is `None` for a fresh rvalue, so
+    /// a copied source is not followed). Resolves the match-scrutinee hoist
     /// (`let __m = w.payload; match __m { Some(t) => … }`, so `t` reaches `w`).
     fn local_aliases(
         &self,
@@ -377,20 +374,14 @@ impl Analyzer<'_> {
             .any(|r| self.local_aliases(r, targets, scrut_roots, seen))
     }
 
-    /// Keep the copy of any by-value argument that aliases storage the same
-    /// call mutates: an explicit sibling `&mut` argument, or — via
-    /// `extra_mut_root` — the auto-ref'd `&mut self` receiver of a
-    /// mutating-receiver method. The callee mutates the shared storage while
-    /// still holding the moved value, so a move would let the mutation leak
-    /// into it (a match binding passed beside `&mut` of its scrutinee, or beside
-    /// the scrutinee as a `&mut self` receiver — wado-lang/wado#1544). The
-    /// live-out alias check misses this because the scrutinee is mutated
-    /// *within* the arm, not read after the match.
-    ///
-    /// The alias test is deferred: the backward walk visits a call before the
-    /// forward `let`s that root its scrutinee, so `let_sources` is incomplete
-    /// here. The `(arg, mut_roots)` pairs are resolved after the walk
-    /// (`resolve_pending_mut_aliases`).
+    /// Keep the copy of any by-value argument that aliases storage the same call
+    /// mutates — an explicit sibling `&mut` argument, or (via `extra_mut_root`)
+    /// the auto-ref'd `&mut self` receiver — since a move would let the callee's
+    /// mutation leak into the moved value (wado-lang/wado#1544). The live-out
+    /// alias check misses this: the scrutinee is mutated within the arm, not
+    /// read after the match. Deferred to [`resolve_pending_mut_aliases`] because
+    /// the backward walk reaches a call before the `let`s that root its
+    /// scrutinee.
     fn mark_sibling_mut_aliases(&mut self, args: &[&TirExpr], extra_mut_root: Option<u32>) {
         let mut mut_roots: Vec<u32> = args
             .iter()
@@ -642,9 +633,6 @@ impl Analyzer<'_> {
             } => {
                 if record {
                     let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
-                    // A `&mut self` method mutates its receiver's storage during
-                    // the call, so the receiver root is a sibling mutation for
-                    // any by-value argument aliasing it.
                     let recv_mut_root = self
                         .mut_receiver_methods
                         .contains(&func_key(&func.module_source, &func.name))

@@ -649,17 +649,16 @@ fn collect_pattern_locals(
     }
 }
 
-/// Locals whose storage aliases a projection of self (`p0`): the boxing rewrite
-/// lowers `&`/`&mut self.<proj>` to `Box { value: self.<proj> }` (a shared cell
-/// over the projected storage), then binds it and matches it. A mutation of any
-/// such local is a write through self that the syntactic self-projection scan
-/// ([`roots_self`] over the raw expression) misses. A least fixpoint over the
-/// bindings that hand out an alias: a projection of a known self alias, a `Box`
-/// literal wrapping one, or a match binding of a self-alias scrutinee. Only the
-/// eventual *mutation* of these (not their construction) counts as a write, so
-/// an immutable `&self.field` boxed and only read is not flagged.
+/// Locals whose storage aliases a projection of self (`p0`) through a boxed
+/// handle the syntactic self-write scan misses: the boxing rewrite lowers
+/// `&`/`&mut self.<proj>` to `Box { value: self.<proj> }`, which is then bound
+/// and matched. A least fixpoint over the bindings that hand out such an alias
+/// (a projection of a known self alias, a `Box` literal wrapping one, or a
+/// match binding of a self-alias scrutinee). Only a later *mutation* of these
+/// counts as a write, so an immutable `&self.field` boxed and read is not
+/// flagged.
 fn self_derived_locals(body: &Body, p0: u32, type_table: &TypeTable) -> IndexSet<u32> {
-    // A binding value that hands out an alias of self's storage.
+    /// A binding value that hands out an alias of self's storage.
     fn value_aliases_self(
         body: &Body,
         set: &IndexSet<u32>,

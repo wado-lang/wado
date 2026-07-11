@@ -208,12 +208,10 @@ pub(super) fn opaque_local(engine: &Engine, v: crate::nir_value_graph::ValueId) 
     }
 }
 
-/// The root a [`BoundKey::Field`] may key on. Path-sensitive on purpose: the
-/// key is `(root, field_index)`, so the walk must not collapse projections
-/// that change which aggregate the index addresses — a variant payload's
-/// field 0 is not its scrutinee's field 0. Kept to the historical projection
-/// set (`&`/`&mut`/`*`/cast/field/index chains) rather than
-/// `arena_query::storage_root`, which is a root-only query.
+/// The root a [`BoundKey::Field`] keys on. Path-sensitive on purpose: since the
+/// key is `(root, field_index)`, the walk must not collapse a variant-payload
+/// projection (whose field 0 is not the scrutinee's field 0), so it does not use
+/// `arena_query::storage_root`.
 fn field_bound_root(body: &crate::nir_arena::Body, expr: ExprId) -> Option<u32> {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => Some(*index),
