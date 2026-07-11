@@ -1468,12 +1468,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let assoc_const_key =
                         Self::format_assoc_const_key(variant_name, variant_qualifier.as_ref());
                     // Resolve to literal patterns when possible for switch optimization.
-                    if let Some((_const_module, type_id, const_expr)) = self
-                        .sem
-                        .decls
-                        .associated_constants
-                        .get(&assoc_const_key)
-                        .cloned()
+                    if let Some((_const_module, type_id, const_expr)) =
+                        self.lookup_associated_constant(&assoc_const_key)
                     {
                         // Resolve for side effects (records the const body's
                         // types for reify). Stage 7-B: `resolve_literal` is a
@@ -2306,9 +2302,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // then dispatch every element to the last element's methods). Snapshot
         // the maps' pre-loop lengths; after each element, peel off and truncate
         // the freshly recorded tail. See `ElementOverlay`.
-        let overlay_base = self
-            .capture_tuple_overlays
-            .then(|| self.sem.types.overlay_base_lens());
+        let overlay_base = self.sem.types.overlay_base_lens();
         let mut element_overlays: Vec<super::sem::types::ElementOverlay> = Vec::new();
 
         for &elem_type in elems {
@@ -2388,9 +2382,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Capture this element's body annotations and reset the maps back to
             // their pre-loop state so the next element records from a clean
             // slate (Stage 5; reify-only).
-            if let Some(base) = overlay_base {
-                element_overlays.push(self.sem.types.split_off_overlay(base));
-            }
+            element_overlays.push(self.sem.types.split_off_overlay(overlay_base));
 
             ctx.exit_scope();
         }
@@ -2399,15 +2391,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // deterministic walk order). A nested inner for-of resolves once per
         // outer element, appending one entry per outer element; reify's visit
         // counter pairs them up in the same order.
-        if overlay_base.is_some() {
-            let for_of_key = for_of.id;
-            self.sem
-                .types
-                .tuple_overlays
-                .entry(for_of_key)
-                .or_default()
-                .push(element_overlays);
-        }
+        let for_of_key = for_of.id;
+        self.sem
+            .types
+            .tuple_overlays
+            .entry(for_of_key)
+            .or_default()
+            .push(element_overlays);
     }
 
     /// Lower `for let v of iterable { body }` directly into TIR for non-tuple
@@ -2458,8 +2448,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let into_iter_receiver_type = self.resolve_expr(&for_of.iterable, ctx, None);
         let into_iter_receiver = placeholder(into_iter_receiver_type, for_of.iterable.span());
 
-        // `<receiver>.into_iter()`
-        let into_iter_call = self.resolve_method_call_with(
+        // `<receiver>.into_iter()` — the synthetic call passes
+        // `call_id == None` so `record_method_dispatch` skips it; the
+        // outcome's `dispatch` carries the `(self_kind, is_ref_impl,
+        // FunctionRef)` reify needs to reproduce the same call shape
+        // (Gap 6 of WEP 2026-05-26).
+        let into_iter_outcome = self.resolve_method_call_with(
             MethodCallInput {
                 receiver: into_iter_receiver,
                 method_name: "into_iter",
@@ -2473,16 +2467,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
             ctx,
         );
-        // Capture the `(self_kind, is_ref_impl, FunctionRef)` the dispatch
-        // chose (Gap 6 of WEP 2026-05-26): the synthetic call passed
-        // `call_id == None` so `record_method_dispatch` skipped it, but
-        // reify needs the receiver-adjustment inputs + the resolved
-        // `FunctionRef` to reproduce the same call shape. Since Stage 7-B
-        // `resolve_method_call_with` returns a typed placeholder, the
-        // `FunctionRef` rides `pending_method_dispatch` rather than being
-        // recovered from `into_iter_call.kind`.
-        let into_iter_dispatch = self.pending_method_dispatch.take();
-        let iter_type = into_iter_call.type_id;
+        let into_iter_dispatch = into_iter_outcome.dispatch;
+        let iter_type = into_iter_outcome.expr.type_id;
 
         // Iterator-trait conformance check, mirroring the pre-refactor
         // surface error.
@@ -2523,7 +2509,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             iter_type,
             span,
         );
-        let next_call = self.resolve_method_call_with(
+        let next_outcome = self.resolve_method_call_with(
             MethodCallInput {
                 receiver: iter_local_ref,
                 method_name: "next",
@@ -2537,8 +2523,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
             ctx,
         );
-        let next_dispatch = self.pending_method_dispatch.take();
-        let option_type = next_call.type_id;
+        let next_dispatch = next_outcome.dispatch;
+        let option_type = next_outcome.expr.type_id;
 
         // Build the `Option::Some(<user binding>)` arm pattern directly as
         // TIR. Resolving the user's `for_of.binding` against the Item type

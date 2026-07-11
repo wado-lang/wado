@@ -552,25 +552,12 @@ Three independent tracks; each slice keeps `mise run test` green (E2E 2934/0).
 - [x] Track B Stage D: `classify_call_callee`, `infer_variant_type_args`, `binop_operand_requires_trait` moved to `impl TypeSystem`; the rest of `operators.rs` stays on `impl Elaborator` (dispatch/coercion methods calling `resolve_expr` / `record_*` / `self.logger`).
 - [x] Track B Stage D: the `resolve_type` family stays on `impl Elaborator` by design (mutates `ModuleSemantics.bindings`, `&mut self` for on-demand interning, reads `self.annotate_ctx` so no clone cost) — a settled member, not pending work.
 
-### Remaining (next to pick up, in order)
+### Remaining
 
-- [ ] Track B Stage E — fold the manual scope save/restores into the guard.
-      Replace the hand-rolled `trait_ctx` clone/restore in `resolve_module`'s
-      `Item::Impl` arm (`elaborator.rs`) and the `self_type`-only save/restore in
-      `method_lookup.rs` with `enter_inherited_type_param_scope` (clearing the
-      relevant fields after entry), for one panic-safe restore path.
-- [ ] Remaining `loaded_modules` consumers needing a method/body digest.
-      `lookup_method_info_uncached` and the `call.rs` / `method_call.rs` dispatch
-      paths still fetch the impl block + method-signature AST to `resolve_type`
-      it — they need a method-signature digest on `ImplHeader` (params / return /
-      self_kind) plus Stage C's scope. `get_impl_block` is the lazy-fetch
-      accessor that disappears once its callers are converted.
-      `find_trait_decl_methods_with_module` and `find_method_in_trait_bounds`
-      clone full method ASTs (bodies included) and need a heavier digest; defer.
-      `reify`'s `loaded_modules` reads are legitimate (it emits TIR) and are out
-      of scope. Progress metric: Elaborator `self.loaded_modules` sites (was ~57
-      across `method_lookup`/`method_call`/`call`/`trait_query`/…; the dispatch
-      core + the heavy trait-decl readers remain).
+Superseded: the completion design — the decl-signature digest that removes
+the remaining `loaded_modules` consumers, the `Scope` guard unification
+(Track B Stage E), and the walker's end state — lives in
+[`wep-2026-07-10-elaborator-god-object-dismantlement.md`](./wep-2026-07-10-elaborator-god-object-dismantlement.md).
 
 ## Consequences
 
