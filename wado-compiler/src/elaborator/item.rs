@@ -924,10 +924,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// each time; subsequent overwrites inside `resolve_function` keep
     /// the cache consistent with the body's own `TypeId`s.
     pub(super) fn precompute_generic_function_cache(&mut self, func: &Function) {
-        // Mirror `resolve_function`'s `has_real_type_params` guard exactly:
-        // fn-bound params are realised eagerly and do not need
-        // monomorphisation, so a function whose only non-effect params are
-        // fn-bound has nothing to cache.
+        // Mirrors `resolve_function`'s guard: fn-bound params are realised
+        // eagerly, so a function whose only non-effect params are fn-bound
+        // has nothing to cache.
         let has_real_type_params = func
             .type_params
             .iter()
@@ -938,12 +937,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.populate_generic_function_cache(func);
     }
 
-    /// Resolve `func`'s canonical signature — its own type params
-    /// registered as `TypeParam` slots, effect params installed, all types
-    /// resolved in the declaring perspective — and record it on
-    /// [`super::sem::decls::ModuleDecls::function_sigs`]. The driver
-    /// assembles the program-wide `TypeSystem::all_function_sigs` between
-    /// the decl and body passes.
+    /// Resolve `func`'s canonical signature (see
+    /// [`super::sem::decls::FunctionSig`]) and record its declared return
+    /// type on `function_return_types`. The one signature resolution per
+    /// function in the decl pass — the body walk re-resolves only to
+    /// record per-node facts.
     pub(super) fn record_function_sig(
         &mut self,
         func: &Function,
@@ -1000,15 +998,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Populate the three generic-function inference caches
-    /// (`generic_function_params`, `generic_function_resolved_param_types`,
-    /// `generic_function_resolved_return_types`) for `func`, keyed by its
-    /// name — derived from the canonical [`super::sem::decls::FunctionSig`]
-    /// the decl pass recorded, with no re-resolution.
-    ///
-    /// Returns the declared return type so callers that need it
-    /// (e.g. `resolve_function` for `task_return_type`) can avoid a
-    /// second lookup.
+    /// Populate the three generic-function inference caches for `func`
+    /// from its recorded [`super::sem::decls::FunctionSig`] — no
+    /// re-resolution. Returns the declared return type for callers that
+    /// need it (`resolve_function`'s `task_return_type`).
     fn populate_generic_function_cache(&mut self, func: &Function) -> TypeId {
         let sig = self
             .sem

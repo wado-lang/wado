@@ -64,12 +64,11 @@ impl StructuralMember<'_> {
     }
 }
 
-/// Canonical identity of an associated-constant key: split the use-site
-/// `Type::CONST` spelling at its first `::`, canonicalize the type prefix
-/// via [`canonical_decl_key_with`], and rebuild the key with the canonical
-/// type name. Returns `None` for keys with no `::` (never a constant key).
-/// Shared by the annotate walk and reify so both resolve a constant to the
-/// same identity.
+/// Canonical identity of an associated-constant key: canonicalize the
+/// `Type` prefix of a use-site `Type::CONST` spelling via
+/// [`canonical_decl_key_with`]. `None` for keys with no `::` (never a
+/// constant key). Shared by annotate and reify so both resolve a constant
+/// to the same identity.
 pub(super) fn canonical_assoc_const_key(
     key: &str,
     current_module_source: &ModuleSource,

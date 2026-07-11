@@ -48,12 +48,11 @@ pub(super) struct MethodCallInput<'a> {
 }
 
 /// Result of [`Elaborator::resolve_method_call_with`]: the typed
-/// placeholder expression plus, on successful dispatch, the
-/// receiver-adjustment inputs and resolved target a synthetic caller
-/// (for-of's `into_iter()` / `next()`, which passes `call_id == None` so
-/// `record_method_dispatch` skips it) needs to record the decision its own
-/// way. `dispatch` is `None` when a short-circuit path returned early or
-/// the method-not-found recovery branch took over.
+/// placeholder plus, on successful dispatch, the receiver-adjustment
+/// inputs and resolved target a synthetic caller (for-of's `into_iter()`
+/// / `next()`, whose `call_id == None` skips `record_method_dispatch`)
+/// needs to record the decision its own way. `None` when a short-circuit
+/// path returned early or method lookup failed.
 pub(super) struct MethodCallOutcome {
     pub expr: TirExpr,
     pub dispatch: Option<(ast::SelfKind, bool, FunctionRef)>,
@@ -1001,23 +1000,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return_type,
                 method_type_args,
             );
-            // Returned for synthetic callers (Gap 6 of Stage 5): for-of's
-            // `.into_iter()` / `.next()` dispatches pass `call_id == None`
-            // so `record_method_dispatch` skips them, but the synthetic
-            // caller still needs the receiver-adjustment inputs *and* the
-            // resolved `FunctionRef` for its own recording. The
-            // `method_found` gate keeps the error-recovery placeholder
-            // from leaking out.
+            // The `method_found` gate keeps the error-recovery placeholder
+            // from leaking into the returned dispatch.
             Some((self_kind, is_ref_impl, func))
         } else {
             None
         };
 
-        // Stage 7-B: reify rebuilds the `MethodCall` TIR from the recorded
-        // `method_dispatch` (or, for synthetic call_id==None callers, from
-        // the returned `dispatch`) and the resolved receiver / args; the
-        // combined walk projects only the result type. `receiver` and
-        // `args` were resolved above for their fact-recording side effects.
+        // Reify rebuilds the `MethodCall` TIR from the recorded dispatch;
+        // the walk projects only the result type. `receiver` and `args`
+        // were resolved above for their fact-recording side effects.
         MethodCallOutcome {
             expr: placeholder(return_type, span),
             dispatch,

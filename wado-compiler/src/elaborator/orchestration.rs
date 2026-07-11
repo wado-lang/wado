@@ -1068,9 +1068,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     if let Some(sem) = module_semantics.get_mut(ms) {
                         sem.types = snap_sem.types.clone();
                         // A snapshot module runs no decl pass this compile;
-                        // carry its decl digests over so the driver's
-                        // program-wide assembly (between the decl and body
-                        // passes) sees stdlib declarations too.
+                        // its digests must come from the snapshot.
                         sem.decls.clone_digests_from(&snap_sem.decls);
                     }
                 }
@@ -1200,10 +1198,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         })
     }
 
-    /// Construct a per-module `Elaborator` over the shared driver state and
-    /// the module's owned `ModuleSemantics`. Used by both Phase 1a
-    /// (`annotate_module_decls`) and Phase 1b (`annotate_module_bodies`);
-    /// the module-identity fields are set by those entry points.
+    /// Construct a per-module `Elaborator` over the shared driver state;
+    /// the module-identity fields are set by the `annotate_module_*` entry
+    /// points.
     fn module_elaborator(
         state: &AnnotateState,
         sem: super::sem::ModuleSemantics,
@@ -1229,13 +1226,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Lower phase: emit one [`TirModule`] per source module using the state
-    /// produced by [`Elaborator::annotate_modules`]. Errors are collected in the
-    /// logger; the function returns [`Bail`] if any module failed.
-    /// Run the per-module decl pass (`annotate_module_decls`) over every
-    /// module, then the body-level walk (`annotate_module_bodies`, which
-    /// populates each `ModuleSemantics` with facts), and — when `build_tir`
-    /// is set — reify each module to its final `TirModule`.
+    /// Run the per-module decl pass over every module, then the body walk
+    /// (populating each `ModuleSemantics` with facts), and — when
+    /// `build_tir` is set — reify each module to its final [`TirModule`].
+    /// Errors are collected in the logger; returns [`Bail`] if any module
+    /// failed.
     ///
     /// The LSP path passes `build_tir = false`: it needs only the recorded
     /// facts (use→def edges, types, dispatch) and never reads TIR, so reify and
@@ -1294,10 +1289,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // even when their body walk stays clean.
         let mut decl_failed: IndexSet<ModuleSource> = IndexSet::default();
 
-        // Phase 1a — `annotate_decls`: populate every user module's
-        // declaration facts (imports, signatures, globals, associated
-        // constants) before any body walk, so bodies resolve against
-        // complete decl knowledge regardless of module order.
+        // Phase 1a — `annotate_decls`: every module's declaration facts
+        // resolve before any body walk, so bodies see complete decl
+        // knowledge regardless of module order.
         for module_source in &sorted_sources {
             if is_stdlib_snapshot_hit(module_source) {
                 continue;
@@ -1402,10 +1396,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         // Merge every module's decl digests into the program-wide maps —
         // the same field set `ModuleDecls::clone_digests_from` seeds from
-        // the stdlib snapshot. Associated constants are keyed by canonical
-        // identity `(type-declaring module, "Type::CONST")`, resolved by
-        // each declaring module's decl pass, so the merge is collision-free
-        // by construction and lookups need no shadowing rules.
+        // the stdlib snapshot.
         {
             let mut all_consts: IndexMap<
                 (ModuleSource, String),
@@ -1451,8 +1442,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             let module = modules.get(module_source).expect("module should exist");
 
-            // Take this module's `ModuleSemantics` (populated by Phase 1a)
-            // out of `state` so the elaborator can own it for the body walk.
             let sem = state
                 .module_semantics
                 .swap_remove(module_source)
@@ -1462,7 +1451,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             logger.set_file(module_source.source_path());
 
             let errors_before = logger.error_count();
-            let resolve_result = elaborator.annotate_module_bodies(module, module_source.clone());
+            elaborator.annotate_module_bodies(module, module_source.clone());
             let module_walk_clean = logger.error_count() == errors_before;
             let saved_sem = elaborator.sem;
             // Re-install the (now-populated) `ModuleSemantics` even on bail
@@ -1473,15 +1462,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .insert(module_source.clone(), saved_sem);
 
             // Eligible for reify (Phase 2) when THIS module's decl pass and
-            // body walk logged no errors and the AST is well-formed. The gate
-            // is per-module (an error-count delta), not the cumulative
-            // logger state — an unrelated module's error must not stop a
-            // clean module from reifying. A module with recovered syntax
-            // errors is skipped: its TIR is never consumed (the batch path
-            // bails on `!is_complete()`, the LSP path reads only Phase 1
-            // facts), and skipping keeps reify off `Error` placeholder nodes
-            // while Phase 1 still recorded the use→def edges the LSP needs.
-            let _ = resolve_result;
+            // body walk logged no errors (a per-module error-count delta —
+            // an unrelated module's error must not stop a clean module from
+            // reifying) and the AST is well-formed: recovered syntax errors
+            // leave `Error` placeholder nodes reify must not walk, and the
+            // TIR would never be consumed anyway.
             if build_tir
                 && module_walk_clean
                 && !decl_failed.contains(module_source)

@@ -243,10 +243,9 @@ pub(crate) struct CallSiteLocation {
 
 impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Look up an impl-associated constant by its use-site `Type::NAME`
-    /// spelling. The prefix canonicalizes in the current module's scope via
-    /// the same helper the annotate walk uses
-    /// (`Elaborator::lookup_associated_constant`), so both walkers resolve
-    /// a constant to the same `(type-declaring module, key)` identity.
+    /// spelling, canonicalized the same way as
+    /// `Elaborator::lookup_associated_constant` so both walkers resolve a
+    /// constant to the same identity.
     fn lookup_associated_constant(&self, key: &str) -> Option<(ModuleSource, TypeId, ast::Expr)> {
         let (type_module, canon_key) = super::trait_query::canonical_assoc_const_key(
             key,

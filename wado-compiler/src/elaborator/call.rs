@@ -1439,9 +1439,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return return_type;
         }
 
-        // The canonical signature (declaring-perspective resolution with
-        // the function's own `TypeParam` slots registered) carries the
-        // pre-resolved return type.
         if !callee_module.is_entry_point()
             && let Some(sig) = self.tysys.function_sig(callee_module, func_name)
             && let Some(return_type) = sig.return_type
@@ -1525,16 +1522,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Vec::new();
         }
 
-        // Local function (defined in this module): same canonical
-        // signature path as imported callees.
         if let Some(sig) = self.tysys.function_sig(&self.current_module_source, name) {
             return sig.param_types.clone();
         }
 
-        // Check imported functions — the canonical signature is resolved
-        // in the definition module's perspective, so type names resolve to
-        // the correct module's types (e.g., "Direction" resolves to module
-        // B's Direction, not module A's).
+        // Imported functions: the canonical signature resolved in the
+        // definition module's perspective, so same-named types from
+        // different modules can't be confused.
         if let Some(symbol) = self.symbols.lookup(&self.current_module_source, name) {
             let src = symbol.module_source().clone();
             let sym_name = symbol.name.clone();
@@ -1543,9 +1537,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Fallback: a default expression may call a private free function
-        // of its declaring module (see `default_scope_module`), whose
-        // canonical signature already resolved in that perspective.
+        // A default expression may call a private free function of its
+        // declaring module (`default_scope_module`).
         if let Some(fallback) = self.annotate_ctx.default_scope_module.clone()
             && fallback != self.current_module_source
             && let Some(sig) = self.tysys.function_sig(&fallback, name)
@@ -1686,7 +1679,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Vec::new();
         }
 
-        // Local function: same canonical signature path as imported callees.
         if let Some(sig) = self
             .tysys
             .function_sig(&self.current_module_source, &ident.name)
@@ -2439,11 +2431,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Vec::new();
         };
 
-        // The canonical signature already resolved parameter types under
-        // the callee's own effect / type-param bindings (effect params
-        // installed before `register_generic_params`, so an
-        // `fn each<effect E>(... fn() with E)` sees `E` as
-        // `EffectRef::Param`, not a phantom concrete effect).
         let param_types: Vec<TypeId> = if self
             .sem
             .decls

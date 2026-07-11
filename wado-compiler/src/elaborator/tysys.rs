@@ -1,56 +1,23 @@
 //! [`TypeSystem`] — pipeline-wide type knowledge.
 //!
-//! Introduced by [`wep-2026-05-26-elaborator-rearchitecture.md`]. Stage 1
-//! placed the empty skeleton; Stage 2 fills it with the cross-module type
-//! tables, registries, and read-only caches that the WEP §"`TypeSystem`
-//! surface" requires.
-//!
 //! # Ownership
 //!
-//! Every field is either `'static`, [`Arc`]-wrapped, or [`Rc`]-wrapped, so
-//! `TypeSystem` is `Clone` (a shallow Rc/Arc copy) and can be handed out
-//! cheaply to per-module phases. The driver builds one `TypeSystem`
-//! during [`super::orchestration::Elaborator::annotate_modules`]; each
-//! per-module [`super::Elaborator`] holds a clone in its
-//! [`super::Elaborator::tysys`] field.
+//! Every field is `'static`, [`Arc`]-wrapped, or [`Rc`]-wrapped, so
+//! `TypeSystem` is `Clone` (a shallow copy) and is handed out cheaply to
+//! per-module phases: the driver builds one during
+//! [`super::orchestration::Elaborator::annotate_modules`], and each
+//! per-module [`super::Elaborator`] holds a clone.
 //!
 //! # Membership rule
 //!
-//! A field belongs on `TypeSystem` only when the answer to
-//! "would this fit the type system itself?" is yes. The criterion is
-//! mechanical and gates drift back toward the God-Object pattern that
-//! motivated the WEP.
-//!
-//! # Removed caches
-//!
-//! Method and indexing-trait lookup used to carry two per-`Elaborator`
-//! caches, `method_info_cache` and `indexing_trait_cache`. Both only
-//! masked an underlying scan: `lookup_method_info` swept every item in
-//! every loaded module for inherent impls (`O(modules × items)`), and
-//! `find_indexing_trait_impl` re-derived its answer from the same impl
-//! scan. Once both lookups became index-driven — inherent impls via
-//! [`super::trait_env::TraitEnv::all_impl_index`], trait impls via
-//! the existing `impl_index` — the caches were pure overhead. Each also
-//! carried a latent staleness hazard: `method_info_cache` keyed on
-//! `(TypeId, name)` with no module-visibility component, and
-//! `indexing_trait_cache`'s key omitted the `trait_ctx.assoc_type_bindings`
-//! its result actually depends on. The prebuilt, immutable indices are
-//! themselves the shared memo, so both caches were removed rather than
-//! migrated to `TypeSystem`.
-//!
-//! [`super::Elaborator::trait_check_stack`] looks superficially similar
-//! — `RefCell<Vec<…>>` mutable state on `Elaborator` — but is **not** a
-//! cache. It is the per-call frame stack used by
-//! `Elaborator::type_implements_trait` to break recursion on recursive
-//! types (e.g. a variant case whose payload eventually contains itself):
-//! frames are pushed on entry, popped on return, and the stack is empty
-//! at every quiescent point. Moving it to a shared `TypeSystem` would
-//! either leak stale frames across module walks (producing wrong
-//! "recursive, optimistically true" answers in trait resolution — a
-//! soundness bug) or require per-call save/restore plumbing that
-//! defeats the move. The migration marker on that field accordingly
-//! targets the same "transient annotate-time scope" bucket as
-//! [`super::Elaborator::trait_ctx`], not `TypeSystem`.
+//! A field belongs here only when the answer to "would this fit the type
+//! system itself?" is yes. Per-call mutable state does not qualify even
+//! when it looks cache-shaped: sharing e.g. the `type_implements_trait`
+//! recursion stack across module walks would leak frames between them
+//! (it lives on [`super::scope::Scope`] instead), and the removed
+//! `method_info_cache` / `indexing_trait_cache` were both stale-prone
+//! covers over scans that the prebuilt `TraitEnv` indices already
+//! memoise.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -138,45 +105,35 @@ pub(crate) struct TypeSystem {
 
     /// Program-wide impl-associated constants, keyed by canonical identity
     /// `(type-declaring module, "Type::CONST")` → `(impl-declaring module,
-    /// declared type, value expr)`. Each module's decl pass canonicalizes and
-    /// resolves its own constants (stdlib entries come from the snapshot);
-    /// the driver merges the per-module maps between the decl and body
-    /// passes. Canonical keys cannot collide across modules, so lookups
-    /// need no shadowing rules — see `lookup_associated_constant` on the
-    /// walkers, which canonicalize the queried prefix the same way.
+    /// declared type, value expr)`. Canonical keys cannot collide across
+    /// modules; `lookup_associated_constant` on the walkers canonicalizes
+    /// the queried prefix the same way the decl pass did.
     pub(crate) all_associated_constants:
         Rc<IndexMap<(ModuleSource, String), (ModuleSource, TypeId, Expr)>>,
 
-    /// Program-wide interface / resource operation signatures, keyed
-    /// `(declaring module, decl name, op name)` → `(param types, return
-    /// type)`. Each module's decl pass resolves its own operations in the
-    /// declaring perspective; the driver assembles this map between the
-    /// decl and body passes. Read by `resolve_effect_op_signature`.
+    /// Program-wide interface / resource operation signatures, declaring
+    /// module → `(decl name, op name)` → `(param types, return type)`.
+    /// Read by `resolve_effect_op_signature`.
     pub(crate) all_effect_op_sigs:
         Rc<IndexMap<ModuleSource, IndexMap<(String, String), (Vec<TypeId>, Option<TypeId>)>>>,
 
-    /// Program-wide canonical free-function signatures (see
-    /// [`super::sem::decls::FunctionSig`]), keyed declaring module →
-    /// function name. Assembled by the driver between the decl and body
-    /// passes from each module's `ModuleDecls::function_sigs`.
+    /// Program-wide canonical free-function signatures
+    /// ([`super::sem::decls::FunctionSig`]), declaring module → name.
     pub(crate) all_function_sigs:
         Rc<IndexMap<ModuleSource, Rc<IndexMap<String, super::sem::decls::FunctionSig>>>>,
 
-    /// Program-wide global-variable declarations, keyed declaring module →
-    /// global name → `(declared type, is_mut)`. Assembled by the driver
-    /// between the decl and body passes from each module's
-    /// `ModuleDecls::current_module_globals`.
+    /// Program-wide global-variable declarations, declaring module →
+    /// name → `(declared type, is_mut)`.
     pub(crate) all_globals: Rc<IndexMap<ModuleSource, IndexMap<String, (TypeId, bool)>>>,
 
-    /// Per-module `__DATA__` section contents (modules without one have no
-    /// entry). Read by the `#data` literal instead of fetching the module
-    /// AST.
+    /// Per-module `__DATA__` section contents; modules without one have
+    /// no entry.
     pub(crate) data_sections: Rc<IndexMap<ModuleSource, String>>,
 }
 
 impl TypeSystem {
     /// Canonical signature of the free function `name` declared in
-    /// `module`, if any. See [`super::sem::decls::FunctionSig`].
+    /// `module`.
     pub(crate) fn function_sig(
         &self,
         module: &ModuleSource,

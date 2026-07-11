@@ -149,20 +149,15 @@ declaration" — anything else is rejected.
 
 ### Scope — transient walk state with RAII-only mutation
 
-One `Scope` struct (in `elaborator/scope.rs`) absorbs `annotate_ctx` and
-`default_scope_module`; effect parameters move into `TraitContext` itself —
+One `Scope` struct (`elaborator/scope.rs`) absorbs `annotate_ctx` and
+`default_scope_module`. Effect parameters move into `TraitContext` itself:
 they are declared in a signature's `type_params` list, so they are
-generic-scope state and the existing `TypeParamScope` guard restores them
-with the rest of the context (S1 finding: the separate
-`current_effect_params` name set had no readers and was deleted; only the
-name → decl-`AstId` map is live). All mutation goes through guards:
-`TypeParamScope` (with `TraitContext::install_effect_params` for the
-install), `with_self_type_override`, `with_default_scope_module`, and the
-guard-managed `resolve_impl_item` extraction of the `Item::Impl` arm. The
-manual save/restores (the `Item::Impl` arm, the `self_type` triple, the
-effect-param and `default_scope_module` take/restore pairs) are deleted.
-Enforceable by inspection: no `mem::replace` / manual clone-restore of
-scope fields outside `scope.rs`.
+generic-scope state and the `TypeParamScope` guard restores them with the
+rest of the context. All mutation goes through guards — `TypeParamScope`,
+`with_self_type` / `with_self_type_if_known`, `with_default_scope_module`
+(one shared field-restore guard behind the `with_*` helpers) — and every
+manual save/restore is deleted. Enforceable by inspection: no
+`mem::replace` / manual clone-restore of scope fields outside `scope.rs`.
 
 ### TypeSystem — completed query surface, and the no-logging rule
 
@@ -240,42 +235,26 @@ the LSP query tests green. Converted consumers read the digest via
 `.expect(…)` — a missing entry is a loud panic, never a fallback to AST
 re-resolution (the reify Stage-7 precedent).
 
-- [x] S1 `Scope` + guards; convert the `Item::Impl` arm, the `self_type`
-      triple, the effect-param takes. (Subsumes the parent WEP's Track B
-      Stage E.) Landed with two refinements: effect params live on
-      `TraitContext` (restored by `TypeParamScope`; the reader-less
-      `current_effect_params` set deleted), and `AnnotateCtx` is renamed to
-      `Scope` ahead of S7's query signatures.
-- [x] S2 Side channels: dispatch outcome as return value, operator `AstId` as
-      parameter; delete `capture_tuple_overlays`. Landed:
-      `resolve_method_call_with` returns `MethodCallOutcome { expr, dispatch }`
-      (the for-of synthetic callers read `dispatch` instead of a field), and
-      the operator dispatcher takes `origin: Option<AstId>` threaded from
-      `resolve_binary` / unary / compound-assign / comparison-chain sites —
-      nested dispatches can no longer clobber a pending record.
-- [x] S3 Decl work → decl pass: move the `resolve_module` preamble into
-      `annotate_decls`; associated-const collection becomes O(N). Landed:
-      `resolve_module` split into `annotate_module_decls` /
-      `annotate_module_bodies`, and the driver runs all decl passes before
-      any body walk (Phase 1a / 1b). Each module resolves only its own
-      associated constants; the driver assembles
-      `TypeSystem::all_associated_constants` (plus per-module namespace
-      aliases) between the phases, and lookups go local-first through
-      `lookup_associated_constant`. The stdlib snapshot seeds
-      `decls.associated_constants` so snapshot modules contribute without a
-      decl pass.
-- [x] S4 `Signatures` stage A — free functions, globals, effect ops, data
-      sections, assoc-type bounds; convert `call.rs` / `expr.rs` /
-      `type_resolution.rs` consumers. Landed as `FunctionSig`
-      (`TypeSystem::all_function_sigs`, canonical frame incl. resolved
-      `with` effects), `all_globals`, `all_effect_op_sigs`,
-      `data_sections`, and `TraitEnv::assoc_type_bound_index`; the
-      per-module halves live on `ModuleDecls` and are snapshot-seeded.
-      Deviations: resource statics ride the S5 impl/static digest instead
-      (their consumers are the `method_call.rs` static paths);
-      `function_return_types` / the generic caches are still populated for
-      own-module fast paths — consolidating them into `FunctionSig` reads
-      is S7-adjacent cleanup; the imported-globals decl loop still reads
+- [x] S1 `Scope` + guards (subsumes the parent WEP's Track B Stage E).
+      Refinements: effect params live on `TraitContext` (restored by
+      `TypeParamScope`); `AnnotateCtx` renamed to `Scope`.
+- [x] S2 Side channels: `resolve_method_call_with` returns
+      `MethodCallOutcome`; the operator dispatcher takes
+      `origin: Option<AstId>`; `capture_tuple_overlays` deleted.
+- [x] S3 Decl work → decl pass: `resolve_module` split into
+      `annotate_module_decls` / `annotate_module_bodies`, all decl passes
+      running before any body walk. Associated constants are keyed by
+      canonical identity `(type-declaring module, "Type::CONST")` —
+      record and lookup both canonicalize the type prefix, so the merged
+      map is collision-free and needs no shadowing or namespace-alias
+      registration.
+- [x] S4 `Signatures` stage A: `FunctionSig` (canonical frame incl.
+      resolved `with` effects, the one signature resolution per function
+      in the decl pass), `all_globals`, `all_effect_op_sigs`,
+      `data_sections`, `TraitEnv::assoc_type_bound_index`; per-module
+      halves live on `ModuleDecls` (`clone_digests_from` is the one
+      snapshot-seeding field list). Deviations: resource statics ride the
+      S5 impl/static digest; the imported-globals decl loop still reads
       the source module's AST (S5, needs visibility on the globals
       digest).
 - [ ] S5 `Signatures` stage B — impl methods: extend `ImplHeader`

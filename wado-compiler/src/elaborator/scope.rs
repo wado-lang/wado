@@ -1,15 +1,8 @@
 //! Transient annotate-walk scope and its RAII guards.
 //!
-//! [`Scope`] bundles the state the body walk pushes and pops as it enters
-//! items, functions, and resolution sites: the trait-resolution context
-//! ([`TraitContext`], including effect parameters), the
-//! `type_implements_trait` recursion guard, and the default-expression
-//! module fallback.
-//!
-//! Rule (WEP 2026-07-10): scope state is mutated only through the guards
-//! and `with_*` helpers in this file. No manual save/restore of scope
-//! fields may exist outside it — every entry has exactly one panic-safe
-//! restore path.
+//! Rule: scope state is mutated only through the guards and `with_*`
+//! helpers in this file — every entry has exactly one panic-safe restore
+//! path (WEP 2026-07-10).
 
 use std::cell::RefCell;
 use std::ops::{Deref, DerefMut};
@@ -46,20 +39,16 @@ pub(super) struct TraitContext {
     pub(super) self_type: Option<TypeId>,
     /// Effect parameters (`<effect E>`) in scope, name → declaration
     /// `AstId`. `resolve_effects` consults this to classify a name as
-    /// `EffectRef::Param` (rather than a phantom `EffectRef::Concrete`)
-    /// and to record its use→def edge. Declared in a signature's
-    /// `type_params` list, so it enters and leaves scope with the other
-    /// generic-scope state above.
+    /// `EffectRef::Param` and to record its use→def edge.
     pub(super) effect_params: IndexMap<String, ast::AstId>,
 }
 
 impl TraitContext {
     /// Install the effect parameters declared in `type_params`, replacing
-    /// the enclosing scope's set. Callers hold a [`TypeParamScope`], which
-    /// restores the parent's set on drop. Install BEFORE
-    /// [`Elaborator::register_generic_params`] — eager `<F: fn() with E>`
-    /// bound resolution consults this channel to recognise `E` as
-    /// `EffectRef::Param`.
+    /// the enclosing scope's set (restored by the caller's
+    /// [`TypeParamScope`]). Must run BEFORE
+    /// [`Elaborator::register_generic_params`]: eager `<F: fn() with E>`
+    /// bound resolution consults this channel.
     pub(super) fn install_effect_params(&mut self, type_params: &[ast::GenericParam]) {
         self.effect_params = type_params
             .iter()
@@ -69,22 +58,19 @@ impl TraitContext {
     }
 }
 
-/// Per-function annotate-time scope: the trait-resolution context
-/// ([`TraitContext`]) plus the `type_implements_trait` recursion guard and
-/// the default-expression module fallback, bundled so they move as one
-/// unit (queries take `&Scope`). None of it may move onto the shared
-/// `TypeSystem`: `trait_ctx` is per-function, `trait_check_stack` is a
-/// per-call frame stack whose sharing would leak frames across module
-/// walks, and `default_scope_module` is a per-call-site override.
+/// Per-function annotate-time scope, bundled so queries take one `&Scope`.
+/// None of it may move onto the shared `TypeSystem`: `trait_ctx` is
+/// per-function, `trait_check_stack` is a per-call frame stack whose
+/// sharing would leak frames across module walks, and
+/// `default_scope_module` is a per-call-site override.
 #[derive(Default)]
 pub(super) struct Scope {
     pub(super) trait_ctx: TraitContext,
     pub(super) trait_check_stack: RefCell<Vec<(TypeId, String)>>,
     /// When resolving a default-expression AST at a call site, fall back to
-    /// looking up unresolved identifiers in this module's global scope. This
-    /// preserves the callee's lexical scope for defaults that reference
-    /// module-private items (see WEP 2026-04-11). Set only via
-    /// [`Elaborator::with_default_scope_module`].
+    /// looking up unresolved identifiers in this module's global scope —
+    /// the callee's lexical scope for defaults that reference
+    /// module-private items (WEP 2026-04-11).
     pub(super) default_scope_module: Option<ModuleSource>,
 }
 
@@ -151,9 +137,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Run `body` with the scope field selected by `field` set to `value`;
-    /// the previous value is restored on return, panic-safe. The shared
-    /// guard behind every `with_*` scope helper below.
+    /// Run `body` with the scope field selected by `field` set to `value`,
+    /// restoring the previous value on return (panic-safe).
     fn with_scope_field<T, R>(
         &mut self,
         field: fn(&mut Scope) -> &mut T,
@@ -180,8 +165,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         body(guard.elaborator)
     }
 
-    /// Run `body` with `trait_ctx.self_type` set to `self_type`; the
-    /// previous `Self` is restored on return, panic-safe.
+    /// Run `body` with `Self` set to `self_type`.
     pub(super) fn with_self_type<R>(
         &mut self,
         self_type: TypeId,
@@ -194,10 +178,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         )
     }
 
-    /// Run `body` with `Self` overridden to `self_type` when it is known
-    /// (`Some`); with `None` the current `Self` stays in place — this
-    /// helper never clears `Self`. Used by dispatch paths whose receiver
-    /// type may be unresolved.
+    /// Run `body` with `Self` overridden when `self_type` is known;
+    /// `None` keeps the current `Self` in place — this helper never clears
+    /// it. For dispatch paths whose receiver type may be unresolved.
     pub(super) fn with_self_type_if_known<R>(
         &mut self,
         self_type: Option<TypeId>,
@@ -209,10 +192,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Run `body` with [`Scope::default_scope_module`] replaced by `module`
-    /// (including `None`, which clears the fallback — unlike
-    /// [`Self::with_self_type_if_known`], `None` here is a value, not
-    /// "keep"). The previous value is restored on return, panic-safe.
+    /// Run `body` with [`Scope::default_scope_module`] replaced by
+    /// `module`. Unlike [`Self::with_self_type_if_known`], `None` here is
+    /// a value: it clears the fallback.
     pub(super) fn with_default_scope_module<R>(
         &mut self,
         module: Option<ModuleSource>,

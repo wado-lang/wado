@@ -650,10 +650,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         name: &str,
         fallback: &ModuleSource,
     ) -> Option<TypeId> {
-        // Stage 7-B: reify resolves the fallback-module global / `FuncRef`
-        // its own way (`reify_ident` branch 3b); project the type only. This
-        // default-expr path is never an assignment target, so no place is
-        // recorded.
+        // Reify resolves the fallback-module global / `FuncRef` its own
+        // way; project the type only. This default-expr path is never an
+        // assignment target, so no place is recorded.
         if let Some(&(ty, _)) = self
             .tysys
             .all_globals
@@ -816,12 +815,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// Build a function type from a free function's canonical signature.
-    /// With `type_args` empty the function must be non-generic (effect-only
-    /// params are treated as non-generic and accepted); a non-empty
-    /// `type_args` — pinned via turbofish (`name::<T>`) or inferred from an
-    /// expected `fn(...)` type — substitutes the signature's `TypeParam`
-    /// slots positionally.
+    /// Build a function type from a canonical signature. With `type_args`
+    /// empty the function must be non-generic (effect-only params count as
+    /// non-generic); a non-empty `type_args` substitutes the signature's
+    /// `TypeParam` slots positionally.
     pub(super) fn compute_func_ref_type_from_sig(
         &mut self,
         sig: &super::sem::decls::FunctionSig,
@@ -986,13 +983,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
     }
 
-    /// Look up the canonical signature, defining module, and the name the
-    /// function is registered under in that module for a function-reference
-    /// identifier (either a current-module function or an imported one,
-    /// possibly via an alias). The third tuple element is the *defining*
-    /// name — for `use { foo as bar }` it is `"foo"`, not the alias `"bar"`
-    /// — which downstream code uses to keep the TIR `FuncRef` aligned with
-    /// the post-monomorphization key space.
+    /// Canonical signature, defining module, and defining name for a
+    /// function-reference identifier (local or imported, possibly aliased).
+    /// The name is the *defining* one — `"foo"` for `use { foo as bar }` —
+    /// keeping the TIR `FuncRef` aligned with the post-monomorphization
+    /// key space.
     fn lookup_func_sig_for_ref(
         &self,
         name: &str,
@@ -1058,8 +1053,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
         }
 
-        // The canonical signature already carries `TypeParam{i}` slots for
-        // the declared type parameters.
         let type_param_ids: Vec<TypeId> = sig.type_param_ids.iter().map(|&(_, id)| id).collect();
         let decl_params = &sig.param_types;
         let decl_return = sig.return_type.unwrap_or(TypeTable::UNIT);

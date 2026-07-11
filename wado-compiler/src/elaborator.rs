@@ -46,7 +46,7 @@ use crate::hashmap::IndexMap;
 
 use crate::ast::{self, Item, Module};
 use crate::compiler_host::CompilerHost;
-use crate::logger::{Bail, Logger};
+use crate::logger::Logger;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{self as name, MethodName};
 use crate::symbol::{Symbol, SymbolTable};
@@ -977,11 +977,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Look up an impl-associated constant by its use-site `Type::NAME`
-    /// spelling (aliased and `ns$Type` namespaced prefixes included). The
-    /// prefix is canonicalized in the current module's scope and the merged
-    /// program-wide map is consulted under the resulting
-    /// `(type-declaring module, canonical key)` identity, so a same-named
-    /// type in an unrelated module can never satisfy the lookup.
+    /// spelling (aliased and `ns$Type` prefixes included). The prefix
+    /// canonicalizes in the current module's scope, so a same-named type
+    /// in an unrelated module can never satisfy the lookup.
     pub(super) fn lookup_associated_constant(
         &self,
         key: &str,
@@ -1287,21 +1285,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Per-module declaration pass (`annotate_decls`): effect sources,
     /// use-specifier use→def edges, type / signature collection, globals,
-    /// imported globals, associated constants, and the generic-function
-    /// inference caches. Populates `ModuleSemantics.imports` / `.decls`;
-    /// walks no bodies. The driver runs this for every module before any
-    /// body walk ([`Self::annotate_module_bodies`]) so bodies resolve
-    /// against complete declaration facts.
+    /// associated constants, and the generic-function inference caches.
+    /// Populates `ModuleSemantics.imports` / `.decls`; walks no bodies.
+    /// The driver runs this for every module before any body walk
+    /// ([`Self::annotate_module_bodies`]).
     pub fn annotate_module_decls(&mut self, module: &'a Module, module_source: ModuleSource) {
-        // Set current module source for struct type creation
         self.current_module_source = module_source.clone();
-        // Store current module items as a reference (no clone)
         self.current_module_items = &module.items;
-        // Function name → item-index lookup is pre-built per loaded
-        // module on `tysys.loaded_module_func_indices` during annotate;
-        // `lookup_current_func` consults it through
-        // `self.current_module_source` so no per-resolve rebuild here.
-        // Build effect source map from imports
         self.sem.imports.effect_sources = Self::build_effect_sources(
             &mut self.interner.borrow_mut(),
             module,
@@ -1419,15 +1409,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
-        // Collect THIS module's impl-associated constants, resolving each
-        // constant's declared type once in the declaring module's
-        // perspective (assoc-const types are primitive or `Self`-substituted
-        // and resolve uniformly, so consumers can reuse the `TypeId`
-        // as-is). Each constant is keyed by its canonical identity — the
-        // impl target's prefix canonicalized here, in the declaring scope —
-        // so the driver-merged `TypeSystem::all_associated_constants` cannot
-        // collide across same-named types. Lookups canonicalize the queried
-        // prefix the same way ([`Self::lookup_associated_constant`]).
+        // This module's impl-associated constants, each keyed by canonical
+        // identity — the impl target's prefix canonicalized here, in the
+        // declaring scope — so the driver-merged view cannot collide across
+        // same-named types. Lookups canonicalize the queried prefix the
+        // same way ([`Self::lookup_associated_constant`]).
         self.sem.decls.associated_constants.clear();
         let assoc_const_inputs: Vec<(String, String, ast::Type, ast::Expr)> = module
             .items
@@ -1465,10 +1451,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             );
         }
 
-        // Resolve this module's interface / resource operation signatures
-        // once, in the declaring perspective; the driver assembles the
-        // program-wide view ([`tysys::TypeSystem::all_effect_op_sigs`])
-        // between the decl and body passes.
         self.sem.decls.effect_op_sigs.clear();
         let op_inputs: Vec<(String, String, Vec<ast::Type>, Option<ast::Type>)> = module
             .items
@@ -1522,18 +1504,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Per-module body walk (`annotate_bodies`, Stage 7-B: records-only).
-    /// reify (`reify_module`) is the sole producer of the `TirModule`; this
-    /// walk resolves every item body (recording types / dispatch /
-    /// signatures / desugar facts and emitting diagnostics) so reify and
-    /// the LSP can read them. Requires [`Self::annotate_module_decls`] to
-    /// have populated this module's `ModuleSemantics` first. Returns `Bail`
-    /// when any error has been logged, matching the previous contract.
-    pub fn annotate_module_bodies(
-        &mut self,
-        module: &'a Module,
-        module_source: ModuleSource,
-    ) -> Result<(), Bail> {
+    /// Per-module body walk (`annotate_bodies`): resolves every item body,
+    /// recording types / dispatch / signatures / desugar facts and emitting
+    /// diagnostics, but builds no TIR — reify (`reify_module`) is the sole
+    /// `TirModule` producer, and it reads these facts. Requires
+    /// [`Self::annotate_module_decls`] to have populated this module's
+    /// `ModuleSemantics` first.
+    pub fn annotate_module_bodies(&mut self, module: &'a Module, module_source: ModuleSource) {
         self.current_module_source = module_source;
         self.current_module_items = &module.items;
         let _resolve_funcs_span = self.logger.span("elaborate/resolve_funcs");
@@ -1594,31 +1571,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // Solve / sweep holes minted in this module; unsolved ones raise
         // "cannot infer". After every function, so all solve points have fired.
         self.finalize_infer_holes();
-
-        self.logger.ok_or_bail(())
     }
 
     /// Resolve an `impl` block item: register its type-param scope, record
     /// the impl facts, resolve its methods, and synthesise trait default
-    /// methods. The type-param scope is guard-managed: the wrapper enters a
-    /// [`scope::TypeParamScope`] (clearing `type_params` / `type_param_bounds`
-    /// for the impl's own registrations) and the guard restores the parent
-    /// context on every exit path, including the synthesize-request early
-    /// return.
+    /// methods. The guard restores the parent context on every exit path,
+    /// including the synthesize-request early return.
     fn resolve_impl_item(&mut self, impl_block: &ast::ImplBlock) {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
-        scope.resolve_impl_item_in_scope(impl_block);
-    }
 
-    fn resolve_impl_item_in_scope(&mut self, impl_block: &ast::ImplBlock) {
         // Resolve impl block methods with mangled names
-        let struct_name = self.get_type_name(&impl_block.ty);
+        let struct_name = scope.get_type_name(&impl_block.ty);
         let trait_name = impl_block
             .trait_type
             .as_ref()
-            .map(|t| self.get_type_name_full(t));
+            .map(|t| scope.get_type_name_full(t));
 
         // Register type parameters from impl block's generic type FIRST
         // e.g., impl IndexValue<i32> for Triple<T> needs T registered
@@ -1629,13 +1598,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // `impl<T: Bound> OtherTrait for T` (T is the impl type directly).
         let mut actual_idx = 0u32;
         for param in &impl_block.type_params {
-            if self
+            if scope
                 .tysys
-                .is_known_type_name_in(&self.current_module_source, &param.name)
+                .is_known_type_name_in(&scope.current_module_source, &param.name)
             {
                 // Concrete type in explicit params (e.g., `impl<i32, T>`): skip
                 if !param.bounds.is_empty() {
-                    self.annotate_ctx
+                    scope
+                        .annotate_ctx
                         .trait_ctx
                         .type_param_bounds
                         .entry(param.name.clone())
@@ -1644,30 +1614,34 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
                 continue;
             }
-            if !self
+            if !scope
                 .annotate_ctx
                 .trait_ctx
                 .type_params
                 .contains_key(&param.name)
             {
                 let type_id = if param.is_pack {
-                    self.tysys
+                    scope
+                        .tysys
                         .type_table
                         .borrow_mut()
                         .make_type_pack(param.name.clone(), actual_idx)
                 } else {
-                    self.tysys
+                    scope
+                        .tysys
                         .type_table
                         .borrow_mut()
                         .make_type_param(param.name.clone(), actual_idx)
                 };
-                self.annotate_ctx
+                scope
+                    .annotate_ctx
                     .trait_ctx
                     .type_params
                     .insert(param.name.clone(), (actual_idx, type_id));
             }
             if !param.bounds.is_empty() {
-                self.annotate_ctx
+                scope
+                    .annotate_ctx
                     .trait_ctx
                     .type_param_bounds
                     .entry(param.name.clone())
@@ -1686,17 +1660,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             for (i, arg) in generic.args.iter().enumerate() {
                 if let ast::Type::Named(named) = arg {
                     let name = &named.name;
-                    if !self.annotate_ctx.trait_ctx.type_params.contains_key(name)
-                        && !self
+                    if !scope.annotate_ctx.trait_ctx.type_params.contains_key(name)
+                        && !scope
                             .tysys
-                            .is_known_type_name_in(&self.current_module_source, name)
+                            .is_known_type_name_in(&scope.current_module_source, name)
                     {
-                        let type_id = self
+                        let type_id = scope
                             .tysys
                             .type_table
                             .borrow_mut()
                             .make_type_param(name.clone(), i as u32);
-                        self.annotate_ctx
+                        scope
+                            .annotate_ctx
                             .trait_ctx
                             .type_params
                             .insert(name.clone(), (i as u32, type_id));
@@ -1706,25 +1681,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
 
         if impl_block.is_synthesize_request {
-            self.resolve_synthesize_request_marker(impl_block, &struct_name);
+            scope.resolve_synthesize_request_marker(impl_block, &struct_name);
             return;
         }
 
         // Set up associated type bindings for trait implementations
         // This now works because type params (like T) are registered above
-        self.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
+        scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
         if impl_block.trait_type.is_some() {
             // Resolve the target type for registering associated type resolutions
-            let target_type_id = self.resolve_type(&impl_block.ty);
-            let is_concrete = !self
+            let target_type_id = scope.resolve_type(&impl_block.ty);
+            let is_concrete = !scope
                 .tysys
                 .type_table
                 .borrow()
                 .contains_type_param(target_type_id);
 
             for binding in &impl_block.associated_types {
-                let type_id = self.resolve_type(&binding.ty);
-                self.annotate_ctx
+                let type_id = scope.resolve_type(&binding.ty);
+                scope
+                    .annotate_ctx
                     .trait_ctx
                     .assoc_type_bindings
                     .insert(binding.name.clone(), type_id);
@@ -1732,7 +1708,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // Register in TypeTable for substitution resolution
                 // Only for concrete types (not generic impls like impl<T> Trait for List<T>)
                 if is_concrete {
-                    self.tysys
+                    scope
+                        .tysys
                         .type_table
                         .borrow_mut()
                         .register_assoc_type_resolution(
@@ -1743,7 +1720,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 } else {
                     // For generic impls, register the definition so the monomorphizer
                     // can resolve associated types for GenericInstance types.
-                    self.tysys
+                    scope
+                        .tysys
                         .type_table
                         .borrow_mut()
                         .register_generic_assoc_type_def(
@@ -1764,16 +1742,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // TIR type-param projection, the assoc-type
         // bindings, and the handler / ref-impl flags.
         {
-            let self_type = self.resolve_type(&impl_block.ty);
+            let self_type = scope.resolve_type(&impl_block.ty);
             let trait_canonical = impl_block.trait_type.as_ref().map(|t| {
-                let base = self.get_type_name(t);
-                self.canonical_decl_key(&base)
+                let base = scope.get_type_name(t);
+                scope.canonical_decl_key(&base)
             });
             let is_handler_method = trait_canonical
                 .as_ref()
                 .map(|key| {
-                    self.tysys.trait_env.effect_decl_index.contains_key(key)
-                        || self.tysys.trait_env.resource_decl_index.contains_key(key)
+                    scope.tysys.trait_env.effect_decl_index.contains_key(key)
+                        || scope.tysys.trait_env.resource_decl_index.contains_key(key)
                 })
                 .unwrap_or(false);
             let is_ref_impl = matches!(
@@ -1789,15 +1767,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Some(ast::Type::Generic(generic)) => generic
                     .args
                     .iter()
-                    .map(|arg| self.resolve_type(arg))
+                    .map(|arg| scope.resolve_type(arg))
                     .collect(),
                 _ => Vec::new(),
             };
             // Concrete-impl owner (`impl List<u8>`): the receiver's
             // qualified mangle, matching call sites (issue #1348).
             let concrete_owner: Option<String> =
-                if self.impl_is_concrete_instantiation(impl_block, &self.current_module_source) {
-                    let tt = self.tysys.type_table.borrow();
+                if scope.impl_is_concrete_instantiation(impl_block, &scope.current_module_source) {
+                    let tt = scope.tysys.type_table.borrow();
                     let peeled = tt.peel_refs(self_type);
                     matches!(
                         tt.get(peeled),
@@ -1807,7 +1785,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 } else {
                     None
                 };
-            self.record_impl_facts(
+            scope.record_impl_facts(
                 impl_block.id,
                 sem::types::ImplFacts {
                     trait_name_mangled: trait_name.clone(),
@@ -1826,11 +1804,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             impl_block.methods.iter().map(|m| m.name.clone()).collect();
 
         let impl_is_concrete =
-            self.impl_is_concrete_instantiation(impl_block, &self.current_module_source);
+            scope.impl_is_concrete_instantiation(impl_block, &scope.current_module_source);
         for method in &impl_block.methods {
             // Records-only: reify emits the method `TirFunction`
             // from the recorded signature facts + the AST.
-            self.resolve_method(
+            scope.resolve_method(
                 method,
                 &struct_name,
                 &impl_block.ty,
@@ -1848,8 +1826,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if let (Some(trait_n), Some(trait_ast)) =
             (trait_name.as_ref(), impl_block.trait_type.as_ref())
         {
-            let trait_decl_name = self.get_type_name(trait_ast);
-            let (trait_methods, _) = self
+            let trait_decl_name = scope.get_type_name(trait_ast);
+            let (trait_methods, _) = scope
                 .find_trait_decl_methods_with_module(&trait_decl_name)
                 .unzip();
             let default_methods: Vec<ast::Function> = trait_methods
@@ -1889,21 +1867,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // resolved decls + import context.
                 let synthetic = super::elaborator::sem::ModuleSemantics {
                     bindings: super::elaborator::sem::ModuleBindings::default(),
-                    imports: self.sem.imports.clone(),
+                    imports: scope.sem.imports.clone(),
                     types: super::elaborator::sem::TypeAnnotations::default(),
-                    decls: self.sem.decls.clone(),
+                    decls: scope.sem.decls.clone(),
                     default_method_semantics: crate::hashmap::IndexMap::default(),
                 };
                 // Swap the elaborator's owned `sem` with the
                 // synthetic. `resolve_method` writes through
-                // `self.sem` (`record_*` calls, fact insertions)
+                // `scope.sem` (`record_*` calls, fact insertions)
                 // — they all land in `synthetic`'s fresh maps.
                 // Its `TirFunction` return is discarded; reify
                 // emits the authoritative TIR from the recorded
                 // facts.
-                let saved_sem = std::mem::replace(&mut self.sem, synthetic);
+                let saved_sem = std::mem::replace(&mut scope.sem, synthetic);
 
-                let _ = self.resolve_method(
+                let _ = scope.resolve_method(
                     default_method,
                     &struct_name,
                     &impl_block.ty,
@@ -1913,22 +1891,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 );
 
                 // Swap back, take the populated synthetic out.
-                let mut populated = std::mem::replace(&mut self.sem, saved_sem);
+                let mut populated = std::mem::replace(&mut scope.sem, saved_sem);
 
                 // Drain decl-level writes that must flow back
                 // into the impl module's `TirModule`. The body
                 // walk's only such write is anon-struct push;
                 // synthesis-request pushes only happen at the
                 // decl pass, not inside a method body.
-                self.sem
+                scope
+                    .sem
                     .decls
                     .pending_anonymous_structs
                     .append(&mut populated.decls.pending_anonymous_structs);
 
                 // Stash the populated synthetic under the
                 // (impl, default_method) key so reify can swap
-                // `self.sem` to it during its synthesis pass.
-                self.sem
+                // `scope.sem` to it during its synthesis pass.
+                scope
+                    .sem
                     .default_method_semantics
                     .insert((impl_block.id, default_method.id), populated);
             }

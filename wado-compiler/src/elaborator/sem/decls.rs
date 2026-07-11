@@ -22,28 +22,25 @@ use crate::tir::TypeId;
 use super::super::types::{EnumInfo, FlagsInfo, GenericNewtypeInfo, StructFieldInfo, VariantInfo};
 
 /// A function's canonical signature, resolved once by its module's decl
-/// pass: the function's own type params registered as `TypeParam` slots
-/// (fn-bound params eagerly realised, effect params installed), all types
-/// resolved in the declaring module's perspective. Use sites substitute
-/// into this frame; they never re-resolve the signature AST.
+/// pass in the declaring perspective, with the function's own type params
+/// registered as `TypeParam` slots. Use sites substitute into this frame;
+/// they never re-resolve the signature AST.
 #[derive(Clone)]
 pub(crate) struct FunctionSig {
     /// Registered `(name, TypeId)` pairs, in registration order — real
     /// params as `TypeParam` slots, fn-bound params as their realised
-    /// function type. Effect params are excluded (their own channel).
-    /// Empty iff the function declares only effect params (or none).
+    /// function type. Effect params are excluded; empty iff the function
+    /// declares only effect params (or none).
     pub(crate) type_param_ids: Vec<(String, TypeId)>,
-    /// The real (non-effect, non-fn-bound) subset of `type_param_ids` —
-    /// the positional `TypeParam` slots substituted by explicit or
-    /// inferred type arguments, and the rows of the generic-inference
-    /// caches.
+    /// The real (non-effect, non-fn-bound) subset of `type_param_ids`:
+    /// the positional slots substituted by explicit or inferred type args.
     pub(crate) real_type_params: Vec<(String, TypeId)>,
     /// Parameter types in declaration order.
     pub(crate) param_types: Vec<TypeId>,
     pub(crate) param_names: Vec<String>,
     pub(crate) param_is_mut: Vec<bool>,
-    /// Default-value expressions (irreducibly AST: re-resolved per call
-    /// site under the callee's scope, WEP 2026-04-11).
+    /// Default-value expressions — irreducibly AST, re-resolved per call
+    /// site under the callee's scope (WEP 2026-04-11).
     pub(crate) param_defaults: Vec<Option<ast::Expr>>,
     /// Declared return type; `None` when the declaration has none.
     pub(crate) return_type: Option<TypeId>,
@@ -53,12 +50,9 @@ pub(crate) struct FunctionSig {
 }
 
 impl ModuleDecls {
-    /// Carry a snapshot module's decl digests into this compile's
-    /// `ModuleSemantics`. The field list lives here, next to the fields —
-    /// the driver's program-wide assembly merges the same set, so a digest
-    /// added to this method is automatically both snapshot-seeded and
-    /// merged; one missed here would silently lose stdlib facts on
-    /// snapshot-hit builds only.
+    /// Carry a snapshot module's decl digests into this compile. The digest
+    /// field list lives only here; a digest missing from this method would
+    /// silently lose stdlib facts on snapshot-hit builds only.
     pub(crate) fn clone_digests_from(&mut self, other: &ModuleDecls) {
         self.associated_constants
             .clone_from(&other.associated_constants);
@@ -72,10 +66,9 @@ impl ModuleDecls {
 /// Per-module declaration tables produced by elaboration.
 #[derive(Default, Clone)]
 pub(crate) struct ModuleDecls {
-    /// Canonical signatures of this module's own free functions, recorded
-    /// by the decl pass and frozen behind `Rc` — the driver's program-wide
-    /// assembly (`TypeSystem::all_function_sigs`) and the stdlib-snapshot
-    /// seeding both share the map instead of deep-cloning every signature.
+    /// Canonical signatures of this module's own free functions, frozen
+    /// behind `Rc` so the program-wide assembly and the stdlib-snapshot
+    /// seeding share the map instead of deep-cloning every signature.
     pub(crate) function_sigs: std::rc::Rc<IndexMap<String, FunctionSig>>,
     /// `func_name → return TypeId` for functions defined in this module.
     pub(crate) function_return_types: IndexMap<String, TypeId>,
@@ -88,22 +81,17 @@ pub(crate) struct ModuleDecls {
     /// `local_name → (source, original_name, TypeId, is_mut)` for globals
     /// brought in by `use`.
     pub(crate) imported_globals: IndexMap<String, (ModuleSource, String, TypeId, bool)>,
-    /// This module's own impl-associated constants, keyed by the constant's
-    /// canonical identity: `(type-declaring module, "Type::CONST")`, with the
-    /// impl target's prefix canonicalized in this module's scope
-    /// ([`super::super::Elaborator::canonical_decl_key`]). The value carries
-    /// the impl-declaring module (reify walks the value expr under that
-    /// perspective), the resolved const type, and the value expression
-    /// (irreducibly AST). The driver merges every module's map into
-    /// `TypeSystem::all_associated_constants` between the decl and body
-    /// passes; canonical keys make cross-module collisions impossible, so
-    /// no shadowing or alias registration is needed.
+    /// This module's own impl-associated constants, keyed by canonical
+    /// identity `(type-declaring module, "Type::CONST")` — the impl
+    /// target's prefix canonicalized in this module's scope. The value
+    /// carries the impl-declaring module (reify walks the value expr under
+    /// that perspective), the const type, and the value expression.
+    /// Canonical keys make cross-module collisions impossible, so the
+    /// driver-merged view needs no shadowing rules.
     pub(crate) associated_constants:
         IndexMap<(ModuleSource, String), (ModuleSource, TypeId, ast::Expr)>,
-    /// This module's own interface / resource operation signatures,
-    /// keyed `(decl name, op name)`, resolved once by the decl pass in the
-    /// declaring perspective. The driver assembles the program-wide view
-    /// (`TypeSystem::all_effect_op_sigs`) between the decl and body passes.
+    /// This module's own interface / resource operation signatures, keyed
+    /// `(decl name, op name)`, resolved once in the declaring perspective.
     pub(crate) effect_op_sigs: IndexMap<(String, String), (Vec<TypeId>, Option<TypeId>)>,
 
     /// Names of generic structs declared in this module (used to decide
