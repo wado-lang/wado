@@ -149,9 +149,7 @@ fn read_all_stdin() -> String with Stdin {
         if chunk.is_empty() {
             break;
         }
-        for let b of chunk {
-            buf.push(b);
-        }
+        buf.extend(&chunk);
     }
     rx.drop();
     return String::from_utf8_lossy(buf);
