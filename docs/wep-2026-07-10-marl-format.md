@@ -5,10 +5,10 @@
 `wado-dev-tools format-md` (invoked by `mise run format`) formats the repo's
 Markdown by embedding the `dprint-plugin-markdown` Rust crate. Marl is
 `package-marl`'s Markdown toolkit, written in Wado: a Markdown-to-HTML renderer
-(`render`, used by [Sheaf](./wep-2026-07-05-sheaf.md)) and a
+(`render`, see [Marl](./wep-2026-07-05-marl.md)) and a
 Markdown-to-Markdown formatter (`format`), shipped together as a
 `wasi:cli/command` program — another instance of Wado dogfooding its own
-toolchain, alongside Sheaf and Kiln.
+toolchain, alongside Kiln.
 
 The formatter's bar is "sufficiently reasonable Markdown output," not
 byte-for-byte parity with dprint. dprint stays the design reference: it is
@@ -29,7 +29,7 @@ than merely echo it. Two backends walk the same tree:
 - `fmt_print.wado` — AST to canonical Markdown (`format`).
 
 `lib.wado` re-exports `render`, `format`, and the `escape_text` /
-`escape_attr` helpers Sheaf's templates use.
+`escape_attr` helpers for HTML-templating consumers.
 
 ### HTML output is safe by construction
 
@@ -45,7 +45,7 @@ table; link reference definitions and front matter produce no output.
 `package-marl/wado.toml` declares `[world]."wasi:cli/command" = "src/main.wado"`
 alongside its `lib`, so the package stays importable as a library and is also
 directly runnable. The CLI mirrors `format_md.rs`'s surface (positional paths,
-`--check`) and `package-sheaf`'s WASI file I/O: walk the preopened tree for
+`--check`) with WASI file I/O: walk the preopened tree for
 `*.md` (skipping `vendor` / `target` / `.git` / `node_modules` / `.vscode-test`),
 then read / format / compare / write. No Rust, no `wado-dev-tools` dependency,
 no `mise` or CI wiring.
