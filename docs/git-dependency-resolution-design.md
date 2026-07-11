@@ -149,6 +149,61 @@ SHA via `git worktree add`, so it can be deleted and rebuilt at will (see
 [`wado clean`](#wado-clean)). The sources of truth are the canonical clone's
 object store and the lock's `resolved-ref` — never the checked-out files.
 
+### The Wado root and `~/.wadorc.toml`
+
+The cache tree is the **Wado root** — the same concept ghq calls its "root", a
+flat `{host}/{owner}/{repo}` store of cloned source. Naming and control:
+
+- The term is `root`, not `home`: `home` (à la `CARGO_HOME`) connotes the tool's
+  whole private state dir, whereas this is a source-checkout root meant to be
+  interchangeable with ghq's. The existing `WADO_ROOT` env var and
+  `cache_root()` resolver already use "root".
+- A global config file `~/.wadorc.toml` sets it:
+
+  ```toml
+  root = "~/ghq"   # point the Wado root at an existing ghq root
+  ```
+
+- Resolution precedence: `WADO_ROOT` (env) → `root` in `~/.wadorc.toml` →
+  default `~/wado`. `~` and `$VARS` expand. The resolver lives where both the
+  CLI (which fetches) and the LSP (which reads offline) already share
+  `cache_root()`, so both agree on one location.
+
+Pointing the root at `~/ghq` is a first-class use case, and it is precisely the
+nested-`.worktrees/` layout that makes it safe: a git dependency's canonical
+clone lands at `~/ghq/{host}/{owner}/{repo}` — exactly where `ghq get` would put
+it, so the two tools interoperate — while the per-version worktrees stay hidden
+inside it and never pollute `ghq list`. The `@ref`-sibling layout, by contrast,
+would have littered a real ghq root with `repo@ver` entries.
+
+Registry components continue to live under the same root
+(`{host}/{ns}/{name}/{version}/component.wasm`); they carry no `.git`, so ghq
+ignores them.
+
+### Worktrees are global, not the project's `build/`
+
+The per-version worktrees live under the Wado root, **not** in the consuming
+project's `build/`. `build/` holds only _this_ project's compiled outputs
+(`build/<world>.wasm`, `build/kiln/…`); dependency source is shared machine-wide,
+mirroring the existing rule for registry components (see `wado-cli/src/cache.rs`:
+the `~/wado/` cache exists so packages are shared "instead of re-downloading into
+each project's `build/`").
+
+Materializing into `build/` was considered and rejected:
+
+- It would **not remove the global clone or its locking** — the object store and
+  the ghq-compatible canonical checkout still have to live under the root — so it
+  only relocates the leaf checkout while adding a coupling: `rm -rf build/` (a
+  routine wipe) orphans `git worktree` admin entries in the global clone until a
+  `prune`.
+- It **loses cross-project sharing**: N projects on one machine would each
+  re-check-out the same commit.
+- It **diverges from registry deps**, which are global — git deps behaving
+  differently would be a needless inconsistency.
+
+The global model keeps one shared, ghq-browsable copy per commit and confines
+per-build churn to `wado clean`.
+
 ### Acquisition: resolve reads a blob, materialize adds a worktree
 
 Two tiers, so resolution never pays for a working-tree checkout:
@@ -397,6 +452,11 @@ impl stays pure.
   (`.worktrees/` eviction + prune). Open only on the details: whether `--all`
   also evicts registry components, and whether a bare `wado clean` should prune
   worktrees not referenced by the current project's lock vs. all worktrees.
+- **`~/.wadorc.toml` conventions**: the `root` key and precedence are decided;
+  open only on the file's spelling (`~/.wadorc.toml` vs a visible `~/wadorc.toml`
+  matching the project's anti-hiding stance for `~/wado`, vs XDG
+  `$XDG_CONFIG_HOME/wado/config.toml`) and whether other machine-global settings
+  eventually share it.
 - **Submodules**: left unrecursed initially. Revisit if a real dependency needs
   them; would become a `--recurse-submodules`-style opt-in, not a default.
 - **Lock `directory`**: not recorded in the lock (the consumer's manifest still
