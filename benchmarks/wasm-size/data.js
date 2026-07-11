@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783753201082,
+  "lastUpdate": 1783757968842,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -39305,6 +39305,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e97f08121596af690886905366a2bdfdad5cd072"
         },
         "date": 1783753200584,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16351,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 266775,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "04504099186e1b833a92e37526b07522ddff42ea",
+          "message": "Merge pull request #1552 from wado-lang/claude/wado-cli-git-deps-myqsws\n\nfeat(deps): git repository dependencies and a PubGrub resolver",
+          "timestamp": "2026-07-11T17:10:24+09:00",
+          "tree_id": "da1b6ba91a2ba684294802535105869e963f1a11",
+          "url": "https://github.com/wado-lang/wado/commit/04504099186e1b833a92e37526b07522ddff42ea"
+        },
+        "date": 1783757968394,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
