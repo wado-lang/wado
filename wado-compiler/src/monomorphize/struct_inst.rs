@@ -77,7 +77,7 @@ impl Monomorphizer {
                     type_id: new_type_id,
                     index: field.index,
                     span: field.span,
-                    is_hidden: field.is_hidden,
+                    is_secret: field.is_secret,
                     serde_rename: field.serde_rename.clone(),
                     serde_default: field.serde_default,
                     serde_positional: field.serde_positional,

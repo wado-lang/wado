@@ -38,7 +38,7 @@ Inspect output follows Wado literal syntax where possible:
 | `()` (unit)                | `()`                                   | `()`                          |
 | Struct                     | `Name { field: value, ... }`           | `Point { x: 10, y: 20 }`      |
 | Struct (generic)           | `Name { field: value }` (no type args) | `Box { value: 42 }`           |
-| Struct (`#[hidden]` field) | Field omitted, `..` appended           | `Foo { visible: 1, .. }`      |
+| Struct (`#[secret]` field) | Field omitted, `..` appended           | `Foo { visible: 1, .. }`      |
 | Tuple                      | `[elem, ...]`                          | `[1, "a", true]`              |
 | `List<T>`                  | `[elem, ...]`                          | `[1, 2, 3]`                   |
 | `TreeMap<K, V>`            | `{key: value, ...}`                    | `{"a": 1, "b": 2}`            |
@@ -62,7 +62,7 @@ Inspect output follows Wado literal syntax where possible:
 
 #### Detailed Format Rules
 
-**Struct fields**: Iterate fields in declaration order. Skip fields annotated with `#[hidden]`, but append `..` to indicate their presence. If all fields are hidden, output `Name { .. }`. Recursively inspect each visible field value.
+**Struct fields**: Iterate fields in declaration order. Skip fields annotated with `#[secret]`, but append `..` to indicate their presence. If all fields are secret, output `Name { .. }`. Recursively inspect each visible field value.
 
 **Enum/Variant/Flags type name**: Always include the type name prefix (`Color::Red`, not just `Red`). This is unambiguous and matches construction syntax.
 
@@ -139,13 +139,13 @@ fn synthesize_inspect_for_type(T, expr, f_ref) -> Vec<TirStmt>:
 
         Struct { name, fields } →
             f.write_str("Name { ")
-            for each (i, field) in fields (skip #[hidden]):
+            for each (i, field) in fields (skip #[secret]):
                 if i > 0: f.write_str(", ")
                 f.write_str("field_name: ")
                 synthesize_inspect_for_type(field.type, expr.field, f_ref)
-            if has_hidden_fields: f.write_str(", ..")
+            if has_secret_fields: f.write_str(", ..")
             f.write_str(" }")
-            // All fields hidden → "Name { .. }"
+            // All fields secret → "Name { .. }"
 
         Tuple(element_types) →
             f.write_char('[')
@@ -350,7 +350,7 @@ The core `synthesize_inspect` phase and the full pipeline integration are implem
 | `()` (unit)                | Done   | Outputs `()`                                                                                                                                  |
 | Struct                     | Done   | Fields in declaration order                                                                                                                   |
 | Struct (generic)           | Done   | Type args substituted for field types; type args omitted in name                                                                              |
-| Struct (`#[hidden]` field) | Done   | Hidden fields skipped with `..` hint; `is_hidden` propagated through TIR                                                                      |
+| Struct (`#[secret]` field) | Done   | Secret fields skipped with `..` hint; `is_secret` propagated through TIR                                                                      |
 | Tuple                      | Done   |                                                                                                                                               |
 | `List<T>`                  | Done   | Loop-based with comma separation                                                                                                              |
 | `Option::Some(v)`          | Done   | Renders as `Some(inspect(v))`                                                                                                                 |
@@ -377,7 +377,7 @@ The core `synthesize_inspect` phase and the full pipeline integration are implem
 ### Additional Fixes
 
 - **Resource hex format**: Changed from decimal (`TypeName#N`) to hex (`TypeName#0xHH`) using `LowerHex::fmt` instead of `Display::fmt`, matching the WEP specification.
-- **`#[hidden]` field support**: Added `is_hidden` flag to `TirField`, propagated through elaborator, monomorphizer, and lowerer. `synthesize_inspect` and `find_struct_fields` filter hidden fields.
+- **`#[secret]` field support**: Added `is_secret` flag to `TirField`, propagated through elaborator, monomorphizer, and lowerer. `synthesize_inspect` and `find_struct_fields` filter secret fields.
 - **Generic struct inspect**: Added `ResolvedType::GenericInstance` handling in `synth_body`, using `SubstitutionContext` to resolve type parameters to concrete types for field access.
 - **Unit type `()` codegen fix**: Fixed invalid Wasm generation when `()` appears as a function parameter or local variable. Unit-type params are now filtered out during WIR function registration, and unit-type locals/assignments/reads emit `Nop` instead of invalid `local.get`/`local.set`. Unit-type arguments are also filtered from call sites.
 

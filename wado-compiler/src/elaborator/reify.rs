@@ -808,7 +808,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 type_id,
                 index: index as u32,
                 span: field.span,
-                is_hidden: field.attrs.iter().any(|a| a.name == "hidden"),
+                is_secret: field.attrs.iter().any(|a| a.name == "secret"),
                 serde_rename,
                 serde_default,
                 serde_positional,
@@ -855,7 +855,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Field types and type-param bounds come from `sem.decls.local_struct_fields`
     /// — the durable, mangled-name-keyed fact `resolve_local_struct` recorded.
-    /// Field attributes (`#[serde(...)]`, `#[hidden]`) and default-value
+    /// Field attributes (`#[serde(...)]`, `#[secret]`) and default-value
     /// expressions are read straight from the AST here, exactly matching
     /// `reify_struct`'s handling for a top-level struct — `StructFieldInfo`
     /// doesn't carry attributes, only `(name, type, visibility)`.
@@ -895,7 +895,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     type_id: *type_id,
                     index: index as u32,
                     span: field.map_or(struct_decl.span, |f| f.span),
-                    is_hidden: attrs.iter().any(|a| a.name == "hidden"),
+                    is_secret: attrs.iter().any(|a| a.name == "secret"),
                     serde_rename: serde_rename_of(attrs),
                     serde_default: field.is_some_and(|f| f.default.is_some()),
                     serde_positional: attrs
