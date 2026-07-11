@@ -190,8 +190,12 @@ pub async fn resolve_inline_git_dependencies(
     Ok(out)
 }
 
-/// Resolve an inline git dependency to its absolute entry `.wado` path: resolve
-/// the ref, materialize the worktree, and read the package's `[package].lib`.
+/// Resolve an inline git dependency to its absolute entry `.wado` path. Shares
+/// the low-level resolution (`crate::git::resolve_ref` / `fetch_manifest`) and
+/// the materialize + `[package].lib` spine (`crate::git::materialize_entry`)
+/// with the manifest path; only the version source differs — no lock, so the
+/// git package's own `[package].version` at the resolved commit keys the
+/// worktree (matching what a manifest ref-pin would lock).
 fn resolve_inline_git(url: &str, git_ref: &str, directory: Option<&str>) -> Result<String, String> {
     let sha = crate::git::resolve_ref(url, git_ref).map_err(|e| e.to_string())?;
     let manifest = crate::git::fetch_manifest(url, &sha, directory).map_err(|e| e.to_string())?;
@@ -200,22 +204,7 @@ fn resolve_inline_git(url: &str, git_ref: &str, directory: Option<&str>) -> Resu
         .as_ref()
         .map(|p| p.version.clone())
         .unwrap_or_else(|| sha.clone());
-    let worktree = crate::git::materialize(url, &version, &sha).map_err(|e| e.to_string())?;
-    let pkg_dir = match directory {
-        Some(dir) => worktree.join(dir),
-        None => worktree,
-    };
-    let manifest_path = pkg_dir.join("wado.toml");
-    let text = std::fs::read_to_string(&manifest_path)
-        .map_err(|e| format!("reading {}: {e}", manifest_path.display()))?;
-    let manifest: wado_manifest::Manifest = text
-        .parse()
-        .map_err(|e| format!("invalid {}: {e}", manifest_path.display()))?;
-    let lib = manifest
-        .package
-        .and_then(|p| p.lib)
-        .ok_or_else(|| format!("{} declares no [package].lib entry", manifest_path.display()))?;
-    Ok(pkg_dir.join(lib).display().to_string())
+    crate::git::materialize_entry(url, &version, &sha, directory).map_err(|e| e.to_string())
 }
 
 /// An inline registry component source declared on a `use … from` clause.

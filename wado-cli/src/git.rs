@@ -165,6 +165,31 @@ fn ensure_commit(url: &str, repo: &Path, sha: &str) -> Result<(), ProviderError>
     })
 }
 
+/// Materialize a worktree and return its absolute `[package].lib` entry path —
+/// the shared spine both the manifest build-tier materializer and the
+/// single-file inline resolver end at, so a git dependency's source entry is
+/// located identically however it was declared. `directory` selects a monorepo
+/// subdirectory within the worktree.
+pub fn materialize_entry(
+    url: &str,
+    version: &str,
+    sha: &str,
+    directory: Option<&str>,
+) -> Result<String, ProviderError> {
+    let worktree = materialize(url, version, sha)?;
+    let pkg_dir = match directory {
+        Some(dir) => worktree.join(dir),
+        None => worktree,
+    };
+    let entry = wado_lsp::host::package_lib_entry(&pkg_dir).map_err(|message| {
+        ProviderError::InvalidManifest {
+            source: pkg_dir.display().to_string(),
+            message,
+        }
+    })?;
+    Ok(entry.display().to_string())
+}
+
 /// Prune a clone's worktree admin entries for checkouts removed on disk. Used by
 /// `wado clean` after deleting the `.worktrees/` directory. Best-effort.
 pub fn prune_worktrees(repo: &Path) -> Result<(), ProviderError> {

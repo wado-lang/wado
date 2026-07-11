@@ -190,7 +190,7 @@ pub fn dependency_index_from(
     for (name, dep) in &manifest.dependencies {
         match &dep.source {
             DependencySource::Path { path, .. } => {
-                match dependency_entry_path(&manifest_dir.join(path)) {
+                match package_lib_entry(&manifest_dir.join(path)) {
                     Ok(entry) => {
                         index
                             .resolved
@@ -264,7 +264,7 @@ fn git_dependency_entry(
     if !worktree.exists() {
         return Err(format!("{name:?} is not cached; run `wado fetch`"));
     }
-    dependency_entry_path(&worktree)
+    package_lib_entry(&worktree)
 }
 
 /// `lock id -> (version, resolved-ref)` for every git `[[package]]` in
@@ -343,10 +343,12 @@ fn nearest_manifest(start: &Path) -> Option<(wado_manifest::Manifest, PathBuf)> 
     }
 }
 
-/// The entry module file of a path dependency: the file itself when the path
+/// The entry module file of a source dependency: the file itself when the path
 /// points at a `.wado` file, otherwise the directory's `[package].lib`. The
-/// `Err` describes why a declared dependency has no usable entry.
-fn dependency_entry_path(dep_path: &Path) -> Result<PathBuf, String> {
+/// `Err` describes why a dependency has no usable entry. Shared by the path,
+/// git (worktree), and single-file inline-git resolution paths so all three
+/// agree on how a package's library entry is located.
+pub fn package_lib_entry(dep_path: &Path) -> Result<PathBuf, String> {
     if dep_path.extension().is_some_and(|e| e == "wado") {
         return Ok(dep_path.to_path_buf());
     }
