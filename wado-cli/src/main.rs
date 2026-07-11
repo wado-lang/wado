@@ -148,6 +148,11 @@ fn print_version() {
 }
 
 fn main() {
+    // Resolve the Wado root from the config file into `$WADO_ROOT` before any
+    // threads (the tokio runtime below) start, so the whole process — including
+    // the embedded LSP server — shares one configured cache location.
+    wado_cli::cache::init_root_from_config();
+
     // The compiler is recursive-descent end to end (parser, type resolution,
     // TIR/NIR/WIR walks), so compiling a large generated source — e.g. a Gale
     // parser for a deeply nested grammar — recurses deeply. The default 2 MiB
