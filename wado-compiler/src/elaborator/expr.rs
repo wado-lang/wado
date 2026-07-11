@@ -829,11 +829,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<TypeId> {
         // Real (non-effect, non-fn-bound) type-param slots — these are the
         // ones substituted positionally by `type_args`.
-        let real_type_param_count = sig
-            .type_params
-            .iter()
-            .filter(|p| p.is_real_type_param())
-            .count();
+        let real_type_param_count = sig.real_type_params.len();
         if type_args.is_empty() && real_type_param_count != 0 {
             return None;
         }
@@ -886,11 +882,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::UNKNOWN;
         };
 
-        let real_type_param_count = sig
-            .type_params
-            .iter()
-            .filter(|p| p.is_real_type_param())
-            .count();
+        let real_type_param_count = sig.real_type_params.len();
 
         // (a) Turbofish on the identifier: `name::<T, ...>`.
         if !ident.type_args.is_empty() {

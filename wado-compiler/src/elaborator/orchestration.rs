@@ -1068,21 +1068,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     if let Some(sem) = module_semantics.get_mut(ms) {
                         sem.types = snap_sem.types.clone();
                         // A snapshot module runs no decl pass this compile;
-                        // carry its own resolved associated constants over so
-                        // the driver's program-wide assembly (between the decl
-                        // and body passes) sees stdlib constants too.
-                        sem.decls
-                            .associated_constants
-                            .clone_from(&snap_sem.decls.associated_constants);
-                        sem.decls
-                            .effect_op_sigs
-                            .clone_from(&snap_sem.decls.effect_op_sigs);
-                        sem.decls
-                            .function_sigs
-                            .clone_from(&snap_sem.decls.function_sigs);
-                        sem.decls
-                            .current_module_globals
-                            .clone_from(&snap_sem.decls.current_module_globals);
+                        // carry its decl digests over so the driver's
+                        // program-wide assembly (between the decl and body
+                        // passes) sees stdlib declarations too.
+                        sem.decls.clone_digests_from(&snap_sem.decls);
                     }
                 }
             }
@@ -1301,6 +1290,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // User modules whose Phase 1 body walk succeeded and whose AST is
         // well-formed — the set the reify pass emits.
         let mut reify_eligible: IndexSet<ModuleSource> = IndexSet::default();
+        // Modules whose own decl pass logged an error; excluded from reify
+        // even when their body walk stays clean.
+        let mut decl_failed: IndexSet<ModuleSource> = IndexSet::default();
 
         // Phase 1a — `annotate_decls`: populate every user module's
         // declaration facts (imports, signatures, globals, associated
@@ -1325,57 +1317,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let imported_type_sources = import_scope.sources;
             let import_original_names = import_scope.original_names;
             let namespace_imports = import_scope.namespace_imports;
-            // Build function_return_types for this module only
-            // (functions defined in this module). The lookup borrows the
-            // shared `all_*` tables; no per-module flat-map cloning.
-            let mut function_return_types = IndexMap::default();
-            {
-                let empty_struct: IndexMap<String, StructFieldInfo> = IndexMap::default();
-                let empty_newtype: IndexMap<String, TypeId> = IndexMap::default();
-                let empty_enum: IndexMap<String, EnumInfo> = IndexMap::default();
-                let empty_flags: IndexMap<String, FlagsInfo> = IndexMap::default();
-                let empty_gnt: IndexMap<String, GenericNewtypeInfo> = IndexMap::default();
-                let empty_variant: IndexMap<String, VariantInfo> = IndexMap::default();
-                let lookup = TypeLookup {
-                    current_module_source: module_source,
-                    imported_type_sources: &imported_type_sources,
-                    import_original_names: &import_original_names,
-                    namespace_imports: &namespace_imports,
-                    all_newtypes: &state.tysys.all_newtypes,
-                    all_struct_fields: &state.tysys.all_struct_fields,
-                    all_variant_cases: &state.tysys.all_variant_cases,
-                    all_enum_cases: &state.tysys.all_enum_cases,
-                    all_flags_cases: &state.tysys.all_flags_cases,
-                    all_resource_types: &state.tysys.all_resource_types,
-                    all_generic_newtypes: &state.tysys.all_generic_newtypes,
-                    local_struct_fields: &empty_struct,
-                    local_newtypes: &empty_newtype,
-                    local_enum_cases: &empty_enum,
-                    local_flags_cases: &empty_flags,
-                    local_generic_newtypes: &empty_gnt,
-                    local_variant_cases: &empty_variant,
-                    fn_local_struct_fields: &empty_struct,
-                    fn_local_newtypes: &empty_newtype,
-                    fn_local_enum_cases: &empty_enum,
-                    fn_local_flags_cases: &empty_flags,
-                    fn_local_variant_cases: &empty_variant,
-                };
-                for item in &module.items {
-                    if let Item::Function(func) = item {
-                        let return_type = if let Some(ret_ty) = &func.return_type {
-                            Self::resolve_type_static(
-                                ret_ty,
-                                &mut state.tysys.type_table.borrow_mut(),
-                                &lookup,
-                            )
-                        } else {
-                            TypeTable::UNIT
-                        };
-                        function_return_types.insert(func.name.clone(), return_type);
-                    }
-                }
-            }
-
             // Imported function names (namespace type members already in scope).
             let mut imported_functions = IndexSet::default();
             for item in &module.items {
@@ -1439,7 +1380,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             sem.imports.imported_type_sources = imported_type_sources;
             sem.imports.import_original_names = import_original_names;
             sem.imports.namespace_imports = namespace_imports;
-            sem.decls.function_return_types = function_return_types;
             sem.decls.imported_functions = imported_functions;
 
             let mut elaborator =
@@ -1449,106 +1389,56 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // carry the correct module filename (not the entry module).
             logger.set_file(module_source.source_path());
 
+            let errors_before = logger.error_count();
             elaborator.annotate_module_decls(module, module_source.clone());
+            if logger.error_count() > errors_before {
+                decl_failed.insert(module_source.clone());
+            }
             let saved_sem = elaborator.sem;
             state
                 .module_semantics
                 .insert(module_source.clone(), saved_sem);
         }
 
-        // Assemble the program-wide associated-constant map: each module's
-        // decl pass resolved its own constants (snapshot modules were seeded
-        // from the snapshot), so one pass in topological order replaces the
-        // previous per-module rescan of every loaded module (O(modules²)).
-        // Then register each module's namespace-alias entries
-        // (`ns$Type::CONST`) against the assembled map — a namespace's
-        // source module always precedes its importer in topo order, so the
-        // map is complete for every alias.
+        // Merge every module's decl digests into the program-wide maps —
+        // the same field set `ModuleDecls::clone_digests_from` seeds from
+        // the stdlib snapshot. Associated constants are keyed by canonical
+        // identity `(type-declaring module, "Type::CONST")`, resolved by
+        // each declaring module's decl pass, so the merge is collision-free
+        // by construction and lookups need no shadowing rules.
         {
-            let mut all_consts: IndexMap<String, (ModuleSource, TypeId, crate::ast::Expr)> =
-                IndexMap::default();
-            for module_source in &sorted_sources {
-                if let Some(sem) = state.module_semantics.get(module_source) {
-                    for (key, value) in &sem.decls.associated_constants {
-                        all_consts.insert(key.clone(), value.clone());
-                    }
-                }
-            }
-            state.tysys.all_associated_constants = Rc::new(all_consts);
-            let mut all_ops: IndexMap<
-                (ModuleSource, String, String),
-                (Vec<TypeId>, Option<TypeId>),
+            let mut all_consts: IndexMap<
+                (ModuleSource, String),
+                (ModuleSource, TypeId, crate::ast::Expr),
             > = IndexMap::default();
-            for module_source in &sorted_sources {
-                if let Some(sem) = state.module_semantics.get(module_source) {
-                    for ((effect, op), sig) in &sem.decls.effect_op_sigs {
-                        all_ops.insert(
-                            (module_source.clone(), effect.clone(), op.clone()),
-                            sig.clone(),
-                        );
-                    }
-                }
-            }
-            state.tysys.all_effect_op_sigs = Rc::new(all_ops);
+            let mut all_ops: IndexMap<
+                ModuleSource,
+                IndexMap<(String, String), (Vec<TypeId>, Option<TypeId>)>,
+            > = IndexMap::default();
             let mut all_fn_sigs: IndexMap<
                 ModuleSource,
-                IndexMap<String, super::sem::decls::FunctionSig>,
+                Rc<IndexMap<String, super::sem::decls::FunctionSig>>,
             > = IndexMap::default();
-            for module_source in &sorted_sources {
-                if let Some(sem) = state.module_semantics.get(module_source) {
-                    all_fn_sigs.insert(module_source.clone(), sem.decls.function_sigs.clone());
-                }
-            }
-            state.tysys.all_function_sigs = Rc::new(all_fn_sigs);
             let mut all_globals: IndexMap<ModuleSource, IndexMap<String, (TypeId, bool)>> =
                 IndexMap::default();
             for module_source in &sorted_sources {
-                if let Some(sem) = state.module_semantics.get(module_source) {
-                    all_globals.insert(
-                        module_source.clone(),
-                        sem.decls.current_module_globals.clone(),
-                    );
-                }
-            }
-            state.tysys.all_globals = Rc::new(all_globals);
-            // Aliases read the *source module's* own map, not the assembled
-            // one: two modules may declare a same-key constant (the bare key
-            // collides in the assembled map, last-in-topo wins), yet each
-            // namespace alias must still reach its own module's constant.
-            // All reads complete before any alias is inserted, so an alias
-            // never aliases another module's alias entries.
-            let per_module_aliases: Vec<(
-                ModuleSource,
-                Vec<(String, (ModuleSource, TypeId, crate::ast::Expr))>,
-            )> = sorted_sources
-                .iter()
-                .filter_map(|module_source| {
-                    let sem = state.module_semantics.get(module_source)?;
-                    let aliases: Vec<_> = sem
-                        .imports
-                        .namespace_imports
-                        .iter()
-                        .filter_map(|(ns, ns_src)| {
-                            let src_sem = state.module_semantics.get(ns_src)?;
-                            Some((ns, &src_sem.decls.associated_constants))
-                        })
-                        .flat_map(|(ns, consts)| {
-                            consts.iter().map(|(key, value)| {
-                                (crate::name::namespace_member_alias(ns, key), value.clone())
-                            })
-                        })
-                        .collect();
-                    (!aliases.is_empty()).then(|| (module_source.clone(), aliases))
-                })
-                .collect();
-            for (module_source, aliases) in per_module_aliases {
-                let Some(sem) = state.module_semantics.get_mut(&module_source) else {
+                let Some(sem) = state.module_semantics.get(module_source) else {
                     continue;
                 };
-                for (key, value) in aliases {
-                    sem.decls.associated_constants.insert(key, value);
+                for (key, value) in &sem.decls.associated_constants {
+                    all_consts.insert(key.clone(), value.clone());
                 }
+                all_ops.insert(module_source.clone(), sem.decls.effect_op_sigs.clone());
+                all_fn_sigs.insert(module_source.clone(), Rc::clone(&sem.decls.function_sigs));
+                all_globals.insert(
+                    module_source.clone(),
+                    sem.decls.current_module_globals.clone(),
+                );
             }
+            state.tysys.all_associated_constants = Rc::new(all_consts);
+            state.tysys.all_effect_op_sigs = Rc::new(all_ops);
+            state.tysys.all_function_sigs = Rc::new(all_fn_sigs);
+            state.tysys.all_globals = Rc::new(all_globals);
         }
 
         // Phase 1b — `annotate_bodies`: run the body walk over every user
@@ -1571,7 +1461,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::module_elaborator(state, sem, symbols, modules, logger, &entry_module_source);
             logger.set_file(module_source.source_path());
 
+            let errors_before = logger.error_count();
             let resolve_result = elaborator.annotate_module_bodies(module, module_source.clone());
+            let module_walk_clean = logger.error_count() == errors_before;
             let saved_sem = elaborator.sem;
             // Re-install the (now-populated) `ModuleSemantics` even on bail
             // so the LSP can answer cursor queries against whatever bindings
@@ -1580,13 +1472,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .module_semantics
                 .insert(module_source.clone(), saved_sem);
 
-            // Eligible for reify (Phase 2) when the body walk succeeded and
-            // the AST is well-formed. A module with recovered syntax errors is
-            // skipped: its TIR is never consumed (the batch path bails on
-            // `!is_complete()`, the LSP path reads only Phase 1 facts), and
-            // skipping keeps reify off `Error` placeholder nodes while Phase 1
-            // still recorded the use→def edges the LSP needs.
-            if build_tir && resolve_result.is_ok() && !module.has_syntax_errors() {
+            // Eligible for reify (Phase 2) when THIS module's decl pass and
+            // body walk logged no errors and the AST is well-formed. The gate
+            // is per-module (an error-count delta), not the cumulative
+            // logger state — an unrelated module's error must not stop a
+            // clean module from reifying. A module with recovered syntax
+            // errors is skipped: its TIR is never consumed (the batch path
+            // bails on `!is_complete()`, the LSP path reads only Phase 1
+            // facts), and skipping keeps reify off `Error` placeholder nodes
+            // while Phase 1 still recorded the use→def edges the LSP needs.
+            let _ = resolve_result;
+            if build_tir
+                && module_walk_clean
+                && !decl_failed.contains(module_source)
+                && !module.has_syntax_errors()
+            {
                 reify_eligible.insert(module_source.clone());
             }
         }

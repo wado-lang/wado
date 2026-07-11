@@ -151,57 +151,74 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Run `body` with `trait_ctx.self_type` overridden to `self_type` when
-    /// it is `Some`; keep the current `Self` otherwise. The previous value
-    /// is restored on return, panic-safe.
-    pub(super) fn with_self_type_override<R>(
+    /// Run `body` with the scope field selected by `field` set to `value`;
+    /// the previous value is restored on return, panic-safe. The shared
+    /// guard behind every `with_*` scope helper below.
+    fn with_scope_field<T, R>(
         &mut self,
-        self_type: Option<TypeId>,
+        field: fn(&mut Scope) -> &mut T,
+        value: T,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        struct Restore<'r, 'a, H: CompilerHost> {
+        struct Restore<'r, 'a, H: CompilerHost, T> {
             elaborator: &'r mut Elaborator<'a, H>,
-            saved: Option<TypeId>,
+            field: fn(&mut Scope) -> &mut T,
+            saved: Option<T>,
         }
-        impl<H: CompilerHost> Drop for Restore<'_, '_, H> {
+        impl<H: CompilerHost, T> Drop for Restore<'_, '_, H, T> {
             fn drop(&mut self) {
-                self.elaborator.annotate_ctx.trait_ctx.self_type = self.saved;
+                *(self.field)(&mut self.elaborator.annotate_ctx) =
+                    self.saved.take().expect("saved scope value present");
             }
         }
-        let saved = self.annotate_ctx.trait_ctx.self_type;
-        if let Some(ty) = self_type {
-            self.annotate_ctx.trait_ctx.self_type = Some(ty);
-        }
+        let saved = std::mem::replace(field(&mut self.annotate_ctx), value);
         let guard = Restore {
             elaborator: self,
-            saved,
+            field,
+            saved: Some(saved),
         };
         body(guard.elaborator)
     }
 
+    /// Run `body` with `trait_ctx.self_type` set to `self_type`; the
+    /// previous `Self` is restored on return, panic-safe.
+    pub(super) fn with_self_type<R>(
+        &mut self,
+        self_type: TypeId,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        self.with_scope_field(
+            |scope| &mut scope.trait_ctx.self_type,
+            Some(self_type),
+            body,
+        )
+    }
+
+    /// Run `body` with `Self` overridden to `self_type` when it is known
+    /// (`Some`); with `None` the current `Self` stays in place — this
+    /// helper never clears `Self`. Used by dispatch paths whose receiver
+    /// type may be unresolved.
+    pub(super) fn with_self_type_if_known<R>(
+        &mut self,
+        self_type: Option<TypeId>,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        match self_type {
+            Some(ty) => self.with_self_type(ty, body),
+            None => body(self),
+        }
+    }
+
     /// Run `body` with [`Scope::default_scope_module`] replaced by `module`
-    /// (including `None`, which clears the fallback). The previous value is
-    /// restored on return, panic-safe.
+    /// (including `None`, which clears the fallback — unlike
+    /// [`Self::with_self_type_if_known`], `None` here is a value, not
+    /// "keep"). The previous value is restored on return, panic-safe.
     pub(super) fn with_default_scope_module<R>(
         &mut self,
         module: Option<ModuleSource>,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        struct Restore<'r, 'a, H: CompilerHost> {
-            elaborator: &'r mut Elaborator<'a, H>,
-            saved: Option<ModuleSource>,
-        }
-        impl<H: CompilerHost> Drop for Restore<'_, '_, H> {
-            fn drop(&mut self) {
-                self.elaborator.annotate_ctx.default_scope_module = std::mem::take(&mut self.saved);
-            }
-        }
-        let saved = std::mem::replace(&mut self.annotate_ctx.default_scope_module, module);
-        let guard = Restore {
-            elaborator: self,
-            saved,
-        };
-        body(guard.elaborator)
+        self.with_scope_field(|scope| &mut scope.default_scope_module, module, body)
     }
 
     /// Register a list of generic parameters as `TypeParam` / `TypePack` ids

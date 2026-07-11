@@ -2301,7 +2301,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Resolve the signature in the impl's module (see the
             // `assoc_bindings` note above): the return / param types may name
             // types private to that module.
-            let (return_type, param_types) = scope.with_self_type_override(receiver_type_id, |s| {
+            let (return_type, param_types) = scope.with_self_type_if_known(receiver_type_id, |s| {
                 s.with_module_perspective_for(&impl_module_source, |s| {
                     let return_type = return_type_ast
                         .as_ref()
@@ -2404,7 +2404,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             param_is_mut,
                             param_defaults,
                             param_names,
-                        ) = scope.with_self_type_override(receiver_type_id, |s| {
+                        ) = scope.with_self_type_if_known(receiver_type_id, |s| {
                             // Bind the trait's own type parameters to the impl's
                             // concrete trait args so that a default method's
                             // return/param types written in terms of the trait's
@@ -2918,7 +2918,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .find(|p| p.self_kind == ast::SelfKind::None)
                     .map(|p| p.ty.clone());
 
-                let (output_type, rhs_type) = s.with_self_type_override(Some(base_type_id), |s| {
+                let (output_type, rhs_type) = s.with_self_type(base_type_id, |s| {
                     // Process associated types (e.g., `type Output = Self`)
                     let mut assoc_type_map: IndexMap<String, TypeId> = IndexMap::default();
                     for (name, ty) in &assoc_types {

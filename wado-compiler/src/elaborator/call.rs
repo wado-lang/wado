@@ -1474,7 +1474,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .clone();
         self.tysys
             .all_effect_op_sigs
-            .get(&(module_source, canonical_key.1, operation.to_string()))
+            .get(&module_source)?
+            .get(&(canonical_key.1, operation.to_string()))
             .cloned()
     }
 
@@ -1524,26 +1525,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Vec::new();
         }
 
-        // Check if it's a local function (defined in this module)
-        if self.sem.decls.function_return_types.contains_key(name) {
-            // Clone params and type_params to avoid borrow issues
-            let func_info: Option<(Vec<ast::Param>, Vec<ast::GenericParam>)> = self
-                .lookup_current_func(name)
-                .map(|func| (func.params.clone(), func.type_params.clone()));
-
-            if let Some((params, type_params)) = func_info {
-                // Set up the callee's generic-param scope before resolving
-                // its parameter types (`install_effect_params` runs before
-                // `register_generic_params` per its contract).
-                let mut scope = self.enter_inherited_type_param_scope();
-                scope.annotate_ctx.trait_ctx.type_params.clear();
-                scope
-                    .annotate_ctx
-                    .trait_ctx
-                    .install_effect_params(&type_params);
-                scope.register_generic_params(&type_params, 0);
-                return params.iter().map(|p| scope.resolve_type(&p.ty)).collect();
-            }
+        // Local function (defined in this module): same canonical
+        // signature path as imported callees.
+        if let Some(sig) = self.tysys.function_sig(&self.current_module_source, name) {
+            return sig.param_types.clone();
         }
 
         // Check imported functions — the canonical signature is resolved
@@ -1656,17 +1641,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(defaults) = ctx.closure_defaults.get(&ident.name) {
             return (defaults.clone(), None);
         }
-        if self
-            .sem
-            .decls
-            .function_return_types
-            .contains_key(&ident.name)
-            && let Some(func) = self.lookup_current_func(&ident.name)
+        if let Some(sig) = self
+            .tysys
+            .function_sig(&self.current_module_source, &ident.name)
         {
             return (
-                func.params
+                sig.param_names
                     .iter()
-                    .map(|p| (p.name.clone(), p.default.clone()))
+                    .cloned()
+                    .zip(sig.param_defaults.iter().cloned())
                     .collect(),
                 Some(self.current_module_source.clone()),
             );
@@ -1703,15 +1686,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Vec::new();
         }
 
-        // Local function
-        if self
-            .sem
-            .decls
-            .function_return_types
-            .contains_key(&ident.name)
-            && let Some(func) = self.lookup_current_func(&ident.name)
+        // Local function: same canonical signature path as imported callees.
+        if let Some(sig) = self
+            .tysys
+            .function_sig(&self.current_module_source, &ident.name)
         {
-            return func.params.iter().map(|p| p.is_mut).collect();
+            return sig.param_is_mut.clone();
         }
 
         // Imported function
@@ -2209,7 +2189,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         callee: &CalleeRef,
     ) -> Option<(Vec<(String, TypeId)>, Vec<TypeId>, Option<TypeId>)> {
         let sig = self.tysys.function_sig(&callee.module, &callee.name)?;
-        if sig.type_params.iter().all(|p| p.is_effect) {
+        if sig.type_param_ids.is_empty() {
             return Some((vec![], vec![], None));
         }
         Some((

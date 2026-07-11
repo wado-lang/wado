@@ -136,16 +136,16 @@ pub(crate) struct TypeSystem {
     /// afterwards.
     pub(crate) loaded_module_func_indices: Rc<IndexMap<ModuleSource, IndexMap<String, usize>>>,
 
-    /// Program-wide impl-associated constants, keyed `Type::NAME` →
-    /// `(defining module, declared type, value expr)`. Each module's decl
-    /// pass resolves its own constants (stdlib entries come from the
-    /// snapshot); the driver assembles this map once between the decl and
-    /// body passes, in module topological order (later modules win a key
-    /// collision, matching the previous per-module scan order). Lookups go
-    /// through `lookup_associated_constant`, which consults the per-module
-    /// map (own constants + namespace aliases) first so a module's own
-    /// constant shadows a same-key foreign one.
-    pub(crate) all_associated_constants: Rc<IndexMap<String, (ModuleSource, TypeId, Expr)>>,
+    /// Program-wide impl-associated constants, keyed by canonical identity
+    /// `(type-declaring module, "Type::CONST")` → `(impl-declaring module,
+    /// declared type, value expr)`. Each module's decl pass canonicalizes and
+    /// resolves its own constants (stdlib entries come from the snapshot);
+    /// the driver merges the per-module maps between the decl and body
+    /// passes. Canonical keys cannot collide across modules, so lookups
+    /// need no shadowing rules — see `lookup_associated_constant` on the
+    /// walkers, which canonicalize the queried prefix the same way.
+    pub(crate) all_associated_constants:
+        Rc<IndexMap<(ModuleSource, String), (ModuleSource, TypeId, Expr)>>,
 
     /// Program-wide interface / resource operation signatures, keyed
     /// `(declaring module, decl name, op name)` → `(param types, return
@@ -153,14 +153,14 @@ pub(crate) struct TypeSystem {
     /// declaring perspective; the driver assembles this map between the
     /// decl and body passes. Read by `resolve_effect_op_signature`.
     pub(crate) all_effect_op_sigs:
-        Rc<IndexMap<(ModuleSource, String, String), (Vec<TypeId>, Option<TypeId>)>>,
+        Rc<IndexMap<ModuleSource, IndexMap<(String, String), (Vec<TypeId>, Option<TypeId>)>>>,
 
     /// Program-wide canonical free-function signatures (see
     /// [`super::sem::decls::FunctionSig`]), keyed declaring module →
     /// function name. Assembled by the driver between the decl and body
     /// passes from each module's `ModuleDecls::function_sigs`.
     pub(crate) all_function_sigs:
-        Rc<IndexMap<ModuleSource, IndexMap<String, super::sem::decls::FunctionSig>>>,
+        Rc<IndexMap<ModuleSource, Rc<IndexMap<String, super::sem::decls::FunctionSig>>>>,
 
     /// Program-wide global-variable declarations, keyed declaring module →
     /// global name → `(declared type, is_mut)`. Assembled by the driver

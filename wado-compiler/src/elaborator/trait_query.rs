@@ -64,6 +64,30 @@ impl StructuralMember<'_> {
     }
 }
 
+/// Canonical identity of an associated-constant key: split the use-site
+/// `Type::CONST` spelling at its first `::`, canonicalize the type prefix
+/// via [`canonical_decl_key_with`], and rebuild the key with the canonical
+/// type name. Returns `None` for keys with no `::` (never a constant key).
+/// Shared by the annotate walk and reify so both resolve a constant to the
+/// same identity.
+pub(super) fn canonical_assoc_const_key(
+    key: &str,
+    current_module_source: &ModuleSource,
+    imports: &super::sem::ModuleImports,
+    symbols: &crate::symbol::SymbolTable,
+    trait_env: &super::trait_env::TraitEnv,
+) -> Option<(ModuleSource, String)> {
+    let (prefix, _) = key.split_once("::")?;
+    let (type_module, canon_name) =
+        canonical_decl_key_with(prefix, current_module_source, imports, symbols, trait_env);
+    let canon_key = if canon_name == prefix {
+        key.to_string()
+    } else {
+        format!("{}{}", canon_name, &key[prefix.len()..])
+    };
+    Some((type_module, canon_key))
+}
+
 /// Free-function form of [`Elaborator::canonical_decl_key`], callable from
 /// any module that has the inputs in hand. Reify uses this for trait
 /// default-method synthesis (it has no `Elaborator` instance but does carry

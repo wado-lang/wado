@@ -28,12 +28,16 @@ use super::super::types::{EnumInfo, FlagsInfo, GenericNewtypeInfo, StructFieldIn
 /// into this frame; they never re-resolve the signature AST.
 #[derive(Clone)]
 pub(crate) struct FunctionSig {
-    /// The declared generic parameters (incl. effect / fn-bound params).
-    pub(crate) type_params: Vec<ast::GenericParam>,
     /// Registered `(name, TypeId)` pairs, in registration order — real
     /// params as `TypeParam` slots, fn-bound params as their realised
     /// function type. Effect params are excluded (their own channel).
+    /// Empty iff the function declares only effect params (or none).
     pub(crate) type_param_ids: Vec<(String, TypeId)>,
+    /// The real (non-effect, non-fn-bound) subset of `type_param_ids` —
+    /// the positional `TypeParam` slots substituted by explicit or
+    /// inferred type arguments, and the rows of the generic-inference
+    /// caches.
+    pub(crate) real_type_params: Vec<(String, TypeId)>,
     /// Parameter types in declaration order.
     pub(crate) param_types: Vec<TypeId>,
     pub(crate) param_names: Vec<String>,
@@ -48,13 +52,31 @@ pub(crate) struct FunctionSig {
     pub(crate) effects: Vec<crate::tir::EffectRef>,
 }
 
+impl ModuleDecls {
+    /// Carry a snapshot module's decl digests into this compile's
+    /// `ModuleSemantics`. The field list lives here, next to the fields —
+    /// the driver's program-wide assembly merges the same set, so a digest
+    /// added to this method is automatically both snapshot-seeded and
+    /// merged; one missed here would silently lose stdlib facts on
+    /// snapshot-hit builds only.
+    pub(crate) fn clone_digests_from(&mut self, other: &ModuleDecls) {
+        self.associated_constants
+            .clone_from(&other.associated_constants);
+        self.effect_op_sigs.clone_from(&other.effect_op_sigs);
+        self.function_sigs = std::rc::Rc::clone(&other.function_sigs);
+        self.current_module_globals
+            .clone_from(&other.current_module_globals);
+    }
+}
+
 /// Per-module declaration tables produced by elaboration.
 #[derive(Default, Clone)]
 pub(crate) struct ModuleDecls {
     /// Canonical signatures of this module's own free functions, recorded
-    /// by the decl pass. The driver assembles the program-wide view
-    /// (`TypeSystem::all_function_sigs`) between the decl and body passes.
-    pub(crate) function_sigs: IndexMap<String, FunctionSig>,
+    /// by the decl pass and frozen behind `Rc` — the driver's program-wide
+    /// assembly (`TypeSystem::all_function_sigs`) and the stdlib-snapshot
+    /// seeding both share the map instead of deep-cloning every signature.
+    pub(crate) function_sigs: std::rc::Rc<IndexMap<String, FunctionSig>>,
     /// `func_name → return TypeId` for functions defined in this module.
     pub(crate) function_return_types: IndexMap<String, TypeId>,
     /// Names visible via `use` declarations in this module (the union of
@@ -66,19 +88,18 @@ pub(crate) struct ModuleDecls {
     /// `local_name → (source, original_name, TypeId, is_mut)` for globals
     /// brought in by `use`.
     pub(crate) imported_globals: IndexMap<String, (ModuleSource, String, TypeId, bool)>,
-    /// `"Type::CONST" → (defining module, resolved type, expr)`. Inlined at
-    /// every use site during resolution. Built from impl blocks across all
-    /// loaded modules plus this module's own impls. The `ModuleSource` records
-    /// which module the `expr` body's AST nodes belong to: `AstId`s are
-    /// only unique within a module, so reify must reify the body under that
-    /// module's perspective (its `ModuleSemantics`) rather than the use
-    /// site's, or a colliding `AstId` would mis-type the inlined constant.
-    ///
-    /// The type is resolved once at population time (`Elaborator::resolve_module`)
-    /// so reify and the combined walk both read the same `TypeId` without
-    /// re-running `resolve_type` at every use site.
+    /// This module's own impl-associated constants, keyed by the constant's
+    /// canonical identity: `(type-declaring module, "Type::CONST")`, with the
+    /// impl target's prefix canonicalized in this module's scope
+    /// ([`super::super::Elaborator::canonical_decl_key`]). The value carries
+    /// the impl-declaring module (reify walks the value expr under that
+    /// perspective), the resolved const type, and the value expression
+    /// (irreducibly AST). The driver merges every module's map into
+    /// `TypeSystem::all_associated_constants` between the decl and body
+    /// passes; canonical keys make cross-module collisions impossible, so
+    /// no shadowing or alias registration is needed.
     pub(crate) associated_constants:
-        IndexMap<String, (crate::module_source::ModuleSource, TypeId, ast::Expr)>,
+        IndexMap<(ModuleSource, String), (ModuleSource, TypeId, ast::Expr)>,
     /// This module's own interface / resource operation signatures,
     /// keyed `(decl name, op name)`, resolved once by the decl pass in the
     /// declaring perspective. The driver assembles the program-wide view

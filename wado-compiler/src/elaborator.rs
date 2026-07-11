@@ -976,39 +976,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.local_types.insert(def_id, type_id);
     }
 
-    /// Look up an impl-associated constant by its `Type::NAME` key (or a
-    /// `ns$Type::NAME` namespace alias). The current module's own map —
-    /// its constants plus its namespace aliases — wins over the shared
-    /// program-wide map, so a module's own constant shadows a same-key
-    /// foreign one.
+    /// Look up an impl-associated constant by its use-site `Type::NAME`
+    /// spelling (aliased and `ns$Type` namespaced prefixes included). The
+    /// prefix is canonicalized in the current module's scope and the merged
+    /// program-wide map is consulted under the resulting
+    /// `(type-declaring module, canonical key)` identity, so a same-named
+    /// type in an unrelated module can never satisfy the lookup.
     pub(super) fn lookup_associated_constant(
         &self,
         key: &str,
     ) -> Option<(ModuleSource, TypeId, ast::Expr)> {
-        self.sem
-            .decls
-            .associated_constants
-            .get(key)
-            .or_else(|| self.tysys.all_associated_constants.get(key))
+        let (type_module, canon_key) = trait_query::canonical_assoc_const_key(
+            key,
+            &self.current_module_source,
+            &self.sem.imports,
+            self.symbols,
+            &self.tysys.trait_env,
+        )?;
+        self.tysys
+            .all_associated_constants
+            .get(&(type_module, canon_key))
             .cloned()
-    }
-
-    /// Look up a function by name in current module items.
-    ///
-    /// Consults [`tysys::TypeSystem::loaded_module_func_indices`] — the
-    /// per-module name→item-index map built once during annotate — to
-    /// avoid rebuilding the index at every `resolve_module` call.
-    fn lookup_current_func(&self, func_name: &str) -> Option<&ast::Function> {
-        let idx_map = self
-            .tysys
-            .loaded_module_func_indices
-            .get(&self.current_module_source)?;
-        let &idx = idx_map.get(func_name)?;
-        if let Item::Function(func) = &self.current_module_items[idx] {
-            Some(func)
-        } else {
-            None
-        }
     }
 
     pub(super) fn lookup_struct_fields_in(
@@ -1435,12 +1423,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // constant's declared type once in the declaring module's
         // perspective (assoc-const types are primitive or `Self`-substituted
         // and resolve uniformly, so consumers can reuse the `TypeId`
-        // as-is). The cross-module view is assembled by the driver after
-        // the decl pass ([`tysys::TypeSystem::all_associated_constants`],
-        // which also registers the `ns$Type::CONST` namespace aliases);
-        // lookups go through [`Self::lookup_associated_constant`].
+        // as-is). Each constant is keyed by its canonical identity — the
+        // impl target's prefix canonicalized here, in the declaring scope —
+        // so the driver-merged `TypeSystem::all_associated_constants` cannot
+        // collide across same-named types. Lookups canonicalize the queried
+        // prefix the same way ([`Self::lookup_associated_constant`]).
         self.sem.decls.associated_constants.clear();
-        let assoc_const_inputs: Vec<(String, ast::Type, ast::Expr)> = module
+        let assoc_const_inputs: Vec<(String, String, ast::Type, ast::Expr)> = module
             .items
             .iter()
             .filter_map(|item| {
@@ -1457,7 +1446,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .iter()
                     .map(move |assoc_const| {
                         (
-                            MethodName::format_local(&type_name, None, &assoc_const.name),
+                            type_name.clone(),
+                            assoc_const.name.clone(),
                             assoc_const.ty.clone(),
                             assoc_const.value.clone(),
                         )
@@ -1465,12 +1455,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .collect::<Vec<_>>()
             })
             .collect();
-        for (key, ty, value) in assoc_const_inputs {
+        for (type_name, const_name, ty, value) in assoc_const_inputs {
             let type_id = self.resolve_type(&ty);
-            self.sem
-                .decls
-                .associated_constants
-                .insert(key, (module_source.clone(), type_id, value));
+            let (type_module, canon_type_name) = self.canonical_decl_key(&type_name);
+            let canon_key = MethodName::format_local(&canon_type_name, None, &const_name);
+            self.sem.decls.associated_constants.insert(
+                (type_module, canon_key),
+                (module_source.clone(), type_id, value),
+            );
         }
 
         // Resolve this module's interface / resource operation signatures
@@ -1515,10 +1507,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // later in the file) to infer type arguments at the call site
         // during body resolution, without relying on a later
         // monomorphization-time fallback.
-        self.sem.decls.function_sigs.clear();
+        let mut function_sigs: IndexMap<String, sem::decls::FunctionSig> = IndexMap::default();
         for item in &module.items {
             if let Item::Function(func) = item {
-                self.record_function_sig(func);
+                let sig = self.record_function_sig(func);
+                function_sigs.insert(func.name.clone(), sig);
+            }
+        }
+        self.sem.decls.function_sigs = Rc::new(function_sigs);
+        for item in &module.items {
+            if let Item::Function(func) = item {
                 self.precompute_generic_function_cache(func);
             }
         }
