@@ -263,10 +263,10 @@ fn git_dependency_materializes_submodules_by_default() {
         .join(".worktrees");
     let entry = fs::read_dir(&worktrees)
         .unwrap()
-        .next()
-        .expect("a worktree exists")
-        .unwrap()
-        .path();
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .find(|p| p.is_dir())
+        .expect("a worktree exists");
     let token = entry.join("vendor/sub/token.txt");
     assert!(
         token.is_file(),

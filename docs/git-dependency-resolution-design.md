@@ -248,152 +248,26 @@ deleted out from under the clone (by `wado clean` or by hand) is reconciled by
 second process never races a partial tree — it waits, then sees either a good
 worktree or repairs the leftover.
 
-## Layer-by-layer changes
+## Implementation
 
-### 1. Manifest: parse `directory`
+Where each piece lives (see the code for detail):
 
-`RawDependency` gains `directory: Option<String>`. `DependencySource::Git`
-gains `directory: Option<String>`:
+| Concern                             | Location                                                            |
+| ----------------------------------- | ------------------------------------------------------------------- |
+| `directory` field, `deps_hash`      | `wado-manifest/src/manifest.rs`                                     |
+| Cache path layout (pure)            | `wado-manifest::cache::git_repo_relative` / `git_worktree_relative` |
+| Resolver git arm                    | `wado-manifest/src/resolve.rs` (PubGrub prefetch + solve)           |
+| Provider git methods (in-memory)    | `wado-manifest/src/provider.rs`                                     |
+| System-`git` backend + worktrees    | `wado-cli/src/git.rs`                                               |
+| Offline index git arm               | `wado_lsp::host::dependency_index_from` / `git_dependency_entry`    |
+| Wado-root config (`WADO_ROOT`/XDG)  | `wado-cli/src/cache.rs::init_root_from_config`                      |
+| `fetch` materialize / `clean` GC    | `wado-cli/src/fetch.rs`, `wado-cli/src/clean.rs`                    |
+| Inline `with { git }` (single-file) | `wado-cli/src/dep_component.rs::resolve_inline_git_dependencies`    |
 
-```rust
-Git { url: String, pin: GitPin, directory: Option<String> },
-```
-
-- `build_git_source` reads `raw.directory`.
-- `directory` is only meaningful with `git`; combining it with a non-git
-  source is a `ConflictingSource` error.
-- `source_fingerprint` includes `directory` so `deps_hash` (lock staleness)
-  changes when the subdirectory changes:
-  `git|{url}|{version|ref}|{pin}|dir={directory?}`.
-
-Path-with-git publish source (`{ path = …, git = …, version = … }`) carries
-`directory` through to its `publish_source` git arm.
-
-### 2. Cache path helper (pure, shared)
-
-Add to `wado_manifest::cache` (pure string logic, no I/O — shared by the CLI
-that fetches and the LSP that reads offline), alongside
-`registry_cache_relative`. Two paths: the canonical clone and the per-version
-worktree.
-
-```rust
-pub fn git_repo_relative(url: &str) -> Option<String>;
-// → "{host}/{owner}/{repo}"                                      (canonical clone / ghq path)
-
-pub fn git_worktree_relative(url: &str, version: &str, resolved_ref: &str) -> Option<String>;
-// → "{host}/{owner}/{repo}/.worktrees/{version}-{short-ref}"     (short-ref = first 8 hex of the SHA)
-```
-
-URL parsing normalizes `https://`, `git@host:owner/repo`, and a trailing
-`.git`/`/` into `host/owner/repo`. `directory` is **not** part of either path —
-it selects the entry _within_ the worktree, and two subdirectory packages of one
-monorepo at the same commit deliberately share one worktree. Returns `None` for
-an unparseable URL.
-
-Wire concrete `PathBuf`s in `wado-cli/src/cache.rs` (`git_repo_path(url)`,
-`git_worktree_path(url, version, resolved_ref)`), matching the existing
-`component_path` / `generator_path` helpers.
-
-### 3. Resolver: the git arm
-
-Remove the `UnsupportedSource { kind: "git" }` branch. Add a git arm to the
-`resolve` loop that parallels the registry arm:
-
-1. Pick the commit:
-   - `GitPin::Version(req)`: `list_git_tags` → filter by the semver
-     requirement → highest → its SHA. No match → `NoMatchingVersion`.
-   - `GitPin::Ref(r)`: `resolve_git_ref(url, r)` → SHA.
-2. `fetch_git_manifest(url, sha, directory)` → the package's own manifest.
-3. Determine the locked version:
-   - version pin → the chosen tag's semver;
-   - ref pin → the fetched manifest's `[package].version`.
-4. Compute the lock id `git+{url}/{coordinate}` (coordinate = the dependency
-   key's `ns:pkg`; matches the `LockFile` roundtrip test's shape).
-5. **Traverse transitive deps** from the fetched manifest — enqueue its
-   `[dependencies]` (registry, path, and nested git) just as the registry arm
-   enqueues children. This is the key behavioral gap vs registry deps, whose
-   manifests are empty.
-6. Emit `LockedPackage { id, version, resolved_ref: Some(sha),
-   integrity: None, world: <from manifest>, deps }`.
-
-De-duplication/conflict keys on the id, same as registry: a second requirement
-on the same git id that disagrees on the resolved ref is a `VersionConflict`.
-
-### 4. Lockfile
-
-No schema change — `git+…` ids and `resolved-ref` already round-trip. The git
-arm simply populates `resolved_ref: Some(sha)` and leaves `integrity: None`.
-The immutable commit SHA _is_ the integrity anchor for git deps.
-
-### 5. Compiler wiring: `dependency_index_from`
-
-Replace the `DependencySource::Git { .. } => {}` no-op in
-`wado_lsp::host::dependency_index_from` with a git arm, mirroring the path arm
-but resolving the entry against the cache checkout:
-
-1. Read the git dep's `resolved_ref` and `version` from `wado.lock`
-   (a `locked_git_refs(manifest_dir)` helper next to
-   `locked_registry_versions`).
-2. `cache_root().join(git_worktree_relative(url, version, sha))` → worktree dir.
-3. Entry = `dependency_entry_path(worktree/directory)` — the existing helper
-   that reads `[package].lib` (honoring `directory`, defaulting to the repo
-   root).
-4. Present on disk → `index.resolved.insert(name, relative_path)`; missing →
-   `index.unresolved.insert(name, "… not cached; run`wado fetch`")`, matching
-   the registry cold-cache path.
-
-This makes every entry point that already consumes `dependency_index_from`
-(`build`, `run`, `serve`, `test`, `check`, `query`, and the `wado lsp` server)
-resolve git deps offline from a warm cache with no further per-command work.
-
-### 6. `FilesystemProvider` (CLI)
-
-Implement the three git methods via the git shell-out described above. Resolution
-methods stay checkout-free: `fetch_git_manifest` ensures the canonical clone and
-the commit's objects, then reads the manifest from a blob
-(`git show <sha>:<directory>/wado.toml`). Materialization (`git worktree add`)
-is a separate step invoked only by `wado fetch` / `build`.
-
-### 7. CLI commands
-
-- **`wado update`**: no code change beyond the resolver — the git arm now
-  produces git lock entries, so `wado.lock` gains `[[package]]` rows with
-  `resolved-ref`.
-- **`wado fetch`**: add a git branch to the fetch loop. Registry deps pull a
-  component; git deps materialize a worktree into the cache. Both are idempotent
-  and warm-cache-skipping.
-- **`build`/`run`/`serve`/`test`/`check`/`query`/`lsp`**: unchanged — they
-  consume the index seam.
-
-### `wado clean`
-
-A new subcommand that evicts derived cache state — the natural GC for git
-worktrees, which are reproducible from the lock:
-
-- Removes every `{owner}/{repo}/.worktrees/` directory under the cache root and
-  runs `git worktree prune` on each affected canonical clone to drop stale admin
-  entries. Safe because a subsequent `wado fetch` rebuilds any worktree from its
-  locked SHA.
-- Leaves the canonical clones (the shared object stores) in place by default, so
-  a re-materialize needs no network. A `--all` flag additionally removes the
-  clones and the fetched registry components.
-
-The command scans the cache only; it needs no project context (mirroring
-`wado list`). Registry components can share the same eviction pass.
-
-### DependencyProvider trait changes
-
-One adjustment, cheap because git is not yet wired at the CLI:
-
-- `fetch_git_manifest(url, sha, directory: Option<&str>)` — the transitive
-  manifest lives at the subdirectory, so the resolver must pass it. The
-  in-memory provider keys its stored manifests to match.
-
-Materialization needs no new trait method: it is a CLI-only concern
-(`wado fetch` / `build`) and the compiler-side index recomputes the worktree
-path purely from the lock via `git_worktree_relative`. The provider trait stays
-`wasm32`-compatible — the shell-out lives only in the CLI impl; the in-memory
-impl stays pure.
+`wado clean` evicts derived state: it removes every `{owner}/{repo}/.worktrees/`
+directory and runs `git worktree prune`, leaving the canonical clones and
+registry components unless `--all` is given. Safe because a worktree is
+reproducible from its locked SHA.
 
 ## Reproducibility, offline, integrity
 
@@ -405,67 +279,19 @@ impl stays pure.
 - These land with the Phase 3 `--locked`/`--offline`/`--frozen` flags; git deps
   need no special-casing beyond honoring them.
 
-## Testing (TDD)
+## Tests
 
-- **Resolver** (red first): the in-memory provider already supports git, so
-  replace `git_source_is_not_yet_supported` with tests that resolve a
-  version-pinned and a ref-pinned git dep, verify `resolved_ref`, and verify a
-  transitive dep of a git dep is locked. No new test infrastructure.
-- **Cache path**: unit-test `git_repo_relative` / `git_worktree_relative` like
-  `registry_cache_relative` (https/ssh/`.git` URL forms, short-ref truncation,
-  the `.worktrees/{version}-{short-ref}` nested suffix).
-- **Manifest**: `directory` parses onto `DependencySource::Git`; `deps_hash`
-  changes with `directory`.
-- **Provider shell-out** (e2e): create a throwaway repo with `git init` in a
-  `tempdir`, tag it, and drive `list_git_tags`/`resolve_git_ref`/
-  materialization against a `file://` URL — no network.
-- **End-to-end**: an `example/` project depending on a small git repo that
-  `update` → `fetch` → `run` builds and executes, round-tripping a value
-  through the git-sourced library (mirrors `example/hello-packages`).
-
-## Work breakdown
-
-1. Manifest `directory` field (`DependencySource::Git`, `RawDependency`,
-   `source_fingerprint`, validation) + tests.
-2. `wado_manifest::cache::git_repo_relative` / `git_worktree_relative` +
-   `wado-cli` `git_repo_path` / `git_worktree_path` + tests.
-3. Resolver git arm (against the in-memory provider), transitive traversal,
-   remove `UnsupportedSource{git}` + red/green tests.
-4. `FilesystemProvider` git methods via `git` shell-out: canonical clone,
-   fetch, blob-read for resolution, `worktree add` for materialization, per-repo
-   file lock + e2e tests.
-5. `dependency_index_from` git arm + `locked_git_refs` lock reader.
-6. Wado-root resolver: `WADO_ROOT` env → `$XDG_CONFIG_HOME/wado/config.toml`
-   `root` → `~/wado`, in the shared `cache_root()` + tests.
-7. `wado fetch` git branch; confirm `update` writes git lock entries.
-8. `wado clean` subcommand (`.worktrees/` eviction + `git worktree prune`,
-   `--all` for clones/components).
-9. `example/` e2e; docs (mark Phase 6 items done, note submodule limitation).
+Unit tests cover the cache-path parser and the resolver (against the in-memory
+provider); `wado-cli/tests/git_dependency.rs` drives the real `git` backend end
+to end against local `file://` repos (basic, inline, submodule, monorepo).
 
 ## Open questions
 
-- **Shallow-fetch fallback**: how aggressively to attempt a by-SHA shallow
-  fetch before falling back to a full fetch. Start conservative (fetch the ref,
-  add a worktree at the SHA) and optimize once measured.
-- **Canonical clone: non-bare vs bare**: the design keeps a non-bare
-  default-branch clone at `{owner}/{repo}` for ghq compatibility, at the cost of
-  one extra working tree. A bare clone would save that disk but forfeit compat.
-  Decided in favor of compat; revisit if the extra checkout ever matters.
+- **Fetch cost**: the PubGrub prefetch fetches every in-range version's manifest,
+  and materialization does a full fetch of the ref. Both are conservative;
+  optimize (bounded prefetch, by-SHA shallow fetch) once measured.
 - **Cross-platform locking**: `flock` (libc) covers unix; Windows needs
-  `LockFileEx` or a lock crate (`fs4`). Decide whether to take the small
-  dependency or hand-roll the platform split.
-- **`wado clean` scope**: decided to ship it in Phase 6 as the worktree GC
-  (`.worktrees/` eviction + prune). Open only on the details: whether `--all`
-  also evicts registry components, and whether a bare `wado clean` should prune
-  worktrees not referenced by the current project's lock vs. all worktrees.
-- **Config file scope**: location (`$XDG_CONFIG_HOME/wado/config.toml`), the
-  `root` key, and precedence are decided; open only on whether other
-  machine-global settings (default registry auth, `--offline` default, …)
-  eventually share this file.
-- **Submodules**: populated by default (`git submodule update --init
-  --recursive` in the worktree), since a dependency's submodules are part of its
-  source. Local (`file`) submodule transport stays git-default-blocked; only
-  tests re-enable it via `GIT_CONFIG_GLOBAL`.
-- **Lock `directory`**: not recorded in the lock (the consumer's manifest still
-  carries it, and the cache key excludes it). Revisit only if a future feature
-  needs to reconstruct the entry purely from the lock.
+  `LockFileEx` or a lock crate (`fs4`).
+- **Nested-group vs local URLs**: a remote URL keeps its full path (so GitLab
+  subgroups work); `file://`/absolute paths key on the trailing three segments.
+  A deeper local layout could still collide — revisit if it matters.

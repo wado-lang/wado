@@ -1,13 +1,8 @@
-//! System `git` backend for git dependencies: tag/ref discovery, a checkout-free
-//! manifest read, and per-version worktree materialization under the Wado root.
-//!
-//! All mutations of one repository (clone, fetch, `worktree add`) are serialized
-//! by a per-repo advisory file lock, so concurrent `wado` processes (parallel
-//! builds, the LSP alongside a CLI run) never race a half-written tree. Reads of
-//! an already-materialized worktree take no lock — a completed worktree is
-//! immutable. Acquisition is two-tier: resolution reads a manifest from a blob
-//! (`git show <sha>:…`) with no checkout; materialization adds a worktree only
-//! when source files must be on disk.
+//! System `git` backend for git dependencies. Acquisition is two-tier:
+//! resolution reads a manifest from a blob (`git show <sha>:…`, no checkout);
+//! materialization adds a worktree only when source files must be on disk. All
+//! mutations of one repository are serialized by a per-repo advisory file lock;
+//! reads of a completed (marker-present) worktree take none.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -21,8 +16,7 @@ use crate::registry::parse_version_tag;
 /// List a repository's semver tags via `git ls-remote --tags`.
 pub fn list_tags(url: &str) -> Result<Vec<GitTagInfo>, ProviderError> {
     let out = run_git(None, &["ls-remote", "--tags", url])?;
-    // Map tag name → sha, preferring an annotated tag's peeled (`^{}`) commit
-    // over the tag object it points through.
+    // Prefer an annotated tag's peeled (`^{}`) commit over the tag object.
     let mut by_name: BTreeMap<String, String> = BTreeMap::new();
     for line in out.lines() {
         let Some((sha, git_ref)) = line.split_once('\t') else {
@@ -77,10 +71,8 @@ pub fn fetch_manifest(
         Some(dir) => format!("{}/wado.toml", dir.trim_matches('/')),
         None => "wado.toml".to_string(),
     };
-    // A tag/commit that predates the manifest (or names a wrong `directory`) has
-    // no `wado.toml`, so `git show` fails; report that plainly rather than
-    // leaking raw git plumbing, so a resolver over a version range explains why
-    // a candidate version was rejected.
+    // A missing `wado.toml` (tag predating the manifest, or a wrong `directory`)
+    // reads clearer than raw `git show` plumbing.
     let text = run_git(Some(&repo), &["show", &format!("{sha}:{manifest_path}")]).map_err(|_| {
         ProviderError::NotFound {
             source: format!("{url}@{sha}"),
@@ -98,59 +90,55 @@ pub fn fetch_manifest(
 }
 
 /// Materialize a per-version worktree at `sha` under the Wado root, returning its
-/// absolute path. Idempotent: a valid warm worktree is reused; a stale/partial
-/// one is rebuilt.
+/// absolute path. Idempotent: a valid warm worktree (see [`worktree_is_valid`])
+/// is reused lock-free; a missing or partial one is rebuilt under the per-repo
+/// lock, re-checking in case another process finished while we waited.
 pub fn materialize(url: &str, version: &str, sha: &str) -> Result<PathBuf, ProviderError> {
     let repo_rel = repo_relative(url)?;
     let worktree_rel = wado_manifest::cache::git_worktree_relative(url, version, sha)
         .ok_or_else(|| bad_url(url))?;
     let root = wado_root()?;
     let worktree = root.join(&worktree_rel);
-    // Warm hit (lock-free): the marker means a prior materialize fully completed.
     if worktree_is_valid(&worktree) {
         return Ok(worktree);
     }
     let repo = root.join(&repo_rel);
     let _lock = lock_repo(&repo_rel)?;
-    // Re-check under the lock: another process may have finished while we waited.
     if worktree_is_valid(&worktree) {
         return Ok(worktree);
     }
     ensure_repo(url, &repo)?;
     ensure_commit(url, &repo, sha)?;
-    // A crash or an incomplete prior run can leave a partial worktree or a
-    // dangling admin entry; drop the (absent) marker, prune, and force-remove
-    // before re-adding so the add never trips over leftovers.
-    let _ = std::fs::remove_file(ready_marker(&worktree));
-    let _ = run_git(Some(&repo), &["worktree", "prune"]);
+    rebuild_worktree(&repo, &worktree, sha)?;
+    Ok(worktree)
+}
+
+/// Rebuild the worktree from scratch at `sha`: clear any partial leftover, add
+/// the checkout, verify `HEAD`, populate submodules, then publish the completion
+/// marker last so the worktree is only ever seen ready once fully usable.
+fn rebuild_worktree(repo: &Path, worktree: &Path, sha: &str) -> Result<(), ProviderError> {
+    let _ = std::fs::remove_file(ready_marker(worktree));
+    let _ = run_git(Some(repo), &["worktree", "prune"]);
     if worktree.exists() {
         let _ = run_git(
-            Some(&repo),
+            Some(repo),
             &["worktree", "remove", "--force", &worktree.to_string_lossy()],
         );
     }
     run_git(
-        Some(&repo),
+        Some(repo),
         &["worktree", "add", "--detach", &worktree.to_string_lossy(), sha],
     )?;
-    let head = run_git(Some(&worktree), &["rev-parse", "HEAD"])?;
+    let head = run_git(Some(worktree), &["rev-parse", "HEAD"])?;
     if !head.trim().starts_with(sha) {
         return Err(ProviderError::IoError {
             path: worktree.display().to_string(),
             message: format!("worktree did not check out to {sha}"),
         });
     }
-    // Populate submodules by default (safe side): a dependency's submodules are
-    // part of its source, so a checkout that omitted them would miss code the
-    // library needs. A no-op for a repo without submodules.
-    run_git(
-        Some(&worktree),
-        &["submodule", "update", "--init", "--recursive"],
-    )?;
-    // Publish the completion marker last: only now is the worktree fully usable.
-    let marker = ready_marker(&worktree);
-    std::fs::write(&marker, sha).map_err(|e| io_err(&marker, &e))?;
-    Ok(worktree)
+    run_git(Some(worktree), &["submodule", "update", "--init", "--recursive"])?;
+    let marker = ready_marker(worktree);
+    std::fs::write(&marker, sha).map_err(|e| io_err(&marker, &e))
 }
 
 /// Clone the canonical repository if it is not already present. The clone is a

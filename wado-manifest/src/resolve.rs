@@ -119,7 +119,6 @@ pub async fn resolve(
 
     crawl.run().await?;
 
-    // Build the offline provider: the root plus every fetched (id, version).
     let mut dp: OfflineDependencyProvider<String, Ranges<Version>> =
         OfflineDependencyProvider::new();
     let mut all_root_edges = root_edges;
