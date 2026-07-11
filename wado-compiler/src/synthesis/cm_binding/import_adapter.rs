@@ -385,6 +385,7 @@ fn synthesize_async_wrap_function(
             type_id: inner_type_id,
             local_index: vl,
             is_mut: false,
+            is_mut_ref: false,
             span,
         });
         Some(vl)
