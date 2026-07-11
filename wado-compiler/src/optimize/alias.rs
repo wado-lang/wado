@@ -545,7 +545,14 @@ fn compute_receiver_mutating(
             && let Some(p0) = f.params.first()
         {
             has_body[id] = true;
-            p0_of[id] = Some(p0.local_index);
+            // A caller-visible receiver write needs a writable declaration:
+            // a by-value `self` writes the callee's own copy, so it neither
+            // counts as mutating nor propagates through the fixpoint
+            // (`outer(&mut self) { self.helper() }` with a by-value helper
+            // leaves outer's receiver untouched). The pre-boxing
+            // `is_mut_ref` bit stays precise after boxing erases `&mut`
+            // from the parameter type.
+            p0_of[id] = p0.is_mut_ref.then_some(p0.local_index);
         }
     }
     // Walk each body once to extract a fixpoint-invariant summary: whether it
