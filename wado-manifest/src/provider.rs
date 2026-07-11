@@ -92,11 +92,14 @@ pub trait DependencyProvider: Send + Sync {
         ref_name: &str,
     ) -> impl Future<Output = Result<String, ProviderError>> + Send;
 
-    /// Fetch the manifest from a git repository at a specific commit.
+    /// Fetch the manifest from a git repository at a specific commit, reading
+    /// `<directory>/wado.toml` when `directory` names a monorepo subdirectory
+    /// (else the repository root's `wado.toml`).
     fn fetch_git_manifest(
         &self,
         url: &str,
         sha: &str,
+        directory: Option<&str>,
     ) -> impl Future<Output = Result<Manifest, ProviderError>> + Send;
 
     /// Load a manifest from a local filesystem path.
@@ -169,17 +172,28 @@ impl InMemoryDependencyProvider {
             .insert(ref_name.into(), sha.into());
     }
 
-    /// Add a manifest at a specific git commit.
+    /// Add a manifest at a specific git commit (repository root).
     pub fn add_git_manifest(
         &mut self,
         url: impl Into<String>,
         sha: impl Into<String>,
         manifest: Manifest,
     ) {
+        self.add_git_manifest_in(url, sha, None, manifest);
+    }
+
+    /// Add a manifest at a specific git commit and subdirectory (`None` = root).
+    pub fn add_git_manifest_in(
+        &mut self,
+        url: impl Into<String>,
+        sha: impl Into<String>,
+        directory: Option<&str>,
+        manifest: Manifest,
+    ) {
         self.git_manifests
             .entry(url.into())
             .or_default()
-            .insert(sha.into(), manifest);
+            .insert(git_manifest_key(&sha.into(), directory), manifest);
     }
 
     /// Add a manifest at a local path.
@@ -192,6 +206,12 @@ impl Default for InMemoryDependencyProvider {
     fn default() -> Self {
         Self::new()
     }
+}
+
+// Inner map key combining a commit SHA with an optional subdirectory, so a
+// monorepo's per-directory manifests at one commit stay distinct.
+fn git_manifest_key(sha: &str, directory: Option<&str>) -> String {
+    format!("{sha}\0{}", directory.unwrap_or(""))
 }
 
 impl DependencyProvider for InMemoryDependencyProvider {
@@ -270,11 +290,13 @@ impl DependencyProvider for InMemoryDependencyProvider {
         &self,
         url: &str,
         sha: &str,
+        directory: Option<&str>,
     ) -> impl Future<Output = Result<Manifest, ProviderError>> + Send {
+        let key = git_manifest_key(sha, directory);
         let result = self
             .git_manifests
             .get(url)
-            .and_then(|commits| commits.get(sha).cloned())
+            .and_then(|commits| commits.get(&key).cloned())
             .ok_or_else(|| ProviderError::NotFound {
                 source: format!("{url}@{sha}"),
                 message: "manifest not found at commit".to_string(),
@@ -452,7 +474,7 @@ version = "{version}"
             );
 
             let manifest = provider
-                .fetch_git_manifest("https://github.com/user/lib.git", "abc123")
+                .fetch_git_manifest("https://github.com/user/lib.git", "abc123", None)
                 .await
                 .unwrap();
             let pkg = manifest.package.unwrap();

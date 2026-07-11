@@ -61,6 +61,7 @@ bench = { git = "https://gitlab.com/user/bench.git", ref = "main" }
         DependencySource::Git {
             url,
             pin: GitPin::Version(v),
+            ..
         } if url == "https://github.com/user/router.git" && v == "^1.0.0"
     ));
 
@@ -89,6 +90,7 @@ bench = { git = "https://gitlab.com/user/bench.git", ref = "main" }
         DependencySource::Git {
             url,
             pin: GitPin::Ref(r),
+            ..
         } if url == "https://gitlab.com/user/bench.git" && r == "main"
     ));
 }

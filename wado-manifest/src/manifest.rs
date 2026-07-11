@@ -297,7 +297,13 @@ pub struct Dependency {
 #[derive(Debug, Clone)]
 pub enum DependencySource {
     /// Git repository dependency.
-    Git { url: String, pin: GitPin },
+    Git {
+        url: String,
+        pin: GitPin,
+        /// Subdirectory holding the package within the repository (monorepo).
+        /// `None` means the repository root.
+        directory: Option<String>,
+    },
     /// Registry dependency.
     Registry {
         /// Registry alias name. `None` means use `"default"`.
@@ -584,6 +590,7 @@ struct RawDependency {
     version: Option<String>,
     #[serde(rename = "ref")]
     git_ref: Option<String>,
+    directory: Option<String>,
     registry: Option<String>,
     package: Option<String>,
     path: Option<String>,
@@ -783,6 +790,15 @@ fn convert_dep(name: &str, raw: RawDependency) -> Result<Dependency, ManifestErr
     let has_path = raw.path.is_some();
     let has_workspace = raw.workspace == Some(true);
 
+    // `directory` selects a subdirectory of a git repository; it is meaningless
+    // without a git source (a bare `path` already points at the directory).
+    if raw.directory.is_some() && !has_git {
+        return Err(ManifestError::ConflictingSource {
+            dep_name: name.to_string(),
+            message: "`directory` is only valid with a `git` source".to_string(),
+        });
+    }
+
     // `workspace = true` is exclusive
     if has_workspace {
         if has_git || has_package || has_path {
@@ -868,10 +884,17 @@ fn source_fingerprint(source: &DependencySource) -> String {
             "registry|{}|{package}|{version}",
             registry.as_deref().unwrap_or("default")
         ),
-        DependencySource::Git { url, pin } => match pin {
-            GitPin::Version(v) => format!("git|{url}|version|{v}"),
-            GitPin::Ref(r) => format!("git|{url}|ref|{r}"),
-        },
+        DependencySource::Git {
+            url,
+            pin,
+            directory,
+        } => {
+            let dir = directory.as_deref().unwrap_or("");
+            match pin {
+                GitPin::Version(v) => format!("git|{url}|version|{v}|dir={dir}"),
+                GitPin::Ref(r) => format!("git|{url}|ref|{r}|dir={dir}"),
+            }
+        }
         DependencySource::Path {
             path,
             publish_source,
@@ -924,7 +947,11 @@ fn build_git_source(name: &str, raw: &RawDependency) -> Result<DependencySource,
         GitPin::Ref(raw.git_ref.clone().unwrap())
     };
 
-    Ok(DependencySource::Git { url, pin })
+    Ok(DependencySource::Git {
+        url,
+        pin,
+        directory: raw.directory.clone(),
+    })
 }
 
 // `package` is the resolved identity: the `package` field, or the key itself
@@ -1060,8 +1087,59 @@ router = { git = "https://github.com/user/router.git", version = "^1.0.0" }
             DependencySource::Git {
                 url,
                 pin: GitPin::Version(v),
+                directory: None,
             } if url == "https://github.com/user/router.git" && v == "^1.0.0"
         ));
+    }
+
+    #[test]
+    fn parse_git_dep_with_directory() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[dependencies]
+"org:foo" = { git = "https://github.com/org/monorepo.git", version = "^1.0.0", directory = "packages/foo" }
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        assert!(matches!(
+            &m.dependencies["org:foo"].source,
+            DependencySource::Git {
+                pin: GitPin::Version(v),
+                directory: Some(dir),
+                ..
+            } if v == "^1.0.0" && dir == "packages/foo"
+        ));
+    }
+
+    #[test]
+    fn directory_without_git_is_rejected() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[dependencies]
+"lib:shared" = { path = "../shared", directory = "packages/foo" }
+"#;
+        let err = toml.parse::<Manifest>().unwrap_err();
+        assert!(
+            matches!(&err, ManifestError::ConflictingSource { message, .. } if message.contains("directory")),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn deps_hash_changes_with_git_directory() {
+        let mk = |dir: &str| -> Manifest {
+            format!(
+                "[package]\nname=\"a\"\nversion=\"0.1.0\"\n\n[dependencies]\n\"org:foo\" = {{ git = \"https://x/r.git\", version = \"^1.0.0\", directory = \"{dir}\" }}\n"
+            )
+            .parse()
+            .unwrap()
+        };
+        assert_ne!(mk("packages/a").deps_hash(), mk("packages/b").deps_hash());
     }
 
     #[test]

@@ -660,6 +660,12 @@ async fn manifest_and_component_index(
     entry_source: &str,
     fetch_missing: bool,
 ) -> Result<wado_compiler::DependencyIndex, String> {
+    // On the build tier, materialize any locked-but-cold git worktrees first, so
+    // the offline git arm below resolves them without a separate `wado fetch`.
+    if fetch_missing && let Some(project) = project {
+        materialize_git_dependencies(&project.manifest, &project.root).await?;
+    }
+
     let mut index = match project {
         Some(project) => {
             wado_lsp::host::dependency_index_from(&project.manifest, &project.root, base_path)
@@ -699,7 +705,50 @@ async fn manifest_and_component_index(
     index.components.extend(inline.resolved);
     index.unresolved.extend(inline.unresolved);
 
+    // Inline git sources (`use … from "<name>" with { git }`) are source deps:
+    // their materialized worktree entry lands in `resolved`, compiled in.
+    let inline_git =
+        crate::dep_component::resolve_inline_git_dependencies(entry_source, fetch_missing).await?;
+    for (name, path) in inline_git.resolved {
+        index.unresolved.swap_remove(&name);
+        index.resolved.insert(name, path);
+    }
+    for (name, reason) in inline_git.unresolved {
+        index.unresolved.insert(name, reason);
+    }
+
     Ok(index)
+}
+
+/// Materialize every locked git dependency's worktree so the build path reads a
+/// git dep straight from the warm cache — no separate `wado fetch`. Lock-pinned:
+/// a git dep with no `wado.lock` entry is left for the offline arm to report
+/// (pointing at `wado update`); a warm worktree is a fast no-op inside
+/// [`crate::git::materialize`].
+///
+/// Only `[dependencies]` are materialized, mirroring `dependency_index_from`,
+/// which indexes only `[dependencies]`. `[dev-dependencies]` of any source are
+/// not importable at compile/test time yet — a general follow-up tracked in the
+/// dependency-management plan, not a git-specific gap.
+async fn materialize_git_dependencies(
+    manifest: &wado_manifest::Manifest,
+    manifest_root: &Path,
+) -> Result<(), String> {
+    let locked = wado_lsp::host::locked_git_packages(manifest_root);
+    for (name, dep) in &manifest.dependencies {
+        let DependencySource::Git { url, .. } = &dep.source else {
+            continue;
+        };
+        let Some((version, sha)) = locked.get(&format!("git+{url}/{name}")) else {
+            continue;
+        };
+        let (url, version, sha) = (url.clone(), version.clone(), sha.clone());
+        tokio::task::spawn_blocking(move || crate::git::materialize(&url, &version, &sha))
+            .await
+            .map_err(|e| format!("materializing git dependency {name:?}: {e}"))?
+            .map_err(|e| format!("materializing git dependency {name:?}: {e}"))?;
+    }
+    Ok(())
 }
 
 /// Collect inline `with { generator: { ... } }` clauses from `entry_file`
