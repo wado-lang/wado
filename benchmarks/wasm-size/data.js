@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783757968842,
+  "lastUpdate": 1783761706583,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -39349,6 +39349,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/04504099186e1b833a92e37526b07522ddff42ea"
         },
         "date": 1783757968394,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16351,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 266775,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e012a273d3c46a0fdf0cd57c2adc10943fa33b7c",
+          "message": "Merge pull request #1554 from wado-lang/claude/zlib-interop-drop-flate2\n\ndeps: drop flate2/crc32fast/adler; validate zlib interop against zlib-rs alone",
+          "timestamp": "2026-07-11T18:10:56+09:00",
+          "tree_id": "5b5e3ec1faf3eccd49e96d14e1dc04656bc70e2a",
+          "url": "https://github.com/wado-lang/wado/commit/e012a273d3c46a0fdf0cd57c2adc10943fa33b7c"
+        },
+        "date": 1783761706276,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
