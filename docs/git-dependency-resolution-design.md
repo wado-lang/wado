@@ -46,21 +46,21 @@ cache and compiled into the consumer exactly like a `path` dependency** — via
 `DependencyIndex.resolved` and `ModuleSource::Dependency`, not via
 `DependencyIndex.components`. The only differences from a path dep are:
 
-1. its source lives in the shared `~/wado/` cache at a pinned commit rather
-   than at a relative path, and
-2. it must be _acquired_ (clone/fetch/checkout) before it can be read.
+1. its source lives in the shared `~/wado/` cache at a pinned commit (a git
+   worktree) rather than at a relative path, and
+2. it must be _acquired_ (clone/fetch/worktree) before it can be read.
 
 This reuses the entire path-dependency machinery (loader, name resolution,
 transitive traversal, `[package].lib` entry discovery) and keeps the compiler
 agnostic — it still only sees `ModuleSource` values.
 
-| Aspect          | Registry dep                    | Git dep                                    | Path dep                 |
-| --------------- | ------------------------------- | ------------------------------------------ | ------------------------ |
-| Artifact        | Prebuilt CM component           | Source tree @ commit                       | Source tree on disk      |
-| Consumed as     | `components` (CM boundary)      | `resolved` (compiled in)                   | `resolved` (compiled in) |
-| Transitive deps | None (standalone)               | From its `wado.toml`                       | From its `wado.toml`     |
-| Locked          | Yes (`integrity` = digest)      | Yes (`resolved-ref` = SHA)                 | No (resolved fresh)      |
-| Cache key       | `{host}/{ns}/{name}/{version}/` | `{host}/{owner}/{repo}/{ver}-{short-ref}/` | n/a                      |
+| Aspect          | Registry dep                    | Git dep                                                   | Path dep                 |
+| --------------- | ------------------------------- | --------------------------------------------------------- | ------------------------ |
+| Artifact        | Prebuilt CM component           | Source tree @ commit                                      | Source tree on disk      |
+| Consumed as     | `components` (CM boundary)      | `resolved` (compiled in)                                  | `resolved` (compiled in) |
+| Transitive deps | None (standalone)               | From its `wado.toml`                                      | From its `wado.toml`     |
+| Locked          | Yes (`integrity` = digest)      | Yes (`resolved-ref` = SHA)                                | No (resolved fresh)      |
+| Cache key       | `{host}/{ns}/{name}/{version}/` | `{host}/{owner}/{repo}@{ver}-{short-ref}/` (git worktree) | n/a                      |
 
 ## Git backend: shell out to the system `git`
 
@@ -89,29 +89,94 @@ build scripts, so a checkout is inert source with no code-execution risk.
 
 ### git invocations
 
-| Provider method      | git command                                               | Notes                                                                                                                                                  |
-| -------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `list_git_tags`      | `git ls-remote --tags <url>`                              | Parse `refs/tags/*`, drop `^{}` peel lines, strip a leading `[a-zA-Z]+` prefix (reuse `registry::parse_version_tag`), keep semver tags, map tag → SHA. |
-| `resolve_git_ref`    | `git ls-remote <url> <ref>`                               | Named ref → SHA. A ref that is itself a SHA (no ls-remote hit) resolves during materialization.                                                        |
-| `fetch_git_manifest` | materialize, then read `<checkout>/<directory>/wado.toml` | See below.                                                                                                                                             |
+| Provider method      | git command                                                                | Notes                                                                                                                                                  |
+| -------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `list_git_tags`      | `git ls-remote --tags <url>`                                               | Parse `refs/tags/*`, drop `^{}` peel lines, strip a leading `[a-zA-Z]+` prefix (reuse `registry::parse_version_tag`), keep semver tags, map tag → SHA. |
+| `resolve_git_ref`    | `git ls-remote <url> <ref>`                                                | Named ref → SHA. A ref that is itself a SHA (no ls-remote hit) resolves during the fetch below.                                                        |
+| `fetch_git_manifest` | clone-if-absent + `git fetch`, then `git show <sha>:<directory>/wado.toml` | Reads the manifest from a blob — no worktree checkout (see Acquisition).                                                                               |
 
-### Materialization (the cache checkout)
+### Cache layout: one canonical clone, a worktree per version
 
-Acquiring a checkout is a new provider capability (not currently a trait
-method — see [Trait changes](#dependencyprovider-trait-changes)):
+The cache must satisfy two requirements that pull against each other: stay
+**ghq-compatible** — `~/wado/{host}/{owner}/{repo}` is itself a real, browsable
+git working tree, so `GHQ_ROOT=~/wado ghq list` and editor/fuzzy-cd tooling see
+it — and hold **multiple versions of one repo at once**, since different
+consumers pin different commits. The current WEP layout
+(`{owner}/{repo}/{version}-{ref}/`) fails the first: `{owner}/{repo}` is a
+_container of version dirs_, not a checkout.
 
-1. Compute the cache dir `{host}/{owner}/{repo}/{version}-{short-ref}/`.
-2. If it already contains a `wado.toml`, it is a warm hit — done (a commit is
-   immutable, so no re-fetch).
-3. Otherwise fetch into a bare per-repo git dir shared across versions
-   (`{host}/{owner}/{repo}/.git-cache/`), then `git worktree`/`archive` the
-   pinned SHA into the version dir. Prefer a shallow fetch of the specific
-   ref (`git fetch --depth 1 origin <ref>`); fall back to an unshallowed
-   fetch when the server rejects a by-SHA want
-   (`uploadpack.allowReachableSHA1InWant` off).
-4. Materialization is atomic: build in a temp sibling dir, then rename into
-   place (same discipline as `cache::write_atomic`), so a warm-cache
-   `is_file()` check never trusts a half-written tree.
+`git worktree` resolves the tension and is the chosen model:
+
+```text
+~/wado/github.com/user/router/                  # canonical clone: default branch,
+                                                # ghq-compatible, hosts the object
+                                                # store + worktree admin (.git/)
+~/wado/github.com/user/router@1.0.2-abc1234d/   # linked worktree @ pinned commit
+~/wado/github.com/user/router@2.1.0-def56789/   # linked worktree @ pinned commit
+```
+
+- The canonical clone at `{owner}/{repo}` is a normal (non-bare) working tree on
+  the remote's default branch. It is what ghq and browsing tools see, and it
+  hosts the shared object store and worktree metadata. A bare clone would save
+  one working-tree's worth of disk but forfeit ghq compatibility (no working
+  tree at `{owner}/{repo}`) — the trade-off is decided in favor of compat, since
+  Wasm packages are small (the WEP's stance).
+- Each consumed commit is a **linked worktree** at the sibling
+  `{owner}/{repo}@{version}-{short-ref}`. Worktrees **share the object store**,
+  so a version costs only its checked-out working files, not a second copy of
+  history.
+- Because objects are shared, even a redundant worktree of an already-present
+  commit (e.g. a monorepo whose two subdirectory packages carry different
+  `[package].version`s at the same commit) costs only working-file bytes. That
+  is why the dir name keeps the human-readable `{version}-{short-ref}` rather
+  than collapsing to a bare commit id — the readability is nearly free.
+
+`short-ref` is the first 8 hex of the resolved SHA; it disambiguates two commits
+that resolve to the same version tag.
+
+ghq's `list` walks for `.git` markers and will surface the `@…` worktree
+siblings as their own entries alongside the canonical `{owner}/{repo}`; the
+listing is a little noisier but nothing is broken (a worktree's `.git` is a
+gitdir-pointer file ghq still recognizes).
+
+### Acquisition: resolve reads a blob, materialize adds a worktree
+
+Two tiers, so resolution never pays for a working-tree checkout:
+
+Resolution-time (no worktree) — used by the resolver to read a manifest and its
+transitive deps:
+
+1. Ensure the canonical clone exists (`git clone <url> <repo>` if absent).
+2. Ensure the commit's objects are present: `git fetch origin <ref>` (prefer a
+   shallow `--depth 1`; fall back to an unshallowed fetch when the server
+   rejects a by-SHA want, `uploadpack.allowReachableSHA1InWant` off).
+3. Read the manifest without checking anything out:
+   `git -C <repo> show <sha>:<directory>/wado.toml`.
+
+Materialize-time (worktree) — used by `wado fetch` / `build` when source files
+must be on disk:
+
+1. Compute the worktree dir `{owner}/{repo}@{version}-{short-ref}`.
+2. Warm hit if it exists and `git -C <worktree> rev-parse HEAD == <sha>` — done
+   (a commit is immutable, so no re-fetch).
+3. Otherwise `git -C <repo> worktree add --detach <worktree> <sha>` (objects are
+   already present from the fetch above — no second network trip).
+
+### Concurrency and crash safety
+
+Multiple processes (parallel `build`s, the LSP alongside a CLI invocation) may
+clone/fetch/`worktree add` the same repo at once. Mutations of one repo are
+serialized by a per-repo advisory file lock (`flock` on `<repo>/.git` via the
+already-present `libc` on unix; `LockFileEx`, or a small cross-platform lock
+crate such as `fs4`, on Windows). Reads of an already-materialized worktree take
+**no lock** — a completed worktree is immutable.
+
+Crash safety: `worktree add` is not atomic, so a crash can leave a partial
+worktree. The lock holder verifies `HEAD == <sha>` after adding; a worktree that
+fails the check is `git worktree remove --force`d and rebuilt. A manually
+deleted worktree dir is reconciled by `git worktree prune`. Because every
+mutation runs under the per-repo lock, a second process never races a partial
+tree — it waits, then sees either a good worktree or repairs the leftover.
 
 ## Layer-by-layer changes
 
@@ -138,20 +203,25 @@ Path-with-git publish source (`{ path = …, git = …, version = … }`) carrie
 
 Add to `wado_manifest::cache` (pure string logic, no I/O — shared by the CLI
 that fetches and the LSP that reads offline), alongside
-`registry_cache_relative`:
+`registry_cache_relative`. Two paths: the canonical clone and the per-version
+worktree.
 
 ```rust
-pub fn git_cache_relative(url: &str, version: &str, resolved_ref: &str) -> Option<String>;
-// → "{host}/{owner}/{repo}/{version}-{short-ref}"  (short-ref = first 8 hex of the SHA)
+pub fn git_repo_relative(url: &str) -> Option<String>;
+// → "{host}/{owner}/{repo}"                          (canonical clone / ghq path)
+
+pub fn git_worktree_relative(url: &str, version: &str, resolved_ref: &str) -> Option<String>;
+// → "{host}/{owner}/{repo}@{version}-{short-ref}"    (short-ref = first 8 hex of the SHA)
 ```
 
 URL parsing normalizes `https://`, `git@host:owner/repo`, and a trailing
-`.git`/`/` into `host/owner/repo`. `directory` is **not** part of the cache
-key — it selects the entry _within_ the checkout, and two packages in one
-monorepo already differ by coordinate. Returns `None` for an unparseable URL.
+`.git`/`/` into `host/owner/repo`. `directory` is **not** part of either path —
+it selects the entry _within_ the worktree, and two subdirectory packages of one
+monorepo at the same commit deliberately share one worktree. Returns `None` for
+an unparseable URL.
 
-Wire concrete `PathBuf`s in `wado-cli/src/cache.rs`
-(`git_checkout_path(url, version, resolved_ref)`), matching the existing
+Wire concrete `PathBuf`s in `wado-cli/src/cache.rs` (`git_repo_path(url)`,
+`git_worktree_path(url, version, resolved_ref)`), matching the existing
 `component_path` / `generator_path` helpers.
 
 ### 3. Resolver: the git arm
@@ -194,8 +264,8 @@ but resolving the entry against the cache checkout:
 1. Read the git dep's `resolved_ref` and `version` from `wado.lock`
    (a `locked_git_refs(manifest_dir)` helper next to
    `locked_registry_versions`).
-2. `cache_root().join(git_cache_relative(url, version, sha))` → checkout dir.
-3. Entry = `dependency_entry_path(checkout/directory)` — the existing helper
+2. `cache_root().join(git_worktree_relative(url, version, sha))` → worktree dir.
+3. Entry = `dependency_entry_path(worktree/directory)` — the existing helper
    that reads `[package].lib` (honoring `directory`, defaulting to the repo
    root).
 4. Present on disk → `index.resolved.insert(name, relative_path)`; missing →
@@ -257,8 +327,9 @@ the in-memory impl stays pure.
   replace `git_source_is_not_yet_supported` with tests that resolve a
   version-pinned and a ref-pinned git dep, verify `resolved_ref`, and verify a
   transitive dep of a git dep is locked. No new test infrastructure.
-- **Cache path**: unit-test `git_cache_relative` like `registry_cache_relative`
-  (https/ssh/`.git` URL forms, short-ref truncation, monorepo `directory`).
+- **Cache path**: unit-test `git_repo_relative` / `git_worktree_relative` like
+  `registry_cache_relative` (https/ssh/`.git` URL forms, short-ref truncation,
+  the `@{version}-{short-ref}` worktree suffix).
 - **Manifest**: `directory` parses onto `DependencySource::Git`; `deps_hash`
   changes with `directory`.
 - **Provider shell-out** (e2e): create a throwaway repo with `git init` in a
@@ -272,12 +343,13 @@ the in-memory impl stays pure.
 
 1. Manifest `directory` field (`DependencySource::Git`, `RawDependency`,
    `source_fingerprint`, validation) + tests.
-2. `wado_manifest::cache::git_cache_relative` + `wado-cli` `git_checkout_path`
-   - tests.
+2. `wado_manifest::cache::git_repo_relative` / `git_worktree_relative` +
+   `wado-cli` `git_repo_path` / `git_worktree_path` + tests.
 3. Resolver git arm (against the in-memory provider), transitive traversal,
    remove `UnsupportedSource{git}` + red/green tests.
-4. `FilesystemProvider` git methods via `git` shell-out + checkout
-   materialization + e2e tests.
+4. `FilesystemProvider` git methods via `git` shell-out: canonical clone,
+   fetch, blob-read for resolution, `worktree add` for materialization, per-repo
+   file lock + e2e tests.
 5. `dependency_index_from` git arm + `locked_git_refs` lock reader.
 6. `wado fetch` git branch; confirm `update` writes git lock entries.
 7. `example/` e2e; docs (mark Phase 6 items done, note submodule limitation).
@@ -285,12 +357,18 @@ the in-memory impl stays pure.
 ## Open questions
 
 - **Shallow-fetch fallback**: how aggressively to attempt a by-SHA shallow
-  fetch before falling back to a full clone. Start conservative (full fetch of
-  the repo, checkout the SHA) and optimize once measured.
-- **`.git-cache` sharing**: whether to keep one bare mirror per repo (fetch
-  once, materialize many versions) or clone per version. The bare-mirror model
-  saves bandwidth for a monorepo referenced at several commits; adds a small
-  amount of concurrency care.
+  fetch before falling back to a full fetch. Start conservative (fetch the ref,
+  add a worktree at the SHA) and optimize once measured.
+- **Canonical clone: non-bare vs bare**: the design keeps a non-bare
+  default-branch clone at `{owner}/{repo}` for ghq compatibility, at the cost of
+  one extra working tree. A bare clone would save that disk but forfeit compat.
+  Decided in favor of compat; revisit if the extra checkout ever matters.
+- **Cross-platform locking**: `flock` (libc) covers unix; Windows needs
+  `LockFileEx` or a lock crate (`fs4`). Decide whether to take the small
+  dependency or hand-roll the platform split.
+- **Worktree GC**: no `wado cache clean` yet. Stale worktrees accumulate;
+  `git worktree prune` reconciles manual deletions, but an explicit
+  cache-eviction command is a follow-up (out of Phase 6 scope).
 - **Submodules**: left unrecursed initially. Revisit if a real dependency needs
   them; would become a `--recurse-submodules`-style opt-in, not a default.
 - **Lock `directory`**: not recorded in the lock (the consumer's manifest still
