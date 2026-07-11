@@ -1,5 +1,5 @@
 //! Cross-validation tests comparing Wado's core:zlib implementation against
-//! zlib-rs and flate2 (backed by zlib-rs).
+//! zlib-rs.
 //!
 //! Architecture: Two Wado driver programs are compiled once and reused across
 //! all tests. Each test only performs cheap Wasm instantiation (no compilation).
@@ -12,9 +12,6 @@
 
 mod common;
 
-use flate2::Compression;
-use flate2::write::{DeflateDecoder, DeflateEncoder, GzDecoder, GzEncoder};
-use std::io::Write;
 use std::path::Path;
 use std::sync::OnceLock;
 use wasmtime::Store;
@@ -287,28 +284,48 @@ fn zlib_rs_decompress(input: &[u8], max_output: usize) -> Vec<u8> {
     decompressed.to_vec()
 }
 
-fn flate2_deflate_raw(input: &[u8], level: u32) -> Vec<u8> {
-    let mut encoder = DeflateEncoder::new(Vec::new(), Compression::new(level));
-    encoder.write_all(input).unwrap();
-    encoder.finish().unwrap()
+const RAW_WINDOW_BITS: i32 = -15;
+const GZIP_WINDOW_BITS: i32 = 15 + 16;
+
+fn zlib_rs_compress_with(input: &[u8], level: u32, window_bits: i32) -> Vec<u8> {
+    let mut output = vec![0u8; zlib_rs::compress_bound(input.len()) + 32];
+    let config = DeflateConfig {
+        window_bits,
+        ..DeflateConfig::new(level as i32)
+    };
+    let (compressed, rc) = zlib_rs::compress_slice(&mut output, input, config);
+    assert_eq!(rc, ReturnCode::Ok, "zlib-rs compress failed");
+    compressed.to_vec()
 }
 
-fn flate2_inflate_raw(input: &[u8]) -> Vec<u8> {
-    let mut decoder = DeflateDecoder::new(Vec::new());
-    decoder.write_all(input).unwrap();
-    decoder.finish().unwrap()
+fn zlib_rs_decompress_with(input: &[u8], window_bits: i32) -> Vec<u8> {
+    let mut size = input.len().max(64) * 4;
+    loop {
+        let mut output = vec![0u8; size];
+        let (decompressed, rc) =
+            zlib_rs::decompress_slice(&mut output, input, InflateConfig { window_bits });
+        match rc {
+            ReturnCode::Ok => return decompressed.to_vec(),
+            ReturnCode::BufError => size *= 2,
+            other => panic!("zlib-rs decompress failed: {other:?}"),
+        }
+    }
 }
 
-fn flate2_gzip_compress(input: &[u8], level: u32) -> Vec<u8> {
-    let mut encoder = GzEncoder::new(Vec::new(), Compression::new(level));
-    encoder.write_all(input).unwrap();
-    encoder.finish().unwrap()
+fn zlib_rs_deflate_raw(input: &[u8], level: u32) -> Vec<u8> {
+    zlib_rs_compress_with(input, level, RAW_WINDOW_BITS)
 }
 
-fn flate2_gzip_decompress(input: &[u8]) -> Vec<u8> {
-    let mut decoder = GzDecoder::new(Vec::new());
-    decoder.write_all(input).unwrap();
-    decoder.finish().unwrap()
+fn zlib_rs_inflate_raw(input: &[u8]) -> Vec<u8> {
+    zlib_rs_decompress_with(input, RAW_WINDOW_BITS)
+}
+
+fn zlib_rs_gzip_compress(input: &[u8], level: u32) -> Vec<u8> {
+    zlib_rs_compress_with(input, level, GZIP_WINDOW_BITS)
+}
+
+fn zlib_rs_gzip_decompress(input: &[u8]) -> Vec<u8> {
+    zlib_rs_decompress_with(input, GZIP_WINDOW_BITS)
 }
 
 fn test_data_sequential(size: usize) -> Vec<u8> {
@@ -457,36 +474,36 @@ fn zlib_rs_pseudorandom_data_inflated_by_wado() {
 // ============================================================================
 
 #[test]
-fn wado_raw_deflate_decompressed_by_flate2() {
+fn wado_raw_deflate_decompressed_by_zlib_rs() {
     let input = test_data_text(5);
     let compressed = wado_deflate_raw(&input, 6);
-    let decompressed = flate2_inflate_raw(&compressed);
+    let decompressed = zlib_rs_inflate_raw(&compressed);
     assert_eq!(
         decompressed, input,
-        "flate2 failed to inflate Wado raw deflate"
+        "zlib-rs failed to inflate Wado raw deflate"
     );
 }
 
 #[test]
-fn flate2_raw_deflate_inflated_by_wado() {
+fn zlib_rs_raw_deflate_inflated_by_wado() {
     let input = test_data_sequential(300);
-    let compressed = flate2_deflate_raw(&input, 6);
+    let compressed = zlib_rs_deflate_raw(&input, 6);
     let decompressed = wado_inflate_raw(&compressed);
     assert_eq!(
         decompressed, input,
-        "Wado failed to inflate flate2 raw deflate"
+        "Wado failed to inflate zlib-rs raw deflate"
     );
 }
 
 #[test]
-fn flate2_raw_deflate_all_levels_inflated_by_wado() {
+fn zlib_rs_raw_deflate_all_levels_inflated_by_wado() {
     let input = test_data_text(5);
     for level in 0..=9 {
-        let compressed = flate2_deflate_raw(&input, level);
+        let compressed = zlib_rs_deflate_raw(&input, level);
         let decompressed = wado_inflate_raw(&compressed);
         assert_eq!(
             decompressed, input,
-            "Wado inflate_raw failed for flate2 level {level}"
+            "Wado inflate_raw failed for zlib-rs level {level}"
         );
     }
 }
@@ -496,36 +513,36 @@ fn flate2_raw_deflate_all_levels_inflated_by_wado() {
 // ============================================================================
 
 #[test]
-fn wado_gzip_compress_decompressed_by_flate2() {
+fn wado_gzip_compress_decompressed_by_zlib_rs() {
     let input = test_data_text(5);
     let compressed = wado_gzip_compress(&input, 6);
-    let decompressed = flate2_gzip_decompress(&compressed);
+    let decompressed = zlib_rs_gzip_decompress(&compressed);
     assert_eq!(
         decompressed, input,
-        "flate2 failed to decompress Wado gzip output"
+        "zlib-rs failed to decompress Wado gzip output"
     );
 }
 
 #[test]
-fn flate2_gzip_inflated_by_wado() {
+fn zlib_rs_gzip_inflated_by_wado() {
     let input = test_data_sequential(300);
-    let compressed = flate2_gzip_compress(&input, 6);
+    let compressed = zlib_rs_gzip_compress(&input, 6);
     let decompressed = wado_inflate_gzip(&compressed);
     assert_eq!(
         decompressed, input,
-        "Wado failed to inflate flate2 gzip data"
+        "Wado failed to inflate zlib-rs gzip data"
     );
 }
 
 #[test]
-fn flate2_gzip_all_levels_inflated_by_wado() {
+fn zlib_rs_gzip_all_levels_inflated_by_wado() {
     let input = test_data_text(3);
     for level in 0..=9 {
-        let compressed = flate2_gzip_compress(&input, level);
+        let compressed = zlib_rs_gzip_compress(&input, level);
         let decompressed = wado_inflate_gzip(&compressed);
         assert_eq!(
             decompressed, input,
-            "Wado inflate_gzip failed for flate2 level {level}"
+            "Wado inflate_gzip failed for zlib-rs level {level}"
         );
     }
 }
@@ -725,10 +742,10 @@ fn cross_validate_large_repetitive() {
 // ============================================================================
 
 #[test]
-fn wado_deflate_stream_raw_decompressed_by_flate2() {
+fn wado_deflate_stream_raw_decompressed_by_zlib_rs() {
     let input = b"Raw deflate test data";
     let compressed = wado_deflate_stream_raw(input, 6);
-    let decompressed = flate2_inflate_raw(&compressed);
+    let decompressed = zlib_rs_inflate_raw(&compressed);
     assert_eq!(
         decompressed, input,
         "DeflateStream RAW_FORMAT cross-inflate failed"
@@ -736,10 +753,10 @@ fn wado_deflate_stream_raw_decompressed_by_flate2() {
 }
 
 #[test]
-fn wado_deflate_stream_gzip_decompressed_by_flate2() {
+fn wado_deflate_stream_gzip_decompressed_by_zlib_rs() {
     let input = b"Gzip format test data";
     let compressed = wado_deflate_stream_gzip(input, 6);
-    let decompressed = flate2_gzip_decompress(&compressed);
+    let decompressed = zlib_rs_gzip_decompress(&compressed);
     assert_eq!(
         decompressed, input,
         "DeflateStream GZIP_FORMAT cross-inflate failed"
@@ -747,24 +764,24 @@ fn wado_deflate_stream_gzip_decompressed_by_flate2() {
 }
 
 #[test]
-fn wado_inflate_stream_raw_from_flate2() {
-    let input = b"Inflate raw from flate2";
-    let compressed = flate2_deflate_raw(input, 6);
+fn wado_inflate_stream_raw_from_zlib_rs() {
+    let input = b"Inflate raw from zlib-rs";
+    let compressed = zlib_rs_deflate_raw(input, 6);
     let decompressed = wado_inflate_stream_raw(&compressed);
     assert_eq!(
         decompressed, input,
-        "InflateStream RAW_FORMAT from flate2 failed"
+        "InflateStream RAW_FORMAT from zlib-rs failed"
     );
 }
 
 #[test]
-fn wado_inflate_stream_gzip_from_flate2() {
-    let input = b"Inflate gzip from flate2";
-    let compressed = flate2_gzip_compress(input, 6);
+fn wado_inflate_stream_gzip_from_zlib_rs() {
+    let input = b"Inflate gzip from zlib-rs";
+    let compressed = zlib_rs_gzip_compress(input, 6);
     let decompressed = wado_inflate_stream_gzip(&compressed);
     assert_eq!(
         decompressed, input,
-        "InflateStream GZIP_FORMAT from flate2 failed"
+        "InflateStream GZIP_FORMAT from zlib-rs failed"
     );
 }
 
@@ -782,7 +799,7 @@ fn wado_inflate_stream_auto_format_zlib() {
 #[test]
 fn wado_inflate_stream_auto_format_gzip() {
     let input = b"Auto detect gzip";
-    let compressed = flate2_gzip_compress(input, 6);
+    let compressed = zlib_rs_gzip_compress(input, 6);
     let decompressed = wado_inflate_stream_auto(&compressed);
     assert_eq!(
         decompressed, input,
@@ -944,20 +961,20 @@ fn fuzz_raw_deflate_round_trip() {
         let level = (next() % 10) as i32;
         let data: Vec<u8> = (0..size).map(|_| next() as u8).collect();
 
-        // Wado deflate → flate2 inflate
+        // Wado deflate → zlib-rs inflate
         let compressed = wado_deflate_raw(&data, level);
-        let decompressed = flate2_inflate_raw(&compressed);
+        let decompressed = zlib_rs_inflate_raw(&compressed);
         assert_eq!(
             decompressed, data,
             "fuzz #{i}: Wado raw deflate level {level}, size {size}"
         );
 
-        // flate2 deflate → Wado inflate
-        let compressed2 = flate2_deflate_raw(&data, level as u32);
+        // zlib-rs deflate → Wado inflate
+        let compressed2 = zlib_rs_deflate_raw(&data, level as u32);
         let decompressed2 = wado_inflate_raw(&compressed2);
         assert_eq!(
             decompressed2, data,
-            "fuzz #{i}: flate2 raw deflate level {level}, size {size}"
+            "fuzz #{i}: zlib-rs raw deflate level {level}, size {size}"
         );
     }
 }
@@ -975,20 +992,20 @@ fn fuzz_gzip_round_trip() {
         let level = (next() % 10) as i32;
         let data: Vec<u8> = (0..size).map(|_| next() as u8).collect();
 
-        // Wado gzip → flate2 decompress
+        // Wado gzip → zlib-rs decompress
         let compressed = wado_gzip_compress(&data, level);
-        let decompressed = flate2_gzip_decompress(&compressed);
+        let decompressed = zlib_rs_gzip_decompress(&compressed);
         assert_eq!(
             decompressed, data,
             "fuzz #{i}: Wado gzip level {level}, size {size}"
         );
 
-        // flate2 gzip → Wado decompress
-        let compressed2 = flate2_gzip_compress(&data, level as u32);
+        // zlib-rs gzip → Wado decompress
+        let compressed2 = zlib_rs_gzip_compress(&data, level as u32);
         let decompressed2 = wado_inflate_gzip(&compressed2);
         assert_eq!(
             decompressed2, data,
-            "fuzz #{i}: flate2 gzip level {level}, size {size}"
+            "fuzz #{i}: zlib-rs gzip level {level}, size {size}"
         );
     }
 }
