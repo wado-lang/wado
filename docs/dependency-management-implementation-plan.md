@@ -274,8 +274,12 @@ conflict errors, once real registries make multi-constraint graphs common.
   mutually exclusive. A `lib:nick` alias fetches the coordinate named by
   `with { package }` while keeping the nickname as the loader's lookup key,
   in both single-file (`with { package, registry, version }`) and manifest
-  (a `lib:nick` `[dependencies]` entry) mode. `with { git = … }` inline
-  sources are still pending.
+  (a `lib:nick` `[dependencies]` entry) mode. Done for git sources:
+  `use { … } from "<name>" with { git, ref[, directory] }` resolves the ref,
+  materializes the worktree, and compiles the git-sourced library into the
+  script (source dep, `resolved` map); a `version` range is rejected inline
+  (no lock to pin it). Verified end to end
+  (`tests/git_dependency.rs::inline_git_source_in_a_single_file_script`).
 - [ ] Workspace publish/resolve edge cases beyond what `publish` covers.
 - [ ] `wado.lock` integrity extensibility (algorithm prefix already in schema).
 

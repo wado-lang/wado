@@ -128,6 +128,96 @@ pub async fn resolve_inline_component_dependencies(
     })
 }
 
+/// Resolution of single-file inline git dependencies
+/// (`use { … } from "<name>" with { git: "<url>", ref: "<ref>" }`). Unlike an
+/// inline registry component, a git dependency is *source*: its materialized
+/// worktree entry lands in the compiler's `resolved` map and compiles into the
+/// consumer, keyed by the import name.
+#[derive(Debug, Default)]
+pub struct InlineGitResolution {
+    pub resolved: Vec<(String, String)>,
+    pub unresolved: Vec<(String, String)>,
+}
+
+/// Resolve every inline `use … from "<name>" with { git }` clause in `source`.
+/// Each is pinned by an exact `ref` (single-file mode has no lock, so a
+/// `version` range is rejected). On the build tier (`fetch_missing`) the ref is
+/// resolved to a commit and the worktree materialized under the Wado root;
+/// otherwise the clause is reported `unresolved` with a build hint.
+pub async fn resolve_inline_git_dependencies(
+    source: &str,
+    fetch_missing: bool,
+) -> Result<InlineGitResolution, String> {
+    let Ok(parsed) = wado_compiler::parse(source).into_fail_fast() else {
+        return Ok(InlineGitResolution::default());
+    };
+    let mut out = InlineGitResolution::default();
+    for item in &parsed.ast.items {
+        let wado_compiler::ast::Item::Use(use_decl) = item else {
+            continue;
+        };
+        let Some(attrs) = use_decl.attributes.as_ref() else {
+            continue;
+        };
+        let Some(url) = attrs.git() else {
+            continue;
+        };
+        let name = use_decl.source.clone();
+        let git_ref = attrs.git_ref().ok_or_else(|| {
+            format!("dependency {name:?}: a `git` source needs a `ref` (tag, branch, or SHA)")
+        })?;
+        if attrs.version().is_some() {
+            return Err(format!(
+                "dependency {name:?}: a git `version` range needs a manifest + lock; \
+                 pin an exact `ref` inline"
+            ));
+        }
+        let directory = attrs.directory();
+        if !fetch_missing {
+            out.unresolved.push((
+                name,
+                "inline git dependency is materialized by `wado build`/`run`".to_string(),
+            ));
+            continue;
+        }
+        let entry = tokio::task::spawn_blocking(move || {
+            resolve_inline_git(&url, &git_ref, directory.as_deref())
+        })
+        .await
+        .map_err(|e| format!("dependency {name:?}: {e}"))??;
+        out.resolved.push((name, entry));
+    }
+    Ok(out)
+}
+
+/// Resolve an inline git dependency to its absolute entry `.wado` path: resolve
+/// the ref, materialize the worktree, and read the package's `[package].lib`.
+fn resolve_inline_git(url: &str, git_ref: &str, directory: Option<&str>) -> Result<String, String> {
+    let sha = crate::git::resolve_ref(url, git_ref).map_err(|e| e.to_string())?;
+    let manifest = crate::git::fetch_manifest(url, &sha, directory).map_err(|e| e.to_string())?;
+    let version = manifest
+        .package
+        .as_ref()
+        .map(|p| p.version.clone())
+        .unwrap_or_else(|| sha.clone());
+    let worktree = crate::git::materialize(url, &version, &sha).map_err(|e| e.to_string())?;
+    let pkg_dir = match directory {
+        Some(dir) => worktree.join(dir),
+        None => worktree,
+    };
+    let manifest_path = pkg_dir.join("wado.toml");
+    let text = std::fs::read_to_string(&manifest_path)
+        .map_err(|e| format!("reading {}: {e}", manifest_path.display()))?;
+    let manifest: wado_manifest::Manifest = text
+        .parse()
+        .map_err(|e| format!("invalid {}: {e}", manifest_path.display()))?;
+    let lib = manifest
+        .package
+        .and_then(|p| p.lib)
+        .ok_or_else(|| format!("{} declares no [package].lib entry", manifest_path.display()))?;
+    Ok(pkg_dir.join(lib).display().to_string())
+}
+
 /// An inline registry component source declared on a `use … from` clause.
 #[derive(Debug)]
 struct InlineDep {

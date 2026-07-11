@@ -705,6 +705,18 @@ async fn manifest_and_component_index(
     index.components.extend(inline.resolved);
     index.unresolved.extend(inline.unresolved);
 
+    // Inline git sources (`use … from "<name>" with { git }`) are source deps:
+    // their materialized worktree entry lands in `resolved`, compiled in.
+    let inline_git =
+        crate::dep_component::resolve_inline_git_dependencies(entry_source, fetch_missing).await?;
+    for (name, path) in inline_git.resolved {
+        index.unresolved.swap_remove(&name);
+        index.resolved.insert(name, path);
+    }
+    for (name, reason) in inline_git.unresolved {
+        index.unresolved.insert(name, reason);
+    }
+
     Ok(index)
 }
 

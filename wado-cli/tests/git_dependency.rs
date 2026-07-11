@@ -109,3 +109,50 @@ fn git_dependency_resolves_fetches_and_runs() {
         .assert()
         .success();
 }
+
+/// A single-file script (no `wado.toml`) pins a git source inline on the `use`
+/// clause. `wado run <file>` resolves the ref, materializes the worktree, and
+/// compiles the git-sourced library into the script.
+#[test]
+fn inline_git_source_in_a_single_file_script() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let cache = root.join("wado-cache");
+
+    let greet = root.join("greet");
+    fs::create_dir_all(greet.join("src")).unwrap();
+    fs::write(
+        greet.join("wado.toml"),
+        "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    fs::write(
+        greet.join("src/lib.wado"),
+        "export fn hello() -> String {\n    return \"hello from inline git\";\n}\n",
+    )
+    .unwrap();
+    git(&greet, &["init", "-q", "-b", "main"]);
+    git(&greet, &["add", "-A"]);
+    git(&greet, &["commit", "-q", "-m", "init"]);
+    let url = format!("file://{}", greet.display());
+
+    // A bare script with no manifest, pinning the git source inline.
+    let script_dir = root.join("script");
+    fs::create_dir_all(&script_dir).unwrap();
+    fs::write(
+        script_dir.join("main.wado"),
+        format!(
+            "use {{ println, Stdout }} from \"core:cli\";\n\
+             use {{ hello }} from \"greet\" with {{ git: \"{url}\", ref: \"main\" }};\n\n\
+             export fn run() with Stdout {{\n    println(hello());\n}}\n"
+        ),
+    )
+    .unwrap();
+
+    wado_in(&script_dir)
+        .env("WADO_ROOT", &cache)
+        .args(["run", "main.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("hello from inline git"));
+}
