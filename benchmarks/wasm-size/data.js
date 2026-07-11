@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783734652140,
+  "lastUpdate": 1783740866763,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -39217,6 +39217,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/75a2ced50060b3f73b67a154674c90613de6061b"
         },
         "date": 1783734651576,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16351,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 266775,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3e53c0626a276960a6b4f44e2414a3842bbf5d46",
+          "message": "Merge pull request #1546 from wado-lang/claude/struct-walkability-2feglo\n\nrefactor(lang)!: rename #[hidden] to #[secret], add struct walkability WEP",
+          "timestamp": "2026-07-11T12:25:11+09:00",
+          "tree_id": "62955eeb056a68b44b6f2c854a9b0f1ebac63ef4",
+          "url": "https://github.com/wado-lang/wado/commit/3e53c0626a276960a6b4f44e2414a3842bbf5d46"
+        },
+        "date": 1783740866325,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
