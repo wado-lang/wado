@@ -268,8 +268,10 @@ fn git_dependency_entry(
 }
 
 /// `lock id -> (version, resolved-ref)` for every git `[[package]]` in
-/// `manifest_dir`'s `wado.lock`. Empty when no lock is present.
-fn locked_git_packages(
+/// `manifest_dir`'s `wado.lock`. Empty when no lock is present. Shared so the CLI
+/// can materialize the same worktrees the offline index resolves against.
+#[must_use]
+pub fn locked_git_packages(
     manifest_dir: &Path,
 ) -> std::collections::BTreeMap<String, (String, String)> {
     let mut out = std::collections::BTreeMap::new();

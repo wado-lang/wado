@@ -244,9 +244,9 @@ root with per-version git worktrees, `wado clean` as their GC.
 - [x] Wire git deps into `dependency_index_from`; `wado fetch` materializes
       worktrees; added `wado clean`. Verified end to end
       (`tests/git_dependency.rs`): `update` → `fetch` → `run`.
-- [ ] Auto-materialize git worktrees inside `build`/`run` (like registry
-      `fetch_component_dependencies`) so a git dep builds without an explicit
-      `wado fetch`; today the build path only reads the warm worktree cache.
+- [x] Auto-materialize git worktrees inside `build`/`run` (like registry
+      `fetch_component_dependencies`) so a locked git dep builds without an
+      explicit `wado fetch` (`manifest_and_component_index`).
 - [ ] Submodules (`--recurse-submodules`) and a bare-mirror/shallow-fetch
       optimization; a git dep in a monorepo subgroup (`host/group/sub/repo`) is
       currently keyed as local.

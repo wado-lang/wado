@@ -83,26 +83,29 @@ fn git_dependency_resolves_fetches_and_runs() {
         "lock missing resolved-ref:\n{lock}"
     );
 
-    // fetch: materialize the worktree into the Wado root.
-    wado_in(&app)
-        .env("WADO_ROOT", &cache)
-        .arg("fetch")
-        .assert()
-        .success();
-    let worktrees = cache
-        .join(wado_manifest::cache::git_repo_relative(&url).unwrap())
-        .join(".worktrees");
-    assert!(
-        worktrees.is_dir(),
-        "expected a materialized worktree under {}",
-        worktrees.display()
-    );
-
-    // run: compile the git-sourced library into the consumer and execute.
+    // run: with no prior `wado fetch`, the build path auto-materializes the
+    // locked worktree, compiles the git-sourced library into the consumer, and
+    // executes it.
     wado_in(&app)
         .env("WADO_ROOT", &cache)
         .args(["run", "src/main.wado"])
         .assert()
         .success()
         .stdout(predicate::str::contains("hello from git dep"));
+
+    let worktrees = cache
+        .join(wado_manifest::cache::git_repo_relative(&url).unwrap())
+        .join(".worktrees");
+    assert!(
+        worktrees.is_dir(),
+        "run should have materialized a worktree under {}",
+        worktrees.display()
+    );
+
+    // fetch is still available and idempotent against the warm cache.
+    wado_in(&app)
+        .env("WADO_ROOT", &cache)
+        .arg("fetch")
+        .assert()
+        .success();
 }
