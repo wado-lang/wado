@@ -254,13 +254,24 @@ root with per-version git worktrees, `wado clean` as their GC.
 
 ### Phase 7 — PubGrub resolver
 
-Replace the single-pass resolver with PubGrub for backtracking and precise
-conflict errors, once real registries make multi-constraint graphs common.
+Replace the single-pass greedy resolver with PubGrub for backtracking and
+precise conflict errors.
 
-- [ ] Adopt the `pubgrub` crate; adapt `DependencyProvider` to its interface.
-- [ ] Preserve current behavior (highest-compatible, coexisting
-      semver-incompatible majors) and add derivation-chain error messages.
-- [ ] Cyclic-dependency detection with the WEP's error format.
+- [x] Adopt the `pubgrub` crate (`OfflineDependencyProvider`). The resolver is
+      now two phases: an async prefetch crawls the graph through the existing
+      `DependencyProvider` (listing versions + fetching every in-range version's
+      manifest) into an in-memory graph, then a sync PubGrub solve backtracks
+      over it. Preserves highest-compatible selection; adds real backtracking
+      (`backtracks_past_the_highest_version_to_satisfy_a_second_constraint`) and
+      PubGrub's derivation-chain report on `NoSolution`. Path deps flatten into
+      their declarer; git version-pins expose tags as versions, ref-pins a
+      single resolved version. `wado-manifest` still builds for
+      `wasm32-unknown-unknown` (pubgrub is pure).
+- [ ] Coexisting semver-incompatible majors (`Transitive Version Isolation`):
+      model each major as a distinct PubGrub package so `^1` and `^2` of one
+      package can co-resolve. Today they still conflict (one node per package).
+- [ ] Cyclic-dependency detection with the WEP's error format (PubGrub
+      terminates on cycles but does not yet report them specially).
 
 ### Phase 8 — Remaining WEP surface
 
