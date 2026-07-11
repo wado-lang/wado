@@ -21,9 +21,55 @@ use crate::tir::TypeId;
 
 use super::super::types::{EnumInfo, FlagsInfo, GenericNewtypeInfo, StructFieldInfo, VariantInfo};
 
+/// A function's canonical signature, resolved once by its module's decl
+/// pass in the declaring perspective, with the function's own type params
+/// registered as `TypeParam` slots. Use sites substitute into this frame;
+/// they never re-resolve the signature AST.
+#[derive(Clone)]
+pub(crate) struct FunctionSig {
+    /// Registered `(name, TypeId)` pairs, in registration order — real
+    /// params as `TypeParam` slots, fn-bound params as their realised
+    /// function type. Effect params are excluded; empty iff the function
+    /// declares only effect params (or none).
+    pub(crate) type_param_ids: Vec<(String, TypeId)>,
+    /// The real (non-effect, non-fn-bound) subset of `type_param_ids`:
+    /// the positional slots substituted by explicit or inferred type args.
+    pub(crate) real_type_params: Vec<(String, TypeId)>,
+    /// Parameter types in declaration order.
+    pub(crate) param_types: Vec<TypeId>,
+    pub(crate) param_names: Vec<String>,
+    pub(crate) param_is_mut: Vec<bool>,
+    /// Default-value expressions — irreducibly AST, re-resolved per call
+    /// site under the callee's scope (WEP 2026-04-11).
+    pub(crate) param_defaults: Vec<Option<ast::Expr>>,
+    /// Declared return type; `None` when the declaration has none.
+    pub(crate) return_type: Option<TypeId>,
+    /// Declared `with` effects, resolved in the declaring perspective
+    /// (effect parameters stay symbolic as `EffectRef::Param`).
+    pub(crate) effects: Vec<crate::tir::EffectRef>,
+}
+
+impl ModuleDecls {
+    /// Carry a snapshot module's decl digests into this compile. The digest
+    /// field list lives only here; a digest missing from this method would
+    /// silently lose stdlib facts on snapshot-hit builds only.
+    pub(crate) fn clone_digests_from(&mut self, other: &ModuleDecls) {
+        self.associated_constants
+            .clone_from(&other.associated_constants);
+        self.effect_op_sigs.clone_from(&other.effect_op_sigs);
+        self.function_sigs = std::rc::Rc::clone(&other.function_sigs);
+        self.current_module_globals
+            .clone_from(&other.current_module_globals);
+    }
+}
+
 /// Per-module declaration tables produced by elaboration.
 #[derive(Default, Clone)]
 pub(crate) struct ModuleDecls {
+    /// Canonical signatures of this module's own free functions, frozen
+    /// behind `Rc` so the program-wide assembly and the stdlib-snapshot
+    /// seeding share the map instead of deep-cloning every signature.
+    pub(crate) function_sigs: std::rc::Rc<IndexMap<String, FunctionSig>>,
     /// `func_name → return TypeId` for functions defined in this module.
     pub(crate) function_return_types: IndexMap<String, TypeId>,
     /// Names visible via `use` declarations in this module (the union of
@@ -35,19 +81,18 @@ pub(crate) struct ModuleDecls {
     /// `local_name → (source, original_name, TypeId, is_mut)` for globals
     /// brought in by `use`.
     pub(crate) imported_globals: IndexMap<String, (ModuleSource, String, TypeId, bool)>,
-    /// `"Type::CONST" → (defining module, resolved type, expr)`. Inlined at
-    /// every use site during resolution. Built from impl blocks across all
-    /// loaded modules plus this module's own impls. The `ModuleSource` records
-    /// which module the `expr` body's AST nodes belong to: `AstId`s are
-    /// only unique within a module, so reify must reify the body under that
-    /// module's perspective (its `ModuleSemantics`) rather than the use
-    /// site's, or a colliding `AstId` would mis-type the inlined constant.
-    ///
-    /// The type is resolved once at population time (`Elaborator::resolve_module`)
-    /// so reify and the combined walk both read the same `TypeId` without
-    /// re-running `resolve_type` at every use site.
+    /// This module's own impl-associated constants, keyed by canonical
+    /// identity `(type-declaring module, "Type::CONST")` — the impl
+    /// target's prefix canonicalized in this module's scope. The value
+    /// carries the impl-declaring module (reify walks the value expr under
+    /// that perspective), the const type, and the value expression.
+    /// Canonical keys make cross-module collisions impossible, so the
+    /// driver-merged view needs no shadowing rules.
     pub(crate) associated_constants:
-        IndexMap<String, (crate::module_source::ModuleSource, TypeId, ast::Expr)>,
+        IndexMap<(ModuleSource, String), (ModuleSource, TypeId, ast::Expr)>,
+    /// This module's own interface / resource operation signatures, keyed
+    /// `(decl name, op name)`, resolved once in the declaring perspective.
+    pub(crate) effect_op_sigs: IndexMap<(String, String), (Vec<TypeId>, Option<TypeId>)>,
 
     /// Names of generic structs declared in this module (used to decide
     /// whether a struct reference needs generic-instance handling).

@@ -677,18 +677,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     param_defaults,
                     param_names,
                 ) = scope.with_module_perspective(impl_module.clone(), target_scope, |s| {
-                    let old_effect_params = std::mem::take(&mut s.current_effect_params);
-                    let old_effect_param_decls = std::mem::take(&mut s.current_effect_param_decls);
-                    let method_effect_params: Vec<&ast::GenericParam> =
-                        method.type_params.iter().filter(|p| p.is_effect).collect();
-                    s.current_effect_params = method_effect_params
-                        .iter()
-                        .map(|p| p.name.clone())
-                        .collect();
-                    s.current_effect_param_decls = method_effect_params
-                        .iter()
-                        .map(|p| (p.name.clone(), p.id))
-                        .collect();
+                    s.annotate_ctx
+                        .trait_ctx
+                        .install_effect_params(&method.type_params);
 
                     let mut idx = impl_offset;
                     for tp in method.type_params.iter().filter(|p| !p.is_effect) {
@@ -758,8 +749,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .map(|p| p.name.clone())
                         .collect();
 
-                    s.current_effect_params = old_effect_params;
-                    s.current_effect_param_decls = old_effect_param_decls;
                     (
                         return_type,
                         self_kind,
@@ -2308,16 +2297,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Without this, `resolve_type("Self")` falls through to
             // UNKNOWN and the caller's argument typecheck silently
             // accepts anything, surfacing as an ICE at codegen.
-            let old_self_type = scope.annotate_ctx.trait_ctx.self_type;
-            if let Some(recv_id) = receiver_type_id {
-                scope.annotate_ctx.trait_ctx.self_type = Some(recv_id);
-            }
-
+            //
             // Resolve the signature in the impl's module (see the
             // `assoc_bindings` note above): the return / param types may name
             // types private to that module.
-            let (return_type, param_types) =
-                scope.with_module_perspective_for(&impl_module_source, |s| {
+            let (return_type, param_types) = scope.with_self_type_if_known(receiver_type_id, |s| {
+                s.with_module_perspective_for(&impl_module_source, |s| {
                     let return_type = return_type_ast
                         .as_ref()
                         .map(|t| s.resolve_type(t))
@@ -2327,9 +2312,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // resolve to the proper `TypeParam` id inference expects.
                     let param_types = s.extract_param_types(&params);
                     (return_type, param_types)
-                });
-
-            scope.annotate_ctx.trait_ctx.self_type = old_self_type;
+                })
+            });
 
             // Remove method-level type params from scope
             for type_param in &method_type_params {
@@ -2410,89 +2394,97 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(trait_methods) = scope.find_trait_decl_methods(&trait_name_base) {
                 for default_method in &trait_methods {
                     if default_method.name == method_name && default_method.body.is_some() {
-                        // Set up Self type so that `Self` in the default method's
-                        // return type resolves to the concrete receiver type
-                        let old_self_type = scope.annotate_ctx.trait_ctx.self_type;
-                        if let Some(recv_id) = receiver_type_id {
-                            scope.annotate_ctx.trait_ctx.self_type = Some(recv_id);
-                        }
+                        // Override `Self` so that `Self` in the default
+                        // method's return type resolves to the concrete
+                        // receiver type.
+                        let (
+                            return_type,
+                            self_kind,
+                            param_types,
+                            param_is_mut,
+                            param_defaults,
+                            param_names,
+                        ) = scope.with_self_type_if_known(receiver_type_id, |s| {
+                            // Bind the trait's own type parameters to the impl's
+                            // concrete trait args so that a default method's
+                            // return/param types written in terms of the trait's
+                            // `T` resolve to the concrete type at the call site
+                            // (e.g., `Maker<i32>::make_with_default` returns i32,
+                            // not the unresolved T).
+                            s.bind_trait_type_params_from_impl(&trait_type_for_name);
 
-                        // Bind the trait's own type parameters to the impl's
-                        // concrete trait args so that a default method's
-                        // return/param types written in terms of the trait's
-                        // `T` resolve to the concrete type at the call site
-                        // (e.g., `Maker<i32>::make_with_default` returns i32,
-                        // not the unresolved T).
-                        scope.bind_trait_type_params_from_impl(&trait_type_for_name);
+                            // Set up method-level type params (e.g., U in map<U>)
+                            let impl_offset = s.annotate_ctx.trait_ctx.type_params.len() as u32;
+                            for (i, type_param) in default_method.type_params.iter().enumerate() {
+                                let index = impl_offset + i as u32;
+                                let type_param_id = s.tysys.type_table.borrow_mut().intern(
+                                    ResolvedType::TypeParam {
+                                        name: type_param.name.clone(),
+                                        index,
+                                    },
+                                );
+                                s.annotate_ctx
+                                    .trait_ctx
+                                    .type_params
+                                    .insert(type_param.name.clone(), (index, type_param_id));
+                                if !type_param.bounds.is_empty() {
+                                    s.annotate_ctx
+                                        .trait_ctx
+                                        .type_param_bounds
+                                        .insert(type_param.name.clone(), type_param.bounds.clone());
+                                }
+                            }
 
-                        // Set up method-level type params (e.g., U in map<U>)
-                        let impl_offset = scope.annotate_ctx.trait_ctx.type_params.len() as u32;
-                        for (i, type_param) in default_method.type_params.iter().enumerate() {
-                            let index = impl_offset + i as u32;
-                            let type_param_id = scope.tysys.type_table.borrow_mut().intern(
-                                ResolvedType::TypeParam {
-                                    name: type_param.name.clone(),
-                                    index,
-                                },
-                            );
-                            scope
-                                .annotate_ctx
-                                .trait_ctx
-                                .type_params
-                                .insert(type_param.name.clone(), (index, type_param_id));
-                            if !type_param.bounds.is_empty() {
-                                scope
-                                    .annotate_ctx
+                            let return_type = default_method
+                                .return_type
+                                .as_ref()
+                                .map(|t| s.resolve_type(t))
+                                .unwrap_or(TypeTable::UNIT);
+                            let self_kind = default_method
+                                .params
+                                .first()
+                                .map(|p| p.self_kind)
+                                .unwrap_or(ast::SelfKind::None);
+                            let param_types = s.extract_param_types(&default_method.params);
+                            let param_is_mut: Vec<bool> = default_method
+                                .params
+                                .iter()
+                                .filter(|p| p.name != "self")
+                                .map(|p| p.is_mut)
+                                .collect();
+                            let param_defaults: Vec<Option<ast::Expr>> = default_method
+                                .params
+                                .iter()
+                                .filter(|p| p.name != "self")
+                                .map(|p| p.default.clone())
+                                .collect();
+                            let param_names: Vec<String> = default_method
+                                .params
+                                .iter()
+                                .filter(|p| p.name != "self")
+                                .map(|p| p.name.clone())
+                                .collect();
+
+                            // Remove method-level type params from scope
+                            for type_param in &default_method.type_params {
+                                s.annotate_ctx
+                                    .trait_ctx
+                                    .type_params
+                                    .shift_remove(&type_param.name);
+                                s.annotate_ctx
                                     .trait_ctx
                                     .type_param_bounds
-                                    .insert(type_param.name.clone(), type_param.bounds.clone());
+                                    .shift_remove(&type_param.name);
                             }
-                        }
-
-                        let return_type = default_method
-                            .return_type
-                            .as_ref()
-                            .map(|t| scope.resolve_type(t))
-                            .unwrap_or(TypeTable::UNIT);
-                        let self_kind = default_method
-                            .params
-                            .first()
-                            .map(|p| p.self_kind)
-                            .unwrap_or(ast::SelfKind::None);
-                        let param_types = scope.extract_param_types(&default_method.params);
-                        let param_is_mut: Vec<bool> = default_method
-                            .params
-                            .iter()
-                            .filter(|p| p.name != "self")
-                            .map(|p| p.is_mut)
-                            .collect();
-                        let param_defaults: Vec<Option<ast::Expr>> = default_method
-                            .params
-                            .iter()
-                            .filter(|p| p.name != "self")
-                            .map(|p| p.default.clone())
-                            .collect();
-                        let param_names: Vec<String> = default_method
-                            .params
-                            .iter()
-                            .filter(|p| p.name != "self")
-                            .map(|p| p.name.clone())
-                            .collect();
-
-                        // Remove method-level type params from scope
-                        for type_param in &default_method.type_params {
-                            scope
-                                .annotate_ctx
-                                .trait_ctx
-                                .type_params
-                                .shift_remove(&type_param.name);
-                            scope
-                                .annotate_ctx
-                                .trait_ctx
-                                .type_param_bounds
-                                .shift_remove(&type_param.name);
-                        }
-                        scope.annotate_ctx.trait_ctx.self_type = old_self_type;
+                            (
+                                return_type,
+                                self_kind,
+                                param_types,
+                                param_is_mut,
+                                param_defaults,
+                                param_names,
+                            )
+                        });
 
                         found_traits.push(TraitMethodMatch {
                             trait_name: trait_name_str.clone(),
@@ -2926,27 +2918,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .find(|p| p.self_kind == ast::SelfKind::None)
                     .map(|p| p.ty.clone());
 
-                let saved_self_type = s.annotate_ctx.trait_ctx.self_type;
-                s.annotate_ctx.trait_ctx.self_type = Some(base_type_id);
+                let (output_type, rhs_type) = s.with_self_type(base_type_id, |s| {
+                    // Process associated types (e.g., `type Output = Self`)
+                    let mut assoc_type_map: IndexMap<String, TypeId> = IndexMap::default();
+                    for (name, ty) in &assoc_types {
+                        let resolved_type = s.resolve_type_with_param_mapping(ty, mapping);
+                        assoc_type_map.insert(name.clone(), resolved_type);
+                    }
 
-                // Process associated types (e.g., `type Output = Self`)
-                let mut assoc_type_map: IndexMap<String, TypeId> = IndexMap::default();
-                for (name, ty) in &assoc_types {
-                    let resolved_type = s.resolve_type_with_param_mapping(ty, mapping);
-                    assoc_type_map.insert(name.clone(), resolved_type);
-                }
+                    let output_type = assoc_type_map
+                        .get("Output")
+                        .copied()
+                        .unwrap_or(base_type_id);
 
-                let output_type = assoc_type_map
-                    .get("Output")
-                    .copied()
-                    .unwrap_or(base_type_id);
-
-                // Resolve the rhs parameter type (first non-self parameter)
-                let rhs_type = rhs_param_ty
-                    .as_ref()
-                    .map(|ty| s.resolve_type_with_param_mapping(ty, mapping));
-
-                s.annotate_ctx.trait_ctx.self_type = saved_self_type;
+                    // Resolve the rhs parameter type (first non-self parameter)
+                    let rhs_type = rhs_param_ty
+                        .as_ref()
+                        .map(|ty| s.resolve_type_with_param_mapping(ty, mapping));
+                    (output_type, rhs_type)
+                });
 
                 Some(ArithmeticTraitInfo {
                     output_type,

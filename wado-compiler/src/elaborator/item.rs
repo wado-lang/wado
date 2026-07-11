@@ -938,10 +938,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// each time; subsequent overwrites inside `resolve_function` keep
     /// the cache consistent with the body's own `TypeId`s.
     pub(super) fn precompute_generic_function_cache(&mut self, func: &Function) {
-        // Mirror `resolve_function`'s `has_real_type_params` guard exactly:
-        // fn-bound params are realised eagerly and do not need
-        // monomorphisation, so a function whose only non-effect params are
-        // fn-bound has nothing to cache.
+        // Mirrors `resolve_function`'s guard: fn-bound params are realised
+        // eagerly, so a function whose only non-effect params are fn-bound
+        // has nothing to cache.
         let has_real_type_params = func
             .type_params
             .iter()
@@ -949,65 +948,84 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !has_real_type_params {
             return;
         }
+        self.populate_generic_function_cache(func);
+    }
+
+    /// Resolve `func`'s canonical signature (see
+    /// [`super::sem::decls::FunctionSig`]) and record its declared return
+    /// type on `function_return_types`. The one signature resolution per
+    /// function in the decl pass — the body walk re-resolves only to
+    /// record per-node facts.
+    pub(super) fn record_function_sig(
+        &mut self,
+        func: &Function,
+    ) -> super::sem::decls::FunctionSig {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
-        // Install effect params before `register_generic_params` so eager
-        // `<F: fn() with E>` bound resolution sees `E` as `EffectRef::Param`.
-        let old_effect_params = std::mem::take(&mut scope.current_effect_params);
-        let old_effect_param_decls = std::mem::take(&mut scope.current_effect_param_decls);
-        let effect_params: Vec<&ast::GenericParam> =
-            func.type_params.iter().filter(|p| p.is_effect).collect();
-        scope.current_effect_params = effect_params.iter().map(|p| p.name.clone()).collect();
-        scope.current_effect_param_decls = effect_params
-            .iter()
-            .map(|p| (p.name.clone(), p.id))
-            .collect();
+        scope
+            .annotate_ctx
+            .trait_ctx
+            .install_effect_params(&func.type_params);
         scope.register_generic_params(&func.type_params, 0);
-        scope.populate_generic_function_cache(func);
-        scope.current_effect_params = old_effect_params;
-        scope.current_effect_param_decls = old_effect_param_decls;
-    }
-
-    /// Populate the three generic-function inference caches
-    /// (`generic_function_params`, `generic_function_resolved_param_types`,
-    /// `generic_function_resolved_return_types`) for `func`, keyed by its
-    /// name. Type parameters must already be registered in
-    /// `self.annotate_ctx.trait_ctx.type_params` before calling this.
-    ///
-    /// Returns the resolved declared return type so callers that need it
-    /// (e.g. `resolve_function` for `task_return_type`) can avoid resolving
-    /// it a second time.
-    fn populate_generic_function_cache(&mut self, func: &Function) -> TypeId {
-        // Skip effect params (never real generics) and fn-bound params
-        // (realised eagerly to their bound's function type by
-        // `register_generic_params`, which does not consume a `TypeParam`
-        // index slot for them). The remaining entries' positional order
-        // matches the dense `TypeParam.index` space so the inference cache
-        // and substitution map line up.
-        let type_param_list: Vec<(String, TypeId)> = func
+        let type_param_ids: Vec<(String, TypeId)> = scope
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .iter()
+            .map(|(name, &(_, id))| (name.clone(), id))
+            .collect();
+        let real_type_params: Vec<(String, TypeId)> = func
             .type_params
             .iter()
             .filter(|p| p.is_real_type_param())
             .filter_map(|p| {
-                self.annotate_ctx
+                scope
+                    .annotate_ctx
                     .trait_ctx
                     .type_params
                     .get(&p.name)
                     .map(|&(_, id)| (p.name.clone(), id))
             })
             .collect();
-        let resolved_param_types: Vec<TypeId> = func
+        let param_types: Vec<TypeId> = func
             .params
             .iter()
-            .filter(|p| p.self_kind == SelfKind::None)
-            .map(|p| self.resolve_type(&p.ty))
+            .map(|p| scope.resolve_type(&p.ty))
             .collect();
-        let declared_return_type = func
-            .return_type
-            .as_ref()
-            .map(|t| self.resolve_type(t))
-            .unwrap_or(TypeTable::UNIT);
+        let return_type = func.return_type.as_ref().map(|t| scope.resolve_type(t));
+        let effects = scope.resolve_effects(&func.effects, &func.effect_ids);
+        drop(scope);
+        self.sem
+            .decls
+            .function_return_types
+            .insert(func.name.clone(), return_type.unwrap_or(TypeTable::UNIT));
+        super::sem::decls::FunctionSig {
+            type_param_ids,
+            real_type_params,
+            param_types,
+            param_names: func.params.iter().map(|p| p.name.clone()).collect(),
+            param_is_mut: func.params.iter().map(|p| p.is_mut).collect(),
+            param_defaults: func.params.iter().map(|p| p.default.clone()).collect(),
+            return_type,
+            effects,
+        }
+    }
+
+    /// Populate the three generic-function inference caches for `func`
+    /// from its recorded [`super::sem::decls::FunctionSig`] — no
+    /// re-resolution. Returns the declared return type for callers that
+    /// need it (`resolve_function`'s `task_return_type`).
+    fn populate_generic_function_cache(&mut self, func: &Function) -> TypeId {
+        let sig = self
+            .sem
+            .decls
+            .function_sigs
+            .get(&func.name)
+            .expect("decl pass records every free function's canonical signature");
+        let type_param_list = sig.real_type_params.clone();
+        let resolved_param_types = sig.param_types.clone();
+        let declared_return_type = sig.return_type.unwrap_or(TypeTable::UNIT);
         self.sem
             .decls
             .generic_function_params
@@ -1039,11 +1057,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Set effect params in scope before `register_generic_params`. Eager
         // `<F: fn() with E>` bound resolution runs inside
-        // `register_generic_params` and consults `current_effect_param_decls`
+        // `register_generic_params` and consults `trait_ctx.effect_params`
         // to recognise `E` as `EffectRef::Param` rather than re-resolving it
         // to a phantom `EffectRef::Concrete`.
-        let old_effect_params = std::mem::take(&mut scope.current_effect_params);
-        let old_effect_param_decls = std::mem::take(&mut scope.current_effect_param_decls);
         let effect_params: Vec<_> = func.type_params.iter().filter(|p| p.is_effect).collect();
         if effect_params.len() > 1 {
             let _ = scope.logger.error(TypeError::InvalidLiteral {
@@ -1051,11 +1067,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: effect_params[1].span,
             });
         }
-        scope.current_effect_params = effect_params.iter().map(|p| p.name.clone()).collect();
-        scope.current_effect_param_decls = effect_params
-            .iter()
-            .map(|p| (p.name.clone(), p.id))
-            .collect();
+        scope
+            .annotate_ctx
+            .trait_ctx
+            .install_effect_params(&func.type_params);
 
         scope.register_generic_params(&func.type_params, 0);
 
@@ -1223,7 +1238,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Stash the resolved `Vec<EffectRef>` for reify (Stage 5): reify
         // cannot reconstruct effect-param canonicalisation without
-        // `current_effect_param_decls`, so the annotate phase records
+        // `trait_ctx.effect_params`, so the annotate phase records
         // the already-resolved list here keyed by the function's `AstId`.
         let func_key = func.id;
         scope.sem.types.function_effects.insert(func_key, effects);
@@ -1240,9 +1255,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .insert(task_key, declared_return_type);
         }
 
-        // Restore effect params scope
-        scope.current_effect_params = old_effect_params;
-        scope.current_effect_param_decls = old_effect_param_decls;
         drop(scope);
 
         // Record the resolved signature for reify to read back (single source
@@ -1575,8 +1587,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Set effect params in scope (for resolving effect names in function types)
-        let old_effect_params = std::mem::take(&mut scope.current_effect_params);
-        let old_effect_param_decls = std::mem::take(&mut scope.current_effect_param_decls);
         let effect_params: Vec<_> = func.type_params.iter().filter(|p| p.is_effect).collect();
         if effect_params.len() > 1 {
             let _ = scope.logger.error(TypeError::InvalidLiteral {
@@ -1584,18 +1594,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: effect_params[1].span,
             });
         }
-        scope.current_effect_params = effect_params.iter().map(|p| p.name.clone()).collect();
-        scope.current_effect_param_decls = effect_params
-            .iter()
-            .map(|p| (p.name.clone(), p.id))
-            .collect();
+        scope
+            .annotate_ctx
+            .trait_ctx
+            .install_effect_params(&func.type_params);
 
         // Then, collect method-level type params. Mirrors
         // `register_generic_params` in `trait_env.rs`: `<F: fn(...)>` /
         // `<F: fn mut(...)>` bounds are realised eagerly to the bound's
         // function type and do NOT consume a `TypeParam` index slot, so the
         // index space stays dense for real type params. Effect params have
-        // their own channel (`current_effect_param_decls`, installed above).
+        // their own channel (`trait_ctx.effect_params`, installed above).
         // Method-level type params start after the impl block's own type
         // params (`impl_type_params`) — the SAME base the monomorphizer uses
         // when substituting (`impl_type_params.len() + param.index` in
@@ -1884,13 +1893,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Stash the resolved `Vec<EffectRef>` for reify (Stage 5): reify
         // cannot reconstruct effect-param canonicalisation without
-        // `current_effect_param_decls`, so the annotate phase records
+        // `trait_ctx.effect_params`, so the annotate phase records
         // the already-resolved list here keyed by the method's `AstId`.
         let method_key = func.id;
         scope.sem.types.function_effects.insert(method_key, effects);
 
-        scope.current_effect_params = old_effect_params;
-        scope.current_effect_param_decls = old_effect_param_decls;
         drop(scope);
 
         // Record the resolved param/return types for reify to read back

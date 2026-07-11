@@ -148,9 +148,9 @@ Materialize resolved packages on disk so the compiler can load them.
       `{host}/{ns}/{name}/core-kiln-generator/{version}/component.wasm` (its
       publish world sub-path), so both artifacts of one package share the tree
       without colliding. The registry prefix folds into `{host}/…` via the
-      `oci::reference` repository mapping. Git's
-      `{host}/{owner}/{repo}/{version}-{short-ref}/` waits on the git provider
-      (Phase 6).
+      `oci::reference` repository mapping. Git's canonical clone
+      `{host}/{owner}/{repo}` with nested `.worktrees/{version}-{short-ref}/`
+      waits on the git provider (Phase 6).
 - [ ] Extract the pulled component's Wado source tree (or, for wado-to-wado, the
       provider-metadata source) into the version directory alongside its
       `wado.toml`.
@@ -225,21 +225,53 @@ The manipulation commands from the CLI WEP.
 
 ### Phase 6 — Git provider
 
-- [ ] Implement the git methods of the CLI provider (`list_git_tags`,
-      `resolve_git_ref`, `fetch_git_manifest`): clone/fetch, enumerate tags,
-      resolve refs to SHAs, read `wado.toml` (honoring `directory`).
-- [ ] Remove the `UnsupportedSource { kind: "git" }` path in `resolve.rs`.
-- [ ] Cache git deps as `{host}/{owner}/{repo}/{version}-{short-ref}/`.
+Designed in detail in the
+[git dependency design](./git-dependency-resolution-design.md): a git dep is a
+source dependency (compiled in like a path dep), cloned to a ghq-compatible Wado
+root with per-version git worktrees, `wado clean` as their GC.
+
+- [x] Parse the git `directory` field onto `DependencySource::Git`.
+- [x] Implement the git methods of the CLI provider (`list_git_tags`,
+      `resolve_git_ref`, `fetch_git_manifest`) via `git` shell-out
+      (`wado-cli/src/git.rs`); removed the `UnsupportedSource { kind: "git" }`
+      path in `resolve.rs` and the resolver now traverses a git dep's transitive
+      deps.
+- [x] Cache git deps under the Wado root as a canonical clone
+      `{host}/{owner}/{repo}` with nested worktrees `.worktrees/{version}-{short-ref}/`
+      (`git worktree`, per-repo `flock`); resolve the root via `WADO_ROOT` →
+      `$XDG_CONFIG_HOME/wado/config.toml` → `~/wado` (config parsed only in
+      wado-cli, exported as `WADO_ROOT`, so wasm-facing crates stay TOML-free).
+- [x] Wire git deps into `dependency_index_from`; `wado fetch` materializes
+      worktrees; added `wado clean`. Verified end to end
+      (`tests/git_dependency.rs`): `update` → `fetch` → `run`.
+- [x] Auto-materialize git worktrees inside `build`/`run` (like registry
+      `fetch_component_dependencies`) so a locked git dep builds without an
+      explicit `wado fetch` (`manifest_and_component_index`).
+- [x] Submodules are populated by default (`git submodule update --init
+      --recursive` on materialize; `tests/git_dependency.rs`).
+- [ ] A bare-mirror/shallow-fetch optimization; a git dep in a monorepo subgroup
+      (`host/group/sub/repo`) is currently keyed as local.
 
 ### Phase 7 — PubGrub resolver
 
-Replace the single-pass resolver with PubGrub for backtracking and precise
-conflict errors, once real registries make multi-constraint graphs common.
+Replace the single-pass greedy resolver with PubGrub for backtracking and
+precise conflict errors.
 
-- [ ] Adopt the `pubgrub` crate; adapt `DependencyProvider` to its interface.
-- [ ] Preserve current behavior (highest-compatible, coexisting
-      semver-incompatible majors) and add derivation-chain error messages.
-- [ ] Cyclic-dependency detection with the WEP's error format.
+- [x] Adopt the `pubgrub` crate (`OfflineDependencyProvider`). The resolver is
+      now two phases: an async prefetch crawls the graph through the existing
+      `DependencyProvider` (listing versions + fetching every in-range version's
+      manifest) into an in-memory graph, then a sync PubGrub solve backtracks
+      over it. Preserves highest-compatible selection; adds real backtracking
+      (`backtracks_past_the_highest_version_to_satisfy_a_second_constraint`) and
+      PubGrub's derivation-chain report on `NoSolution`. Path deps flatten into
+      their declarer; git version-pins expose tags as versions, ref-pins a
+      single resolved version. `wado-manifest` still builds for
+      `wasm32-unknown-unknown` (pubgrub is pure).
+- [ ] Coexisting semver-incompatible majors (`Transitive Version Isolation`):
+      model each major as a distinct PubGrub package so `^1` and `^2` of one
+      package can co-resolve. Today they still conflict (one node per package).
+- [ ] Cyclic-dependency detection with the WEP's error format (PubGrub
+      terminates on cycles but does not yet report them specially).
 
 ### Phase 8 — Remaining WEP surface
 
@@ -254,10 +286,20 @@ conflict errors, once real registries make multi-constraint graphs common.
   mutually exclusive. A `lib:nick` alias fetches the coordinate named by
   `with { package }` while keeping the nickname as the loader's lookup key,
   in both single-file (`with { package, registry, version }`) and manifest
-  (a `lib:nick` `[dependencies]` entry) mode. `with { git = … }` inline
-  sources are still pending.
+  (a `lib:nick` `[dependencies]` entry) mode. Done for git sources:
+  `use { … } from "<name>" with { git, ref[, directory] }` resolves the ref,
+  materializes the worktree, and compiles the git-sourced library into the
+  script (source dep, `resolved` map); a `version` range is rejected inline
+  (no lock to pin it). Verified end to end
+  (`tests/git_dependency.rs::inline_git_source_in_a_single_file_script`).
 - [ ] Workspace publish/resolve edge cases beyond what `publish` covers.
 - [ ] `wado.lock` integrity extensibility (algorithm prefix already in schema).
+- [ ] `[dev-dependencies]` are resolved and locked, but `dependency_index_from`
+      only indexes `[dependencies]`, so a dev dependency of any source
+      (path/registry/git) is not importable at compile/test time. Making
+      dev-dep imports resolve for `wado test` (scoped to the test tier so a dev
+      dep is not importable from production code) is a general follow-up, not a
+      git-specific gap.
 
 #### Registry Kiln generators
 

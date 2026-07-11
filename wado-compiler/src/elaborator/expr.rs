@@ -414,10 +414,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Literal::DataSection => {
                 // #data - returns the __DATA__ section content as a String
                 let data = self
-                    .loaded_modules
+                    .tysys
+                    .data_sections
                     .get(&self.current_module_source)
-                    .and_then(|m| m.data_section())
-                    .map(str::to_owned);
+                    .cloned();
                 let string_type = self.get_string_struct_type();
                 if data.is_none() {
                     let _ = self.logger.error(TypeError::InvalidLiteral {
@@ -542,12 +542,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // cross-module collision, issue #1342). Reify produces the const's
         // TIR under `with_const_module_perspective(const_module)` and does
         // not read these consumer-side entries.
-        if let Some((_const_module, type_id, const_expr)) = self
-            .sem
-            .decls
-            .associated_constants
-            .get(&ident.name)
-            .cloned()
+        if let Some((_const_module, type_id, const_expr)) =
+            self.lookup_associated_constant(&ident.name)
         {
             // Resolve the constant body for its fact-recording side effects;
             // reify re-reifies it (`reify_ident`). Not an l-value.
@@ -625,7 +621,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // definition module's private globals and functions, and to
         // qualified type paths (`Mode::Fast`) whose type the use site
         // never imported (issue #1486).
-        if let Some(fallback) = self.default_scope_module.clone()
+        if let Some(fallback) = self.annotate_ctx.default_scope_module.clone()
             && fallback != self.current_module_source
         {
             if let Some(result) = self.resolve_ident_in_fallback_module(&ident.name, &fallback) {
@@ -654,28 +650,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         name: &str,
         fallback: &ModuleSource,
     ) -> Option<TypeId> {
-        let module = self.loaded_modules.get(fallback)?;
-        for item in &module.items {
-            match item {
-                crate::ast::Item::Global(global_decl) if global_decl.name == name => {
-                    let ty = self.resolve_type(&global_decl.ty);
-                    // Stage 7-B: reify resolves the fallback-module global from
-                    // the same AST items (`reify_ident` branch 3b). Project the
-                    // type only; this default-expr path is never an assignment
-                    // target, so no place is recorded.
-                    return Some(ty);
-                }
-                crate::ast::Item::Function(func) if func.name == name => {
-                    let type_id = self
-                        .compute_func_ref_type_from_ast(func, fallback)
-                        .unwrap_or(TypeTable::UNKNOWN);
-                    // Stage 7-B: reify rebuilds the fallback-module `FuncRef`.
-                    return Some(type_id);
-                }
-                _ => {}
-            }
+        // Reify resolves the fallback-module global / `FuncRef` its own
+        // way; project the type only. This default-expr path is never an
+        // assignment target, so no place is recorded.
+        if let Some(&(ty, _)) = self
+            .tysys
+            .all_globals
+            .get(fallback)
+            .and_then(|m| m.get(name))
+        {
+            return Some(ty);
         }
-        None
+        let sig = self.tysys.function_sig(fallback, name)?.clone();
+        Some(
+            self.compute_func_ref_type_from_sig(&sig, &[])
+                .unwrap_or(TypeTable::UNKNOWN),
+        )
     }
 
     /// Resolve a struct-literal type name in the default-expression scope
@@ -684,7 +674,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// struct name and its defining module. `None` when no default scope is
     /// active or the name doesn't resolve there.
     fn lookup_struct_in_default_scope(&mut self, name: &str) -> Option<(String, ModuleSource)> {
-        let fallback = self.default_scope_module.clone()?;
+        let fallback = self.annotate_ctx.default_scope_module.clone()?;
         if fallback == self.current_module_source {
             return None;
         }
@@ -825,39 +815,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// Build a function type from a non-generic [`ast::Function`] declaration
-    /// that lives in `def_module`. Param/return types resolve in the
-    /// definition module's perspective so type names referencing the
-    /// declaring module's items (newtypes, locally-declared structs,
-    /// re-exported enums, …) bind to the correct entries. Returns `None` if
-    /// the function has unsupplied type parameters (effect-only params are
-    /// treated as non-generic and accepted).
-    pub(super) fn compute_func_ref_type_from_ast(
+    /// Build a function type from a canonical signature. With `type_args`
+    /// empty the function must be non-generic (effect-only params count as
+    /// non-generic); a non-empty `type_args` substitutes the signature's
+    /// `TypeParam` slots positionally.
+    pub(super) fn compute_func_ref_type_from_sig(
         &mut self,
-        func: &ast::Function,
-        def_module: &ModuleSource,
-    ) -> Option<TypeId> {
-        self.compute_func_ref_type_from_ast_with_args(func, def_module, &[])
-    }
-
-    /// Like [`compute_func_ref_type_from_ast`] but also accepts `type_args`
-    /// to substitute the function's type parameters. Used when a generic
-    /// function reference has been pinned via turbofish (`name::<T>`) or
-    /// inferred from an expected `fn(...)` type. With `type_args` empty,
-    /// the function must be non-generic, mirroring the original behaviour.
-    pub(super) fn compute_func_ref_type_from_ast_with_args(
-        &mut self,
-        func: &ast::Function,
-        def_module: &ModuleSource,
+        sig: &super::sem::decls::FunctionSig,
         type_args: &[TypeId],
     ) -> Option<TypeId> {
         // Real (non-effect, non-fn-bound) type-param slots — these are the
         // ones substituted positionally by `type_args`.
-        let real_type_param_count = func
-            .type_params
-            .iter()
-            .filter(|p| p.is_real_type_param())
-            .count();
+        let real_type_param_count = sig.real_type_params.len();
         if type_args.is_empty() && real_type_param_count != 0 {
             return None;
         }
@@ -865,41 +834,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
 
-        let same_module = *def_module == self.current_module_source;
-        let needs_param_scope = !type_args.is_empty();
-        let type_params_for_scope = func.type_params.clone();
-        let func_params = func.params.clone();
-        let func_return_type = func.return_type.clone();
-        let func_effects = func.effects.clone();
-        let func_effect_ids = func.effect_ids.clone();
-        let resolve = move |s: &mut Self| -> (Vec<TypeId>, TypeId, Vec<crate::tir::EffectRef>) {
-            let inner = |inner_self: &mut Self| {
-                let param_types: Vec<TypeId> = func_params
-                    .iter()
-                    .map(|p| inner_self.resolve_type(&p.ty))
-                    .collect();
-                let return_type = func_return_type
-                    .as_ref()
-                    .map(|t| inner_self.resolve_type(t))
-                    .unwrap_or(TypeTable::UNIT);
-                let effects = inner_self.resolve_effects(&func_effects, &func_effect_ids);
-                (param_types, return_type, effects)
-            };
-            if needs_param_scope {
-                let mut scope = s.enter_inherited_type_param_scope();
-                scope.annotate_ctx.trait_ctx.type_params.clear();
-                scope.register_generic_params(&type_params_for_scope, 0);
-                inner(&mut scope)
-            } else {
-                inner(s)
-            }
-        };
-        let (mut param_types, mut return_type, effects) = if same_module {
-            resolve(self)
-        } else {
-            let scope = self.tysys.trait_env.import_scope(def_module);
-            self.with_module_perspective(def_module.clone(), scope, resolve)
-        };
+        let mut param_types = sig.param_types.clone();
+        let mut return_type = sig.return_type.unwrap_or(TypeTable::UNIT);
         if !type_args.is_empty() {
             for p in &mut param_types {
                 *p = self.substitute_type_params(*p, type_args);
@@ -912,7 +848,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(self.tysys.type_table.borrow_mut().make_function(
             param_types,
             return_type,
-            effects,
+            sig.effects.clone(),
             Vec::new(),
         ))
     }
@@ -935,20 +871,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         self.record_item_reference_by_name(ident.id, &ident.name);
 
-        let Some((func_ast, def_module, _defining_name)) =
-            self.lookup_func_ast_for_ref(&ident.name)
+        let Some((sig, _def_module, _defining_name)) = self.lookup_func_sig_for_ref(&ident.name)
         else {
-            // Fallback: known function but its AST is unreachable (shouldn't
-            // normally happen). Emit a stub FuncRef so downstream stays sane.
-            // Stage 7-B: reify rebuilds the stub `FuncRef`.
+            // Fallback: known function but its signature is unreachable
+            // (shouldn't normally happen). Emit a stub FuncRef so downstream
+            // stays sane. Stage 7-B: reify rebuilds the stub `FuncRef`.
             return TypeTable::UNKNOWN;
         };
 
-        let real_type_param_count = func_ast
-            .type_params
-            .iter()
-            .filter(|p| p.is_real_type_param())
-            .count();
+        let real_type_param_count = sig.real_type_params.len();
 
         // (a) Turbofish on the identifier: `name::<T, ...>`.
         if !ident.type_args.is_empty() {
@@ -969,7 +900,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|t| self.resolve_type(t))
                 .collect();
             let type_id = self
-                .compute_func_ref_type_from_ast_with_args(&func_ast, &def_module, &resolved_args)
+                .compute_func_ref_type_from_sig(&sig, &resolved_args)
                 .unwrap_or(TypeTable::UNKNOWN);
             self.record_func_ref_instantiation(ident.id, &resolved_args, type_id);
             // Stage 7-B: reify rebuilds the turbofish `FuncRef` from the
@@ -980,7 +911,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Non-generic function: keep the original behaviour.
         if real_type_param_count == 0 {
             let type_id = self
-                .compute_func_ref_type_from_ast(&func_ast, &def_module)
+                .compute_func_ref_type_from_sig(&sig, &[])
                 .unwrap_or(TypeTable::UNKNOWN);
             // Stage 7-B: reify rebuilds the non-generic `FuncRef`.
             return type_id;
@@ -988,10 +919,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // (b) Generic without turbofish: try to infer from `expected_type`.
         if let Some(expected) = expected_type {
-            match self.infer_func_ref_type_args(&func_ast, &def_module, expected) {
+            match self.infer_func_ref_type_args(&sig, expected) {
                 FuncRefInference::Ok(inferred) => {
                     let type_id = self
-                        .compute_func_ref_type_from_ast_with_args(&func_ast, &def_module, &inferred)
+                        .compute_func_ref_type_from_sig(&sig, &inferred)
                         .unwrap_or(TypeTable::UNKNOWN);
                     self.record_func_ref_instantiation(ident.id, &inferred, type_id);
                     // Stage 7-B: reify rebuilds the inferred-generic `FuncRef`
@@ -1052,17 +983,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
     }
 
-    /// Look up the AST [`ast::Function`], defining module, and the name the
-    /// function is registered under in that module for a function-reference
-    /// identifier (either a current-module function or an imported one,
-    /// possibly via an alias). The third tuple element is the *defining*
-    /// name — for `use { foo as bar }` it is `"foo"`, not the alias `"bar"`
-    /// — which downstream code uses to keep the TIR `FuncRef` aligned with
-    /// the post-monomorphization key space.
-    fn lookup_func_ast_for_ref(&self, name: &str) -> Option<(ast::Function, ModuleSource, String)> {
-        if let Some(func) = self.lookup_current_func(name) {
+    /// Canonical signature, defining module, and defining name for a
+    /// function-reference identifier (local or imported, possibly aliased).
+    /// The name is the *defining* one — `"foo"` for `use { foo as bar }` —
+    /// keeping the TIR `FuncRef` aligned with the post-monomorphization
+    /// key space.
+    fn lookup_func_sig_for_ref(
+        &self,
+        name: &str,
+    ) -> Option<(super::sem::decls::FunctionSig, ModuleSource, String)> {
+        if let Some(sig) = self.tysys.function_sig(&self.current_module_source, name) {
             return Some((
-                func.clone(),
+                sig.clone(),
                 self.current_module_source.clone(),
                 name.to_string(),
             ));
@@ -1070,14 +1002,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let symbol = self.symbols.lookup(&self.current_module_source, name)?;
         let src = symbol.module_source().clone();
         let original = symbol.name.clone();
-        let func = Self::lookup_func_in_loaded_module(
-            self.loaded_modules,
-            &self.tysys.loaded_module_func_indices,
-            &src,
-            &original,
-        )?
-        .clone();
-        Some((func, src, original))
+        let sig = self.tysys.function_sig(&src, &original)?.clone();
+        Some((sig, src, original))
     }
 
     /// Try to derive type arguments for a generic function reference from an
@@ -1097,8 +1023,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///     not a function shape at all (or no expected type was supplied).
     fn infer_func_ref_type_args(
         &mut self,
-        func: &ast::Function,
-        def_module: &ModuleSource,
+        sig: &super::sem::decls::FunctionSig,
         expected: TypeId,
     ) -> FuncRefInference {
         let (expected_params, expected_return) = {
@@ -1120,11 +1045,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
         };
-        let decl_param_count = func
-            .params
-            .iter()
-            .filter(|p| matches!(p.self_kind, crate::ast::SelfKind::None))
-            .count();
+        let decl_param_count = sig.param_types.len();
         if expected_params.len() != decl_param_count {
             return FuncRefInference::ArityMismatch {
                 expected_params: expected_params.len(),
@@ -1132,40 +1053,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
         }
 
-        // Resolve the function's params and return type with `TypeParam{i}`
-        // entries for its declared type parameters.
-        let same_module = *def_module == self.current_module_source;
-        let type_params_for_scope = func.type_params.clone();
-        let func_params = func.params.clone();
-        let func_return_type = func.return_type.clone();
-        let resolve = move |s: &mut Self| -> (Vec<TypeId>, TypeId, Vec<TypeId>) {
-            let mut scope = s.enter_inherited_type_param_scope();
-            scope.annotate_ctx.trait_ctx.type_params.clear();
-            scope.register_generic_params(&type_params_for_scope, 0);
-            let type_param_ids: Vec<TypeId> = scope
-                .annotate_ctx
-                .trait_ctx
-                .type_params
-                .iter()
-                .map(|(_, &(_, id))| id)
-                .collect();
-            let param_types: Vec<TypeId> = func_params
-                .iter()
-                .filter(|p| matches!(p.self_kind, crate::ast::SelfKind::None))
-                .map(|p| scope.resolve_type(&p.ty))
-                .collect();
-            let return_type = func_return_type
-                .as_ref()
-                .map(|t| scope.resolve_type(t))
-                .unwrap_or(TypeTable::UNIT);
-            (param_types, return_type, type_param_ids)
-        };
-        let (decl_params, decl_return, type_param_ids) = if same_module {
-            resolve(self)
-        } else {
-            let scope = self.tysys.trait_env.import_scope(def_module);
-            self.with_module_perspective(def_module.clone(), scope, resolve)
-        };
+        let type_param_ids: Vec<TypeId> = sig.type_param_ids.iter().map(|&(_, id)| id).collect();
+        let decl_params = &sig.param_types;
+        let decl_return = sig.return_type.unwrap_or(TypeTable::UNIT);
         if type_param_ids.is_empty() {
             return FuncRefInference::NotApplicable;
         }
@@ -2554,12 +2444,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && !self.is_known_case_of_type(scrutinee_type, &normalized, variant_qualifier)
         {
             let assoc_const_key = Self::exh_assoc_const_key(variant_name, variant_qualifier);
-            if let Some((_m, _type_id, const_expr)) = self
-                .sem
-                .decls
-                .associated_constants
-                .get(&assoc_const_key)
-                .cloned()
+            if let Some((_m, _type_id, const_expr)) =
+                self.lookup_associated_constant(&assoc_const_key)
             {
                 if let ast::Expr::Literal(lit) = &const_expr {
                     match &lit.value {
@@ -3414,13 +3300,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let resolved = if struct_module_source == self.current_module_source {
                         self.resolve_expr(&default_expr, ctx, Some(*expected_type_id))
                     } else {
-                        let prev_scope = self
-                            .default_scope_module
-                            .replace(struct_module_source.clone());
-                        let resolved =
-                            self.resolve_expr(&default_expr, ctx, Some(*expected_type_id));
-                        self.default_scope_module = prev_scope;
-                        resolved
+                        self.with_default_scope_module(Some(struct_module_source.clone()), |s| {
+                            s.resolve_expr(&default_expr, ctx, Some(*expected_type_id))
+                        })
                     };
                     self.typecheck(resolved, *expected_type_id, struct_lit.span);
                     fields.push(TirStructField {

@@ -328,8 +328,7 @@ pub(crate) struct TypeAnnotations {
     /// that annotate resolves once per element in a *different* type
     /// context. Every per-element map below would otherwise be overwritten
     /// so only the last element's facts survive. Annotate captures each
-    /// element's body facts here (`Elaborator::capture_tuple_overlays`, now
-    /// unconditional since reify is the sole TIR consumer) and reify replays
+    /// element's body facts here (`resolve_tuple_for_of`) and reify replays
     /// them per element. Populated whenever a module has tuple-for-of loops;
     /// empty only when it has none.
     pub(crate) tuple_overlays: IndexMap<AstId, Vec<Vec<ElementOverlay>>>,

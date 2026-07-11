@@ -12,7 +12,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::callee::CalleeRef;
-use super::trait_env::AnnotateCtx;
+use super::scope::Scope;
 use super::types::{MethodInfo, ResolvedTraitMethod, TraitMethodMatch, TypeError, TypeLookup};
 use super::tysys::TypeSystem;
 
@@ -62,6 +62,29 @@ impl StructuralMember<'_> {
             Self::Case(name) => format!("variant `{name}`"),
         }
     }
+}
+
+/// Canonical identity of an associated-constant key: canonicalize the
+/// `Type` prefix of a use-site `Type::CONST` spelling via
+/// [`canonical_decl_key_with`]. `None` for keys with no `::` (never a
+/// constant key). Shared by annotate and reify so both resolve a constant
+/// to the same identity.
+pub(super) fn canonical_assoc_const_key(
+    key: &str,
+    current_module_source: &ModuleSource,
+    imports: &super::sem::ModuleImports,
+    symbols: &crate::symbol::SymbolTable,
+    trait_env: &super::trait_env::TraitEnv,
+) -> Option<(ModuleSource, String)> {
+    let (prefix, _) = key.split_once("::")?;
+    let (type_module, canon_name) =
+        canonical_decl_key_with(prefix, current_module_source, imports, symbols, trait_env);
+    let canon_key = if canon_name == prefix {
+        key.to_string()
+    } else {
+        format!("{}{}", canon_name, &key[prefix.len()..])
+    };
+    Some((type_module, canon_key))
 }
 
 /// Free-function form of [`Elaborator::canonical_decl_key`], callable from
@@ -379,7 +402,7 @@ impl TypeSystem {
     /// Check if a type implements a specific trait (for trait bound checking)
     pub(super) fn type_implements_trait(
         &self,
-        ctx: &AnnotateCtx,
+        ctx: &Scope,
         scope: &TypeLookup,
         type_id: TypeId,
         trait_name: &str,
@@ -420,7 +443,7 @@ impl TypeSystem {
     /// explained, since those are the ones a diagnostic can usefully unfold.
     pub(super) fn trait_unimpl_reason_chain(
         &self,
-        ctx: &AnnotateCtx,
+        ctx: &Scope,
         scope: &TypeLookup,
         type_id: TypeId,
         trait_name: &str,
@@ -432,7 +455,7 @@ impl TypeSystem {
 
     fn collect_trait_unimpl_reason(
         &self,
-        ctx: &AnnotateCtx,
+        ctx: &Scope,
         scope: &TypeLookup,
         type_id: TypeId,
         trait_name: &str,
@@ -615,7 +638,7 @@ impl TypeSystem {
 
     pub(super) fn structurally_derivable_for_explicit_request(
         &self,
-        ctx: &AnnotateCtx,
+        ctx: &Scope,
         scope: &TypeLookup,
         type_id: TypeId,
         trait_name: &str,
@@ -661,7 +684,7 @@ impl TypeSystem {
 
     fn type_implements_trait_inner(
         &self,
-        ctx: &AnnotateCtx,
+        ctx: &Scope,
         scope: &TypeLookup,
         resolved: &ResolvedType,
         trait_name: &str,
@@ -857,7 +880,7 @@ impl TypeSystem {
     /// Helper to check if there's an impl block for a type implementing a trait
     pub(super) fn find_trait_impl_for_type(
         &self,
-        ctx: &AnnotateCtx,
+        ctx: &Scope,
         scope: &TypeLookup,
         type_name: &str,
         trait_name: &str,
@@ -867,7 +890,7 @@ impl TypeSystem {
 
     pub(super) fn has_real_trait_impl_for_type(
         &self,
-        ctx: &AnnotateCtx,
+        ctx: &Scope,
         scope: &TypeLookup,
         type_name: &str,
         trait_name: &str,
@@ -880,7 +903,7 @@ impl TypeSystem {
     /// For `impl<T: Eq> Eq for List<T>`, when checking `List<Foo>`, passes `[Foo]` as `type_args`.
     pub(super) fn find_trait_impl_for_type_with_args(
         &self,
-        ctx: &AnnotateCtx,
+        ctx: &Scope,
         scope: &TypeLookup,
         type_name: &str,
         trait_name: &str,
@@ -925,7 +948,7 @@ impl TypeSystem {
 
     fn blanket_trait_impl_applies(
         &self,
-        ctx: &AnnotateCtx,
+        ctx: &Scope,
         scope: &TypeLookup,
         type_name: &str,
         trait_name: &str,
@@ -1237,7 +1260,7 @@ impl TypeSystem {
     /// For `impl<T: Ord> List<T>`, checks that the concrete type substituted for T implements Ord.
     pub(super) fn check_impl_block_bounds(
         &self,
-        ctx: &AnnotateCtx,
+        ctx: &Scope,
         scope: &TypeLookup,
         type_params: &[ast::GenericParam],
         impl_ty: &ast::Type,

@@ -190,7 +190,7 @@ pub fn dependency_index_from(
     for (name, dep) in &manifest.dependencies {
         match &dep.source {
             DependencySource::Path { path, .. } => {
-                match dependency_entry_path(&manifest_dir.join(path)) {
+                match package_lib_entry(&manifest_dir.join(path)) {
                     Ok(entry) => {
                         index
                             .resolved
@@ -201,7 +201,19 @@ pub fn dependency_index_from(
                     }
                 }
             }
-            DependencySource::Git { .. } | DependencySource::Workspace => {}
+            DependencySource::Git { url, directory, .. } => {
+                match git_dependency_entry(manifest_dir, name, url, directory.as_deref()) {
+                    Ok(entry) => {
+                        index
+                            .resolved
+                            .insert(name.clone(), relative_path(&base_abs, &absolutize(&entry)));
+                    }
+                    Err(reason) => {
+                        index.unresolved.insert(name.clone(), reason);
+                    }
+                }
+            }
+            DependencySource::Workspace => {}
             // Registry deps are indexed from `registry_component_needs` below,
             // so the lock is read once for the whole manifest.
             DependencySource::Registry { .. } => {}
@@ -228,6 +240,62 @@ pub fn dependency_index_from(
     index
 }
 
+/// The entry module of a git dependency, resolved offline from `wado.lock` + the
+/// warm worktree cache. `Ok(entry)` is the checked-out `[package].lib` (honoring
+/// `directory`); `Err(reason)` explains why it cannot be placed (no lock pin, no
+/// cache root, or a cold worktree pointing the user at `wado fetch`).
+fn git_dependency_entry(
+    manifest_dir: &Path,
+    name: &str,
+    url: &str,
+    directory: Option<&str>,
+) -> Result<PathBuf, String> {
+    let id = format!("git+{url}/{name}");
+    let (version, resolved_ref) = locked_git_packages(manifest_dir)
+        .remove(&id)
+        .ok_or_else(|| format!("no `wado.lock` entry for {name:?}; run `wado update`"))?;
+    let root =
+        cache_root().ok_or_else(|| format!("no cache root for {name:?}; set `WADO_ROOT`"))?;
+    let relative = wado_manifest::cache::git_worktree_relative(url, &version, &resolved_ref)
+        .ok_or_else(|| format!("cannot place {name:?} in the cache (bad git url {url:?})"))?;
+    let worktree_root = root.join(relative);
+    // The `.ready` completion marker (written last by `wado-cli`'s materializer)
+    // guards against reading a partial worktree mid-materialize; without it, a
+    // cold or in-progress worktree points the user at `wado fetch`.
+    let mut marker = worktree_root.clone().into_os_string();
+    marker.push(".ready");
+    if !worktree_root.is_dir() || !Path::new(&marker).is_file() {
+        return Err(format!("{name:?} is not cached; run `wado fetch`"));
+    }
+    let pkg_dir = match directory {
+        Some(dir) => worktree_root.join(dir),
+        None => worktree_root,
+    };
+    package_lib_entry(&pkg_dir)
+}
+
+/// `lock id -> (version, resolved-ref)` for every git `[[package]]` in
+/// `manifest_dir`'s `wado.lock`. Empty when no lock is present. Shared so the CLI
+/// can materialize the same worktrees the offline index resolves against.
+#[must_use]
+pub fn locked_git_packages(
+    manifest_dir: &Path,
+) -> std::collections::BTreeMap<String, (String, String)> {
+    let mut out = std::collections::BTreeMap::new();
+    let Ok(text) = std::fs::read_to_string(manifest_dir.join("wado.lock")) else {
+        return out;
+    };
+    let Ok(lock) = text.parse::<wado_manifest::LockFile>() else {
+        return out;
+    };
+    for pkg in &lock.packages {
+        if let Some(sha) = &pkg.resolved_ref {
+            out.insert(pkg.id.clone(), (pkg.version.clone(), sha.clone()));
+        }
+    }
+    out
+}
+
 /// `lock id -> version` for every registry `[[package]]` in `manifest_dir`'s
 /// `wado.lock`. Keyed by the full id so distinct registries never collide.
 /// Empty when no lock is present (a cold checkout).
@@ -245,9 +313,16 @@ fn locked_registry_versions(manifest_dir: &Path) -> std::collections::BTreeMap<S
     out
 }
 
-/// The dependency cache root: `$WADO_ROOT`, else `~/wado` (`$HOME/wado`).
-/// `None` when neither is set — an honest "no cache" (registry deps then read
+/// The Wado root (dependency cache): `$WADO_ROOT`, else `~/wado` (`$HOME/wado`).
+/// `None` when neither resolves — an honest "no cache" (registry deps then read
 /// as uncached) rather than a meaningless relative path.
+///
+/// This reads only the environment, so it stays dependency-light and works on
+/// every target (a no-fs wasm build simply sees no env and falls through to
+/// `None`). The `$XDG_CONFIG_HOME/wado/config.toml` `root` key is resolved once
+/// by the CLI (`wado-cli`), which exports it as `$WADO_ROOT` at startup, so both
+/// the CLI and the embedded LSP server observe one configured root here without
+/// this crate ever parsing a config file.
 #[must_use]
 pub fn cache_root() -> Option<PathBuf> {
     if let Some(root) = std::env::var_os("WADO_ROOT").filter(|v| !v.is_empty()) {
@@ -275,10 +350,12 @@ fn nearest_manifest(start: &Path) -> Option<(wado_manifest::Manifest, PathBuf)> 
     }
 }
 
-/// The entry module file of a path dependency: the file itself when the path
+/// The entry module file of a source dependency: the file itself when the path
 /// points at a `.wado` file, otherwise the directory's `[package].lib`. The
-/// `Err` describes why a declared dependency has no usable entry.
-fn dependency_entry_path(dep_path: &Path) -> Result<PathBuf, String> {
+/// `Err` describes why a dependency has no usable entry. Shared by the path,
+/// git (worktree), and single-file inline-git resolution paths so all three
+/// agree on how a package's library entry is located.
+pub fn package_lib_entry(dep_path: &Path) -> Result<PathBuf, String> {
     if dep_path.extension().is_some_and(|e| e == "wado") {
         return Ok(dep_path.to_path_buf());
     }

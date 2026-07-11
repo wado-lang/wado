@@ -21,6 +21,7 @@ wado update --pin [name]           # update lock file + tighten toml specs
 wado update --breaking [name]      # update across major versions
 wado fetch                         # download dependencies without building
 wado list [filter]                 # list cached packages
+wado clean                         # evict derived cache state (git worktrees)
 wado exec <dep-name> [args...]     # run dependency's command entry point
 ```
 
@@ -67,7 +68,7 @@ still sees dependencies and builds real files; it just never does the resolving.
 | --------------------- | -------------------------------------------------------------------- | ------------------------------ |
 | Compiler primitives   | `compile` `check` `dump` `query` `format` `doc` `wit` `syntax` `lsp` | No (consumes a resolved index) |
 | Project build & run   | `build` `run` `serve` `test` `publish`                               | Yes                            |
-| Dependency management | `add` `remove` `update` `fetch` `list` `exec`                        | Yes                            |
+| Dependency management | `add` `remove` `update` `fetch` `list` `clean` `exec`                | Yes                            |
 | Scaffolding           | `init`                                                               | —                              |
 
 This supersedes the earlier model where a bare `wado compile` (no argument or a
@@ -95,6 +96,7 @@ plays exactly one role toward the dependency graph:
 | `update`  | `cargo update`              | manifest-op  | resolve                         |
 | `fetch`   | `cargo fetch`               | manifest-op  | resolve if no lock, + download  |
 | `list`    | `cargo tree` (cache view)   | inspect      | cache                           |
+| `clean`   | `cargo clean` (cache scope) | inspect      | cache (evicts derived state)    |
 | `build`   | `cargo build`               | orchestrator | consume (auto-resolve if stale) |
 | `run`     | `cargo run`                 | driver       | consume                         |
 | `serve`   | `cargo run` (service world) | driver       | consume                         |
@@ -312,37 +314,40 @@ Dependencies are stored in a structured directory tree under `~/wado/`, mirrorin
 ```
 ~/wado/
 ├── ghcr.io/                          # registry host
-│   ├── docs/regex/
-│   │   └── 0.1.2/
-│   │       ├── wado.toml
-│   │       └── src/
-│   └── std/json/
-│       └── 1.2.0/
-├── github.com/                      # git host
-│   └── user/router/
-│       └── 1.0.2-abc1234d/          # version + short commit
-│           ├── wado.toml
-│           └── src/
-└── gitlab.com/
-    └── user/bench/
-        └── 0.1.0-def56789/
+│   └── docs/regex/0.1.2/component.wasm
+└── github.com/                       # git host
+    └── user/router/                  # canonical clone (default branch, ghq entry)
+        └── .worktrees/
+            ├── 1.0.2-abc1234d/       # linked worktree @ pinned commit
+            └── 2.1.0-def56789/
 ```
 
 #### Path Convention
 
-| Source   | Path pattern                                       | Example                                  |
-| -------- | -------------------------------------------------- | ---------------------------------------- |
-| Registry | `{registry-host}/{namespace}/{name}/{version}/`    | `ghcr.io/docs/regex/0.1.2/`              |
-| Git      | `{git-host}/{owner}/{repo}/{version}-{short-ref}/` | `github.com/user/router/1.0.2-abc1234d/` |
+| Source   | Path pattern                                                  | Example                                             |
+| -------- | ------------------------------------------------------------- | --------------------------------------------------- |
+| Registry | `{registry-host}/{namespace}/{name}/{version}/`               | `ghcr.io/docs/regex/0.1.2/`                         |
+| Git      | `{git-host}/{owner}/{repo}/.worktrees/{version}-{short-ref}/` | `github.com/user/router/.worktrees/1.0.2-abc1234d/` |
 
-Git dependencies include a short commit prefix (8 hex chars) in the directory name to distinguish different commits that resolve to the same version tag. Registry dependencies use the exact resolved version.
+A git dependency is source, so it clones to `{host}/{owner}/{repo}` (a real,
+ghq-browsable checkout that hosts the shared object store), and each pinned
+commit is a linked git worktree nested in `.worktrees/`. Nesting keeps `ghq list`
+to one entry per repo, and the short commit prefix (8 hex) distinguishes commits
+sharing a version tag. Worktrees are disposable derived state (rebuilt from the
+lock by `wado fetch`, evicted by `wado clean`); registry dependencies are
+prebuilt components at the exact version. See the
+[git dependency design](./git-dependency-resolution-design.md) for the acquisition
+and concurrency model.
 
 #### Cache Root
 
-The default cache root is `~/wado/`. This can be overridden via the `WADO_ROOT` environment variable:
+The cache tree is the **Wado root**. Its location resolves as `WADO_ROOT` (env) →
+`root` in `$XDG_CONFIG_HOME/wado/config.toml` → default `~/wado/`. Point it at an
+existing ghq root to share checkouts with `ghq`:
 
-```sh
-WADO_ROOT=/tmp/wado-cache wado fetch    # custom cache location
+```toml
+# $XDG_CONFIG_HOME/wado/config.toml
+root = "~/ghq"
 ```
 
 ### `wado list`
@@ -373,8 +378,8 @@ Columns: package identity, version, source host. Sorted by source host then pack
 $ wado list --path
 /home/user/wado/ghcr.io/docs/regex/0.1.2
 /home/user/wado/ghcr.io/std/json/1.2.0
-/home/user/wado/github.com/user/router/1.0.2-abc1234d
-/home/user/wado/gitlab.com/user/bench/0.1.0-def56789
+/home/user/wado/github.com/user/router/.worktrees/1.0.2-abc1234d
+/home/user/wado/gitlab.com/user/bench/.worktrees/0.1.0-def56789
 ```
 
 One absolute path per line. Designed for piping into other tools:
@@ -388,6 +393,15 @@ wado list --path | xargs -I{} ls {}/wado.toml
 ```
 
 `wado list` scans the cache directory — it does not require a `wado.toml` or project context. It reports what is physically present on disk, regardless of whether any project currently depends on it.
+
+### `wado clean`
+
+Evicts derived cache state, the counterpart to `wado list`. It removes the git
+worktrees (`{owner}/{repo}/.worktrees/`) and prunes their admin entries, leaving
+the canonical clones and registry components so a rebuild needs no network;
+`--all` additionally removes those. Worktrees are reproducible from the lock, so
+this is always safe — `wado fetch` rebuilds them. Like `wado list`, it scans the
+cache and needs no project context.
 
 ### Entry Point and CLI Commands
 

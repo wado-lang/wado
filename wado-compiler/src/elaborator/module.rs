@@ -380,67 +380,159 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Collect function signatures for call resolution
     pub(super) fn collect_function_signatures(&mut self, module: &Module) {
         for item in &module.items {
-            match item {
-                Item::Function(func) => {
-                    // Set up the function's own type parameters before resolving the return type,
-                    // so that associated type projections like `V::Output` can be resolved.
-                    // Use inherited scope to preserve caller-provided context;
-                    // only `type_params` and `type_param_bounds` are replaced
-                    // (matching the original `mem::take` semantics).
-                    let mut scope = self.enter_inherited_type_param_scope();
-                    scope.annotate_ctx.trait_ctx.type_params.clear();
-                    scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
-                    scope.register_generic_params(&func.type_params, 0);
-                    let return_type = func
-                        .return_type
-                        .as_ref()
-                        .map(|t| scope.resolve_type(t))
-                        .unwrap_or(TypeTable::UNIT);
-                    drop(scope);
-                    self.sem
-                        .decls
-                        .function_return_types
-                        .insert(func.name.clone(), return_type);
-                }
-                Item::Impl(impl_block) => {
-                    // Set up type parameters from impl block before resolving method signatures.
-                    // Use inherited scope to preserve caller-provided context;
-                    // only `type_params`, `type_param_bounds`, and
-                    // `assoc_type_bindings` are replaced (matching the
-                    // original `mem::take` semantics for those fields).
-                    let mut scope = self.enter_inherited_type_param_scope();
-                    scope.annotate_ctx.trait_ctx.type_params.clear();
-                    scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
-                    scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
+            if let Item::Impl(impl_block) = item {
+                // Set up type parameters from impl block before resolving method signatures.
+                // Use inherited scope to preserve caller-provided context;
+                // only `type_params`, `type_param_bounds`, and
+                // `assoc_type_bindings` are replaced (matching the
+                // original `mem::take` semantics for those fields).
+                let mut scope = self.enter_inherited_type_param_scope();
+                scope.annotate_ctx.trait_ctx.type_params.clear();
+                scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
+                scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
 
-                    // First, collect explicit type params from impl<T>, skipping concrete types
-                    // (e.g., `impl<i32, T> IndexValue<i32> for Triple<T>` — skip "i32").
-                    let mut actual_idx = 0u32;
-                    for param in &impl_block.type_params {
-                        if scope
+                // First, collect explicit type params from impl<T>, skipping concrete types
+                // (e.g., `impl<i32, T> IndexValue<i32> for Triple<T>` — skip "i32").
+                let mut actual_idx = 0u32;
+                for param in &impl_block.type_params {
+                    if scope
+                        .tysys
+                        .is_known_type_name_in(&scope.current_module_source, &param.name)
+                    {
+                        continue;
+                    }
+                    let type_id = if param.is_pack {
+                        scope
                             .tysys
-                            .is_known_type_name_in(&scope.current_module_source, &param.name)
-                        {
-                            continue;
+                            .type_table
+                            .borrow_mut()
+                            .make_type_pack(param.name.clone(), actual_idx)
+                    } else {
+                        scope
+                            .tysys
+                            .type_table
+                            .borrow_mut()
+                            .make_type_param(param.name.clone(), actual_idx)
+                    };
+                    scope
+                        .annotate_ctx
+                        .trait_ctx
+                        .type_params
+                        .insert(param.name.clone(), (actual_idx, type_id));
+                    scope
+                        .annotate_ctx
+                        .trait_ctx
+                        .type_param_decls
+                        .insert(param.name.clone(), param.id);
+                    if !param.bounds.is_empty() {
+                        scope
+                            .annotate_ctx
+                            .trait_ctx
+                            .type_param_bounds
+                            .insert(param.name.clone(), param.bounds.clone());
+                    }
+                    actual_idx += 1;
+                }
+
+                // Also collect type params from generic type: impl List<T> {...}
+                // The type args in List<T> are type parameters.
+                // For ref types (impl Trait for &Container<T>), unwrap the reference first.
+                let impl_inner_ty = match &impl_block.ty {
+                    ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
+                    other => other,
+                };
+                if let ast::Type::Generic(generic) = impl_inner_ty {
+                    let offset = actual_idx as usize;
+                    for (i, arg) in generic.args.iter().enumerate() {
+                        if let ast::Type::Named(named) = arg {
+                            let name = &named.name;
+                            if !scope.annotate_ctx.trait_ctx.type_params.contains_key(name)
+                                && !scope
+                                    .tysys
+                                    .is_known_type_name_in(&scope.current_module_source, name)
+                            {
+                                let index = (offset + i) as u32;
+                                let type_id = scope
+                                    .tysys
+                                    .type_table
+                                    .borrow_mut()
+                                    .make_type_param(name.clone(), index);
+                                scope
+                                    .annotate_ctx
+                                    .trait_ctx
+                                    .type_params
+                                    .insert(name.clone(), (index, type_id));
+                            }
                         }
-                        let type_id = if param.is_pack {
-                            scope
-                                .tysys
-                                .type_table
-                                .borrow_mut()
-                                .make_type_pack(param.name.clone(), actual_idx)
-                        } else {
-                            scope
-                                .tysys
-                                .type_table
-                                .borrow_mut()
-                                .make_type_param(param.name.clone(), actual_idx)
-                        };
+                    }
+                }
+
+                // Set up associated type bindings for trait implementations
+                if impl_block.trait_type.is_some() {
+                    for binding in &impl_block.associated_types {
+                        let type_id = scope.resolve_type(&binding.ty);
+                        scope
+                            .annotate_ctx
+                            .trait_ctx
+                            .assoc_type_bindings
+                            .insert(binding.name.clone(), type_id);
+                    }
+                }
+
+                // Resolve the trait type for its side effect of recording a
+                // use->def reference from the trait-name identifier in the
+                // impl header (`impl Greet for Bot`) to the trait decl. The
+                // resulting TypeId is unused because trait bounds are
+                // checked via trait_query, not via type substitution.
+                if let Some(trait_type) = &impl_block.trait_type {
+                    let _ = scope.resolve_type(trait_type);
+                }
+                // Resolve the implementing type for its reference-recording
+                // side effect (already performed when method signatures are
+                // later resolved, but doing it here ensures the ref is
+                // recorded even for impls with no methods referencing it).
+                let _ = scope.resolve_type(&impl_block.ty);
+
+                // Collect method signatures with mangled names
+                let struct_name = scope.get_type_name(&impl_block.ty);
+                let trait_name = impl_block
+                    .trait_type
+                    .as_ref()
+                    .map(|t| scope.get_type_name(t));
+
+                // Register methods that carry `#[compiler_item("...")]`
+                // against the impl's owning type. This is the only place
+                // where the method declaration AND its owner type are
+                // simultaneously in scope.
+                for method in &impl_block.methods {
+                    super::item::register_method_compiler_item(
+                        &scope.tysys.type_table,
+                        &method.attrs,
+                        &method.name,
+                        &scope.get_type_name(&impl_block.ty),
+                        &scope.current_module_source,
+                        method.span,
+                        scope.logger,
+                    );
+                }
+
+                for method in &impl_block.methods {
+                    // Set up method-level type parameters so that `V::Output`-style
+                    // associated type projections can be resolved in the return type.
+                    let mut method_type_param_names: Vec<String> = Vec::new();
+                    let offset = scope.annotate_ctx.trait_ctx.type_params.len();
+                    for (i, param) in method.type_params.iter().enumerate() {
+                        let idx = (offset + i) as u32;
+                        let type_id = scope
+                            .tysys
+                            .type_table
+                            .borrow_mut()
+                            .make_type_param(param.name.clone(), idx);
                         scope
                             .annotate_ctx
                             .trait_ctx
                             .type_params
-                            .insert(param.name.clone(), (actual_idx, type_id));
+                            .insert(param.name.clone(), (idx, type_id));
                         scope
                             .annotate_ctx
                             .trait_ctx
@@ -453,158 +545,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 .type_param_bounds
                                 .insert(param.name.clone(), param.bounds.clone());
                         }
-                        actual_idx += 1;
+                        method_type_param_names.push(param.name.clone());
                     }
 
-                    // Also collect type params from generic type: impl List<T> {...}
-                    // The type args in List<T> are type parameters.
-                    // For ref types (impl Trait for &Container<T>), unwrap the reference first.
-                    let impl_inner_ty = match &impl_block.ty {
-                        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
-                            inner.as_ref()
-                        }
-                        other => other,
-                    };
-                    if let ast::Type::Generic(generic) = impl_inner_ty {
-                        let offset = actual_idx as usize;
-                        for (i, arg) in generic.args.iter().enumerate() {
-                            if let ast::Type::Named(named) = arg {
-                                let name = &named.name;
-                                if !scope.annotate_ctx.trait_ctx.type_params.contains_key(name)
-                                    && !scope
-                                        .tysys
-                                        .is_known_type_name_in(&scope.current_module_source, name)
-                                {
-                                    let index = (offset + i) as u32;
-                                    let type_id = scope
-                                        .tysys
-                                        .type_table
-                                        .borrow_mut()
-                                        .make_type_param(name.clone(), index);
-                                    scope
-                                        .annotate_ctx
-                                        .trait_ctx
-                                        .type_params
-                                        .insert(name.clone(), (index, type_id));
-                                }
-                            }
-                        }
-                    }
-
-                    // Set up associated type bindings for trait implementations
-                    if impl_block.trait_type.is_some() {
-                        for binding in &impl_block.associated_types {
-                            let type_id = scope.resolve_type(&binding.ty);
-                            scope
-                                .annotate_ctx
-                                .trait_ctx
-                                .assoc_type_bindings
-                                .insert(binding.name.clone(), type_id);
-                        }
-                    }
-
-                    // Resolve the trait type for its side effect of recording a
-                    // use->def reference from the trait-name identifier in the
-                    // impl header (`impl Greet for Bot`) to the trait decl. The
-                    // resulting TypeId is unused because trait bounds are
-                    // checked via trait_query, not via type substitution.
-                    if let Some(trait_type) = &impl_block.trait_type {
-                        let _ = scope.resolve_type(trait_type);
-                    }
-                    // Resolve the implementing type for its reference-recording
-                    // side effect (already performed when method signatures are
-                    // later resolved, but doing it here ensures the ref is
-                    // recorded even for impls with no methods referencing it).
-                    let _ = scope.resolve_type(&impl_block.ty);
-
-                    // Collect method signatures with mangled names
-                    let struct_name = scope.get_type_name(&impl_block.ty);
-                    let trait_name = impl_block
-                        .trait_type
+                    let return_type = method
+                        .return_type
                         .as_ref()
-                        .map(|t| scope.get_type_name(t));
+                        .map(|t| scope.resolve_type(t))
+                        .unwrap_or(TypeTable::UNIT);
 
-                    // Register methods that carry `#[compiler_item("...")]`
-                    // against the impl's owning type. This is the only place
-                    // where the method declaration AND its owner type are
-                    // simultaneously in scope.
-                    for method in &impl_block.methods {
-                        super::item::register_method_compiler_item(
-                            &scope.tysys.type_table,
-                            &method.attrs,
-                            &method.name,
-                            &scope.get_type_name(&impl_block.ty),
-                            &scope.current_module_source,
-                            method.span,
-                            scope.logger,
-                        );
-                    }
-
-                    for method in &impl_block.methods {
-                        // Set up method-level type parameters so that `V::Output`-style
-                        // associated type projections can be resolved in the return type.
-                        let mut method_type_param_names: Vec<String> = Vec::new();
-                        let offset = scope.annotate_ctx.trait_ctx.type_params.len();
-                        for (i, param) in method.type_params.iter().enumerate() {
-                            let idx = (offset + i) as u32;
-                            let type_id = scope
-                                .tysys
-                                .type_table
-                                .borrow_mut()
-                                .make_type_param(param.name.clone(), idx);
-                            scope
-                                .annotate_ctx
-                                .trait_ctx
-                                .type_params
-                                .insert(param.name.clone(), (idx, type_id));
-                            scope
-                                .annotate_ctx
-                                .trait_ctx
-                                .type_param_decls
-                                .insert(param.name.clone(), param.id);
-                            if !param.bounds.is_empty() {
-                                scope
-                                    .annotate_ctx
-                                    .trait_ctx
-                                    .type_param_bounds
-                                    .insert(param.name.clone(), param.bounds.clone());
-                            }
-                            method_type_param_names.push(param.name.clone());
-                        }
-
-                        let return_type = method
-                            .return_type
-                            .as_ref()
-                            .map(|t| scope.resolve_type(t))
-                            .unwrap_or(TypeTable::UNIT);
-
-                        // Remove method-level type params from scope
-                        for name in &method_type_param_names {
-                            scope.annotate_ctx.trait_ctx.type_params.shift_remove(name);
-                            scope
-                                .annotate_ctx
-                                .trait_ctx
-                                .type_param_bounds
-                                .shift_remove(name);
-                        }
-
-                        let mangled_name = MethodName::format_local(
-                            &struct_name,
-                            trait_name.as_deref(),
-                            &method.name,
-                        );
+                    // Remove method-level type params from scope
+                    for name in &method_type_param_names {
+                        scope.annotate_ctx.trait_ctx.type_params.shift_remove(name);
                         scope
-                            .sem
-                            .decls
-                            .function_return_types
-                            .insert(mangled_name, return_type);
+                            .annotate_ctx
+                            .trait_ctx
+                            .type_param_bounds
+                            .shift_remove(name);
                     }
 
-                    // Type parameters, bounds, and associated type bindings
-                    // are auto-restored on `drop(scope)`.
-                    drop(scope);
+                    let mangled_name =
+                        MethodName::format_local(&struct_name, trait_name.as_deref(), &method.name);
+                    scope
+                        .sem
+                        .decls
+                        .function_return_types
+                        .insert(mangled_name, return_type);
                 }
-                _ => {}
+
+                // Type parameters, bounds, and associated type bindings
+                // are auto-restored on `drop(scope)`.
+                drop(scope);
             }
         }
     }
