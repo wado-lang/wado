@@ -2462,6 +2462,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let into_iter_call = self.resolve_method_call_with(
             MethodCallInput {
                 receiver: into_iter_receiver,
+                receiver_ast: None,
                 method_name: "into_iter",
                 method_id: None,
                 call_id: None,
@@ -2526,6 +2527,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let next_call = self.resolve_method_call_with(
             MethodCallInput {
                 receiver: iter_local_ref,
+                receiver_ast: None,
                 method_name: "next",
                 method_id: None,
                 call_id: None,

@@ -1584,6 +1584,56 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
+    /// Reject a `&mut self` method call whose receiver place is rooted at an
+    /// immutable reference: the callee's writes would land in a temporary
+    /// copy, never in the storage the caller reads. Mirrors the
+    /// assignment-side "cannot assign through immutable reference" rule. A
+    /// non-place receiver (call result, literal) stays legal — mutating an
+    /// owned temporary is well-defined.
+    pub(super) fn check_mut_receiver(
+        &mut self,
+        receiver: &TirExpr,
+        receiver_ast: Option<&ast::Expr>,
+        method_name: &str,
+        span: Span,
+    ) {
+        let immutable = match self.tysys.type_table.borrow().get(receiver.type_id) {
+            ResolvedType::Ref(_) => true,
+            ResolvedType::MutRef(_) => false,
+            _ => receiver_ast.is_some_and(|e| self.place_roots_at_immutable_ref(e)),
+        };
+        if immutable {
+            let _ = self.logger.error(TypeError::CannotMutate {
+                message: format!(
+                    "cannot call `&mut self` method `{method_name}` through immutable reference"
+                ),
+                span,
+            });
+        }
+    }
+
+    /// Whether the place `expr` reaches its storage through an immutable
+    /// reference (`&T`): a field/index/deref chain whose crossed step has
+    /// recorded type `&T`. A `&mut T` step makes the place mutable and stops
+    /// the walk. Works on the source AST plus recorded `expression_types`
+    /// because annotate-time receiver TIR is a placeholder without structure.
+    pub(super) fn place_roots_at_immutable_ref(&self, expr: &ast::Expr) -> bool {
+        let inner = match expr {
+            ast::Expr::FieldAccess(fa) => &fa.expr,
+            ast::Expr::Index(ix) => &ix.expr,
+            ast::Expr::Unary(u) if u.op == ast::UnaryOp::Deref => &u.expr,
+            _ => return false,
+        };
+        let Some(inner_type) = self.sem.types.expression_types.get(&inner.id()).copied() else {
+            return false;
+        };
+        match self.tysys.type_table.borrow().get(inner_type) {
+            ResolvedType::Ref(_) => true,
+            ResolvedType::MutRef(_) => false,
+            _ => self.place_roots_at_immutable_ref(inner),
+        }
+    }
+
     /// Adjust the receiver expression to match what the method's self parameter expects.
     ///
     /// When `is_ref_impl` is true, the method was found on a reference type impl

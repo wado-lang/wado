@@ -1184,6 +1184,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Resolve the indexed expression to get its type
             let indexed_type = self.resolve_expr(&index_expr.expr, ctx, None);
 
+            let indexed_immutable = matches!(
+                self.tysys.type_table.borrow().get(indexed_type),
+                ResolvedType::Ref(_)
+            ) || self.place_roots_at_immutable_ref(&index_expr.expr);
+            if indexed_immutable {
+                let _ = self.logger.error(TypeError::CannotAssign {
+                    message: "cannot assign through immutable reference".to_string(),
+                    span: target_ast.span(),
+                });
+                return TypeTable::ERROR;
+            }
+
             // Get base type (unwrap reference if needed)
             let base_type_id = match self.tysys.type_table.borrow().get(indexed_type) {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
@@ -1330,8 +1342,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // resolver returns a placeholder, so each target shape is classified
         // from the AST + recorded facts.
         let is_valid_lvalue = match target_ast {
-            // A field access is always a place.
-            ast::Expr::FieldAccess(_) => true,
+            // A field access is a place, but writable only when not rooted
+            // at an immutable reference.
+            ast::Expr::FieldAccess(_) => {
+                if self.place_roots_at_immutable_ref(target_ast) {
+                    let _ = self.logger.error(TypeError::CannotAssign {
+                        message: "cannot assign through immutable reference".to_string(),
+                        span: target_ast.span(),
+                    });
+                    false
+                } else {
+                    true
+                }
+            }
             // The IndexAssign path at the top of `assign_to_target` already
             // returned for index-assignable receivers, so an `Index` target
             // here is a tuple index (a place), a read-only `Index` /

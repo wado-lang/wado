@@ -1,0 +1,20 @@
+// Error: calling a `&mut self` method through an immutable reference. The
+// callee's writes would land in a temporary copy, never in the storage the
+// caller reads (the shape that silently corrupted Gale's generated lexer
+// dispatch when written as `for g of &mut groups { g.guard.push_str(..) }`).
+
+struct Group {
+    guard: String,
+}
+
+fn extend(g: &Group) {
+    g.guard.push_str(&"!");
+}
+
+export fn run() {
+    let g = Group { guard: String::from("a") };
+    extend(&g);
+}
+
+__DATA__
+{"compile_error": "cannot call `&mut self` method `push_str` through immutable reference"}
