@@ -1,166 +1,244 @@
-//! Mock and capture stdin / stdout / stderr with effect handlers.
+//! Mock and capture the real `core:cli` stdin / stdout / stderr.
 //!
-//! Application code performs the `Console` effect instead of calling
-//! `println` / `eprintln` directly. Swapping the handler swaps the world the
-//! program talks to:
+//! Unlike a hand-rolled `Console` abstraction, application code here uses the
+//! ordinary `println` / `eprintln` / `print` and reads stdin through the real
+//! `wasi:cli` interfaces — no seam is added for testing. Capture happens one
+//! layer below, at the Component Model boundary those helpers desugar to.
 //!
-//! - `SystemConsole` forwards to the real terminal (`wado run`).
-//! - `MockConsole` scripts stdin and captures stdout / stderr, so the exact
-//!   same logic runs under test without touching the terminal.
+//! `println(msg)` expands to roughly:
 //!
-//! This is the effect-handler analogue of dependency injection: no globals, no
-//! conditional "am I testing?" branches — the caller picks the handler.
+//!     let [rx, tx] = Stream::<u8>::new();          // stream pair
+//!     let fut = Stdout::write_via_stream(rx);       // hand the reader to WASI
+//!     tx.write_raw(msg_bytes, len); tx.drop();      // push the bytes
+//!     fut.drop();                                    // signal completion
+//!
+//! So a full mock must handle every resource in that dance — `Stdout`,
+//! `Stderr`, `Stdin`, the `Stream<u8>` / `StreamWritable<u8>` pair, and the
+//! completion `Future` — routing all of it to in-memory buffers. The bundled
+//! `with &mut mock do { ... }` form installs the whole set at once, since one
+//! `MockStdio` value implements all of them.
 
-use { println, eprintln, Stdout, Stderr } from "core:cli";
+use { println, eprintln, print, Stdout, Stderr } from "core:cli";
+use { Stdin } from "wasi:cli";
+use { ErrorCode } from "wasi:cli/types.wado";
 
-interface Console {
-    fn out(line: String);
-    fn err(line: String);
-    fn read_line() -> Option<String>;
+// In-memory stand-in for the three standard streams. `to_stderr` records which
+// sink the currently-open write stream targets, set when the guest calls
+// `Stdout`/`Stderr::write_via_stream` and read back when bytes arrive on the
+// writable end — safe because each `println` runs that open→write→drop dance to
+// completion before the next one starts.
+struct MockStdio {
+    to_stderr: bool = false,
+    out: List<u8> = [],
+    err: List<u8> = [],
+    input: List<u8> = [],
+    input_pos: i32 = 0,
 }
 
-// Application logic, written against the effect. It never names a concrete
-// stream, so it is oblivious to whether it drives a terminal or a buffer.
-fn greet_repl() with Console {
-    let mut count = 0;
-    while let Some(name) = Console::read_line() {
-        if name.is_empty() {
-            Console::err("skipped a blank line");
-            continue;
+impl MockStdio {
+    fn stdout_text(&self) -> String {
+        return decode(self.out);
+    }
+
+    fn stderr_text(&self) -> String {
+        return decode(self.err);
+    }
+}
+
+fn decode(bytes: List<u8>) -> String {
+    return match String::from_utf8(bytes) {
+        Ok(s) => s,
+        Err(_) => "<invalid utf-8>",
+    };
+}
+
+// --- WASI stdio effects: pick the sink, hand back a fake completion future ---
+
+impl Stdout for MockStdio {
+    fn write_via_stream(&mut self, data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
+        let _ = data;
+        self.to_stderr = false;
+        let done: Future<Result<(), ErrorCode>> = 0 as Future<Result<(), ErrorCode>>;
+        resume done;
+    }
+}
+
+impl Stderr for MockStdio {
+    fn write_via_stream(&mut self, data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
+        let _ = data;
+        self.to_stderr = true;
+        let done: Future<Result<(), ErrorCode>> = 0 as Future<Result<(), ErrorCode>>;
+        resume done;
+    }
+}
+
+impl Stdin for MockStdio {
+    fn read_via_stream(&mut self) -> [Stream<u8>, Future<Result<(), ErrorCode>>] {
+        let rx: Stream<u8> = 0 as Stream<u8>;
+        let done: Future<Result<(), ErrorCode>> = 0 as Future<Result<(), ErrorCode>>;
+        resume [rx, done];
+    }
+}
+
+// --- The stream pair: writes append to a sink, reads replay scripted stdin ---
+
+impl Stream<u8> for MockStdio {
+    fn new(&mut self) -> [Stream<u8>, StreamWritable<u8>] {
+        let rx: Stream<u8> = 0 as Stream<u8>;
+        let tx: StreamWritable<u8> = 0 as StreamWritable<u8>;
+        resume [rx, tx];
+    }
+
+    fn read(&mut self, this: &Stream<u8>, max: i32) -> List<u8> {
+        let _ = this;
+        let mut chunk: List<u8> = [];
+        let mut n = 0;
+        while self.input_pos < self.input.len() && n < max {
+            chunk.push(self.input[self.input_pos]);
+            self.input_pos += 1;
+            n += 1;
         }
-        Console::out(`Hello, {name}!`);
-        count += 1;
+        resume chunk;
     }
-    Console::err(`greeted {count}`);
+
+    fn drop(&mut self, this: &Stream<u8>) {
+        let _ = this;
+        resume ();
+    }
+
+    ..trap
 }
 
-// Production handler: stdin is empty (EOF), output goes to the real terminal.
-struct SystemConsole {
-}
-
-impl Console for SystemConsole {
-    fn out(&self, line: String) with Stdout {
-        println(line);
-    }
-
-    fn err(&self, line: String) with Stderr {
-        eprintln(line);
-    }
-
-    fn read_line(&self) -> Option<String> {
-        let eof: Option<String> = null;
-        resume eof;
-    }
-}
-
-// Test double: replays scripted stdin lines and records everything written.
-struct MockConsole {
-    input: List<String> = [],
-    cursor: i32 = 0,
-    stdout: List<String> = [],
-    stderr: List<String> = [],
-}
-
-impl Console for MockConsole {
-    fn out(&mut self, line: String) {
-        self.stdout.push(line);
-    }
-
-    fn err(&mut self, line: String) {
-        self.stderr.push(line);
-    }
-
-    fn read_line(&mut self) -> Option<String> {
-        if self.cursor >= self.input.len() {
-            let eof: Option<String> = null;
-            resume eof;
+impl StreamWritable<u8> for MockStdio {
+    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) {
+        let _ = this;
+        for let b of data {
+            if self.to_stderr {
+                self.err.push(b);
+            } else {
+                self.out.push(b);
+            }
         }
-        let line = self.input[self.cursor];
-        self.cursor += 1;
-        resume Option::Some(line);
+        resume ();
     }
+
+    fn write_raw(&mut self, this: &StreamWritable<u8>, data: &Array<u8>, len: i32) {
+        let _ = this;
+        for let mut i = 0; i < len; i += 1 {
+            let b = data.get(i);
+            if self.to_stderr {
+                self.err.push(b);
+            } else {
+                self.out.push(b);
+            }
+        }
+        resume ();
+    }
+
+    fn drop(&mut self, this: &StreamWritable<u8>) {
+        let _ = this;
+        resume ();
+    }
+
+    ..trap
+}
+
+impl Future<Result<(), ErrorCode>> for MockStdio {
+    fn drop(&mut self, this: &Future<Result<(), ErrorCode>>) {
+        let _ = this;
+        resume ();
+    }
+
+    ..trap
+}
+
+// Ordinary application code — no test seam, just the real stdio helpers.
+fn greet(name: String) with Stdout, Stderr {
+    if name.is_empty() {
+        eprintln("warning: empty name");
+        return;
+    }
+    println(`Hello, {name}!`);
+}
+
+fn read_all_stdin() -> String with Stdin {
+    let [rx, _done] = Stdin::read_via_stream();
+    let mut buf: List<u8> = [];
+    loop {
+        let chunk = rx.read(1024);
+        if chunk.is_empty() {
+            break;
+        }
+        for let b of chunk {
+            buf.push(b);
+        }
+    }
+    rx.drop();
+    return decode(buf);
 }
 
 export fn run() with Stdout, Stderr {
-    // Drive the app under a mock, then reveal what it captured — the same
-    // buffers a test would assert on.
-    let mut mock = MockConsole {
-        input: ["Ada", "", "Turing"],
+    let mut mock = MockStdio {
+        input: "Ada\nTuring\n".as_bytes().to_array().into_iter().collect(),
     };
-    with Console => &mut mock do {
-        greet_repl();
+    with &mut mock do {
+        print("prompt> ");
+        greet("Ada");
+        greet("");
+        let echoed = read_all_stdin();
+        eprintln(`read {echoed.len()} bytes of stdin`);
     };
 
-    println("--- captured stdout ---");
-    for let line of mock.stdout {
-        println(line);
-    }
-    println("--- captured stderr ---");
-    for let line of mock.stderr {
-        println(line);
-    }
-
-    // A real run would forward to the terminal instead of capturing.
-    let sys = SystemConsole {};
-    with Console => &sys do {
-        Console::out("--- now via SystemConsole (real stdout) ---");
-    };
+    // Reveal the captured buffers on the real terminal.
+    println("=== captured stdout ===");
+    print(mock.stdout_text());
+    println("=== captured stderr ===");
+    print(mock.stderr_text());
 }
 
-test "captures stdout lines written through the effect" {
-    let mut mock = MockConsole {
-        input: ["Ada", "Turing"],
+test "captures stdout written through println/print" {
+    let mut mock = MockStdio {};
+    with &mut mock do {
+        print("a");
+        println("b");
+        greet("Ada");
     };
-    with Console => &mut mock do {
-        greet_repl();
-    };
-    let expected: List<String> = ["Hello, Ada!", "Hello, Turing!"];
-    assert mock.stdout == expected;
+    assert mock.stdout_text() == "ab\nHello, Ada!\n";
+    assert mock.stderr_text() == "";
 }
 
 test "captures stderr independently from stdout" {
-    let mut mock = MockConsole {
-        input: ["Ada"],
+    let mut mock = MockStdio {};
+    with &mut mock do {
+        greet("Ada");
+        greet("");
     };
-    with Console => &mut mock do {
-        greet_repl();
-    };
-    let out: List<String> = ["Hello, Ada!"];
-    let err: List<String> = ["greeted 1"];
-    assert mock.stdout == out;
-    assert mock.stderr == err;
+    assert mock.stdout_text() == "Hello, Ada!\n";
+    assert mock.stderr_text() == "warning: empty name\n";
 }
 
-test "scripted stdin drives control flow (blank line branch)" {
-    let mut mock = MockConsole {
-        input: ["Ada", "", "Turing"],
+test "scripted stdin is replayed to the guest reader" {
+    let mut mock = MockStdio {
+        input: "hello\nstdin".as_bytes().to_array().into_iter().collect(),
     };
-    with Console => &mut mock do {
-        greet_repl();
+    let got = with &mut mock do {
+        read_all_stdin();
     };
-    let out: List<String> = ["Hello, Ada!", "Hello, Turing!"];
-    let err: List<String> = ["skipped a blank line", "greeted 2"];
-    assert mock.stdout == out;
-    assert mock.stderr == err;
+    assert got == "hello\nstdin";
 }
 
-test "empty stdin reaches EOF immediately" {
-    let mut mock = MockConsole {};
-    with Console => &mut mock do {
-        greet_repl();
+test "empty stdin reads as end-of-stream immediately" {
+    let mut mock = MockStdio {};
+    let got = with &mut mock do {
+        read_all_stdin();
     };
-    assert mock.stdout.is_empty();
-    let err: List<String> = ["greeted 0"];
-    assert mock.stderr == err;
+    assert got == "";
 }
 
-test "read_line returns None past the end of the script" {
-    let mut mock = MockConsole {
-        input: ["only"],
+test "unicode round-trips through the byte buffers" {
+    let mut mock = MockStdio {};
+    with &mut mock do {
+        println("こんにちは 🌍");
     };
-    with Console => &mut mock do {
-        assert Console::read_line() matches { Some(_) };
-        assert Console::read_line() matches { None };
-        assert Console::read_line() matches { None };
-    };
+    assert mock.stdout_text() == "こんにちは 🌍\n";
 }
