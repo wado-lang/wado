@@ -46,6 +46,90 @@ use super::escape::EscapeMap;
 use super::value_copy::carries_identity;
 use super::value_copy::mutation::{MutationOracle, Witness, expr_witnesses};
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Access paths (field-sensitive storage locations)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// One projection step of an access path. `Index` is a dynamic wildcard: two
+/// `Index` steps may address the same element, so they never *prove*
+/// disjointness on their own.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Selector {
+    Field(u32),
+    Variant(u32),
+    Index,
+}
+
+/// A storage location as a root local plus a root-first chain of projection
+/// steps. `self.index` is `AccessPath { root: self, selectors: [Field(index)] }`.
+#[derive(Clone, PartialEq, Eq, Debug)]
+struct AccessPath {
+    root: u32,
+    selectors: Vec<Selector>,
+}
+
+/// The access path of a pure place expression, or `None` when it is not a
+/// local-rooted place: a `Deref` (the pointee has no local identity — this
+/// preserves the [`reads_through_deref`] guard, #1522), a call/composition
+/// result, or a projection off one. `Cast` and non-`Deref` `Unary` are
+/// transparent (they do not move storage).
+fn place_path(body: &Body, expr: ExprId) -> Option<AccessPath> {
+    match &body.exprs[expr].kind {
+        ExprKind::Local { index, .. } => Some(AccessPath {
+            root: *index,
+            selectors: Vec::new(),
+        }),
+        ExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            ..
+        } => {
+            let mut p = place_path(body, inner.as_expr()?)?;
+            p.selectors.push(Selector::Field(*field_index));
+            Some(p)
+        }
+        ExprKind::VariantPayload {
+            expr: inner,
+            case_index,
+            ..
+        } => {
+            let mut p = place_path(body, inner.as_expr()?)?;
+            p.selectors.push(Selector::Variant(*case_index));
+            Some(p)
+        }
+        ExprKind::Index { expr: inner, .. } => {
+            let mut p = place_path(body, inner.as_expr()?)?;
+            p.selectors.push(Selector::Index);
+            Some(p)
+        }
+        ExprKind::Cast { expr: inner, .. } => place_path(body, inner.as_expr()?),
+        ExprKind::Unary { op, expr: inner } if *op != NirUnaryOp::Deref => {
+            place_path(body, inner.as_expr()?)
+        }
+        _ => None,
+    }
+}
+
+/// Whether a write to `mutated` can never change the value read at `read`
+/// (both rooted at the same local). True only when the paths provably address
+/// non-overlapping storage: they agree on a shared prefix and then diverge at
+/// two distinct struct fields or two distinct variant cases. A dynamic `Index`
+/// step (may collide), a mixed selector kind, or one path being a prefix of the
+/// other (ancestor/descendant overlap) all yield `false` — conservative.
+fn disjoint(mutated: &AccessPath, read: &AccessPath) -> bool {
+    for (a, b) in mutated.selectors.iter().zip(read.selectors.iter()) {
+        match (a, b) {
+            (Selector::Field(x), Selector::Field(y)) if x != y => return true,
+            (Selector::Variant(x), Selector::Variant(y)) if x != y => return true,
+            (Selector::Field(_), Selector::Field(_))
+            | (Selector::Variant(_), Selector::Variant(_))
+            | (Selector::Index, Selector::Index) => continue,
+            _ => return false,
+        }
+    }
+    false
+}
+
 /// Strips `$value_copy$T(arg)` wrappers off observably read-only bindings, run
 /// as a rule inside the unified peephole session (formerly the standalone
 /// `nir/value_copy_elide` pass). `usage` is the same whole-function map
@@ -91,6 +175,11 @@ impl<'a> ValueCopyElideRule<'a> {
 pub(super) struct UsageInfo {
     locals: IndexMap<u32, LocalUsage>,
     alias_rep: IndexMap<u32, u32>,
+    /// Locals whose `direct_mutated_paths` is the complete mutation profile of
+    /// their storage: the sole direct mutator in their alias component and free
+    /// of imprecise mutation. Only these may use field-sensitive disjointness;
+    /// every other local falls back to the coarse `has_field_mutation` bit.
+    precise_eligible: IndexSet<u32>,
 }
 
 impl UsageInfo {
@@ -104,6 +193,10 @@ impl UsageInfo {
 
     fn may_alias(&self, a: u32, b: u32) -> bool {
         a == b || self.rep(a) == self.rep(b)
+    }
+
+    fn is_precise_eligible(&self, index: u32) -> bool {
+        self.precise_eligible.contains(&index)
     }
 }
 
@@ -206,6 +299,22 @@ pub(super) struct LocalUsage {
     /// count of 1 means the local is mentioned exactly once, so a copy of it at
     /// that single site is its last use — a move.
     occurrences: u32,
+    /// The access paths this local is *directly* mutated at (its own writes /
+    /// `&mut` borrows / mutating call arguments), before alias closure. The
+    /// field-sensitive source-side check consults these to strip a copy whose
+    /// read path is disjoint from every mutation — but only when this local is
+    /// the sole direct mutator in its alias component (see
+    /// [`UsageInfo::precise_eligible`]), so this set is the complete mutation
+    /// profile.
+    direct_mutated_paths: Vec<AccessPath>,
+    /// Set alongside every direct mutation (precise or not); drives the
+    /// per-component "sole mutator" test.
+    direct_field_mutation: bool,
+    /// A direct mutation whose exact path could not be captured (a `Deref`
+    /// target, a computed receiver, a literal-wrapped `&mut`). Disables the
+    /// precise path check for this local — `direct_mutated_paths` is then
+    /// incomplete, so it falls back to the coarse `has_field_mutation` bit.
+    imprecise_mutation: bool,
 }
 
 impl LocalUsage {
@@ -252,10 +361,42 @@ fn analyze_usage(
     }
     let alias_rep = alias_components(&alias_edges);
     close_alias_mutation(&alias_rep, &mut usage);
+    let precise_eligible = compute_precise_eligible(&alias_rep, &usage);
     UsageInfo {
         locals: usage,
         alias_rep,
+        precise_eligible,
     }
+}
+
+/// A local may use field-sensitive disjointness only when its
+/// `direct_mutated_paths` is the *complete* mutation profile of its storage:
+/// it mutates itself directly, none of those mutations were imprecise, and it
+/// is the sole direct mutator in its alias component (so no sibling's mutation
+/// — whose relative offset the union-find edges don't record — reaches it).
+fn compute_precise_eligible(
+    alias_rep: &IndexMap<u32, u32>,
+    usage: &IndexMap<u32, LocalUsage>,
+) -> IndexSet<u32> {
+    let rep_of = |local: u32| alias_rep.get(&local).copied().unwrap_or(local);
+    let mut mutators_by_rep: IndexMap<u32, IndexSet<u32>> = IndexMap::default();
+    for (local, u) in usage {
+        if u.direct_field_mutation {
+            mutators_by_rep.entry(rep_of(*local)).or_default().insert(*local);
+        }
+    }
+    let mut eligible = IndexSet::default();
+    for (local, u) in usage {
+        if u.direct_field_mutation
+            && !u.imprecise_mutation
+            && mutators_by_rep
+                .get(&rep_of(*local))
+                .is_some_and(|s| s.len() == 1)
+        {
+            eligible.insert(*local);
+        }
+    }
+    eligible
 }
 
 /// Union-find over the undirected alias relation; returns each connected
@@ -397,86 +538,138 @@ impl AliasWalk<'_> {
                         stack.push(ie);
                     }
                 }
-                ExprKind::StructLiteral { fields, .. } => {
-                    for field in fields {
-                        if let Some(fe) = field.value.as_expr() {
-                            stack.push(fe);
-                        }
+                _ => self.push_composition_children(e, &mut stack),
+            }
+        }
+        roots
+    }
+
+    /// The composition arms shared by [`Self::value_alias_roots`] and
+    /// [`Self::value_alias_read_paths`]: an aggregate literal, `if` / `match` /
+    /// `switch` arm values, block tails, and the receiver / arguments of a call
+    /// whose result is not provably fresh. Neither identifies a single place, so
+    /// the walk descends into their value-position children.
+    fn push_composition_children(&self, e: ExprId, stack: &mut Vec<ExprId>) {
+        let body = self.body;
+        match &body.exprs[e].kind {
+            ExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    if let Some(fe) = field.value.as_expr() {
+                        stack.push(fe);
                     }
                 }
-                ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-                    for element in elements {
-                        if let Some(ee) = element.as_expr() {
-                            stack.push(ee);
-                        }
+            }
+            ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+                for element in elements {
+                    if let Some(ee) = element.as_expr() {
+                        stack.push(ee);
                     }
                 }
-                ExprKind::VariantConstruct {
-                    payload: Some(payload),
-                    ..
-                } => {
-                    if let Some(pe) = payload.as_expr() {
-                        stack.push(pe);
+            }
+            ExprKind::VariantConstruct {
+                payload: Some(payload),
+                ..
+            } => {
+                if let Some(pe) = payload.as_expr() {
+                    stack.push(pe);
+                }
+            }
+            ExprKind::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                self.push_block_tail_expr(*then_branch, stack);
+                if let Some(eb) = else_branch {
+                    self.push_block_tail_expr(*eb, stack);
+                }
+            }
+            ExprKind::Match { arms, .. } => {
+                for arm in arms {
+                    if let Some(ae) = arm.body.as_expr() {
+                        stack.push(ae);
                     }
                 }
-                ExprKind::If {
-                    then_branch,
-                    else_branch,
-                    ..
-                } => {
-                    self.push_block_tail_expr(*then_branch, &mut stack);
-                    if let Some(eb) = else_branch {
-                        self.push_block_tail_expr(*eb, &mut stack);
-                    }
+            }
+            ExprKind::Switch {
+                arms,
+                default: dflt,
+                ..
+            } => {
+                for arm in arms {
+                    self.push_block_tail_expr(*arm, stack);
                 }
-                ExprKind::Match { arms, .. } => {
-                    for arm in arms {
-                        if let Some(ae) = arm.body.as_expr() {
+                self.push_block_tail_expr(*dflt, stack);
+            }
+            ExprKind::Block(block) => {
+                self.push_block_tail_expr(*block, stack);
+            }
+            ExprKind::LabeledBlock { block, .. } => {
+                self.push_block_value_exprs(*block, stack);
+            }
+            ExprKind::Call { args, .. } => {
+                if !self.escape.rvalue_is_fresh(body, e, self.type_table) {
+                    for arg in args {
+                        if let Some(ae) = arg.expr.as_expr() {
                             stack.push(ae);
                         }
                     }
                 }
-                ExprKind::Switch {
-                    arms,
-                    default: dflt,
-                    ..
-                } => {
-                    for arm in arms {
-                        self.push_block_tail_expr(*arm, &mut stack);
+            }
+            ExprKind::MethodCall { receiver, args, .. } => {
+                if !self.escape.rvalue_is_fresh(body, e, self.type_table) {
+                    if let Some(re) = receiver.as_expr() {
+                        stack.push(re);
                     }
-                    self.push_block_tail_expr(*dflt, &mut stack);
-                }
-                ExprKind::Block(block) => {
-                    self.push_block_tail_expr(*block, &mut stack);
-                }
-                ExprKind::LabeledBlock { block, .. } => {
-                    self.push_block_value_exprs(*block, &mut stack);
-                }
-                ExprKind::Call { args, .. } => {
-                    if !self.escape.rvalue_is_fresh(body, e, self.type_table) {
-                        for arg in args {
-                            if let Some(ae) = arg.expr.as_expr() {
-                                stack.push(ae);
-                            }
+                    for arg in args {
+                        if let Some(ae) = arg.expr.as_expr() {
+                            stack.push(ae);
                         }
                     }
                 }
-                ExprKind::MethodCall { receiver, args, .. } => {
-                    if !self.escape.rvalue_is_fresh(body, e, self.type_table) {
-                        if let Some(re) = receiver.as_expr() {
-                            stack.push(re);
-                        }
-                        for arg in args {
-                            if let Some(ae) = arg.expr.as_expr() {
-                                stack.push(ae);
-                            }
-                        }
+            }
+            _ => {}
+        }
+    }
+
+    /// The field-sensitive companion to [`Self::value_alias_roots`]: every
+    /// identity-carrying storage location the value may alias, as a full access
+    /// path (root + selectors) rather than a bare root local. A pure place is
+    /// captured whole (its path recorded, no further descent); a projection over
+    /// a composition (`foo().bar`) and every composition descends exactly as in
+    /// `value_alias_roots`, so the set of roots covered is identical — only the
+    /// selector detail is added.
+    fn value_alias_read_paths(&self, value: Operand) -> Vec<AccessPath> {
+        let body = self.body;
+        let mut paths = Vec::new();
+        let Some(e0) = value.as_expr() else {
+            return paths;
+        };
+        let mut stack = vec![e0];
+        while let Some(e) = stack.pop() {
+            if let Some(ap) = place_path(body, e) {
+                let ty = body.exprs[e].type_id;
+                if carries_identity(ty, self.type_table)
+                    || self.type_table.box_payload_of(ty).is_some()
+                {
+                    paths.push(ap);
+                }
+                continue;
+            }
+            match &body.exprs[e].kind {
+                ExprKind::FieldAccess { expr: inner, .. }
+                | ExprKind::VariantPayload { expr: inner, .. }
+                | ExprKind::Cast { expr: inner, .. }
+                | ExprKind::Unary { expr: inner, .. }
+                | ExprKind::Index { expr: inner, .. } => {
+                    if let Some(ie) = inner.as_expr() {
+                        stack.push(ie);
                     }
                 }
-                _ => {}
+                _ => self.push_composition_children(e, &mut stack),
             }
         }
-        roots
+        paths
     }
 
     /// Push the tail expression of a block (its value position) for the
@@ -551,6 +744,18 @@ fn classify_expr(
     if let ExprKind::Local { index, .. } = &body.exprs[id].kind {
         usage.entry(*index).or_default().occurrences += 1;
     }
+    // Precise mutated-path recording for a direct field/index/variant write.
+    // The shared `Witness::Write` carries only the operand *under* the outer
+    // projection, so read the assignment target here to keep the outer
+    // selector (a whole-local target is a `Rebind`, handled below).
+    if let ExprKind::Assign { target, .. } = &body.exprs[id].kind
+        && matches!(
+            &body.exprs[*target].kind,
+            ExprKind::FieldAccess { .. } | ExprKind::Index { .. } | ExprKind::VariantPayload { .. }
+        )
+    {
+        record_direct_mutation(body, *target, type_table, usage);
+    }
     expr_witnesses(body, id, oracle, &mut |w| match w {
         Witness::Rebind(index) => {
             usage.entry(index).or_default().assign_count += 1;
@@ -560,6 +765,7 @@ fn classify_expr(
         }
         Witness::MutBorrow(e) => {
             mark_root_field_mutated(body, e, type_table, usage);
+            record_direct_mutation(body, e, type_table, usage);
         }
         Witness::CalleeArg {
             expr: ae,
@@ -570,6 +776,7 @@ fn classify_expr(
                 is_mut || is_mutable_witness_type(body.exprs[ae].type_id, type_table)
             }) {
                 mark_root_field_mutated(body, ae, type_table, usage);
+                record_direct_mutation(body, ae, type_table, usage);
             }
         }
         // Auto-ref hides a `&mut self` receiver's mode, so an unknown callee is
@@ -577,14 +784,103 @@ fn classify_expr(
         Witness::Receiver { expr: re, verdict } => {
             if verdict.unwrap_or(true) {
                 mark_root_field_mutated(body, re, type_table, usage);
+                record_direct_mutation(body, re, type_table, usage);
             }
         }
         Witness::IndirectArg(ae) => {
             if is_mutable_witness_type(body.exprs[ae].type_id, type_table) {
                 mark_root_field_mutated(body, ae, type_table, usage);
+                record_direct_mutation(body, ae, type_table, usage);
             }
         }
     });
+}
+
+/// Record a direct mutation at `place`: its exact access path when it is a
+/// local-rooted place, otherwise mark the roots imprecise so the field-
+/// sensitive check falls back to the coarse bit. A whole-local place (path with
+/// no selectors, e.g. `&mut self`) is precise and correctly blocks every read
+/// under that root via the prefix rule.
+fn record_direct_mutation(
+    body: &Body,
+    place: ExprId,
+    type_table: &TypeTable,
+    usage: &mut IndexMap<u32, LocalUsage>,
+) {
+    match place_path(body, place) {
+        Some(ap) => {
+            let u = usage.entry(ap.root).or_default();
+            u.direct_field_mutation = true;
+            u.direct_mutated_paths.push(ap);
+        }
+        None => mark_roots_imprecise(body, place, type_table, usage),
+    }
+}
+
+/// [`mark_root_field_mutated`]'s traversal, but flagging each root's mutation as
+/// direct-yet-imprecise (a `Deref`, a computed receiver, or a literal-wrapped
+/// `&mut`, whose exact path is not a local-rooted place). This disables the
+/// precise check for those roots without weakening the coarse bit, which
+/// `mark_root_field_mutated` sets separately.
+fn mark_roots_imprecise(
+    body: &Body,
+    expr: ExprId,
+    type_table: &TypeTable,
+    usage: &mut IndexMap<u32, LocalUsage>,
+) {
+    match &body.exprs[expr].kind {
+        ExprKind::Local { index, .. } => {
+            let u = usage.entry(*index).or_default();
+            u.direct_field_mutation = true;
+            u.imprecise_mutation = true;
+        }
+        ExprKind::Unary { expr: inner, .. }
+        | ExprKind::Cast { expr: inner, .. }
+        | ExprKind::FieldAccess { expr: inner, .. }
+        | ExprKind::VariantPayload { expr: inner, .. }
+        | ExprKind::Index { expr: inner, .. } => {
+            if let Some(e) = inner.as_expr() {
+                mark_roots_imprecise(body, e, type_table, usage);
+            }
+        }
+        ExprKind::MethodCall { receiver, .. } => {
+            if let Some(e) = receiver.as_expr() {
+                mark_roots_imprecise(body, e, type_table, usage);
+            }
+        }
+        ExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                mark_identity_root_imprecise(body, field.value, type_table, usage);
+            }
+        }
+        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+            for element in elements {
+                mark_identity_root_imprecise(body, *element, type_table, usage);
+            }
+        }
+        ExprKind::VariantConstruct {
+            payload: Some(payload),
+            ..
+        } => {
+            mark_identity_root_imprecise(body, *payload, type_table, usage);
+        }
+        _ => {}
+    }
+}
+
+/// [`mark_roots_imprecise`] for an aggregate-literal element carrying identity.
+fn mark_identity_root_imprecise(
+    body: &Body,
+    op: Operand,
+    type_table: &TypeTable,
+    usage: &mut IndexMap<u32, LocalUsage>,
+) {
+    if let Some(e) = op.as_expr()
+        && (carries_identity(body.exprs[e].type_id, type_table)
+            || type_table.box_payload_of(body.exprs[e].type_id).is_some())
+    {
+        mark_roots_imprecise(body, e, type_table, usage);
+    }
 }
 
 /// Whether an argument of this type can carry a mutation into the
@@ -768,12 +1064,28 @@ impl ValueCopyElideRule<'_> {
             escape: self.escape,
         };
         aliasing
-            .value_alias_roots(arg.expr)
+            .value_alias_read_paths(arg.expr)
             .iter()
-            .all(|root| match self.usage.local(*root) {
-                Some(u) => !u.is_assigned() && !u.has_field_mutation,
-                None => true,
-            })
+            .all(|read| self.read_path_stable(read))
+    }
+
+    /// Whether a source aliasing storage at `read` observes no mutation of that
+    /// storage. Field-insensitive when the root is not `precise_eligible`
+    /// (unchanged: reject any reassignment or field mutation); field-sensitive
+    /// otherwise (accept when every direct mutation of the root is at a path
+    /// provably disjoint from `read`, e.g. `self.index` vs `self.repr`).
+    fn read_path_stable(&self, read: &AccessPath) -> bool {
+        let Some(u) = self.usage.local(read.root) else {
+            return true;
+        };
+        if u.is_assigned() {
+            return false;
+        }
+        if !u.has_field_mutation {
+            return true;
+        }
+        self.usage.is_precise_eligible(read.root)
+            && u.direct_mutated_paths.iter().all(|m| disjoint(m, read))
     }
 
     /// Check whether `value` is a `$value_copy$T(arg)` call whose wrapper can
@@ -1023,5 +1335,81 @@ fn call_arg(body: &Body, value_copy: ExprId) -> Option<Operand> {
         args.first().map(|a| a.expr)
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AccessPath, Selector, disjoint};
+
+    fn path(root: u32, selectors: &[Selector]) -> AccessPath {
+        AccessPath {
+            root,
+            selectors: selectors.to_vec(),
+        }
+    }
+
+    #[test]
+    fn distinct_fields_are_disjoint() {
+        // self.index (mutated) vs self.repr (read): the ArrayRefIter case.
+        let mutated = path(0, &[Selector::Field(1)]);
+        let read = path(0, &[Selector::Field(0)]);
+        assert!(disjoint(&mutated, &read));
+        assert!(disjoint(&read, &mutated));
+    }
+
+    #[test]
+    fn same_field_is_not_disjoint() {
+        let mutated = path(0, &[Selector::Field(0)]);
+        let read = path(0, &[Selector::Field(0)]);
+        assert!(!disjoint(&mutated, &read));
+    }
+
+    #[test]
+    fn prefix_is_not_disjoint() {
+        // Mutating self.a overlaps a read of self.a.b, and vice versa.
+        let ancestor = path(0, &[Selector::Field(0)]);
+        let descendant = path(0, &[Selector::Field(0), Selector::Field(3)]);
+        assert!(!disjoint(&ancestor, &descendant));
+        assert!(!disjoint(&descendant, &ancestor));
+    }
+
+    #[test]
+    fn whole_root_overlaps_everything() {
+        let whole = path(0, &[]);
+        let field = path(0, &[Selector::Field(2)]);
+        assert!(!disjoint(&whole, &field));
+        assert!(!disjoint(&field, &whole));
+    }
+
+    #[test]
+    fn distinct_fields_diverge_after_shared_prefix() {
+        // self.a.x vs self.a.y: agree on `a`, diverge at distinct fields.
+        let mutated = path(0, &[Selector::Field(0), Selector::Field(1)]);
+        let read = path(0, &[Selector::Field(0), Selector::Field(2)]);
+        assert!(disjoint(&mutated, &read));
+    }
+
+    #[test]
+    fn dynamic_index_never_proves_disjoint() {
+        // a[i] vs a[j] may collide.
+        let mutated = path(0, &[Selector::Index]);
+        let read = path(0, &[Selector::Index]);
+        assert!(!disjoint(&mutated, &read));
+    }
+
+    #[test]
+    fn distinct_field_after_shared_index_is_disjoint() {
+        // a[i].x vs a[j].y: even the same element's distinct fields don't alias.
+        let mutated = path(0, &[Selector::Index, Selector::Field(1)]);
+        let read = path(0, &[Selector::Index, Selector::Field(2)]);
+        assert!(disjoint(&mutated, &read));
+    }
+
+    #[test]
+    fn distinct_variants_are_disjoint() {
+        let mutated = path(0, &[Selector::Variant(0)]);
+        let read = path(0, &[Selector::Variant(1)]);
+        assert!(disjoint(&mutated, &read));
     }
 }

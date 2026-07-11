@@ -1,0 +1,31 @@
+// Field-sensitive source-side elision: a copy whose source reads one field
+// (`self.rows`) must be stripped even when a *disjoint* field of the same
+// receiver (`self.tick`) is mutated in the same body. This is the shape of
+// `ArrayRefIter::next` (`let x = array_get(self.repr, self.index); self.index
+// += 1`), whose element copy a field-insensitive oracle wrongly retains.
+
+struct Counter {
+    tick: i32,
+    rows: List<List<i32>>,
+}
+
+impl Counter {
+    fn read_row(&mut self) -> i32 {
+        let row = self.rows[0];
+        self.tick += 1;
+        return row.len();
+    }
+}
+
+export fn run() {
+    let mut c = Counter { tick: 0, rows: [[1, 2, 3]] };
+    assert c.read_row() == 3;
+    assert c.tick == 1;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O0": ["$value_copy"],
+    "wir_not_expect:O2": ["__array_clone"]
+}
