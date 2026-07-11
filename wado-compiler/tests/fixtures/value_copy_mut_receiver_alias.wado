@@ -1,0 +1,34 @@
+// A by-value argument that aliases the `&mut self` receiver of the same method
+// call must keep its copy: the callee mutates the shared storage while still
+// holding the moved value, so a move would leak the mutation into it. The
+// last-use move analysis' sibling-alias check must treat the auto-ref'd
+// `&mut self` receiver as a sibling mutation, not only explicit `&mut` args
+// (wado-lang/wado#1544 follow-up).
+
+struct Wrapper {
+    payload: Option<List<i32>>,
+}
+
+impl Wrapper {
+    fn grow_and_measure(&mut self, snapshot: List<i32>) -> i32 {
+        if let Some(v) = &mut self.payload {
+            v.push(999);
+        }
+        return snapshot.len();
+    }
+}
+
+test "by-value arg is independent of the mutated &mut-self receiver" {
+    let mut w = Wrapper { payload: Option::Some([1] as List<i32>) };
+    let mut n = 0;
+    match w.payload {
+        Some(t) => {
+            n = w.grow_and_measure(t);
+        }
+        None => {}
+    }
+    assert n == 1;
+}
+
+__DATA__
+{"test": {}}

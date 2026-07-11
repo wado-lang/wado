@@ -38,6 +38,11 @@ pub struct ValueCopyPlan {
     /// one is borrow-escaped and cannot be moved (the TIR move analysis runs
     /// before inlining, so `stores_aliased_locals` is not yet populated).
     pub functions_with_stores: IndexSet<FunctionId>,
+    /// Functions whose first parameter is `&mut self` — the only methods that
+    /// can mutate the caller's receiver storage. The last-use move analysis
+    /// treats such a call's receiver as a sibling mutation, so a by-value
+    /// argument aliasing it keeps its copy.
+    pub mut_receiver_methods: IndexSet<FunctionId>,
 }
 
 pub fn plan(flat: &mut FlatPackage) -> ValueCopyPlan {
@@ -55,11 +60,23 @@ pub fn plan(flat: &mut FlatPackage) -> ValueCopyPlan {
             (!f.stores.is_empty()).then(|| ownership::func_key(&f.module_source, &f.name))
         })
         .collect();
+    let mut_receiver_methods = flat
+        .functions
+        .iter()
+        .filter_map(|f| {
+            let f = f.borrow();
+            f.params
+                .first()
+                .is_some_and(|p| p.is_mut_ref)
+                .then(|| ownership::func_key(&f.module_source, &f.name))
+        })
+        .collect();
     ValueCopyPlan {
         name_for_type,
         returns_owned: conventions.returns_owned,
         returns_self_projection: conventions.returns_self_projection,
         functions_with_stores,
+        mut_receiver_methods,
     }
 }
 

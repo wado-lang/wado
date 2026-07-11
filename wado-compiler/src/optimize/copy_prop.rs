@@ -888,7 +888,6 @@ pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bo
     let copy_value_id = project.builtin_func_id("copy_value");
     let type_table = project.type_table.borrow();
     let param_mut = super::value_copy_elide::build_param_mut(project);
-    let call_immutability = super::alias::CallImmutability::new(project, &type_table);
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::CopyProp, len, |fid| {
@@ -898,7 +897,7 @@ pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bo
         }
         let rule = CopyPropRule {
             type_table: &type_table,
-            oracle: MutationOracle::new(&param_mut, &call_immutability),
+            oracle: MutationOracle::new(&param_mut),
             copy_value_id,
             applied: Cell::new(false),
         };

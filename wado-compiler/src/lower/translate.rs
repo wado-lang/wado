@@ -322,6 +322,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 &oracle,
                 &base.type_table.borrow(),
                 &base.value_copy.functions_with_stores,
+                &base.value_copy.mut_receiver_methods,
             )
         };
         Self {

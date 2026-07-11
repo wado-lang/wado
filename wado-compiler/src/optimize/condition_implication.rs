@@ -208,10 +208,6 @@ pub(super) fn opaque_local(engine: &Engine, v: crate::nir_value_graph::ValueId) 
     }
 }
 
-/// Parse an operand (through copy temps) as a structural bound: a bare local or
-/// a `local.field` read over a by-value local root. Handles both the skeleton
-/// form and a **promoted** `Operand::Value` (the freeze promotes a `FieldAccess`
-/// bound), decomposed through the value **pool** (`body.values`, not `value_of`).
 /// The root a [`BoundKey::Field`] may key on. Path-sensitive on purpose: the
 /// key is `(root, field_index)`, so the walk must not collapse projections
 /// that change which aggregate the index addresses — a variant payload's
@@ -229,6 +225,10 @@ fn field_bound_root(body: &crate::nir_arena::Body, expr: ExprId) -> Option<u32> 
     }
 }
 
+/// Parse an operand (through copy temps) as a structural bound: a bare local or
+/// a `local.field` read over a by-value local root. Handles both the skeleton
+/// form and a **promoted** `Operand::Value` (the freeze promotes a `FieldAccess`
+/// bound), decomposed through the value **pool** (`body.values`, not `value_of`).
 pub(super) fn parse_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<BoundKey> {
     match resolve(engine, binds, op) {
         Operand::Expr(e) => match &engine.body.exprs[e].kind {

@@ -61,7 +61,6 @@ pub(super) struct ValueCopyElideRule<'a> {
     escape: &'a EscapeMap,
     type_table: &'a TypeTable,
     param_mut: &'a IndexMap<FuncId, Vec<bool>>,
-    call_immutability: &'a super::alias::CallImmutability<'a>,
     n_params: u32,
     usage: UsageInfo,
 }
@@ -72,7 +71,6 @@ impl<'a> ValueCopyElideRule<'a> {
         escape: &'a EscapeMap,
         type_table: &'a TypeTable,
         param_mut: &'a IndexMap<FuncId, Vec<bool>>,
-        call_immutability: &'a super::alias::CallImmutability<'a>,
         n_params: u32,
         usage: UsageInfo,
     ) -> Self {
@@ -81,7 +79,6 @@ impl<'a> ValueCopyElideRule<'a> {
             escape,
             type_table,
             param_mut,
-            call_immutability,
             n_params,
             usage,
         }
@@ -918,12 +915,19 @@ impl ValueCopyElideRule<'_> {
             if let NodeRef::Expr(e) = n {
                 match &body.exprs[e].kind {
                     ExprKind::Call { func_id, args, .. } => {
-                        self.scan_call_args(body, *func_id, 0, args, out);
+                        self.scan_call_args(body, *func_id, 0, None, args, out);
                     }
                     // A method's parameter 0 is `self`; the i-th argument is
-                    // absolute parameter i + 1.
-                    ExprKind::MethodCall { func_id, args, .. } => {
-                        self.scan_call_args(body, *func_id, 1, args, out);
+                    // absolute parameter i + 1. A `&mut self` method mutates the
+                    // caller's receiver, so it is a sibling mutation for the
+                    // arguments.
+                    ExprKind::MethodCall {
+                        func_id,
+                        receiver,
+                        args,
+                        ..
+                    } => {
+                        self.scan_call_args(body, *func_id, 1, Some(*receiver), args, out);
                     }
                     _ => {}
                 }
@@ -937,6 +941,7 @@ impl ValueCopyElideRule<'_> {
         body: &Body,
         func_id: FuncId,
         param_offset: usize,
+        receiver: Option<Operand>,
         args: &[crate::nir_arena::ArenaCallArg],
         out: &mut Vec<ExprId>,
     ) {
@@ -951,12 +956,19 @@ impl ValueCopyElideRule<'_> {
             type_table: self.type_table,
             escape: self.escape,
         };
+        let oracle = MutationOracle::new(self.param_mut);
+        // A `&mut self` method mutates the caller's receiver storage during the
+        // call, so those roots are a sibling mutation too (unknown callee →
+        // conservatively assumed to mutate).
+        let receiver_roots = receiver
+            .filter(|_| oracle.receiver_mutates(func_id).unwrap_or(true))
+            .map(|re| aliasing.value_alias_roots(re))
+            .unwrap_or_default();
         let mut_roots: Vec<u32> = args
             .iter()
             .enumerate()
             .filter_map(|(i, a)| {
                 let e = a.expr.as_expr()?;
-                let oracle = MutationOracle::new(self.param_mut, self.call_immutability);
                 let mutates = match oracle.arg_mutates(func_id, param_offset + i) {
                     Some(m) => m,
                     None => is_mutable_witness_type(body.exprs[e].type_id, self.type_table),
@@ -964,6 +976,7 @@ impl ValueCopyElideRule<'_> {
                 mutates.then(|| aliasing.value_alias_roots(a.expr))
             })
             .flatten()
+            .chain(receiver_roots)
             .collect();
         for (i, a) in args.iter().enumerate() {
             let Some(e) = a.expr.as_expr() else { continue };

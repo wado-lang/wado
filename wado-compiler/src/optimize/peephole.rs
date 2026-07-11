@@ -97,10 +97,6 @@ pub(super) fn run_peephole(
     // boxing has erased the `&mut`/`&` distinction from the parameter type.
     // Built once (pre-inline only, where the elide rule runs).
     let param_mut = (pre_inline && !value_copy_ids.is_empty()).then(|| build_param_mut(project));
-    // The body-derived receiver-writes fixpoint; conjoined with `param_mut`
-    // by the mutation oracle (see `value_copy::mutation`).
-    let call_immutability = (pre_inline && !value_copy_ids.is_empty())
-        .then(|| super::alias::CallImmutability::new(project, &type_table));
     let callees = build_callee_map(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let const_fold_rule = ConstFoldRule::new(&type_table, &callees);
@@ -125,10 +121,9 @@ pub(super) fn run_peephole(
                 func.body
                     .as_ref()
                     .zip(param_mut.as_ref())
-                    .zip(call_immutability.as_ref())
                     .zip(escape_map.as_ref())
-                    .map(|(((b, pm), ci), escape)| {
-                        build_usage(b, &type_table, &MutationOracle::new(pm, ci), escape)
+                    .map(|((b, pm), escape)| {
+                        build_usage(b, &type_table, &MutationOracle::new(pm), escape)
                     })
             })
             .flatten();
@@ -136,9 +131,8 @@ pub(super) fn run_peephole(
         let value_copy_rule = value_copy_usage
             .zip(escape_map.as_ref())
             .zip(param_mut.as_ref())
-            .zip(call_immutability.as_ref())
-            .map(|(((u, escape), pm), ci)| {
-                ValueCopyElideRule::new(&value_copy_ids, escape, &type_table, pm, ci, n_params, u)
+            .map(|((u, escape), pm)| {
+                ValueCopyElideRule::new(&value_copy_ids, escape, &type_table, pm, n_params, u)
             });
         // Reference elimination runs post-inline only (it cleans up the ref
         // bindings inlining exposes). Its maps are built from the pristine

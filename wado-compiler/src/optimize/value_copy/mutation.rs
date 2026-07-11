@@ -3,15 +3,20 @@
 //! Four analyses each re-implemented "which locals may this expression
 //! mutate" (elide's usage map, `copy_prop`'s `mut_indices` /
 //! `has_field_mutation`, alias's mut-escape sets, `condition_implication`'s
-//! invalidation), with different callee oracles of *independent* precision:
-//! the pre-boxing declared-`&mut` parameter bits ([`super::super::peephole`]'s
-//! `param_mut`) and the body-derived receiver-writes fixpoint
-//! (`alias::CallImmutability`). This module recognizes the witness shapes
-//! once and answers callee questions with the *conjunction* of both oracles —
-//! sound (a caller-visible write needs a writable declaration AND an actual
-//! write) and strictly more precise than either alone: a declared `&mut self`
-//! that never writes, and a by-value `self` that writes its own copy, both
-//! stop counting as mutations.
+//! invalidation). This module recognizes the witness shapes once and answers
+//! callee questions from one oracle: the pre-boxing declared-`&mut` parameter
+//! bits ([`super::super::peephole`]'s `param_mut`), which stay precise where
+//! the boxing rewrite has erased the `&mut`/`&` distinction from the parameter
+//! type.
+//!
+//! The verdict is by *declaration*, not by whether the body actually writes.
+//! A body-derived receiver-writes proof (`alias::CallImmutability`) is not
+//! sound to elide against: it has false negatives for mutations the boxing
+//! rewrite hides — `if let Some(v) = &mut self.payload { v.push(x) }` lowers to
+//! `Box { value: self.payload }` matched and pushed through, a shape the
+//! syntactic self-write scan misses — so trusting `writes == false` would strip
+//! a copy the callee's mutation then corrupts (wado-lang/wado#1544). A declared
+//! `&mut` is conservatively assumed to mutate.
 //!
 //! Root resolution and the bodyless-callee default stay with each consumer:
 //! those differences are load-bearing (see `arena_query::storage_root` /
@@ -21,45 +26,25 @@ use crate::hashmap::IndexMap;
 use crate::nir::{FuncId, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, Operand};
 
-use super::super::alias::CallImmutability;
-
 pub(in crate::optimize) struct MutationOracle<'a> {
     param_mut: &'a IndexMap<FuncId, Vec<bool>>,
-    call_immutability: &'a CallImmutability<'a>,
 }
 
 impl<'a> MutationOracle<'a> {
-    pub(in crate::optimize) fn new(
-        param_mut: &'a IndexMap<FuncId, Vec<bool>>,
-        call_immutability: &'a CallImmutability<'a>,
-    ) -> Self {
-        Self {
-            param_mut,
-            call_immutability,
-        }
+    pub(in crate::optimize) fn new(param_mut: &'a IndexMap<FuncId, Vec<bool>>) -> Self {
+        Self { param_mut }
     }
 
     /// Whether a method callee may write the caller's storage through its
-    /// receiver. `None` for a bodyless callee — the site supplies its own
-    /// default. Bodied: declared `&mut self` (pre-boxing bit) AND the
-    /// body-derived writes fixpoint.
+    /// receiver: its declared `&mut self` bit. `None` for a bodyless callee —
+    /// the site supplies its own default.
     pub(in crate::optimize) fn receiver_mutates(&self, func_id: FuncId) -> Option<bool> {
-        let declared = self
-            .param_mut
-            .get(&func_id)?
-            .first()
-            .copied()
-            .unwrap_or(false);
-        Some(
-            match self.call_immutability.method_writes_receiver(func_id) {
-                Some(writes) => declared && writes,
-                None => declared,
-            },
-        )
+        self.arg_mutates(func_id, 0)
     }
 
     /// Whether the callee may write the caller's storage through parameter
-    /// `idx` (absolute: `self` is 0). `None` for a bodyless callee.
+    /// `idx` (absolute: `self` is 0): its declared `&mut` bit. `None` for a
+    /// bodyless callee.
     pub(in crate::optimize) fn arg_mutates(&self, func_id: FuncId, idx: usize) -> Option<bool> {
         self.param_mut
             .get(&func_id)
