@@ -833,6 +833,44 @@ impl SemEffectWalker<'_> {
         self.index.method_effects(func_ref)
     }
 
+    /// Effects a single `with` binding grants to the do-block body.
+    ///
+    /// The explicit form (`Effect => handler`) names its effect directly, but
+    /// the bundled form (`with handler do`) leaves `binding.effect` unset and
+    /// installs one handler per effect the handler value's type implements.
+    /// The elaborator already enumerated that set into `handler_bindings`, so
+    /// read it back rather than re-deriving it here — otherwise a bundled
+    /// handler grants nothing and any effect a helper called from the block
+    /// requires is spuriously reported missing.
+    fn binding_granted_effects(
+        &self,
+        binding: &crate::ast::EffectHandlerBinding,
+    ) -> Vec<EffectRef> {
+        if let Some(facts) = self
+            .annotations
+            .and_then(|a| a.handler_bindings.get(&binding.id))
+        {
+            return facts
+                .effects
+                .iter()
+                .filter_map(|entry| self.index.effect_by_name.get(&entry.name).cloned())
+                .collect();
+        }
+        // Fallback for partial state without recorded facts: the explicit
+        // form still names its effect on the binding.
+        binding
+            .effect
+            .as_ref()
+            .and_then(|ty| match ty {
+                crate::ast::Type::Named(named) => {
+                    self.index.effect_by_name.get(&named.name).cloned()
+                }
+                _ => None,
+            })
+            .into_iter()
+            .collect()
+    }
+
     /// Resolve `EffectRef::Param` effects to concrete effects by matching the
     /// callee's function-typed parameters against the actual argument types.
     /// `is_method` drops the leading `self` parameter so params line up with
@@ -1051,13 +1089,7 @@ impl AstVisitor for SemEffectWalker<'_> {
                 let granted: Vec<EffectRef> = with_handler
                     .handlers
                     .iter()
-                    .filter_map(|b| b.effect.as_ref())
-                    .filter_map(|ty| match ty {
-                        crate::ast::Type::Named(named) => {
-                            self.index.effect_by_name.get(&named.name).cloned()
-                        }
-                        _ => None,
-                    })
+                    .flat_map(|binding| self.binding_granted_effects(binding))
                     .collect();
                 let added: Vec<EffectRef> = granted
                     .into_iter()

@@ -1,0 +1,56 @@
+// Regression: the bundled handler form (`with &mut h do`) must grant its
+// installed effects to functions *called* from the do-block body, not only to
+// effect operations performed directly in the block.
+//
+// The effect checker walks the source AST and, at a `with` expression, grants
+// the handled effects to the body so calls inside it hold what their callees
+// require. For the bundled form `binding.effect` is `None` (no `Effect =>`
+// prefix), so an earlier version granted nothing and reported the effects a
+// helper required as "missing", even though the handler installs them. The
+// grant now reads the elaborator's enumerated `handler_bindings` facts.
+//
+// `use_both` requires `A` and `B`; both are installed by the single bundled
+// `with &mut m do` clause and must be discharged for the call to check.
+
+use { println, Stdout } from "core:cli";
+
+interface A {
+    fn a() -> i32;
+}
+
+interface B {
+    fn b() -> i32;
+}
+
+struct Mock {
+    n: i32,
+}
+
+impl A for Mock {
+    fn a(&mut self) -> i32 {
+        self.n += 1;
+        resume self.n
+    }
+}
+
+impl B for Mock {
+    fn b(&mut self) -> i32 {
+        self.n += 10;
+        resume self.n
+    }
+}
+
+fn use_both() -> i32 with A, B {
+    return A::a() + B::b();
+}
+
+export fn run() with Stdout {
+    let mut m = Mock { n: 0 };
+    let total = with &mut m do {
+        use_both();
+    };
+    println(`total={total}`);
+}
+
+__DATA__
+{"stdout": "total=12\n"}
