@@ -10,7 +10,7 @@ use std::fmt;
 use indexmap::IndexMap;
 
 use crate::lockfile::LockedPackage;
-use crate::manifest::{Dependency, DependencySource, Manifest};
+use crate::manifest::{Dependency, DependencySource, GitPin, Manifest};
 use crate::provider::{DependencyProvider, ProviderError};
 use crate::version::{Version, VersionSpecifier};
 
@@ -127,7 +127,27 @@ pub async fn resolve(
                 );
                 continue;
             }
-            DependencySource::Git { .. } | DependencySource::Workspace => {
+            // A git dep is a source dep: resolve its commit, read its manifest,
+            // traverse its transitive deps, and lock it by `resolved-ref`.
+            DependencySource::Git {
+                url,
+                pin,
+                directory,
+            } => {
+                resolve_git(
+                    &frame,
+                    url,
+                    pin,
+                    directory.as_deref(),
+                    provider,
+                    &mut resolved,
+                    &mut children,
+                    &mut queue,
+                )
+                .await?;
+                continue;
+            }
+            DependencySource::Workspace => {
                 return Err(ResolveError::UnsupportedSource {
                     dep: frame.key.clone(),
                     kind: source_kind(&frame.source),
@@ -182,25 +202,7 @@ pub async fn resolve(
             .await
             .map_err(ResolveError::Provider)?;
 
-        let mut child_ids = Vec::new();
-        for (ckey, cdep) in &info.manifest.dependencies {
-            if let DependencySource::Registry {
-                registry: creg,
-                package: cpkg,
-                ..
-            } = &cdep.source
-                && let Some(curl) = registry_url(&info.manifest.registries, creg.as_deref())
-            {
-                child_ids.push(format!("registry+{curl}/{cpkg}"));
-            }
-            queue.push_back(Frame {
-                key: ckey.clone(),
-                source: cdep.source.clone(),
-                registries: info.manifest.registries.clone(),
-                base: String::new(),
-                dev: frame.dev,
-            });
-        }
+        let child_ids = enqueue_children(&mut queue, &info.manifest, frame.dev);
 
         resolved.insert(
             id.clone(),
@@ -267,6 +269,145 @@ fn join_base(base: &str, path: &str) -> String {
     }
 }
 
+// Resolve one git dependency: pick its commit, read its manifest, enqueue its
+// transitive deps, and record a `git+…` locked package pinned by `resolved-ref`.
+#[allow(clippy::too_many_arguments)]
+async fn resolve_git(
+    frame: &Frame,
+    url: &str,
+    pin: &GitPin,
+    directory: Option<&str>,
+    provider: &impl DependencyProvider,
+    resolved: &mut BTreeMap<String, LockedPackage>,
+    children: &mut BTreeMap<String, Vec<String>>,
+    queue: &mut VecDeque<Frame>,
+) -> Result<(), ResolveError> {
+    // Per the design, the coordinate is the dependency key; the id is stable
+    // before any fetch, so duplicates dedup without a network round-trip.
+    let id = format!("git+{url}/{}", frame.key);
+
+    if let Some(existing) = resolved.get_mut(&id) {
+        // A version pin must stay compatible with the already-locked version;
+        // a ref pin takes the first resolution. A non-dev use clears the mark.
+        if let GitPin::Version(req_str) = pin {
+            let req = parse_req(&frame.key, req_str)?;
+            if let Ok(existing_ver) = Version::parse(&existing.version)
+                && !req.matches(&existing_ver)
+            {
+                return Err(ResolveError::VersionConflict {
+                    package: frame.key.clone(),
+                    requirement: req_str.clone(),
+                    resolved: existing.version.clone(),
+                });
+            }
+        }
+        if !frame.dev {
+            existing.dev = false;
+        }
+        return Ok(());
+    }
+
+    let (sha, tag_version) = match pin {
+        GitPin::Version(req_str) => {
+            let req = parse_req(&frame.key, req_str)?;
+            let chosen = provider
+                .list_git_tags(url)
+                .await
+                .map_err(ResolveError::Provider)?
+                .into_iter()
+                .filter(|t| req.matches(&t.version))
+                .max_by(|a, b| a.version.cmp(&b.version))
+                .ok_or_else(|| ResolveError::NoMatchingVersion {
+                    package: frame.key.clone(),
+                    requirement: req_str.clone(),
+                })?;
+            (chosen.sha, Some(chosen.version.to_string()))
+        }
+        GitPin::Ref(r) => (
+            provider
+                .resolve_git_ref(url, r)
+                .await
+                .map_err(ResolveError::Provider)?,
+            None,
+        ),
+    };
+
+    let manifest = provider
+        .fetch_git_manifest(url, &sha, directory)
+        .await
+        .map_err(ResolveError::Provider)?;
+
+    // Version: the matched tag for a version pin; otherwise the package's own
+    // version at that commit, falling back to the commit itself.
+    let version = tag_version
+        .or_else(|| manifest.package.as_ref().map(|p| p.version.clone()))
+        .unwrap_or_else(|| sha.clone());
+
+    let child_ids = enqueue_children(queue, &manifest, frame.dev);
+
+    resolved.insert(
+        id.clone(),
+        LockedPackage {
+            id: id.clone(),
+            version,
+            resolved_ref: Some(sha),
+            integrity: None,
+            dev: frame.dev,
+            world: manifest
+                .world
+                .iter()
+                .map(|(fq, w)| (fq.clone(), w.entry.clone()))
+                .collect(),
+            deps: Vec::new(),
+        },
+    );
+    children.insert(id, child_ids);
+    Ok(())
+}
+
+fn parse_req(dep: &str, requirement: &str) -> Result<VersionSpecifier, ResolveError> {
+    VersionSpecifier::parse(requirement).map_err(|e| ResolveError::InvalidRequirement {
+        dep: dep.to_string(),
+        requirement: requirement.to_string(),
+        reason: e.to_string(),
+    })
+}
+
+// Enqueue a resolved package's dependencies as frames and return the lock ids of
+// those that lock (registry and git); path/workspace children have no id here.
+fn enqueue_children(queue: &mut VecDeque<Frame>, manifest: &Manifest, dev: bool) -> Vec<String> {
+    let mut child_ids = Vec::new();
+    for (ckey, cdep) in &manifest.dependencies {
+        if let Some(cid) = child_lock_id(ckey, &cdep.source, &manifest.registries) {
+            child_ids.push(cid);
+        }
+        queue.push_back(Frame {
+            key: ckey.clone(),
+            source: cdep.source.clone(),
+            registries: manifest.registries.clone(),
+            base: String::new(),
+            dev,
+        });
+    }
+    child_ids
+}
+
+// The lock id a child dependency will occupy, for the parent's `deps` list.
+// Registry and git deps lock; path and workspace deps do not (return `None`).
+fn child_lock_id(
+    key: &str,
+    source: &DependencySource,
+    registries: &IndexMap<String, String>,
+) -> Option<String> {
+    match source {
+        DependencySource::Registry {
+            registry, package, ..
+        } => registry_url(registries, registry.as_deref()).map(|url| format!("registry+{url}/{package}")),
+        DependencySource::Git { url, .. } => Some(format!("git+{url}/{key}")),
+        DependencySource::Path { .. } | DependencySource::Workspace => None,
+    }
+}
+
 fn enqueue(
     queue: &mut VecDeque<Frame>,
     deps: &IndexMap<String, Dependency>,
@@ -301,7 +442,7 @@ fn source_kind(source: &DependencySource) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::provider::{InMemoryDependencyProvider, RegistryPackageInfo};
+    use crate::provider::{GitTagInfo, InMemoryDependencyProvider, RegistryPackageInfo};
     use crate::version::Version;
     use std::future::Future;
 
@@ -647,7 +788,7 @@ version = "0.1.0"
     }
 
     #[test]
-    fn git_source_is_not_yet_supported() {
+    fn workspace_source_is_not_yet_supported() {
         block_on(async {
             let manifest: Manifest = r#"
 [package]
@@ -655,14 +796,156 @@ name = "app"
 version = "0.1.0"
 
 [dependencies]
-"lib:router" = { git = "https://github.com/user/router.git", ref = "main" }
+json = { workspace = true }
 "#
             .parse()
             .unwrap();
             let provider = InMemoryDependencyProvider::new();
             let err = resolve(&manifest, &provider).await.unwrap_err();
             assert!(
-                matches!(err, ResolveError::UnsupportedSource { kind: "git", .. }),
+                matches!(err, ResolveError::UnsupportedSource { kind: "workspace", .. }),
+                "{err:?}"
+            );
+        });
+    }
+
+    #[test]
+    fn resolves_version_pinned_git_dep() {
+        block_on(async {
+            let manifest: Manifest = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[dependencies]
+"user:router" = { git = "https://github.com/user/router.git", version = "^1.0.0" }
+"#
+            .parse()
+            .unwrap();
+            let mut provider = InMemoryDependencyProvider::new();
+            for (v, sha) in [("1.0.0", "aaaa1111"), ("1.2.0", "bbbb2222"), ("2.0.0", "cccc3333")] {
+                provider.add_git_tag(
+                    "https://github.com/user/router.git",
+                    GitTagInfo {
+                        version: Version::parse(v).unwrap(),
+                        sha: sha.to_string(),
+                    },
+                );
+            }
+            provider.add_git_manifest(
+                "https://github.com/user/router.git",
+                "bbbb2222",
+                leaf_manifest("router", "1.2.0"),
+            );
+
+            let locked = resolve(&manifest, &provider).await.unwrap();
+            assert_eq!(locked.len(), 1, "{locked:?}");
+            let p = &locked[0];
+            assert_eq!(p.id, "git+https://github.com/user/router.git/user:router");
+            assert_eq!(p.version, "1.2.0");
+            assert_eq!(p.resolved_ref.as_deref(), Some("bbbb2222"));
+            assert!(p.integrity.is_none());
+        });
+    }
+
+    #[test]
+    fn resolves_ref_pinned_git_dep_using_package_version() {
+        block_on(async {
+            let manifest: Manifest = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[dependencies]
+"user:router" = { git = "https://github.com/user/router.git", ref = "main" }
+"#
+            .parse()
+            .unwrap();
+            let mut provider = InMemoryDependencyProvider::new();
+            provider.add_git_ref("https://github.com/user/router.git", "main", "deadbeef1234");
+            provider.add_git_manifest(
+                "https://github.com/user/router.git",
+                "deadbeef1234",
+                leaf_manifest("router", "0.3.1"),
+            );
+
+            let locked = resolve(&manifest, &provider).await.unwrap();
+            assert_eq!(locked.len(), 1, "{locked:?}");
+            assert_eq!(locked[0].version, "0.3.1");
+            assert_eq!(locked[0].resolved_ref.as_deref(), Some("deadbeef1234"));
+        });
+    }
+
+    #[test]
+    fn git_dep_transitive_registry_dep_is_locked() {
+        block_on(async {
+            let manifest: Manifest = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[dependencies]
+"user:router" = { git = "https://github.com/user/router.git", ref = "main" }
+"#
+            .parse()
+            .unwrap();
+            let router: Manifest = r#"
+[package]
+name = "router"
+version = "1.0.0"
+
+[registries]
+default = "https://wa.dev"
+
+[dependencies]
+"ns:dep" = { version = "^1.0.0" }
+"#
+            .parse()
+            .unwrap();
+            let mut provider = InMemoryDependencyProvider::new();
+            provider.add_git_ref("https://github.com/user/router.git", "main", "abc12345");
+            provider.add_git_manifest("https://github.com/user/router.git", "abc12345", router);
+            provider.add_registry_package(
+                "https://wa.dev",
+                "ns:dep",
+                Version::parse("1.0.0").unwrap(),
+                leaf_info("dep", "1.0.0", "sha256:d"),
+            );
+
+            let locked = resolve(&manifest, &provider).await.unwrap();
+            assert_eq!(locked.len(), 2, "{locked:?}");
+            let git = locked
+                .iter()
+                .find(|p| p.id.starts_with("git+"))
+                .expect("git pkg");
+            assert_eq!(git.deps, vec!["registry+https://wa.dev/ns:dep@1.0.0"]);
+        });
+    }
+
+    #[test]
+    fn unsatisfiable_git_version_errors() {
+        block_on(async {
+            let manifest: Manifest = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[dependencies]
+"user:router" = { git = "https://github.com/user/router.git", version = "^2.0.0" }
+"#
+            .parse()
+            .unwrap();
+            let mut provider = InMemoryDependencyProvider::new();
+            provider.add_git_tag(
+                "https://github.com/user/router.git",
+                GitTagInfo {
+                    version: Version::parse("1.0.0").unwrap(),
+                    sha: "aaaa1111".to_string(),
+                },
+            );
+            let err = resolve(&manifest, &provider).await.unwrap_err();
+            assert!(
+                matches!(err, ResolveError::NoMatchingVersion { .. }),
                 "{err:?}"
             );
         });

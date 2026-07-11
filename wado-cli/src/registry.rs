@@ -146,6 +146,7 @@ impl DependencyProvider for FilesystemProvider {
         &self,
         url: &str,
         sha: &str,
+        _directory: Option<&str>,
     ) -> impl Future<Output = Result<Manifest, ProviderError>> + Send {
         ready(Err(backend_pending(format!("{url}@{sha}"))))
     }
