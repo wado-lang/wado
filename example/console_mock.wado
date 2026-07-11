@@ -1,0 +1,166 @@
+//! Mock and capture stdin / stdout / stderr with effect handlers.
+//!
+//! Application code performs the `Console` effect instead of calling
+//! `println` / `eprintln` directly. Swapping the handler swaps the world the
+//! program talks to:
+//!
+//! - `SystemConsole` forwards to the real terminal (`wado run`).
+//! - `MockConsole` scripts stdin and captures stdout / stderr, so the exact
+//!   same logic runs under test without touching the terminal.
+//!
+//! This is the effect-handler analogue of dependency injection: no globals, no
+//! conditional "am I testing?" branches — the caller picks the handler.
+
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+
+interface Console {
+    fn out(line: String);
+    fn err(line: String);
+    fn read_line() -> Option<String>;
+}
+
+// Application logic, written against the effect. It never names a concrete
+// stream, so it is oblivious to whether it drives a terminal or a buffer.
+fn greet_repl() with Console {
+    let mut count = 0;
+    while let Some(name) = Console::read_line() {
+        if name.is_empty() {
+            Console::err("skipped a blank line");
+            continue;
+        }
+        Console::out(`Hello, {name}!`);
+        count += 1;
+    }
+    Console::err(`greeted {count}`);
+}
+
+// Production handler: stdin is empty (EOF), output goes to the real terminal.
+struct SystemConsole {
+}
+
+impl Console for SystemConsole {
+    fn out(&self, line: String) with Stdout {
+        println(line);
+    }
+
+    fn err(&self, line: String) with Stderr {
+        eprintln(line);
+    }
+
+    fn read_line(&self) -> Option<String> {
+        let eof: Option<String> = null;
+        resume eof;
+    }
+}
+
+// Test double: replays scripted stdin lines and records everything written.
+struct MockConsole {
+    input: List<String> = [],
+    cursor: i32 = 0,
+    stdout: List<String> = [],
+    stderr: List<String> = [],
+}
+
+impl Console for MockConsole {
+    fn out(&mut self, line: String) {
+        self.stdout.push(line);
+    }
+
+    fn err(&mut self, line: String) {
+        self.stderr.push(line);
+    }
+
+    fn read_line(&mut self) -> Option<String> {
+        if self.cursor >= self.input.len() {
+            let eof: Option<String> = null;
+            resume eof;
+        }
+        let line = self.input[self.cursor];
+        self.cursor += 1;
+        resume Option::Some(line);
+    }
+}
+
+export fn run() with Stdout, Stderr {
+    // Drive the app under a mock, then reveal what it captured — the same
+    // buffers a test would assert on.
+    let mut mock = MockConsole {
+        input: ["Ada", "", "Turing"],
+    };
+    with Console => &mut mock do {
+        greet_repl();
+    };
+
+    println("--- captured stdout ---");
+    for let line of mock.stdout {
+        println(line);
+    }
+    println("--- captured stderr ---");
+    for let line of mock.stderr {
+        println(line);
+    }
+
+    // A real run would forward to the terminal instead of capturing.
+    let sys = SystemConsole {};
+    with Console => &sys do {
+        Console::out("--- now via SystemConsole (real stdout) ---");
+    };
+}
+
+test "captures stdout lines written through the effect" {
+    let mut mock = MockConsole {
+        input: ["Ada", "Turing"],
+    };
+    with Console => &mut mock do {
+        greet_repl();
+    };
+    let expected: List<String> = ["Hello, Ada!", "Hello, Turing!"];
+    assert mock.stdout == expected;
+}
+
+test "captures stderr independently from stdout" {
+    let mut mock = MockConsole {
+        input: ["Ada"],
+    };
+    with Console => &mut mock do {
+        greet_repl();
+    };
+    let out: List<String> = ["Hello, Ada!"];
+    let err: List<String> = ["greeted 1"];
+    assert mock.stdout == out;
+    assert mock.stderr == err;
+}
+
+test "scripted stdin drives control flow (blank line branch)" {
+    let mut mock = MockConsole {
+        input: ["Ada", "", "Turing"],
+    };
+    with Console => &mut mock do {
+        greet_repl();
+    };
+    let out: List<String> = ["Hello, Ada!", "Hello, Turing!"];
+    let err: List<String> = ["skipped a blank line", "greeted 2"];
+    assert mock.stdout == out;
+    assert mock.stderr == err;
+}
+
+test "empty stdin reaches EOF immediately" {
+    let mut mock = MockConsole {};
+    with Console => &mut mock do {
+        greet_repl();
+    };
+    assert mock.stdout.is_empty();
+    let err: List<String> = ["greeted 0"];
+    assert mock.stderr == err;
+}
+
+test "read_line returns None past the end of the script" {
+    let mut mock = MockConsole {
+        input: ["only"],
+    };
+    with Console => &mut mock do {
+        assert Console::read_line() matches { Some(_) };
+        assert Console::read_line() matches { None };
+        assert Console::read_line() matches { None };
+    };
+}
