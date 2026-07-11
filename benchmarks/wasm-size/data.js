@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783730222164,
+  "lastUpdate": 1783734652140,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -39173,6 +39173,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1d7c12ddc44b7e715de200ca8f03aef43d3f60d3"
         },
         "date": 1783730221577,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16351,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 266775,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "75a2ced50060b3f73b67a154674c90613de6061b",
+          "message": "Merge pull request #1547 from wado-lang/claude/wado-blog-migration-otzv77\n\nrefactor(sheaf): move the blog generator to wado-lang.github.io",
+          "timestamp": "2026-07-11T10:43:15+09:00",
+          "tree_id": "d6db3b5fb6155ea2208abc4d141b03bc97e78c4e",
+          "url": "https://github.com/wado-lang/wado/commit/75a2ced50060b3f73b67a154674c90613de6061b"
+        },
+        "date": 1783734651576,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
