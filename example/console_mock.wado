@@ -36,18 +36,12 @@ struct MockStdio {
 
 impl MockStdio {
     fn stdout_text(&self) -> String {
-        return decode(self.out);
+        return String::from_utf8_lossy(self.out);
     }
 
     fn stderr_text(&self) -> String {
-        return decode(self.err);
+        return String::from_utf8_lossy(self.err);
     }
-}
-
-// The captured bytes always originate from valid UTF-8 (Wado string writes and
-// string-literal stdin scripts), so skip the checked `from_utf8` here.
-fn decode(bytes: List<u8>) -> String {
-    return String::from_utf8_unchecked(bytes);
 }
 
 // --- WASI stdio effects: pick the sink, hand back a fake completion future ---
@@ -172,7 +166,7 @@ fn read_all_stdin() -> String with Stdin {
         }
     }
     rx.drop();
-    return decode(buf);
+    return String::from_utf8_lossy(buf);
 }
 
 export fn run() with Stdout, Stderr {
