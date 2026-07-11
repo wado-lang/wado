@@ -59,10 +59,18 @@ impl FilesystemProvider {
     }
 }
 
-fn backend_pending(source: String) -> ProviderError {
-    ProviderError::NotFound {
-        source,
-        message: "git dependency backend is not wired yet".to_string(),
+// Run a blocking git operation on the blocking pool, flattening the join error.
+async fn on_blocking<T, F>(f: F) -> Result<T, ProviderError>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, ProviderError> + Send + 'static,
+{
+    match tokio::task::spawn_blocking(f).await {
+        Ok(result) => result,
+        Err(e) => Err(ProviderError::IoError {
+            path: "git".to_string(),
+            message: e.to_string(),
+        }),
     }
 }
 
@@ -131,7 +139,8 @@ impl DependencyProvider for FilesystemProvider {
         &self,
         url: &str,
     ) -> impl Future<Output = Result<Vec<GitTagInfo>, ProviderError>> + Send {
-        ready(Err(backend_pending(url.to_string())))
+        let url = url.to_string();
+        on_blocking(move || crate::git::list_tags(&url))
     }
 
     fn resolve_git_ref(
@@ -139,15 +148,21 @@ impl DependencyProvider for FilesystemProvider {
         url: &str,
         ref_name: &str,
     ) -> impl Future<Output = Result<String, ProviderError>> + Send {
-        ready(Err(backend_pending(format!("{url}#{ref_name}"))))
+        let url = url.to_string();
+        let ref_name = ref_name.to_string();
+        on_blocking(move || crate::git::resolve_ref(&url, &ref_name))
     }
 
     fn fetch_git_manifest(
         &self,
         url: &str,
         sha: &str,
+        directory: Option<&str>,
     ) -> impl Future<Output = Result<Manifest, ProviderError>> + Send {
-        ready(Err(backend_pending(format!("{url}@{sha}"))))
+        let url = url.to_string();
+        let sha = sha.to_string();
+        let directory = directory.map(str::to_string);
+        on_blocking(move || crate::git::fetch_manifest(&url, &sha, directory.as_deref()))
     }
 
     fn load_path_manifest(

@@ -1598,6 +1598,27 @@ impl ImportAttributes {
         self.get_str("package")
     }
 
+    /// Inline git repository URL for a single-file source dependency
+    /// (`with { git: "https://…" }`).
+    #[must_use]
+    pub fn git(&self) -> Option<String> {
+        self.get_str("git")
+    }
+
+    /// Inline git ref (tag, branch, or SHA) paired with [`ImportAttributes::git`]
+    /// (`with { git: "…", ref: "main" }`).
+    #[must_use]
+    pub fn git_ref(&self) -> Option<String> {
+        self.get_str("ref")
+    }
+
+    /// Subdirectory of a git repository holding the package (monorepo)
+    /// (`with { git: "…", directory: "packages/foo" }`).
+    #[must_use]
+    pub fn directory(&self) -> Option<String> {
+        self.get_str("directory")
+    }
+
     #[must_use]
     pub fn type_hint(&self) -> Option<String> {
         self.get_str("type")
