@@ -115,6 +115,15 @@ test "/status pings the upstream and reports its status" {
     assert upstream.hits == hits;
 }
 
+test "the exported handle routes through to the upstream" {
+    let mut upstream = MockUpstream { status: 204 };
+    with Client => &mut upstream do {
+        handle(get("/status"));
+    };
+    let hits: List<String> = ["/health"];
+    assert upstream.hits == hits;
+}
+
 test "unknown path is 404 and never touches the upstream" {
     let mut upstream = MockUpstream {};
     let resp = with Client => &mut upstream do {
