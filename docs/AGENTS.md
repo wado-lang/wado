@@ -140,3 +140,4 @@ It may include TODOs on WIP.
 - [Iterator Reference Model](./wep-2026-07-05-iterator-reference-model.md)
 - [Local Item Definitions](./wep-2026-07-09-local-item-definitions.md)
 - [Struct Walkability — Field Walks over `Reflect` and `#[secret]` Fields](./wep-2026-07-10-struct-walkability.md)
+- [Elaborator God-Object Dismantlement — Decl Signatures, Scope, and the Body Walker](./wep-2026-07-10-elaborator-god-object-dismantlement.md)

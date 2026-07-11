@@ -64,18 +64,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             left.type_id = self.apply_infer_holes(left.type_id);
             right.type_id = self.apply_infer_holes(right.type_id);
         }
-        // Pin the binary's source AstId on the
-        // side-channel so the operator-trait dispatch path can record
-        // the decision under it. Cleared by
-        // `build_trait_op_method_call_on_resolved` on success; we
-        // also clear here defensively in case
-        // `build_binary_op_tir` takes a native (non-dispatch) path,
-        // so a later synthesised binary call doesn't pick up a stale
-        // id from this entry.
-        self.pending_operator_ast_id = Some(binary.id);
-        let result = self.build_binary_op_tir(left, binary.op, right, binary.span);
-        self.pending_operator_ast_id = None;
-        result
+        // Pass the binary's source AstId so the operator-trait
+        // dispatch path can record the decision under it.
+        self.build_binary_op_tir(left, binary.op, right, binary.span, Some(binary.id))
     }
 
     /// Resolve both operands of a binary op, applying the standard
@@ -264,6 +255,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         op: BinaryOp,
         right: TirExpr,
         span: Span,
+        origin: Option<ast::AstId>,
     ) -> TypeId {
         // Check if this is a comparison operation on a non-primitive type
         // Non-primitives use Eq/Ord traits instead of direct Wasm instructions
@@ -417,6 +409,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         vec![right],
                         &resolved,
                         span,
+                        origin,
                     );
                     if op == BinaryOp::NotEq && call.type_id == TypeTable::BOOL {
                         // reify rebuilds the `!` wrapper for `!=`; project BOOL.
@@ -464,6 +457,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         vec![right],
                         &resolved,
                         span,
+                        origin,
                     );
                     if cmp_call.type_id == TypeTable::ERROR {
                         return TypeTable::ERROR;
@@ -514,6 +508,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         vec![right],
                         &resolved,
                         span,
+                        origin,
                     );
                     if op == BinaryOp::NotEq && call.type_id == TypeTable::BOOL {
                         // reify rebuilds the `!` wrapper for `!=`; project BOOL.
@@ -547,6 +542,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         vec![right],
                         &resolved,
                         span,
+                        origin,
                     );
                     if cmp_call.type_id == TypeTable::ERROR {
                         return TypeTable::ERROR;
@@ -623,7 +619,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         is_type_param_receiver: false,
                     };
                     return self
-                        .build_trait_op_method_call_on_resolved(left, vec![right], &resolved, span)
+                        .build_trait_op_method_call_on_resolved(
+                            left,
+                            vec![right],
+                            &resolved,
+                            span,
+                            origin,
+                        )
                         .type_id;
                 }
             }
@@ -667,7 +669,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         is_type_param_receiver: true,
                     };
                     return self
-                        .build_trait_op_method_call_on_resolved(left, vec![right], &resolved, span)
+                        .build_trait_op_method_call_on_resolved(
+                            left,
+                            vec![right],
+                            &resolved,
+                            span,
+                            origin,
+                        )
                         .type_id;
                 }
             }
@@ -727,7 +735,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         is_type_param_receiver: false,
                     };
                     return self
-                        .build_trait_op_method_call_on_resolved(left, vec![right], &resolved, span)
+                        .build_trait_op_method_call_on_resolved(
+                            left,
+                            vec![right],
+                            &resolved,
+                            span,
+                            origin,
+                        )
                         .type_id;
                 }
             }
@@ -1015,18 +1029,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                 if let Some(resolved) = resolved {
                     // Record the dispatch keyed by the unary expr's AstId
-                    // (via the `pending_operator_ast_id` side-channel) so
-                    // reify can replay the `Neg::neg` / `BitNot::bitnot`
+                    // so reify can replay the `Neg::neg` / `BitNot::bitnot`
                     // method call instead of emitting a bare `Unary` on a
                     // struct (which codegen rejects: `expected i32, found
                     // (ref $T)`). Mirrors the binary-operator path.
-                    self.pending_operator_ast_id = Some(unary.id);
                     return self
                         .build_trait_op_method_call_on_resolved(
                             placeholder(expr_type, unary.expr.span()),
                             vec![],
                             &resolved,
                             unary.span,
+                            Some(unary.id),
                         )
                         .type_id;
                 }
@@ -1453,11 +1466,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // trait method (`Div::div` → `div_rem`). Tag the record with the
         // compound's AstId so reify replays that MethodCall instead of a raw
         // `Binary` (a primitive `/` on struct operands is invalid Wasm).
-        // Cleared unconditionally so a primitive op — which never reaches the
-        // dispatch-record path — leaves no stale id behind.
-        self.pending_operator_ast_id = Some(compound.id);
-        let combined = self.build_binary_op_tir(read, op, rhs, compound.span);
-        self.pending_operator_ast_id = None;
+        let combined = self.build_binary_op_tir(read, op, rhs, compound.span, Some(compound.id));
         self.assign_to_target(
             &compound.target,
             AssignValue::Resolved {
@@ -1501,12 +1510,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `build_binary_op_tir` (non-primitive operands → Eq /
             // Ord trait methods), tag the recording with the chain's
             // AstId so reify can replay the same method-call + Ord
-            // wrap shape. Cleared on every path so a later
-            // synthesised binary call doesn't pick up a stale id.
-            self.pending_operator_ast_id = Some(chain.id);
-            let result = self.build_binary_op_tir(left_tir, cmp.op, right_tir, cmp.op_span);
-            self.pending_operator_ast_id = None;
-            return result;
+            // wrap shape.
+            return self.build_binary_op_tir(
+                left_tir,
+                cmp.op,
+                right_tir,
+                cmp.op_span,
+                Some(chain.id),
+            );
         }
 
         // Multi-comparison: actual chain expansion. Tag the node so the
@@ -1531,7 +1542,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Bind `right0` to `__m0` — it is reused by the next comparison.
         let m0_ref = self.bind_chain_middle(0, right0_tir, ctx);
-        let acc_tir = self.build_binary_op_tir(first_tir, cmp0.op, m0_ref.clone(), cmp0.op_span);
+        let acc_tir =
+            self.build_binary_op_tir(first_tir, cmp0.op, m0_ref.clone(), cmp0.op_span, None);
         let mut acc_tir = placeholder(acc_tir, chain.span);
         let mut prev_tir = m0_ref;
 
@@ -1550,9 +1562,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.bind_chain_middle(idx, raw_right, ctx)
             };
             let next_prev = right_tir.clone();
-            let cmp_tir = self.build_binary_op_tir(prev_tir, cmp.op, right_tir, cmp.op_span);
+            let cmp_tir = self.build_binary_op_tir(prev_tir, cmp.op, right_tir, cmp.op_span, None);
             let cmp_tir = placeholder(cmp_tir, cmp.op_span);
-            let acc_type = self.build_binary_op_tir(acc_tir, BinaryOp::And, cmp_tir, chain.span);
+            let acc_type =
+                self.build_binary_op_tir(acc_tir, BinaryOp::And, cmp_tir, chain.span, None);
             acc_tir = placeholder(acc_type, chain.span);
             prev_tir = next_prev;
         }
@@ -1614,6 +1627,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: Vec<TirExpr>,
         resolved: &ResolvedTraitMethod,
         span: Span,
+        origin: Option<ast::AstId>,
     ) -> TirExpr {
         if args.len() != resolved.param_types.len() {
             // This is an internal invariant violation by the caller — the
@@ -1691,15 +1705,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_info: Some(method_info),
         };
 
-        // When the operator-dispatch
-        // request carries a source AST id on the
-        // [`Self::pending_operator_ast_id`] side-channel, record the
-        // dispatch decision so reify can re-emit the same `MethodCall`
-        // TIR for the binary / index expression. Synthesised callers
-        // (e.g. `desugar_comparison_chain`'s inner comparisons) leave
-        // the channel `None` and the record is skipped — they have no
-        // source-level `BinaryExpr` reify would key on.
-        if let Some(ast_id) = self.pending_operator_ast_id.take() {
+        // When the operator-dispatch request carries a source AST id in
+        // `origin`, record the dispatch decision so reify can re-emit the
+        // same `MethodCall` TIR for the binary / index expression.
+        // Synthesised callers (e.g. `desugar_comparison_chain`'s inner
+        // comparisons) pass `None` and the record is skipped — they have
+        // no source-level `BinaryExpr` reify would key on.
+        if let Some(ast_id) = origin {
             self.record_operator_dispatch(
                 ast_id,
                 super::sem::types::OperatorDispatch {

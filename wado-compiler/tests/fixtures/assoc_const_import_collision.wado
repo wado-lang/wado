@@ -1,0 +1,13 @@
+// An imported type's associated constant must resolve to the module the
+// type was imported from, not to whichever unrelated module happens to
+// declare a same-named type with a same-named constant.
+use { t_helper } from "./sub/assoc_const_collide_t.wado";
+use { Foo } from "./sub/assoc_const_collide_s.wado";
+
+test "imported type's assoc const wins over an unrelated same-named one" {
+    assert Foo::MAX == 111;
+    assert t_helper() == 7;
+}
+
+__DATA__
+{"test": {}}

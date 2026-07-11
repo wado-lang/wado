@@ -53,6 +53,26 @@ pub(super) struct MethodCallInput<'a> {
     pub span: Span,
 }
 
+/// Result of [`Elaborator::resolve_method_call_with`]: the typed
+/// placeholder plus, on successful dispatch, the receiver-adjustment
+/// inputs and resolved target a synthetic caller (for-of's `into_iter()`
+/// / `next()`, whose `call_id == None` skips `record_method_dispatch`)
+/// needs to record the decision its own way. `None` when a short-circuit
+/// path returned early or method lookup failed.
+pub(super) struct MethodCallOutcome {
+    pub expr: TirExpr,
+    pub dispatch: Option<(ast::SelfKind, bool, FunctionRef)>,
+}
+
+impl MethodCallOutcome {
+    fn no_dispatch(expr: TirExpr) -> Self {
+        Self {
+            expr,
+            dispatch: None,
+        }
+    }
+}
+
 use super::util::placeholder;
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -107,6 +127,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
             ctx,
         )
+        .expr
         .type_id
     }
 
@@ -116,14 +137,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         input: MethodCallInput<'_>,
         ctx: &mut FunctionContext,
-    ) -> TirExpr {
-        // Clear the side-channel so a synthetic caller that reads
-        // `self.pending_method_dispatch` after this call never sees a
-        // stale value from a previous dispatch. The successful-dispatch
-        // path below repopulates it just before the final method-call
-        // TIR is built.
-        self.pending_method_dispatch = None;
-
+    ) -> MethodCallOutcome {
         let MethodCallInput {
             mut receiver,
             receiver_ast,
@@ -404,13 +418,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // only known after monomorphization. Defer folding to a literal so it
             // is not frozen at the (wrong) unsubstituted pack count.
             if self.type_contains_pack(base_type_id) {
-                return TirExpr::new(
+                return MethodCallOutcome::no_dispatch(TirExpr::new(
                     TirExprKind::TupleLen {
                         expr: Box::new(receiver),
                     },
                     TypeTable::I32,
                     span,
-                );
+                ));
             }
             let len = self
                 .tysys
@@ -419,14 +433,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .as_tuple(base_type_id)
                 .unwrap()
                 .len() as i64;
-            return TirExpr::new(
+            return MethodCallOutcome::no_dispatch(TirExpr::new(
                 TirExprKind::IntLiteral {
                     value: len as u64,
                     repr: len.to_string(),
                 },
                 TypeTable::I32,
                 span,
-            );
+            ));
         }
 
         // Tuple.zip() transposes a tuple-of-tuples.
@@ -435,13 +449,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let has_type_pack = self.type_contains_pack(base_type_id);
             if has_type_pack {
                 // TypePack present: defer expansion to monomorphization.
-                return TirExpr::new(
+                return MethodCallOutcome::no_dispatch(TirExpr::new(
                     TirExprKind::TupleZip {
                         expr: Box::new(receiver),
                     },
                     return_type,
                     span,
-                );
+                ));
             }
             // Concrete tuples: expand inline now.
             let outer_elems = self
@@ -490,13 +504,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span,
                 ));
             }
-            return TirExpr::new(
+            return MethodCallOutcome::no_dispatch(TirExpr::new(
                 TirExprKind::TupleLiteral {
                     elements: col_exprs,
                 },
                 return_type,
                 span,
-            );
+            ));
         }
 
         // Static methods (no self parameter) cannot be called with instance method syntax.
@@ -511,7 +525,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ),
                 span,
             });
-            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
+            return MethodCallOutcome::no_dispatch(TirExpr::new(
+                TirExprKind::Unit,
+                TypeTable::ERROR,
+                span,
+            ));
         }
 
         // Type check method arguments against expected parameter types (newtype-aware)
@@ -982,7 +1000,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         //    reaching here, or
         //  - Method lookup failed and we are in the error-recovery
         //    placeholder path (`method_found == false`).
-        if method_found {
+        let dispatch = if method_found {
             self.record_method_dispatch(
                 call_id,
                 &func,
@@ -994,24 +1012,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return_type,
                 method_type_args,
             );
-            // Side-channel for synthetic callers (Gap 6 of Stage 5):
-            // for-of's `.into_iter()` / `.next()` dispatches pass
-            // `call_id == None` so `record_method_dispatch` skips them,
-            // but the synthetic caller still needs the receiver-adjustment
-            // inputs *and* the resolved `FunctionRef` for its own
-            // recording. We populate the channel regardless of `call_id`;
-            // the `method_found` gate keeps the error-recovery placeholder
-            // from leaking out. Stage 7-B: the `FunctionRef` rides the
-            // channel because the returned TIR is now a typed placeholder.
-            self.pending_method_dispatch = Some((self_kind, is_ref_impl, func));
-        }
+            // The `method_found` gate keeps the error-recovery placeholder
+            // from leaking into the returned dispatch.
+            Some((self_kind, is_ref_impl, func))
+        } else {
+            None
+        };
 
-        // Stage 7-B: reify rebuilds the `MethodCall` TIR from the recorded
-        // `method_dispatch` (or, for synthetic call_id==None callers, from
-        // `pending_method_dispatch`) and the resolved receiver / args; the
-        // combined walk projects only the result type. `receiver` and
-        // `args` were resolved above for their fact-recording side effects.
-        placeholder(return_type, span)
+        // Reify rebuilds the `MethodCall` TIR from the recorded dispatch;
+        // the walk projects only the result type. `receiver` and `args`
+        // were resolved above for their fact-recording side effects.
+        MethodCallOutcome {
+            expr: placeholder(return_type, span),
+            dispatch,
+        }
     }
 
     /// Resolve a static method call: `List::<i32>::with_capacity(100)` or `Point::origin()`
