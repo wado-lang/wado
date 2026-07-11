@@ -231,12 +231,19 @@ fn run_git(cwd: Option<&Path>, args: &[&str]) -> Result<String, ProviderError> {
         }
     })?;
     if !output.status.success() {
+        // stderr is only a diagnostic, so a lossy decode is acceptable here.
         return Err(ProviderError::NetworkError {
             url: format!("git {}", args.join(" ")),
             message: String::from_utf8_lossy(&output.stderr).trim().to_string(),
         });
     }
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    // stdout is parsed as data (ref lists, a manifest blob, a SHA), and stdio is
+    // not guaranteed UTF-8 in general, so reject invalid bytes rather than
+    // silently replacing them and parsing garbage.
+    String::from_utf8(output.stdout).map_err(|e| ProviderError::InvalidManifest {
+        source: format!("git {}", args.join(" ")),
+        message: format!("output is not valid UTF-8: {e}"),
+    })
 }
 
 fn repo_relative(url: &str) -> Result<String, ProviderError> {
