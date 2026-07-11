@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783764412393,
+  "lastUpdate": 1783803768529,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -39457,6 +39457,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 266775,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b91cdd6d11db41f4aeddab201ccd107371a60e84",
+          "message": "Merge pull request #1544 from wado-lang/claude/ownership-analysis-status-cqd8e4\n\nfix(compiler): sound value copies for variant payloads and immutable-reference mutations",
+          "timestamp": "2026-07-12T05:53:36+09:00",
+          "tree_id": "278fde5078f560d82b5ab5d10fe14c1e74f82118",
+          "url": "https://github.com/wado-lang/wado/commit/b91cdd6d11db41f4aeddab201ccd107371a60e84"
+        },
+        "date": 1783803768212,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16412,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265859,
             "unit": "bytes"
           }
         ]
