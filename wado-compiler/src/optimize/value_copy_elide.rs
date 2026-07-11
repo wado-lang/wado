@@ -390,7 +390,10 @@ fn compute_precise_eligible(
     let mut mutators_by_rep: IndexMap<u32, IndexSet<u32>> = IndexMap::default();
     for (local, u) in usage {
         if u.direct_field_mutation {
-            mutators_by_rep.entry(rep_of(*local)).or_default().insert(*local);
+            mutators_by_rep
+                .entry(rep_of(*local))
+                .or_default()
+                .insert(*local);
         }
     }
     let mut eligible = IndexSet::default();
