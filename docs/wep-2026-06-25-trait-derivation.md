@@ -181,7 +181,7 @@ left to ordinary dead-code elimination.
 means a type becomes serializable the moment some code asks, and a later
 field addition silently extends the wire shape — why Rust `serde` and Swift
 `Codable` are opt-in. Wado accepts the trade-off: its whole-program model has
-no downstream consumers to surprise. A manual impl or field-level `#[hidden]`
+no downstream consumers to surprise. A manual impl or field-level `#[secret]`
 remain the levers for tighter control; no dedicated opt-out is introduced.
 
 `Eq` / `Ord` cross no data boundary — `on_bound` only changes _when_ their
@@ -207,7 +207,7 @@ motivation is pure compile-time / code size, with no opt-out to weigh.
 ### Trade-offs
 
 - `Serialize` / `Deserialize` crossing to `on_bound` weakens the opt-in that
-  bounds the wire surface today; `#[hidden]` and a manual impl are the only
+  bounds the wire surface today; `#[secret]` and a manual impl are the only
   countermeasures.
 - Errors move from the (absent) impl site to the bound site; reason chains
   keep them legible.

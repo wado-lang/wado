@@ -4652,15 +4652,15 @@ fn make<K, V>() -> HashMap<K, V> {
 }
 ```
 
-#### `#[hidden]`
+#### `#[secret]`
 
 Hides a struct field from debug/inspect output (the `:?` format specifier).
 
 ```wado
 struct Foo {
     pub name: String,
-    #[hidden]
-    secret: String, // excluded from `{foo:?}` output
+    #[secret]
+    password: String, // excluded from `{foo:?}` output
 }
 ```
 

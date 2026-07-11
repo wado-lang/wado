@@ -252,7 +252,7 @@ impl TypeBuilder {
                 type_id: inner_type_id,
                 index: 0,
                 span: Span::new(0, 0, 0, 0),
-                is_hidden: false,
+                is_secret: false,
                 serde_rename: None,
                 serde_default: false,
                 serde_positional: false,

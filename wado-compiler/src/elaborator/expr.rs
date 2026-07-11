@@ -3932,7 +3932,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 type_id: *fty,
                 index: i as u32,
                 span: struct_lit.span,
-                is_hidden: false,
+                is_secret: false,
                 serde_rename: None,
                 serde_default: false,
                 serde_positional: false,

@@ -23,8 +23,8 @@ This WEP settles two questions raised while reviewing that design:
 
 1. Does struct walking need a new language primitive, in particular for nested
    structs?
-2. How does field redaction interact with reflection? Today `#[hidden]` affects
-   only `Inspect`/`InspectAlt` and `wado doc`; serde serializes hidden fields
+2. How does field redaction interact with reflection? Today `#[secret]` affects
+   only `Inspect`/`InspectAlt` and `wado doc`; serde serializes secret fields
    normally, so a redacted credential still leaks through `json::to_string`.
    Once any package can walk any struct via `Reflect`, this hole widens.
 
@@ -98,13 +98,12 @@ three unbuilt items already on the WEP 2026-03-14 / 2026-06-13 checklists:
 `Reflect` per-struct synthesis, `where`-clause pack binding
 `T: Reflect<Fields = [..F]>`, and coherence Rules 1–2.
 
-### `#[secret]` — rename `#[hidden]`, upgrade to a security contract
+### `#[secret]` — upgrade to a security contract
 
-`#[hidden]` is renamed to `#[secret]`, and its meaning is upgraded from "not
-shown in inspect output" to: the field's value never flows out through any
-generic introspection channel. The old name undersold the new contract and
-invited "display-only" uses; those belong to serde's own vocabulary
-(rename/skip), not here.
+`#[secret]` today means only "not shown in inspect output". This WEP upgrades
+it to: the field's value never flows out through any generic introspection
+channel. "Display-only" redaction — hide from inspect but still serialize —
+belongs to serde's own vocabulary (rename/skip), not here.
 
 This is not a fourth rung on the visibility ladder. Visibility already has two
 orthogonal axes
@@ -174,9 +173,9 @@ to a no-op).
 
 ## Implementation checklist
 
-- [ ] Rename `#[hidden]` → `#[secret]` end to end (attribute parsing,
-      `is_hidden` flags in TIR/NIR/WIR, `doc.rs`, `unparse.rs`, synthesis,
-      fixtures, `spec.md`, `cheatsheet.md`).
+The `#[secret]` attribute already exists with inspect-only semantics; the work
+below is the security upgrade on top of it.
+
 - [ ] `serde_synth`: skip secret fields on serialize; require default/`Option`
       for serializability; leave deserialize unchanged.
 - [ ] Trait synthesis: refuse `Eq`/`Ord` auto-derive and the explicit marker
@@ -212,8 +211,6 @@ to a no-op).
 - A struct with a secret field loses derived `Eq`/`Ord` and (without a default)
   `Serialize`; users must opt back in manually. This friction is the point, but
   it is friction.
-- Renaming `#[hidden]` breaks existing sources; a mechanical rename with no
-  behavioral overlap keeps the migration one `sed` away.
 
 ## Related WEPs
 

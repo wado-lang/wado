@@ -1326,8 +1326,8 @@ Each parameter resolves highest priority first: `-D NAME=value` (alias `--define
 #![generated(by = "wado-from-idl", sources = ["deps/random.wit"])]  // with metadata
 
 struct Foo {
-    #[hidden]
-    secret: String,        // won't be shown in Display / Inspect
+    #[secret]
+    password: String,      // won't be shown in Display / Inspect
 }
 
 #[inline]                  // hint: prefer inlining
