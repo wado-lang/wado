@@ -136,8 +136,13 @@ It may include TODOs on WIP.
 - [Trait Derivation Policy — Bound-Driven Synthesis](./wep-2026-06-25-trait-derivation.md)
 - [Visibility — `internal` / `pub` / `export`](./wep-2026-06-25-visibility-internal-pub-export.md)
 - [Wasm CM Component Import (`use`-based)](./wep-2026-06-26-wasm-cm-component-import.md)
-- [Sheaf & Marl — A Minimal Blog System](./wep-2026-07-05-sheaf.md)
+- [Marl — Markdown Renderer and Formatter](./wep-2026-07-05-marl.md)
 - [Iterator Reference Model](./wep-2026-07-05-iterator-reference-model.md)
 - [Local Item Definitions](./wep-2026-07-09-local-item-definitions.md)
+<<<<<<< HEAD
 - [Marl Format — A Standalone Markdown Formatter CLI for Wado](./wep-2026-07-10-marl-format.md)
 - [Struct Walkability — Field Walks over `Reflect` and `#[secret]` Fields](./wep-2026-07-10-struct-walkability.md)
+||||||| da73320f3
+- [Marl Format — A Standalone Markdown Formatter CLI for Wado](./wep-2026-07-10-marl-format.md)
+=======
+>>>>>>> origin/main
