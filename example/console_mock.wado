@@ -50,8 +50,7 @@ impl Stdout for MockStdio {
     fn write_via_stream(&mut self, data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
         let _ = data;
         self.to_stderr = false;
-        let done: Future<Result<(), ErrorCode>> = 0 as Future<Result<(), ErrorCode>>;
-        resume done;
+        resume 0 as Future<Result<(), ErrorCode>>;
     }
 }
 
@@ -59,16 +58,13 @@ impl Stderr for MockStdio {
     fn write_via_stream(&mut self, data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
         let _ = data;
         self.to_stderr = true;
-        let done: Future<Result<(), ErrorCode>> = 0 as Future<Result<(), ErrorCode>>;
-        resume done;
+        resume 0 as Future<Result<(), ErrorCode>>;
     }
 }
 
 impl Stdin for MockStdio {
     fn read_via_stream(&mut self) -> [Stream<u8>, Future<Result<(), ErrorCode>>] {
-        let rx: Stream<u8> = 0 as Stream<u8>;
-        let done: Future<Result<(), ErrorCode>> = 0 as Future<Result<(), ErrorCode>>;
-        resume [rx, done];
+        resume [0 as Stream<u8>, 0 as Future<Result<(), ErrorCode>>];
     }
 }
 
@@ -76,9 +72,7 @@ impl Stdin for MockStdio {
 
 impl Stream<u8> for MockStdio {
     fn new(&mut self) -> [Stream<u8>, StreamWritable<u8>] {
-        let rx: Stream<u8> = 0 as Stream<u8>;
-        let tx: StreamWritable<u8> = 0 as StreamWritable<u8>;
-        resume [rx, tx];
+        resume [0 as Stream<u8>, 0 as StreamWritable<u8>];
     }
 
     fn read(&mut self, this: &Stream<u8>, max: i32) -> List<u8> {
