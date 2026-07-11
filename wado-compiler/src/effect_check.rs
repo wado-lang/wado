@@ -833,15 +833,11 @@ impl SemEffectWalker<'_> {
         self.index.method_effects(func_ref)
     }
 
-    /// Effects a single `with` binding grants to the do-block body.
-    ///
-    /// The explicit form (`Effect => handler`) names its effect directly, but
-    /// the bundled form (`with handler do`) leaves `binding.effect` unset and
-    /// installs one handler per effect the handler value's type implements.
-    /// The elaborator already enumerated that set into `handler_bindings`, so
-    /// read it back rather than re-deriving it here — otherwise a bundled
-    /// handler grants nothing and any effect a helper called from the block
-    /// requires is spuriously reported missing.
+    /// Effects a single `with` binding grants to the do-block body. Read from
+    /// the elaborator's enumerated `handler_bindings` facts, which cover the
+    /// bundled form (`with handler do`, whose `binding.effect` is unset yet
+    /// installs one handler per effect the handler type implements); the
+    /// explicit-form fallback applies only when no facts were recorded.
     fn binding_granted_effects(
         &self,
         binding: &crate::ast::EffectHandlerBinding,
@@ -856,8 +852,6 @@ impl SemEffectWalker<'_> {
                 .filter_map(|entry| self.index.effect_by_name.get(&entry.name).cloned())
                 .collect();
         }
-        // Fallback for partial state without recorded facts: the explicit
-        // form still names its effect on the binding.
         binding
             .effect
             .as_ref()

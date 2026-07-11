@@ -1,31 +1,11 @@
-//! Mock and capture the real `core:cli` stdin / stdout / stderr.
-//!
-//! Unlike a hand-rolled `Console` abstraction, application code here uses the
-//! ordinary `println` / `eprintln` / `print` and reads stdin through the real
-//! `wasi:cli` interfaces — no seam is added for testing. Capture happens one
-//! layer below, at the Component Model boundary those helpers desugar to.
-//!
-//! `println(msg)` expands to roughly:
-//!
-//!     let [rx, tx] = Stream::<u8>::new();          // stream pair
-//!     let fut = Stdout::write_via_stream(rx);       // hand the reader to WASI
-//!     tx.write_raw(msg_bytes, len); tx.drop();      // push the bytes
-//!     fut.drop();                                    // signal completion
-//!
-//! So a full mock must handle every resource in that dance — `Stdout`,
-//! `Stderr`, `Stdin`, the `Stream<u8>` / `StreamWritable<u8>` pair, and the
-//! completion `Future` — routing all of it to in-memory buffers. The bundled
-//! `with &mut mock do { ... }` form installs the whole set at once, since one
-//! `MockStdio` value implements all of them.
+//! Mock and capture the real `core:cli` stdin / stdout / stderr with effect
+//! handlers. Application code uses ordinary `println` / `eprintln` / `print`
+//! and reads stdin through `wasi:cli`; one `MockStdio` handles every stdio
+//! resource those helpers touch, installed together via `with &mut mock do`.
 
 use { println, eprintln, print, Stdout, Stderr } from "core:cli";
 use { Stdin, ErrorCode } from "wasi:cli";
 
-// In-memory stand-in for the three standard streams. `to_stderr` records which
-// sink the currently-open write stream targets, set when the guest calls
-// `Stdout`/`Stderr::write_via_stream` and read back when bytes arrive on the
-// writable end — safe because each `println` runs that open→write→drop dance to
-// completion before the next one starts.
 struct MockStdio {
     to_stderr: bool = false,
     out: List<u8> = [],
@@ -43,8 +23,6 @@ impl MockStdio {
         return String::from_utf8_lossy(self.err);
     }
 }
-
-// --- WASI stdio effects: pick the sink, hand back a fake completion future ---
 
 impl Stdout for MockStdio {
     fn write_via_stream(&mut self, data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
@@ -67,8 +45,6 @@ impl Stdin for MockStdio {
         resume [0 as Stream<u8>, 0 as Future<Result<(), ErrorCode>>];
     }
 }
-
-// --- The stream pair: writes append to a sink, reads replay scripted stdin ---
 
 impl Stream<u8> for MockStdio {
     fn new(&mut self) -> [Stream<u8>, StreamWritable<u8>] {
@@ -126,7 +102,6 @@ impl Future<Result<(), ErrorCode>> for MockStdio {
     ..trap
 }
 
-// Ordinary application code — no test seam, just the real stdio helpers.
 fn greet(name: String) with Stdout, Stderr {
     if name.is_empty() {
         eprintln("warning: empty name");
@@ -161,7 +136,6 @@ export fn run() with Stdout, Stderr {
         eprintln(`read {echoed.len()} bytes of stdin`);
     };
 
-    // Reveal the captured buffers on the real terminal.
     println("=== captured stdout ===");
     print(mock.stdout_text());
     println("=== captured stderr ===");
