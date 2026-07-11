@@ -1,0 +1,24 @@
+// A replace-on-assign element type (primitive / enum / flags / variant / fn) has
+// no addressable interior, so a write through a `&mut T` element would land in a
+// temporary and be lost. `for let x of &mut xs` over such a list is rejected at
+// the loop, naming the index-assignment workaround (WEP-2026-06-13 D1).
+
+variant Shape {
+    Circle(i32),
+    Square(i32),
+}
+
+export fn run() {
+    let mut ns: List<i32> = [1, 2, 3];
+    for let x of &mut ns {
+        *x = *x * 10;
+    }
+
+    let mut shapes: List<Shape> = [Shape::Circle(1)];
+    for let s of &mut shapes {
+        *s = Shape::Square(9);
+    }
+}
+
+__DATA__
+{"compile_error": "cannot iterate `&mut` over a list of"}

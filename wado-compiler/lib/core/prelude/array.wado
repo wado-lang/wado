@@ -13,7 +13,7 @@
 // lowers directly to the matching `array.*` instruction.
 
 use { IndexValue, IndexAssign, IntoIterator, Display, DisplayAlt, Inspect, InspectAlt } from "core:prelude/traits.wado";
-use { ArraySlice, ArrayIter, ArrayRefIter, ArrayWindows, ArrayChunks } from "core:prelude/slice.wado";
+use { ArraySlice, ArrayIter, ArrayRefIter, ArrayRefMutIter, ArrayWindows, ArrayChunks } from "core:prelude/slice.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { i32_clamp } from "core:rt";
@@ -109,6 +109,16 @@ impl<T> IntoIterator for &Array<T> {
     fn into_iter(&self) -> Self::Iter {
         let arr = *self;
         return ArrayRefIter::internal_new(arr, 0, builtin::array_len(arr));
+    }
+}
+
+impl<T> IntoIterator for &mut Array<T> {
+    type Item = &mut T;
+    type Iter = ArrayRefMutIter<T>;
+
+    fn into_iter(&self) -> Self::Iter {
+        let arr = *self;
+        return ArrayRefMutIter::internal_new(arr, 0, builtin::array_len(arr));
     }
 }
 

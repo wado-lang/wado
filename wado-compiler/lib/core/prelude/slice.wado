@@ -261,6 +261,36 @@ impl<T> Iterator for ArrayRefIter<T> {
     }
 }
 
+/// A by-mutable-reference iterator over a backing array, yielding `&mut T`.
+/// Each item is the element's shared GC handle, so mutations land on the
+/// backing array (in-place element types only — a replace-on-assign element
+/// type is rejected at the `for ... of &mut xs` site).
+internal struct ArrayRefMutIter<T> {
+    repr: &mut Array<T>,
+    index: i32,
+    end: i32,
+}
+
+impl ArrayRefMutIter<T> {
+    /// Internal: build a by-mutable-reference iterator over `[index, end)`.
+    internal fn internal_new(repr: &mut Array<T>, index: i32, end: i32) -> ArrayRefMutIter<T> with stores[repr] {
+        return ArrayRefMutIter { repr, index, end };
+    }
+}
+
+impl<T> Iterator for ArrayRefMutIter<T> {
+    type Item = &mut T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.end {
+            return null;
+        }
+        let ref_val = &mut self.repr[self.index];
+        self.index += 1;
+        return Option::Some(ref_val);
+    }
+}
+
 /// An iterator over overlapping windows of `size` consecutive elements. Each
 /// item is a `ArraySlice<T>` viewing the backing array.
 internal struct ArrayWindows<T> {

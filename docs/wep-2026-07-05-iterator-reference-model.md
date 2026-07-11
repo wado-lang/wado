@@ -65,10 +65,28 @@ separate proposal.
       `iter_ref_adapter_monomorph.wado`.
 - [x] Migrated the breaking `iter()` call sites (stdlib tests, fixtures,
       `package-gale`).
+- [x] `&mut` iteration for in-place element types. `&mut List<T>` /
+      `&mut Array<T>` yield `&mut T` via `ArrayRefMutIter` (`next` returns
+      `&mut self.repr[index]`, the element's shared GC handle). Mutation lands on
+      the backing list for `struct` / `List` / `String` / `i128` elements. Every
+      write is immediate, so `break` / `continue` / `return` are sound with no
+      write-back epilogue. Fixture `iter_mut_inplace.wado`.
+- [x] Reject `&mut` iteration over a replace-on-assign element type (`primitive`
+      / `enum` / `flags` / `variant` / `fn`) at the `for ... of &mut xs` site,
+      naming the index-assignment workaround — otherwise the write is silently
+      dropped (WEP-2026-06-13 D1). Fixture `iter_mut_forbidden.wado`.
+- [x] Fixed a latent P0 exposed by `Item = &mut T`: `Fn<N,Ret>^Inspect::inspect`
+      was synthesized once per return-type `TypeId`, but `&T` and `&mut T` mangle
+      to the same `Fn` name, so the two collided post-monomorphization.
+      `collect_canonical_fn_signatures` now dedups by the canonical mangled name.
 
 ## TODO
 
-- [ ] `iter_mut` (`&mut T`): needs the reference write-back model
-      (`next -> Option<&mut T>`); deferred.
+- [ ] `&mut` iteration for replace-on-assign element types (`primitive` / `enum`
+      / `flags` / `variant` / `fn`): needs the reference write-back model
+      (write-back to `xs[i]` on every loop-exit edge — WEP-2026-06-13); rejected
+      for now rather than silently dropped.
+- [ ] Public `iter_mut()` method: redundant with `for ... of &mut xs` until
+      adapter chaining over `&mut T` composes; add it then.
 - [ ] Generic `copied()` on any `Iterator<Item = &T>`: blocked on propagating
       associated-type-equality bounds (`Item = &T`) into the impl body.

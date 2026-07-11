@@ -2572,6 +2572,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None => TypeTable::UNKNOWN,
         };
 
+        // Reject `&mut` iteration over a replace-on-assign element type. Such an
+        // element has no addressable interior: a write through `&mut T` would
+        // land in a temporary and be lost (the D1 silent-drop in
+        // WEP-2026-06-13). Only in-place element types (struct / List / String /
+        // i128) yield a usable `&mut T` today. Keyed on the `&mut T` item type
+        // so immutable (`&T`) and by-value iteration are unaffected.
+        if let ResolvedType::MutRef(elem) = self.tysys.type_table.borrow().get(item_type).clone()
+            && self.is_replace_on_assign_element(elem)
+        {
+            let elem_name = self.tysys.type_table.borrow().type_name(elem);
+            let _ = self.logger.error(TypeError::CannotMutate {
+                message: format!(
+                    "cannot iterate `&mut` over a list of `{elem_name}`: a write through \
+                     `&mut {elem_name}` would be lost (no in-place interior). Assign by index \
+                     instead, e.g. `xs[i] = ...`"
+                ),
+                span,
+            });
+        }
+
         // Stage 5 (Gap 6 of WEP 2026-05-26): record the iterator-path
         // dispatch decision so reify can re-emit the synthetic
         // `into_iter()` / `next()` calls without re-dispatching. Only
@@ -2608,6 +2628,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx.exit_scope();
 
         ctx.active_labels.pop();
+    }
+
+    /// Whether `type_id` is a replace-on-assign type: one whose `&mut`
+    /// reference is a boxed cell, so a write must land back in the original
+    /// storage. For a non-local place (a `List` element) that write-back does
+    /// not exist yet, so `&mut` iteration over such elements is rejected.
+    ///
+    /// Mirrors the boxed-reference predicate in `lower/plan/boxing.rs`
+    /// (WEP-2026-06-13 D2); the two must stay in sync.
+    fn is_replace_on_assign_element(&self, type_id: TypeId) -> bool {
+        match self.tysys.type_table.borrow().get(type_id).clone() {
+            ResolvedType::Primitive(p) => !matches!(p, PrimitiveType::I128 | PrimitiveType::U128),
+            ResolvedType::Enum { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Function { .. } => true,
+            ResolvedType::GenericInstance { name, .. } => self.contains_variant(&name),
+            ResolvedType::Newtype { base_type, .. } => self.is_replace_on_assign_element(base_type),
+            _ => false,
+        }
     }
 
     /// Check if a block contains `break`, `continue`, or `return` at the top level
