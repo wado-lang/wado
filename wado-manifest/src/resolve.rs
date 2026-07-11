@@ -65,7 +65,10 @@ impl fmt::Display for ResolveError {
                 "dependency {dep:?}: invalid version requirement {requirement:?}: {reason}"
             ),
             ResolveError::UnsupportedSource { dep, kind } => {
-                write!(f, "dependency {dep:?}: {kind} resolution is not yet supported")
+                write!(
+                    f,
+                    "dependency {dep:?}: {kind} resolution is not yet supported"
+                )
             }
             ResolveError::NoSolution { report } => {
                 write!(f, "dependency resolution failed:\n{report}")
@@ -90,8 +93,15 @@ type Edge = (String, Option<VersionSpecifier>);
 /// How to fetch a package's versions and manifests.
 #[derive(Clone)]
 enum Fetch {
-    Registry { url: String, package: String },
-    Git { url: String, pin: GitPin, directory: Option<String> },
+    Registry {
+        url: String,
+        package: String,
+    },
+    Git {
+        url: String,
+        pin: GitPin,
+        directory: Option<String>,
+    },
 }
 
 /// A resolved `(id, version)`'s facts, used to emit its [`LockedPackage`] and its
@@ -111,7 +121,9 @@ pub async fn resolve(
     let mut crawl = Crawl::new(provider);
 
     // Root edges: `[dependencies]` are runtime, `[dev-dependencies]` dev-only.
-    let root_edges = crawl.expand(&manifest.dependencies, &manifest.registries, "").await?;
+    let root_edges = crawl
+        .expand(&manifest.dependencies, &manifest.registries, "")
+        .await?;
     let dev_edges = crawl
         .expand(&manifest.dev_dependencies, &manifest.registries, "")
         .await?;
@@ -123,7 +135,11 @@ pub async fn resolve(
         OfflineDependencyProvider::new();
     let mut all_root_edges = root_edges;
     all_root_edges.extend(dev_edges);
-    dp.add_dependencies(ROOT.to_string(), root_version(), crawl.ranges(&all_root_edges));
+    dp.add_dependencies(
+        ROOT.to_string(),
+        root_version(),
+        crawl.ranges(&all_root_edges),
+    );
     for (id, versions) in &crawl.data {
         for (version, data) in versions {
             dp.add_dependencies(id.clone(), version.clone(), crawl.ranges(&data.edges));
@@ -131,10 +147,8 @@ pub async fn resolve(
     }
 
     let solution = pubgrub_solve(&dp, ROOT.to_string(), root_version()).map_err(solve_error)?;
-    let selected: BTreeMap<String, Version> = solution
-        .into_iter()
-        .filter(|(id, _)| id != ROOT)
-        .collect();
+    let selected: BTreeMap<String, Version> =
+        solution.into_iter().filter(|(id, _)| id != ROOT).collect();
 
     Ok(crawl.to_locked(&selected, &nondev_roots))
 }
@@ -243,7 +257,11 @@ impl<'p, P: DependencyProvider> Crawl<'p, P> {
         while let Some((id, req)) = self.queue.pop_front() {
             self.ensure_versions(&id).await?;
             let in_range: Vec<Version> = match &req {
-                Some(spec) => self.versions[&id].iter().filter(|v| spec.matches(v)).cloned().collect(),
+                Some(spec) => self.versions[&id]
+                    .iter()
+                    .filter(|v| spec.matches(v))
+                    .cloned()
+                    .collect(),
                 None => self.versions[&id].clone(),
             };
             for version in in_range {
@@ -251,7 +269,10 @@ impl<'p, P: DependencyProvider> Crawl<'p, P> {
                     continue;
                 }
                 let data = self.fetch_verdata(&id, &version).await?;
-                self.data.entry(id.clone()).or_default().insert(version, data);
+                self.data
+                    .entry(id.clone())
+                    .or_default()
+                    .insert(version, data);
             }
         }
         Ok(())
@@ -272,7 +293,11 @@ impl<'p, P: DependencyProvider> Crawl<'p, P> {
                     .map_err(ResolveError::Provider)?;
                 self.versions.insert(id.to_string(), versions);
             }
-            Fetch::Git { url, pin, directory } => match pin {
+            Fetch::Git {
+                url,
+                pin,
+                directory,
+            } => match pin {
                 GitPin::Version(_) => {
                     let tags = self
                         .provider
@@ -310,7 +335,11 @@ impl<'p, P: DependencyProvider> Crawl<'p, P> {
     }
 
     /// Fetch one `(id, version)`'s manifest and record its edges + lock facts.
-    async fn fetch_verdata(&mut self, id: &str, version: &Version) -> Result<VerData, ResolveError> {
+    async fn fetch_verdata(
+        &mut self,
+        id: &str,
+        version: &Version,
+    ) -> Result<VerData, ResolveError> {
         let source = self.sources[id].clone();
         match source {
             Fetch::Registry { url, package } => {
@@ -938,7 +967,13 @@ json = { workspace = true }
             let provider = InMemoryDependencyProvider::new();
             let err = resolve(&manifest, &provider).await.unwrap_err();
             assert!(
-                matches!(err, ResolveError::UnsupportedSource { kind: "workspace", .. }),
+                matches!(
+                    err,
+                    ResolveError::UnsupportedSource {
+                        kind: "workspace",
+                        ..
+                    }
+                ),
                 "{err:?}"
             );
         });
@@ -958,7 +993,11 @@ version = "0.1.0"
             .parse()
             .unwrap();
             let mut provider = InMemoryDependencyProvider::new();
-            for (v, sha) in [("1.0.0", "aaaa1111"), ("1.2.0", "bbbb2222"), ("2.0.0", "cccc3333")] {
+            for (v, sha) in [
+                ("1.0.0", "aaaa1111"),
+                ("1.2.0", "bbbb2222"),
+                ("2.0.0", "cccc3333"),
+            ] {
                 provider.add_git_tag(
                     "https://github.com/user/router.git",
                     GitTagInfo {

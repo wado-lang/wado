@@ -35,7 +35,9 @@ pub fn list_tags(url: &str) -> Result<Vec<GitTagInfo>, ProviderError> {
     }
     Ok(by_name
         .into_iter()
-        .filter_map(|(name, sha)| parse_version_tag(&name).map(|version| GitTagInfo { version, sha }))
+        .filter_map(|(name, sha)| {
+            parse_version_tag(&name).map(|version| GitTagInfo { version, sha })
+        })
         .collect())
 }
 
@@ -73,15 +75,16 @@ pub fn fetch_manifest(
     };
     // A missing `wado.toml` (tag predating the manifest, or a wrong `directory`)
     // reads clearer than raw `git show` plumbing.
-    let text = run_git(Some(&repo), &["show", &format!("{sha}:{manifest_path}")]).map_err(|_| {
-        ProviderError::NotFound {
-            source: format!("{url}@{sha}"),
-            message: format!(
-                "no {manifest_path} at this commit (the tag/ref may predate the \
+    let text =
+        run_git(Some(&repo), &["show", &format!("{sha}:{manifest_path}")]).map_err(|_| {
+            ProviderError::NotFound {
+                source: format!("{url}@{sha}"),
+                message: format!(
+                    "no {manifest_path} at this commit (the tag/ref may predate the \
                  manifest, or `directory` is wrong)"
-            ),
-        }
-    })?;
+                ),
+            }
+        })?;
     text.parse::<Manifest>()
         .map_err(|e| ProviderError::InvalidManifest {
             source: format!("{url}@{sha}"),
@@ -127,7 +130,13 @@ fn rebuild_worktree(repo: &Path, worktree: &Path, sha: &str) -> Result<(), Provi
     }
     run_git(
         Some(repo),
-        &["worktree", "add", "--detach", &worktree.to_string_lossy(), sha],
+        &[
+            "worktree",
+            "add",
+            "--detach",
+            &worktree.to_string_lossy(),
+            sha,
+        ],
     )?;
     let head = run_git(Some(worktree), &["rev-parse", "HEAD"])?;
     if !head.trim().starts_with(sha) {
@@ -136,7 +145,10 @@ fn rebuild_worktree(repo: &Path, worktree: &Path, sha: &str) -> Result<(), Provi
             message: format!("worktree did not check out to {sha}"),
         });
     }
-    run_git(Some(worktree), &["submodule", "update", "--init", "--recursive"])?;
+    run_git(
+        Some(worktree),
+        &["submodule", "update", "--init", "--recursive"],
+    )?;
     let marker = ready_marker(worktree);
     std::fs::write(&marker, sha).map_err(|e| io_err(&marker, &e))
 }
@@ -215,7 +227,11 @@ pub fn prune_worktrees(repo: &Path) -> Result<(), ProviderError> {
 }
 
 fn commit_present(repo: &Path, sha: &str) -> bool {
-    run_git(Some(repo), &["cat-file", "-e", &format!("{sha}^{{commit}}")]).is_ok()
+    run_git(
+        Some(repo),
+        &["cat-file", "-e", &format!("{sha}^{{commit}}")],
+    )
+    .is_ok()
 }
 
 /// A worktree is ready once its completion marker exists. The marker is written
@@ -351,7 +367,10 @@ mod tests {
     fn commit_all(dir: &Path, message: &str) -> String {
         run_git(Some(dir), &["add", "-A"]).unwrap();
         run_git(Some(dir), &["commit", "-q", "-m", message]).unwrap();
-        run_git(Some(dir), &["rev-parse", "HEAD"]).unwrap().trim().to_string()
+        run_git(Some(dir), &["rev-parse", "HEAD"])
+            .unwrap()
+            .trim()
+            .to_string()
     }
 
     // A local `file://` origin exercises the real git plumbing with no network.
@@ -365,8 +384,11 @@ mod tests {
         let origin = tmp.path().join("router");
         fs::create_dir(&origin).unwrap();
         init_repo(&origin);
-        fs::write(origin.join("wado.toml"), "[package]\nname=\"router\"\nversion=\"1.0.0\"\n")
-            .unwrap();
+        fs::write(
+            origin.join("wado.toml"),
+            "[package]\nname=\"router\"\nversion=\"1.0.0\"\n",
+        )
+        .unwrap();
         let sha_10 = commit_all(&origin, "v1.0.0");
         run_git(Some(&origin), &["tag", "v1.0.0"]).unwrap();
         fs::write(origin.join("x.txt"), "x").unwrap();
@@ -396,7 +418,11 @@ mod tests {
         )
         .unwrap();
         fs::create_dir(origin.join("src")).unwrap();
-        fs::write(origin.join("src/lib.wado"), "export fn f() -> i32 { return 1 }\n").unwrap();
+        fs::write(
+            origin.join("src/lib.wado"),
+            "export fn f() -> i32 { return 1 }\n",
+        )
+        .unwrap();
         let sha = commit_all(&origin, "init");
         let url = origin_url(&origin);
 

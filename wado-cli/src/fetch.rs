@@ -72,7 +72,11 @@ pub async fn run(_opts: FetchOptions) -> Result<(), CliExit> {
                 crate::cache::write_atomic(&out, &bytes)
                     .map_err(|e| CliExit::error(format!("writing {}: {e}", out.display())))?;
             }
-            eprintln!("Fetched {coordinate}@{} → {}", package.version, out.display());
+            eprintln!(
+                "Fetched {coordinate}@{} → {}",
+                package.version,
+                out.display()
+            );
             count += 1;
         } else if let Some(sha) = &package.resolved_ref {
             let url = split_git_id(&package.id)
@@ -80,12 +84,11 @@ pub async fn run(_opts: FetchOptions) -> Result<(), CliExit> {
                 .to_string();
             let (version, sha) = (package.version.clone(), sha.clone());
             let url_for_msg = url.clone();
-            let worktree = tokio::task::spawn_blocking(move || {
-                crate::git::materialize(&url, &version, &sha)
-            })
-            .await
-            .map_err(|e| CliExit::error(format!("materializing {}: {e}", package.id)))?
-            .map_err(|e| CliExit::error(format!("materializing {}: {e}", package.id)))?;
+            let worktree =
+                tokio::task::spawn_blocking(move || crate::git::materialize(&url, &version, &sha))
+                    .await
+                    .map_err(|e| CliExit::error(format!("materializing {}: {e}", package.id)))?
+                    .map_err(|e| CliExit::error(format!("materializing {}: {e}", package.id)))?;
             eprintln!(
                 "Fetched {url_for_msg}@{} → {}",
                 package.version,

@@ -197,8 +197,12 @@ mod tests {
             Some("gitlab.com/group/sub/repo")
         );
         assert_eq!(
-            git_worktree_relative("https://gitlab.com/group/sub/repo.git", "1.0.0", "abcd1234ef")
-                .as_deref(),
+            git_worktree_relative(
+                "https://gitlab.com/group/sub/repo.git",
+                "1.0.0",
+                "abcd1234ef"
+            )
+            .as_deref(),
             Some("gitlab.com/group/sub/repo/.worktrees/1.0.0-abcd1234")
         );
     }

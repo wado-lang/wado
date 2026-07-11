@@ -254,7 +254,8 @@ fn git_dependency_entry(
     let (version, resolved_ref) = locked_git_packages(manifest_dir)
         .remove(&id)
         .ok_or_else(|| format!("no `wado.lock` entry for {name:?}; run `wado update`"))?;
-    let root = cache_root().ok_or_else(|| format!("no cache root for {name:?}; set `WADO_ROOT`"))?;
+    let root =
+        cache_root().ok_or_else(|| format!("no cache root for {name:?}; set `WADO_ROOT`"))?;
     let relative = wado_manifest::cache::git_worktree_relative(url, &version, &resolved_ref)
         .ok_or_else(|| format!("cannot place {name:?} in the cache (bad git url {url:?})"))?;
     let worktree_root = root.join(relative);

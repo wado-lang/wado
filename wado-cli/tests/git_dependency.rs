@@ -223,11 +223,19 @@ fn git_dependency_materializes_submodules_by_default() {
         "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
     )
     .unwrap();
-    fs::write(greet.join("src/lib.wado"), "export fn hello() -> String { return \"hi\"; }\n")
-        .unwrap();
+    fs::write(
+        greet.join("src/lib.wado"),
+        "export fn hello() -> String { return \"hi\"; }\n",
+    )
+    .unwrap();
     git_cfg(
         &greet,
-        &["submodule", "add", &format!("file://{}", sub.display()), "vendor/sub"],
+        &[
+            "submodule",
+            "add",
+            &format!("file://{}", sub.display()),
+            "vendor/sub",
+        ],
     );
     git_cfg(&greet, &["add", "-A"]);
     git_cfg(&greet, &["commit", "-q", "-m", "greet with submodule"]);
