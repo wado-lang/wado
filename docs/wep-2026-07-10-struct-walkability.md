@@ -162,29 +162,40 @@ implements:
   impl is allowed — it uses direct field access under normal visibility, a
   deliberate act, and may choose constant-time comparison.
 
-Enforcement lives in the bespoke synthesizers now (`serde_synth`, trait
-synthesis). When serde migrates to `Reflect`-based library code
-(WEP 2026-06-13 §5), the serialize skip must move with it; how a generic
-derivation skips a field inside an unrolled loop — the untaken arm still
-type-checks under the C++ template model — is an open question (candidates: a
-compile-time `if` that drops the untaken arm, or inverting control so the value
-drives the whole entry via a defaulted trait method that `Secret<T>` overrides
-to a no-op).
+Why not plug the leak in `serde_synth` now: serde is slated to become
+`Reflect`-based library code (WEP 2026-06-13 §5), so a secret-skip written into
+the bespoke synthesizer is thrown away at that migration. The skip belongs in
+the `Reflect`-based serde, where it reads `FieldMeta::secret` and is correct by
+construction. The whole contract — serialize skip, `Eq`/`Ord` refusal,
+`Secret<T>` — therefore lands as one change on top of `Reflect`, not dribbled
+into the synthesizers ahead of the rest (which would leave a half-migrated
+semantics: serialize still leaking while inspect is already hardened). The
+accepted cost is that serde keeps serializing secret fields until the migration
+lands — a known-open leak we choose over throwaway code.
+
+One mechanism stays unresolved, shared by every generic derivation that must
+drop a field: how to skip inside an unrolled loop when the untaken arm still
+type-checks under the C++ template model. Candidates: a compile-time `if` that
+drops the untaken arm, or inverting control so the value drives the entry via a
+defaulted trait method that `Secret<T>` overrides to a no-op.
 
 ## Implementation checklist
 
-The `#[secret]` attribute already exists with inspect-only semantics; the work
-below is the security upgrade on top of it.
+The `#[secret]` attribute already exists with inspect-only semantics. Everything
+below rides on the `Reflect` substrate, which this WEP does not own — it is the
+three unbuilt items on the WEP 2026-03-14 / 2026-06-13 checklists (per-struct
+`Reflect` synthesis, `where`-clause pack binding `T: Reflect<Fields = [..F]>`,
+coherence Rules 1–2). Struct walkability needs nothing beyond them; the
+`#[secret]` security upgrade needs the two staged items below.
 
-- [ ] `serde_synth`: skip secret fields on serialize; require default/`Option`
-      for serializability; leave deserialize unchanged.
-- [ ] Trait synthesis: refuse `Eq`/`Ord` auto-derive and the explicit marker
-      for structs with secret fields.
-- [ ] Blocked on `Reflect` synthesis: project secret fields as `Secret<T>` in
-      `Fields`; add `FieldMeta::secret`.
-- [ ] Blocked on `Reflect` synthesis: settle the generic-derivation skip
-      mechanism (open question above) before migrating serde per
-      WEP 2026-06-13 §5.
+- [ ] Extend `Reflect` to project a `#[secret]` field as `Secret<T>` in `Fields`
+      and add `FieldMeta::secret` (blocked on `Reflect` synthesis).
+- [ ] Land the `#[secret]` security upgrade in one step — not piecemeal in the
+      bespoke synthesizers ahead of the rest: serialize skip (in the
+      `Reflect`-based serde, reading `FieldMeta::secret`), require
+      default/`Option` for serializability, and `Eq`/`Ord` auto-derive + marker
+      refusal (a guard in trait synthesis). Resolve the unrolled-loop skip open
+      question above. Deserialize is unchanged.
 - [ ] Document the walk/nesting idiom in the cheatsheet once `Reflect` lands.
 
 ## Consequences
@@ -193,7 +204,7 @@ below is the security upgrade on top of it.
 
 - Struct walkability costs no new language surface: one projection trait plus
   machinery that already exists; nesting falls out of coherence rules.
-- `#[secret]` closes a live leak (serde currently serializes redacted fields)
+- The end state closes a leak serde has today (it serializes redacted fields)
   and gives credentials a contract that every future `Reflect` consumer
   inherits automatically — a library cannot forget to redact.
 - The axis framing keeps the visibility model clean: name access, CM surface,
@@ -211,6 +222,10 @@ below is the security upgrade on top of it.
 - A struct with a secret field loses derived `Eq`/`Ord` and (without a default)
   `Serialize`; users must opt back in manually. This friction is the point, but
   it is friction.
+- The security upgrade is deferred to the `Reflect`-based serde rather than
+  patched into `serde_synth` now, so secret fields stay serializable until the
+  migration lands. Deliberate: an interim bespoke patch would be thrown away at
+  that migration.
 
 ## Related WEPs
 
