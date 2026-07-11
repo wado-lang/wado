@@ -14,6 +14,7 @@ enum Cmd {
     Init,
     Update,
     Fetch,
+    Clean,
     Build,
     Compile,
     Check,
@@ -35,6 +36,7 @@ impl Cmd {
         Self::Init,
         Self::Update,
         Self::Fetch,
+        Self::Clean,
         Self::Build,
         Self::Compile,
         Self::Check,
@@ -56,6 +58,7 @@ impl Cmd {
             Self::Init => "init",
             Self::Update => "update",
             Self::Fetch => "fetch",
+            Self::Clean => "clean",
             Self::Build => "build",
             Self::Compile => "compile",
             Self::Check => "check",
@@ -83,6 +86,7 @@ impl Cmd {
             Self::Init
             | Self::Update
             | Self::Fetch
+            | Self::Clean
             | Self::Build
             | Self::Syntax
             | Self::Lsp
@@ -96,6 +100,7 @@ impl Cmd {
             Self::Init => "Create a new wado.toml manifest",
             Self::Update => "Resolve dependencies and write wado.lock",
             Self::Fetch => "Download the project's registry dependencies",
+            Self::Clean => "Evict derived cache state (git worktrees)",
             Self::Build => "Build the project's worlds from wado.toml",
             Self::Compile => "Compile a single Wado source file",
             Self::Check => "Verify Kiln generators match committed source (CI)",
@@ -220,6 +225,10 @@ async fn dispatch() -> Result<(), CliExit> {
                 Cmd::Fetch => {
                     let opts = wado_cli::fetch::parse_args(parser)?;
                     Box::pin(wado_cli::fetch::run(opts)).await
+                }
+                Cmd::Clean => {
+                    let opts = wado_cli::clean::parse_args(parser)?;
+                    wado_cli::clean::run(opts)
                 }
                 Cmd::Build => {
                     let opts = wado_cli::build::parse_args(parser)?;

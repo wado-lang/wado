@@ -89,14 +89,22 @@ fn parse_git_url(url: &str) -> Option<String> {
     };
     let trimmed = normalized.trim_end_matches('/');
     let trimmed = trimmed.strip_suffix(".git").unwrap_or(trimmed);
-    let mut parts = trimmed.splitn(3, '/');
-    let host = parts.next().filter(|s| !s.is_empty())?;
-    let owner = parts.next().filter(|s| !s.is_empty())?;
-    let repo = parts.next().filter(|s| !s.is_empty())?;
-    // `repo` must be a single path segment; a monorepo subdir uses `directory`.
-    if repo.contains('/') {
-        return None;
-    }
+    let segments: Vec<&str> = trimmed.split('/').filter(|s| !s.is_empty()).collect();
+    // A `file://` URL or a bare absolute path (used for local repos and tests)
+    // has no `host/owner/repo` prefix, so key it on the trailing three path
+    // components. A remote URL must be exactly `host/owner/repo`.
+    let is_local = url.starts_with("file://") || after_scheme.starts_with('/');
+    let (host, owner, repo) = if is_local {
+        match segments.as_slice() {
+            [.., host, owner, repo] => (*host, *owner, *repo),
+            _ => return None,
+        }
+    } else {
+        match segments.as_slice() {
+            [host, owner, repo] => (*host, *owner, *repo),
+            _ => return None,
+        }
+    };
     Some(format!("{host}/{owner}/{repo}"))
 }
 
@@ -177,9 +185,21 @@ mod tests {
     }
 
     #[test]
-    fn git_rejects_urls_without_owner_repo() {
+    fn git_rejects_remote_urls_without_owner_repo() {
         assert!(git_repo_relative("https://github.com/only-owner").is_none());
         assert!(git_repo_relative("https://github.com/o/r/extra").is_none());
         assert!(git_repo_relative("not a url").is_none());
+    }
+
+    #[test]
+    fn git_local_and_file_urls_key_on_trailing_segments() {
+        assert_eq!(
+            git_repo_relative("file:///tmp/t/github.com/user/router").as_deref(),
+            Some("github.com/user/router")
+        );
+        assert_eq!(
+            git_repo_relative("/home/me/src/acme/widget").as_deref(),
+            Some("src/acme/widget")
+        );
     }
 }

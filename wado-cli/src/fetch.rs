@@ -55,26 +55,44 @@ pub async fn run(_opts: FetchOptions) -> Result<(), CliExit> {
         .map_err(|e| CliExit::error(format!("resolving dependencies: {e}")))?;
 
     let mut count = 0;
-    for package in packages.iter().filter(|p| p.integrity.is_some()) {
-        let (registry_url, coordinate, _name) = split_registry_id(&package.id)
-            .ok_or_else(|| CliExit::error(format!("unexpected lock id {:?}", package.id)))?;
-        let out = crate::cache::component_path(registry_url, coordinate, &package.version)
-            .map_err(CliExit::error)?;
-        if !out.is_file() {
-            let reference = oci::reference(registry_url, coordinate, &package.version)
-                .map_err(|e| CliExit::error(format!("{}: {e}", package.id)))?;
-            let bytes = oci::pull_component(&reference).await.map_err(|e| {
-                CliExit::error(format!("fetching {coordinate}@{}: {e}", package.version))
-            })?;
-            crate::cache::write_atomic(&out, &bytes)
-                .map_err(|e| CliExit::error(format!("writing {}: {e}", out.display())))?;
+    for package in &packages {
+        // A registry package carries an integrity digest; a git package a
+        // resolved commit. Pull the component or materialize the worktree.
+        if package.integrity.is_some() {
+            let (registry_url, coordinate, _name) = split_registry_id(&package.id)
+                .ok_or_else(|| CliExit::error(format!("unexpected lock id {:?}", package.id)))?;
+            let out = crate::cache::component_path(registry_url, coordinate, &package.version)
+                .map_err(CliExit::error)?;
+            if !out.is_file() {
+                let reference = oci::reference(registry_url, coordinate, &package.version)
+                    .map_err(|e| CliExit::error(format!("{}: {e}", package.id)))?;
+                let bytes = oci::pull_component(&reference).await.map_err(|e| {
+                    CliExit::error(format!("fetching {coordinate}@{}: {e}", package.version))
+                })?;
+                crate::cache::write_atomic(&out, &bytes)
+                    .map_err(|e| CliExit::error(format!("writing {}: {e}", out.display())))?;
+            }
+            eprintln!("Fetched {coordinate}@{} → {}", package.version, out.display());
+            count += 1;
+        } else if let Some(sha) = &package.resolved_ref {
+            let url = split_git_id(&package.id)
+                .ok_or_else(|| CliExit::error(format!("unexpected lock id {:?}", package.id)))?
+                .to_string();
+            let (version, sha) = (package.version.clone(), sha.clone());
+            let url_for_msg = url.clone();
+            let worktree = tokio::task::spawn_blocking(move || {
+                crate::git::materialize(&url, &version, &sha)
+            })
+            .await
+            .map_err(|e| CliExit::error(format!("materializing {}: {e}", package.id)))?
+            .map_err(|e| CliExit::error(format!("materializing {}: {e}", package.id)))?;
+            eprintln!(
+                "Fetched {url_for_msg}@{} → {}",
+                package.version,
+                worktree.display()
+            );
+            count += 1;
         }
-        eprintln!(
-            "Fetched {coordinate}@{} → {}",
-            package.version,
-            out.display()
-        );
-        count += 1;
     }
 
     // Build-dependencies are Kiln generators, published at their package's
@@ -126,6 +144,14 @@ pub(crate) fn split_registry_id(id: &str) -> Option<(&str, &str, &str)> {
     let (registry_url, coordinate) = rest.rsplit_once('/')?;
     let (_namespace, name) = coordinate.split_once(':')?;
     Some((registry_url, coordinate, name))
+}
+
+/// The git URL of a git lock id `git+<url>/<coordinate>`. The coordinate is the
+/// trailing `ns:pkg` segment, so the final `/` splits the URL from it.
+pub(crate) fn split_git_id(id: &str) -> Option<&str> {
+    let rest = id.strip_prefix("git+")?;
+    let (url, _coordinate) = rest.rsplit_once('/')?;
+    Some(url)
 }
 
 #[cfg(test)]
