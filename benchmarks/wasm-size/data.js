@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783803768529,
+  "lastUpdate": 1783812410303,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -39481,6 +39481,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b91cdd6d11db41f4aeddab201ccd107371a60e84"
         },
         "date": 1783803768212,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16412,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265859,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c66576c75eef460eb793ecdcb10261f183d8d61d",
+          "message": "Merge pull request #1555 from wado-lang/claude/effect-handlers-stdio-mock-rhabwh\n\nfeat(effects): handle async CM-import operations via effect handlers",
+          "timestamp": "2026-07-12T08:17:10+09:00",
+          "tree_id": "df27f9d84afa1a162b506fe171f3d6feb7709581",
+          "url": "https://github.com/wado-lang/wado/commit/c66576c75eef460eb793ecdcb10261f183d8d61d"
+        },
+        "date": 1783812410153,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
