@@ -285,7 +285,7 @@ fn generate_textmate_grammar(def: &SyntaxDefinition) -> serde_json::Value {
                         "patterns": [
                             {
                                 "name": "entity.name.attribute.wado",
-                                "match": "\\b(hidden)\\b"
+                                "match": "\\b(secret)\\b"
                             },
                             { "include": "#strings" }
                         ]

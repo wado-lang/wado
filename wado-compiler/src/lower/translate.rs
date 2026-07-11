@@ -1846,7 +1846,7 @@ impl FunctionTranslator<'_, '_> {
             type_id: field.type_id,
             index: field.index,
             span: field.span,
-            is_hidden: field.is_hidden,
+            is_secret: field.is_secret,
             serde_rename: field.serde_rename.clone(),
             serde_default: field.serde_default,
         }

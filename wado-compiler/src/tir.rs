@@ -4119,8 +4119,8 @@ pub struct TirField {
     pub type_id: TypeId,
     pub index: u32,
     pub span: Span,
-    /// `#[hidden]` — field not shown in debug inspect output.
-    pub is_hidden: bool,
+    /// `#[secret]` — field not shown in debug inspect output.
+    pub is_secret: bool,
     /// `#[serde(rename = "name")]` — custom serialization name for this field.
     pub serde_rename: Option<String>,
     /// `#[serde(default)]` — use default value when field is missing during deserialization.

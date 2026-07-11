@@ -1,5 +1,30 @@
 # Changelog
 
+## [v0.0.10](https://github.com/wado-lang/wado/compare/v0.0.9...v0.0.10) - 2026-07-10
+
+- fix: reject `&mut` to an enum-typed struct field by @gfx in https://github.com/wado-lang/wado/pull/1516
+- chore: drop dead vendor/wasmtime submodule checkout and document publish auth by @gfx in https://github.com/wado-lang/wado/pull/1519
+- feat(gale): execute semantic predicates in generated parsers and lexers by @gfx in https://github.com/wado-lang/wado/pull/1518
+- fix: transparent newtype Display and closure/global format-trait coherence by @gfx in https://github.com/wado-lang/wado/pull/1520
+- refactor(gale): idiomatic cleanup and a Rust-aligned iterator model by @gfx in https://github.com/wado-lang/wado/pull/1524
+- feat(cli): dependency-management commands and Kiln typed-options redesign by @gfx in https://github.com/wado-lang/wado/pull/1525
+- perf(zlib) + fix(optimize): SIMD/linear-memory deflate, `[]` stdlib migration, and a capture-at-binding correctness fix by @gfx in https://github.com/wado-lang/wado/pull/1521
+- feat(deps): consume registry-published Kiln generators and library components by @gfx in https://github.com/wado-lang/wado/pull/1526
+- chore: update package-lock.json (including typesctipt@7-rc by @gfx in https://github.com/wado-lang/wado/pull/1528
+- fix(vscode): restore extension name `wado` by @gfx in https://github.com/wado-lang/wado/pull/1529
+- feat(gale): Stage C action-print output-compare and action execution by @gfx in https://github.com/wado-lang/wado/pull/1530
+- feat(synopsis): add #[synopsis] test attribute and wado doc rendering by @gfx in https://github.com/wado-lang/wado/pull/1531
+- chore: update deps by @gfx in https://github.com/wado-lang/wado/pull/1532
+- feat(synopsis): synopsis tests across core stdlib, plus WIR naming and inference fixes by @gfx in https://github.com/wado-lang/wado/pull/1534
+- feat(sheaf): add the Sheaf & Marl minimal blog system by @gfx in https://github.com/wado-lang/wado/pull/1533
+- perf(optimizer): elide value copies whose target is reassigned more than once by @gfx in https://github.com/wado-lang/wado/pull/1535
+- feat(compiler): local item definitions by @gfx in https://github.com/wado-lang/wado/pull/1537
+- perf(lowering): native array.copy for builtin array clones by @gfx in https://github.com/wado-lang/wado/pull/1538
+- fix(dump): resolve Kiln generators before dumping (+ branchless ASCII case) by @gfx in https://github.com/wado-lang/wado/pull/1541
+- refactor(compiler): move elaborator trait/type queries onto TypeSystem by @gfx in https://github.com/wado-lang/wado/pull/1543
+- perf(optimizer): hoist inline `&`-literal call arguments to shared globals by @gfx in https://github.com/wado-lang/wado/pull/1542
+- feat(package-marl): implement Marl Format, a self-hosted Markdown formatter by @gfx in https://github.com/wado-lang/wado/pull/1545
+
 ## [v0.0.9](https://github.com/wado-lang/wado/compare/v0.0.8...v0.0.9) - 2026-07-04
 
 - Rename kebab-case .wado files to snake_case by @gfx in https://github.com/wado-lang/wado/pull/1454

@@ -879,15 +879,15 @@ pub struct WirMeta {
     pub module_source: Option<ModuleSource>,
     /// Source span in the original Wado source.
     pub span: Option<Span>,
-    /// Attributes (e.g., `#[hidden]`).
+    /// Attributes (e.g., `#[secret]`).
     pub attributes: Vec<WirAttribute>,
 }
 
 /// An attribute on a WIR entity.
 #[derive(Debug, Clone)]
 pub enum WirAttribute {
-    /// `#[hidden]` — field not shown in debug stringify.
-    Hidden,
+    /// `#[secret]` — field not shown in debug stringify.
+    Secret,
 }
 
 /// Generic instantiation origin (e.g., `List<i32>` from `List<T>`).
