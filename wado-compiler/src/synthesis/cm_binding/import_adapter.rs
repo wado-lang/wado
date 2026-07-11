@@ -373,7 +373,9 @@ fn synthesize_async_wrap_function(
     let mut body_stmts: Vec<TirStmt> = Vec::new();
 
     let mut params: Vec<TirParam> = Vec::new();
-    let value_local: Option<u32> = if inner_type_id != TypeTable::UNIT {
+    let value_local: Option<u32> = if inner_type_id == TypeTable::UNIT {
+        None
+    } else {
         let vl = next_local;
         locals.push(TirLocal::synth(vl, inner_type_id, false));
         next_local += 1;
@@ -385,8 +387,6 @@ fn synthesize_async_wrap_function(
             span,
         });
         Some(vl)
-    } else {
-        None
     };
 
     let outptr_expr = if outptr_size > 0 {
