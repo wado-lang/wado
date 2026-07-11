@@ -110,6 +110,74 @@ fn git_dependency_resolves_fetches_and_runs() {
         .success();
 }
 
+/// A monorepo git dependency: one repository holds several packages in
+/// subdirectories, and `directory` selects which one. `update` reads the
+/// subdirectory's `wado.toml`, `run` compiles that package's library into the
+/// consumer.
+#[test]
+fn git_dependency_with_directory_selects_a_monorepo_subpackage() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let cache = root.join("wado-cache");
+
+    // A monorepo with two packages; only `packages/foo` is depended on.
+    let repo = root.join("monorepo");
+    for (dir, name, ret) in [
+        ("packages/foo", "foo", "from foo"),
+        ("packages/bar", "bar", "from bar"),
+    ] {
+        fs::create_dir_all(repo.join(dir).join("src")).unwrap();
+        fs::write(
+            repo.join(dir).join("wado.toml"),
+            format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n"),
+        )
+        .unwrap();
+        fs::write(
+            repo.join(dir).join("src/lib.wado"),
+            format!("export fn hello() -> String {{\n    return \"{ret}\";\n}}\n"),
+        )
+        .unwrap();
+    }
+    git(&repo, &["init", "-q", "-b", "main"]);
+    git(&repo, &["add", "-A"]);
+    git(&repo, &["commit", "-q", "-m", "monorepo"]);
+    let url = format!("file://{}", repo.display());
+
+    let app = root.join("app");
+    fs::create_dir_all(app.join("src")).unwrap();
+    fs::write(
+        app.join("wado.toml"),
+        format!(
+            "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+             [world]\n\"wasi:cli/command\" = \"src/main.wado\"\n\n\
+             [dependencies]\n\
+             \"org:foo\" = {{ git = \"{url}\", ref = \"main\", directory = \"packages/foo\" }}\n"
+        ),
+    )
+    .unwrap();
+    fs::write(
+        app.join("src/main.wado"),
+        "use { println, Stdout } from \"core:cli\";\n\
+         use { hello } from \"org:foo\";\n\n\
+         export fn run() with Stdout {\n    println(hello());\n}\n",
+    )
+    .unwrap();
+
+    wado_in(&app)
+        .env("WADO_ROOT", &cache)
+        .arg("update")
+        .assert()
+        .success();
+
+    wado_in(&app)
+        .env("WADO_ROOT", &cache)
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("from foo"))
+        .stdout(predicate::str::contains("from bar").not());
+}
+
 /// Submodules are populated by default: a git dependency whose repository has a
 /// submodule gets that submodule checked out into the materialized worktree, so
 /// the dependency's full source is present.
