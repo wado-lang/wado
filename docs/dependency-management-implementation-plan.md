@@ -148,9 +148,9 @@ Materialize resolved packages on disk so the compiler can load them.
       `{host}/{ns}/{name}/core-kiln-generator/{version}/component.wasm` (its
       publish world sub-path), so both artifacts of one package share the tree
       without colliding. The registry prefix folds into `{host}/…` via the
-      `oci::reference` repository mapping. Git's
-      `{host}/{owner}/{repo}/{version}-{short-ref}/` waits on the git provider
-      (Phase 6).
+      `oci::reference` repository mapping. Git's canonical clone
+      `{host}/{owner}/{repo}` with nested `.worktrees/{version}-{short-ref}/`
+      waits on the git provider (Phase 6).
 - [ ] Extract the pulled component's Wado source tree (or, for wado-to-wado, the
       provider-metadata source) into the version directory alongside its
       `wado.toml`.
@@ -225,11 +225,20 @@ The manipulation commands from the CLI WEP.
 
 ### Phase 6 — Git provider
 
+Designed in detail in the
+[git dependency design](./git-dependency-resolution-design.md): a git dep is a
+source dependency (compiled in like a path dep), cloned to a ghq-compatible Wado
+root with per-version git worktrees, `wado clean` as their GC.
+
+- [ ] Parse the git `directory` field onto `DependencySource::Git`.
 - [ ] Implement the git methods of the CLI provider (`list_git_tags`,
-      `resolve_git_ref`, `fetch_git_manifest`): clone/fetch, enumerate tags,
-      resolve refs to SHAs, read `wado.toml` (honoring `directory`).
-- [ ] Remove the `UnsupportedSource { kind: "git" }` path in `resolve.rs`.
-- [ ] Cache git deps as `{host}/{owner}/{repo}/{version}-{short-ref}/`.
+      `resolve_git_ref`, `fetch_git_manifest`) via `git` shell-out; remove the
+      `UnsupportedSource { kind: "git" }` path in `resolve.rs` and traverse a git
+      dep's transitive deps.
+- [ ] Cache git deps under the Wado root as a canonical clone
+      `{host}/{owner}/{repo}` with nested worktrees `.worktrees/{version}-{short-ref}/`;
+      resolve the root via `WADO_ROOT` → `$XDG_CONFIG_HOME/wado/config.toml` → `~/wado`.
+- [ ] Wire git deps into `dependency_index_from` and add `wado clean`.
 
 ### Phase 7 — PubGrub resolver
 
