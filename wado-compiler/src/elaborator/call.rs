@@ -16,14 +16,9 @@ use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util::placeholder;
 
-/// Generic signature of a static method `Type::method`, normalised across an
-/// `impl` block and a Component Model `resource`. See [`Elaborator::static_method_sig`].
 struct StaticMethodSig {
-    /// Positional impl / resource type-argument names (`impl<T> Foo<T>` → `["T"]`).
     type_level_names: Vec<String>,
-    /// The method's own generics (empty for a resource method).
     method_type_params: Vec<ast::GenericParam>,
-    /// Value parameters, including any `self` (a static method has none).
     value_params: Vec<ast::Param>,
     return_type: Option<ast::Type>,
 }
@@ -621,10 +616,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     combined.extend_from_slice(&method_type_args);
                     self.record_generic_instantiation(call.id, combined, TypeTable::UNKNOWN);
                 }
-                // Report a clean diagnostic when a generic static method /
-                // constructor leaves a type parameter unbound (no turbofish, no
-                // usable expected type), so it fails here instead of reaching
-                // WIR build as an unresolved `Call` (which panics).
                 self.report_uninferred_static_method_type_args(
                     prefix,
                     suffix,
@@ -1954,9 +1945,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
-    /// The `resource` declaration named `name` (canonicalising an import alias),
-    /// looked up through the resource index — an `IndexMap` keyed by name — plus
-    /// one `item_by_id`, so it does not scan module item lists.
     fn find_resource_decl(&self, name: &str) -> Option<&ast::ResourceDecl> {
         let canonical = self.canonical_decl_key(name).1;
         for resources in self.tysys.all_resource_types.values() {
@@ -1972,15 +1960,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// The generic signature of a static method `Type::method` (no `self`),
-    /// resolved for both an `impl` block and a Component Model `resource`
-    /// (which is not an `impl` block). `type_level_names` are the positional
-    /// impl / resource type-argument names; `method_type_params` are the
-    /// method's own generics (always empty for a resource method, which cannot
-    /// declare type parameters). The single source shared by
-    /// [`Self::infer_static_method_type_args`] and
-    /// [`Self::report_uninferred_static_method_type_args`] keeps their slot
-    /// indexing in lock-step.
     fn static_method_sig(&self, struct_name: &str, method_name: &str) -> Option<StaticMethodSig> {
         if let Some((type_level_names, method)) =
             self.find_static_method_def(struct_name, method_name)
@@ -2009,20 +1988,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// Report a clean "cannot infer type parameter" diagnostic when a generic
-    /// static method / constructor call (`Type::method()`, no turbofish) leaves
-    /// a declared type parameter unbound. Without this the unresolved call
-    /// reaches WIR build as an unsubstituted `Call` and panics (issue #1557).
-    ///
-    /// Uses the same [`StaticMethodSig`] discovery as
-    /// [`Self::infer_static_method_type_args`], so the reported slots stay
-    /// index-aligned with the args inference produced. A slot bound to an
-    /// outer-scope generic (the caller forwarding its own type params) is fine,
-    /// mirroring [`Self::report_uninferred_fn_type_args`].
-    ///
-    /// Unlike the free-function path, this reports immediately rather than
-    /// deferring via inference holes: a static constructor's type parameter is
-    /// never pinned by a later use, so there is nothing to defer to.
     fn report_uninferred_static_method_type_args(
         &mut self,
         prefix: &str,
@@ -2034,8 +1999,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(sig) = self.static_method_sig(prefix, suffix) else {
             return;
         };
-        // The `!is_effect` filter keeps method slots index-aligned with the
-        // `method_type_args` inference produced (see `infer_static_method_type_args`).
         let method_params: Vec<&ast::GenericParam> = sig
             .method_type_params
             .iter()
@@ -2059,7 +2022,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        // Type-level (impl / resource) args are positional; every slot is real.
         let mut names: Vec<String> = sig
             .type_level_names
             .iter()
@@ -2068,7 +2030,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(_, n)| n.clone())
             .collect();
         let type_level_unresolved = !names.is_empty();
-        // Method-level: only real, non-defaulted params are reportable.
         names.extend(
             method_params
                 .iter()
@@ -2418,9 +2379,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[TirExpr],
         expected_type: Option<TypeId>,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
-        // Resolve the static method's generic signature (impl block or CM
-        // resource), so impl / resource-level params are inferable from the LHS
-        // or arguments for calls like `Container::make()` / `Stream::new()`.
         let Some(StaticMethodSig {
             type_level_names: impl_type_param_names,
             method_type_params,
