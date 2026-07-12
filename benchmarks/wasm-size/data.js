@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783812410303,
+  "lastUpdate": 1783825537500,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -39525,6 +39525,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c66576c75eef460eb793ecdcb10261f183d8d61d"
         },
         "date": 1783812410153,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16412,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265859,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d0f47ff02caa8f8978c505354c7de6904390bd70",
+          "message": "Merge pull request #1559 from wado-lang/claude/wado-hello-blog-post-cotqxs\n\ndocs: fix broken doc cross-links, drop the CLAUDE.md reference",
+          "timestamp": "2026-07-12T11:56:15+09:00",
+          "tree_id": "c49adb7889b18a681fa9dade3c8d035d3d084ac5",
+          "url": "https://github.com/wado-lang/wado/commit/d0f47ff02caa8f8978c505354c7de6904390bd70"
+        },
+        "date": 1783825536779,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
