@@ -12,6 +12,7 @@ use {
     assign_action_ids,
 } from "./ir.wado";
 use { build as build_follow_env } from "./follow_env.wado";
+use { TokenKinds, resolve_kind_ids } from "./token_kinds.wado";
 use { rule_type_name, all_alts_are_single_token } from "./gen_util.wado";
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
 use {
@@ -103,6 +104,12 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     assign_action_ids(grammar);
     translate_attr_types(grammar);
     normalize_caches(grammar);
+    // Stamp each terminal element with its canonical token kind id
+    // (`token_slot_order` position, == the emitted `TK_*` value) so FIRST-set
+    // analysis can carry the integer instead of the `TK_*` name. Inert until
+    // the analysis reads `kind_id`; names are recovered from the table at emit.
+    let token_kinds = TokenKinds::build(grammar);
+    resolve_kind_ids(grammar, &token_kinds);
     // Pre-size the output buffer from the grammar's rule count so the
     // bulk of `String::push_str` calls in `CodeWriter::line` don't
     // trigger `String::grow` doubling events. Empirical Rust*.g4 output
