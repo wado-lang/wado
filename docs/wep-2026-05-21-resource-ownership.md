@@ -663,7 +663,11 @@ note in that WEP.
 - [x] Read-only-share refinement: a read-only binding bound from a projection
       whose storage is provably never mutated while live shares the source and
       emits no copy — field-sensitive over disjoint fields (`self.rows[0]` shared
-      while `self.tick` is mutated), pinned by `value_copy_elide_disjoint_field_mut`.
+      while `self.tick` is mutated). Gated on the source root being unconsumed, so
+      a mutation reaching the shared storage through an aliased reference or a
+      callee (both of which must first consume the root) keeps the copy. Pinned by
+      `value_copy_elide_disjoint_field_mut` (share fires) and
+      `value_copy_share_root_escape` (share must not fire).
 - [x] Fix recursive-type `$value_copy$T` synthesis to a true deep copy
       (mutually-recursive helper), replacing the identity `return v` fallback —
       covers variant payload deep copy, structs containing variants,

@@ -29,9 +29,9 @@
 //! must run after all other transformations.
 //!
 //! The pass is invoked at two points in the fixed-point loop — before `inline`
-//! (where `ValueCopyElideRule` runs in the same session, so `string_push` sees
-//! the value-copy-stripped receiver via the shared worklist; `value_copy_demote`
-//! then runs after) and after `inline` (so `array_literal` sees the exposed
+//! (so `string_push` sees the `push_str` `MethodCall` before inlining expands it;
+//! `value_copy_demote` then runs after) and after `inline` (so `array_literal`
+//! sees the exposed
 //! `array_new + push` window, `RefElimRule` cleans up the ref bindings
 //! inlining exposes, `ElideBoxLocalRule` collapses the `Box<T>` shells, and
 //! `LabeledBlockFusionRule` folds inlined `Option`/`Result` allocations into
@@ -59,12 +59,10 @@ use super::string_push::{ShortPushStrRule, resolve_ctx};
 /// Run the unified peephole rule set over every function body. Returns whether
 /// any rule fired. Gated: skips functions unchanged since this pass last ran.
 ///
-/// `pre_inline` adds the rules that the old loop ran once per iteration before
-/// `inline`: `MatchToSwitchRule` (lower every reachable `Match` to `Switch`
-/// before `inline` copies bodies; the post-inline run would only re-scan
-/// already-`Switch` bodies) and `ValueCopyElideRule` (strip read-only
-/// `$value_copy$T` wrappers). A `Match` or wrapper a later rewrite plants is
-/// caught by the next iteration's pre-inline run, matching the old timing.
+/// `pre_inline` adds `MatchToSwitchRule` (lower every reachable `Match` to
+/// `Switch` before `inline` copies bodies; the post-inline run would only
+/// re-scan already-`Switch` bodies). A `Match` a later rewrite plants is caught
+/// by the next iteration's pre-inline run.
 pub(super) fn run_peephole(
     project: &mut NirPackage,
     gate: &mut FunctionGate,

@@ -10,7 +10,8 @@
 //!
 //! This is the caller-side, single-phase replacement for `optimize::escape`'s
 //! `param_escapes`. The fold skips the copy precisely rather than inserting it
-//! everywhere and recovering it in a later `optimize::value_copy_elide` pass.
+//! everywhere and recovering it in a later elision pass (the now-deleted
+//! `optimize::value_copy_elide`).
 //!
 //! It runs before the boxing plan (`lower::plan::plan`), so `&mut T` / `&T`
 //! references are still distinguishable — boxing collapses both onto `Box<T>`.

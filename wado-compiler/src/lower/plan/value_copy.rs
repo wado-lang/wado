@@ -5,9 +5,11 @@
 //! [`synthesize::synthesize_helpers`] generates a per-type helper for
 //! the seed plus its transitive closure of nested value-typed fields.
 //! The fold (`lower::translate`) emits wrap calls directly using
-//! [`ValueCopyPlan::name_for_type`].
-//!
-//! Wrapper elision runs later in `optimize::value_copy_elide`.
+//! [`ValueCopyPlan::name_for_type`], but only at consumption sites the ownership
+//! analysis cannot prove a move, share, or fresh value: last-use liveness
+//! ([`last_use`]), interprocedural freshness ([`ownership`]), per-parameter
+//! confinement ([`confine`]), and the read-only-share refinement. There is no
+//! later elision pass — every emitted copy is necessary by construction.
 
 pub mod analyze;
 pub mod confine;

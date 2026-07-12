@@ -52,9 +52,8 @@ use crate::tir_visitor::TirRefVisitor;
 /// when a `let x = <projection of y>` (whole-value move or field/element/deref
 /// of `y`) or a match-arm binding of a scrutinee rooted at `y` connects them. A
 /// `let x = <fresh rvalue>` roots a new component (aliases nothing observable).
-/// Mirrors `optimize::value_copy_elide`'s `alias_rep` union-find, so the
-/// caller-side confinement check keeps exactly the copies of a by-value argument
-/// that aliases a mutated sibling.
+/// The caller-side confinement check uses it to keep exactly the copies of a
+/// by-value argument that aliases a mutated sibling.
 pub struct AliasComponents {
     parent: IndexMap<u32, u32>,
 }

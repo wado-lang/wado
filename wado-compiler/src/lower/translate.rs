@@ -797,9 +797,16 @@ impl FunctionTranslator<'_, '_> {
         // This `Let` is synthesized after `value_copy::insert`'s walk, so the
         // defensive copy is requested explicitly here; otherwise the per-field
         // write-back would alias the RHS's storage (e.g. a `List`'s backing
-        // array). The `analyze` seed walker registers a helper for the
-        // deref-target RHS type so this wrap resolves.
-        let val_nir = self.wrap_value_copy_operand(self.convert_operand(value), inner_type_id);
+        // array). It is elided for a fresh / moved RHS by the same predicate the
+        // fold uses everywhere — a fresh value aliases nothing, so the per-field
+        // write-back is safe without a copy. The `analyze` seed walker registers
+        // a helper for the deref-target RHS type so the wrap resolves.
+        let converted_val = self.convert_operand(value);
+        let val_nir = if self.should_wrap_value_copy(value) {
+            self.wrap_value_copy_operand(converted_val, inner_type_id)
+        } else {
+            converted_val
+        };
 
         let mut out: Vec<StmtId> = Vec::with_capacity(2 + fields.len());
         out.push(self.alloc_stmt(
@@ -825,9 +832,9 @@ impl FunctionTranslator<'_, '_> {
                 is_reactive: false,
                 type_id: inner_type_id,
                 value: val_nir,
-                // The copy is applied above; `false` lets `value_copy_elide`
-                // drop it again when the RHS source is provably unmutated.
-                skip_value_copy: false,
+                // The copy decision is made above (`should_wrap_value_copy`), so
+                // this synthesized binding must not re-wrap.
+                skip_value_copy: true,
             },
             span,
         ));
