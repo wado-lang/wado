@@ -138,8 +138,12 @@ impl FunctionTranslator<'_, '_> {
         method_info: &crate::name::LocalMethodName,
     ) -> Option<crate::wir::WirFuncId> {
         let struct_name = &method_info.base_struct_name;
-        // Find a Newtype in the type table with this name
-        let base_name = self.resolve_newtype_to_base_struct_name(struct_name)?;
+        // Resolve the newtype (identified by its (name, module_source)) to its
+        // ultimate base type name.
+        let base_name = self
+            .type_table
+            .newtype_ultimate_base_name(struct_name, module_source)?
+            .to_string();
         // Build a new method name with the base type's struct name
         let mut resolved_info = method_info.clone();
         resolved_info.struct_name.clone_from(&base_name);
@@ -147,14 +151,6 @@ impl FunctionTranslator<'_, '_> {
         let mangled = resolved_info.to_mangled_name();
         let fq = format!("{module_source}/{mangled}");
         self.ctx.func_map.get(&fq).cloned()
-    }
-
-    /// Resolve a newtype name to the ultimate base struct/primitive name.
-    /// Returns `None` if the name is not a newtype.
-    fn resolve_newtype_to_base_struct_name(&self, name: &str) -> Option<String> {
-        self.type_table
-            .get_newtype_ultimate_base_name(name)
-            .map(str::to_owned)
     }
 
     /// Translate a builtin intrinsic call to a WIR instruction.
