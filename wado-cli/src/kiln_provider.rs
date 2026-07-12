@@ -252,12 +252,12 @@ impl CliGeneratorProvider {
                     loaded: loaded_for_task,
                 };
                 let options = CompilerOptions {
-                    // `O2` matches the default `wado compile` opt level, so
-                    // Kiln-invoked generators see the same code their authors
-                    // tested against on the CLI. O0 has uncovered bugs that
-                    // are orthogonal to the Kiln wiring (e.g. `package-gale`'s
-                    // `parser_gen` SQLite path).
-                    opt_level: wado_compiler::OptLevel::O2,
+                    // Compile the generator at O0. It recompiles far more often
+                    // than it runs — its output is cached and usually committed —
+                    // so the compile saving (O0 skips the optimizer) dominates,
+                    // while generation runtime measures opt-level-insensitive. O0
+                    // output is byte-identical to O2, so nothing downstream shifts.
+                    opt_level: wado_compiler::OptLevel::O0,
                     target_world: Some("core:kiln/generator".to_string()),
                     skip_validation: false,
                     log_level: Some(LogLevel::Warn),
