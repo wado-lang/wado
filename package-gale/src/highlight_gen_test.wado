@@ -129,6 +129,30 @@ B : 'b' ;
     assert index_of(&out, "capture: \"string\"") >= 0, out;
 }
 
+test "default on a literal-shadowed named token maps the shadowing literal kind" {
+    // LP is `'('` and the parser also uses '(' inline, so the lexer emits the
+    // literal token, not TK_LP. Mapping (LP) must still colour '(' by also
+    // targeting the literal kind, otherwise the mapping is a silent no-op.
+    let out = highlight_output_q("grammar T;
+r : '(' B ')' ;
+B : 'b' ;
+LP : '(' ;
+RP : ')' ;
+", "(LP) @punctuation.bracket");
+    assert index_of(&out, "\"punctuation.bracket\",  // TK_LIT") >= 0, out;
+}
+
+test "later override for the same rule and token wins (last-wins)" {
+    let out = highlight_output_q("grammar T;
+r : B ;
+B : 'b' ;
+", "(r (B) @string)
+(r (B) @keyword)");
+    assert count_occurrences(&out, "HighlightOverride {") == 1, out;
+    assert index_of(&out, "capture: \"keyword\"") >= 0, out;
+    assert index_of(&out, "capture: \"string\"") == -1, out;
+}
+
 test "unknown token in query warns via ctx diagnostics" {
     let g = parse_grammar("grammar T;
 r : B ;

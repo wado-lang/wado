@@ -54,15 +54,10 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
     let mut inputs: List<[String, String]> = [
         [req.primary.path, req.primary.content],
     ];
-    let mut highlight_src = String::new();
-    let mut highlight_path = String::new();
+    let mut scm_inputs: List<[String, String]> = [];
     for let supp of &req.inputs {
         if supp.path.ends_with(".scm") {
-            if highlight_path.is_empty() {
-                highlight_path = supp.path;
-            }
-            highlight_src.push_str(&supp.content);
-            highlight_src.push('\n');
+            scm_inputs.push([supp.path, supp.content]);
         } else {
             inputs.push([supp.path, supp.content]);
         }
@@ -82,14 +77,26 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
         },
     };
 
+    // Parse each `.scm` separately so an error reports the file it came from
+    // with its own line/column, then concatenate the rule lists.
     let mut highlight_query: Option<List<HighlightRule>> = null;
-    if !highlight_path.is_empty() {
-        highlight_query = match parse_highlight_query(&highlight_src) {
-            Ok(rules) => Option::Some(rules),
-            Err(e) => return Result::Err(Error::InvalidSchema(
-                `gale: invalid highlight query '{highlight_path}' at {e.line}:{e.col}: {e.message}`,
-            )),
-        };
+    if scm_inputs.len() > 0 {
+        let mut all_rules: List<HighlightRule> = [];
+        for let scm of &scm_inputs {
+            match parse_highlight_query(&scm.1) {
+                Ok(rules) => {
+                    for let r of rules {
+                        all_rules.push(r);
+                    }
+                },
+                Err(e) => {
+                    return Result::Err(Error::InvalidSchema(
+                        `gale: invalid highlight query '{scm.0}' at {e.line}:{e.col}: {e.message}`,
+                    ));
+                },
+            }
+        }
+        highlight_query = Option::Some(all_rules);
     }
 
     let gen_opts = GenerateOptions {

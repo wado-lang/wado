@@ -1,4 +1,4 @@
-use { Grammar, LexerRule, ParserRule } from "./ir.wado";
+use { Grammar, LexerRule, LexerElement, ParserRule } from "./ir.wado";
 use { LitToken, TokenSlot, token_slot_order } from "./lexer_gen.wado";
 use { CodeWriter, FnSpec, Vis, str_lit } from "./wadopoet.wado";
 use { HighlightRule, TokenSelector } from "./highlight_query.wado";
@@ -55,6 +55,27 @@ pub fn gen_highlight(
 struct KindIndex {
     by_name: TreeMap<String, i32>,
     by_literal: TreeMap<String, i32>,
+    /// A single-literal lexer rule (`OPEN_PAR : '('`) is shadowed at lex time
+    /// by the identical inline-literal token, so a `(OPEN_PAR)` mapping alone
+    /// would target a kind the lexer never emits. Map such a rule name to the
+    /// literal kind that actually appears, so a default / override written
+    /// against the name still fires.
+    shadow: TreeMap<String, i32>,
+}
+
+/// The literal text of a lexer rule whose whole body is a single string
+/// literal (`OPEN_PAR : '(' ;`), else `None`.
+fn single_literal_text(rule: &LexerRule) -> Option<String> {
+    if rule.body.len() != 1 {
+        return null;
+    }
+    if rule.body[0].elements.len() != 1 {
+        return null;
+    }
+    if let Literal(t) = &rule.body[0].elements[0] {
+        return Option::Some(*t);
+    }
+    return null;
 }
 
 /// A resolved override: rule name + integer token kind + capture, ready to emit
@@ -78,7 +99,19 @@ fn build_kind_index(lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>, 
             },
         }
     }
-    return KindIndex { by_name, by_literal };
+    // A named single-literal rule whose text also exists as an inline-literal
+    // token is shadowed by that literal at lex time; record the literal kind.
+    let mut shadow = TreeMap::<String, i32>::new();
+    for let rule of lexer_rules {
+        if let Some(text) = single_literal_text(rule) {
+            if let Some(lit_kind) = by_literal.get(text) {
+                if by_name.get(rule.name) matches { Some(_) } {
+                    shadow[rule.name] = lit_kind;
+                }
+            }
+        }
+    }
+    return KindIndex { by_name, by_literal, shadow };
 }
 
 fn resolve_selector(idx: &KindIndex, sel: &TokenSelector) -> Option<i32> {
@@ -102,6 +135,19 @@ fn parser_rule_exists(parser_rules: &List<ParserRule>, name: &String) -> bool {
         }
     }
     return false;
+}
+
+/// Record an override for (rule, token), last-wins: a later query rule for the
+/// same pair replaces an earlier one (matching the default table's last-wins
+/// and tree-sitter's convention), rather than being dead behind it.
+fn push_override(overrides: &mut List<ResolvedOverride>, rule_name: String, token_kind: i32, capture: String) {
+    for let mut i = 0; i < overrides.len(); i += 1 {
+        if overrides[i].rule_name == rule_name && overrides[i].token_kind == token_kind {
+            overrides[i] = ResolvedOverride { rule_name, token_kind, capture };
+            return;
+        }
+    }
+    overrides.push(ResolvedOverride { rule_name, token_kind, capture });
 }
 
 fn slot_comment(slot: &TokenSlot, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) -> String {
@@ -128,9 +174,10 @@ fn gen_highlight_mapping(
     let slots = token_slot_order(lexer_rules, lit_tokens);
     let idx = build_kind_index(lexer_rules, lit_tokens, &slots);
 
-    // Compile the query: defaults keyed by token kind (last rule wins), plus
-    // resolved overrides. Unknown token / rule names are skipped with a
-    // warning rather than failing the whole highlighter.
+    // Compile the query: defaults keyed by token kind and overrides, both
+    // last-wins. Unknown token / rule names are skipped with a warning rather
+    // than failing the whole highlighter. A name selector that is shadowed by
+    // an inline literal maps the literal kind too (`shadow_kind`).
     let mut default_by_kind = TreeMap::<i32, String>::new();
     let mut overrides: List<ResolvedOverride> = [];
     for let rule of query {
@@ -145,8 +192,17 @@ fn gen_highlight_mapping(
                 continue;
             },
         };
+        let shadow_kind = match &rule.selector {
+            Name(n) => idx.shadow.get(*n),
+            Literal(_) => null,
+        };
         match &rule.rule_context {
-            None => default_by_kind[kind] = rule.capture,
+            None => {
+                default_by_kind[kind] = rule.capture;
+                if let Some(k2) = shadow_kind {
+                    default_by_kind[k2] = rule.capture;
+                }
+            },
             Some(rctx) => {
                 if !parser_rule_exists(parser_rules, rctx) {
                     ctx.warn(
@@ -156,7 +212,10 @@ fn gen_highlight_mapping(
                     );
                     continue;
                 }
-                overrides.push(ResolvedOverride { rule_name: *rctx, token_kind: kind, capture: rule.capture });
+                push_override(&mut overrides, *rctx, kind, rule.capture);
+                if let Some(k2) = shadow_kind {
+                    push_override(&mut overrides, *rctx, k2, rule.capture);
+                }
             },
         }
     }

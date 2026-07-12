@@ -78,7 +78,7 @@ gale is published as a Kiln generator at `ghcr.io/wado-lang/gale/core-kiln-gener
 
 ```wado
 use calc from "./Calc.g4"
-    with { generator: { module: "wado-lang:gale", options: { trace: false } } };
+    with { generator: { module: "wado-lang:gale", options: { highlight: false, trace: false } } };
 ```
 
 `wado update` resolves the coordinate, picks the highest published version

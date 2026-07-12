@@ -98,6 +98,19 @@ test "reject an unterminated string literal" {
     assert msg.contains("unterminated"), msg;
 }
 
+test "reject an unsupported escape rather than corrupting it" {
+    // \u must not be silently dropped to `u0041`; non-ASCII text can be
+    // written literally in the UTF-8 file instead.
+    let msg = parse_err("\"\\u0041\" @string");
+    assert msg.contains("unsupported escape"), msg;
+}
+
+test "known escapes are still decoded" {
+    let rules = parse_ok("\"\\t\" @string");
+    assert rules.len() == 1;
+    assert is_literal(&rules[0].selector, "\t");
+}
+
 test "empty query parses to no rules" {
     let rules = parse_ok("; nothing here\n");
     assert rules.len() == 0;

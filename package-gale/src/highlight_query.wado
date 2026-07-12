@@ -143,7 +143,17 @@ impl Lexer {
                     'r' => out.push('\r'),
                     '"' => out.push('"'),
                     '\\' => out.push('\\'),
-                    _ => out.push(e),
+                    // Reject unknown escapes rather than silently dropping the
+                    // backslash (which would corrupt `\uXXXX` into `uXXXX`).
+                    // Non-ASCII token text can be written literally — the file
+                    // is UTF-8.
+                    _ => {
+                        return Result::Err(HighlightQueryError {
+                            message: `unsupported escape '\\{e}' in string literal`,
+                            line,
+                            col,
+                        });
+                    },
                 }
             } else {
                 out.push(c);

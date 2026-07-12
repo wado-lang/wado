@@ -89,20 +89,25 @@ fn cmd_gen(paths: List<String>, output: &Option<String>, trace: bool) with Stdou
     }
     let mut merged = load_and_merge(&g4_paths);
 
+    // Parse each `.scm` separately so an error names the file it came from.
     let mut highlight_query: Option<List<HighlightRule>> = null;
     if scm_paths.len() > 0 {
-        let mut src = String::new();
+        let mut all_rules: List<HighlightRule> = [];
         for let p of &scm_paths {
-            src.push_str(&read_source_file(p));
-            src.push('\n');
+            let src = read_source_file(p);
+            match parse_highlight_query(&src) {
+                Ok(rules) => {
+                    for let r of rules {
+                        all_rules.push(r);
+                    }
+                },
+                Err(e) => {
+                    eprintln(`gale: {*p}: highlight query {e.line}:{e.col}: {e.message}`);
+                    exit(1);
+                },
+            }
         }
-        highlight_query = match parse_highlight_query(&src) {
-            Ok(rules) => Option::Some(rules),
-            Err(e) => {
-                eprintln(`gale: highlight query {e.line}:{e.col}: {e.message}`);
-                exit(1);
-            },
-        };
+        highlight_query = Option::Some(all_rules);
     }
     let options = GenerateOptions { highlight_query, trace };
 
