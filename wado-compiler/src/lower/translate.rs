@@ -1940,12 +1940,11 @@ impl FunctionTranslator<'_, '_> {
         args: &[CallArg],
         param_offset: usize,
     ) -> Vec<u32> {
-        let key = value_copy::ownership::func_key(&callee.module_source, &callee.name);
         let mut_of = |i: usize| {
             self.base
                 .value_copy
                 .mut_ref_params
-                .get(&key)
+                .get(&callee.module_source, &callee.name)
                 .and_then(|v| v.get(i))
                 .copied()
                 .unwrap_or(false)

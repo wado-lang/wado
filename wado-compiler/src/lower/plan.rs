@@ -48,20 +48,20 @@ fn capture_param_mut_ref(flat: &mut FlatPackage) {
 
 /// Functions whose first parameter is a reference (`&self` / `&mut self`),
 /// captured before `boxing::prepare_types` erases the reference into `Box<T>`.
-fn ref_receiver_methods(flat: &FlatPackage) -> crate::hashmap::IndexSet<crate::name::FunctionId> {
+fn ref_receiver_methods(flat: &FlatPackage) -> value_copy::funcset::FuncKeySet {
     let type_table = flat.type_table.borrow();
-    flat.functions
-        .iter()
-        .filter_map(|f| {
-            let f = f.borrow();
-            let p0 = f.params.first()?;
-            matches!(
-                type_table.get(p0.type_id),
-                crate::tir::ResolvedType::Ref(_) | crate::tir::ResolvedType::MutRef(_)
-            )
-            .then(|| value_copy::ownership::func_key(&f.module_source, &f.name))
-        })
-        .collect()
+    let mut set = value_copy::funcset::FuncKeySet::default();
+    for f in &flat.functions {
+        let f = f.borrow();
+        let Some(p0) = f.params.first() else { continue };
+        if matches!(
+            type_table.get(p0.type_id),
+            crate::tir::ResolvedType::Ref(_) | crate::tir::ResolvedType::MutRef(_)
+        ) {
+            set.insert(f.module_source.clone(), f.name.clone());
+        }
+    }
+    set
 }
 
 pub fn plan(flat: &mut FlatPackage) -> LowerPlan {

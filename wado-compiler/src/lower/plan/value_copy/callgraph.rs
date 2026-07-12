@@ -7,17 +7,15 @@
 //! callers) reaches the same least fixpoint touching each function only when a
 //! callee it reads actually moves.
 
-use super::ownership::func_key;
+use super::funcset::FuncIndex;
 use crate::flat_package::FlatPackage;
-use crate::hashmap::IndexMap;
-use crate::name::FunctionId;
 use crate::tir::{FunctionRef, TirExpr, TirExprKind};
 use crate::tir_visitor::TirRefVisitor;
 use std::collections::VecDeque;
 
 /// Dense function ids (position in `project.functions`) plus reverse call edges.
 pub struct CallGraph {
-    index: IndexMap<FunctionId, u32>,
+    index: FuncIndex,
     /// `callers[callee]` lists every function that calls `callee`.
     callers: Vec<Vec<u32>>,
 }
@@ -25,10 +23,10 @@ pub struct CallGraph {
 impl CallGraph {
     pub fn build(project: &FlatPackage) -> Self {
         let n = project.functions.len();
-        let mut index: IndexMap<FunctionId, u32> = IndexMap::default();
+        let mut index = FuncIndex::default();
         for (i, func) in project.functions.iter().enumerate() {
             let func = func.borrow();
-            index.insert(func_key(&func.module_source, &func.name), i as u32);
+            index.insert(func.module_source.clone(), func.name.clone(), i as u32);
         }
         let mut callers: Vec<Vec<u32>> = vec![Vec::new(); n];
         for (caller, func) in project.functions.iter().enumerate() {
@@ -50,9 +48,7 @@ impl CallGraph {
 
     /// Dense id of `func`, or `None` for a callee outside this package.
     pub fn id_of(&self, func: &FunctionRef) -> Option<u32> {
-        self.index
-            .get(&func_key(&func.module_source, &func.name))
-            .copied()
+        self.index.id(&func.module_source, &func.name)
     }
 
     /// Drive a monotone worklist: seed every body function, and each time
@@ -83,7 +79,7 @@ impl CallGraph {
 }
 
 struct CalleeCollector<'a> {
-    index: &'a IndexMap<FunctionId, u32>,
+    index: &'a FuncIndex,
     callees: Vec<u32>,
 }
 
@@ -91,7 +87,7 @@ impl TirRefVisitor for CalleeCollector<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
         match &expr.kind {
             TirExprKind::Call { func, .. } | TirExprKind::MethodCall { func, .. } => {
-                if let Some(&id) = self.index.get(&func_key(&func.module_source, &func.name)) {
+                if let Some(id) = self.index.id(&func.module_source, &func.name) {
                     self.callees.push(id);
                 }
             }

@@ -14,15 +14,16 @@
 pub mod analyze;
 pub mod callgraph;
 pub mod confine;
+pub mod funcset;
 pub mod last_use;
 pub mod ownership;
 pub mod synthesize;
 
 use crate::flat_package::FlatPackage;
-use crate::hashmap::{IndexMap, IndexSet};
+use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::name::FunctionId;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
+use funcset::{FuncKeyMap, FuncKeySet};
 
 /// `TypeId` → `(ModuleSource, $value_copy$T<id>)` for every helper
 /// `synthesize_helpers` registered in [`FlatPackage::functions`], plus the
@@ -30,42 +31,42 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 /// call result is owned (a move) or borrowed (a copy).
 pub struct ValueCopyPlan {
     pub name_for_type: IndexMap<TypeId, (ModuleSource, String)>,
-    pub returns_owned: IndexSet<FunctionId>,
+    pub returns_owned: FuncKeySet,
     /// Functions whose every returned value is owned *or* a projection of the
     /// receiver / first parameter (`build(&self) -> List { return *self }`). A
     /// call to one is fresh when its receiver is, so a `[1, 2, 3]` builder
     /// finalized by `.build()` is not defensively copied. Superset of
     /// `returns_owned`.
-    pub returns_self_projection: IndexSet<FunctionId>,
+    pub returns_self_projection: FuncKeySet,
     /// Functions with a non-empty `stores[...]` clause — a callee that may
     /// persist a reference passed to it. A local whose `&`/`&mut` is passed to
     /// one is borrow-escaped and cannot be moved (the TIR move analysis runs
     /// before inlining, so `stores_aliased_locals` is not yet populated).
-    pub functions_with_stores: IndexSet<FunctionId>,
+    pub functions_with_stores: FuncKeySet,
     /// Functions whose first parameter is `&mut self` — the only methods that
     /// can mutate the caller's receiver storage. The last-use move analysis
     /// treats such a call's receiver as a sibling mutation, so a by-value
     /// argument aliasing it keeps its copy.
-    pub mut_receiver_methods: IndexSet<FunctionId>,
+    pub mut_receiver_methods: FuncKeySet,
     /// Per-parameter confinement: a still-live value into a confined parameter
     /// needs no defensive copy (caller-side replacement for `param_escapes`).
     pub confined_params: confine::ConfinedParams,
     /// Per-callee, which parameters are `&mut` — the only siblings that can
     /// mutate a shared by-value argument during the call. A confined by-value
     /// argument keeps its copy only when it aliases such a sibling.
-    pub mut_ref_params: IndexMap<FunctionId, Vec<bool>>,
+    pub mut_ref_params: FuncKeyMap<Vec<bool>>,
     /// Methods whose receiver is a reference (`&self` / `&mut self`) — a
     /// borrowing, not consuming, receiver. Used by the read-only-share analysis.
-    pub ref_receiver_methods: IndexSet<FunctionId>,
+    pub ref_receiver_methods: FuncKeySet,
     /// Functions whose result aliases their receiver's storage (a borrowed
     /// projection / element read). Used only by the read-only-share analysis.
-    pub returns_receiver_alias: IndexSet<FunctionId>,
+    pub returns_receiver_alias: FuncKeySet,
 }
 
 pub fn plan(
     flat: &mut FlatPackage,
     confined_params: confine::ConfinedParams,
-    ref_receiver_methods: IndexSet<FunctionId>,
+    ref_receiver_methods: FuncKeySet,
 ) -> ValueCopyPlan {
     register_variant_cases(flat);
     let seed = analyze::collect_seed_types(flat);
@@ -73,36 +74,23 @@ pub fn plan(
     // Computed after synthesis so the value-copy helpers (always owned) are
     // present in `flat.functions` and seed the fixpoint.
     let conventions = ownership::compute_return_conventions(flat);
-    let functions_with_stores = flat
-        .functions
-        .iter()
-        .filter_map(|f| {
-            let f = f.borrow();
-            (!f.stores.is_empty()).then(|| ownership::func_key(&f.module_source, &f.name))
-        })
-        .collect();
-    let mut_receiver_methods = flat
-        .functions
-        .iter()
-        .filter_map(|f| {
-            let f = f.borrow();
-            f.params
-                .first()
-                .is_some_and(|p| p.is_mut_ref)
-                .then(|| ownership::func_key(&f.module_source, &f.name))
-        })
-        .collect();
-    let mut_ref_params = flat
-        .functions
-        .iter()
-        .map(|f| {
-            let f = f.borrow();
-            (
-                ownership::func_key(&f.module_source, &f.name),
-                f.params.iter().map(|p| p.is_mut_ref).collect(),
-            )
-        })
-        .collect();
+    let mut functions_with_stores = FuncKeySet::default();
+    let mut mut_receiver_methods = FuncKeySet::default();
+    let mut mut_ref_params = FuncKeyMap::default();
+    for f in &flat.functions {
+        let f = f.borrow();
+        if !f.stores.is_empty() {
+            functions_with_stores.insert(f.module_source.clone(), f.name.clone());
+        }
+        if f.params.first().is_some_and(|p| p.is_mut_ref) {
+            mut_receiver_methods.insert(f.module_source.clone(), f.name.clone());
+        }
+        mut_ref_params.insert(
+            f.module_source.clone(),
+            f.name.clone(),
+            f.params.iter().map(|p| p.is_mut_ref).collect(),
+        );
+    }
     let returns_receiver_alias = ownership::compute_receiver_alias(flat);
     ValueCopyPlan {
         name_for_type,

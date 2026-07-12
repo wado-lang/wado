@@ -39,9 +39,9 @@
 //! final read), so at worst a copy is kept.
 
 use super::analyze::is_owned_value;
-use super::ownership::{OwnedCalls, func_key};
+use super::funcset::FuncKeySet;
+use super::ownership::OwnedCalls;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::FunctionId;
 use crate::tir::{
     FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm,
     TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeTable,
@@ -153,8 +153,8 @@ pub fn compute_move_eligible(
     func: &TirFunction,
     oracle: &OwnedCalls,
     type_table: &TypeTable,
-    functions_with_stores: &IndexSet<FunctionId>,
-    mut_receiver_methods: &IndexSet<FunctionId>,
+    functions_with_stores: &FuncKeySet,
+    mut_receiver_methods: &FuncKeySet,
 ) -> IndexSet<u32> {
     let Some(body) = &func.body else {
         return IndexSet::default();
@@ -354,9 +354,9 @@ fn disjoint(mutated: &AccessPath, read: &AccessPath) -> bool {
 pub fn compute_share_eligible(
     func: &TirFunction,
     move_eligible: &IndexSet<u32>,
-    mut_receiver_methods: &IndexSet<FunctionId>,
-    ref_receiver_methods: &IndexSet<FunctionId>,
-    returns_receiver_alias: &IndexSet<FunctionId>,
+    mut_receiver_methods: &FuncKeySet,
+    ref_receiver_methods: &FuncKeySet,
+    returns_receiver_alias: &FuncKeySet,
 ) -> IndexSet<u32> {
     let Some(body) = &func.body else {
         return IndexSet::default();
@@ -398,9 +398,9 @@ pub fn compute_share_eligible(
 }
 
 struct ShareCollector<'a> {
-    mut_receiver_methods: &'a IndexSet<FunctionId>,
-    ref_receiver_methods: &'a IndexSet<FunctionId>,
-    returns_receiver_alias: &'a IndexSet<FunctionId>,
+    mut_receiver_methods: &'a FuncKeySet,
+    ref_receiver_methods: &'a FuncKeySet,
+    returns_receiver_alias: &'a FuncKeySet,
     /// Binding local → the access path of its source projection.
     sources: IndexMap<u32, AccessPath>,
     /// Every access path a mutation writes through.
@@ -449,14 +449,14 @@ impl ShareCollector<'_> {
             TirExprKind::MethodCall { func, receiver, .. }
                 if self
                     .returns_receiver_alias
-                    .contains(&func_key(&func.module_source, &func.name)) =>
+                    .contains(&func.module_source, &func.name) =>
             {
                 place_path(receiver)
             }
             TirExprKind::Call { func, args, .. }
                 if self
                     .returns_receiver_alias
-                    .contains(&func_key(&func.module_source, &func.name)) =>
+                    .contains(&func.module_source, &func.name) =>
             {
                 place_path(&args.first()?.expr)
             }
@@ -556,11 +556,16 @@ impl ShareCollector<'_> {
                 args,
                 ..
             } => {
-                let key = func_key(&func.module_source, &func.name);
-                if self.mut_receiver_methods.contains(&key) {
+                if self
+                    .mut_receiver_methods
+                    .contains(&func.module_source, &func.name)
+                {
                     self.record_mutation(receiver);
                 }
-                if self.ref_receiver_methods.contains(&key) {
+                if self
+                    .ref_receiver_methods
+                    .contains(&func.module_source, &func.name)
+                {
                     self.walk_place_base(receiver);
                 } else {
                     self.walk_value(receiver);
@@ -692,8 +697,8 @@ struct Exit {
 }
 
 struct Analyzer<'a> {
-    functions_with_stores: &'a IndexSet<FunctionId>,
-    mut_receiver_methods: &'a IndexSet<FunctionId>,
+    functions_with_stores: &'a FuncKeySet,
+    mut_receiver_methods: &'a FuncKeySet,
     non_final: IndexSet<u32>,
     aliases_live: IndexSet<u32>,
     /// Locals a persisting reference is taken of — a `&`/`&mut` that is not a
@@ -771,7 +776,7 @@ impl Analyzer<'_> {
                 && let Some(r) = referent
                 && callee.is_some_and(|c| {
                     self.functions_with_stores
-                        .contains(&func_key(&c.module_source, &c.name))
+                        .contains(&c.module_source, &c.name)
                 })
             {
                 self.borrow_escaped.insert(r);
@@ -1106,7 +1111,7 @@ impl Analyzer<'_> {
                     let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
                     let recv_mut_root = self
                         .mut_receiver_methods
-                        .contains(&func_key(&func.module_source, &func.name))
+                        .contains(&func.module_source, &func.name)
                         .then(|| alias_root(receiver))
                         .flatten();
                     self.mark_sibling_mut_aliases(&exprs, recv_mut_root);

@@ -9,11 +9,10 @@
 //! closure / handler / `resume` body mark every parameter escaping.
 
 use super::callgraph::CallGraph;
+use super::funcset::FuncKeyMap;
 use super::needs_value_copy;
-use super::ownership::func_key;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::FunctionId;
 use crate::tir::{
     FunctionKind, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId, TypeTable,
@@ -22,13 +21,13 @@ use crate::tir_visitor::TirRefVisitor;
 
 /// Per-parameter confinement bits. A missing entry answers "not confined".
 pub struct ConfinedParams {
-    map: IndexMap<FunctionId, Vec<bool>>,
+    map: FuncKeyMap<Vec<bool>>,
 }
 
 impl ConfinedParams {
     pub fn is_confined(&self, func: &FunctionRef, param_index: usize) -> bool {
         self.map
-            .get(&func_key(&func.module_source, &func.name))
+            .get(&func.module_source, &func.name)
             .and_then(|bits| bits.get(param_index))
             .copied()
             .unwrap_or(false)
@@ -53,13 +52,14 @@ pub fn compute_confined_params(project: &FlatPackage) -> ConfinedParams {
     let type_table = project.type_table.borrow();
     let kinds = classify_functions(project);
 
-    let mut funcs: IndexMap<FunctionId, ParamEscape> = IndexMap::default();
+    let mut funcs: FuncKeyMap<ParamEscape> = FuncKeyMap::default();
     for func in &project.functions {
         let func = func.borrow();
         if func.body.is_some() {
             let n = func.params.len();
             funcs.insert(
-                func_key(&func.module_source, &func.name),
+                func.module_source.clone(),
+                func.name.clone(),
                 ParamEscape {
                     ret: vec![false; n],
                     side: vec![false; n],
@@ -74,13 +74,13 @@ pub fn compute_confined_params(project: &FlatPackage) -> ConfinedParams {
         let Some(body) = &func.body else {
             return false;
         };
-        let key = func_key(&func.module_source, &func.name);
         let ctx = Ctx {
             type_table: &type_table,
             kinds: &kinds,
             funcs: &funcs,
         };
-        let mut pe = funcs[&key].clone();
+        let current = funcs.get(&func.module_source, &func.name).unwrap();
+        let mut pe = current.clone();
         if body_defies_model(body) {
             for b in pe.ret.iter_mut().chain(pe.side.iter_mut()) {
                 *b = true;
@@ -88,34 +88,28 @@ pub fn compute_confined_params(project: &FlatPackage) -> ConfinedParams {
         } else {
             compute_escape(&ctx, body, func.return_type, &mut pe);
         }
-        if pe == funcs[&key] {
+        if &pe == funcs.get(&func.module_source, &func.name).unwrap() {
             false
         } else {
-            funcs.insert(key, pe);
+            funcs.insert(func.module_source.clone(), func.name.clone(), pe);
             true
         }
     });
 
-    let map = funcs
-        .into_iter()
-        .map(|(key, pe)| {
-            let bits = pe
-                .ret
-                .iter()
-                .zip(&pe.side)
-                .map(|(r, s)| !*r && !*s)
-                .collect();
-            (key, bits)
-        })
-        .collect();
+    let map = funcs.map_values(|pe| {
+        pe.ret
+            .iter()
+            .zip(&pe.side)
+            .map(|(r, s)| !*r && !*s)
+            .collect()
+    });
     ConfinedParams { map }
 }
 
-fn classify_functions(project: &FlatPackage) -> IndexMap<FunctionId, Kind> {
-    let mut kinds = IndexMap::default();
+fn classify_functions(project: &FlatPackage) -> FuncKeyMap<Kind> {
+    let mut kinds = FuncKeyMap::default();
     for func in &project.functions {
         let func = func.borrow();
-        let key = func_key(&func.module_source, &func.name);
         let kind = if matches!(func.kind, FunctionKind::ValueCopy { .. }) {
             Kind::ValueCopy
         } else if func.module_source.is_core_builtin() || func.module_source.is_wasm_asset() {
@@ -125,34 +119,34 @@ fn classify_functions(project: &FlatPackage) -> IndexMap<FunctionId, Kind> {
         } else {
             Kind::Opaque
         };
-        kinds.insert(key, kind);
+        kinds.insert(func.module_source.clone(), func.name.clone(), kind);
     }
     kinds
 }
 
 struct Ctx<'a> {
     type_table: &'a TypeTable,
-    kinds: &'a IndexMap<FunctionId, Kind>,
-    funcs: &'a IndexMap<FunctionId, ParamEscape>,
+    kinds: &'a FuncKeyMap<Kind>,
+    funcs: &'a FuncKeyMap<ParamEscape>,
 }
 
 impl Ctx<'_> {
     fn kind(&self, func: &FunctionRef) -> Kind {
         self.kinds
-            .get(&func_key(&func.module_source, &func.name))
+            .get(&func.module_source, &func.name)
             .copied()
             .unwrap_or(Kind::Opaque)
     }
 
     fn callee_ret(&self, func: &FunctionRef, param_index: usize) -> bool {
-        match self.funcs.get(&func_key(&func.module_source, &func.name)) {
+        match self.funcs.get(&func.module_source, &func.name) {
             Some(pe) => pe.ret.get(param_index).copied().unwrap_or(true),
             None => true,
         }
     }
 
     fn callee_side(&self, func: &FunctionRef, param_index: usize) -> bool {
-        match self.funcs.get(&func_key(&func.module_source, &func.name)) {
+        match self.funcs.get(&func.module_source, &func.name) {
             Some(pe) => pe.side.get(param_index).copied().unwrap_or(true),
             None => true,
         }

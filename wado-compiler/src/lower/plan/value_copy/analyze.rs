@@ -6,10 +6,10 @@
 //! [`collect_seed_types`] walks every function with the same
 //! predicates to feed [`super::synthesize::synthesize_helpers`].
 
+use super::funcset::FuncKeySet;
 use super::ownership::OwnedCalls;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
-use crate::name::FunctionId;
 use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
     TypeId, TypeTable,
@@ -25,8 +25,8 @@ use crate::tir_visitor::TirRefVisitor;
 /// the precise fold never calls is dead-code-eliminated — but never misses one.
 pub fn collect_seed_types(project: &FlatPackage) -> IndexSet<TypeId> {
     let type_table = project.type_table.borrow();
-    let no_owned: IndexSet<FunctionId> = IndexSet::default();
-    let no_self_proj: IndexSet<FunctionId> = IndexSet::default();
+    let no_owned = FuncKeySet::default();
+    let no_self_proj = FuncKeySet::default();
     let oracle = OwnedCalls::new(&no_owned, &no_self_proj);
     let mut walker = SeedWalker {
         type_table: &type_table,

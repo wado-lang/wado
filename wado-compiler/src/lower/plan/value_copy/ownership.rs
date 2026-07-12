@@ -19,32 +19,25 @@
 //! cannot achieve.
 
 use super::callgraph::CallGraph;
+use super::funcset::FuncKeySet;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::module_source::ModuleSource;
-use crate::name::{FreeFunctionName, FunctionId};
 use crate::tir::{
     FunctionKind, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind,
     TirUnaryOp, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
-/// The canonical id of a function, matching `nir::FunctionRef::function_id`
-/// (module + name; the mangled name is unique post-monomorphization).
-pub fn func_key(module: &ModuleSource, name: &str) -> FunctionId {
-    FunctionId::Free(FreeFunctionName::from_module_source(module, name))
-}
-
 /// Oracle the freshness checker consults for a call's return convention.
 pub struct OwnedCalls<'a> {
-    returns_owned: &'a IndexSet<FunctionId>,
-    returns_self_projection: &'a IndexSet<FunctionId>,
+    returns_owned: &'a FuncKeySet,
+    returns_self_projection: &'a FuncKeySet,
 }
 
 impl<'a> OwnedCalls<'a> {
     pub fn new(
-        returns_owned: &'a IndexSet<FunctionId>,
-        returns_self_projection: &'a IndexSet<FunctionId>,
+        returns_owned: &'a FuncKeySet,
+        returns_self_projection: &'a FuncKeySet,
     ) -> Self {
         Self {
             returns_owned,
@@ -61,7 +54,7 @@ impl<'a> OwnedCalls<'a> {
             return func.name != "array_get";
         }
         self.returns_owned
-            .contains(&func_key(&func.module_source, &func.name))
+            .contains(&func.module_source, &func.name)
     }
 
     /// Whether `func` returns a projection of its receiver / first parameter
@@ -74,7 +67,7 @@ impl<'a> OwnedCalls<'a> {
             return false;
         }
         self.returns_self_projection
-            .contains(&func_key(&func.module_source, &func.name))
+            .contains(&func.module_source, &func.name)
     }
 }
 
@@ -83,26 +76,25 @@ impl<'a> OwnedCalls<'a> {
 /// `returns_self_projection` (every returned value is owned *or* a projection of
 /// the receiver / first parameter).
 pub struct ReturnConventions {
-    pub returns_owned: IndexSet<FunctionId>,
-    pub returns_self_projection: IndexSet<FunctionId>,
+    pub returns_owned: FuncKeySet,
+    pub returns_self_projection: FuncKeySet,
 }
 
 /// Functions whose every value-return aliases the receiver / first parameter
 /// (a *borrowed* projection, through `array_get` and nested accessor calls).
 /// Because it admits borrowed projections it must NOT feed the move/owned
 /// decision; only the read-only-share analysis consumes it.
-pub fn compute_receiver_alias(project: &FlatPackage) -> IndexSet<FunctionId> {
+pub fn compute_receiver_alias(project: &FlatPackage) -> FuncKeySet {
     let call_graph = CallGraph::build(project);
-    let mut set: IndexSet<FunctionId> = IndexSet::default();
+    let mut set = FuncKeySet::default();
     call_graph.solve(project, |id| {
         let func = project.functions[id as usize].borrow();
-        let key = func_key(&func.module_source, &func.name);
-        if set.contains(&key) {
+        if set.contains(&func.module_source, &func.name) {
             return false;
         }
         let Some(body) = &func.body else { return false };
         if function_returns_receiver_alias(body, &set) {
-            set.insert(key);
+            set.insert(func.module_source.clone(), func.name.clone());
             true
         } else {
             false
@@ -111,9 +103,9 @@ pub fn compute_receiver_alias(project: &FlatPackage) -> IndexSet<FunctionId> {
     set
 }
 
-fn function_returns_receiver_alias(body: &TirBlock, set: &IndexSet<FunctionId>) -> bool {
+fn function_returns_receiver_alias(body: &TirBlock, set: &FuncKeySet) -> bool {
     struct W<'a> {
-        set: &'a IndexSet<FunctionId>,
+        set: &'a FuncKeySet,
         all_alias: bool,
         saw_return: bool,
     }
@@ -140,7 +132,7 @@ fn function_returns_receiver_alias(body: &TirBlock, set: &IndexSet<FunctionId>) 
 /// Whether `expr` aliases the storage of parameter `param`: a projection chain,
 /// an `array_get` element read of one, or a call to a receiver-aliasing callee
 /// whose receiver / first argument is one.
-fn is_receiver_projection(expr: &TirExpr, param: u32, set: &IndexSet<FunctionId>) -> bool {
+fn is_receiver_projection(expr: &TirExpr, param: u32, set: &FuncKeySet) -> bool {
     match &expr.kind {
         TirExprKind::Local { index, .. } => *index == param,
         TirExprKind::Unary { expr: inner, .. }
@@ -155,12 +147,12 @@ fn is_receiver_projection(expr: &TirExpr, param: u32, set: &IndexSet<FunctionId>
                 .is_some_and(|a| is_receiver_projection(&a.expr, param, set))
         }
         TirExprKind::MethodCall { func, receiver, .. }
-            if set.contains(&func_key(&func.module_source, &func.name)) =>
+            if set.contains(&func.module_source, &func.name) =>
         {
             is_receiver_projection(receiver, param, set)
         }
         TirExprKind::Call { func, args, .. }
-            if set.contains(&func_key(&func.module_source, &func.name)) =>
+            if set.contains(&func.module_source, &func.name) =>
         {
             args.first()
                 .is_some_and(|a| is_receiver_projection(&a.expr, param, set))
@@ -178,23 +170,22 @@ fn is_receiver_projection(expr: &TirExpr, param: u32, set: &IndexSet<FunctionId>
 pub fn compute_return_conventions(project: &FlatPackage) -> ReturnConventions {
     let type_table = project.type_table.borrow();
 
-    let mut owned: IndexSet<FunctionId> = IndexSet::default();
+    let mut owned = FuncKeySet::default();
     for func in &project.functions {
         let func = func.borrow();
         let is_helper = matches!(func.kind, FunctionKind::ValueCopy { .. });
         let is_builtin = func.module_source.is_core_builtin() || func.module_source.is_wasm_asset();
         if is_helper || (is_builtin && func.name != "array_get") {
-            owned.insert(func_key(&func.module_source, &func.name));
+            owned.insert(func.module_source.clone(), func.name.clone());
         }
     }
-    let mut self_proj: IndexSet<FunctionId> = owned.clone();
+    let mut self_proj = owned.clone();
 
     let call_graph = CallGraph::build(project);
     call_graph.solve(project, |id| {
         let func = project.functions[id as usize].borrow();
-        let key = func_key(&func.module_source, &func.name);
-        let already_owned = owned.contains(&key);
-        let already_self_proj = self_proj.contains(&key);
+        let already_owned = owned.contains(&func.module_source, &func.name);
+        let already_self_proj = self_proj.contains(&func.module_source, &func.name);
         if already_owned && already_self_proj {
             return false;
         }
@@ -207,12 +198,12 @@ pub fn compute_return_conventions(project: &FlatPackage) -> ReturnConventions {
         };
         let mut changed = false;
         if !already_owned && ret_owned {
-            self_proj.insert(key.clone());
-            owned.insert(key.clone());
+            self_proj.insert(func.module_source.clone(), func.name.clone());
+            owned.insert(func.module_source.clone(), func.name.clone());
             changed = true;
         }
         if !already_self_proj && ret_self_proj {
-            self_proj.insert(key);
+            self_proj.insert(func.module_source.clone(), func.name.clone());
             changed = true;
         }
         changed
