@@ -12,6 +12,7 @@
 //! later elision pass — every emitted copy is necessary by construction.
 
 pub mod analyze;
+pub mod callgraph;
 pub mod confine;
 pub mod last_use;
 pub mod ownership;

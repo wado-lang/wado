@@ -8,6 +8,7 @@
 //! analysis over-approximates escape: unmodelled constructs and functions with a
 //! closure / handler / `resume` body mark every parameter escaping.
 
+use super::callgraph::CallGraph;
 use super::needs_value_copy;
 use super::ownership::func_key;
 use crate::flat_package::FlatPackage;
@@ -67,34 +68,33 @@ pub fn compute_confined_params(project: &FlatPackage) -> ConfinedParams {
         }
     }
 
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for func in &project.functions {
-            let func = func.borrow();
-            let Some(body) = &func.body else {
-                continue;
-            };
-            let key = func_key(&func.module_source, &func.name);
-            let ctx = Ctx {
-                type_table: &type_table,
-                kinds: &kinds,
-                funcs: &funcs,
-            };
-            let mut pe = funcs[&key].clone();
-            if body_defies_model(body) {
-                for b in pe.ret.iter_mut().chain(pe.side.iter_mut()) {
-                    *b = true;
-                }
-            } else {
-                compute_escape(&ctx, body, func.return_type, &mut pe);
+    let call_graph = CallGraph::build(project);
+    call_graph.solve(project, |id| {
+        let func = project.functions[id as usize].borrow();
+        let Some(body) = &func.body else {
+            return false;
+        };
+        let key = func_key(&func.module_source, &func.name);
+        let ctx = Ctx {
+            type_table: &type_table,
+            kinds: &kinds,
+            funcs: &funcs,
+        };
+        let mut pe = funcs[&key].clone();
+        if body_defies_model(body) {
+            for b in pe.ret.iter_mut().chain(pe.side.iter_mut()) {
+                *b = true;
             }
-            if pe != funcs[&key] {
-                funcs.insert(key, pe);
-                changed = true;
-            }
+        } else {
+            compute_escape(&ctx, body, func.return_type, &mut pe);
         }
-    }
+        if pe != funcs[&key] {
+            funcs.insert(key, pe);
+            true
+        } else {
+            false
+        }
+    });
 
     let map = funcs
         .into_iter()
@@ -296,13 +296,14 @@ fn build_taint(ctx: &Ctx, body: &TirBlock, n_params: u32) -> IndexMap<u32, Taint
         taint.entry(p).or_default().insert(p);
     }
 
+    let mut collector = BindingWalker {
+        targets: Vec::new(),
+    };
+    collector.visit_block(body);
+
     let mut changed = true;
     while changed {
         changed = false;
-        let mut collector = BindingWalker {
-            targets: Vec::new(),
-        };
-        collector.visit_block(body);
         for (local, value) in &collector.targets {
             let t = taint_of(ctx, &taint, value);
             if merge_into(&mut taint, *local, t) {

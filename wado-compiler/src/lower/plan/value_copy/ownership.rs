@@ -18,6 +18,7 @@
 //! and its element stays aliased — which the callee-side copy-on-extract model
 //! cannot achieve.
 
+use super::callgraph::CallGraph;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -91,27 +92,22 @@ pub struct ReturnConventions {
 /// Because it admits borrowed projections it must NOT feed the move/owned
 /// decision; only the read-only-share analysis consumes it.
 pub fn compute_receiver_alias(project: &FlatPackage) -> IndexSet<FunctionId> {
+    let call_graph = CallGraph::build(project);
     let mut set: IndexSet<FunctionId> = IndexSet::default();
-    let mut changed = true;
-    while changed {
-        changed = false;
-        let mut newly: Vec<FunctionId> = Vec::new();
-        for func in &project.functions {
-            let func = func.borrow();
-            let key = func_key(&func.module_source, &func.name);
-            if set.contains(&key) {
-                continue;
-            }
-            let Some(body) = &func.body else { continue };
-            if function_returns_receiver_alias(body, &set) {
-                newly.push(key);
-            }
+    call_graph.solve(project, |id| {
+        let func = project.functions[id as usize].borrow();
+        let key = func_key(&func.module_source, &func.name);
+        if set.contains(&key) {
+            return false;
         }
-        for key in newly {
+        let Some(body) = &func.body else { return false };
+        if function_returns_receiver_alias(body, &set) {
             set.insert(key);
-            changed = true;
+            true
+        } else {
+            false
         }
-    }
+    });
     set
 }
 
@@ -193,43 +189,34 @@ pub fn compute_return_conventions(project: &FlatPackage) -> ReturnConventions {
     }
     let mut self_proj: IndexSet<FunctionId> = owned.clone();
 
-    loop {
-        let mut newly_owned: Vec<FunctionId> = Vec::new();
-        let mut newly_self_proj: Vec<FunctionId> = Vec::new();
-        {
+    let call_graph = CallGraph::build(project);
+    call_graph.solve(project, |id| {
+        let func = project.functions[id as usize].borrow();
+        let key = func_key(&func.module_source, &func.name);
+        let already_owned = owned.contains(&key);
+        let already_self_proj = self_proj.contains(&key);
+        if already_owned && already_self_proj {
+            return false;
+        }
+        let Some(body) = &func.body else {
+            return false;
+        };
+        let (ret_owned, ret_self_proj) = {
             let oracle = OwnedCalls::new(&owned, &self_proj);
-            for func in &project.functions {
-                let func = func.borrow();
-                let key = func_key(&func.module_source, &func.name);
-                let already_owned = owned.contains(&key);
-                let already_self_proj = self_proj.contains(&key);
-                if already_owned && already_self_proj {
-                    continue;
-                }
-                let Some(body) = &func.body else {
-                    continue;
-                };
-                let (ret_owned, ret_self_proj) =
-                    function_return_convention(body, &func.params, &oracle, &type_table);
-                if !already_owned && ret_owned {
-                    newly_owned.push(key.clone());
-                }
-                if !already_self_proj && ret_self_proj {
-                    newly_self_proj.push(key);
-                }
-            }
-        }
-        if newly_owned.is_empty() && newly_self_proj.is_empty() {
-            break;
-        }
-        for key in newly_owned {
+            function_return_convention(body, &func.params, &oracle, &type_table)
+        };
+        let mut changed = false;
+        if !already_owned && ret_owned {
             self_proj.insert(key.clone());
-            owned.insert(key);
+            owned.insert(key.clone());
+            changed = true;
         }
-        for key in newly_self_proj {
+        if !already_self_proj && ret_self_proj {
             self_proj.insert(key);
+            changed = true;
         }
-    }
+        changed
+    });
 
     ReturnConventions {
         returns_owned: owned,
