@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783840932505,
+  "lastUpdate": 1783847122520,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -39701,6 +39701,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bf1ef80bf341195cd92093b23c204b0e88add6bf"
         },
         "date": 1783840931784,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16412,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265859,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9dea04ed6c1b40a4e496c1ef68951464757df22f",
+          "message": "Merge pull request #1564 from wado-lang/claude/turbofish-omission-ice-2g025g\n\nfix: emit diagnostic for un-inferrable generic static constructor instead of ICE",
+          "timestamp": "2026-07-12T17:55:35+09:00",
+          "tree_id": "af6782f6c82107951ab966d9c1f2dbadcf3e4c86",
+          "url": "https://github.com/wado-lang/wado/commit/9dea04ed6c1b40a4e496c1ef68951464757df22f"
+        },
+        "date": 1783847121755,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
