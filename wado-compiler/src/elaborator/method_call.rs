@@ -2577,7 +2577,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Find the AST definition of a static method for a given struct.
     /// Returns the impl block's type param names and the method definition.
-    fn find_static_method_def(
+    pub(super) fn find_static_method_def(
         &self,
         struct_name: &str,
         method_name: &str,

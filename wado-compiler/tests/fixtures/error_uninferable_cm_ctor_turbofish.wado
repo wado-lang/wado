@@ -1,0 +1,25 @@
+// Regression (issue #1557): a generic Component Model resource constructor
+// called without a turbofish (`Stream::new()` / `Future::new()`) whose type
+// parameter cannot be inferred must report a clean "cannot infer type
+// parameter" diagnostic — not panic the compiler with an "unresolved Call"
+// ICE during WIR build.
+//
+// In the `wasi:http/service` world the `Stream` resource is in scope, so the
+// unresolved constructor previously survived to WIR and hit the assertion.
+
+use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    let [_rx, _tx] = Stream::new();
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{
+    "wasi:http/service": {},
+    "compile_error": "cannot infer type parameter `T` of `Stream::new`"
+}
