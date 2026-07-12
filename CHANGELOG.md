@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.0.12](https://github.com/wado-lang/wado/compare/v0.0.11...v0.0.12) - 2026-07-12
+
+- fix(compiler): sound value copies for variant payloads and immutable-reference mutations by @gfx in https://github.com/wado-lang/wado/pull/1544
+- feat(effects): handle async CM-import operations via effect handlers by @gfx in https://github.com/wado-lang/wado/pull/1555
+- docs: fix broken doc cross-links, drop the CLAUDE.md reference by @gfx in https://github.com/wado-lang/wado/pull/1559
+- feat(marl)!: GFM heading ids and rendered outline with a value-only API by @gfx in https://github.com/wado-lang/wado/pull/1560
+- fix(compiler): make local-item mangled names deterministic and collision-safe by @gfx in https://github.com/wado-lang/wado/pull/1562
+- feat(compiler): iterate `&mut` lists as `&mut T` for in-place elements by @gfx in https://github.com/wado-lang/wado/pull/1558
+- fix: emit diagnostic for un-inferrable generic static constructor instead of ICE by @gfx in https://github.com/wado-lang/wado/pull/1564
+- chore(release): trigger the wado-lang.github.io deploy after a release by @gfx in https://github.com/wado-lang/wado/pull/1565
+
 ## [v0.0.11](https://github.com/wado-lang/wado/compare/v0.0.10...v0.0.11) - 2026-07-11
 
 - refactor(sheaf): move the blog generator to wado-lang.github.io by @gfx in https://github.com/wado-lang/wado/pull/1547
