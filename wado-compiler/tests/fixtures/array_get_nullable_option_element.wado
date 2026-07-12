@@ -1,0 +1,59 @@
+// Regression: `array.get` on an array whose element is a niche-optimized
+// `Option<ref>` must NOT narrow the result to non-null. `None` is stored as a
+// genuine null ref, so the old unconditional `ref.as_non_null` after
+// `array.get` trapped on every `None` read (indexing or by-ref iteration).
+// A non-nullable ref element (`List<String>`) must still be narrowed.
+
+fn make(present: bool) -> Option<List<String>> {
+    if present {
+        return Option::Some(["x", "y"]);
+    }
+    return null;
+}
+
+test "index a None element (heap payload)" {
+    let v: List<Option<List<String>>> = [null, Option::Some(["a"])];
+    let a = v[0];
+    assert a matches { None };
+    let b = v[1];
+    let mut n = 0;
+    if let Some(inner) = b {
+        n = inner.len();
+    }
+    assert n == 1;
+}
+
+test "by-ref iterate over None elements" {
+    let v: List<Option<List<String>>> = [null, make(true), null];
+    let mut some_count = 0;
+    let mut none_count = 0;
+    for let e of &v {
+        if let Some(_) = e {
+            some_count += 1;
+        } else {
+            none_count += 1;
+        }
+    }
+    assert some_count == 1;
+    assert none_count == 2;
+}
+
+test "assign into a None slot then read back" {
+    let mut w: List<Option<List<String>>> = [null, null];
+    w[0] = Option::Some(["z"]);
+    assert w[1] matches { None };
+    let mut n = 0;
+    if let Some(inner) = w[0] {
+        n = inner.len();
+    }
+    assert n == 1;
+}
+
+test "non-nullable ref element is still narrowed" {
+    let v: List<List<String>> = [["a", "b", "c"]];
+    let x = v[0];
+    assert x.len() == 3;
+}
+
+__DATA__
+{"test": {}}
