@@ -1,0 +1,22 @@
+// A handler for a resource's async op is rejected (only cm-backed interface
+// effect ops can be handled).
+resource Sock {
+    async fn connect(self: &Sock, addr: i32) -> AsyncCall<i32>;
+}
+
+struct MockSock {
+}
+
+impl Sock for MockSock {
+    fn connect(&self, addr: i32) -> i32 {
+        let _ = addr;
+        resume 42;
+    }
+    ..trap
+}
+
+export fn run() {
+}
+
+__DATA__
+{"compile_error": "cannot handle async operation"}

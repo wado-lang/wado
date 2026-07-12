@@ -1,0 +1,152 @@
+//! Standalone tests for a wasi:http service, with both directions mocked by
+//! effect handlers — no network, no host-side mocks:
+//!
+//! - serve: construct real `Request` values and call the handler logic
+//!   directly, instead of waiting for the host to deliver one.
+//! - send: handle the async `Client::send` effect; the handler resumes with
+//!   an already-resolved `Result<Response, ErrorCode>` and the caller's
+//!   `.wait()` proceeds as if the call had completed synchronously.
+//!
+//! Mocked responses carry data in the status code and headers only: a body
+//! stream needs a concurrent reader (the host), which a same-task mock
+//! cannot provide.
+//!
+//! Run the tests with `wado test example/http_mock.wado`, or serve for real
+//! with `wado serve example/http_mock.wado`.
+
+use { Request, Response, ErrorCode, Fields, FieldValue, Trailers, StatusCode } from "wasi:http";
+use { Client } from "wasi:http";
+
+// A tiny gateway: `/status` reports the upstream health-check status in an
+// `x-upstream-status` response header, mapping upstream failures to 502.
+fn gateway(req: Request) -> Response with Client {
+    let path = match req.get_path_with_query() {
+        Some(p) => p,
+        None => "/",
+    };
+    if path != "/status" {
+        return respond(404, []);
+    }
+
+    let [trailers_rx, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [out_req, _req_future] = Request::new(Fields::new(), null, trailers_rx, null);
+    out_req.set_authority(Option::<String>::Some("upstream.internal"));
+    out_req.set_path_with_query(Option::<String>::Some("/health"));
+
+    return match Client::send(out_req).wait() {
+        Ok(upstream) => {
+            let status = upstream.get_status_code() as i32;
+            respond(200, [
+                ["x-upstream-status", `{status}`],
+            ]);
+        },
+        Err(_) => respond(502, []),
+    };
+}
+
+fn respond(status: StatusCode, headers: List<[String, String]>) -> Response {
+    let fields = Fields::new();
+    for let [name, value] of headers {
+        let _ = fields.append(name as FieldName, value.bytes().collect() as FieldValue);
+    }
+    let [trailers_rx, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [resp, _tx_future] = Response::new(fields, null, trailers_rx);
+    let _ = resp.set_status_code(status);
+    return resp;
+}
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with Client {
+    let response = gateway(request);
+    task return Result::<Response, ErrorCode>::Ok(response);
+}
+
+// Send-side mock: records every outgoing request path and replays a canned
+// status. Installed with `with Client => &mut mock do { ... }`.
+struct MockUpstream {
+    hits: List<String> = [],
+    status: StatusCode = 200,
+}
+
+impl Client for MockUpstream {
+    fn send(&mut self, request: Request) -> Result<Response, ErrorCode> {
+        let path = match request.get_path_with_query() {
+            Some(p) => p,
+            None => "",
+        };
+        self.hits.push(path);
+        resume Result::<Response, ErrorCode>::Ok(respond(self.status, []));
+    }
+}
+
+// Failure-mode mock: every send is refused at the connection level.
+struct DeadUpstream {
+}
+
+impl Client for DeadUpstream {
+    fn send(&self, request: Request) -> Result<Response, ErrorCode> {
+        let _ = request;
+        resume Result::<Response, ErrorCode>::Err(ErrorCode::ConnectionRefused);
+    }
+}
+
+// Serve-side mock: a real `Request` resource, constructed instead of
+// received from the network.
+fn get(path: String) -> Request {
+    let [trailers_rx, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [req, _req_future] = Request::new(Fields::new(), null, trailers_rx, null);
+    req.set_path_with_query(Option::<String>::Some(path));
+    return req;
+}
+
+fn header_text(resp: &Response, name: String) -> String {
+    let values = resp.get_headers().get(name as FieldName);
+    assert values.len() == 1;
+    return String::from_utf8_lossy(values[0] as List<u8>);
+}
+
+test "/status pings the upstream and reports its status" {
+    let mut upstream = MockUpstream { status: 204 };
+    let resp = with Client => &mut upstream do {
+        gateway(get("/status"));
+    };
+    assert resp.get_status_code() == 200;
+    assert header_text(&resp, "x-upstream-status") == "204";
+    let hits: List<String> = ["/health"];
+    assert upstream.hits == hits;
+}
+
+test "the exported handle routes through to the upstream" {
+    let mut upstream = MockUpstream { status: 204 };
+    with Client => &mut upstream do {
+        handle(get("/status"));
+    };
+    let hits: List<String> = ["/health"];
+    assert upstream.hits == hits;
+}
+
+test "unknown path is 404 and never touches the upstream" {
+    let mut upstream = MockUpstream {};
+    let resp = with Client => &mut upstream do {
+        gateway(get("/nope"));
+    };
+    assert resp.get_status_code() == 404;
+    assert upstream.hits.is_empty();
+}
+
+test "upstream connection failure maps to 502" {
+    let dead = DeadUpstream {};
+    let resp = with Client => &dead do {
+        gateway(get("/status"));
+    };
+    assert resp.get_status_code() == 502;
+}
+
+test "each request hits the upstream once" {
+    let mut upstream = MockUpstream {};
+    with Client => &mut upstream do {
+        gateway(get("/status"));
+        gateway(get("/status"));
+    };
+    let hits: List<String> = ["/health", "/health"];
+    assert upstream.hits == hits;
+}

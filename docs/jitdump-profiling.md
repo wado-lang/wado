@@ -90,4 +90,4 @@ rm -f jit-*.dump perf.data perf.jit.data
 
 ## Comparison with Other Wasmtime Profilers
 
-See [wasmtime-profiler-characteristics.md](./wasmtime-profiler-characteristics.md) for a detailed comparison of all three wasmtime profiling modes (guest, jitdump, perfmap).
+See [research-wasmtime-profiler-characteristics.md](./research-wasmtime-profiler-characteristics.md) for a detailed comparison of all three wasmtime profiling modes (guest, jitdump, perfmap).
