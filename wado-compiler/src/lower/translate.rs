@@ -319,7 +319,19 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             .collect();
         let address_taken = func.address_taken_locals.clone();
         let func_moved_spans = base.moved_local_spans.get(&func.module_source);
-        let move_eligible_locals = {
+        // The move/share/alias analyses only ever mark copyable-value locals; a
+        // function with none has nothing to elide, so all three are empty. Skip
+        // them — running them is otherwise pure per-function allocation, and most
+        // functions (scalar/reference-only) hit this path.
+        let needs_copy_analysis = {
+            let tt = base.type_table.borrow();
+            func.params
+                .iter()
+                .map(|p| p.type_id)
+                .chain(func.locals.iter().map(|l| l.type_id))
+                .any(|tid| value_copy::needs_value_copy(tid, &tt))
+        };
+        let move_eligible_locals = if needs_copy_analysis {
             let oracle = value_copy::ownership::OwnedCalls::new(
                 &base.value_copy.returns_owned,
                 &base.value_copy.returns_self_projection,
@@ -331,15 +343,25 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 &base.value_copy.functions_with_stores,
                 &base.value_copy.mut_receiver_methods,
             )
+        } else {
+            IndexSet::default()
         };
-        let share_eligible_locals = value_copy::last_use::compute_share_eligible(
-            func,
-            &move_eligible_locals,
-            &base.value_copy.mut_receiver_methods,
-            &base.value_copy.ref_receiver_methods,
-            &base.value_copy.returns_receiver_alias,
-        );
-        let alias_components = value_copy::last_use::AliasComponents::build(func);
+        let share_eligible_locals = if needs_copy_analysis {
+            value_copy::last_use::compute_share_eligible(
+                func,
+                &move_eligible_locals,
+                &base.value_copy.mut_receiver_methods,
+                &base.value_copy.ref_receiver_methods,
+                &base.value_copy.returns_receiver_alias,
+            )
+        } else {
+            IndexSet::default()
+        };
+        let alias_components = if needs_copy_analysis {
+            value_copy::last_use::AliasComponents::build(func)
+        } else {
+            value_copy::last_use::AliasComponents::empty()
+        };
         Self {
             base,
             specialized,
