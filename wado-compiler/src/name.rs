@@ -70,12 +70,19 @@ pub fn namespace_member_alias(namespace: &str, member: &str) -> String {
 /// reaches a diagnostic.
 pub const LOCAL_ITEM_ID_SEP: char = '@';
 
-/// Build the internal storage name for a local item declaration: the
-/// declared name plus its disambiguating `AstId`, unique per declaration
-/// site so same-named local items in different functions never collide in
-/// the module-wide storage tables they're interned into.
+/// Build the internal storage name for a local item declaration: the declared
+/// name plus the `AstId`'s module-local index, unique per declaration site so
+/// same-named local items in different functions never collide in the
+/// module-wide storage tables they're interned into.
+///
+/// Only the `local` index is encoded — never the `AstIdSpace`. The space is a
+/// process-global counter whose value depends on unrelated parse history
+/// (e.g. how many fixtures a parallel golden run compiled first), so encoding
+/// it would leak into mangled WIR names and make compiler output
+/// non-deterministic. The `local` index is dense per module and the module
+/// source already qualifies the name across modules, so it alone suffices.
 pub fn mangle_local_item_name(name: &str, id: crate::ast::AstId) -> String {
-    format!("{name}{LOCAL_ITEM_ID_SEP}{id:?}")
+    format!("{name}{LOCAL_ITEM_ID_SEP}{}", id.local())
 }
 
 /// Recover a local item's user-declared name from its internal storage name
@@ -1475,6 +1482,27 @@ mod tests {
                 "snake form of {input:?} must be ASCII"
             );
         }
+    }
+
+    #[test]
+    fn mangle_local_item_name_is_space_independent() {
+        // The storage name only disambiguates local items *within* a module
+        // (the module source qualifies it across modules), so it must depend
+        // solely on the module-local `local` index — never on the
+        // process-global `AstIdSpace`, which varies with unrelated parse
+        // history and would otherwise leak into compiler output (mangled WIR
+        // function names), making it non-deterministic.
+        use crate::ast::{AstId, AstIdSpace};
+        let space_a = AstIdSpace::next();
+        let space_b = AstIdSpace::next();
+        assert_ne!(space_a, space_b);
+        let a = mangle_local_item_name("UserId", AstId::new(space_a, 19));
+        let b = mangle_local_item_name("UserId", AstId::new(space_b, 19));
+        assert_eq!(a, b, "mangled name must not encode the AstIdSpace");
+        // Distinct declaration sites within a module still get distinct names.
+        assert_ne!(a, mangle_local_item_name("UserId", AstId::new(space_a, 20)));
+        // The declared name is still recoverable.
+        assert_eq!(strip_local_item_id(&a), "UserId");
     }
 
     #[test]

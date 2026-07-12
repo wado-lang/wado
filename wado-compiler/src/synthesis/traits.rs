@@ -1294,7 +1294,9 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         let ref_type = tt.make_ref(nt.type_id);
         let span = synth_span();
         let as_suffix = write_str_stmt(
-            format!(" as {}", nt.name),
+            // Strip the local-item storage disambiguator: a user must see
+            // `as UserId`, never the internal `UserId@<local>` mangling.
+            format!(" as {}", crate::name::strip_local_item_id(&nt.name)),
             local_expr(1, "f", fmt_type, span),
             string_type,
             ref_string_type,
