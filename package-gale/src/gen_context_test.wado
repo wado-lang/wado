@@ -121,7 +121,7 @@ test "intern_kind_set: stored tokens are sorted" {
     ctx.intern_kind_set(&unsorted);
     let entries = ctx.kind_sets();
     assert entries.len() == 1;
-    let toks = &entries[0].tokens;
+    let toks = ctx.token_names_of(&entries[0].tokens);
     assert toks[0] == "TK_A";
     assert toks[1] == "TK_B";
     assert toks[2] == "TK_C";
@@ -164,9 +164,9 @@ test "kind_sets: returns entries in insertion order" {
     assert entries[1].id == 1;
     assert entries[2].id == 2;
     // First-seen set should come first regardless of token order.
-    assert entries[0].tokens[0] == "TK_X";
-    assert entries[1].tokens[0] == "TK_A";
-    assert entries[2].tokens[0] == "TK_M";
+    assert ctx.token_name(entries[0].tokens[0]) == "TK_X";
+    assert ctx.token_name(entries[1].tokens[0]) == "TK_A";
+    assert ctx.token_name(entries[2].tokens[0]) == "TK_M";
 }
 
 

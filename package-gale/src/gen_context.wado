@@ -18,9 +18,9 @@ use { TreeMap } from "core:collections";
 /// helper function emitted at the end of the parser section.
 pub struct KindSetEntry {
     pub id: i32,
-    /// Canonical (sorted, unique) token list. Tokens are `TK_*` global
-    /// constants in the generated source.
-    pub tokens: List<String>,
+    /// Canonical (name-sorted, unique) token list, as kind ids. Emitted as the
+    /// `TK_*` global names via `GenContext::token_name` at codegen.
+    pub tokens: List<i32>,
 }
 
 /// A runtime FOLLOW-continuation mask interned during parser codegen.
@@ -33,9 +33,9 @@ pub struct KindSetEntry {
 /// distinct continuations, not the call graph.
 pub struct FollowMaskEntry {
     pub id: i32,
-    /// Canonical per-depth token sets. `mask[d]` lists the `TK_*`
-    /// constants valid at depth `d` of the caller's continuation.
-    pub mask: List<List<String>>,
+    /// Canonical per-depth token sets, as kind ids. `mask[d]` lists the kinds
+    /// valid at depth `d` of the caller's continuation; emitted as `TK_*` names.
+    pub mask: List<List<i32>>,
 }
 
 /// Maximum K-prefix depth carried into `intern_follow_mask` for the
@@ -1374,8 +1374,19 @@ impl GenContext {
             return entry.id;
         }
         let id = self.kind_set_registry.len();
-        self.kind_set_registry[key] = KindSetEntry { id, tokens: canonical };
+        let ids = self.names_to_ids(&canonical);
+        self.kind_set_registry[key] = KindSetEntry { id, tokens: ids };
         return id;
+    }
+
+    /// Map `TK_*` names to their kind ids (in the given order). Names come from
+    /// the canonicalised (name-sorted) set, so emit re-derives the same order.
+    fn names_to_ids(&mut self, names: &List<String>) -> List<i32> {
+        let mut out: List<i32> = [];
+        for let n of names {
+            out.push(self.token_kinds.intern(n));
+        }
+        return out;
     }
 
     /// All interned kind sets in helper-ID order (i.e. insertion order).
@@ -1397,7 +1408,8 @@ impl GenContext {
             return Option::<i32>::Some(entry.id);
         }
         let id = self.sync_set_registry.len();
-        self.sync_set_registry[key] = KindSetEntry { id, tokens: canonical };
+        let ids = self.names_to_ids(&canonical);
+        self.sync_set_registry[key] = KindSetEntry { id, tokens: ids };
         return Option::<i32>::Some(id);
     }
 
@@ -1437,7 +1449,11 @@ impl GenContext {
             return Option::<i32>::Some(entry.id);
         }
         let id = self.follow_mask_registry.len();
-        self.follow_mask_registry[key] = FollowMaskEntry { id, mask: canonical };
+        let mut mask_ids: List<List<i32>> = [];
+        for let depth of &canonical {
+            mask_ids.push(self.names_to_ids(depth));
+        }
+        self.follow_mask_registry[key] = FollowMaskEntry { id, mask: mask_ids };
         return Option::<i32>::Some(id);
     }
 
