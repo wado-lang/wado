@@ -16,6 +16,18 @@ use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util::placeholder;
 
+/// Generic signature of a static method `Type::method`, normalised across an
+/// `impl` block and a Component Model `resource`. See [`Elaborator::static_method_sig`].
+struct StaticMethodSig {
+    /// Positional impl / resource type-argument names (`impl<T> Foo<T>` → `["T"]`).
+    type_level_names: Vec<String>,
+    /// The method's own generics (empty for a resource method).
+    method_type_params: Vec<ast::GenericParam>,
+    /// Value parameters, including any `self` (a static method has none).
+    value_params: Vec<ast::Param>,
+    return_type: Option<ast::Type>,
+}
+
 /// Per-position `_` mask for a turbofish: `holes[i]` is true when argument `i`
 /// was written `_`. Slots past the end count as holes too (omitted trailing
 /// args), so the mask need only cover the supplied args.
@@ -1942,37 +1954,59 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
-    /// Type-level (impl / resource) generic parameter names for a static call
-    /// `prefix::suffix`. For an `impl` block these come from the impl header
-    /// (`impl<T> Container<T>`); for a Component Model `resource Stream<T>` they
-    /// come from the resource declaration, which is not an `impl` block and so is
-    /// invisible to the impl-based lookup.
-    fn static_receiver_type_param_names(&self, prefix: &str, suffix: &str) -> Vec<String> {
-        if let Some((names, _)) = self.find_static_method_def(prefix, suffix)
-            && !names.is_empty()
+    /// The `resource` declaration named `name` (canonicalising an import alias),
+    /// looked up through the resource index — an `IndexMap` keyed by name — plus
+    /// one `item_by_id`, so it does not scan module item lists.
+    fn find_resource_decl(&self, name: &str) -> Option<&ast::ResourceDecl> {
+        let canonical = self.canonical_decl_key(name).1;
+        for resources in self.tysys.all_resource_types.values() {
+            if let Some(info) = resources.get(name).or_else(|| resources.get(&canonical))
+                && let Some(ast::Item::Resource(decl)) = self
+                    .loaded_modules
+                    .get(&info.module_source)
+                    .and_then(|m| m.item_by_id(info.defined_at))
+            {
+                return Some(decl);
+            }
+        }
+        None
+    }
+
+    /// The generic signature of a static method `Type::method` (no `self`),
+    /// resolved for both an `impl` block and a Component Model `resource`
+    /// (which is not an `impl` block). `type_level_names` are the positional
+    /// impl / resource type-argument names; `method_type_params` are the
+    /// method's own generics (always empty for a resource method, which cannot
+    /// declare type parameters). The single source shared by
+    /// [`Self::infer_static_method_type_args`] and
+    /// [`Self::report_uninferred_static_method_type_args`] keeps their slot
+    /// indexing in lock-step.
+    fn static_method_sig(&self, struct_name: &str, method_name: &str) -> Option<StaticMethodSig> {
+        if let Some((type_level_names, method)) =
+            self.find_static_method_def(struct_name, method_name)
         {
-            return names;
+            return Some(StaticMethodSig {
+                type_level_names,
+                method_type_params: method.type_params,
+                value_params: method.params,
+                return_type: method.return_type,
+            });
         }
-        let canonical = self.canonical_decl_key(prefix).1;
-        let from_items = |items: &[Item]| -> Option<Vec<String>> {
-            items.iter().find_map(|item| match item {
-                Item::Resource(r) if r.name == prefix || r.name == canonical => Some(
-                    r.type_params
-                        .iter()
-                        .filter(|p| !p.is_effect)
-                        .map(|p| p.name.clone())
-                        .collect(),
-                ),
-                _ => None,
-            })
-        };
-        if let Some(names) = from_items(self.current_module_items) {
-            return names;
-        }
-        self.loaded_modules
-            .iter()
-            .find_map(|(_, module)| from_items(&module.items))
-            .unwrap_or_default()
+        let decl = self.find_resource_decl(struct_name)?;
+        let method = decl.methods.iter().find(|m| {
+            m.name == method_name && m.params.iter().all(|p| p.self_kind == ast::SelfKind::None)
+        })?;
+        Some(StaticMethodSig {
+            type_level_names: decl
+                .type_params
+                .iter()
+                .filter(|p| p.is_real_type_param())
+                .map(|p| p.name.clone())
+                .collect(),
+            method_type_params: Vec::new(),
+            value_params: method.params.clone(),
+            return_type: method.return_type.clone(),
+        })
     }
 
     /// Report a clean "cannot infer type parameter" diagnostic when a generic
@@ -1980,9 +2014,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// a declared type parameter unbound. Without this the unresolved call
     /// reaches WIR build as an unsubstituted `Call` and panics (issue #1557).
     ///
-    /// Mirrors [`Self::report_uninferred_fn_type_args`]: a parameter bound to an
-    /// outer-scope generic (the caller forwarding its own type params) is fine
-    /// and left for monomorphization.
+    /// Uses the same [`StaticMethodSig`] discovery as
+    /// [`Self::infer_static_method_type_args`], so the reported slots stay
+    /// index-aligned with the args inference produced. A slot bound to an
+    /// outer-scope generic (the caller forwarding its own type params) is fine,
+    /// mirroring [`Self::report_uninferred_fn_type_args`].
+    ///
+    /// Unlike the free-function path, this reports immediately rather than
+    /// deferring via inference holes: a static constructor's type parameter is
+    /// never pinned by a later use, so there is nothing to defer to.
     fn report_uninferred_static_method_type_args(
         &mut self,
         prefix: &str,
@@ -1991,14 +2031,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_type_args: &[TypeId],
         span: crate::token::Span,
     ) {
-        let type_level_names = self.static_receiver_type_param_names(prefix, suffix);
-        let method_level_names: Vec<String> = self
-            .lookup_static_method_type_params(prefix, suffix)
+        let Some(sig) = self.static_method_sig(prefix, suffix) else {
+            return;
+        };
+        // The `!is_effect` filter keeps method slots index-aligned with the
+        // `method_type_args` inference produced (see `infer_static_method_type_args`).
+        let method_params: Vec<&ast::GenericParam> = sig
+            .method_type_params
             .iter()
-            .filter(|p| !p.is_effect && p.default.is_none() && !p.has_fn_bound())
-            .map(|p| p.name.clone())
+            .filter(|p| !p.is_effect)
             .collect();
-        if type_level_names.is_empty() && method_level_names.is_empty() {
+        if sig.type_level_names.is_empty() && method_params.is_empty() {
             return;
         }
 
@@ -2009,36 +2052,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .values()
             .map(|&(_, tid)| tid)
             .collect();
-        let unresolved_names = |this: &Self, names: &[String], args: &[TypeId]| -> Vec<String> {
-            names
-                .iter()
-                .enumerate()
-                .filter(|&(i, _)| match args.get(i) {
-                    None => true,
-                    Some(&t) => this.is_unbound_type_param(t) && !scope_params.contains(&t),
-                })
-                .map(|(_, n)| n.clone())
-                .collect()
+        let unresolved = |this: &Self, slot: Option<&TypeId>| -> bool {
+            match slot {
+                None => true,
+                Some(&t) => this.is_unbound_type_param(t) && !scope_params.contains(&t),
+            }
         };
 
-        let mut unresolved = unresolved_names(self, &type_level_names, impl_type_args);
-        let type_level_unresolved = !unresolved.is_empty();
-        unresolved.extend(unresolved_names(
-            self,
-            &method_level_names,
-            method_type_args,
-        ));
-        if unresolved.is_empty() {
+        // Type-level (impl / resource) args are positional; every slot is real.
+        let mut names: Vec<String> = sig
+            .type_level_names
+            .iter()
+            .enumerate()
+            .filter(|&(i, _)| unresolved(self, impl_type_args.get(i)))
+            .map(|(_, n)| n.clone())
+            .collect();
+        let type_level_unresolved = !names.is_empty();
+        // Method-level: only real, non-defaulted params are reportable.
+        names.extend(
+            method_params
+                .iter()
+                .enumerate()
+                .filter(|&(i, p)| {
+                    p.default.is_none()
+                        && !p.has_fn_bound()
+                        && unresolved(self, method_type_args.get(i))
+                })
+                .map(|(_, p)| p.name.clone()),
+        );
+        if names.is_empty() {
             return;
         }
 
-        let names = unresolved
+        let joined = names
             .iter()
             .map(|n| format!("`{n}`"))
             .collect::<Vec<_>>()
             .join(", ");
-        // The turbofish for a type-level parameter binds to the type
-        // (`Stream::<T>::new()`); a method-level one binds to the method.
         let turbofish = if type_level_unresolved {
             format!("`{prefix}::<...>::{suffix}()`")
         } else {
@@ -2046,7 +2096,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let _ = self.logger.error(TypeError::CannotInferType {
             message: format!(
-                "cannot infer type parameter {names} of `{prefix}::{suffix}`; \
+                "cannot infer type parameter {joined} of `{prefix}::{suffix}`; \
                  add a turbofish ({turbofish}) or a type annotation"
             ),
             span,
@@ -2368,80 +2418,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[TirExpr],
         expected_type: Option<TypeId>,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
-        // Find the impl block + method (regardless of whether the method has
-        // its own type params — we also want to infer impl-level params from
-        // the LHS for static methods like `Container::make()`).
-        let method_info: Option<(
-            ast::Type,
-            Vec<ast::GenericParam>,
-            Vec<ast::Param>,
-            Option<ast::Type>,
-        )> = {
-            let mut found = None;
-            'outer: for (_, module) in self.loaded_modules {
-                for item in &module.items {
-                    if let Item::Impl(impl_block) = item
-                        && Self::get_type_name_static(&impl_block.ty) == struct_name
-                    {
-                        for method in &impl_block.methods {
-                            let has_self = method
-                                .params
-                                .iter()
-                                .any(|p| p.self_kind != ast::SelfKind::None);
-                            if method.name == method_name && !has_self {
-                                found = Some((
-                                    impl_block.ty.clone(),
-                                    method.type_params.clone(),
-                                    method.params.clone(),
-                                    method.return_type.clone(),
-                                ));
-                                break 'outer;
-                            }
-                        }
-                    }
-                }
-            }
-            // Also check current module items
-            if found.is_none() {
-                'outer2: for item in self.current_module_items {
-                    if let Item::Impl(impl_block) = item
-                        && Self::get_type_name_static(&impl_block.ty) == struct_name
-                    {
-                        for method in &impl_block.methods {
-                            let has_self = method
-                                .params
-                                .iter()
-                                .any(|p| p.self_kind != ast::SelfKind::None);
-                            if method.name == method_name && !has_self {
-                                found = Some((
-                                    impl_block.ty.clone(),
-                                    method.type_params.clone(),
-                                    method.params.clone(),
-                                    method.return_type.clone(),
-                                ));
-                                break 'outer2;
-                            }
-                        }
-                    }
-                }
-            }
-            found
-        };
-        let Some((impl_ty, method_type_params, params, return_type_ast)) = method_info else {
+        // Resolve the static method's generic signature (impl block or CM
+        // resource), so impl / resource-level params are inferable from the LHS
+        // or arguments for calls like `Container::make()` / `Stream::new()`.
+        let Some(StaticMethodSig {
+            type_level_names: impl_type_param_names,
+            method_type_params,
+            value_params: params,
+            return_type: return_type_ast,
+        }) = self.static_method_sig(struct_name, method_name)
+        else {
             return (vec![], vec![]);
-        };
-
-        // Extract impl-level type param names (e.g. `impl Container<T>` -> ["T"]).
-        let impl_type_param_names: Vec<String> = match &impl_ty {
-            ast::Type::Generic(g) => g
-                .args
-                .iter()
-                .filter_map(|arg| match arg {
-                    ast::Type::Named(n) => Some(n.name.clone()),
-                    _ => None,
-                })
-                .collect(),
-            _ => vec![],
         };
 
         // Nothing generic to infer.
