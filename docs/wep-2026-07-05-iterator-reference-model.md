@@ -61,14 +61,19 @@ separate proposal.
 ## Status
 
 - [x] `iter()` yields `&T` (`List::iter -> ArrayRefIter`).
-- [x] `copied()` (inherent on `ArrayRefIter`); regression fixture
-      `iter_ref_adapter_monomorph.wado`.
-- [x] Migrated the breaking `iter()` call sites (stdlib tests, fixtures,
-      `package-gale`).
+- [x] `copied()` on `ArrayRefIter`; fixture `iter_ref_adapter_monomorph.wado`.
+- [x] Migrated the breaking `iter()` call sites.
+- [x] `&mut` iteration for in-place elements: `&mut List<T>` yields `&mut T` via `ArrayRefMutIter`; fixture `iter_mut_inplace.wado`.
+- [x] Reject `&mut` iteration over replace-on-assign / unresolved-generic elements; fixture `iter_mut_forbidden.wado`.
+- [x] Fixed a latent P0: `Fn<N,Ret>^Inspect` deduped by mangled name, not return `TypeId` (`&T` / `&mut T` collide).
 
 ## TODO
 
-- [ ] `iter_mut` (`&mut T`): needs the reference write-back model
-      (`next -> Option<&mut T>`); deferred.
+- [ ] `&mut` iteration for replace-on-assign element types (`primitive` / `enum`
+      / `flags` / `variant` / `fn`): needs the reference write-back model
+      (write-back to `xs[i]` on every loop-exit edge — WEP-2026-06-13); rejected
+      for now rather than silently dropped.
+- [ ] Public `iter_mut()` method: redundant with `for ... of &mut xs` until
+      adapter chaining over `&mut T` composes; add it then.
 - [ ] Generic `copied()` on any `Iterator<Item = &T>`: blocked on propagating
       associated-type-equality bounds (`Item = &T`) into the impl body.

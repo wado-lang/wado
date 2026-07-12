@@ -25,3 +25,8 @@ Describe the outcome of the whole branch (origin/main...HEAD -- use three dots).
 Do not include trial-and-error history; the commits does.
 
 No need to include a test section. CI runs the full test suite.
+
+## After opening
+
+Check mergeability (`mergeable_state`). If conflicting, resolve it with the
+`git-upstream-sync` skill.

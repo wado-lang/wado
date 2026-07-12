@@ -1,0 +1,28 @@
+// `&mut` iteration over replace-on-assign or unresolved-generic elements is
+// rejected: the write would be lost (WEP-2026-06-13 D1).
+
+variant Shape {
+    Circle(i32),
+    Square(i32),
+}
+
+fn double_all<T: Mul>(xs: &mut List<T>) {
+    for let x of xs {
+        *x = *x * *x;
+    }
+}
+
+export fn run() {
+    let mut ns: List<i32> = [1, 2, 3];
+    for let x of &mut ns {
+        *x = *x * 10;
+    }
+
+    let mut shapes: List<Shape> = [Shape::Circle(1)];
+    for let s of &mut shapes {
+        *s = Shape::Square(9);
+    }
+}
+
+__DATA__
+{"compile_error": "cannot iterate `&mut` over a list of"}

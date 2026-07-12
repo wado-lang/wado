@@ -2775,7 +2775,17 @@ let rest = iter2.collect();  // [2, 3, 4, 5]
 
 **Value Semantics:**
 
-Iterator `next()` returns copies of elements (value semantics). Wasm GC cannot yield `&mut T` for array elements, so `iter_mut()` is not available. For in-place mutation, use indexed access:
+By-value iteration (`into_iter()`, `for let x of list`) returns copies of elements. Reference iteration yields references instead: `iter()` and `for let x of &list` yield `&T`, and `for let x of &mut list` yields `&mut T`.
+
+`&mut` iteration enables in-place mutation for element types with an addressable interior — `struct`, `List`, `String`, `i128`/`u128` — whose `&mut T` is the element's shared GC handle:
+
+```wado
+for let p of &mut points {
+    p.x += 1;  // mutates the element in place
+}
+```
+
+A replace-on-assign element type (`primitive`, `enum`, `flags`, `variant`, `fn`) has no addressable interior, so a write through `&mut T` would be lost. `&mut` iteration over such a list is a compile error; use indexed access instead:
 
 ```wado
 for let mut i = 0; i < arr.len(); i += 1 {

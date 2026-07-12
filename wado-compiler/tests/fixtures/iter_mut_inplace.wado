@@ -1,0 +1,71 @@
+// `&mut List<T>` iterates as `&mut T` for in-place elements (WEP-2026-07-05).
+
+struct P {
+    x: i32,
+    y: i32,
+}
+
+test "struct field mutation via &mut iteration" {
+    let mut ps: List<P> = [P { x: 1, y: 2 }, P { x: 3, y: 4 }];
+    for let p of &mut ps {
+        p.y = p.y + 1000;
+    }
+    assert ps[0].y == 1002;
+    assert ps[1].y == 1004;
+}
+
+test "String element method mutation via &mut iteration" {
+    let mut items: List<String> = [String::from("a"), String::from("b")];
+    for let s of &mut items {
+        s.push_str(&"!");
+    }
+    assert items[0] == String::from("a!");
+    assert items[1] == String::from("b!");
+}
+
+test "nested List element mutation via &mut iteration" {
+    let mut rows: List<List<i32>> = [[1], [2, 3]];
+    for let row of &mut rows {
+        row.push(9);
+    }
+    assert rows[0].len() == 2;
+    assert rows[1].len() == 3;
+    assert rows[0][1] == 9;
+}
+
+test "whole-value replace of a struct element via deref" {
+    let mut ps: List<P> = [P { x: 1, y: 2 }, P { x: 3, y: 4 }];
+    for let p of &mut ps {
+        *p = P { x: 7, y: 8 };
+    }
+    assert ps[0].x == 7;
+    assert ps[0].y == 8;
+    assert ps[1].x == 7;
+}
+
+test "whole-value replace of a String element via deref" {
+    let mut items: List<String> = [String::from("a"), String::from("b")];
+    for let s of &mut items {
+        *s = String::from("z");
+    }
+    assert items[0] == String::from("z");
+    assert items[1] == String::from("z");
+}
+
+test "break and continue keep writes on in-place elements" {
+    let mut rows: List<List<i32>> = [[1], [2], [3]];
+    let mut seen = 0;
+    for let row of &mut rows {
+        seen += 1;
+        if seen == 2 {
+            continue;
+        }
+        row.push(9);
+        if seen == 3 {
+            break;
+        }
+    }
+    assert rows[0][1] == 9;
+    assert rows[1].len() == 1;
+    assert rows[2][1] == 9;
+}

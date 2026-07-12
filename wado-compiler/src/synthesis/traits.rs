@@ -3648,7 +3648,9 @@ struct FnSignature {
 
 fn collect_canonical_fn_signatures(tt: &TypeTable) -> Vec<FnSignature> {
     let is_concrete = |t: TypeId| !matches!(tt.get(t), ResolvedType::TypeParam { .. });
-    let mut seen: IndexSet<(usize, TypeId)> = IndexSet::default();
+    // Dedup by mangled name, not return-type `TypeId`: `&T` / `&mut T` mangle
+    // identically and must share one stub, else the stubs collide post-mono.
+    let mut seen: IndexSet<(usize, String)> = IndexSet::default();
     let mut result = Vec::new();
 
     for (id, resolved) in tt.all_types() {
@@ -3664,17 +3666,15 @@ fn collect_canonical_fn_signatures(tt: &TypeTable) -> Vec<FnSignature> {
             continue;
         }
         let arity = params.len();
-        if !seen.insert((arity, *return_type)) {
+        let return_type_name = tt.mangle_type_name(*return_type);
+        if !seen.insert((arity, return_type_name.clone())) {
             continue;
         }
         result.push(FnSignature {
             repr_type_id: id,
             arity,
             return_type: *return_type,
-            type_arg_names: crate::name::fn_type_arg_names(
-                arity,
-                &tt.mangle_type_name(*return_type),
-            ),
+            type_arg_names: crate::name::fn_type_arg_names(arity, &return_type_name),
         });
     }
     result
