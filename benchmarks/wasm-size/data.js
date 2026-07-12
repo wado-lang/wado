@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783834250838,
+  "lastUpdate": 1783840932505,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -39657,6 +39657,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/71b119717fe48b4668840ca4838700f93e300d2f"
         },
         "date": 1783834250373,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16412,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265859,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bf1ef80bf341195cd92093b23c204b0e88add6bf",
+          "message": "Merge pull request #1558 from wado-lang/claude/iter-mut-item-updates-alteec\n\nfeat(compiler): iterate `&mut` lists as `&mut T` for in-place elements",
+          "timestamp": "2026-07-12T16:12:51+09:00",
+          "tree_id": "bfc32a0662c086ac1f921cfef95e71ff6a5fdb48",
+          "url": "https://github.com/wado-lang/wado/commit/bf1ef80bf341195cd92093b23c204b0e88add6bf"
+        },
+        "date": 1783840931784,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
