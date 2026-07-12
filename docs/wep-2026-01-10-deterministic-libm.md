@@ -290,7 +290,7 @@ match import_source {
 - [ ] Generate `embedded/libm.wasm` and `embedded/libm.wit`
 - [ ] Embed `libm.wasm` in compiler binary
 
-### Phase 2: Compiler Integration (depends on ARD-2026-01-10-wasm-import)
+### Phase 2: Compiler Integration (depends on WEP-2026-01-10-wasm-import)
 
 - [ ] Implement `builtin:libm` namespace resolution
 - [ ] Link bundled `libm.wasm` into final component
@@ -338,4 +338,4 @@ match import_source {
 - [Floating-point portability issues (Japanese)](https://zenn.dev/mod_poppo/articles/floating-point-portability)
 - [IEEE 754-2019 Standard](https://ieeexplore.ieee.org/document/8766229)
 - [WebAssembly Floating-Point Semantics](https://webassembly.github.io/spec/core/exec/numerics.html#floating-point-operations)
-- Related ARD: [ARD-2026-01-10-wasm-import](./ard-2026-01-10-wasm-import.md)
+- Related WEP: [WEP-2026-01-10-wasm-import](./wep-2026-01-10-wasm-import.md)
