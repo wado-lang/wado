@@ -4,7 +4,7 @@ The Wado compiler (`wado-compiler/`) translates `.wado` source into a Wasm compo
 
 - Optimization passes: [optimizer.md](./optimizer.md)
 - LSP architecture: [WEP 2026-04-18](./wep-2026-04-18-lsp-architecture.md)
-- Language features: [spec.md](./spec.md) and the [WEP index](./CLAUDE.md)
+- Language features: [spec.md](./spec.md)
 
 ## Pipeline
 
