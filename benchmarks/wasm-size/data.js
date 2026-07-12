@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783847122520,
+  "lastUpdate": 1783898840811,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -39745,6 +39745,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9dea04ed6c1b40a4e496c1ef68951464757df22f"
         },
         "date": 1783847121755,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16412,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265859,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "13fa1b519eb5fc05c7a1625aff066a9a781f912e",
+          "message": "Merge pull request #1565 from wado-lang/claude/wado-hello-blog-post-cotqxs\n\nchore(release): trigger the wado-lang.github.io deploy after a release",
+          "timestamp": "2026-07-13T08:17:35+09:00",
+          "tree_id": "fe0435f7f5d84518a06ebed76356bca2524ecac4",
+          "url": "https://github.com/wado-lang/wado/commit/13fa1b519eb5fc05c7a1625aff066a9a781f912e"
+        },
+        "date": 1783898840368,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
