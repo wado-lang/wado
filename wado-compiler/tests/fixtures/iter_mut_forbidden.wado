@@ -1,11 +1,20 @@
 // A replace-on-assign element type (primitive / enum / flags / variant / fn) has
 // no addressable interior, so a write through a `&mut T` element would land in a
 // temporary and be lost. `for let x of &mut xs` over such a list is rejected at
-// the loop, naming the index-assignment workaround (WEP-2026-06-13 D1).
+// the loop, naming the index-assignment workaround (WEP-2026-06-13 D1). A bare
+// generic element type is rejected too: it may monomorphize to a replace-on-
+// assign type, which would silently drop, so it cannot be proven in-place here.
 
 variant Shape {
     Circle(i32),
     Square(i32),
+}
+
+// Generic element type: not provably in-place, rejected even without a call site.
+fn double_all<T: Mul>(xs: &mut List<T>) {
+    for let x of xs {
+        *x = *x * *x;
+    }
 }
 
 export fn run() {

@@ -2572,24 +2572,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None => TypeTable::UNKNOWN,
         };
 
-        // Reject `&mut` iteration over a replace-on-assign element type. Such an
-        // element has no addressable interior: a write through `&mut T` would
-        // land in a temporary and be lost (the D1 silent-drop in
-        // WEP-2026-06-13). Only in-place element types (struct / List / String /
-        // i128) yield a usable `&mut T` today. Keyed on the `&mut T` item type
-        // so immutable (`&T`) and by-value iteration are unaffected.
-        if let ResolvedType::MutRef(elem) = self.tysys.type_table.borrow().get(item_type).clone()
-            && self.is_replace_on_assign_element(elem)
-        {
+        // Reject `&mut` iteration unless the element type is *provably* in-place.
+        // A write through `&mut T` is observable only when `T` has an addressable
+        // interior (struct / List / String / i128); for a replace-on-assign type
+        // the write lands in a temporary and is lost (the D1 silent-drop in
+        // WEP-2026-06-13), and for an unresolved generic `T` we cannot prove it is
+        // in-place, so a replace-on-assign monomorphization would silently drop.
+        // Both are rejected here — at the concrete `for ... of &mut xs` site — so
+        // the miscompile never reaches monomorphization. Keyed on the `&mut T`
+        // item type, so immutable (`&T`) and by-value iteration are unaffected.
+        if let ResolvedType::MutRef(elem) = self.tysys.type_table.borrow().get(item_type).clone() {
+            let elem_resolved = self.tysys.type_table.borrow().get(elem).clone();
             let elem_name = self.tysys.type_table.borrow().type_name(elem);
-            let _ = self.logger.error(TypeError::CannotMutate {
-                message: format!(
-                    "cannot iterate `&mut` over a list of `{elem_name}`: a write through \
-                     `&mut {elem_name}` would be lost (no in-place interior). Assign by index \
-                     instead, e.g. `xs[i] = ...`"
-                ),
-                span,
-            });
+            if matches!(elem_resolved, ResolvedType::TypeParam { .. }) {
+                let _ = self.logger.error(TypeError::CannotMutate {
+                    message: format!(
+                        "cannot iterate `&mut` over a list of generic type `{elem_name}`: the \
+                         element type is not known to support in-place mutation. Constrain it to \
+                         a concrete in-place type, or assign by index (`xs[i] = ...`)"
+                    ),
+                    span,
+                });
+            } else if self.is_replace_on_assign_element(elem) {
+                let _ = self.logger.error(TypeError::CannotMutate {
+                    message: format!(
+                        "cannot iterate `&mut` over a list of `{elem_name}`: a write through \
+                         `&mut {elem_name}` would be lost (no in-place interior). Assign by index \
+                         instead, e.g. `xs[i] = ...`"
+                    ),
+                    span,
+                });
+            }
         }
 
         // Stage 5 (Gap 6 of WEP 2026-05-26): record the iterator-path
@@ -2630,20 +2643,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx.active_labels.pop();
     }
 
-    /// Whether `type_id` is a replace-on-assign type: one whose `&mut`
-    /// reference is a boxed cell, so a write must land back in the original
-    /// storage. For a non-local place (a `List` element) that write-back does
-    /// not exist yet, so `&mut` iteration over such elements is rejected.
+    /// Whether `type_id` is a replace-on-assign type: one that is mutated by
+    /// swapping the whole value (`*r = v`) rather than by an in-place interior
+    /// write, so a `&mut T` to a non-local `List` element has no sound write-back
+    /// point and `&mut` iteration over it is rejected.
     ///
-    /// Mirrors the boxed-reference predicate in `lower/plan/boxing.rs`
-    /// (WEP-2026-06-13 D2); the two must stay in sync.
+    /// This is a *conservative superset* of the boxed-reference set in
+    /// `lower/plan/boxing.rs` (WEP-2026-06-13): it additionally names `Flags`,
+    /// `Resource` (D4/D6, replace-on-assign but not boxed there), and looks
+    /// through `Newtype`. It must stay a superset so nothing replace-on-assign
+    /// slips through the reject; it is intentionally not identical, because
+    /// boxing relies on earlier lowering (`flags` → `u32`) that has not happened
+    /// at this phase.
     fn is_replace_on_assign_element(&self, type_id: TypeId) -> bool {
         match self.tysys.type_table.borrow().get(type_id).clone() {
             ResolvedType::Primitive(p) => !matches!(p, PrimitiveType::I128 | PrimitiveType::U128),
             ResolvedType::Enum { .. }
             | ResolvedType::Variant { .. }
             | ResolvedType::Flags { .. }
-            | ResolvedType::Function { .. } => true,
+            | ResolvedType::Function { .. }
+            | ResolvedType::Resource { .. } => true,
             ResolvedType::GenericInstance { name, .. } => self.contains_variant(&name),
             ResolvedType::Newtype { base_type, .. } => self.is_replace_on_assign_element(base_type),
             _ => false,

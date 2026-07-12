@@ -38,7 +38,17 @@ test "nested List element mutation via &mut iteration" {
     assert rows[0][1] == 9;
 }
 
-test "whole-value replace of an in-place element via deref" {
+test "whole-value replace of a struct element via deref" {
+    let mut ps: List<P> = [P { x: 1, y: 2 }, P { x: 3, y: 4 }];
+    for let p of &mut ps {
+        *p = P { x: 7, y: 8 };
+    }
+    assert ps[0].x == 7;
+    assert ps[0].y == 8;
+    assert ps[1].x == 7;
+}
+
+test "whole-value replace of a String element via deref" {
     let mut items: List<String> = [String::from("a"), String::from("b")];
     for let s of &mut items {
         *s = String::from("z");
