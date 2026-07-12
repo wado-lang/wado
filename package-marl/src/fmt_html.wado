@@ -5,6 +5,10 @@
 //! HTML. Output is safe by construction: text and raw HTML are escaped, and
 //! link/image/autolink destinations are scheme-filtered (see
 //! `docs/wep-2026-07-05-marl.md`, "HTML safety").
+//!
+//! `render` returns both the HTML and the heading outline it collected, so a
+//! consumer (e.g. a CMS) can opt into a table of contents. Every heading gets
+//! a GFM-compatible `id` (see `fmt_slug.wado`).
 
 use {
     Node,
@@ -18,76 +22,192 @@ use {
     ReferenceLinkNode,
     ReferenceImageNode,
 } from "./fmt_ast.wado";
-use { escape_text, escape_attr, sanitize_url } from "./html.wado";
+use { escape_text_ref, escape_attr_ref } from "./html.wado";
 use { RefTable, ref_table_get } from "./fmt_links.wado";
 use { parse } from "./fmt_parse_block.wado";
 use { is_ascii_punct } from "./fmt_parse_inline.wado";
 use { chars_of } from "./str_cursor.wado";
+use { slugify, Slugger } from "./fmt_slug.wado";
 
-pub fn render(source: &String) -> String {
-    let parsed = parse(source);
-    return match &parsed.document {
-        Node::Document(children) => render_blocks(children, &parsed.refs),
+/// A rendered Markdown document: the HTML plus the heading outline collected
+/// while rendering. Consuming `headings` is opt-in — ignore it for plain HTML,
+/// or walk it to build a table of contents.
+pub struct RenderResult {
+    pub html: String,
+    pub headings: List<HeadingInfo>,
+}
+
+/// One heading in the document outline, in document order.
+pub struct HeadingInfo {
+    /// Heading level, 1..=6.
+    pub level: u8,
+    /// GFM-compatible slug, unique within the document; also the heading's
+    /// `id` attribute.
+    pub id: String,
+    /// Plain-text content of the heading, used both as the slug source and as
+    /// a ready-made table-of-contents label.
+    pub text: String,
+}
+
+pub fn render(source: String) -> RenderResult {
+    let parsed = parse(&source);
+    let mut r = Renderer {
+        refs: parsed.refs,
+        slugger: Slugger::new(),
+        headings: [],
+    };
+    let html = match &parsed.document {
+        Node::Document(children) => r.render_blocks(children),
         _ => panic("marl-html: render expects a Document node"),
     };
+    return RenderResult { html, headings: r.headings };
 }
 
-// --- blocks ---
+/// Rendering state threaded through the block walk: the document's reference
+/// definitions plus the slug deduplicator and the heading outline being built.
+struct Renderer {
+    refs: RefTable,
+    slugger: Slugger,
+    headings: List<HeadingInfo>,
+}
 
-/// Blocks join with a single newline, and front matter / reference
-/// definitions contribute no output — they are metadata, not content.
-fn render_blocks(nodes: &List<Node>, refs: &RefTable) -> String {
-    let mut parts: List<String> = [];
-    for let node of nodes {
-        if node matches { Node::FrontMatter(_) | Node::LinkReferenceDef(_) } {
-            continue;
+impl Renderer {
+    // --- blocks ---
+
+    /// Blocks join with a single newline, and front matter / reference
+    /// definitions contribute no output — they are metadata, not content.
+    fn render_blocks(&mut self, nodes: &List<Node>) -> String {
+        let mut parts: List<String> = [];
+        for let node of nodes {
+            if node matches { Node::FrontMatter(_) | Node::LinkReferenceDef(_) } {
+                continue;
+            }
+            parts.push(self.render_block(node));
         }
-        parts.push(render_block(node, refs));
+        return parts.join("\n");
     }
-    return parts.join("\n");
+
+    fn render_block(&mut self, node: &Node) -> String {
+        return match node {
+            Node::Heading(h) => self.render_heading(h),
+            Node::Paragraph(p) => `<p>{render_inline_seq(&p.children, &self.refs)}</p>`,
+            Node::BlockQuote(children) => `<blockquote>\n{self.render_blocks(children)}\n</blockquote>`,
+            Node::CodeBlock(cb) => render_code_block(cb),
+            Node::List(list) => self.render_list(list),
+            Node::Table(t) => render_table(t, &self.refs),
+            Node::ThematicBreak => "<hr />",
+            Node::Html(s) => escape_text_ref(s),
+            _ => panic("marl-html: unexpected node in block position"),
+        };
+    }
+
+    fn render_heading(&mut self, h: &Heading) -> String {
+        let text = heading_text(&h.children);
+        let id = self.slugger.slug(slugify(&text));
+        let inner = render_inline_seq(&h.children, &self.refs);
+        self.headings.push(HeadingInfo { level: h.level as u8, id, text });
+        return `<h{h.level} id="{escape_attr_ref(&id)}">{inner}</h{h.level}>`;
+    }
+
+    // --- lists ---
+
+    fn render_list(&mut self, list: &MdList) -> String {
+        let loose = list_is_loose(list);
+        let mut parts: List<String> = [];
+        for let item of list.items {
+            parts.push(self.render_item(&item, loose));
+        }
+        let inner = parts.join("\n");
+        let [open, close] = list_tags(list);
+        return `{open}\n{inner}\n{close}`;
+    }
+
+    fn render_item(&mut self, item: &MdItem, loose: bool) -> String {
+        let marker = match item.marker {
+            Some(m) => if m.checked { "[x] " } else { "[ ] " },
+            None => "",
+        };
+        let content = self.render_item_children(&item.children, loose, marker);
+        if loose {
+            return `<li>\n{content}\n</li>`;
+        }
+        return `<li>{content}</li>`;
+    }
+
+    /// In a tight list a paragraph item contributes its inline content
+    /// directly; in a loose list it is wrapped in `<p>`. Nested blocks render
+    /// normally. A task-list marker (`[ ] ` / `[x] `) leads the first child's
+    /// content, so it lands inside the `<p>` of a loose item without
+    /// inspecting the output.
+    fn render_item_children(&mut self, children: &List<Node>, loose: bool, marker: String) -> String {
+        let mut parts: List<String> = [];
+        let mut first = true;
+        for let child of children {
+            let lead = if first { marker } else { "" };
+            parts.push(self.render_item_child(child, loose, &lead));
+            first = false;
+        }
+        return parts.join("\n");
+    }
+
+    fn render_item_child(&mut self, child: &Node, loose: bool, lead: &String) -> String {
+        match child {
+            Node::Paragraph(p) => {
+                let inline = render_inline_seq(&p.children, &self.refs);
+                if loose {
+                    return `<p>{lead}{inline}</p>`;
+                }
+                return `{lead}{inline}`;
+            },
+            _ => {
+                return `{lead}{self.render_block(child)}`;
+            },
+        }
+    }
 }
 
-fn render_block(node: &Node, refs: &RefTable) -> String {
-    return match node {
-        Node::Heading(h) => render_heading(h, refs),
-        Node::Paragraph(p) => `<p>{render_inline_seq(&p.children, refs)}</p>`,
-        Node::BlockQuote(children) => `<blockquote>\n{render_blocks(children, refs)}\n</blockquote>`,
-        Node::CodeBlock(cb) => render_code_block(cb),
-        Node::List(list) => render_list(list, refs),
-        Node::Table(t) => render_table(t, refs),
-        Node::ThematicBreak => "<hr />",
-        Node::Html(s) => escape_text(s),
-        _ => panic("marl-html: unexpected node in block position"),
-    };
+// --- heading text extraction ---
+
+/// The plain-text content of a heading's inline children — the slug source and
+/// TOC label. Mirrors GFM's `textContent`: code-span text is included, link
+/// and emphasis text is flattened, autolinks contribute their URL, and image
+/// alt text is excluded.
+fn heading_text(children: &List<Node>) -> String {
+    let mut out = String::new();
+    collect_heading_text(children, &mut out);
+    return out;
 }
 
-fn render_heading(h: &Heading, refs: &RefTable) -> String {
-    return `<h{h.level}>{render_inline_seq(&h.children, refs)}</h{h.level}>`;
+fn collect_heading_text(children: &List<Node>, out: &mut String) {
+    for let node of children {
+        match node {
+            Node::Text(s) => out.push_str(&unescape_backslashes(s)),
+            Node::Code(s) => out.push_str(s),
+            Node::Emphasis(em) => collect_heading_text(&em.children, out),
+            Node::Strong(ch) => collect_heading_text(ch, out),
+            Node::Strikethrough(ch) => collect_heading_text(ch, out),
+            Node::InlineLink(link) => collect_heading_text(&link.children, out),
+            Node::ReferenceLink(link) => collect_heading_text(&link.children, out),
+            Node::ShortcutLink(link) => collect_heading_text(&link.children, out),
+            Node::AutoLink(link) => out.push_str(&link.url),
+            Node::Html(s) => out.push_str(s),
+            _ => {},
+        }
+    }
 }
+
+// --- blocks (reference-only) ---
 
 fn render_code_block(cb: &CodeBlock) -> String {
     let mut out = String::new();
     out.push_str(&"<pre><code");
     if cb.tag.len() > 0 {
-        out.push_str(&` class="language-{escape_attr(&cb.tag)}"`);
+        out.push_str(&` class="language-{escape_attr_ref(&cb.tag)}"`);
     }
     out.push('>');
-    out.push_str(&escape_text(&cb.code));
+    out.push_str(&escape_text_ref(&cb.code));
     out.push_str(&"</code></pre>");
     return out;
-}
-
-// --- lists ---
-
-fn render_list(list: &MdList, refs: &RefTable) -> String {
-    let loose = list_is_loose(list);
-    let mut parts: List<String> = [];
-    for let item of list.items {
-        parts.push(render_item(&item, loose, refs));
-    }
-    let inner = parts.join("\n");
-    let [open, close] = list_tags(list);
-    return `{open}\n{inner}\n{close}`;
 }
 
 fn list_is_loose(list: &MdList) -> bool {
@@ -107,48 +227,6 @@ fn list_tags(list: &MdList) -> [String, String] {
         return [`<ol start="{list.start}">`, "</ol>"];
     }
     return ["<ol>", "</ol>"];
-}
-
-fn render_item(item: &MdItem, loose: bool, refs: &RefTable) -> String {
-    let marker = match item.marker {
-        Some(m) => if m.checked { "[x] " } else { "[ ] " },
-        None => "",
-    };
-    let content = render_item_children(&item.children, loose, marker, refs);
-    if loose {
-        return `<li>\n{content}\n</li>`;
-    }
-    return `<li>{content}</li>`;
-}
-
-/// In a tight list a paragraph item contributes its inline content directly;
-/// in a loose list it is wrapped in `<p>`. Nested blocks render normally. A
-/// task-list marker (`[ ] ` / `[x] `) leads the first child's content, so it
-/// lands inside the `<p>` of a loose item without inspecting the output.
-fn render_item_children(children: &List<Node>, loose: bool, marker: String, refs: &RefTable) -> String {
-    let mut parts: List<String> = [];
-    let mut first = true;
-    for let child of children {
-        let lead = if first { marker } else { "" };
-        parts.push(render_item_child(child, loose, &lead, refs));
-        first = false;
-    }
-    return parts.join("\n");
-}
-
-fn render_item_child(child: &Node, loose: bool, lead: &String, refs: &RefTable) -> String {
-    match child {
-        Node::Paragraph(p) => {
-            let inline = render_inline_seq(&p.children, refs);
-            if loose {
-                return `<p>{lead}{inline}</p>`;
-            }
-            return `{lead}{inline}`;
-        },
-        _ => {
-            return `{lead}{render_block(child, refs)}`;
-        },
-    }
 }
 
 // --- tables ---
@@ -218,14 +296,14 @@ fn render_inline_node(node: &Node, refs: &RefTable, out: &mut String) {
         Node::Emphasis(em) => wrap_inline(&"em", &em.children, refs, out),
         Node::Strong(children) => wrap_inline(&"strong", children, refs, out),
         Node::Strikethrough(children) => wrap_inline(&"del", children, refs, out),
-        Node::Code(s) => out.push_str(&`<code>{escape_text(s)}</code>`),
+        Node::Code(s) => out.push_str(&`<code>{escape_text_ref(s)}</code>`),
         Node::InlineLink(link) => render_link(&link.url, &link.title, &link.children, refs, out),
         Node::ReferenceLink(link) => render_reference_link(link, refs, out),
         Node::ShortcutLink(link) => render_reference_link(link, refs, out),
         Node::AutoLink(link) => render_autolink(&link.url, out),
         Node::InlineImage(img) => render_image(&img.alt, &img.url, &img.title, out),
         Node::ReferenceImage(img) => render_reference_image(img, refs, out),
-        Node::Html(s) => out.push_str(&escape_text(s)),
+        Node::Html(s) => out.push_str(&escape_text_ref(s)),
         _ => panic("marl-html: unexpected node in inline position"),
     }
 }
@@ -238,7 +316,7 @@ fn wrap_inline(tag: &String, children: &List<Node>, refs: &RefTable, out: &mut S
 /// source spelling (`\*`) so the formatter round-trips it, but HTML output
 /// wants the escaped character itself (`*`).
 fn text_to_html(s: &String) -> String {
-    return escape_text(&unescape_backslashes(s));
+    return escape_text_ref(&unescape_backslashes(s));
 }
 
 fn unescape_backslashes(s: &String) -> String {
@@ -258,8 +336,29 @@ fn unescape_backslashes(s: &String) -> String {
     return out;
 }
 
+/// Neutralize a link/image destination whose scheme could execute script:
+/// return it unchanged when the scheme is safe (or absent), else `""`. Blocks
+/// `javascript:`, `data:`, `vbscript:`, and any other unlisted scheme.
+fn sanitize_url(url: &String) -> String {
+    let mut scheme = String::new();
+    for let c of url.chars() {
+        if c == ':' {
+            return if scheme_is_safe(&scheme) { *url } else { "" };
+        }
+        if c matches { '/' | '?' | '#' } {
+            return *url;
+        }
+        scheme.push(c.to_ascii_lowercase());
+    }
+    return *url;
+}
+
+fn scheme_is_safe(scheme: &String) -> bool {
+    return *scheme == "http" || *scheme == "https" || *scheme == "mailto" || *scheme == "tel";
+}
+
 fn render_link(url: &String, title: &String, children: &List<Node>, refs: &RefTable, out: &mut String) {
-    let href = escape_attr(&sanitize_url(url));
+    let href = escape_attr_ref(&sanitize_url(url));
     out.push_str(&`<a href="{href}"{title_attr(title)}>{render_inline_seq(children, refs)}</a>`);
 }
 
@@ -273,13 +372,13 @@ fn render_reference_link(link: &ReferenceLinkNode, refs: &RefTable, out: &mut St
 }
 
 fn render_autolink(url: &String, out: &mut String) {
-    let href = escape_attr(&sanitize_url(url));
-    out.push_str(&`<a href="{href}">{escape_text(url)}</a>`);
+    let href = escape_attr_ref(&sanitize_url(url));
+    out.push_str(&`<a href="{href}">{escape_text_ref(url)}</a>`);
 }
 
 fn render_image(alt: &String, url: &String, title: &String, out: &mut String) {
-    let src = escape_attr(&sanitize_url(url));
-    out.push_str(&`<img src="{src}" alt="{escape_attr(alt)}"{title_attr(title)} />`);
+    let src = escape_attr_ref(&sanitize_url(url));
+    out.push_str(&`<img src="{src}" alt="{escape_attr_ref(alt)}"{title_attr(title)} />`);
 }
 
 fn render_reference_image(img: &ReferenceImageNode, refs: &RefTable, out: &mut String) {
@@ -293,5 +392,5 @@ fn title_attr(title: &String) -> String {
     if title.len() == 0 {
         return "";
     }
-    return ` title="{escape_attr(title)}"`;
+    return ` title="{escape_attr_ref(title)}"`;
 }

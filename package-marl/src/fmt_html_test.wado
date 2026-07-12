@@ -3,31 +3,31 @@ use { render } from "./fmt_html.wado";
 // --- blocks ---
 
 test "render wraps a line in a paragraph" {
-    assert render(&"hello world") == "<p>hello world</p>";
+    assert render("hello world").html == "<p>hello world</p>";
 }
 
 test "render emits ATX headings by level" {
-    assert render(&"# Title") == "<h1>Title</h1>";
-    assert render(&"### Deep") == "<h3>Deep</h3>";
-    assert render(&"###### Six") == "<h6>Six</h6>";
+    assert render("# Title").html == "<h1 id=\"title\">Title</h1>";
+    assert render("### Deep").html == "<h3 id=\"deep\">Deep</h3>";
+    assert render("###### Six").html == "<h6 id=\"six\">Six</h6>";
 }
 
 test "render joins consecutive lines into one paragraph" {
-    assert render(&"line one
-line two") == "<p>line one
+    assert render("line one
+line two").html == "<p>line one
 line two</p>";
 }
 
 test "render separates paragraphs on a blank line" {
-    assert render(&"first
+    assert render("first
 
-second") == "<p>first</p>
+second").html == "<p>first</p>
 <p>second</p>";
 }
 
 test "render emits a thematic break" {
-    assert render(&"---") == "<hr />";
-    assert render(&"***") == "<hr />";
+    assert render("---").html == "<hr />";
+    assert render("***").html == "<hr />";
 }
 
 test "render mixes headings, paragraphs, and breaks" {
@@ -38,59 +38,59 @@ A paragraph.
 ---
 
 Another.";
-    assert render(&input) == "<h1>Heading</h1>
+    assert render(input).html == "<h1 id=\"heading\">Heading</h1>
 <p>A paragraph.</p>
 <hr />
 <p>Another.</p>";
 }
 
 test "render strips an ATX closing sequence" {
-    assert render(&"## foo ##") == "<h2>foo</h2>";
+    assert render("## foo ##").html == "<h2 id=\"foo\">foo</h2>";
 }
 
 // --- code ---
 
 test "render emits a fenced code block" {
-    assert render(&"```
+    assert render("```
 code
-```") == "<pre><code>code
+```").html == "<pre><code>code
 </code></pre>";
 }
 
 test "render tags a fenced code block with its language" {
-    assert render(&"```wado
+    assert render("```wado
 let x = 1;
-```") == "<pre><code class=\"language-wado\">let x = 1;
+```").html == "<pre><code class=\"language-wado\">let x = 1;
 </code></pre>";
 }
 
 test "render escapes html in a code fence but not markdown" {
-    assert render(&"```
+    assert render("```
 a < b & *c*
-```") == "<pre><code>a &lt; b &amp; *c*
+```").html == "<pre><code>a &lt; b &amp; *c*
 </code></pre>";
 }
 
 // --- blockquotes ---
 
 test "render emits a blockquote" {
-    assert render(&"> quote") == "<blockquote>
+    assert render("> quote").html == "<blockquote>
 <p>quote</p>
 </blockquote>";
 }
 
 test "render renders block structure inside a blockquote" {
-    assert render(&"> # Title") == "<blockquote>
-<h1>Title</h1>
+    assert render("> # Title").html == "<blockquote>
+<h1 id=\"title\">Title</h1>
 </blockquote>";
 }
 
 // --- lists ---
 
 test "render emits a tight unordered list" {
-    assert render(&"- a
+    assert render("- a
 - b
-- c") == "<ul>
+- c").html == "<ul>
 <li>a</li>
 <li>b</li>
 <li>c</li>
@@ -98,31 +98,31 @@ test "render emits a tight unordered list" {
 }
 
 test "render emits an ordered list" {
-    assert render(&"1. one
-2. two") == "<ol>
+    assert render("1. one
+2. two").html == "<ol>
 <li>one</li>
 <li>two</li>
 </ol>";
 }
 
 test "render emits an ol start attribute for a non-1 first number" {
-    assert render(&"3. three
-4. four") == "<ol start=\"3\">
+    assert render("3. three
+4. four").html == "<ol start=\"3\">
 <li>three</li>
 <li>four</li>
 </ol>";
 }
 
 test "render renders inline markup in list items" {
-    assert render(&"- **bold** item") == "<ul>
+    assert render("- **bold** item").html == "<ul>
 <li><strong>bold</strong> item</li>
 </ul>";
 }
 
 test "render wraps loose list items in paragraphs" {
-    assert render(&"- a
+    assert render("- a
 
-- b") == "<ul>
+- b").html == "<ul>
 <li>
 <p>a</p>
 </li>
@@ -133,8 +133,8 @@ test "render wraps loose list items in paragraphs" {
 }
 
 test "render nests a list under an item" {
-    assert render(&"- parent
-  - child") == "<ul>
+    assert render("- parent
+  - child").html == "<ul>
 <li>parent
 <ul>
 <li>child</li>
@@ -143,17 +143,17 @@ test "render nests a list under an item" {
 }
 
 test "render prints task-list markers as literal text" {
-    assert render(&"- [ ] todo
-- [x] done") == "<ul>
+    assert render("- [ ] todo
+- [x] done").html == "<ul>
 <li>[ ] todo</li>
 <li>[x] done</li>
 </ul>";
 }
 
 test "render keeps task-list markers inside p for a loose list" {
-    assert render(&"- [ ] todo
+    assert render("- [ ] todo
 
-- [x] done") == "<ul>
+- [x] done").html == "<ul>
 <li>
 <p>[ ] todo</p>
 </li>
@@ -169,7 +169,7 @@ test "render emits a GFM table" {
     let input = "| a | b |
 | --- | --- |
 | 1 | 2 |";
-    assert render(&input) == "<table>
+    assert render(input).html == "<table>
 <thead>
 <tr>
 <th>a</th>
@@ -189,7 +189,7 @@ test "render applies table column alignment" {
     let input = "| L | C | R |
 | :-- | :-: | --: |
 | a | b | c |";
-    assert render(&input) == "<table>
+    assert render(input).html == "<table>
 <thead>
 <tr>
 <th align=\"left\">L</th>
@@ -210,51 +210,51 @@ test "render applies table column alignment" {
 // --- inline ---
 
 test "render emits strong, emphasis, strikethrough" {
-    assert render(&"**bold**") == "<p><strong>bold</strong></p>";
-    assert render(&"*em*") == "<p><em>em</em></p>";
-    assert render(&"~~gone~~") == "<p><del>gone</del></p>";
+    assert render("**bold**").html == "<p><strong>bold</strong></p>";
+    assert render("*em*").html == "<p><em>em</em></p>";
+    assert render("~~gone~~").html == "<p><del>gone</del></p>";
 }
 
 test "render renders inline code and escapes within it" {
-    assert render(&"`a<b & c>`") == "<p><code>a&lt;b &amp; c&gt;</code></p>";
+    assert render("`a<b & c>`").html == "<p><code>a&lt;b &amp; c&gt;</code></p>";
 }
 
 test "render leaves intraword underscores literal" {
-    assert render(&"foo_bar_baz") == "<p>foo_bar_baz</p>";
+    assert render("foo_bar_baz").html == "<p>foo_bar_baz</p>";
 }
 
 test "render escapes plain angle brackets and ampersands" {
-    assert render(&"# a < b & c") == "<h1>a &lt; b &amp; c</h1>";
-    assert render(&"x < y & z") == "<p>x &lt; y &amp; z</p>";
+    assert render("# a < b & c").html == "<h1 id=\"a--b--c\">a &lt; b &amp; c</h1>";
+    assert render("x < y & z").html == "<p>x &lt; y &amp; z</p>";
 }
 
 test "render resolves backslash escapes for HTML" {
-    assert render(&"\\*not em\\*") == "<p>*not em*</p>";
-    assert render(&"a \\& b") == "<p>a &amp; b</p>";
+    assert render("\\*not em\\*").html == "<p>*not em*</p>";
+    assert render("a \\& b").html == "<p>a &amp; b</p>";
 }
 
 test "render makes a hard break on a trailing backslash" {
-    assert render(&"a\\
-b") == "<p>a<br />
+    assert render("a\\
+b").html == "<p>a<br />
 b</p>";
 }
 
 // --- links and images ---
 
 test "render renders an inline link with an escaped href" {
-    assert render(&"[home](http://example.com)") == "<p><a href=\"http://example.com\">home</a></p>";
+    assert render("[home](http://example.com)").html == "<p><a href=\"http://example.com\">home</a></p>";
 }
 
 test "render renders an inline link title" {
-    assert render(&"[home](http://x.test \"Home\")") == "<p><a href=\"http://x.test\" title=\"Home\">home</a></p>";
+    assert render("[home](http://x.test \"Home\")").html == "<p><a href=\"http://x.test\" title=\"Home\">home</a></p>";
 }
 
 test "render renders an image" {
-    assert render(&"![a cat](cat.png)") == "<p><img src=\"cat.png\" alt=\"a cat\" /></p>";
+    assert render("![a cat](cat.png)").html == "<p><img src=\"cat.png\" alt=\"a cat\" /></p>";
 }
 
 test "render autolinks a bare url" {
-    assert render(&"see https://wado.example/docs here") == "<p>see <a href=\"https://wado.example/docs\">https://wado.example/docs</a> here</p>";
+    assert render("see https://wado.example/docs here").html == "<p>see <a href=\"https://wado.example/docs\">https://wado.example/docs</a> here</p>";
 }
 
 // --- reference-style links (resolved via the definition table) ---
@@ -263,45 +263,45 @@ test "render resolves a reference link" {
     let input = "[home][h]
 
 [h]: http://example.com \"Home\"";
-    assert render(&input) == "<p><a href=\"http://example.com\" title=\"Home\">home</a></p>";
+    assert render(input).html == "<p><a href=\"http://example.com\" title=\"Home\">home</a></p>";
 }
 
 test "render resolves a shortcut reference link" {
     let input = "[home]
 
 [home]: /x";
-    assert render(&input) == "<p><a href=\"/x\">home</a></p>";
+    assert render(input).html == "<p><a href=\"/x\">home</a></p>";
 }
 
 test "render omits link reference definitions from output" {
     let input = "[a][b]
 
 [b]: /url";
-    assert render(&input) == "<p><a href=\"/url\">a</a></p>";
+    assert render(input).html == "<p><a href=\"/url\">a</a></p>";
 }
 
 // --- safety ---
 
 test "render neutralizes unsafe URL schemes" {
-    assert render(&"[x](javascript:alert(1))") == "<p><a href=\"\">x</a></p>";
-    assert render(&"![x](data:text/html,evil)") == "<p><img src=\"\" alt=\"x\" /></p>";
+    assert render("[x](javascript:alert(1))").html == "<p><a href=\"\">x</a></p>";
+    assert render("![x](data:text/html,evil)").html == "<p><img src=\"\" alt=\"x\" /></p>";
 }
 
 test "render keeps safe and relative URLs" {
-    assert render(&"[x](mailto:a@b.com)") == "<p><a href=\"mailto:a@b.com\">x</a></p>";
-    assert render(&"[x](#anchor)") == "<p><a href=\"#anchor\">x</a></p>";
+    assert render("[x](mailto:a@b.com)").html == "<p><a href=\"mailto:a@b.com\">x</a></p>";
+    assert render("[x](#anchor)").html == "<p><a href=\"#anchor\">x</a></p>";
 }
 
 test "render neutralizes an unsafe scheme in an angle autolink" {
-    assert render(&"<javascript:foo>") == "<p><a href=\"\">javascript:foo</a></p>";
+    assert render("<javascript:foo>").html == "<p><a href=\"\">javascript:foo</a></p>";
 }
 
 test "render escapes a raw inline HTML span as literal text" {
-    assert render(&"a <b>c</b> d") == "<p>a &lt;b&gt;c&lt;/b&gt; d</p>";
+    assert render("a <b>c</b> d").html == "<p>a &lt;b&gt;c&lt;/b&gt; d</p>";
 }
 
 test "render escapes a raw HTML block as literal text" {
-    assert render(&"<div>x</div>") == "&lt;div&gt;x&lt;/div&gt;";
+    assert render("<div>x</div>").html == "&lt;div&gt;x&lt;/div&gt;";
 }
 
 // --- front matter ---
@@ -311,5 +311,108 @@ test "render skips leading front matter" {
 title: x
 ---
 body";
-    assert render(&input) == "<p>body</p>";
+    assert render(input).html == "<p>body</p>";
+}
+
+// --- heading ids (GFM slugs) ---
+
+test "render slugifies a heading with spaces and punctuation" {
+    assert render("## Hello, World!").html == "<h2 id=\"hello-world\">Hello, World!</h2>";
+}
+
+test "render keeps hyphens and underscores in a slug" {
+    assert render("# foo_bar-baz").html == "<h1 id=\"foo_bar-baz\">foo_bar-baz</h1>";
+}
+
+test "render keeps non-ASCII characters verbatim in a slug" {
+    assert render("## 日本語").html == "<h2 id=\"日本語\">日本語</h2>";
+}
+
+test "render lowercases only ASCII letters in a slug" {
+    // Option A: non-ASCII letters are kept verbatim, not case-folded, so the
+    // uppercase Ü stays Ü while the ASCII C is lowered to c.
+    assert render("## Café Über").html == "<h2 id=\"café-Über\">Café Über</h2>";
+}
+
+test "render slugifies from a code span's text" {
+    assert render("## `code` span").html == "<h2 id=\"code-span\"><code>code</code> span</h2>";
+}
+
+test "render slugifies from link and emphasis text, not markup" {
+    assert render("## a [link](/x) and *em*").html
+        == "<h2 id=\"a-link-and-em\">a <a href=\"/x\">link</a> and <em>em</em></h2>";
+}
+
+test "render deduplicates repeated heading slugs" {
+    let input = "# Dup
+
+# Dup
+
+# Dup";
+    assert render(input).html == "<h1 id=\"dup\">Dup</h1>
+<h1 id=\"dup-1\">Dup</h1>
+<h1 id=\"dup-2\">Dup</h1>";
+}
+
+test "render avoids a dedup slug colliding with an explicit one" {
+    let input = "# a
+
+# a
+
+# a-1";
+    assert render(input).html == "<h1 id=\"a\">a</h1>
+<h1 id=\"a-1\">a</h1>
+<h1 id=\"a-1-1\">a-1</h1>";
+}
+
+test "render emits an empty slug for punctuation-only headings" {
+    let input = "# !!!
+
+# !!!";
+    assert render(input).html == "<h1 id=\"\">!!!</h1>
+<h1 id=\"-1\">!!!</h1>";
+}
+
+// --- rendered outline (opt-in table of contents) ---
+
+test "render returns the heading outline in document order" {
+    let input = "# Intro
+
+## Details
+
+Body.
+
+## Details";
+    let result = render(input);
+    assert result.headings.len() == 3;
+
+    assert result.headings[0].level == 1 as u8;
+    assert result.headings[0].id == "intro";
+    assert result.headings[0].text == "Intro";
+
+    assert result.headings[1].level == 2 as u8;
+    assert result.headings[1].id == "details";
+    assert result.headings[1].text == "Details";
+
+    assert result.headings[2].id == "details-1";
+    assert result.headings[2].text == "Details";
+}
+
+test "render collects a heading nested in a blockquote" {
+    let result = render("> # Quoted");
+    assert result.headings.len() == 1;
+    assert result.headings[0].id == "quoted";
+    assert result.headings[0].text == "Quoted";
+}
+
+test "render reports plain text with markup stripped in the outline" {
+    let result = render("## a `code` and **bold**");
+    assert result.headings.len() == 1;
+    assert result.headings[0].text == "a code and bold";
+    assert result.headings[0].id == "a-code-and-bold";
+}
+
+test "render reports no headings for a heading-free document" {
+    let result = render("just a paragraph");
+    assert result.headings.is_empty();
 }
