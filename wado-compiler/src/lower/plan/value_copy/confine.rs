@@ -88,11 +88,11 @@ pub fn compute_confined_params(project: &FlatPackage) -> ConfinedParams {
         } else {
             compute_escape(&ctx, body, func.return_type, &mut pe);
         }
-        if pe != funcs[&key] {
+        if pe == funcs[&key] {
+            false
+        } else {
             funcs.insert(key, pe);
             true
-        } else {
-            false
         }
     });
 
