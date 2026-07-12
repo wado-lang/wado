@@ -533,52 +533,73 @@ impl GenContext {
     }
 
     pub fn first_of_rule(&mut self, name: &String, visiting: &mut List<String>) -> List<String> {
+        let mut min_cycle = i32::MAX;
+        return self.first_of_rule_at(name, visiting, &mut min_cycle);
+    }
+
+    /// FIRST set with SCC-aware memoization; see `is_rule_scannable_at` for the
+    /// `min_cycle` mechanism. A FIRST set computed while ancestors are on the
+    /// stack may under-count (a cycle contributes the empty set), so it is only
+    /// cached once its whole SCC has closed at this frame (`local_min >= p`).
+    fn first_of_rule_at(&mut self, name: &String, visiting: &mut List<String>, min_cycle: &mut i32) -> List<String> {
         let cached = self.first_cache.get(*name);
         if let Some(result) = cached {
             return result;
         }
 
-        if visiting.contains(name) {
+        let on_stack = visiting_index(visiting, name);
+        if on_stack >= 0 {
+            if on_stack < *min_cycle {
+                *min_cycle = on_stack;
+            }
             return [];
         }
 
-        let is_top_level = visiting.is_empty();
+        let p = visiting.len();
         visiting.push(*name);
 
+        let mut local_min = i32::MAX;
         let mut result: List<String> = [];
 
         let rule = self.find_rule(name);
         if let Some(rule) = rule {
             for let alt of &rule.alternatives {
-                let af = self.first_of_alt(alt, visiting);
+                let af = self.first_of_alt_at(alt, visiting, &mut local_min);
                 dedup_append_arr(&mut result, &af);
             }
         }
 
         remove_from_visiting(visiting, name);
 
-        if is_top_level {
+        if local_min >= p {
             self.first_cache[*name] = result;
+        } else if local_min < *min_cycle {
+            *min_cycle = local_min;
         }
 
         return result;
     }
 
     pub fn first_of_element(&mut self, elem: &Element, visiting: &mut List<String>) -> List<String> {
+        let mut min_cycle = i32::MAX;
+        return self.first_of_element_at(elem, visiting, &mut min_cycle);
+    }
+
+    fn first_of_element_at(&mut self, elem: &Element, visiting: &mut List<String>, min_cycle: &mut i32) -> List<String> {
         return match elem {
             TokenRef(t) => [`TK_{t.name}`],
             Literal(l) => [literal_const_name(&l.text)],
-            RuleRef(r) => self.first_of_rule(&r.name, visiting),
+            RuleRef(r) => self.first_of_rule_at(&r.name, visiting, min_cycle),
             Group(g) => {
                 let mut result: List<String> = [];
                 for let alt of &g.alternatives {
-                    let af = self.first_of_alt(alt, visiting);
+                    let af = self.first_of_alt_at(alt, visiting, min_cycle);
                     dedup_append_arr(&mut result, &af);
                 }
                 result;
             },
-            Repeat(rep) => self.first_of_element(&rep.element, visiting),
-            Label(lab) => self.first_of_element(&lab.element, visiting),
+            Repeat(rep) => self.first_of_element_at(&rep.element, visiting, min_cycle),
+            Label(lab) => self.first_of_element_at(&lab.element, visiting, min_cycle),
             // Wildcard and Not match an open-ended set of tokens; we cannot
             // enumerate FIRST statically. Returning [] disables static prediction
             // for alternatives starting with them — such alternatives must either
@@ -590,10 +611,15 @@ impl GenContext {
     }
 
     pub fn first_of_alt(&mut self, alt: &Alternative, visiting: &mut List<String>) -> List<String> {
+        let mut min_cycle = i32::MAX;
+        return self.first_of_alt_at(alt, visiting, &mut min_cycle);
+    }
+
+    fn first_of_alt_at(&mut self, alt: &Alternative, visiting: &mut List<String>, min_cycle: &mut i32) -> List<String> {
         let mut result: List<String> = [];
 
         for let elem of &alt.elements {
-            let elem_first = self.first_of_element(elem, visiting);
+            let elem_first = self.first_of_element_at(elem, visiting, min_cycle);
             dedup_append_arr(&mut result, &elem_first);
             if !is_nullable(elem) {
                 break;
@@ -831,23 +857,28 @@ impl GenContext {
     }
 
     pub fn element_is_nullable_deep(&mut self, elem: &Element, visiting: &mut List<String>) -> bool {
+        let mut min_cycle = i32::MAX;
+        return self.element_is_nullable_deep_at(elem, visiting, &mut min_cycle);
+    }
+
+    fn element_is_nullable_deep_at(&mut self, elem: &Element, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
         return match elem {
             TokenRef(_) => false,
             Literal(_) => false,
             Wildcard(_) => false,
             Not(_) => false,
-            RuleRef(r) => self.rule_is_nullable(&r.name, visiting),
-            Label(lab) => self.element_is_nullable_deep(&lab.element, visiting),
+            RuleRef(r) => self.rule_is_nullable_at(&r.name, visiting, min_cycle),
+            Label(lab) => self.element_is_nullable_deep_at(&lab.element, visiting, min_cycle),
             Repeat(rep) => match rep.kind {
                 Star | Optional => true,
-                _ => self.element_is_nullable_deep(&rep.element, visiting),
+                _ => self.element_is_nullable_deep_at(&rep.element, visiting, min_cycle),
             },
             Group(g) => {
                 let mut any_nullable = false;
                 for let alt of &g.alternatives {
                     let mut all_null = true;
                     for let e of &alt.elements {
-                        if !self.element_is_nullable_deep(e, visiting) {
+                        if !self.element_is_nullable_deep_at(e, visiting, min_cycle) {
                             all_null = false;
                             break;
                         }
@@ -863,25 +894,39 @@ impl GenContext {
     }
 
     pub fn rule_is_nullable(&mut self, name: &String, visiting: &mut List<String>) -> bool {
+        let mut min_cycle = i32::MAX;
+        return self.rule_is_nullable_at(name, visiting, &mut min_cycle);
+    }
+
+    /// Nullability with SCC-aware memoization (see `is_rule_scannable_at`). A
+    /// value computed while ancestors are on the stack may be provisional (a
+    /// cycle assumes not-nullable), so it is cached only once its SCC has
+    /// closed at this frame (`local_min >= p`).
+    fn rule_is_nullable_at(&mut self, name: &String, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
         let cached = self.nullable_cache.get(*name);
         if let Some(val) = cached {
             return val;
         }
 
-        if visiting.contains(name) {
+        let on_stack = visiting_index(visiting, name);
+        if on_stack >= 0 {
+            if on_stack < *min_cycle {
+                *min_cycle = on_stack;
+            }
             return false;
         }
 
-        let is_top_level = visiting.is_empty();
+        let p = visiting.len();
         visiting.push(*name);
 
+        let mut local_min = i32::MAX;
         let mut result = false;
         let rule = self.find_rule(name);
         if let Some(rule) = rule {
             for let alt of &rule.alternatives {
                 let mut all_null = true;
                 for let e of &alt.elements {
-                    if !self.element_is_nullable_deep(e, visiting) {
+                    if !self.element_is_nullable_deep_at(e, visiting, &mut local_min) {
                         all_null = false;
                         break;
                     }
@@ -895,8 +940,10 @@ impl GenContext {
 
         remove_from_visiting(visiting, name);
 
-        if is_top_level {
+        if local_min >= p {
             self.nullable_cache[*name] = result;
+        } else if local_min < *min_cycle {
+            *min_cycle = local_min;
         }
 
         return result;
@@ -1003,18 +1050,31 @@ impl GenContext {
     }
 
     pub fn rule_is_single_token(&mut self, name: &String, visiting: &mut List<String>) -> bool {
+        let mut min_cycle = i32::MAX;
+        return self.rule_is_single_token_at(name, visiting, &mut min_cycle);
+    }
+
+    /// Single-token classification with SCC-aware memoization (see
+    /// `is_rule_scannable_at`): cache only once the SCC has closed at this
+    /// frame (`local_min >= p`).
+    fn rule_is_single_token_at(&mut self, name: &String, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
         let cached = self.single_token_cache.get(*name);
         if let Some(val) = cached {
             return val;
         }
 
-        if visiting.contains(name) {
+        let on_stack = visiting_index(visiting, name);
+        if on_stack >= 0 {
+            if on_stack < *min_cycle {
+                *min_cycle = on_stack;
+            }
             return false;
         }
 
-        let is_top_level = visiting.is_empty();
+        let p = visiting.len();
         visiting.push(*name);
 
+        let mut local_min = i32::MAX;
         let mut result = false;
         let rule = self.find_rule(name);
         if let Some(rule) = rule {
@@ -1040,7 +1100,7 @@ impl GenContext {
                     if let TokenRef(_) | Literal(_) = elem {
                         single_ok = true;
                     } else if let RuleRef(r) = elem {
-                        single_ok = self.rule_is_single_token(&r.name, visiting);
+                        single_ok = self.rule_is_single_token_at(&r.name, visiting, &mut local_min);
                     }
                 }
                 if has_nullable || non_nullable_count != 1 || !single_ok {
@@ -1053,8 +1113,10 @@ impl GenContext {
 
         remove_from_visiting(visiting, name);
 
-        if is_top_level {
+        if local_min >= p {
             self.single_token_cache[*name] = result;
+        } else if local_min < *min_cycle {
+            *min_cycle = local_min;
         }
 
         return result;
@@ -1076,24 +1138,46 @@ impl GenContext {
     /// per-candidate LR scan is bounded, not run exhaustively for already-
     /// matched alts.
     pub fn is_rule_scannable(&mut self, name: &String, visiting: &mut List<String>) -> bool {
+        let mut min_cycle = i32::MAX;
+        return self.is_rule_scannable_at(name, visiting, &mut min_cycle);
+    }
+
+    /// Scannability with SCC-aware memoization. `min_cycle` is an out-parameter:
+    /// the shallowest `visiting` index this computation cycled back to
+    /// (`i32::MAX` if none). Only top-level results were cacheable before,
+    /// because a value computed while ancestors are on the `visiting` stack
+    /// depends on the optimistic "cycle = scannable" assumption — recomputing
+    /// every non-top-level call is exponential for deeply mutually-recursive
+    /// grammars (Rust/TypeScript/css3). Tracking the cycle depth lets us cache
+    /// far more: a result is final once it no longer depends on an unresolved
+    /// ancestor, which the SCC condition below decides. Results stay identical
+    /// to the top-level-only scheme; only the number of recomputations drops.
+    fn is_rule_scannable_at(&mut self, name: &String, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
         let cached = self.scannable_cache.get(*name);
         if let Some(val) = cached {
             return val;
         }
 
-        if visiting.contains(name) {
+        let on_stack = visiting_index(visiting, name);
+        if on_stack >= 0 {
+            // Cycle back to an on-stack rule: assume scannable (the analysis's
+            // optimistic fixpoint) and record how shallow the cycle reached.
+            if on_stack < *min_cycle {
+                *min_cycle = on_stack;
+            }
             return true;
         }
 
-        let is_top_level = visiting.is_empty();
+        let p = visiting.len();
         visiting.push(*name);
 
+        let mut local_min = i32::MAX;
         let mut result = false;
         let rule = self.find_rule(name);
         if let Some(rule) = rule {
             let mut all_ok = true;
             for let alt of &rule.alternatives {
-                if !self.is_alt_scannable(&alt.elements, visiting) {
+                if !self.is_alt_scannable_at(&alt.elements, visiting, &mut local_min) {
                     all_ok = false;
                     break;
                 }
@@ -1103,8 +1187,15 @@ impl GenContext {
 
         remove_from_visiting(visiting, name);
 
-        if is_top_level {
+        // Cache once the result no longer depends on an unresolved ancestor's
+        // optimistic assumption: a `false` never does (cycles only make things
+        // optimistically `true`), and a `true` is final once its whole SCC
+        // closed at or below this frame (`local_min >= p`). Otherwise the value
+        // is provisional — propagate the escaping cycle depth to the caller.
+        if !result || local_min >= p {
             self.scannable_cache[*name] = result;
+        } else if local_min < *min_cycle {
+            *min_cycle = local_min;
         }
 
         return result;
@@ -1112,8 +1203,18 @@ impl GenContext {
 
     /// Returns true if every element in the sequence is scannable.
     pub fn is_alt_scannable(&mut self, elements: &List<Element>, visiting: &mut List<String>) -> bool {
+        let mut min_cycle = i32::MAX;
+        return self.is_alt_scannable_at(elements, visiting, &mut min_cycle);
+    }
+
+    fn is_alt_scannable_at(
+        &mut self,
+        elements: &List<Element>,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> bool {
         for let elem of elements {
-            if !self.is_element_scannable(elem, visiting) {
+            if !self.is_element_scannable_at(elem, visiting, min_cycle) {
                 return false;
             }
         }
@@ -1122,14 +1223,19 @@ impl GenContext {
 
     /// Returns true if a single element is scannable.
     pub fn is_element_scannable(&mut self, elem: &Element, visiting: &mut List<String>) -> bool {
+        let mut min_cycle = i32::MAX;
+        return self.is_element_scannable_at(elem, visiting, &mut min_cycle);
+    }
+
+    fn is_element_scannable_at(&mut self, elem: &Element, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
         return match elem {
             TokenRef(_) | Literal(_) => true,
-            RuleRef(r) => self.is_rule_scannable(&r.name, visiting),
-            Label(lab) => self.is_element_scannable(&lab.element, visiting),
-            Repeat(rep) => self.is_element_scannable(&rep.element, visiting),
+            RuleRef(r) => self.is_rule_scannable_at(&r.name, visiting, min_cycle),
+            Label(lab) => self.is_element_scannable_at(&lab.element, visiting, min_cycle),
+            Repeat(rep) => self.is_element_scannable_at(&rep.element, visiting, min_cycle),
             Group(g) => {
                 for let alt of &g.alternatives {
-                    if !self.is_alt_scannable(&alt.elements, visiting) {
+                    if !self.is_alt_scannable_at(&alt.elements, visiting, min_cycle) {
                         return false;
                     }
                 }
@@ -1275,31 +1381,50 @@ impl GenContext {
     /// callee's tail-greedy elements cannot collide with the caller's
     /// expectations and no FOLLOW argument is needed.
     pub fn tail_greedy_first_of_rule(&mut self, name: &String, visiting: &mut List<String>) -> List<String> {
+        let mut min_cycle = i32::MAX;
+        return self.tail_greedy_first_of_rule_at(name, visiting, &mut min_cycle);
+    }
+
+    /// Tail-greedy FIRST with SCC-aware memoization (see `is_rule_scannable_at`):
+    /// cache only once the SCC has closed at this frame (`local_min >= p`).
+    fn tail_greedy_first_of_rule_at(
+        &mut self,
+        name: &String,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> List<String> {
         let cached = self.tail_greedy_cache.get(*name);
         if let Some(result) = cached {
             return result;
         }
 
-        if visiting.contains(name) {
+        let on_stack = visiting_index(visiting, name);
+        if on_stack >= 0 {
+            if on_stack < *min_cycle {
+                *min_cycle = on_stack;
+            }
             return [];
         }
 
-        let is_top_level = visiting.is_empty();
+        let p = visiting.len();
         visiting.push(*name);
 
+        let mut local_min = i32::MAX;
         let mut result: List<String> = [];
         let rule = self.find_rule(name);
         if let Some(rule) = rule {
             for let alt of &rule.alternatives {
-                let af = self.tail_greedy_first_of_elements(&alt.elements, visiting);
+                let af = self.tail_greedy_first_of_elements(&alt.elements, visiting, &mut local_min);
                 dedup_append_arr(&mut result, &af);
             }
         }
 
         remove_from_visiting(visiting, name);
 
-        if is_top_level {
+        if local_min >= p {
             self.tail_greedy_cache[*name] = result;
+        } else if local_min < *min_cycle {
+            *min_cycle = local_min;
         }
 
         return result;
@@ -1310,12 +1435,17 @@ impl GenContext {
     /// `Repeat (Optional|Star|Plus)` contributes `first_of_element(inner)`.
     /// A nested `Group` recurses per alt. A `RuleRef` to a rule with a
     /// non-empty `tail_greedy_first` contributes that set transitively.
-    fn tail_greedy_first_of_elements(&mut self, elements: &List<Element>, visiting: &mut List<String>) -> List<String> {
+    fn tail_greedy_first_of_elements(
+        &mut self,
+        elements: &List<Element>,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> List<String> {
         let mut result: List<String> = [];
         let mut i = elements.len() - 1;
         while i >= 0 {
             let elem = &elements[i];
-            let tg = self.tail_greedy_first_of_element(elem, visiting);
+            let tg = self.tail_greedy_first_of_element(elem, visiting, min_cycle);
             dedup_append_arr(&mut result, &tg);
             let mut nv: List<String> = [];
             if !self.element_is_nullable_deep(elem, &mut nv) {
@@ -1326,7 +1456,12 @@ impl GenContext {
         return result;
     }
 
-    fn tail_greedy_first_of_element(&mut self, elem: &Element, visiting: &mut List<String>) -> List<String> {
+    fn tail_greedy_first_of_element(
+        &mut self,
+        elem: &Element,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> List<String> {
         return match elem {
             Repeat(rep) => {
                 // Only count Repeats whose inner consumes EXACTLY one
@@ -1354,13 +1489,13 @@ impl GenContext {
             Group(g) => {
                 let mut acc: List<String> = [];
                 for let alt of &g.alternatives {
-                    let inner = self.tail_greedy_first_of_elements(&alt.elements, visiting);
+                    let inner = self.tail_greedy_first_of_elements(&alt.elements, visiting, min_cycle);
                     dedup_append_arr(&mut acc, &inner);
                 }
                 acc;
             },
-            Label(lab) => self.tail_greedy_first_of_element(&lab.element, visiting),
-            RuleRef(r) => self.tail_greedy_first_of_rule(&r.name, visiting),
+            Label(lab) => self.tail_greedy_first_of_element(&lab.element, visiting, min_cycle),
+            RuleRef(r) => self.tail_greedy_first_of_rule_at(&r.name, visiting, min_cycle),
             // Token / Literal / Wildcard / Not consume exactly one token
             // and never leak — they are the "stop" condition.
             TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => [],
@@ -1532,6 +1667,28 @@ pub fn union_kind_arrays(a: &List<String>, b: &List<String>) -> List<String> {
     return result;
 }
 
+/// Index of `name` in the visiting stack, or -1. Used by the scannability
+/// analysis to record how shallow a cycle reaches (see `is_rule_scannable_at`).
+fn visiting_index(visiting: &List<String>, name: &String) -> i32 {
+    for let mut i = 0; i < visiting.len(); i += 1 {
+        if visiting[i] == *name {
+            return i;
+        }
+    }
+    return -1;
+}
+
 fn remove_from_visiting(visiting: &mut List<String>, name: &String) {
+    // `visiting` is a stack: every caller pushes `name`, recurses (inner frames
+    // pop their own names), then removes `name` — so `name` is on top. Pop in
+    // O(1). The old `filter().collect()` rebuilt the whole list on every
+    // recursion frame; on deeply-recursive grammars that per-frame allocation
+    // dominated allocation and GC. Fall back to a scan if the invariant is ever
+    // violated.
+    let n = visiting.len();
+    if n > 0 && visiting[n - 1] == *name {
+        visiting.pop();
+        return;
+    }
     *visiting = visiting.iter().copied().filter(|v: String| v != *name).collect();
 }
