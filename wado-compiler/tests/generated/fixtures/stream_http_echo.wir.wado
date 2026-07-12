@@ -468,6 +468,9 @@ fn "stream_http_echo.wado/handle"(request) {
     let packed_184: i64;
     let rx_185: i32;
     let tx_186: i32;
+    let v_187: ref "wasi:http/types.wado//FieldSizePayload";
+    let v_188: ref null "core:prelude/string.wado//String";
+    let __vc_payload_0: ref "core:prelude/string.wado//String";
     let __sroa___pattern_temp_0_0: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:stream_http_echo.wado::__modules_initialized);
@@ -600,7 +603,13 @@ fn "stream_http_echo.wado/handle"(request) {
             __local_71 = 0;
             __local_72 = 0;
             if __local_67 != 0 {
-                __local_73 = ref.as_non_null(__local_65);
+                v_187 = ref.as_non_null(__local_65);
+                __local_73 = struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: v_188 = v_187.field_name; (if ref.is_null(v_188) == 0 -> ref null "core:prelude/string.wado//String" {
+                    __vc_payload_0 = ref.as_non_null(v_188);
+                    struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = __vc_payload_0.repr; let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__array_clone_src_1); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: __vc_payload_0.used };
+                } else {
+                    v_188;
+                }), field_size: v_187.field_size };
                 __local_74 = __local_73.field_name;
                 __local_75 = ref.is_null(__local_74) == 0;
                 __local_76 = 0;
@@ -786,16 +795,16 @@ fn "stream_http_echo.wado/handle"(request) {
         "wasi/task-return:handle"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
     __iter_15 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/list.wado/List<u8>>" { repr: __b.repr, index: 0, end: __b.used };
-    b63: block {
-        l64: loop {
+    b64: block {
+        l65: loop {
             __match_173 = "core:prelude/slice.wado/ArrayIter<core:prelude/list.wado/List<u8>>^Iterator::next"(__iter_15);
             if ref.is_null(__match_173) == 0 {
                 chunk_16 = ref.as_non_null(__match_173);
                 "core:rt/cm_stream_write_u8"(tx_186, chunk_16);
             } else {
-                break b63;
+                break b64;
             }
-            continue l64;
+            continue l65;
         };
     };
     "wasi/stream-drop-writable"(tx_186);
@@ -874,12 +883,12 @@ fn "core:rt/memory_to_gc_array"(ptr, len) {
     let i: i32;
     arr = builtin::array_new<u8>(len);
     i = 0;
-    b68: block {
-        l69: loop {
-            break_if b68 i >= len;
+    b69: block {
+        l70: loop {
+            break_if b69 i >= len;
             builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
             i = i + 1;
-            continue l69;
+            continue l70;
         };
     };
     return arr;
@@ -888,12 +897,12 @@ fn "core:rt/memory_to_gc_array"(ptr, len) {
 fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b70: block {
-        l71: loop {
-            break_if b70 i >= len;
+    b71: block {
+        l72: loop {
+            break_if b71 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l71;
+            continue l72;
         };
     };
 }
@@ -960,20 +969,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b73: block {
-        l74: loop {
-            break_if b73 offset >= count;
+    b74: block {
+        l75: loop {
+            break_if b74 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/wait_for_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b73 (if (result >> 4) == 0 -> i32 {
+            break_if b74 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l74;
+            continue l75;
         };
     };
 }

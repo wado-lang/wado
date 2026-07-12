@@ -391,6 +391,9 @@ fn "http_future_new.wado/handle"(request) {
     let packed_165: i64;
     let rx_166: i32;
     let tx_167: i32;
+    let v_168: ref "wasi:http/types.wado//FieldSizePayload";
+    let v_169: ref null "core:prelude/string.wado//String";
+    let __vc_payload_0: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:http_future_new.wado::__modules_initialized);
         cold_path;
@@ -508,7 +511,13 @@ fn "http_future_new.wado/handle"(request) {
             __local_62 = 0;
             __local_63 = 0;
             if __local_58 != 0 {
-                __local_64 = ref.as_non_null(__local_56);
+                v_168 = ref.as_non_null(__local_56);
+                __local_64 = struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: v_169 = v_168.field_name; (if ref.is_null(v_169) == 0 -> ref null "core:prelude/string.wado//String" {
+                    __vc_payload_0 = ref.as_non_null(v_169);
+                    struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = __vc_payload_0.repr; let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__array_clone_src_1); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: __vc_payload_0.used };
+                } else {
+                    v_169;
+                }), field_size: v_168.field_size };
                 __local_65 = __local_64.field_name;
                 __local_66 = ref.is_null(__local_65) == 0;
                 __local_67 = 0;
@@ -751,12 +760,12 @@ fn "http_future_new.wado/__cm_export__handle"(request) {
 fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b63: block {
-        l64: loop {
-            break_if b63 i >= len;
+    b64: block {
+        l65: loop {
+            break_if b64 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l64;
+            continue l65;
         };
     };
 }

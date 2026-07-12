@@ -206,9 +206,11 @@ pub fn compute_move_eligible(
     // Multi-use or borrow-escaping parameters are still held back by `non_final`
     // / `borrow_escaped`, so this only frees genuinely final consumptions.
     // Reference parameters (`&self`) borrow the caller's storage and are never
-    // seeded. (This intraprocedural move set is distinct from the interprocedural
-    // return convention, which must stay conservative — a stored-then-returned
-    // parameter aliases the store, so params are not owned there.)
+    // seeded. The interprocedural return convention (`ownership.rs`) seeds
+    // by-value params the same way and for the same reason: a returned parameter
+    // is never confined, so the caller always deep-copies it in, and returning it
+    // (a stored-then-returned parameter's store copied it too, since it is live at
+    // the return) yields a value that aliases only the callee's own copy.
     let mut fresh: IndexSet<u32> = a
         .let_sources
         .keys()
@@ -355,8 +357,12 @@ fn disjoint(mutated: &AccessPath, read: &AccessPath) -> bool {
 /// Soundness requires that neither the binding nor its source is ever mutated or
 /// transferred while both are live, so the conditions are strict: the local is
 /// read-only, is only ever *observed* (a method receiver or a projection base,
-/// never consumed by value), is not move-eligible, and no mutation in the
-/// function aliases its source path.
+/// never consumed by value), and is not move-eligible; the *source root* is
+/// likewise never consumed by value; and every direct mutation of the source
+/// root's storage is disjoint from the projected read. The unconsumed-root
+/// condition is what makes the disjointness check complete: a mutation reaching
+/// the source storage through an aliased reference or a callee requires the root
+/// to be passed by value / bound elsewhere first, which marks it consumed.
 pub fn compute_share_eligible(
     func: &TirFunction,
     move_eligible: &IndexSet<u32>,
@@ -395,7 +401,20 @@ pub fn compute_share_eligible(
             {
                 return None;
             }
-            // No mutation aliases the source storage.
+            // The source root must not be consumed by value. A mutation of the
+            // shared storage other than a direct projection write — an aliased
+            // reference (`let x = self; x.rows[0].push(..)`) or a callee that
+            // mutates through the reference (`grow(self)`) — can only arise if the
+            // root is first passed by value / bound elsewhere, which marks it
+            // consumed. With the root unconsumed, every mutation reaching its
+            // storage is a direct write rooted exactly at it, so the disjointness
+            // check below is complete.
+            if collector.consumed.contains(&path.root) {
+                return None;
+            }
+            // Every direct mutation of the source root's storage is disjoint from
+            // the projected read (a distinct field / variant case). Mutations
+            // rooted elsewhere cannot reach it (the root is unconsumed).
             let safe = collector
                 .mutated
                 .iter()

@@ -532,9 +532,15 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
     let packed_319: i64;
     let rx_320: i32;
     let tx_321: i32;
-    let packed_322: i64;
-    let rx_323: i32;
-    let tx_324: i32;
+    let v_322: ref "wasi:http/types.wado//FieldSizePayload";
+    let v_323: ref null "core:prelude/string.wado//String";
+    let __vc_payload_0_324: ref "core:prelude/string.wado//String";
+    let packed_325: i64;
+    let rx_326: i32;
+    let tx_327: i32;
+    let v_328: ref "wasi:http/types.wado//FieldSizePayload";
+    let v_329: ref null "core:prelude/string.wado//String";
+    let __vc_payload_0_330: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:cm_waitable_set_poll.wado::__modules_initialized);
         cold_path;
@@ -654,7 +660,13 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
                 __local_218 = 0;
                 __local_219 = 0;
                 if __local_214 != 0 {
-                    __local_220 = ref.as_non_null(__local_212);
+                    v_322 = ref.as_non_null(__local_212);
+                    __local_220 = struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: v_323 = v_322.field_name; (if ref.is_null(v_323) == 0 -> ref null "core:prelude/string.wado//String" {
+                        __vc_payload_0_324 = ref.as_non_null(v_323);
+                        struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = __vc_payload_0_324.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: __vc_payload_0_324.used };
+                    } else {
+                        v_323;
+                    }), field_size: v_322.field_size };
                     __local_221 = __local_220.field_name;
                     __local_222 = ref.is_null(__local_221) == 0;
                     __local_223 = 0;
@@ -859,9 +871,9 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
     } else {
     }
     "wasi/waitable-set-drop"(ws);
-    rx_323 = builtin::i32_wrap_i64(local.tee packed_322("wasi/future-new"()));
-    tx_324 = builtin::i32_wrap_i64(packed_322 >> 32_i64);
-    __pattern_temp_3 = "cm_waitable_set_poll.wado/__cm_binding__Response_new"(local.tee headers_10("cm_waitable_set_poll.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, rx_323);
+    rx_326 = builtin::i32_wrap_i64(local.tee packed_325("wasi/future-new"()));
+    tx_327 = builtin::i32_wrap_i64(packed_325 >> 32_i64);
+    __pattern_temp_3 = "cm_waitable_set_poll.wado/__cm_binding__Response_new"(local.tee headers_10("cm_waitable_set_poll.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, rx_326);
     response_11 = __pattern_temp_3.0;
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response_11 };
     __tv_1 = 0;
@@ -969,7 +981,13 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
             __local_67 = 0;
             __local_68 = 0;
             if __local_63 != 0 {
-                __local_69 = ref.as_non_null(__local_61);
+                v_328 = ref.as_non_null(__local_61);
+                __local_69 = struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: v_329 = v_328.field_name; (if ref.is_null(v_329) == 0 -> ref null "core:prelude/string.wado//String" {
+                    __vc_payload_0_330 = ref.as_non_null(v_329);
+                    struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = __vc_payload_0_330.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: __vc_payload_0_330.used };
+                } else {
+                    v_329;
+                }), field_size: v_328.field_size };
                 __local_70 = __local_69.field_name;
                 __local_71 = ref.is_null(__local_70) == 0;
                 __local_72 = 0;
@@ -1161,11 +1179,11 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
     builtin::store_i64[16](__fw_write_ptr_2, 0_i64);
     builtin::store_i64[24](__fw_write_ptr_2, 0_i64);
     builtin::store_i64[32](__fw_write_ptr_2, 0_i64);
-    __fw_result_2 = "wasi/future-write"(tx_324, __fw_write_ptr_2);
+    __fw_result_2 = "wasi/future-write"(tx_327, __fw_write_ptr_2);
     if __fw_result_2 == -1 {
         let __fw_evt_2: i32;
         __fw_result_2 = "wasi/waitable-set-new"();
-        "wasi/waitable-join"(tx_324, __fw_result_2);
+        "wasi/waitable-join"(tx_327, __fw_result_2);
         __fw_evt_2 = "mem/realloc"(0, 0, 4, 8);
         drop("wasi/waitable-set-wait"(__fw_result_2, __fw_evt_2));
         drop("mem/realloc"(__fw_evt_2, 8, 4, 0));
@@ -1212,12 +1230,12 @@ fn "cm_waitable_set_poll.wado/__cm_export__handle"(request) {
 fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b126: block {
-        l127: loop {
-            break_if b126 i >= len;
+    b128: block {
+        l129: loop {
+            break_if b128 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l127;
+            continue l129;
         };
     };
 }
