@@ -166,6 +166,55 @@ longer the bottleneck. Pick the current top frame off the live profile above
 rather than a fixed recipe here: the frames shift as levers land, and the
 mid-size ones are noisy, so re-measure before committing.
 
+### Generation-time cost: the generator itself (2026-07)
+
+Distinct from the *generated parser*: how long `gale gen` takes to emit a large
+grammar. Keyword-heavy grammars (SQLite, TypeScript, Rust) are slow; the Kiln
+build path (copying collector + fuel) makes TypeScript/Rust take on the order of
+an hour. Measured findings, `wado run … gen` (`cargo run` host):
+
+- **Two levers only: compute, and GC.** Isolate GC with `--collector null` (no
+  GC; leaks, so only for a one-shot gen) vs the default `copying`:
+
+  | grammar | output | first-sets | null (compute) | copying | GC |
+  | ------- | ------ | ---------- | -------------- | ------- | -- |
+  | css3    | 1.76 MB | small | 39.1s | 41.5s | **2.4s** |
+  | SQLite  | 786 KB  | large (150+ kw) | 38.5s | 61–65s | **~24s** |
+
+- **GC scales with distinct-token count, not output size.** css3 emits a *bigger*
+  file with ~10× *less* GC — its first-sets are tiny. So the copying collector's
+  cost is re-tracing the thousands of `String` token objects held in the
+  long-lived first / kind / FOLLOW caches, and it explodes on keyword grammars
+  (TypeScript `null`-gen OOMs — it accumulates that many token Strings).
+  `follow_env`'s bitset FOLLOW fixed point (2026-07) removed one such holder;
+  the FIRST-set caches and kind-set registry are the remaining ones.
+
+- **Collector switch is a non-lever.** DRC (cost ∝ garbage) is *worse* on small
+  grammars — SQLite DRC 118s vs copying 61s — because its per-alloc overhead
+  dwarfs the small live set; it only wins where copying thrashes a huge live set
+  (TypeScript ~7min vs ~1h). A blanket kiln→DRC switch would regress the common
+  case. Reduce allocation instead.
+
+- **The lever: intern token names to dense ids; carry FIRST/kind/FOLLOW sets as
+  `List<i32>` end-to-end (`src/token.wado` `TokenTable`), stringify only at the
+  codegen emit boundary.** This collapses thousands of live `String` objects into
+  a few flat int arrays, cutting what copying re-traces each cycle. Must be
+  *end-to-end*: a half-measure that keeps `first_of_*` returning `List<String>`
+  and converts per call is a **net loss** (measured SQLite copying 61s → 65s) —
+  the per-call `names_of` churn outweighs the smaller persistent cache. The
+  conversion touches `gen_context` (producers + caches), `prediction`
+  (`PredictionBranch.tokens` etc.), `lower`, `parser_gen`, `alt_grouping`, and
+  `dump`; the only stringify sites are `kind_check_str` / `intern_kind_set` and
+  `dump`. Keep byte-identical: FIRST-set order is insertion order (preserve it);
+  kind sets canonicalize by name at intern (stringify+sort there).
+  Measure the win as the `copying` − `null` GC delta shrinking, not wall-time on
+  a small grammar.
+
+  (A `type TokenId = i32` newtype for the id — so a `Display` can format token
+  names later — currently trips a `$value_copy` codegen ICE when a
+  newtype-valued `TreeMap` sits in the `GenContext` monomorphization. Filed as a
+  compiler P0; use plain `i32` until it is fixed.)
+
 ## Tried and didn't pan out
 
 ### Flat green-tree + cursor CST — NO-GO (2026-06), later done right
