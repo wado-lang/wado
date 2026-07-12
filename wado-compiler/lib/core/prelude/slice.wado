@@ -261,10 +261,6 @@ impl<T> Iterator for ArrayRefIter<T> {
     }
 }
 
-/// A by-mutable-reference iterator over a backing array, yielding `&mut T`.
-/// Each item is the element's shared GC handle, so mutations land on the
-/// backing array (in-place element types only — a replace-on-assign element
-/// type is rejected at the `for ... of &mut xs` site).
 internal struct ArrayRefMutIter<T> {
     repr: &mut Array<T>,
     index: i32,

@@ -1,9 +1,4 @@
-// `&mut List<T>` (and `&mut Array<T>`) iterate as `&mut T` for in-place element
-// types — struct / List / String / i128 — whose `&mut T` is the element's shared
-// GC handle, so mutation through the binding lands on the backing list
-// (WEP-2026-07-05). Every write is immediate, so `break` / `continue` / `return`
-// need no write-back epilogue. Replace-on-assign elements are rejected instead;
-// see `iter_mut_forbidden.wado`.
+// `&mut List<T>` iterates as `&mut T` for in-place elements (WEP-2026-07-05).
 
 struct P {
     x: i32,

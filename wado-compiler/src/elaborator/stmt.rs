@@ -2572,15 +2572,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None => TypeTable::UNKNOWN,
         };
 
-        // Reject `&mut` iteration unless the element type is *provably* in-place.
-        // A write through `&mut T` is observable only when `T` has an addressable
-        // interior (struct / List / String / i128); for a replace-on-assign type
-        // the write lands in a temporary and is lost (the D1 silent-drop in
-        // WEP-2026-06-13), and for an unresolved generic `T` we cannot prove it is
-        // in-place, so a replace-on-assign monomorphization would silently drop.
-        // Both are rejected here — at the concrete `for ... of &mut xs` site — so
-        // the miscompile never reaches monomorphization. Keyed on the `&mut T`
-        // item type, so immutable (`&T`) and by-value iteration are unaffected.
         if let ResolvedType::MutRef(elem) = self.tysys.type_table.borrow().get(item_type).clone() {
             let elem_resolved = self.tysys.type_table.borrow().get(elem).clone();
             let elem_name = self.tysys.type_table.borrow().type_name(elem);
@@ -2643,18 +2634,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx.active_labels.pop();
     }
 
-    /// Whether `type_id` is a replace-on-assign type: one that is mutated by
-    /// swapping the whole value (`*r = v`) rather than by an in-place interior
-    /// write, so a `&mut T` to a non-local `List` element has no sound write-back
-    /// point and `&mut` iteration over it is rejected.
-    ///
-    /// This is a *conservative superset* of the boxed-reference set in
-    /// `lower/plan/boxing.rs` (WEP-2026-06-13): it additionally names `Flags`,
-    /// `Resource` (D4/D6, replace-on-assign but not boxed there), and looks
-    /// through `Newtype`. It must stay a superset so nothing replace-on-assign
-    /// slips through the reject; it is intentionally not identical, because
-    /// boxing relies on earlier lowering (`flags` → `u32`) that has not happened
-    /// at this phase.
+    /// Conservative superset of `boxing.rs`'s boxed set (also names flags /
+    /// resource / newtype): a type with no sound `&mut` element write-back.
     fn is_replace_on_assign_element(&self, type_id: TypeId) -> bool {
         match self.tysys.type_table.borrow().get(type_id).clone() {
             ResolvedType::Primitive(p) => !matches!(p, PrimitiveType::I128 | PrimitiveType::U128),

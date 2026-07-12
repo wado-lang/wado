@@ -61,24 +61,11 @@ separate proposal.
 ## Status
 
 - [x] `iter()` yields `&T` (`List::iter -> ArrayRefIter`).
-- [x] `copied()` (inherent on `ArrayRefIter`); regression fixture
-      `iter_ref_adapter_monomorph.wado`.
-- [x] Migrated the breaking `iter()` call sites (stdlib tests, fixtures,
-      `package-gale`).
-- [x] `&mut` iteration for in-place element types. `&mut List<T>` /
-      `&mut Array<T>` yield `&mut T` via `ArrayRefMutIter` (`next` returns
-      `&mut self.repr[index]`, the element's shared GC handle). Mutation lands on
-      the backing list for `struct` / `List` / `String` / `i128` elements. Every
-      write is immediate, so `break` / `continue` / `return` are sound with no
-      write-back epilogue. Fixture `iter_mut_inplace.wado`.
-- [x] Reject `&mut` iteration over a replace-on-assign element type (`primitive`
-      / `enum` / `flags` / `variant` / `fn`) at the `for ... of &mut xs` site,
-      naming the index-assignment workaround — otherwise the write is silently
-      dropped (WEP-2026-06-13 D1). Fixture `iter_mut_forbidden.wado`.
-- [x] Fixed a latent P0 exposed by `Item = &mut T`: `Fn<N,Ret>^Inspect::inspect`
-      was synthesized once per return-type `TypeId`, but `&T` and `&mut T` mangle
-      to the same `Fn` name, so the two collided post-monomorphization.
-      `collect_canonical_fn_signatures` now dedups by the canonical mangled name.
+- [x] `copied()` on `ArrayRefIter`; fixture `iter_ref_adapter_monomorph.wado`.
+- [x] Migrated the breaking `iter()` call sites.
+- [x] `&mut` iteration for in-place elements: `&mut List<T>` yields `&mut T` via `ArrayRefMutIter`; fixture `iter_mut_inplace.wado`.
+- [x] Reject `&mut` iteration over replace-on-assign / unresolved-generic elements; fixture `iter_mut_forbidden.wado`.
+- [x] Fixed a latent P0: `Fn<N,Ret>^Inspect` deduped by mangled name, not return `TypeId` (`&T` / `&mut T` collide).
 
 ## TODO
 

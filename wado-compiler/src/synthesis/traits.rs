@@ -3646,11 +3646,8 @@ struct FnSignature {
 
 fn collect_canonical_fn_signatures(tt: &TypeTable) -> Vec<FnSignature> {
     let is_concrete = |t: TypeId| !matches!(tt.get(t), ResolvedType::TypeParam { .. });
-    // Dedup by the canonical `Fn<arity, return_name>` mangled name, not by the
-    // return-type `TypeId`. `&T` and `&mut T` are distinct types but mangle to
-    // the same name (the ref wrapper is stripped) and share one Wasm signature
-    // family, so both must collapse onto a single `Fn` inspect stub — otherwise
-    // two stubs with the same `(module, name)` collide post-monomorphization.
+    // Dedup by mangled name, not return-type `TypeId`: `&T` / `&mut T` mangle
+    // identically and must share one stub, else the stubs collide post-mono.
     let mut seen: IndexSet<(usize, String)> = IndexSet::default();
     let mut result = Vec::new();
 
