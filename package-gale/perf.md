@@ -195,25 +195,37 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
   (TypeScript ~7min vs ~1h). A blanket kiln→DRC switch would regress the common
   case. Reduce allocation instead.
 
-- **The lever: intern token names to dense ids; carry FIRST/kind/FOLLOW sets as
-  `List<i32>` end-to-end (`src/token.wado` `TokenTable`), stringify only at the
-  codegen emit boundary.** This collapses thousands of live `String` objects into
-  a few flat int arrays, cutting what copying re-traces each cycle. Must be
-  *end-to-end*: a half-measure that keeps `first_of_*` returning `List<String>`
-  and converts per call is a **net loss** (measured SQLite copying 61s → 65s) —
-  the per-call `names_of` churn outweighs the smaller persistent cache. The
-  conversion touches `gen_context` (producers + caches), `prediction`
-  (`PredictionBranch.tokens` etc.), `lower`, `parser_gen`, `alt_grouping`, and
-  `dump`; the only stringify sites are `kind_check_str` / `intern_kind_set` and
-  `dump`. Keep byte-identical: FIRST-set order is insertion order (preserve it);
-  kind sets canonicalize by name at intern (stringify+sort there).
-  Measure the win as the `copying` − `null` GC delta shrinking, not wall-time on
-  a small grammar.
+- **The lever (landing): the token's identity *is* a dense integer, carried on
+  the IR, not a name we cache.** `token_slot_order` already numbers every token
+  (slot index == the emitted `TK_*` value); `token_kinds.wado`'s `TokenKinds`
+  table (id ↔ name) is built once and `resolve_kind_ids` stamps each
+  `Element::kind_id`. FIRST/kind/FOLLOW sets are then `List<i32>`; names are
+  recovered only at emit (`token_names_of` / `kind_check_str`).
+
+  **Do NOT re-cache via a lazy `String→i32` intern in the hot path** — measured a
+  net loss (SQLite copying 61s → 80s, null 38.5s → 48s): the per-call intern is a
+  String tree-lookup costing more than the compare it replaced, and it still
+  rebuilds `TK_{name}`. The fast path is `elem.kind_id` (resolved once); the only
+  fallback intern is for unresolved IR in unit tests.
+
+  Byte-identity rules: FIRST-set order = insertion order of ids (== today's name
+  order, 1:1); kind sets still canonicalise **by name** at `intern_kind_set`
+  (sort names, then map to ids) so emit order/dedup are unchanged; emit writes
+  the name, not the number. Measure the win as the `copying` − `null` GC delta.
+
+  Progress (SQLite `wado run gen`, `copying` − `null` GC): baseline 24s.
+  - P0 (table + `kind_id` + resolution pass, inert) — byte-identical.
+  - P1+P2 (FIRST sets + prediction carry ids) — GC 21s, copying 59.3s, compute
+    back to baseline (null 38.1s).
+  - P3 (kind/sync/follow-mask registries store ids) — GC 17.5s, copying 56.5s.
+  Remaining P4 (the `lower`/`parser_gen` FIRST-set boundary, `rule_follow_kinds`)
+  is smaller and coupled on SQLite; the keyword-dense TS/Rust grammars (GC-bound)
+  are where the accumulated cut should matter most.
 
   (A `type TokenId = i32` newtype for the id — so a `Display` can format token
   names later — currently trips a `$value_copy` codegen ICE when a
-  newtype-valued `TreeMap` sits in the `GenContext` monomorphization. Filed as a
-  compiler P0; use plain `i32` until it is fixed.)
+  newtype-valued `TreeMap` coexists with its `i32` base in a value-copied struct
+  (minimal repro saved). A compiler P0; use plain `i32` until it is fixed.)
 
 ## Tried and didn't pan out
 
