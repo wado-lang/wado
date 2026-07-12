@@ -87,10 +87,12 @@ kinds.
 ### Surviving value copies
 
 A deep copy is a call to a synthesized `$value_copy$T` helper
-(`FunctionKind::ValueCopy`), and the `value_copy_elide` pass strips the wrapper
-wherever the copy is provably unnecessary. But a copy is not always removed _or_
-left intact: `value_copy_demote` rewrites a deep copy whose elements are never
-mutated into a shallow spine copy, lowered as a `builtin::array_clone` /
+(`FunctionKind::ValueCopy`). It is inserted only where the lower-phase ownership
+analysis (`lower::plan::value_copy`) could not prove the copy unnecessary — a
+move, a share, or a fresh value — so every wrapper reaching the optimizer is
+already needed; there is no elision pass. But a copy is not always left intact:
+`value_copy_demote` rewrites a deep copy whose elements are never mutated into a
+shallow spine copy, lowered as a `builtin::array_clone` /
 `array_clone_shallow` call on the backing array. So a value copy that survives
 optimization appears in the final NIR as one of: a remaining `$value_copy$T(...)`
 call, or an `array_clone` / `array_clone_shallow` / `copy_value` call. The remark

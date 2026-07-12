@@ -204,9 +204,10 @@ fix to conform; none should be preserved.
       registered helper for the referent type at that site. So `*r = v` aliased
       `v`'s interior — e.g. `*list_ref = other; other[0] = 9` also mutated the
       referent's element. Fixed by seeding a copy helper for the deref-target RHS
-      type in the `analyze` walker and re-requesting the copy explicitly at the
-      expansion site (`skip_value_copy = false` lets `value_copy_elide` drop it
-      again when the source is unmutated, so `*xs = []`/literal cases stay free).
+      type in the `analyze` walker and requesting the copy at the expansion site
+      through the fold's `should_wrap_value_copy` predicate, so a live RHS is
+      copied while a fresh / moved one (`*xs = []`/literal cases) stays free with
+      no copy inserted at all.
       Note: a _separate_ pre-existing gap remains — a tuple literal does not copy
       its element variables (`a = [inner, 1]; inner[0] = 9` mutates `a.0`), which
       is tuple-literal construction, not deref-assign, and is out of scope here.
