@@ -30,7 +30,7 @@ WS : (' '|'\\n') -> skip ;
         Ok(g) => g,
         Err(err) => panic(`parse_checked failed: {err.message}`),
     };
-    let out = generate(&mut grammar, &GenerateOptions { highlight: false }).source;
+    let out = generate(&mut grammar, &GenerateOptions {}).source;
 
     // After the fix the LR-aware codegen emits `scan_e_atom` and at
     // least one `scan_e_lr_<N>`. The non-LR path emits a unified
@@ -92,7 +92,7 @@ WS : (' '|'\\n') -> skip ;
         Ok(g) => g,
         Err(err) => panic(`parse_checked failed: {err.message}`),
     };
-    let out = generate(&mut grammar, &GenerateOptions { highlight: false }).source;
+    let out = generate(&mut grammar, &GenerateOptions {}).source;
     let body = scan_e_body(&out);
 
     assert body.contains("let _lr_pos0 = pos;"), `scan_e loop is missing the no-progress snapshot: {body}`;
@@ -119,7 +119,7 @@ WS : (' '|'\\n') -> skip ;
         Ok(g) => g,
         Err(err) => panic(`parse_checked failed: {err.message}`),
     };
-    let out = generate(&mut grammar, &GenerateOptions { highlight: false }).source;
+    let out = generate(&mut grammar, &GenerateOptions {}).source;
 
     // For each `scan_e_lr_N` reference, assert a matching `fn scan_e_lr_N(`
     // definition exists. The atom and suffix indices stay small for this

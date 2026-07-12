@@ -24,6 +24,7 @@ use {
 use { gen_node_kinds, gen_alt_enums, gen_string_tree_helper } from "./cst_gen.wado";
 use { should_emit_actions, collect_member_method_names, translate_attr_types } from "./java2wado.wado";
 use { gen_highlight } from "./highlight_gen.wado";
+use { HighlightRule } from "./highlight_query.wado";
 use { GenContext, sets_overlap } from "./gen_context.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec, Vis } from "./wadopoet.wado";
 use { lower } from "./lower.wado";
@@ -50,7 +51,11 @@ use {
 } from "./gir.wado";
 
 pub struct GenerateOptions {
-    pub highlight: bool,
+    /// Parsed highlight query. `Some` emits the highlighter (defaults +
+    /// overrides tables compiled from the query); `None` (the default)
+    /// keeps generated output byte-identical to a highlight-free build.
+    /// Presence of a `.scm` query input is what turns highlighting on.
+    pub highlight_query: Option<List<HighlightRule>> = null,
     /// Emit trace logging to stderr (via `log_stderr`) in the generated
     /// parser: rule enter/ok/fail frames plus the multi-alt scan/pick/try
     /// decisions. Off by default; enabled by `gale gen --trace` or the
@@ -173,7 +178,8 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // needs a longest-match tournament; the FOLLOW runtime / mask globals only
     // when lowering built a caller-FOLLOW gate (`emit_follow`).
     let ef = ctx.emit_follow();
-    gen_runtime(&mut w, ef, ctx.needs_atn(), needs_latn, options.highlight);
+    let emit_highlight = options.highlight_query matches { Some(_) };
+    gen_runtime(&mut w, ef, ctx.needs_atn(), needs_latn, emit_highlight);
     gen_token_kind(&mut w, &grammar.lexer_rules);
     gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
     gen_lexer(&mut w, grammar, &lit_tokens, &atn_class_map);
@@ -181,8 +187,8 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     gen_alt_enums(&mut w, grammar);
     gen_parser(&mut w, grammar, &lowered, &mut ctx);
     gen_string_tree_helper(&mut w, grammar, &lit_tokens);
-    if options.highlight {
-        gen_highlight(&mut w, grammar, &lit_tokens);
+    if let Some(query) = &options.highlight_query {
+        gen_highlight(&mut w, grammar, &lit_tokens, query, &mut ctx);
     }
     // The scan emission may intern kind-set helpers (`_kind_set_N`);
     // emit whatever was interned (a no-op when none).

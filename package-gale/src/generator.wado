@@ -20,6 +20,7 @@
 use { Request, Response, Error, OutputFile, KilnHost, Diagnostic as KilnDiagnostic, DiagnosticLevel } from "core:kiln";
 use { assemble_grammar, AssembleError } from "./g4/parser.wado";
 use { generate as codegen_generate, GenerateOptions } from "./codegen.wado";
+use { parse_highlight_query, HighlightRule } from "./highlight_query.wado";
 use { to_snake_case } from "./gen_util.wado";
 
 /// Generator-side options. Surfaced under `options = { ... }` on the
@@ -29,8 +30,6 @@ use { to_snake_case } from "./gen_util.wado";
 /// The shape mirrors the legacy `gale gen` CLI flags; extend here as new
 /// flags land (WEP 2026-04-12 M6.7 checklist).
 pub struct Options {
-    /// Emit the optional `highlight` table in the generated parser.
-    pub highlight: bool,
     /// Emit trace logging to stderr in the generated parser: rule
     /// enter/ok/fail frames plus multi-alt scan/pick/try decisions. Off by
     /// default; set `trace: true` to debug why a grammar rejects an input.
@@ -49,11 +48,24 @@ impl Deserialize for Options;
 export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHost {
     // Stamp the real Kiln paths; otherwise the generated header's
     // `sources = [...]` fabricates a nonexistent `<GrammarName>.g4`.
+    // Route supplementary inputs by extension: `.scm` files are highlight
+    // queries (compiled into the highlighter), everything else is a `.g4`
+    // grammar half merged into the primary.
     let mut inputs: List<[String, String]> = [
         [req.primary.path, req.primary.content],
     ];
+    let mut highlight_src = String::new();
+    let mut highlight_path = String::new();
     for let supp of &req.inputs {
-        inputs.push([supp.path, supp.content]);
+        if supp.path.ends_with(".scm") {
+            if highlight_path.is_empty() {
+                highlight_path = supp.path;
+            }
+            highlight_src.push_str(&supp.content);
+            highlight_src.push('\n');
+        } else {
+            inputs.push([supp.path, supp.content]);
+        }
     }
     let mut grammar = match assemble_grammar(&inputs) {
         Ok(g) => g,
@@ -70,8 +82,18 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
         },
     };
 
+    let mut highlight_query: Option<List<HighlightRule>> = null;
+    if !highlight_path.is_empty() {
+        highlight_query = match parse_highlight_query(&highlight_src) {
+            Ok(rules) => Option::Some(rules),
+            Err(e) => return Result::Err(Error::InvalidSchema(
+                `gale: invalid highlight query '{highlight_path}' at {e.line}:{e.col}: {e.message}`,
+            )),
+        };
+    }
+
     let gen_opts = GenerateOptions {
-        highlight: req.options.highlight,
+        highlight_query,
         trace: req.options.trace,
     };
     let generated = codegen_generate(&mut grammar, &gen_opts);

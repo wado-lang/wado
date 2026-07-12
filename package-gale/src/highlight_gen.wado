@@ -1,13 +1,24 @@
-use { Grammar, LexerRule, ParserRule, Alternative, Element } from "./ir.wado";
+use { Grammar, LexerRule, ParserRule } from "./ir.wado";
 use { LitToken, TokenSlot, token_slot_order } from "./lexer_gen.wado";
-use { CodeWriter, FnSpec, GlobalSpec, Vis, str_lit } from "./wadopoet.wado";
+use { CodeWriter, FnSpec, Vis, str_lit } from "./wadopoet.wado";
+use { HighlightRule, TokenSelector } from "./highlight_query.wado";
+use { GenContext } from "./gen_context.wado";
+use { DiagnosticKind } from "./gir.wado";
+use { TreeMap } from "core:collections";
 
-/// `highlight`: build the token/rule mapping, then drive `highlight_walk`
-/// over the parsed CST store. `parse` always returns a tree (partial on
-/// broken input), so there is no parse-failure / tokenize-only branch — a
-/// broken input still highlights from its partial tree.
-pub fn gen_highlight(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>) {
-    gen_highlight_mapping(w, &grammar.lexer_rules, &grammar.parser_rules, lit_tokens);
+/// `highlight`: build the token/rule mapping from the parsed highlight query,
+/// then drive `highlight_walk` over the parsed CST store. `parse` always
+/// returns a tree (partial on broken input), so there is no parse-failure /
+/// tokenize-only branch — a broken input still highlights from its partial
+/// tree.
+pub fn gen_highlight(
+    w: &mut CodeWriter,
+    grammar: &Grammar,
+    lit_tokens: &List<LitToken>,
+    query: &List<HighlightRule>,
+    ctx: &mut GenContext,
+) {
+    gen_highlight_mapping(w, &grammar.lexer_rules, &grammar.parser_rules, lit_tokens, query, ctx);
     let mut f = FnSpec::new("highlight", Vis::Pub);
     f.add_param(&"input", &"&String");
     f.set_return_type(&"String");
@@ -39,43 +50,137 @@ pub fn gen_highlight(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<Li
     gen_highlight_run(w);
 }
 
+/// Token kind resolution built once per grammar: token kind ids are the index
+/// into `token_slot_order`, so a name / literal maps directly to its kind.
+struct KindIndex {
+    by_name: TreeMap<String, i32>,
+    by_literal: TreeMap<String, i32>,
+}
+
+/// A resolved override: rule name + integer token kind + capture, ready to emit
+/// into the `overrides` table.
+struct ResolvedOverride {
+    rule_name: String,
+    token_kind: i32,
+    capture: String,
+}
+
+fn build_kind_index(lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>, slots: &List<TokenSlot>) -> KindIndex {
+    let mut by_name = TreeMap::<String, i32>::new();
+    let mut by_literal = TreeMap::<String, i32>::new();
+    for let mut i = 0; i < slots.len(); i += 1 {
+        match &slots[i] {
+            Rule(ri) => by_name[lexer_rules[*ri].name] = i,
+            Lit(li) => by_literal[lit_tokens[*li].text] = i,
+            Eof => {
+            },
+            Error => {
+            },
+        }
+    }
+    return KindIndex { by_name, by_literal };
+}
+
+fn resolve_selector(idx: &KindIndex, sel: &TokenSelector) -> Option<i32> {
+    return match sel {
+        Name(n) => idx.by_name.get(*n),
+        Literal(t) => idx.by_literal.get(*t),
+    };
+}
+
+fn selector_desc(sel: &TokenSelector) -> String {
+    return match sel {
+        Name(n) => `'{*n}'`,
+        Literal(t) => `literal "{*t}"`,
+    };
+}
+
+fn parser_rule_exists(parser_rules: &List<ParserRule>, name: &String) -> bool {
+    for let r of parser_rules {
+        if r.name == *name {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn slot_comment(slot: &TokenSlot, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) -> String {
+    return match slot {
+        Rule(ri) => `TK_{lexer_rules[*ri].name}`,
+        Eof => "TK_EOF",
+        Error => "TK_ERROR",
+        Lit(li) => lit_tokens[*li].const_name,
+    };
+}
+
 fn gen_highlight_mapping(
     w: &mut CodeWriter,
     lexer_rules: &List<LexerRule>,
     parser_rules: &List<ParserRule>,
     lit_tokens: &List<LitToken>,
+    query: &List<HighlightRule>,
+    ctx: &mut GenContext,
 ) {
+    // Token kind ids follow `token_slot_order` — including deferred
+    // `more` / `type(...)` rules and the conditional `TK_ERROR` sentinel —
+    // so both the defaults table (indexed `defaults[kind]` at runtime) and
+    // override resolution key off it.
+    let slots = token_slot_order(lexer_rules, lit_tokens);
+    let idx = build_kind_index(lexer_rules, lit_tokens, &slots);
+
+    // Compile the query: defaults keyed by token kind (last rule wins), plus
+    // resolved overrides. Unknown token / rule names are skipped with a
+    // warning rather than failing the whole highlighter.
+    let mut default_by_kind = TreeMap::<i32, String>::new();
+    let mut overrides: List<ResolvedOverride> = [];
+    for let rule of query {
+        let kind = match resolve_selector(&idx, &rule.selector) {
+            Some(k) => k,
+            None => {
+                ctx.warn(
+                    &"highlight",
+                    DiagnosticKind::HighlightQuery,
+                    `highlight query: unknown token {selector_desc(&rule.selector)}`,
+                );
+                continue;
+            },
+        };
+        match &rule.rule_context {
+            None => default_by_kind[kind] = rule.capture,
+            Some(rctx) => {
+                if !parser_rule_exists(parser_rules, rctx) {
+                    ctx.warn(
+                        &"highlight",
+                        DiagnosticKind::HighlightQuery,
+                        `highlight query: unknown parser rule '{*rctx}'`,
+                    );
+                    continue;
+                }
+                overrides.push(ResolvedOverride { rule_name: *rctx, token_kind: kind, capture: rule.capture });
+            },
+        }
+    }
+
     let mut f = FnSpec::new("highlight_mapping", Vis::Pub);
     f.set_return_type(&"HighlightMapping");
     f.emit_begin(w);
 
-    // The runtime indexes this table by token kind (`defaults[kind]`), so
-    // the rows must follow the exact token numbering — including deferred
-    // `more` / `type(...)` rules and the conditional `TK_ERROR` sentinel —
-    // which `token_slot_order` is the single source of truth for.
+    // Default capture per token kind, one row per slot in kind order.
     w.line(&"let defaults: List<String> = [");
     w.indent();
-    for let slot of token_slot_order(lexer_rules, lit_tokens) {
-        match slot {
-            Rule(ri) => {
-                let rule = &lexer_rules[ri];
-                let capture = classify_lexer_rule(rule);
-                w.line(&`{str_lit(capture)},  // TK_{rule.name}`);
-            },
-            Eof => w.line(&`"",  // TK_EOF`),
-            Error => w.line(&`"",  // TK_ERROR`),
-            Lit(li) => {
-                let lit = &lit_tokens[li];
-                let capture = classify_literal(&lit.text);
-                w.line(&`{str_lit(capture)},  // {lit.const_name}`);
-            },
-        }
+    for let mut i = 0; i < slots.len(); i += 1 {
+        let capture = match default_by_kind.get(i) {
+            Some(c) => c,
+            None => "",
+        };
+        w.line(&`{str_lit(capture)},  // {slot_comment(&slots[i], lexer_rules, lit_tokens)}`);
     }
     w.dedent();
     w.line(&"];");
 
     // Rule names indexed by rule_id (parser-rule declaration order). Must
-    // match the ids the generated walker passes to hl_enter.
+    // match the ids the generated walker passes to hl_enter, and the ids the
+    // runtime resolves override `rule_name`s against.
     w.line(&"let rule_names: List<String> = [");
     w.indent();
     for let rule of parser_rules {
@@ -84,7 +189,22 @@ fn gen_highlight_mapping(
     w.dedent();
     w.line(&"];");
 
-    w.line(&"let overrides: List<HighlightOverride> = [];");
+    if overrides.is_empty() {
+        w.line(&"let overrides: List<HighlightOverride> = [];");
+    } else {
+        w.line(&"let overrides: List<HighlightOverride> = [");
+        w.indent();
+        for let ov of &overrides {
+            w.line(
+                &`HighlightOverride \{ rule_name: {str_lit(ov.rule_name)}, token_kind: {ov.token_kind}, capture: {str_lit(
+                    ov.capture,
+                )} \},`,
+            );
+        }
+        w.dedent();
+        w.line(&"];");
+    }
+
     w.line(&"return HighlightMapping { defaults, rule_names, overrides };");
 
     w.end();
@@ -129,141 +249,4 @@ fn gen_highlight_run(w: &mut CodeWriter) {
     w.line(&"print(highlight(&input));");
     w.end();
     w.blank();
-}
-
-fn classify_lexer_rule(rule: &LexerRule) -> String {
-    let name = rule.name;
-    if rule.skip {
-        if contains_substr(&name, &"WS") || contains_substr(&name, &"WHITESPACE") || contains_substr(&name, &"NEWLINE") {
-            return "";
-        }
-    }
-    // `contains_substr` is a substring test, so `COMMENT` already covers
-    // `LINE_COMMENT` / `BLOCK_COMMENT` / `DOC_COMMENT`.
-    if contains_substr(&name, &"COMMENT") {
-        return "comment";
-    }
-    if name == "STRING" || name == "STRING_LITERAL" || name == "QUOTED_STRING" || contains_substr(&name, &"STRING") {
-        return "string";
-    }
-    if name == "CHAR" || name == "CHAR_LITERAL" || contains_substr(&name, &"CHAR_LIT") {
-        return "string";
-    }
-    if name == "NUMBER"
-        || name == "INT"
-        || name == "INTEGER"
-        || name == "FLOAT"
-        || name == "DECIMAL"
-        || name == "INTEGER_LITERAL"
-        || name == "FLOAT_LITERAL"
-        || contains_substr(&name, &"NUMBER")
-        || contains_substr(&name, &"NUMERIC") {
-        return "number";
-    }
-    if name == "IDENTIFIER" || name == "ID" || name == "NAME" || name == "IDENT" {
-        return "";
-    }
-    // Lexer rules starting with K_ or KW_ are keyword tokens (e.g. K_SELECT, KW_IF)
-    if starts_with(&name, &"K_") || starts_with(&name, &"KW_") {
-        return "keyword";
-    }
-    // Lexer rules containing KEYWORD are keyword tokens
-    if contains_substr(&name, &"KEYWORD") {
-        return "keyword";
-    }
-    if rule.skip {
-        return "";
-    }
-    return "";
-}
-
-fn classify_literal(text: &String) -> String {
-    if is_constant_builtin(text) {
-        return "constant.builtin";
-    }
-    if is_all_alpha(text) {
-        return "keyword";
-    }
-    if is_bracket(text) {
-        return "punctuation.bracket";
-    }
-    if is_delimiter(text) {
-        return "punctuation.delimiter";
-    }
-    if !is_all_alpha(text) && !text.is_empty() {
-        return "operator";
-    }
-    return "";
-}
-
-fn is_constant_builtin(text: &String) -> bool {
-    let t = *text;
-    return t == "true"
-        || t == "false"
-        || t == "null"
-        || t == "nil"
-        || t == "none"
-        || t == "None"
-        || t == "True"
-        || t == "False"
-        || t == "undefined"
-        || t == "NaN"
-        || t == "Infinity";
-}
-
-fn is_all_alpha(text: &String) -> bool {
-    if text.is_empty() {
-        return false;
-    }
-    for let c of text.chars() {
-        if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_') {
-            return false;
-        }
-    }
-    return true;
-}
-
-fn is_bracket(text: &String) -> bool {
-    let t = *text;
-    return t == "(" || t == ")" || t == "[" || t == "]" || t == "{" || t == "}";
-}
-
-fn is_delimiter(text: &String) -> bool {
-    let t = *text;
-    return t == "," || t == ";" || t == ".";
-}
-
-fn starts_with(haystack: &String, prefix: &String) -> bool {
-    let h = haystack.chars().collect();
-    let p = prefix.chars().collect();
-    if p.len() > h.len() {
-        return false;
-    }
-    for let mut i = 0; i < p.len(); i += 1 {
-        if h[i] != p[i] {
-            return false;
-        }
-    }
-    return true;
-}
-
-fn contains_substr(haystack: &String, needle: &String) -> bool {
-    let h = haystack.chars().collect();
-    let n = needle.chars().collect();
-    if n.len() > h.len() {
-        return false;
-    }
-    for let mut i = 0; i <= h.len() - n.len(); i += 1 {
-        let mut match_ = true;
-        for let mut j = 0; j < n.len(); j += 1 {
-            if h[i + j] != n[j] {
-                match_ = false;
-                break;
-            }
-        }
-        if match_ {
-            return true;
-        }
-    }
-    return false;
 }

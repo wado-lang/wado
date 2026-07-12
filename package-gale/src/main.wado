@@ -5,6 +5,7 @@ use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags, Err
 use { assemble_grammar, AssembleError } from "./g4/parser.wado";
 use { Grammar, normalize_caches } from "./ir.wado";
 use { generate, GenerateOptions } from "./codegen.wado";
+use { parse_highlight_query, HighlightRule } from "./highlight_query.wado";
 use { lower } from "./lower.wado";
 use { collect_literal_tokens } from "./lexer_gen.wado";
 use { GenContext } from "./gen_context.wado";
@@ -16,7 +17,6 @@ use { build_atn, dump_atn } from "./atn.wado";
 // check stays in `cmd_*` with its specific message; long options only (`-o` is
 // dropped). `rename_all` lower-cases the wire tags (`gen` / `dump`).
 struct GenArgs {
-    highlight: bool = false,
     trace: bool = false,
     output: Option<String> = null,
     #[serde(positional)]
@@ -42,8 +42,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
     let argv = args();
     match parse::<Command>(argv) {
         Ok(Command::Gen(g)) => {
-            let options = GenerateOptions { highlight: g.highlight, trace: g.trace };
-            cmd_gen(g.grammars, &g.output, &options);
+            cmd_gen(g.grammars, &g.output, g.trace);
         },
         Ok(Command::Dump(d)) => {
             cmd_dump(d.grammars, d.atn);
@@ -68,23 +67,51 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
 }
 
 fn usage() with Stderr {
-    eprintln("Usage: gale gen [--highlight] [--trace] [--output <file>] <grammar.g4> [grammar2.g4 ...]");
+    eprintln("Usage: gale gen [--trace] [--output <file>] <grammar.g4> [grammar2.g4 ...] [highlights.scm]");
     eprintln("       gale dump [--atn] <grammar.g4> [grammar2.g4 ...]");
 }
 
-fn cmd_gen(paths: List<String>, output: &Option<String>, options: &GenerateOptions) with Stdout, Stderr, Preopens, Exit {
-    if paths.len() == 0 {
+fn cmd_gen(paths: List<String>, output: &Option<String>, trace: bool) with Stdout, Stderr, Preopens, Exit {
+    // Route inputs by extension: `.scm` is a highlight query, everything else
+    // is a `.g4` grammar half.
+    let mut g4_paths: List<String> = [];
+    let mut scm_paths: List<String> = [];
+    for let p of &paths {
+        if p.ends_with(".scm") {
+            scm_paths.push(*p);
+        } else {
+            g4_paths.push(*p);
+        }
+    }
+    if g4_paths.len() == 0 {
         eprintln("gale gen: no grammar files given");
         exit(1);
     }
-    let mut merged = load_and_merge(&paths);
+    let mut merged = load_and_merge(&g4_paths);
+
+    let mut highlight_query: Option<List<HighlightRule>> = null;
+    if scm_paths.len() > 0 {
+        let mut src = String::new();
+        for let p of &scm_paths {
+            src.push_str(&read_source_file(p));
+            src.push('\n');
+        }
+        highlight_query = match parse_highlight_query(&src) {
+            Ok(rules) => Option::Some(rules),
+            Err(e) => {
+                eprintln(`gale: highlight query {e.line}:{e.col}: {e.message}`);
+                exit(1);
+            },
+        };
+    }
+    let options = GenerateOptions { highlight_query, trace };
 
     // Generate once and surface the prediction-strategy diagnostics the
     // single lowering raised. `generate` runs `normalize_caches` and lowers
     // internally (matching `cmd_dump`), so there is no separate diagnostic
     // pass to keep in sync. Warnings are advisory; generation still
     // proceeds and must succeed.
-    let generated = generate(&mut merged, options);
+    let generated = generate(&mut merged, &options);
     for let d of &generated.diagnostics {
         eprintln(`gale: warning: {d.rule}: {d.message}`);
     }
@@ -207,6 +234,38 @@ fn load_and_merge(paths: &List<String>) -> Grammar with Stdout, Stderr, Preopens
         },
         Err(Check(msg)) => {
             eprintln(`gale: {msg}`);
+            exit(1);
+        },
+    };
+}
+
+/// Read one source file to a UTF-8 string, relative to the first preopened
+/// directory. Any failure prints a message and exits with code 1 (mirrors
+/// `load_and_merge`'s per-file read).
+fn read_source_file(path: &String) -> String with Stderr, Preopens, Exit {
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("gale: no preopened directories available");
+        exit(1);
+    }
+    let root = dirs[0].0;
+    let open_result = root.open_at(PathFlags::none(), *path, OpenFlags::none(), DescriptorFlags::Read).wait();
+    if let Err(_) = open_result {
+        eprintln(`gale: {*path}: cannot open file`);
+        exit(1);
+    }
+    let file = open_result.unwrap();
+    let bytes = match read_all(&file) {
+        Ok(b) => b,
+        Err(_) => {
+            eprintln(`gale: {*path}: read error`);
+            exit(1);
+        },
+    };
+    return match String::from_utf8(bytes) {
+        Ok(s) => s,
+        Err(_) => {
+            eprintln(`gale: {*path}: not valid UTF-8`);
             exit(1);
         },
     };
