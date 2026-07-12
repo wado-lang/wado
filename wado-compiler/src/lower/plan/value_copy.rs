@@ -10,6 +10,7 @@
 //! Wrapper elision runs later in `optimize::value_copy_elide`.
 
 pub mod analyze;
+pub mod confine;
 pub mod last_use;
 pub mod ownership;
 pub mod synthesize;
@@ -43,9 +44,29 @@ pub struct ValueCopyPlan {
     /// treats such a call's receiver as a sibling mutation, so a by-value
     /// argument aliasing it keeps its copy.
     pub mut_receiver_methods: IndexSet<FunctionId>,
+    /// Per-parameter confinement: a call passing a still-live value into a
+    /// confined parameter needs no defensive copy, because the callee neither
+    /// returns nor leaks it. The caller-side replacement for `optimize::escape`'s
+    /// `param_escapes`.
+    pub confined_params: confine::ConfinedParams,
+    /// Per-callee, which parameters are `&mut` — the only siblings that can
+    /// mutate a shared by-value argument during the call. A confined by-value
+    /// argument keeps its copy only when it aliases such a sibling.
+    pub mut_ref_params: IndexMap<FunctionId, Vec<bool>>,
+    /// Methods whose receiver is a reference (`&self` / `&mut self`) — a
+    /// borrowing, not consuming, receiver. Used by the read-only-share analysis.
+    pub ref_receiver_methods: IndexSet<FunctionId>,
+    /// Functions whose result aliases their receiver's storage (a borrowed
+    /// projection / element read). Used only by the read-only-share analysis to
+    /// learn that `row = list.index_value(i)` aliases `list`.
+    pub returns_receiver_alias: IndexSet<FunctionId>,
 }
 
-pub fn plan(flat: &mut FlatPackage) -> ValueCopyPlan {
+pub fn plan(
+    flat: &mut FlatPackage,
+    confined_params: confine::ConfinedParams,
+    ref_receiver_methods: IndexSet<FunctionId>,
+) -> ValueCopyPlan {
     register_variant_cases(flat);
     let seed = analyze::collect_seed_types(flat);
     let name_for_type = synthesize::synthesize_helpers(flat, seed);
@@ -71,12 +92,28 @@ pub fn plan(flat: &mut FlatPackage) -> ValueCopyPlan {
                 .then(|| ownership::func_key(&f.module_source, &f.name))
         })
         .collect();
+    let mut_ref_params = flat
+        .functions
+        .iter()
+        .map(|f| {
+            let f = f.borrow();
+            (
+                ownership::func_key(&f.module_source, &f.name),
+                f.params.iter().map(|p| p.is_mut_ref).collect(),
+            )
+        })
+        .collect();
+    let returns_receiver_alias = ownership::compute_receiver_alias(flat);
     ValueCopyPlan {
         name_for_type,
         returns_owned: conventions.returns_owned,
         returns_self_projection: conventions.returns_self_projection,
         functions_with_stores,
         mut_receiver_methods,
+        confined_params,
+        mut_ref_params,
+        ref_receiver_methods,
+        returns_receiver_alias,
     }
 }
 

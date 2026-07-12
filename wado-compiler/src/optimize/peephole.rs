@@ -55,8 +55,6 @@ use super::labeled_block_fusion::build_labeled_block_fusion;
 use super::match_to_switch::MatchToSwitchRule;
 use super::ref_elim::build_ref_elim;
 use super::string_push::{ShortPushStrRule, resolve_ctx};
-use super::value_copy::mutation::MutationOracle;
-use super::value_copy_elide::{ValueCopyElideRule, build_param_mut, build_usage};
 
 /// Run the unified peephole rule set over every function body. Returns whether
 /// any rule fired. Gated: skips functions unchanged since this pass last ran.
@@ -80,23 +78,11 @@ pub(super) fn run_peephole(
     let array_new_ids = resolve_array_new_ids(project);
     let array_rule = Collapser::new(&push_ids, &array_new_ids);
     let push_rule = resolve_ctx(project).map(ShortPushStrRule::new);
-    // `$value_copy$T` helper ids, for the pre-inline value-copy-elision rule.
-    let value_copy_ids = project.value_copy_func_ids();
-    // Interprocedural parameter-escape bits, so the elision rule can strip a
-    // call-argument copy whose callee parameter is provably confined. Computed
-    // once (pre-inline only, where the rule runs) from the whole package.
-    let escape_map = (pre_inline && !value_copy_ids.is_empty())
-        .then(|| super::escape::analyze_param_escape(project, &value_copy_ids));
     // Environment-free constant folding shares the session. It needs the
     // program-wide CTFE callee map and the type table; the per-function `env`
     // stays empty so only literal arithmetic and pure CTFE fold here, leaving
     // the flow-sensitive folds to the standalone `const_folding` walker.
     let type_table = project.type_table.borrow();
-    // Per-callee parameter `&mut`-ness, so the value-copy usage analysis knows
-    // which call arguments a callee can mutate through — precisely, even after
-    // boxing has erased the `&mut`/`&` distinction from the parameter type.
-    // Built once (pre-inline only, where the elide rule runs).
-    let param_mut = (pre_inline && !value_copy_ids.is_empty()).then(|| build_param_mut(project));
     let callees = build_callee_map(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let const_fold_rule = ConstFoldRule::new(&type_table, &callees);
@@ -107,33 +93,10 @@ pub(super) fn run_peephole(
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::Peephole, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
-        // `stores_aliased_locals` is per-function, so the elide rule is rebuilt
-        // for each body.
+        // `stores_aliased_locals` is per-function, so the ref-elimination rule is
+        // rebuilt for each body.
         let stores_aliased = func.stores_aliased_locals.clone();
         let elide_rule = ElideRule::new(&stores_aliased);
-        // Value-copy elision runs pre-inline only, and not on the
-        // `$value_copy$T` helpers themselves. Its usage map is built from the
-        // pristine body here, before the session rewrites it (matching the old
-        // standalone pass's snapshot); the rule borrows the shared helper-type
-        // set.
-        let value_copy_usage = (pre_inline && !func.is_value_copy() && !value_copy_ids.is_empty())
-            .then(|| {
-                func.body
-                    .as_ref()
-                    .zip(param_mut.as_ref())
-                    .zip(escape_map.as_ref())
-                    .map(|((b, pm), escape)| {
-                        build_usage(b, &type_table, &MutationOracle::new(pm), escape)
-                    })
-            })
-            .flatten();
-        let n_params = func.params.len() as u32;
-        let value_copy_rule = value_copy_usage
-            .zip(escape_map.as_ref())
-            .zip(param_mut.as_ref())
-            .map(|((u, escape), pm)| {
-                ValueCopyElideRule::new(&value_copy_ids, escape, &type_table, pm, n_params, u)
-            });
         // Reference elimination runs post-inline only (it cleans up the ref
         // bindings inlining exposes). Its maps are built from the pristine
         // post-inline body.
@@ -173,9 +136,6 @@ pub(super) fn run_peephole(
         let mut rules: Vec<&dyn Rule> = Vec::with_capacity(10);
         if pre_inline {
             rules.push(&match_rule);
-        }
-        if let Some(value_copy_rule) = value_copy_rule.as_ref() {
-            rules.push(value_copy_rule);
         }
         if let Some(ref_elim_rule) = ref_elim_rule.as_ref() {
             rules.push(ref_elim_rule);

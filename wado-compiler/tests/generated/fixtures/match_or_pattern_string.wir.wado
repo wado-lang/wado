@@ -128,23 +128,41 @@ global global:match_or_pattern_string.wado::__const_obj_2: ref null "core:prelud
 global global:match_or_pattern_string.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32)), used: 20 };
 
 fn "match_or_pattern_string.wado/is_reserved"(name) {
-    let len_a_5: i32;
-    let len_a_8: i32;
-    return (if __inline_String_Eq__eq_0: block -> bool {
-        len_a_5 = name.used;
-        if len_a_5 != 5 {
-            break __inline_String_Eq__eq_0: 0;
+    let len_a_6: i32;
+    let len_a_10: i32;
+    let __sroa_other_repr_19: ref Array<u8>;
+    let __sroa_other_repr_21: ref Array<u8>;
+    return (if __inline_String_Eq__eq_1: block -> bool {
+        let __array_clone_src_2: ref Array<u8>;
+        __array_clone_src_2 = array.new_data<u8>("alpha");
+        let __array_clone_len_2: i32;
+        __array_clone_len_2 = builtin::array_len(__array_clone_src_2);
+        let __array_clone_dst_2: ref Array<u8>;
+        __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2);
+        builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2);
+        __sroa_other_repr_21 = __array_clone_dst_2;
+        len_a_6 = name.used;
+        if len_a_6 != 5 {
+            break __inline_String_Eq__eq_1: 0;
         }
-        break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(name.repr, array.new_data<u8>("alpha"), len_a_5);
+        break __inline_String_Eq__eq_1: "core:prelude/string.wado/String^Eq::eq_bytes"(name.repr, __sroa_other_repr_21, len_a_6);
     } -> bool {
         1;
     } else {
-        __inline_String_Eq__eq_1: block -> bool {
-            len_a_8 = name.used;
-            if len_a_8 != 4 {
-                break __inline_String_Eq__eq_1: 0;
+        __inline_String_Eq__eq_3: block -> bool {
+            let __array_clone_src_2: ref Array<u8>;
+            __array_clone_src_2 = array.new_fixed<u8>(98, 101, 116, 97);
+            let __array_clone_len_2: i32;
+            __array_clone_len_2 = builtin::array_len(__array_clone_src_2);
+            let __array_clone_dst_2: ref Array<u8>;
+            __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2);
+            builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2);
+            __sroa_other_repr_19 = __array_clone_dst_2;
+            len_a_10 = name.used;
+            if len_a_10 != 4 {
+                break __inline_String_Eq__eq_3: 0;
             }
-            break __inline_String_Eq__eq_1: "core:prelude/string.wado/String^Eq::eq_bytes"(name.repr, array.new_fixed<u8>(98, 101, 116, 97), len_a_8);
+            break __inline_String_Eq__eq_3: "core:prelude/string.wado/String^Eq::eq_bytes"(name.repr, __sroa_other_repr_19, len_a_10);
         };
     });
 }

@@ -23,8 +23,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FreeFunctionName, FunctionId};
 use crate::tir::{
-    FunctionKind, FunctionRef, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirUnaryOp,
-    TypeTable,
+    FunctionKind, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -86,6 +86,97 @@ pub struct ReturnConventions {
     pub returns_self_projection: IndexSet<FunctionId>,
 }
 
+/// Functions whose every value-return aliases the receiver / first parameter's
+/// storage — a *borrowed* projection, including element reads through
+/// `array_get` and nested accessor calls (`List::index_value` returns
+/// `Array::index_value(self.repr, i)`, an element of `self`). Unlike
+/// `returns_self_projection` this includes borrowed (non-owned) projections, so
+/// it must NOT feed the move/owned decision — a borrowed element is not owned.
+/// It is consumed only by the read-only-share analysis, to learn that
+/// `row = list.index_value(i)` aliases `list`.
+pub fn compute_receiver_alias(project: &FlatPackage) -> IndexSet<FunctionId> {
+    let mut set: IndexSet<FunctionId> = IndexSet::default();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        let mut newly: Vec<FunctionId> = Vec::new();
+        for func in &project.functions {
+            let func = func.borrow();
+            let key = func_key(&func.module_source, &func.name);
+            if set.contains(&key) {
+                continue;
+            }
+            let Some(body) = &func.body else { continue };
+            if function_returns_receiver_alias(body, &set) {
+                newly.push(key);
+            }
+        }
+        for key in newly {
+            set.insert(key);
+            changed = true;
+        }
+    }
+    set
+}
+
+fn function_returns_receiver_alias(body: &TirBlock, set: &IndexSet<FunctionId>) -> bool {
+    struct W<'a> {
+        set: &'a IndexSet<FunctionId>,
+        all_alias: bool,
+        saw_return: bool,
+    }
+    impl TirRefVisitor for W<'_> {
+        fn visit_stmt(&mut self, stmt: &TirStmt) {
+            if let TirStmtKind::Return { value: Some(v) } = &stmt.kind {
+                self.saw_return = true;
+                if !is_receiver_projection(v, 0, self.set) {
+                    self.all_alias = false;
+                }
+            }
+            self.walk_stmt(stmt);
+        }
+    }
+    let mut w = W {
+        set,
+        all_alias: true,
+        saw_return: false,
+    };
+    w.visit_block(body);
+    w.saw_return && w.all_alias
+}
+
+/// Whether `expr` aliases the storage of parameter `param`: a projection chain,
+/// an `array_get` element read of one, or a call to a receiver-aliasing callee
+/// whose receiver / first argument is one.
+fn is_receiver_projection(expr: &TirExpr, param: u32, set: &IndexSet<FunctionId>) -> bool {
+    match &expr.kind {
+        TirExprKind::Local { index, .. } => *index == param,
+        TirExprKind::Unary { expr: inner, .. }
+        | TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::Index { expr: inner, .. } => is_receiver_projection(inner, param, set),
+        TirExprKind::Call { func, args, .. }
+            if func.module_source.is_core_builtin() && func.name == "array_get" =>
+        {
+            args.first()
+                .is_some_and(|a| is_receiver_projection(&a.expr, param, set))
+        }
+        TirExprKind::MethodCall { func, receiver, .. }
+            if set.contains(&func_key(&func.module_source, &func.name)) =>
+        {
+            is_receiver_projection(receiver, param, set)
+        }
+        TirExprKind::Call { func, args, .. }
+            if set.contains(&func_key(&func.module_source, &func.name)) =>
+        {
+            args.first()
+                .is_some_and(|a| is_receiver_projection(&a.expr, param, set))
+        }
+        _ => false,
+    }
+}
+
 /// Least fixpoint over the two return conventions. Seeds the always-owned
 /// callees (value-copy helpers clone; builtins except `array_get` allocate) and
 /// grows: a body function becomes owned once every value it returns is owned,
@@ -122,9 +213,8 @@ pub fn compute_return_conventions(project: &FlatPackage) -> ReturnConventions {
                 let Some(body) = &func.body else {
                     continue;
                 };
-                let n_params = u32::try_from(func.params.len()).unwrap_or(u32::MAX);
                 let (ret_owned, ret_self_proj) =
-                    function_return_convention(body, n_params, &oracle, &type_table);
+                    function_return_convention(body, &func.params, &oracle, &type_table);
                 if !already_owned && ret_owned {
                     newly_owned.push(key.clone());
                 }
@@ -158,11 +248,11 @@ pub fn compute_return_conventions(project: &FlatPackage) -> ReturnConventions {
 /// match-arm bindings that destructure an owned source).
 fn function_return_convention(
     body: &TirBlock,
-    n_params: u32,
+    params: &[crate::tir::TirParam],
     oracle: &OwnedCalls,
     type_table: &TypeTable,
 ) -> (bool, bool) {
-    let fresh = compute_fresh_locals(body, n_params, oracle, type_table);
+    let fresh = compute_fresh_locals(body, params, oracle, type_table);
     let mut walker = ReturnWalker {
         fresh: &fresh,
         oracle,
@@ -230,10 +320,11 @@ pub(super) fn is_projection_of_param(expr: &TirExpr, param: u32) -> bool {
 /// shrinking).
 fn compute_fresh_locals(
     body: &TirBlock,
-    n_params: u32,
+    params: &[crate::tir::TirParam],
     oracle: &OwnedCalls,
     type_table: &TypeTable,
 ) -> IndexSet<u32> {
+    let n_params = u32::try_from(params.len()).unwrap_or(u32::MAX);
     let mut collector = BindingCollector {
         n_params,
         let_sources: IndexMap::default(),
@@ -244,6 +335,20 @@ fn compute_fresh_locals(
     let mut fresh: IndexSet<u32> = collector.let_sources.keys().copied().collect();
     for (local, _) in &collector.match_sources {
         fresh.insert(*local);
+    }
+    // A by-value (non-reference) parameter is storage the callee owns
+    // exclusively: it can only be returned owned because a returned parameter is
+    // never confined, so the caller always deep-copies it in. Returning it (or a
+    // projection / match-binding of it) therefore yields an owned value —
+    // `unwrap(self) -> T { match self { Ok(v) => v } }`. A `&`/`&mut` parameter
+    // borrows the caller's storage and is never seeded.
+    for p in params {
+        if !matches!(
+            type_table.get(p.type_id),
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+        ) {
+            fresh.insert(p.local_index);
+        }
     }
 
     let mut changed = true;

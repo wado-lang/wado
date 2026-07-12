@@ -46,11 +46,38 @@ fn capture_param_mut_ref(flat: &mut FlatPackage) {
     }
 }
 
+/// Functions whose first parameter is a reference (`&self` / `&mut self`),
+/// captured before `boxing::prepare_types` erases the reference into `Box<T>`.
+fn ref_receiver_methods(flat: &FlatPackage) -> crate::hashmap::IndexSet<crate::name::FunctionId> {
+    let type_table = flat.type_table.borrow();
+    flat.functions
+        .iter()
+        .filter_map(|f| {
+            let f = f.borrow();
+            let p0 = f.params.first()?;
+            matches!(
+                type_table.get(p0.type_id),
+                crate::tir::ResolvedType::Ref(_) | crate::tir::ResolvedType::MutRef(_)
+            )
+            .then(|| value_copy::ownership::func_key(&f.module_source, &f.name))
+        })
+        .collect()
+}
+
 pub fn plan(flat: &mut FlatPackage) -> LowerPlan {
     globals::extract(flat);
     // Record each parameter's `&mut`-ness before `boxing::prepare_types`
     // rewrites `&mut T` / `&T` to the same `Box<T>`, erasing the distinction.
     capture_param_mut_ref(flat);
+    // Confinement is computed before boxing, so `&mut` / `&` references are still
+    // distinguishable (boxing collapses both onto `Box<T>`). The per-parameter
+    // result is boxing-independent — it keys on parameter position, which boxing
+    // preserves.
+    let confined_params = value_copy::confine::compute_confined_params(flat);
+    // Methods whose receiver (parameter 0) is a reference, captured before boxing
+    // collapses `&T` / `&mut T` onto `Box<T>`. The read-only-share analysis needs
+    // it to tell a borrowing receiver (`row.len()`) from a consuming one.
+    let ref_receiver_methods = ref_receiver_methods(flat);
     let box_plan = boxing::prepare_types(flat);
     boxing::shadow_params(flat, &box_plan);
     let lifted_from = flat.functions.len();
@@ -59,7 +86,7 @@ pub fn plan(flat: &mut FlatPackage) -> LowerPlan {
     globals::build_initialize_modules(flat);
     flat.rebuild_variant_indices();
     lift_mut::lift_mut_match_bindings(flat);
-    let value_copy = value_copy::plan(flat);
+    let value_copy = value_copy::plan(flat, confined_params, ref_receiver_methods);
     LowerPlan {
         box_plan,
         closure,

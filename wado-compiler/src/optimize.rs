@@ -59,8 +59,10 @@
 //! The `$value_copy$T` insertion + synthesis steps that materialize Wado's
 //! value-copy semantics live in the lower phase (`lower::plan::value_copy`) —
 //! by the time NIR reaches the optimizer, every defensive deep-copy is
-//! explicit. The optimizer only *removes* redundant copies, via
-//! `value_copy_elide` (full strip) and `value_copy_demote` (deep → shallow).
+//! explicit and precise: the fold inserts a copy only where the ownership
+//! analysis (move / confinement / freshness) could not prove it unnecessary.
+//! The optimizer only demotes a deep copy to a shallow one, via
+//! `value_copy_demote` (deep → shallow) when the elements are never mutated.
 
 mod alias;
 mod arena_query;
@@ -77,7 +79,6 @@ pub mod dce;
 mod drve;
 mod elide_box_local;
 mod elide_local;
-mod escape;
 mod extract;
 mod field_scalarize;
 mod gate;
@@ -99,7 +100,6 @@ mod string_push;
 mod tmpl_hoist;
 mod value_copy;
 mod value_copy_demote;
-mod value_copy_elide;
 
 use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
 use const_folding::{fold_constants, fold_constants_all};

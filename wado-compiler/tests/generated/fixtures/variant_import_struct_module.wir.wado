@@ -151,6 +151,7 @@ fn "variant_import_struct_module.wado/__cm_binding__Stdout_write_via_stream"(dat
 fn "variant_import_struct_module.wado/__cm_export__run"() {
     let opts: ref "variant_import_struct_module.wado//Options";
     let s: ref "core:prelude/string.wado//String";
+    let v: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:variant_import_struct_module.wado::__modules_initialized);
         cold_path;
@@ -164,7 +165,8 @@ fn "variant_import_struct_module.wado/__cm_export__run"() {
         global:variant_import_struct_module.wado::__modules_initialized = 1;
     };
     opts = struct.new "variant_import_struct_module.wado//Options" { align: struct.new "variant_import_struct_module.wado//Align" { 1 }, width: 0 };
-    s = "variant_import_struct_module.wado/format_with_opts"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 101, 115, 116), used: 4 }, opts);
+    v = "variant_import_struct_module.wado/format_with_opts"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 101, 115, 116), used: 4 }, opts);
+    s = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = v.repr; let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__array_clone_src_1); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: v.used };
     "core:cli/println"(s);
     "wasi/task-return"(0);
 }

@@ -496,13 +496,22 @@ being moved.
 The return-convention analysis (`ownership.rs`) supplies the interprocedural
 half: a call is a fresh allocation iff its callee returns owned. It is the
 caller-side, single-phase replacement for `optimize::escape`'s `returns_fresh`
-fixpoint. `optimize::escape` / `optimize::value_copy_elide` are not yet deleted
-(the `param_escapes` confinement half still feeds `value_copy_demote`); their
-removal is deferred to the M5 checklist below.
+fixpoint.
 
-- [ ] Fold the confinement (`param_escapes`) recovery into the caller-side
-      insertion so `optimize::escape` / `optimize::value_copy_elide` can be
-      deleted, as the WEP intends.
+The confinement half is now caller-side too. `lower::plan::value_copy::confine`
+computes per-parameter confinement (a two-channel return/side escape fixpoint
+over TIR, run before boxing so `&mut` / `&` are still distinguishable), and the
+fold skips a by-value argument's copy when the callee parameter is confined and
+the argument aliases no mutated sibling — the precise `no_mut_alias` check that
+`optimize::value_copy_elide` did post-hoc, using a shared may-alias union-find.
+With freshness and confinement both decided at insertion, `optimize::escape` and
+`optimize::value_copy_elide` are deleted; `build_param_mut` moved to
+`optimize::value_copy::mutation` (still used by `copy_prop`). `value_copy_demote`
+is independent of both and survives.
+
+- [x] Fold the confinement (`param_escapes`) recovery into the caller-side
+      insertion so `optimize::escape` / `optimize::value_copy_elide` are deleted,
+      as the WEP intends.
 
 ### Relationship to earlier WEPs
 
@@ -648,15 +657,19 @@ note in that WEP.
 
 - [ ] Emit the per-consumption move / copy / share classification for copyable
       value types from the same checker output.
-- [ ] `lower::plan::value_copy` inserts `$value_copy$T` only at `copy` sites.
-- [ ] Read-only-share refinement from local `let` / `let mut` / `&mut`
-      mutability, defaulting to `copy`.
+- [x] `lower::plan::value_copy` inserts `$value_copy$T` only at `copy` sites —
+      freshness (`analyze`/`ownership`), last-use move (`last_use`), and
+      confinement (`confine`) are all decided at insertion.
+- [x] Read-only-share refinement: a read-only binding bound from a projection
+      whose storage is provably never mutated while live shares the source and
+      emits no copy — field-sensitive over disjoint fields (`self.rows[0]` shared
+      while `self.tick` is mutated), pinned by `value_copy_elide_disjoint_field_mut`.
 - [x] Fix recursive-type `$value_copy$T` synthesis to a true deep copy
       (mutually-recursive helper), replacing the identity `return v` fallback —
       covers variant payload deep copy, structs containing variants,
       `List<variant>`, and payload copy at `VariantConstruct` sites (pinned by
       the `value_copy_variant_*` e2e fixtures).
-- [ ] Delete `optimize::escape` and `optimize::value_copy_elide`.
+- [x] Delete `optimize::escape` and `optimize::value_copy_elide`.
 - [ ] Pin representative move / copy / share decisions as e2e
       `wir_not_expect` / `wir_expect` fixtures (serde `?`-chain, accumulator
       `push`, literal-into-field, `let b = a; b.mut; …a`).

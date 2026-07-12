@@ -48,6 +48,108 @@ use crate::tir::{
 };
 use crate::tir_visitor::TirRefVisitor;
 
+/// May-alias components over a function's locals: two locals may share storage
+/// when a `let x = <projection of y>` (whole-value move or field/element/deref
+/// of `y`) or a match-arm binding of a scrutinee rooted at `y` connects them. A
+/// `let x = <fresh rvalue>` roots a new component (aliases nothing observable).
+/// Mirrors `optimize::value_copy_elide`'s `alias_rep` union-find, so the
+/// caller-side confinement check keeps exactly the copies of a by-value argument
+/// that aliases a mutated sibling.
+pub struct AliasComponents {
+    parent: IndexMap<u32, u32>,
+}
+
+impl AliasComponents {
+    pub fn empty() -> Self {
+        AliasComponents {
+            parent: IndexMap::default(),
+        }
+    }
+
+    pub fn build(func: &TirFunction) -> Self {
+        let mut ac = AliasComponents {
+            parent: IndexMap::default(),
+        };
+        if let Some(body) = &func.body {
+            let mut collector = AliasEdgeCollector { edges: Vec::new() };
+            collector.visit_block(body);
+            for (a, b) in collector.edges {
+                ac.union(a, b);
+            }
+        }
+        ac
+    }
+
+    /// Whether locals `a` and `b` may share storage.
+    pub fn may_alias(&self, a: u32, b: u32) -> bool {
+        a == b || self.find(a) == self.find(b)
+    }
+
+    fn find(&self, mut x: u32) -> u32 {
+        while let Some(&p) = self.parent.get(&x) {
+            if p == x {
+                return x;
+            }
+            x = p;
+        }
+        x
+    }
+
+    fn union(&mut self, a: u32, b: u32) {
+        let ra = self.find(a);
+        let rb = self.find(b);
+        self.parent.entry(ra).or_insert(ra);
+        self.parent.entry(rb).or_insert(rb);
+        if ra != rb {
+            self.parent.insert(ra, rb);
+        }
+    }
+}
+
+/// Collects `(local, alias-root)` edges: a `let` / whole-local assign bound from
+/// a projection, and a match-arm binding rooted at its scrutinee.
+struct AliasEdgeCollector {
+    edges: Vec<(u32, u32)>,
+}
+
+impl TirRefVisitor for AliasEdgeCollector {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        if let TirStmtKind::Let {
+            local_index, value, ..
+        } = &stmt.kind
+            && let Some(root) = alias_root(value)
+        {
+            self.edges.push((*local_index, root));
+        }
+        self.walk_stmt(stmt);
+    }
+
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        match &expr.kind {
+            TirExprKind::Assign { target, value } => {
+                if let TirExprKind::Local { index, .. } = &target.kind
+                    && let Some(root) = alias_root(value)
+                {
+                    self.edges.push((*index, root));
+                }
+            }
+            TirExprKind::Match { expr: scrut, arms } => {
+                if let Some(root) = alias_root(scrut) {
+                    for arm in arms {
+                        let mut binds: IndexSet<u32> = IndexSet::default();
+                        super::analyze::collect_pattern_bindings(&arm.pattern, &mut binds);
+                        for b in binds {
+                            self.edges.push((b, root));
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        self.walk_expr(expr);
+    }
+}
+
 /// Local indices the fold moves rather than copies. Empty for a bodyless
 /// function or one whose control forms (closure / handler / resume) defeat the
 /// single-observation argument.
@@ -161,6 +263,398 @@ pub fn compute_move_eligible(
         })
         .collect();
     owned
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Read-only-share refinement (WEP 2026-05-21)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// A place selector — one projection step, root-first.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Selector {
+    Field(u32),
+    Variant(u32),
+    Index,
+}
+
+/// A storage location: a root local plus a root-first chain of projections.
+/// `self.rows[0]` is `{ root: self, selectors: [Field(rows), Index] }`.
+#[derive(Clone)]
+struct AccessPath {
+    root: u32,
+    selectors: Vec<Selector>,
+}
+
+/// The access path of a pure place expression, or `None` for a non-place: a
+/// deref (the pointee has no local identity), a call/construction result, or a
+/// projection off one. Casts and non-deref unaries are transparent.
+fn place_path(expr: &TirExpr) -> Option<AccessPath> {
+    match &expr.kind {
+        TirExprKind::Local { index, .. } => Some(AccessPath {
+            root: *index,
+            selectors: Vec::new(),
+        }),
+        TirExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            ..
+        } => {
+            let mut p = place_path(inner)?;
+            p.selectors.push(Selector::Field(*field_index));
+            Some(p)
+        }
+        TirExprKind::VariantPayload {
+            expr: inner,
+            case_index,
+            ..
+        } => {
+            let mut p = place_path(inner)?;
+            p.selectors.push(Selector::Variant(*case_index));
+            Some(p)
+        }
+        TirExprKind::Index { expr: inner, .. } => {
+            let mut p = place_path(inner)?;
+            p.selectors.push(Selector::Index);
+            Some(p)
+        }
+        TirExprKind::Cast { expr: inner, .. } => place_path(inner),
+        TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            expr: inner,
+        } => place_path(inner),
+        _ => None,
+    }
+}
+
+/// Whether a write to `mutated` can never change the value read at `read` (both
+/// rooted at the same local): they agree on a shared prefix and then diverge at
+/// two distinct struct fields or variant cases. A dynamic `Index`, a mixed
+/// selector kind, or one being a prefix of the other is conservatively
+/// overlapping.
+fn disjoint(mutated: &AccessPath, read: &AccessPath) -> bool {
+    for (a, b) in mutated.selectors.iter().zip(read.selectors.iter()) {
+        match (a, b) {
+            (Selector::Field(x), Selector::Field(y)) if x != y => return true,
+            (Selector::Variant(x), Selector::Variant(y)) if x != y => return true,
+            (Selector::Field(_), Selector::Field(_))
+            | (Selector::Variant(_), Selector::Variant(_))
+            | (Selector::Index, Selector::Index) => {}
+            _ => return false,
+        }
+    }
+    false
+}
+
+/// Locals whose binding copy can be elided by *sharing* the source storage
+/// (WEP 2026-05-21, the "share" refinement): a read-only local bound from a
+/// projection of another place, where the projected storage is provably never
+/// mutated while the binding is live. `row = self.rows[0]; self.tick += 1;
+/// return row.len()` — `row` reads a field-element the disjoint `self.tick`
+/// write never touches, so no defensive copy is needed.
+///
+/// Soundness requires that neither the binding nor its source is ever mutated or
+/// transferred while both are live, so the conditions are strict: the local is
+/// read-only, is only ever *observed* (a method receiver or a projection base,
+/// never consumed by value), is not move-eligible, and no mutation in the
+/// function aliases its source path.
+pub fn compute_share_eligible(
+    func: &TirFunction,
+    move_eligible: &IndexSet<u32>,
+    mut_receiver_methods: &IndexSet<FunctionId>,
+    ref_receiver_methods: &IndexSet<FunctionId>,
+    returns_receiver_alias: &IndexSet<FunctionId>,
+) -> IndexSet<u32> {
+    let Some(body) = &func.body else {
+        return IndexSet::default();
+    };
+    if has_unsupported_form(body) {
+        return IndexSet::default();
+    }
+    let mut collector = ShareCollector {
+        mut_receiver_methods,
+        ref_receiver_methods,
+        returns_receiver_alias,
+        sources: IndexMap::default(),
+        mutated: Vec::new(),
+        consumed: IndexSet::default(),
+    };
+    collector.walk_block(body);
+
+    collector
+        .sources
+        .iter()
+        .filter_map(|(&local, path)| {
+            // A projection of another place (not a fresh rvalue, not itself).
+            if path.root == local {
+                return None;
+            }
+            // Read-only: never written, never moved, never consumed by value.
+            if move_eligible.contains(&local)
+                || collector.consumed.contains(&local)
+                || collector.is_mutated_root(local)
+            {
+                return None;
+            }
+            // No mutation aliases the source storage.
+            let safe = collector
+                .mutated
+                .iter()
+                .all(|m| m.root != path.root || disjoint(m, path));
+            safe.then_some(local)
+        })
+        .collect()
+}
+
+struct ShareCollector<'a> {
+    mut_receiver_methods: &'a IndexSet<FunctionId>,
+    ref_receiver_methods: &'a IndexSet<FunctionId>,
+    returns_receiver_alias: &'a IndexSet<FunctionId>,
+    /// Binding local → the access path of its source projection.
+    sources: IndexMap<u32, AccessPath>,
+    /// Every access path a mutation writes through.
+    mutated: Vec<AccessPath>,
+    /// Locals read in a value position (consumed), so not safe to share.
+    consumed: IndexSet<u32>,
+}
+
+impl ShareCollector<'_> {
+    fn is_mutated_root(&self, local: u32) -> bool {
+        self.mutated.iter().any(|m| m.root == local)
+    }
+
+    /// Record a write through `place`. When the exact path is unknown, mark
+    /// every local `place` mentions as fully mutated (a bare-root path) — the
+    /// conservative default.
+    fn record_mutation(&mut self, place: &TirExpr) {
+        if let Some(p) = place_path(place) {
+            self.mutated.push(p);
+        } else {
+            let mut roots: IndexSet<u32> = IndexSet::default();
+            collect_local_roots(place, &mut roots);
+            for r in roots {
+                self.mutated.push(AccessPath {
+                    root: r,
+                    selectors: Vec::new(),
+                });
+            }
+        }
+    }
+
+    fn mark_local_mutated(&mut self, index: u32) {
+        self.mutated.push(AccessPath {
+            root: index,
+            selectors: Vec::new(),
+        });
+    }
+
+    /// The access path a binding's value projects, if it aliases a place: a
+    /// direct place expression, or a call to a *self-projecting* accessor
+    /// (`self.rows.index_value(0)` returns a projection of `self.rows`, so the
+    /// binding aliases the receiver's storage). A prefix path is sound for
+    /// disjointness — a mutation disjoint from `self.rows` is disjoint from
+    /// `self.rows[0]`.
+    fn source_path(&self, value: &TirExpr) -> Option<AccessPath> {
+        if let Some(p) = place_path(value) {
+            return Some(p);
+        }
+        match &value.kind {
+            TirExprKind::MethodCall { func, receiver, .. }
+                if self
+                    .returns_receiver_alias
+                    .contains(&func_key(&func.module_source, &func.name)) =>
+            {
+                place_path(receiver)
+            }
+            TirExprKind::Call { func, args, .. }
+                if self
+                    .returns_receiver_alias
+                    .contains(&func_key(&func.module_source, &func.name)) =>
+            {
+                place_path(&args.first()?.expr)
+            }
+            _ => None,
+        }
+    }
+
+    fn walk_block(&mut self, block: &TirBlock) {
+        for stmt in &block.stmts {
+            self.walk_stmt(stmt);
+        }
+    }
+
+    fn walk_stmt(&mut self, stmt: &TirStmt) {
+        match &stmt.kind {
+            TirStmtKind::Let {
+                local_index, value, ..
+            } => {
+                if let Some(path) = self.source_path(value) {
+                    self.sources.insert(*local_index, path);
+                }
+                self.walk_value(value);
+            }
+            TirStmtKind::LetDestructure { value, .. } => self.walk_value(value),
+            TirStmtKind::Expr(e) => self.walk_value(e),
+            TirStmtKind::Return { value } => {
+                if let Some(v) = value {
+                    self.walk_value(v);
+                }
+            }
+            TirStmtKind::TaskReturn { value } => self.walk_value(value),
+            TirStmtKind::Break { value, .. } => {
+                if let Some(v) = value {
+                    self.walk_value(v);
+                }
+            }
+            TirStmtKind::Continue => {}
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                self.walk_value(condition);
+                self.walk_block(then_block);
+                if let Some(eb) = else_block {
+                    self.walk_block(eb);
+                }
+            }
+            TirStmtKind::Loop { body } => self.walk_block(body),
+            TirStmtKind::LabeledBlock { block, .. } => self.walk_block(block),
+            // Filtered by `has_unsupported_form`.
+            TirStmtKind::VariadicForOf { .. } => {}
+        }
+    }
+
+    /// Walk `expr` in a value position: a whole-local read here is a consumption.
+    /// Projection bases and borrow referents are only observed, not consumed.
+    /// Mutation-bearing forms record their writes. An unrecognized form falls
+    /// back to consuming every local it mentions — sound (fewer shares).
+    fn walk_value(&mut self, expr: &TirExpr) {
+        match &expr.kind {
+            TirExprKind::Local { index, .. } => {
+                self.consumed.insert(*index);
+            }
+            // Reading a field / element / payload by value copies it out; the
+            // base is only observed.
+            TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::VariantPayload { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. } => self.walk_place_base(inner),
+            TirExprKind::Index { expr: inner, index } => {
+                self.walk_place_base(inner);
+                self.walk_value(index);
+            }
+            // A shared borrow observes its referent; it does not consume it.
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref,
+                expr: place,
+            } => self.walk_place_base(place),
+            // A `&mut` borrow may be written through: the referent is mutated.
+            TirExprKind::Unary {
+                op: TirUnaryOp::MutRef,
+                expr: place,
+            } => {
+                self.record_mutation(place);
+                self.walk_place_base(place);
+            }
+            TirExprKind::Unary { expr: inner, .. } => self.walk_value(inner),
+            TirExprKind::Binary { left, right, .. } => {
+                self.walk_value(left);
+                self.walk_value(right);
+            }
+            TirExprKind::Assign { target, value } => {
+                match &target.kind {
+                    TirExprKind::Local { index, .. } => self.mark_local_mutated(*index),
+                    _ => self.record_mutation(target),
+                }
+                self.walk_value(value);
+            }
+            TirExprKind::MethodCall {
+                func,
+                receiver,
+                args,
+                ..
+            } => {
+                let key = func_key(&func.module_source, &func.name);
+                if self.mut_receiver_methods.contains(&key) {
+                    self.record_mutation(receiver);
+                }
+                // A `&self` / `&mut self` receiver is borrowed, not consumed; a
+                // by-value `self` receiver is consumed.
+                if self.ref_receiver_methods.contains(&key) {
+                    self.walk_place_base(receiver);
+                } else {
+                    self.walk_value(receiver);
+                }
+                for a in args {
+                    self.walk_value(&a.expr);
+                }
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                self.walk_value(condition);
+                self.walk_block(then_branch);
+                if let Some(eb) = else_branch {
+                    self.walk_block(eb);
+                }
+            }
+            TirExprKind::Match { expr: scrut, arms } => {
+                self.walk_value(scrut);
+                for arm in arms {
+                    if let Some(g) = &arm.guard {
+                        self.walk_value(g);
+                    }
+                    self.walk_value(&arm.body);
+                }
+            }
+            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+                self.walk_block(block);
+            }
+            TirExprKind::GlobalVarSet { value, .. } => self.walk_value(value),
+            // Everything else: recurse into every child as a value (consuming its
+            // locals), the conservative default that never under-reports a
+            // consumption or a mutation-free read.
+            _ => {
+                let mut children: Vec<&TirExpr> = Vec::new();
+                collect_child_exprs(expr, &mut children);
+                for c in children {
+                    self.walk_value(c);
+                }
+            }
+        }
+    }
+
+    /// A place base: a whole `Local` here is observed (the projection borrows
+    /// it), not consumed. Deeper projections stay place bases; a non-place
+    /// recurses as a value.
+    fn walk_place_base(&mut self, expr: &TirExpr) {
+        match &expr.kind {
+            TirExprKind::Local { .. } => {}
+            TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::VariantPayload { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. } => self.walk_place_base(inner),
+            TirExprKind::Index { expr: inner, index } => {
+                self.walk_place_base(inner);
+                self.walk_value(index);
+            }
+            _ => self.walk_value(expr),
+        }
+    }
+}
+
+/// Collect every local mentioned anywhere in `expr`.
+fn collect_local_roots(expr: &TirExpr, out: &mut IndexSet<u32>) {
+    struct W<'a>(&'a mut IndexSet<u32>);
+    impl TirRefVisitor for W<'_> {
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            if let TirExprKind::Local { index, .. } = &expr.kind {
+                self.0.insert(*index);
+            }
+            self.walk_expr(expr);
+        }
+    }
+    W(out).visit_expr(expr);
 }
 
 /// Closures / effect handlers / `resume` / an unexpanded variadic for-of defeat
@@ -680,7 +1174,7 @@ impl Analyzer<'_> {
 /// construction, a literal, an arithmetic result — aliases nothing observable,
 /// so returns `None`. Errs toward `Some` for unmodelled projection-like nodes
 /// (over-flagging only keeps a copy).
-fn alias_root(expr: &TirExpr) -> Option<u32> {
+pub(crate) fn alias_root(expr: &TirExpr) -> Option<u32> {
     match &expr.kind {
         TirExprKind::Local { index, .. } => Some(*index),
         TirExprKind::FieldAccess { expr: inner, .. }

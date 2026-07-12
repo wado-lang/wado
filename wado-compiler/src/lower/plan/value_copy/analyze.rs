@@ -238,7 +238,10 @@ pub(crate) fn is_owned_value(
             match_result_is_fresh(scrut, arms, fresh_locals, oracle, type_table)
         }
         TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. } => {
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        // A cast reinterprets a value without creating an alias, so it is owned
+        // exactly when its operand is (`[] as List<i32>`, a fresh literal cast).
+        | TirExprKind::Cast { expr: inner, .. } => {
             is_owned_value(inner, fresh_locals, oracle, type_table)
         }
         _ => false,

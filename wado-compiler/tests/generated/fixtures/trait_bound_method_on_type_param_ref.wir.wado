@@ -72,6 +72,7 @@ fn "trait_bound_method_on_type_param_ref.wado/__cm_binding__Stdout_write_via_str
 
 fn "trait_bound_method_on_type_param_ref.wado/__cm_export__run"() {
     let l: ref "core:prelude/string.wado//String";
+    let __sroa___sroa_item_name_repr: ref Array<u8>;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:trait_bound_method_on_type_param_ref.wado::__modules_initialized);
         cold_path;
@@ -84,7 +85,8 @@ fn "trait_bound_method_on_type_param_ref.wado/__cm_export__run"() {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:trait_bound_method_on_type_param_ref.wado::__modules_initialized = 1;
     };
-    l = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("widget"), used: 6 };
+    __sroa___sroa_item_name_repr = array.new_data<u8>("widget");
+    l = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__sroa___sroa_item_name_repr); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __sroa___sroa_item_name_repr, 0, __array_clone_len_1); __array_clone_dst_1), used: 6 };
     "core:cli/println"(l);
     "wasi/task-return"(0);
 }

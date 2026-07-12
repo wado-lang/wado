@@ -156,8 +156,17 @@ global global:core:prelude/format.wado::__const_obj_21: ref null "core:prelude/s
 fn "opt_move_out_string_reset_1522.wado/take"(buf) {
     let text: ref "core:prelude/string.wado//String";
     let __sroa___deref_val_3_repr: ref Array<u8>;
+    let __sroa_v_repr: ref Array<u8>;
     text = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = buf.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: buf.used };
-    __sroa___deref_val_3_repr = builtin::array_new<u8>(0);
+    __sroa_v_repr = builtin::array_new<u8>(0);
+    let __array_clone_src_3: ref Array<u8>;
+    __array_clone_src_3 = __sroa_v_repr;
+    let __array_clone_len_3: i32;
+    __array_clone_len_3 = builtin::array_len(__array_clone_src_3);
+    let __array_clone_dst_3: ref Array<u8>;
+    __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3);
+    builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3);
+    __sroa___deref_val_3_repr = __array_clone_dst_3;
     buf.repr = __sroa___deref_val_3_repr;
     buf.used = 0;
     return text;
@@ -173,16 +182,18 @@ fn "opt_move_out_string_reset_1522.wado/__test_0_moved_out_string_keeps_its_valu
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
-    let len_a_12: i32;
-    let len_a_20: i32;
+    let v_10: ref "core:prelude/string.wado//String";
+    let len_a_13: i32;
+    let len_a_21: i32;
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-    taken = "opt_move_out_string_reset_1522.wado/take"(s);
-    __cond_3 = __inline_String_Eq__eq_0: block -> bool {
-        len_a_12 = taken.used;
-        if len_a_12 != 5 {
-            break __inline_String_Eq__eq_0: 0;
+    v_10 = "opt_move_out_string_reset_1522.wado/take"(s);
+    taken = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = v_10.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: v_10.used };
+    __cond_3 = __inline_String_Eq__eq_1: block -> bool {
+        len_a_13 = taken.used;
+        if len_a_13 != 5 {
+            break __inline_String_Eq__eq_1: 0;
         }
-        break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(taken.repr, array.new_data<u8>("hello"), len_a_12);
+        break __inline_String_Eq__eq_1: "core:prelude/string.wado/String^Eq::eq_bytes"(taken.repr, array.new_data<u8>("hello"), len_a_13);
     };
     if @unlikely(__cond_3 == 0) {
         cold_path;
@@ -190,12 +201,12 @@ fn "opt_move_out_string_reset_1522.wado/__test_0_moved_out_string_keeps_its_valu
         unreachable;
     }
     __v0_4 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = s.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: s.used };
-    __cond_5 = __inline_String_Eq__eq_6: block -> bool {
-        len_a_20 = __v0_4.used;
-        if len_a_20 != 0 {
-            break __inline_String_Eq__eq_6: 0;
+    __cond_5 = __inline_String_Eq__eq_7: block -> bool {
+        len_a_21 = __v0_4.used;
+        if len_a_21 != 0 {
+            break __inline_String_Eq__eq_7: 0;
         }
-        break __inline_String_Eq__eq_6: "core:prelude/string.wado/String^Eq::eq_bytes"(__v0_4.repr, builtin::array_new<u8>(0), len_a_20);
+        break __inline_String_Eq__eq_7: "core:prelude/string.wado/String^Eq::eq_bytes"(__v0_4.repr, builtin::array_new<u8>(0), len_a_21);
     };
     if @unlikely(__cond_5 == 0) {
         cold_path;
@@ -206,6 +217,7 @@ fn "opt_move_out_string_reset_1522.wado/__test_0_moved_out_string_keeps_its_valu
 
 fn "opt_move_out_string_reset_1522.wado/__test_1_moved_out_field_keeps_its_value_across_a_field_reset___1522_"() {
     let p_0: ref "opt_move_out_string_reset_1522.wado//Pair";
+    let taken: ref "core:prelude/string.wado//String";
     let __cond_3: bool;
     let __v0_4: ref "core:prelude/string.wado//String";
     let __cond_5: bool;
@@ -218,50 +230,51 @@ fn "opt_move_out_string_reset_1522.wado/__test_1_moved_out_field_keeps_its_value
     let __local_12: ref "core:prelude/string.wado//String";
     let __local_13: ref "core:prelude/format.wado//Formatter";
     let text: ref "core:prelude/string.wado//String";
-    let v_16: ref "core:prelude/string.wado//String";
-    let len_a_19: i32;
-    let v_24: ref "core:prelude/string.wado//String";
-    let len_a_27: i32;
-    let v_32: ref "core:prelude/string.wado//String";
-    let len_a_35: i32;
+    let v_17: ref "core:prelude/string.wado//String";
+    let len_a_20: i32;
+    let v_25: ref "core:prelude/string.wado//String";
+    let len_a_28: i32;
+    let v_33: ref "core:prelude/string.wado//String";
+    let len_a_36: i32;
     p_0 = struct.new "opt_move_out_string_reset_1522.wado//Pair" { a: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(107, 101, 101, 112), used: 4 }, b: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 } };
-    v_16 = p_0.a;
-    text = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = v_16.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: v_16.used };
+    v_17 = p_0.a;
+    text = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = v_17.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: v_17.used };
     p_0.a = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    __cond_3 = __inline_String_Eq__eq_3: block -> bool {
-        len_a_19 = text.used;
-        if len_a_19 != 4 {
-            break __inline_String_Eq__eq_3: 0;
+    taken = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = text.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: text.used };
+    __cond_3 = __inline_String_Eq__eq_4: block -> bool {
+        len_a_20 = taken.used;
+        if len_a_20 != 4 {
+            break __inline_String_Eq__eq_4: 0;
         }
-        break __inline_String_Eq__eq_3: "core:prelude/string.wado/String^Eq::eq_bytes"(text.repr, array.new_fixed<u8>(107, 101, 101, 112), len_a_19);
+        break __inline_String_Eq__eq_4: "core:prelude/string.wado/String^Eq::eq_bytes"(taken.repr, array.new_fixed<u8>(107, 101, 101, 112), len_a_20);
     };
     if @unlikely(__cond_3 == 0) {
         cold_path;
-        "core:rt/panic"(__local_8 = "core:prelude/string.wado/String::with_capacity"(125); "core:prelude/string.wado/String::push_str"(__local_8, global:opt_move_out_string_reset_1522.wado::__const_obj_3); "core:prelude/string.wado/String::push_str"(__local_8, global:opt_move_out_string_reset_1522.wado::__const_obj_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_moved_out_field_keeps_its_value_across_a_field_reset___1522_"), used: 69 }; global:opt_move_out_string_reset_1522.wado::__const_obj_18); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push"(__local_8, 97); "core:prelude/string.wado/String::push"(__local_8, 116); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push_str"(__local_8, global:opt_move_out_string_reset_1522.wado::__const_obj_1); "core:prelude/string.wado/String::push"(__local_8, 58); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 36 }, __local_9); "core:prelude/string.wado/String::push_str"(__local_8, global:opt_move_out_string_reset_1522.wado::__const_obj_16); "core:prelude/string.wado/String::push"(__local_8, 116); "core:prelude/string.wado/String::push"(__local_8, 97); "core:prelude/string.wado/String::push"(__local_8, 107); "core:prelude/string.wado/String::push"(__local_8, 101); "core:prelude/string.wado/String::push"(__local_8, 110); "core:prelude/string.wado/String::push"(__local_8, 58); "core:prelude/string.wado/String::push"(__local_8, 32); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/format.wado/String^Inspect::inspect"(text, __local_9); "core:prelude/string.wado/String::push"(__local_8, 10); __local_8);
+        "core:rt/panic"(__local_8 = "core:prelude/string.wado/String::with_capacity"(125); "core:prelude/string.wado/String::push_str"(__local_8, global:opt_move_out_string_reset_1522.wado::__const_obj_3); "core:prelude/string.wado/String::push_str"(__local_8, global:opt_move_out_string_reset_1522.wado::__const_obj_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_moved_out_field_keeps_its_value_across_a_field_reset___1522_"), used: 69 }; global:opt_move_out_string_reset_1522.wado::__const_obj_18); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push"(__local_8, 97); "core:prelude/string.wado/String::push"(__local_8, 116); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push_str"(__local_8, global:opt_move_out_string_reset_1522.wado::__const_obj_1); "core:prelude/string.wado/String::push"(__local_8, 58); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 36 }, __local_9); "core:prelude/string.wado/String::push_str"(__local_8, global:opt_move_out_string_reset_1522.wado::__const_obj_16); "core:prelude/string.wado/String::push"(__local_8, 116); "core:prelude/string.wado/String::push"(__local_8, 97); "core:prelude/string.wado/String::push"(__local_8, 107); "core:prelude/string.wado/String::push"(__local_8, 101); "core:prelude/string.wado/String::push"(__local_8, 110); "core:prelude/string.wado/String::push"(__local_8, 58); "core:prelude/string.wado/String::push"(__local_8, 32); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/format.wado/String^Inspect::inspect"(taken, __local_9); "core:prelude/string.wado/String::push"(__local_8, 10); __local_8);
         unreachable;
     }
-    v_24 = p_0.a;
-    __v0_4 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = v_24.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: v_24.used };
-    __cond_5 = __inline_String_Eq__eq_9: block -> bool {
-        len_a_27 = __v0_4.used;
-        if len_a_27 != 0 {
-            break __inline_String_Eq__eq_9: 0;
+    v_25 = p_0.a;
+    __v0_4 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = v_25.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: v_25.used };
+    __cond_5 = __inline_String_Eq__eq_10: block -> bool {
+        len_a_28 = __v0_4.used;
+        if len_a_28 != 0 {
+            break __inline_String_Eq__eq_10: 0;
         }
-        break __inline_String_Eq__eq_9: "core:prelude/string.wado/String^Eq::eq_bytes"(__v0_4.repr, builtin::array_new<u8>(0), len_a_27);
+        break __inline_String_Eq__eq_10: "core:prelude/string.wado/String^Eq::eq_bytes"(__v0_4.repr, builtin::array_new<u8>(0), len_a_28);
     };
     if @unlikely(__cond_5 == 0) {
         cold_path;
         "core:rt/panic"(__local_10 = "core:prelude/string.wado/String::with_capacity"(117); "core:prelude/string.wado/String::push_str"(__local_10, global:opt_move_out_string_reset_1522.wado::__const_obj_3); "core:prelude/string.wado/String::push_str"(__local_10, global:opt_move_out_string_reset_1522.wado::__const_obj_14 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_moved_out_field_keeps_its_value_across_a_field_reset___1522_"), used: 69 }; global:opt_move_out_string_reset_1522.wado::__const_obj_14); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push"(__local_10, 97); "core:prelude/string.wado/String::push"(__local_10, 116); "core:prelude/string.wado/String::push"(__local_10, 32); "core:prelude/string.wado/String::push_str"(__local_10, global:opt_move_out_string_reset_1522.wado::__const_obj_1); "core:prelude/string.wado/String::push"(__local_10, 58); __local_11 = "core:prelude/format.wado/Formatter::new"(__local_10); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 37 }, __local_11); "core:prelude/string.wado/String::push_str"(__local_10, global:opt_move_out_string_reset_1522.wado::__const_obj_12); "core:prelude/string.wado/String::push"(__local_10, 112); "core:prelude/string.wado/String::push"(__local_10, 46); "core:prelude/string.wado/String::push"(__local_10, 97); "core:prelude/string.wado/String::push"(__local_10, 58); "core:prelude/string.wado/String::push"(__local_10, 32); __local_11 = "core:prelude/format.wado/Formatter::new"(__local_10); "core:prelude/format.wado/String^Inspect::inspect"(__v0_4, __local_11); "core:prelude/string.wado/String::push"(__local_10, 10); __local_10);
         unreachable;
     }
-    v_32 = p_0.b;
-    __v0_6 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = v_32.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: v_32.used };
-    __cond_7 = __inline_String_Eq__eq_15: block -> bool {
-        len_a_35 = __v0_6.used;
-        if len_a_35 != 5 {
-            break __inline_String_Eq__eq_15: 0;
+    v_33 = p_0.b;
+    __v0_6 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = v_33.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: v_33.used };
+    __cond_7 = __inline_String_Eq__eq_16: block -> bool {
+        len_a_36 = __v0_6.used;
+        if len_a_36 != 5 {
+            break __inline_String_Eq__eq_16: 0;
         }
-        break __inline_String_Eq__eq_15: "core:prelude/string.wado/String^Eq::eq_bytes"(__v0_6.repr, array.new_data<u8>("other"), len_a_35);
+        break __inline_String_Eq__eq_16: "core:prelude/string.wado/String^Eq::eq_bytes"(__v0_6.repr, array.new_data<u8>("other"), len_a_36);
     };
     if @unlikely(__cond_7 == 0) {
         cold_path;

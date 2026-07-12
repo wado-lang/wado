@@ -20,9 +20,9 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(3)
+array Array<i32> (mut i32);  // TypeId(3)
 
-array Array<i32> (mut i32);  // TypeId(4)
+array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(4)
 
 struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(5)
     mut repr: ref "Array<core:prelude/string.wado/String>",
@@ -122,7 +122,6 @@ global global:newtype_generic.wado::__const_obj_8: ref null "core:prelude//List<
 
 fn "newtype_generic.wado/run"() with Stdout {
     let __b_2: ref "core:prelude//List<i32>";
-    let arr2: ref "core:prelude//List<i32>";
     let __b_4: ref "core:prelude//List<core:prelude/string.wado/String>";
     let __local_6_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
@@ -132,42 +131,25 @@ fn "newtype_generic.wado/run"() with Stdout {
     let __local_11: ref "core:prelude/format.wado//Formatter";
     let __local_12: ref "core:prelude/string.wado//String";
     let __local_13: ref "core:prelude/format.wado//Formatter";
+    let self_28: i32;
+    let __v1: i32;
     let __cond: bool;
-    let self_42: i32;
-    let __sroa_arr_repr: ref Array<i32>;
+    let self_41: i32;
+    let self_69: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:newtype_generic.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:newtype_generic.wado::__modules_initialized = 1;
     };
-    let __array_clone_src_6: ref Array<i32>;
-    __array_clone_src_6 = global:newtype_generic.wado::__const_obj_8.repr;
-    let __array_clone_len_6: i32;
-    __array_clone_len_6 = builtin::array_len(__array_clone_src_6);
-    let __array_clone_dst_6: ref Array<i32>;
-    __array_clone_dst_6 = builtin::array_new<i32>(__array_clone_len_6);
-    builtin::array_copy<i32>(__array_clone_dst_6, 0, __array_clone_src_6, 0, __array_clone_len_6);
-    __sroa_arr_repr = __array_clone_dst_6;
-    drop(global:newtype_generic.wado::__const_obj_8.used);
-    "core:cli/println"(__local_6_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }; "core:prelude/string.wado/String::push"(__local_6_6, 108); "core:prelude/string.wado/String::push"(__local_6_6, 101); "core:prelude/string.wado/String::push"(__local_6_6, 110); "core:prelude/string.wado/String::push"(__local_6_6, 58); "core:prelude/string.wado/String::push"(__local_6_6, 32); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6_6 }; "core:prelude/primitive.wado/i32::fmt_decimal"(3, __local_7); __local_6_6);
-    "core:cli/println"(__local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 }; "core:prelude/string.wado/String::push"(__local_8, 102); "core:prelude/string.wado/String::push"(__local_8, 105); "core:prelude/string.wado/String::push"(__local_8, 114); "core:prelude/string.wado/String::push"(__local_8, 115); "core:prelude/string.wado/String::push"(__local_8, 116); "core:prelude/string.wado/String::push"(__local_8, 58); "core:prelude/string.wado/String::push"(__local_8, 32); __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_42(__cond = 1; builtin::array_get<i32>(__sroa_arr_repr, 0)), __local_9); __local_8);
+    "core:cli/println"(__local_6_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }; "core:prelude/string.wado/String::push"(__local_6_6, 108); "core:prelude/string.wado/String::push"(__local_6_6, 101); "core:prelude/string.wado/String::push"(__local_6_6, 110); "core:prelude/string.wado/String::push"(__local_6_6, 58); "core:prelude/string.wado/String::push"(__local_6_6, 32); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6_6 }; self_28 = global:newtype_generic.wado::__const_obj_8.used; "core:prelude/primitive.wado/i32::fmt_decimal"(3, __local_7); __local_6_6);
+    "core:cli/println"(__local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 }; "core:prelude/string.wado/String::push"(__local_8, 102); "core:prelude/string.wado/String::push"(__local_8, 105); "core:prelude/string.wado/String::push"(__local_8, 114); "core:prelude/string.wado/String::push"(__local_8, 115); "core:prelude/string.wado/String::push"(__local_8, 116); "core:prelude/string.wado/String::push"(__local_8, 58); "core:prelude/string.wado/String::push"(__local_8, 32); __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_41(__v1 = global:newtype_generic.wado::__const_obj_8.used; __cond = 1; builtin::array_get<i32>(global:newtype_generic.wado::__const_obj_8.repr, 0)), __local_9); __local_8);
     __b_2 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20), used: 2 };
-    arr2 = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_6: ref Array<i32>; __array_clone_src_6 = __b_2.repr; let __array_clone_len_6: i32; __array_clone_len_6 = builtin::array_len(__array_clone_src_6); let __array_clone_dst_6: ref Array<i32>; __array_clone_dst_6 = builtin::array_new<i32>(__array_clone_len_6); builtin::array_copy<i32>(__array_clone_dst_6, 0, __array_clone_src_6, 0, __array_clone_len_6); __array_clone_dst_6), used: 2 };
-    "core:prelude/list.wado/List<i32>::push"(arr2, 30);
-    "core:cli/println"(__local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_10, global:newtype_generic.wado::__const_obj_1); __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 }; "core:prelude/primitive.wado/i32::fmt_decimal"(arr2.used, __local_11); __local_10);
+    "core:prelude/list.wado/List<i32>::push"(__b_2, 30);
+    "core:cli/println"(__local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_10, global:newtype_generic.wado::__const_obj_1); __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 }; "core:prelude/primitive.wado/i32::fmt_decimal"(__b_2.used, __local_11); __local_10);
     __b_4 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 }), used: 2 };
     global:newtype_generic.wado::__const_obj_0 = __b_4;
-    let __array_clone_src_5: ref "Array<core:prelude/string.wado/String>";
-    __array_clone_src_5 = global:newtype_generic.wado::__const_obj_0.repr;
-    let __array_clone_len_5: i32;
-    __array_clone_len_5 = builtin::array_len(__array_clone_src_5);
-    let __array_clone_dst_5: ref "Array<core:prelude/string.wado/String>";
-    __array_clone_dst_5 = builtin::array_new<ref "core:prelude/string.wado//String">(__array_clone_len_5);
-    builtin::array_copy<ref "core:prelude/string.wado//String">(__array_clone_dst_5, 0, __array_clone_src_5, 0, __array_clone_len_5);
-    drop(__array_clone_dst_5);
-    drop(global:newtype_generic.wado::__const_obj_0.used);
-    "core:cli/println"(__local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }; "core:prelude/string.wado/String::push"(__local_12, 115); "core:prelude/string.wado/String::push"(__local_12, 116); "core:prelude/string.wado/String::push"(__local_12, 114); "core:prelude/string.wado/String::push"(__local_12, 115); "core:prelude/string.wado/String::push"(__local_12, 58); "core:prelude/string.wado/String::push"(__local_12, 32); __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_12 }; "core:prelude/primitive.wado/i32::fmt_decimal"(2, __local_13); __local_12);
+    "core:cli/println"(__local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }; "core:prelude/string.wado/String::push"(__local_12, 115); "core:prelude/string.wado/String::push"(__local_12, 116); "core:prelude/string.wado/String::push"(__local_12, 114); "core:prelude/string.wado/String::push"(__local_12, 115); "core:prelude/string.wado/String::push"(__local_12, 58); "core:prelude/string.wado/String::push"(__local_12, 32); __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_12 }; self_69 = global:newtype_generic.wado::__const_obj_0.used; "core:prelude/primitive.wado/i32::fmt_decimal"(2, __local_13); __local_12);
 }
 
 fn "newtype_generic.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

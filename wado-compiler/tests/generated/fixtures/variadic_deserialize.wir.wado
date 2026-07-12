@@ -321,7 +321,6 @@ global global:core:prelude/slice.wado::__const_obj_66: ref null "core:prelude/st
 global global:core:prelude/slice.wado::__const_obj_67: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(105, 51, 50, 95, 99, 108, 97, 109, 112)), used: 9 };
 
 fn "variadic_deserialize.wado/__test_0_tuple_deserialize_via_variadic_impl"() {
-    let json: ref "core:prelude/string.wado//String";
     let t: ref "tuple//[i32, core:prelude/string.wado/String]";
     let __v0_3: i32;
     let __v0_5: ref "core:prelude/string.wado//String";
@@ -330,12 +329,15 @@ fn "variadic_deserialize.wado/__test_0_tuple_deserialize_via_variadic_impl"() {
     let __local_8: ref "core:prelude/format.wado//Formatter";
     let __local_9: ref "core:prelude/string.wado//String";
     let __local_10: ref "core:prelude/format.wado//Formatter";
+    let input: ref "core:prelude/string.wado//String";
     let len_a: i32;
-    json = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("[42,\"hello\"]"), used: 12 };
+    let __sroa_json_repr: ref Array<u8>;
+    __sroa_json_repr = array.new_data<u8>("[42,\"hello\"]");
     let __sroa_parsed_discriminant: i32;
     let __sroa_parsed_case0_payload_0: ref null "tuple//[i32, core:prelude/string.wado/String]";
     let __sroa_parsed_case1_payload_0: ref null "core:serde//DeserializeError";
-    multivalue_bind [__sroa_parsed_discriminant, __sroa_parsed_case0_payload_0, __sroa_parsed_case1_payload_0] = "core:json/core/json/from_bytes<[i32,core:prelude/string.wado/String],core:prelude/string.wado/String>"(json);
+    input = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_8: i32; __array_clone_len_8 = builtin::array_len(__sroa_json_repr); let __array_clone_dst_8: ref Array<u8>; __array_clone_dst_8 = builtin::array_new<u8>(__array_clone_len_8); builtin::array_copy<u8>(__array_clone_dst_8, 0, __sroa_json_repr, 0, __array_clone_len_8); __array_clone_dst_8), used: 12 };
+    multivalue_bind [__sroa_parsed_discriminant, __sroa_parsed_case0_payload_0, __sroa_parsed_case1_payload_0] = "core:json/core/json/from_bytes<[i32,core:prelude/string.wado/String],core:prelude/string.wado/String>"(input);
     if @likely(__sroa_parsed_discriminant == 0) {
         t = ref.as_non_null(__sroa_parsed_case0_payload_0);
         __v0_3 = t.0;
@@ -345,12 +347,12 @@ fn "variadic_deserialize.wado/__test_0_tuple_deserialize_via_variadic_impl"() {
             unreachable;
         }
         __v0_5 = t.1;
-        __cond_6 = __inline_String_Eq__eq_1: block -> bool {
+        __cond_6 = __inline_String_Eq__eq_2: block -> bool {
             len_a = __v0_5.used;
             if len_a != 5 {
-                break __inline_String_Eq__eq_1: 0;
+                break __inline_String_Eq__eq_2: 0;
             }
-            break __inline_String_Eq__eq_1: "core:prelude/string.wado/String^Eq::eq_bytes"(__v0_5.repr, array.new_data<u8>("hello"), len_a);
+            break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(__v0_5.repr, array.new_data<u8>("hello"), len_a);
         };
         if @unlikely(__cond_6 == 0) {
             cold_path;
@@ -1081,7 +1083,7 @@ fn "core:json/core/json/from_bytes<[i32,core:prelude/string.wado/String],core:pr
     let __qm_v: ref "tuple//[i32, core:prelude/string.wado/String]";
     let __qm_e: ref "core:serde//DeserializeError";
     let v: ref "tuple//[i32, core:prelude/string.wado/String]";
-    de = struct.new "core:json//JsonDeserializer" { input: ref.as_non_null("variadic_deserialize.wado/$value_copy$T25"(struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: input.used })), pos: 0 };
+    de = struct.new "core:json//JsonDeserializer" { input: struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: input.used }, pos: 0 };
     let __sroa___match_scrut_0_discriminant: i32;
     let __sroa___match_scrut_0_case0_payload_0: ref null "tuple//[i32, core:prelude/string.wado/String]";
     let __sroa___match_scrut_0_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -1383,7 +1385,7 @@ fn "core:prelude/string.wado/String::is_valid_utf8"(bytes) {
             let scalar_mv_code: u32;
             let scalar_mv_advance: i32;
             let scalar_mv_valid: bool;
-            multivalue_bind [scalar_mv_code, scalar_mv_advance, scalar_mv_valid] = "core:prelude/string.wado/decode_utf8_scalar"(bytes, i, len);
+            multivalue_bind [scalar_mv_code, scalar_mv_advance, scalar_mv_valid] = "core:prelude/string.wado/decode_utf8_scalar"("variadic_deserialize.wado/$value_copy$T25"(bytes), i, len);
             if @unlikely(scalar_mv_valid == 0) {
                 cold_path;
                 return 0;
@@ -1502,7 +1504,7 @@ fn "core:json/JsonDeserializer::append_scanned_run"(self, dst, start, end, all_a
     let slice: ref "core:prelude/slice.wado//ArraySlice<u8>";
     slice = "core:prelude/slice.wado/ArraySlice<u8>::slice"(self.input, start, end);
     if (if all_ascii == 0 -> i32 {
-        "core:prelude/string.wado/String::is_valid_utf8"(slice) == 0;
+        "core:prelude/string.wado/String::is_valid_utf8"("variadic_deserialize.wado/$value_copy$T25"(slice)) == 0;
     } else {
         0;
     }) {

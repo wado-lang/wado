@@ -693,11 +693,12 @@ fn "effect_handler_resource_fields.wado/handle"(request) {
     let __save_Fields: ref null "effect_handler_resource_fields.wado//__Dispatch_Fields";
     let __d_Fields: ref "effect_handler_resource_fields.wado//__Dispatch_Fields";
     let __pattern_temp_1: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
-    let v_174: ref "core:prelude/string.wado//String";
-    let v_175: ref "core:prelude/string.wado//String";
     let packed: i64;
     let rx: i32;
     let tx: i32;
+    let v_177: ref "wasi:http/types.wado//FieldSizePayload";
+    let v_178: ref null "core:prelude/string.wado//String";
+    let __vc_payload_0: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:effect_handler_resource_fields.wado::__modules_initialized);
         cold_path;
@@ -708,8 +709,8 @@ fn "effect_handler_resource_fields.wado/handle"(request) {
     __save_Fields = global:effect_handler_resource_fields.wado::__effect_Fields;
     __d_Fields = struct.new "effect_handler_resource_fields.wado//__Dispatch_Fields" { outer: __save_Fields, op_new: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_resource_fields.wado//__Closure_2" { __capture_0: counter }, func: ref.func "closure/effect_handler_resource_fields.wado/__closure_wrapper_0" }, op_from_list: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_resource_fields.wado//__Closure_3" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/__closure_wrapper_1" }, op_get: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_resource_fields.wado//__Closure_4" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/__closure_wrapper_2" }, op_has: struct.new "canonical//CanonicalClosure_3" { env: struct.new "effect_handler_resource_fields.wado//__Closure_5" { __capture_0: counter }, func: ref.func "closure/effect_handler_resource_fields.wado/__closure_wrapper_3" }, op_set: struct.new "canonical//CanonicalClosure_4" { env: struct.new "effect_handler_resource_fields.wado//__Closure_6" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/__closure_wrapper_4" }, op_delete: struct.new "canonical//CanonicalClosure_5" { env: struct.new "effect_handler_resource_fields.wado//__Closure_7" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/__closure_wrapper_5" }, op_get_and_delete: struct.new "canonical//CanonicalClosure_6" { env: struct.new "effect_handler_resource_fields.wado//__Closure_8" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/__closure_wrapper_6" }, op_append: struct.new "canonical//CanonicalClosure_7" { env: struct.new "effect_handler_resource_fields.wado//__Closure_9" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/__closure_wrapper_7" }, op_copy_all: struct.new "canonical//CanonicalClosure_8" { env: struct.new "effect_handler_resource_fields.wado//__Closure_10" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/__closure_wrapper_8" }, op_clone: struct.new "canonical//CanonicalClosure_9" { env: struct.new "effect_handler_resource_fields.wado//__Closure_11" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/__closure_wrapper_9" } };
     global:effect_handler_resource_fields.wado::__effect_Fields = __d_Fields;
-    drop("effect_handler_resource_fields.wado/__effect_dispatch__Fields__has"(local.tee f("effect_handler_resource_fields.wado/__effect_dispatch__Fields__new"()), v_174 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-test"), used: 6 }; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = v_174.repr; let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__array_clone_src_1); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: v_174.used }));
-    drop("effect_handler_resource_fields.wado/__effect_dispatch__Fields__has"(f, v_175 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-test"), used: 6 }; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = v_175.repr; let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__array_clone_src_1); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: v_175.used }));
+    drop("effect_handler_resource_fields.wado/__effect_dispatch__Fields__has"(local.tee f("effect_handler_resource_fields.wado/__effect_dispatch__Fields__new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-test"), used: 6 }));
+    drop("effect_handler_resource_fields.wado/__effect_dispatch__Fields__has"(f, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-test"), used: 6 }));
     "wasi/resource-drop:fields"(f);
     global:effect_handler_resource_fields.wado::__effect_Fields = __save_Fields;
     __v0_5 = global:effect_handler_resource_fields.wado::new_count;
@@ -834,7 +835,13 @@ fn "effect_handler_resource_fields.wado/handle"(request) {
             __local_72 = 0;
             __local_73 = 0;
             if __local_68 != 0 {
-                __local_74 = ref.as_non_null(__local_66);
+                v_177 = ref.as_non_null(__local_66);
+                __local_74 = struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: v_178 = v_177.field_name; (if ref.is_null(v_178) == 0 -> ref null "core:prelude/string.wado//String" {
+                    __vc_payload_0 = ref.as_non_null(v_178);
+                    struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = __vc_payload_0.repr; let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__array_clone_src_1); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: __vc_payload_0.used };
+                } else {
+                    v_178;
+                }), field_size: v_177.field_size };
                 __local_75 = __local_74.field_name;
                 __local_76 = ref.is_null(__local_75) == 0;
                 __local_77 = 0;
@@ -1128,12 +1135,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b70: block {
-        l71: loop {
-            break_if b70 t <= 0_i64;
+    b71: block {
+        l72: loop {
+            break_if b71 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l71;
+            continue l72;
         };
     };
     return n;
@@ -1147,13 +1154,13 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b73: block {
-            l74: loop {
-                break_if b73 temp <= 0_i64;
+        b74: block {
+            l75: loop {
+                break_if b74 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l74;
+                continue l75;
             };
         };
     }
@@ -1162,12 +1169,12 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
 fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b75: block {
-        l76: loop {
-            break_if b75 i >= len;
+    b76: block {
+        l77: loop {
+            break_if b76 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l76;
+            continue l77;
         };
     };
 }
@@ -1240,20 +1247,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b78: block {
-        l79: loop {
-            break_if b78 offset >= count;
+    b79: block {
+        l80: loop {
+            break_if b79 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/wait_for_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b78 (if (result >> 4) == 0 -> i32 {
+            break_if b79 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l79;
+            continue l80;
         };
     };
 }
@@ -1374,12 +1381,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b90: block {
-        l91: loop {
-            break_if b90 i >= n;
+    b91: block {
+        l92: loop {
+            break_if b91 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l91;
+            continue l92;
         };
     };
 }

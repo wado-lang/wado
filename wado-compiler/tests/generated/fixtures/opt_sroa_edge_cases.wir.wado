@@ -353,11 +353,13 @@ fn "opt_sroa_edge_cases.wado/dependent_field_construction"(base) {
 
 fn "opt_sroa_edge_cases.wado/struct_from_conditional"(flag) {
     let p: ref "opt_sroa_edge_cases.wado//Point";
-    p = (if flag -> ref "opt_sroa_edge_cases.wado//Point" {
+    let v: ref "opt_sroa_edge_cases.wado//Point";
+    v = (if flag -> ref "opt_sroa_edge_cases.wado//Point" {
         struct.new "opt_sroa_edge_cases.wado//Point" { x: 10, y: 20 };
     } else {
         struct.new "opt_sroa_edge_cases.wado//Point" { x: 30, y: 40 };
     });
+    p = struct.new "opt_sroa_edge_cases.wado//Point" { x: v.x, y: v.y };
     return p.x + p.y;
 }
 

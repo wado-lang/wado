@@ -886,7 +886,7 @@ impl Rule for CopyPropRule<'_> {
 pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let copy_value_id = project.builtin_func_id("copy_value");
     let type_table = project.type_table.borrow();
-    let param_mut = super::value_copy_elide::build_param_mut(project);
+    let param_mut = super::value_copy::mutation::build_param_mut(project);
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::CopyProp, len, |fid| {

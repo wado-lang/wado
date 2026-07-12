@@ -117,8 +117,9 @@ fn "wir_optimize_vcopy_deref_snapshot.wado/run"() with Stdout {
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
     let snapshot: ref "core:prelude//List<i32>";
-    let f_20: ref "core:prelude/format.wado//Formatter";
-    let f_26: ref "core:prelude/format.wado//Formatter";
+    let f_21: ref "core:prelude/format.wado//Formatter";
+    let f_27: ref "core:prelude/format.wado//Formatter";
+    let __sroa_snap_used: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:wir_optimize_vcopy_deref_snapshot.wado::__modules_initialized);
         cold_path;
@@ -128,7 +129,16 @@ fn "wir_optimize_vcopy_deref_snapshot.wado/run"() with Stdout {
     __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
     snapshot = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_5: ref Array<i32>; __array_clone_src_5 = __b.repr; let __array_clone_len_5: i32; __array_clone_len_5 = builtin::array_len(__array_clone_src_5); let __array_clone_dst_5: ref Array<i32>; __array_clone_dst_5 = builtin::array_new<i32>(__array_clone_len_5); builtin::array_copy<i32>(__array_clone_dst_5, 0, __array_clone_src_5, 0, __array_clone_len_5); __array_clone_dst_5), used: __b.used };
     "core:prelude/list.wado/List<i32>::push"(__b, 100);
-    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_3, global:wir_optimize_vcopy_deref_snapshot.wado::__const_obj_1); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; f_20 = __local_4; "core:prelude/primitive.wado/i32::fmt_decimal"(snapshot.used, f_20); "core:prelude/string.wado/String::push_str"(__local_3, global:wir_optimize_vcopy_deref_snapshot.wado::__const_obj_0); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; f_26 = __local_4; "core:prelude/primitive.wado/i32::fmt_decimal"(__b.used, f_26); __local_3);
+    let __array_clone_src_5: ref Array<i32>;
+    __array_clone_src_5 = snapshot.repr;
+    let __array_clone_len_5: i32;
+    __array_clone_len_5 = builtin::array_len(__array_clone_src_5);
+    let __array_clone_dst_5: ref Array<i32>;
+    __array_clone_dst_5 = builtin::array_new<i32>(__array_clone_len_5);
+    builtin::array_copy<i32>(__array_clone_dst_5, 0, __array_clone_src_5, 0, __array_clone_len_5);
+    drop(__array_clone_dst_5);
+    __sroa_snap_used = snapshot.used;
+    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_3, global:wir_optimize_vcopy_deref_snapshot.wado::__const_obj_1); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; f_21 = __local_4; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_snap_used, f_21); "core:prelude/string.wado/String::push_str"(__local_3, global:wir_optimize_vcopy_deref_snapshot.wado::__const_obj_0); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; f_27 = __local_4; "core:prelude/primitive.wado/i32::fmt_decimal"(__b.used, f_27); __local_3);
 }
 
 fn "wir_optimize_vcopy_deref_snapshot.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

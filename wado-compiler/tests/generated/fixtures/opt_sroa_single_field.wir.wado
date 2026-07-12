@@ -294,11 +294,13 @@ fn "opt_sroa_single_field.wado/process_wrapper"(w) {
 
 fn "opt_sroa_single_field.wado/conditional_wrapper"(flag) {
     let w: ref "opt_sroa_single_field.wado//Wrapper";
-    w = (if flag -> ref "opt_sroa_single_field.wado//Wrapper" {
+    let v: ref "opt_sroa_single_field.wado//Wrapper";
+    v = (if flag -> ref "opt_sroa_single_field.wado//Wrapper" {
         struct.new "opt_sroa_single_field.wado//Wrapper" { inner: 10 };
     } else {
         struct.new "opt_sroa_single_field.wado//Wrapper" { inner: 20 };
     });
+    w = struct.new "opt_sroa_single_field.wado//Wrapper" { inner: v.inner };
     return "opt_sroa_single_field.wado/Wrapper::get"(w.inner);
 }
 
