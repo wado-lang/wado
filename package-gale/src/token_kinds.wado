@@ -20,6 +20,36 @@ pub struct TokenKinds {
 }
 
 impl TokenKinds {
+    /// Empty self-extending table. Used where the canonical numbering isn't
+    /// available (unit tests that build a `GenContext` without running
+    /// `resolve_kind_ids`); `intern` then assigns ids lazily. Production uses
+    /// [`build`] so ids match the emitted `TK_*` values.
+    pub fn empty() -> TokenKinds {
+        return TokenKinds { names: [], by_name: TreeMap::<String, i32>::new() };
+    }
+
+    /// Fallback id assignment for a name not already present — only reached for
+    /// an element whose `kind_id` was never resolved (the test path). Extends
+    /// the table so `name_of` still round-trips.
+    pub fn intern(&mut self, name: &String) -> i32 {
+        if let Some(id) = self.by_name.get(*name) {
+            return id;
+        }
+        let id = self.names.len();
+        self.by_name[*name] = id;
+        self.names.push(*name);
+        return id;
+    }
+
+    /// Recover names for a list of ids, preserving order (the emit boundary).
+    pub fn names_of(&self, ids: &List<i32>) -> List<String> {
+        let mut out: List<String> = [];
+        for let id of ids {
+            out.push(self.names[*id]);
+        }
+        return out;
+    }
+
     pub fn build(grammar: &Grammar) -> TokenKinds {
         let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
         let slots = token_slot_order(&grammar.lexer_rules, &lit_tokens);
@@ -53,6 +83,39 @@ impl TokenKinds {
 
     pub fn len(&self) -> i32 {
         return self.names.len();
+    }
+}
+
+fn bits_ensure(bits: &mut List<u64>, word: i32) {
+    while bits.len() <= word {
+        bits.push(0 as u64);
+    }
+}
+
+/// Set the bit for `id`.
+pub fn bits_set(bits: &mut List<u64>, id: i32) {
+    let word = id / 64;
+    bits_ensure(bits, word);
+    bits[word] = bits[word] | ((1 as u64) << ((id % 64) as u64));
+}
+
+/// Test the bit for `id`.
+pub fn bits_test(bits: &List<u64>, id: i32) -> bool {
+    let word = id / 64;
+    if word >= bits.len() {
+        return false;
+    }
+    return (bits[word] & ((1 as u64) << ((id % 64) as u64))) != (0 as u64);
+}
+
+/// Append every id in `src` to `result`, skipping any already present (O(1)
+/// bitset probe on `seen`); insertion order is preserved.
+pub fn append_ids(result: &mut List<i32>, seen: &mut List<u64>, src: &List<i32>) {
+    for let id of src {
+        if !bits_test(seen, *id) {
+            bits_set(seen, *id);
+            result.push(*id);
+        }
     }
 }
 

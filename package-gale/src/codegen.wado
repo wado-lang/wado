@@ -124,6 +124,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // / scannable caches for the subsequent parser emit.
     let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
     let mut ctx = GenContext::new(&grammar.parser_rules, &lit_tokens);
+    ctx.set_token_kinds(token_kinds);
     ctx.set_trace(options.trace);
     ctx.set_emit_actions(should_emit_actions(grammar));
     ctx.set_action_language(&grammar.action_language);
