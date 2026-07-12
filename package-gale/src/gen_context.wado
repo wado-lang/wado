@@ -55,10 +55,16 @@ pub struct GenContext {
     pub parser_rules: List<ParserRule>,
     pub lit_tokens: List<LitToken>,
     rule_index: TreeMap<String, i32>,
-    first_cache: TreeMap<String, List<String>>,
-    single_token_cache: TreeMap<String, bool>,
-    nullable_cache: TreeMap<String, bool>,
-    scannable_cache: TreeMap<String, bool>,
+    /// Per-rule memo caches indexed by dense rule id (position in
+    /// `parser_rules`, i.e. what `rule_index_of` returns). `null` means
+    /// "not yet computed"; `Some(v)` is the memoized value. Dense arrays
+    /// replace the former `TreeMap<String, _>` so a cache probe on the hot
+    /// first/nullable/scannable recursion is an O(1) index instead of an
+    /// O(log n) rule-name string-tree walk.
+    first_cache: List<Option<List<String>>>,
+    single_token_cache: List<Option<bool>>,
+    nullable_cache: List<Option<bool>>,
+    scannable_cache: List<Option<bool>>,
     /// Maps single-alt group type name → the rule name that first defines it.
     /// Used to resolve general group type names inside shared single-alt groups.
     single_alt_owner: TreeMap<String, String>,
@@ -76,8 +82,9 @@ pub struct GenContext {
     /// `SYNC_<id>: List<i32>` global passed to `expect` by reference, so a
     /// terminal on the valid hot path never rebuilds or copies the set.
     sync_set_registry: TreeMap<String, KindSetEntry>,
-    /// Cache of `tail_greedy_first(rule)` keyed by rule name.
-    tail_greedy_cache: TreeMap<String, List<String>>,
+    /// Cache of `tail_greedy_first(rule)` indexed by dense rule id (see
+    /// the memo caches above).
+    tail_greedy_cache: List<Option<List<String>>>,
     /// Prediction-strategy diagnostics raised during lowering, in the
     /// order lowering walked the rules. Drained into
     /// `LoweredGrammar.diagnostics` by `lower_with_ctx`. See
@@ -188,19 +195,20 @@ impl GenContext {
             rule_index[parser_rules[i].name] = i;
         }
         let single_alt_owner = build_single_alt_owner_map(parser_rules);
+        let rule_count = parser_rules.len();
         return GenContext {
             parser_rules: *parser_rules,
             lit_tokens: *lit_tokens,
             rule_index,
-            first_cache: TreeMap::new(),
-            single_token_cache: TreeMap::new(),
-            nullable_cache: TreeMap::new(),
-            scannable_cache: TreeMap::new(),
+            first_cache: none_list_cache(rule_count),
+            single_token_cache: none_bool_cache(rule_count),
+            nullable_cache: none_bool_cache(rule_count),
+            scannable_cache: none_bool_cache(rule_count),
             single_alt_owner,
             kind_set_registry: TreeMap::new(),
             follow_mask_registry: TreeMap::new(),
             sync_set_registry: TreeMap::new(),
-            tail_greedy_cache: TreeMap::new(),
+            tail_greedy_cache: none_list_cache(rule_count),
             diagnostics: [],
             caller_follow_gate_seen: false,
             needs_atn_seen: false,
@@ -542,9 +550,12 @@ impl GenContext {
     /// stack may under-count (a cycle contributes the empty set), so it is only
     /// cached once its whole SCC has closed at this frame (`local_min >= p`).
     fn first_of_rule_at(&mut self, name: &String, visiting: &mut List<String>, min_cycle: &mut i32) -> List<String> {
-        let cached = self.first_cache.get(*name);
-        if let Some(result) = cached {
-            return result;
+        let rid = self.rule_index_of(name);
+        if rid >= 0 {
+            let cached = self.first_cache[rid];
+            if let Some(result) = cached {
+                return result;
+            }
         }
 
         let on_stack = visiting_index(visiting, name);
@@ -561,8 +572,8 @@ impl GenContext {
         let mut local_min = i32::MAX;
         let mut result: List<String> = [];
 
-        let rule = self.find_rule(name);
-        if let Some(rule) = rule {
+        if rid >= 0 {
+            let rule = &self.parser_rules[rid];
             for let alt of &rule.alternatives {
                 let af = self.first_of_alt_at(alt, visiting, &mut local_min);
                 dedup_append_arr(&mut result, &af);
@@ -572,7 +583,9 @@ impl GenContext {
         remove_from_visiting(visiting, name);
 
         if local_min >= p {
-            self.first_cache[*name] = result;
+            if rid >= 0 {
+                self.first_cache[rid] = Option::Some(result);
+            }
         } else if local_min < *min_cycle {
             *min_cycle = local_min;
         }
@@ -903,9 +916,12 @@ impl GenContext {
     /// cycle assumes not-nullable), so it is cached only once its SCC has
     /// closed at this frame (`local_min >= p`).
     fn rule_is_nullable_at(&mut self, name: &String, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
-        let cached = self.nullable_cache.get(*name);
-        if let Some(val) = cached {
-            return val;
+        let rid = self.rule_index_of(name);
+        if rid >= 0 {
+            let cached = self.nullable_cache[rid];
+            if let Some(val) = cached {
+                return val;
+            }
         }
 
         let on_stack = visiting_index(visiting, name);
@@ -921,8 +937,8 @@ impl GenContext {
 
         let mut local_min = i32::MAX;
         let mut result = false;
-        let rule = self.find_rule(name);
-        if let Some(rule) = rule {
+        if rid >= 0 {
+            let rule = &self.parser_rules[rid];
             for let alt of &rule.alternatives {
                 let mut all_null = true;
                 for let e of &alt.elements {
@@ -941,7 +957,9 @@ impl GenContext {
         remove_from_visiting(visiting, name);
 
         if local_min >= p {
-            self.nullable_cache[*name] = result;
+            if rid >= 0 {
+                self.nullable_cache[rid] = Option::Some(result);
+            }
         } else if local_min < *min_cycle {
             *min_cycle = local_min;
         }
@@ -1058,9 +1076,12 @@ impl GenContext {
     /// `is_rule_scannable_at`): cache only once the SCC has closed at this
     /// frame (`local_min >= p`).
     fn rule_is_single_token_at(&mut self, name: &String, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
-        let cached = self.single_token_cache.get(*name);
-        if let Some(val) = cached {
-            return val;
+        let rid = self.rule_index_of(name);
+        if rid >= 0 {
+            let cached = self.single_token_cache[rid];
+            if let Some(val) = cached {
+                return val;
+            }
         }
 
         let on_stack = visiting_index(visiting, name);
@@ -1076,8 +1097,8 @@ impl GenContext {
 
         let mut local_min = i32::MAX;
         let mut result = false;
-        let rule = self.find_rule(name);
-        if let Some(rule) = rule {
+        if rid >= 0 {
+            let rule = &self.parser_rules[rid];
             let mut all_alts_ok = true;
             for let alt of &rule.alternatives {
                 let mut non_nullable_count = 0;
@@ -1114,7 +1135,9 @@ impl GenContext {
         remove_from_visiting(visiting, name);
 
         if local_min >= p {
-            self.single_token_cache[*name] = result;
+            if rid >= 0 {
+                self.single_token_cache[rid] = Option::Some(result);
+            }
         } else if local_min < *min_cycle {
             *min_cycle = local_min;
         }
@@ -1153,9 +1176,12 @@ impl GenContext {
     /// ancestor, which the SCC condition below decides. Results stay identical
     /// to the top-level-only scheme; only the number of recomputations drops.
     fn is_rule_scannable_at(&mut self, name: &String, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
-        let cached = self.scannable_cache.get(*name);
-        if let Some(val) = cached {
-            return val;
+        let rid = self.rule_index_of(name);
+        if rid >= 0 {
+            let cached = self.scannable_cache[rid];
+            if let Some(val) = cached {
+                return val;
+            }
         }
 
         let on_stack = visiting_index(visiting, name);
@@ -1173,8 +1199,8 @@ impl GenContext {
 
         let mut local_min = i32::MAX;
         let mut result = false;
-        let rule = self.find_rule(name);
-        if let Some(rule) = rule {
+        if rid >= 0 {
+            let rule = &self.parser_rules[rid];
             let mut all_ok = true;
             for let alt of &rule.alternatives {
                 if !self.is_alt_scannable_at(&alt.elements, visiting, &mut local_min) {
@@ -1193,7 +1219,9 @@ impl GenContext {
         // closed at or below this frame (`local_min >= p`). Otherwise the value
         // is provisional — propagate the escaping cycle depth to the caller.
         if !result || local_min >= p {
-            self.scannable_cache[*name] = result;
+            if rid >= 0 {
+                self.scannable_cache[rid] = Option::Some(result);
+            }
         } else if local_min < *min_cycle {
             *min_cycle = local_min;
         }
@@ -1393,9 +1421,12 @@ impl GenContext {
         visiting: &mut List<String>,
         min_cycle: &mut i32,
     ) -> List<String> {
-        let cached = self.tail_greedy_cache.get(*name);
-        if let Some(result) = cached {
-            return result;
+        let rid = self.rule_index_of(name);
+        if rid >= 0 {
+            let cached = self.tail_greedy_cache[rid];
+            if let Some(result) = cached {
+                return result;
+            }
         }
 
         let on_stack = visiting_index(visiting, name);
@@ -1411,8 +1442,8 @@ impl GenContext {
 
         let mut local_min = i32::MAX;
         let mut result: List<String> = [];
-        let rule = self.find_rule(name);
-        if let Some(rule) = rule {
+        if rid >= 0 {
+            let rule = &self.parser_rules[rid];
             for let alt of &rule.alternatives {
                 let af = self.tail_greedy_first_of_elements(&alt.elements, visiting, &mut local_min);
                 dedup_append_arr(&mut result, &af);
@@ -1422,7 +1453,9 @@ impl GenContext {
         remove_from_visiting(visiting, name);
 
         if local_min >= p {
-            self.tail_greedy_cache[*name] = result;
+            if rid >= 0 {
+                self.tail_greedy_cache[rid] = Option::Some(result);
+            }
         } else if local_min < *min_cycle {
             *min_cycle = local_min;
         }
@@ -1665,6 +1698,23 @@ pub fn union_kind_arrays(a: &List<String>, b: &List<String>) -> List<String> {
         }
     }
     return result;
+}
+
+/// Dense `null`-initialised memo cache of length `n`, indexed by rule id.
+fn none_bool_cache(n: i32) -> List<Option<bool>> {
+    let mut v: List<Option<bool>> = [];
+    for let mut i = 0; i < n; i += 1 {
+        v.push(null);
+    }
+    return v;
+}
+
+fn none_list_cache(n: i32) -> List<Option<List<String>>> {
+    let mut v: List<Option<List<String>>> = [];
+    for let mut i = 0; i < n; i += 1 {
+        v.push(null);
+    }
+    return v;
 }
 
 /// Index of `name` in the visiting stack, or -1. Used by the scannability
