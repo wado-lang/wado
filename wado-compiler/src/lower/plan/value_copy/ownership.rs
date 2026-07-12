@@ -35,10 +35,7 @@ pub struct OwnedCalls<'a> {
 }
 
 impl<'a> OwnedCalls<'a> {
-    pub fn new(
-        returns_owned: &'a FuncKeySet,
-        returns_self_projection: &'a FuncKeySet,
-    ) -> Self {
+    pub fn new(returns_owned: &'a FuncKeySet, returns_self_projection: &'a FuncKeySet) -> Self {
         Self {
             returns_owned,
             returns_self_projection,
@@ -53,8 +50,7 @@ impl<'a> OwnedCalls<'a> {
         if func.module_source.is_core_builtin() || func.module_source.is_wasm_asset() {
             return func.name != "array_get";
         }
-        self.returns_owned
-            .contains(&func.module_source, &func.name)
+        self.returns_owned.contains(&func.module_source, &func.name)
     }
 
     /// Whether `func` returns a projection of its receiver / first parameter
@@ -151,9 +147,7 @@ fn is_receiver_projection(expr: &TirExpr, param: u32, set: &FuncKeySet) -> bool 
         {
             is_receiver_projection(receiver, param, set)
         }
-        TirExprKind::Call { func, args, .. }
-            if set.contains(&func.module_source, &func.name) =>
-        {
+        TirExprKind::Call { func, args, .. } if set.contains(&func.module_source, &func.name) => {
             args.first()
                 .is_some_and(|a| is_receiver_projection(&a.expr, param, set))
         }
