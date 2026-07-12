@@ -1,0 +1,67 @@
+// A guest-side mock of the async `Client::send` effect operation, standalone
+// (no `outgoing_mocks`): the installed handler resumes with the resolved
+// `Result<Response, ErrorCode>` and the dispatch wrapper repackages it as an
+// already-completed `AsyncCall`, so the caller's `.wait()` follows the normal
+// completed-call path.
+use { Request, Response, ErrorCode, Fields, Trailers, StatusCode } from "wasi:http";
+use { Client } from "wasi:http/client.wado";
+
+struct MockClient {
+    calls: i32,
+}
+
+// Nobody transmits the mocked response or reads the mocked request, so their
+// trailer futures never gain a reader — writing them would block forever
+// (P3 futures rendezvous). The writable ends are simply left unwritten.
+impl Client for MockClient {
+    fn send(&mut self, request: Request) -> Result<Response, ErrorCode> {
+        self.calls += 1;
+        assert request.get_path_with_query() matches { Some("/upstream") };
+        let [trailers_future, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+        let [resp, _tx_future] = Response::new(Fields::new(), null, trailers_future);
+        let _ = resp.set_status_code(201 as StatusCode);
+        resume Result::<Response, ErrorCode>::Ok(resp);
+    }
+}
+
+fn fetch_upstream() -> Response with Client {
+    let headers = Fields::new();
+    let [trailers_future, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [req, _req_future] = Request::new(headers, null, trailers_future, null);
+    req.set_path_with_query(Option::<String>::Some("/upstream"));
+    let result = Client::send(req).wait();
+    return match result {
+        Ok(r) => r,
+        Err(_) => panic("mocked send returned Err"),
+    };
+}
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let mut mock = MockClient { calls: 0 };
+    let upstream = with Client => &mut mock do {
+        fetch_upstream();
+    };
+    assert mock.calls == 1;
+    let status = upstream.get_status_code() as i32;
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [body_rx, body_tx] = Stream::<u8>::new();
+    let [response, _tx_future] = Response::new(
+        Fields::new(),
+        Option::<Stream<u8>>::Some(body_rx),
+        trailers_future,
+    );
+    task return Result::<Response, ErrorCode>::Ok(response);
+
+    body_tx.write(`upstream={status}`.bytes().collect());
+    body_tx.drop();
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{
+    "wasi:http/service": {
+        "status": 200,
+        "body": "upstream=201"
+    }
+}
