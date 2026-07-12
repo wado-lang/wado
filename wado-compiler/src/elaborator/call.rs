@@ -609,6 +609,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     combined.extend_from_slice(&method_type_args);
                     self.record_generic_instantiation(call.id, combined, TypeTable::UNKNOWN);
                 }
+                // Report a clean diagnostic when a generic static method /
+                // constructor leaves a type parameter unbound (no turbofish, no
+                // usable expected type), so it fails here instead of reaching
+                // WIR build as an unresolved `Call` (which panics).
+                self.report_uninferred_static_method_type_args(
+                    prefix,
+                    suffix,
+                    &impl_type_args_inferred,
+                    &method_type_args,
+                    call.span,
+                );
                 // Enforce the static method's type-arg bounds (shared rule).
                 if !method_type_args.is_empty() {
                     let mtype_params = self.lookup_static_method_type_params(prefix, suffix);
@@ -1926,6 +1937,117 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             message: format!(
                 "cannot infer type parameter {names} of function `{func_name}`; \
                  add a turbofish (`{func_name}::<...>()`) or a type annotation"
+            ),
+            span,
+        });
+    }
+
+    /// Type-level (impl / resource) generic parameter names for a static call
+    /// `prefix::suffix`. For an `impl` block these come from the impl header
+    /// (`impl<T> Container<T>`); for a Component Model `resource Stream<T>` they
+    /// come from the resource declaration, which is not an `impl` block and so is
+    /// invisible to the impl-based lookup.
+    fn static_receiver_type_param_names(&self, prefix: &str, suffix: &str) -> Vec<String> {
+        if let Some((names, _)) = self.find_static_method_def(prefix, suffix)
+            && !names.is_empty()
+        {
+            return names;
+        }
+        let canonical = self.canonical_decl_key(prefix).1;
+        let from_items = |items: &[Item]| -> Option<Vec<String>> {
+            items.iter().find_map(|item| match item {
+                Item::Resource(r) if r.name == prefix || r.name == canonical => Some(
+                    r.type_params
+                        .iter()
+                        .filter(|p| !p.is_effect)
+                        .map(|p| p.name.clone())
+                        .collect(),
+                ),
+                _ => None,
+            })
+        };
+        if let Some(names) = from_items(self.current_module_items) {
+            return names;
+        }
+        self.loaded_modules
+            .iter()
+            .find_map(|(_, module)| from_items(&module.items))
+            .unwrap_or_default()
+    }
+
+    /// Report a clean "cannot infer type parameter" diagnostic when a generic
+    /// static method / constructor call (`Type::method()`, no turbofish) leaves
+    /// a declared type parameter unbound. Without this the unresolved call
+    /// reaches WIR build as an unsubstituted `Call` and panics (issue #1557).
+    ///
+    /// Mirrors [`Self::report_uninferred_fn_type_args`]: a parameter bound to an
+    /// outer-scope generic (the caller forwarding its own type params) is fine
+    /// and left for monomorphization.
+    fn report_uninferred_static_method_type_args(
+        &mut self,
+        prefix: &str,
+        suffix: &str,
+        impl_type_args: &[TypeId],
+        method_type_args: &[TypeId],
+        span: crate::token::Span,
+    ) {
+        let type_level_names = self.static_receiver_type_param_names(prefix, suffix);
+        let method_level_names: Vec<String> = self
+            .lookup_static_method_type_params(prefix, suffix)
+            .iter()
+            .filter(|p| !p.is_effect && p.default.is_none() && !p.has_fn_bound())
+            .map(|p| p.name.clone())
+            .collect();
+        if type_level_names.is_empty() && method_level_names.is_empty() {
+            return;
+        }
+
+        let scope_params: Vec<TypeId> = self
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .values()
+            .map(|&(_, tid)| tid)
+            .collect();
+        let unresolved_names = |this: &Self, names: &[String], args: &[TypeId]| -> Vec<String> {
+            names
+                .iter()
+                .enumerate()
+                .filter(|&(i, _)| match args.get(i) {
+                    None => true,
+                    Some(&t) => this.is_unbound_type_param(t) && !scope_params.contains(&t),
+                })
+                .map(|(_, n)| n.clone())
+                .collect()
+        };
+
+        let mut unresolved = unresolved_names(self, &type_level_names, impl_type_args);
+        let type_level_unresolved = !unresolved.is_empty();
+        unresolved.extend(unresolved_names(
+            self,
+            &method_level_names,
+            method_type_args,
+        ));
+        if unresolved.is_empty() {
+            return;
+        }
+
+        let names = unresolved
+            .iter()
+            .map(|n| format!("`{n}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        // The turbofish for a type-level parameter binds to the type
+        // (`Stream::<T>::new()`); a method-level one binds to the method.
+        let turbofish = if type_level_unresolved {
+            format!("`{prefix}::<...>::{suffix}()`")
+        } else {
+            format!("`{prefix}::{suffix}::<...>()`")
+        };
+        let _ = self.logger.error(TypeError::CannotInferType {
+            message: format!(
+                "cannot infer type parameter {names} of `{prefix}::{suffix}`; \
+                 add a turbofish ({turbofish}) or a type annotation"
             ),
             span,
         });
