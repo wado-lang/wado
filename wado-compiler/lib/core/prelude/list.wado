@@ -23,7 +23,7 @@ use { String } from "core:prelude/string.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { write_seq_inspect, write_seq_inspect_alt } from "core:prelude/array.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
-use { ArraySlice, ArrayIter, ArrayRefIter, ArrayWindows, ArrayChunks } from "core:prelude/slice.wado";
+use { ArraySlice, ArrayIter, ArrayRefIter, ArrayRefMutIter, ArrayWindows, ArrayChunks } from "core:prelude/slice.wado";
 use { panic, i32_min, i32_max, i32_clamp } from "core:rt";
 
 #[compiler_item("list")]
@@ -510,12 +510,12 @@ impl<T> IntoIterator for &List<T> {
 }
 
 impl<T> IntoIterator for &mut List<T> {
-    type Item = &T;
-    type Iter = ArrayRefIter<T>;
+    type Item = &mut T;
+    type Iter = ArrayRefMutIter<T>;
 
     fn into_iter(&self) -> Self::Iter {
         let list = *self;
-        return ArrayRefIter::internal_new(&list.repr, 0, list.used);
+        return ArrayRefMutIter::internal_new(&mut list.repr, 0, list.used);
     }
 }
 

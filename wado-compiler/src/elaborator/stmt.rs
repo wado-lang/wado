@@ -2572,6 +2572,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None => TypeTable::UNKNOWN,
         };
 
+        if let ResolvedType::MutRef(elem) = self.tysys.type_table.borrow().get(item_type).clone() {
+            let elem_resolved = self.tysys.type_table.borrow().get(elem).clone();
+            let elem_name = self.tysys.type_table.borrow().type_name(elem);
+            if matches!(elem_resolved, ResolvedType::TypeParam { .. }) {
+                let _ = self.logger.error(TypeError::CannotMutate {
+                    message: format!(
+                        "cannot iterate `&mut` over a list of generic type `{elem_name}`: the \
+                         element type is not known to support in-place mutation. Constrain it to \
+                         a concrete in-place type, or assign by index (`xs[i] = ...`)"
+                    ),
+                    span,
+                });
+            } else if self.is_replace_on_assign_element(elem) {
+                let _ = self.logger.error(TypeError::CannotMutate {
+                    message: format!(
+                        "cannot iterate `&mut` over a list of `{elem_name}`: a write through \
+                         `&mut {elem_name}` would be lost (no in-place interior). Assign by index \
+                         instead, e.g. `xs[i] = ...`"
+                    ),
+                    span,
+                });
+            }
+        }
+
         // Stage 5 (Gap 6 of WEP 2026-05-26): record the iterator-path
         // dispatch decision so reify can re-emit the synthetic
         // `into_iter()` / `next()` calls without re-dispatching. Only
@@ -2608,6 +2632,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx.exit_scope();
 
         ctx.active_labels.pop();
+    }
+
+    /// Conservative superset of `boxing.rs`'s boxed set (also names flags /
+    /// resource / newtype): a type with no sound `&mut` element write-back.
+    fn is_replace_on_assign_element(&self, type_id: TypeId) -> bool {
+        match self.tysys.type_table.borrow().get(type_id).clone() {
+            ResolvedType::Primitive(p) => !matches!(p, PrimitiveType::I128 | PrimitiveType::U128),
+            ResolvedType::Enum { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Function { .. }
+            | ResolvedType::Resource { .. } => true,
+            ResolvedType::GenericInstance { name, .. } => self.contains_variant(&name),
+            ResolvedType::Newtype { base_type, .. } => self.is_replace_on_assign_element(base_type),
+            _ => false,
+        }
     }
 
     /// Check if a block contains `break`, `continue`, or `return` at the top level

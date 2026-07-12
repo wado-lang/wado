@@ -220,7 +220,12 @@ let n = arr.len();                       // get length
 let empty = arr.is_empty();              // check if empty
 let first = arr[0];                      // index access (read)
 arr[0] = 100;                            // index assignment (write, requires mut)
-// Note: there is no iter_mut(); mutate elements via index access
+
+// In-place element mutation: iterate `&mut` to get `&mut T`
+let mut ps: List<Point> = [Point { x: 1 }, Point { x: 2 }];
+for let p of &mut ps { p.x += 10; }      // struct/List/String elements mutate in place
+// For primitive/enum/variant elements (replace-on-assign), use index access:
+for let mut i = 0; i < arr.len(); i += 1 { arr[i] = arr[i] * 2; }
 
 // Sorting
 let mut nums: List<i32> = [5, 3, 8, 1];
