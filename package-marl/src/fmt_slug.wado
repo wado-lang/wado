@@ -1,15 +1,8 @@
-//! GFM-compatible heading slugs.
-//!
-//! `slugify` follows github-slugger: lowercase ASCII letters, keep ASCII
-//! alphanumerics / `-` / `_`, turn each space into `-`, drop other ASCII
-//! punctuation, and keep non-ASCII characters verbatim (raw UTF-8, so
-//! `## 日本語` yields `id="日本語"`). A `Slugger` deduplicates within one
-//! document by appending `-1`, `-2`, … to a repeated base — including
-//! collisions with an explicit slug that already reads like a suffixed one.
+//! GFM-compatible heading slugs (github-slugger rules) with per-document
+//! deduplication. See `docs/wep-2026-07-05-marl.md`.
 
 use { TreeMap } from "core:collections";
 
-/// Turn heading text into its base slug, before deduplication.
 internal fn slugify(text: &String) -> String {
     let mut out = String::with_capacity(text.len());
     for let c of text.chars() {
@@ -26,12 +19,10 @@ internal fn slugify(text: &String) -> String {
     return out;
 }
 
-/// ASCII characters kept verbatim: lowercase letters, digits, `-`, `_`.
 fn is_slug_char(c: char) -> bool {
     return c.is_ascii_lowercase() || c >= '0' && c <= '9' || c == '-' || c == '_';
 }
 
-/// Per-document slug deduplicator (the github-slugger scheme).
 internal struct Slugger {
     counts: TreeMap<String, i32>,
 }
@@ -41,8 +32,6 @@ impl Slugger {
         return Slugger { counts: TreeMap::<String, i32>::new() };
     }
 
-    /// Return a unique slug for `base`, recording it so a later repeat of the
-    /// same base gets the next `-N` suffix that is still free.
     internal fn slug(&mut self, base: String) -> String {
         let mut result = base;
         while self.counts.contains_key(result) {

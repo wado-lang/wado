@@ -328,9 +328,7 @@ test "render keeps non-ASCII characters verbatim in a slug" {
     assert render("## 日本語").html == "<h2 id=\"日本語\">日本語</h2>";
 }
 
-test "render lowercases only ASCII letters in a slug" {
-    // Option A: non-ASCII letters are kept verbatim, not case-folded, so the
-    // uppercase Ü stays Ü while the ASCII C is lowered to c.
+test "render keeps non-ASCII letters verbatim, lowercasing only ASCII" {
     assert render("## Café Über").html == "<h2 id=\"café-Über\">Café Über</h2>";
 }
 

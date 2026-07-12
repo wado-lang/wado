@@ -6,9 +6,8 @@
 //! link/image/autolink destinations are scheme-filtered (see
 //! `docs/wep-2026-07-05-marl.md`, "HTML safety").
 //!
-//! `render` returns both the HTML and the heading outline it collected, so a
-//! consumer (e.g. a CMS) can opt into a table of contents. Every heading gets
-//! a GFM-compatible `id` (see `fmt_slug.wado`).
+//! `render` also returns the heading outline it collects, so a consumer can
+//! opt into a table of contents; every heading gets a GFM `id` (`fmt_slug`).
 
 use {
     Node,
@@ -29,23 +28,18 @@ use { is_ascii_punct } from "./fmt_parse_inline.wado";
 use { chars_of } from "./str_cursor.wado";
 use { slugify, Slugger } from "./fmt_slug.wado";
 
-/// A rendered Markdown document: the HTML plus the heading outline collected
-/// while rendering. Consuming `headings` is opt-in — ignore it for plain HTML,
-/// or walk it to build a table of contents.
+/// The HTML plus the heading outline collected while rendering; walk
+/// `headings` to build a table of contents, or use `html` alone.
 pub struct RenderResult {
     pub html: String,
     pub headings: List<HeadingInfo>,
 }
 
-/// One heading in the document outline, in document order.
+/// A heading in document order: its level (1..=6), slug `id`, and plain-text
+/// label.
 pub struct HeadingInfo {
-    /// Heading level, 1..=6.
     pub level: u8,
-    /// GFM-compatible slug, unique within the document; also the heading's
-    /// `id` attribute.
     pub id: String,
-    /// Plain-text content of the heading, used both as the slug source and as
-    /// a ready-made table-of-contents label.
     pub text: String,
 }
 
@@ -63,8 +57,6 @@ pub fn render(source: String) -> RenderResult {
     return RenderResult { html, headings: r.headings };
 }
 
-/// Rendering state threaded through the block walk: the document's reference
-/// definitions plus the slug deduplicator and the heading outline being built.
 struct Renderer {
     refs: RefTable,
     slugger: Slugger,
@@ -166,12 +158,6 @@ impl Renderer {
     }
 }
 
-// --- heading text extraction ---
-
-/// The plain-text content of a heading's inline children — the slug source and
-/// TOC label. Mirrors GFM's `textContent`: code-span text is included, link
-/// and emphasis text is flattened, autolinks contribute their URL, and image
-/// alt text is excluded.
 fn heading_text(children: &List<Node>) -> String {
     let mut out = String::new();
     collect_heading_text(children, &mut out);
@@ -195,8 +181,6 @@ fn collect_heading_text(children: &List<Node>, out: &mut String) {
         }
     }
 }
-
-// --- blocks (reference-only) ---
 
 fn render_code_block(cb: &CodeBlock) -> String {
     let mut out = String::new();
