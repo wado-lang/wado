@@ -1,21 +1,21 @@
 use { escape_text, escape_attr } from "./html.wado";
 
 test "escape_text escapes ampersand, lt, gt" {
-    assert escape_text(&"a & b < c > d") == "a &amp; b &lt; c &gt; d";
+    assert escape_text("a & b < c > d") == "a &amp; b &lt; c &gt; d";
 }
 
 test "escape_text encodes an ampersand before an entity name" {
-    assert escape_text(&"AT&T <tag>") == "AT&amp;T &lt;tag&gt;";
+    assert escape_text("AT&T <tag>") == "AT&amp;T &lt;tag&gt;";
 }
 
 test "escape_text leaves quotes untouched" {
-    assert escape_text(&"say \"hi\"") == "say \"hi\"";
+    assert escape_text("say \"hi\"") == "say \"hi\"";
 }
 
 test "escape_attr also escapes double quotes" {
-    assert escape_attr(&"a \"b\" & c") == "a &quot;b&quot; &amp; c";
+    assert escape_attr("a \"b\" & c") == "a &quot;b&quot; &amp; c";
 }
 
 test "escape_text passes plain text through unchanged" {
-    assert escape_text(&"hello world") == "hello world";
+    assert escape_text("hello world") == "hello world";
 }

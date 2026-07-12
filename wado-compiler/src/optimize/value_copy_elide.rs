@@ -126,7 +126,7 @@ fn disjoint(mutated: &AccessPath, read: &AccessPath) -> bool {
             // keep comparing deeper selectors.
             (Selector::Field(_), Selector::Field(_))
             | (Selector::Variant(_), Selector::Variant(_))
-            | (Selector::Index, Selector::Index) => continue,
+            | (Selector::Index, Selector::Index) => {}
             // Mixed selector kinds on the same storage cannot arise for two paths
             // that share a prefix (the type at each depth is fixed); treat any as
             // conservatively overlapping.

@@ -12,7 +12,7 @@ Wado is a programming language targeting Wasm/WASI -- Wasm in plain sight.
 | Typing    | Static, Strong, Inferred  |
 | Target    | Wasm/WASI                 |
 
-See also: [Cheatsheet](docs/cheatsheet.md) for quick syntax reference.
+See also: [Cheatsheet](./cheatsheet.md) for quick syntax reference.
 
 ## Design Philosophy
 

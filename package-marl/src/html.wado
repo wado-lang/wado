@@ -1,7 +1,17 @@
 //! HTML escaping and URL sanitization helpers.
 
 /// Escape text for use in HTML element content: `&`, `<`, `>`.
-pub fn escape_text(s: &String) -> String {
+pub fn escape_text(s: String) -> String {
+    return escape_text_ref(&s);
+}
+
+/// Escape text for use in a double-quoted HTML attribute value:
+/// element-content escapes plus `"`.
+pub fn escape_attr(s: String) -> String {
+    return escape_attr_ref(&s);
+}
+
+internal fn escape_text_ref(s: &String) -> String {
     let mut out = String::with_capacity(s.len());
     for let c of s.chars() {
         push_escaped(&mut out, c, false);
@@ -9,9 +19,7 @@ pub fn escape_text(s: &String) -> String {
     return out;
 }
 
-/// Escape text for use in a double-quoted HTML attribute value:
-/// element-content escapes plus `"`.
-pub fn escape_attr(s: &String) -> String {
+internal fn escape_attr_ref(s: &String) -> String {
     let mut out = String::with_capacity(s.len());
     for let c of s.chars() {
         push_escaped(&mut out, c, true);
@@ -27,25 +35,4 @@ fn push_escaped(out: &mut String, c: char, in_attr: bool) {
         '"' && in_attr => out.push_str(&"&quot;"),
         _ => out.push(c),
     }
-}
-
-/// Neutralize a link/image destination whose scheme could execute script:
-/// return it unchanged when the scheme is safe (or absent), else `""`. Blocks
-/// `javascript:`, `data:`, `vbscript:`, and any other unlisted scheme.
-pub fn sanitize_url(url: &String) -> String {
-    let mut scheme = String::new();
-    for let c of url.chars() {
-        if c == ':' {
-            return if scheme_is_safe(&scheme) { *url } else { "" };
-        }
-        if c matches { '/' | '?' | '#' } {
-            return *url;
-        }
-        scheme.push(c.to_ascii_lowercase());
-    }
-    return *url;
-}
-
-fn scheme_is_safe(scheme: &String) -> bool {
-    return *scheme == "http" || *scheme == "https" || *scheme == "mailto" || *scheme == "tel";
 }
