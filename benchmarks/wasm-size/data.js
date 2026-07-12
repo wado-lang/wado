@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783825537500,
+  "lastUpdate": 1783828392621,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -39569,6 +39569,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d0f47ff02caa8f8978c505354c7de6904390bd70"
         },
         "date": 1783825536779,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16412,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265859,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0a4f1c006b9708eb063eeec5785d0ebdbf613fa6",
+          "message": "Merge pull request #1560 from wado-lang/claude/package-marl-heading-ids-5uykcj\n\nfeat(marl)!: GFM heading ids and rendered outline with a value-only API",
+          "timestamp": "2026-07-12T12:43:19+09:00",
+          "tree_id": "6dd3471d97ee02b30bbaa24ef8088b5317866a8e",
+          "url": "https://github.com/wado-lang/wado/commit/0a4f1c006b9708eb063eeec5785d0ebdbf613fa6"
+        },
+        "date": 1783828391878,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
