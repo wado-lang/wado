@@ -447,71 +447,26 @@ and which no interprocedural `returns_fresh` property is needed to justify.
 
 ### M5 value-copy client — as implemented
 
-The shipped value-copy client is caller-side and single-phase, but its
-move/copy decision is split across two analyses rather than one `AstId`-keyed
-classification, because two consumers with different reach need it:
+The value-copy client is caller-side and single-phase: the fold
+(`lower::translate`) emits a `$value_copy$T` only where the ownership analysis
+cannot prove a move, share, or fresh value. There is no elision pass.
 
-- Source last use — `elaborator::liveness` runs the backward last-use pass over
-  the typed AST and projects the final-use sites to `(module, span)` in
-  `moved_local_spans` (threaded `Package` → `FlatPackage` to the planner). This
-  is the LSP-facing, `AstId`-keyed artifact the WEP describes.
-- Synthesized last use — the AST pass cannot see reify- and
-  synthesizer-emitted bodies (serde `deserialize`/`serialize`, `Default` /
-  `Clone` derives, the `?` desugar), which is exactly where the hot copies are
-  (a deserialized struct field). So `lower::plan::value_copy::last_use` runs a
-  second last-use analysis directly on the monomorphized TIR of every function.
-  It is post-monomorphization, so it keys on nothing — it recomputes per body —
-  and needs no cross-phase span table.
+- Move — `last_use::compute_move_eligible` (backward liveness + freshness
+  fixpoint over monomorphized TIR) plus the source-level `moved_local_spans`
+  from `elaborator::liveness`; the fold moves when either marks a consumption.
+- Freshness — `ownership.rs` return conventions: a call is fresh iff its callee
+  returns owned (the caller-side replacement for `optimize::escape`'s
+  `returns_fresh`).
+- Confinement — `confine.rs` per-parameter return/side escape fixpoint (over
+  pre-boxing TIR); the fold skips a by-value argument's copy when the callee
+  parameter is confined and the argument aliases no mutated sibling.
+- Read-only-share — a read-only binding whose projected storage is never mutated
+  while live shares its source (field-sensitive, gated on the source root being
+  unconsumed).
 
-The fold (`lower::translate`) moves a consumption when _either_ analysis marks
-it: the span is in `moved_local_spans`, or the TIR local is in the per-function
-move set. Union is sound because each is independently sound; the TIR pass is
-the superset in practice but the span pass is retained for source fidelity.
-
-The TIR pass (`compute_move_eligible`) is a backward liveness plus a freshness
-fixpoint. A local is moved when:
-
-- every read of it is a _final_ read (dead on every live path afterward) —
-  precise across divergent `match` arms (a `?` `Err`-rewrap reads the scrutinee
-  but only on the returning path, so the scrutinee stays a final read on the
-  `Ok` path) and across loop back-edges (a value produced and consumed in one
-  iteration is dead at the head);
-- it _exclusively owns fresh storage_ — a least fixpoint over `is_owned_value`
-  (shared with the return-convention analysis) proves its value traces to a
-  fresh allocation, allowing multi-read intermediates (the `?` tag-test +
-  payload-extract) to carry freshness up the chain;
-- it has _no live alias_ at its binding — the local its value is a projection
-  or whole-value move of (`alias_root`, `None` for a fresh allocation whose
-  result aliases nothing) is dead after the binding. This is what keeps
-  `if let Some(s) = opt { s.push(x) }` copying `s` while `opt` is read again,
-  yet lets a deserialize temporary — whose scrutinee is a dead call result —
-  move.
-
-Freshness (does the value alias existing data) and consumability (is this the
-last observation) are orthogonal: a fresh value read twice is not movable, and
-the analysis keeps them as separate sets (`fresh` vs the final move set)
-precisely so a twice-read fresh temporary propagates ownership without itself
-being moved.
-
-The return-convention analysis (`ownership.rs`) supplies the interprocedural
-half: a call is a fresh allocation iff its callee returns owned. It is the
-caller-side, single-phase replacement for `optimize::escape`'s `returns_fresh`
-fixpoint.
-
-The confinement half is now caller-side too. `lower::plan::value_copy::confine`
-computes per-parameter confinement (a two-channel return/side escape fixpoint
-over TIR, run before boxing so `&mut` / `&` are still distinguishable), and the
-fold skips a by-value argument's copy when the callee parameter is confined and
-the argument aliases no mutated sibling — the precise `no_mut_alias` check that
-`optimize::value_copy_elide` did post-hoc, using a shared may-alias union-find.
-With freshness and confinement both decided at insertion, `optimize::escape` and
-`optimize::value_copy_elide` are deleted; `build_param_mut` moved to
-`optimize::value_copy::mutation` (still used by `copy_prop`). `value_copy_demote`
-is independent of both and survives.
-
-- [x] Fold the confinement (`param_escapes`) recovery into the caller-side
-      insertion so `optimize::escape` / `optimize::value_copy_elide` are deleted,
-      as the WEP intends.
+`optimize::escape` and `optimize::value_copy_elide` are deleted; `build_param_mut`
+moved to `optimize::value_copy::mutation` (used by `copy_prop`);
+`value_copy_demote` is independent and survives.
 
 ### Relationship to earlier WEPs
 
@@ -657,22 +612,9 @@ note in that WEP.
 
 - [ ] Emit the per-consumption move / copy / share classification for copyable
       value types from the same checker output.
-- [x] `lower::plan::value_copy` inserts `$value_copy$T` only at `copy` sites —
-      freshness (`analyze`/`ownership`), last-use move (`last_use`), and
-      confinement (`confine`) are all decided at insertion.
-- [x] Read-only-share refinement: a read-only binding bound from a projection
-      whose storage is provably never mutated while live shares the source and
-      emits no copy — field-sensitive over disjoint fields (`self.rows[0]` shared
-      while `self.tick` is mutated). Gated on the source root being unconsumed, so
-      a mutation reaching the shared storage through an aliased reference or a
-      callee (both of which must first consume the root) keeps the copy. Pinned by
-      `value_copy_elide_disjoint_field_mut` (share fires) and
-      `value_copy_share_root_escape` (share must not fire).
-- [x] Fix recursive-type `$value_copy$T` synthesis to a true deep copy
-      (mutually-recursive helper), replacing the identity `return v` fallback —
-      covers variant payload deep copy, structs containing variants,
-      `List<variant>`, and payload copy at `VariantConstruct` sites (pinned by
-      the `value_copy_variant_*` e2e fixtures).
+- [x] `lower::plan::value_copy` inserts `$value_copy$T` only at `copy` sites (freshness, last-use move, confinement decided at insertion).
+- [x] Read-only-share refinement: field-sensitive, gated on an unconsumed source root; pinned by `value_copy_elide_disjoint_field_mut` and `value_copy_share_root_escape`.
+- [x] Recursive-type `$value_copy$T` synthesis is a true deep copy (mutually-recursive helper), pinned by `value_copy_variant_*`.
 - [x] Delete `optimize::escape` and `optimize::value_copy_elide`.
 - [ ] Pin representative move / copy / share decisions as e2e
       `wir_not_expect` / `wir_expect` fixtures (serde `?`-chain, accumulator

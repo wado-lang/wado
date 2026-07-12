@@ -86,14 +86,10 @@ pub struct ReturnConventions {
     pub returns_self_projection: IndexSet<FunctionId>,
 }
 
-/// Functions whose every value-return aliases the receiver / first parameter's
-/// storage — a *borrowed* projection, including element reads through
-/// `array_get` and nested accessor calls (`List::index_value` returns
-/// `Array::index_value(self.repr, i)`, an element of `self`). Unlike
-/// `returns_self_projection` this includes borrowed (non-owned) projections, so
-/// it must NOT feed the move/owned decision — a borrowed element is not owned.
-/// It is consumed only by the read-only-share analysis, to learn that
-/// `row = list.index_value(i)` aliases `list`.
+/// Functions whose every value-return aliases the receiver / first parameter
+/// (a *borrowed* projection, through `array_get` and nested accessor calls).
+/// Because it admits borrowed projections it must NOT feed the move/owned
+/// decision; only the read-only-share analysis consumes it.
 pub fn compute_receiver_alias(project: &FlatPackage) -> IndexSet<FunctionId> {
     let mut set: IndexSet<FunctionId> = IndexSet::default();
     let mut changed = true;
@@ -336,12 +332,8 @@ fn compute_fresh_locals(
     for (local, _) in &collector.match_sources {
         fresh.insert(*local);
     }
-    // A by-value (non-reference) parameter is storage the callee owns
-    // exclusively: it can only be returned owned because a returned parameter is
-    // never confined, so the caller always deep-copies it in. Returning it (or a
-    // projection / match-binding of it) therefore yields an owned value —
-    // `unwrap(self) -> T { match self { Ok(v) => v } }`. A `&`/`&mut` parameter
-    // borrows the caller's storage and is never seeded.
+    // A by-value parameter is owned: returning it is owned because a returned
+    // parameter is never confined, so the caller always copies it in.
     for p in params {
         if !matches!(
             type_table.get(p.type_id),

@@ -69,14 +69,10 @@ pub fn plan(flat: &mut FlatPackage) -> LowerPlan {
     // Record each parameter's `&mut`-ness before `boxing::prepare_types`
     // rewrites `&mut T` / `&T` to the same `Box<T>`, erasing the distinction.
     capture_param_mut_ref(flat);
-    // Confinement is computed before boxing, so `&mut` / `&` references are still
-    // distinguishable (boxing collapses both onto `Box<T>`). The per-parameter
-    // result is boxing-independent — it keys on parameter position, which boxing
-    // preserves.
+    // Confinement and receiver-ref capture run before boxing collapses `&mut T`
+    // / `&T` onto `Box<T>`; both results key on parameter position, unchanged by
+    // boxing.
     let confined_params = value_copy::confine::compute_confined_params(flat);
-    // Methods whose receiver (parameter 0) is a reference, captured before boxing
-    // collapses `&T` / `&mut T` onto `Box<T>`. The read-only-share analysis needs
-    // it to tell a borrowing receiver (`row.len()`) from a consuming one.
     let ref_receiver_methods = ref_receiver_methods(flat);
     let box_plan = boxing::prepare_types(flat);
     boxing::shadow_params(flat, &box_plan);

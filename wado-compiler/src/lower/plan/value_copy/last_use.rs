@@ -48,12 +48,9 @@ use crate::tir::{
 };
 use crate::tir_visitor::TirRefVisitor;
 
-/// May-alias components over a function's locals: two locals may share storage
-/// when a `let x = <projection of y>` (whole-value move or field/element/deref
-/// of `y`) or a match-arm binding of a scrutinee rooted at `y` connects them. A
-/// `let x = <fresh rvalue>` roots a new component (aliases nothing observable).
-/// The caller-side confinement check uses it to keep exactly the copies of a
-/// by-value argument that aliases a mutated sibling.
+/// May-alias union-find over a function's locals: a `let` / assign / match-arm
+/// binding from a projection connects the binding to its source root. Consumed
+/// by the confinement check's `no_mut_alias`.
 pub struct AliasComponents {
     parent: IndexMap<u32, u32>,
 }
@@ -346,22 +343,14 @@ fn disjoint(mutated: &AccessPath, read: &AccessPath) -> bool {
     false
 }
 
-/// Locals whose binding copy can be elided by *sharing* the source storage
-/// (WEP 2026-05-21, the "share" refinement): a read-only local bound from a
-/// projection of another place, where the projected storage is provably never
-/// mutated while the binding is live. `row = self.rows[0]; self.tick += 1;
-/// return row.len()` — `row` reads a field-element the disjoint `self.tick`
-/// write never touches, so no defensive copy is needed.
+/// Locals whose binding copy can be elided by sharing the source storage
+/// (WEP 2026-05-21): a read-only local bound from a projection whose storage is
+/// never mutated while live (`row = self.rows[0]; self.tick += 1; row.len()`).
 ///
-/// Soundness requires that neither the binding nor its source is ever mutated or
-/// transferred while both are live, so the conditions are strict: the local is
-/// read-only, is only ever *observed* (a method receiver or a projection base,
-/// never consumed by value), and is not move-eligible; the *source root* is
-/// likewise never consumed by value; and every direct mutation of the source
-/// root's storage is disjoint from the projected read. The unconsumed-root
-/// condition is what makes the disjointness check complete: a mutation reaching
-/// the source storage through an aliased reference or a callee requires the root
-/// to be passed by value / bound elsewhere first, which marks it consumed.
+/// Soundness rests on the source root being unconsumed: a mutation reaching the
+/// shared storage through an alias or a callee must first consume the root, so
+/// with the root unconsumed every such mutation is a direct write rooted at it,
+/// which the disjointness check covers.
 pub fn compute_share_eligible(
     func: &TirFunction,
     move_eligible: &IndexSet<u32>,
@@ -389,31 +378,16 @@ pub fn compute_share_eligible(
         .sources
         .iter()
         .filter_map(|(&local, path)| {
-            // A projection of another place (not a fresh rvalue, not itself).
             if path.root == local {
                 return None;
             }
-            // Read-only: never written, never moved, never consumed by value.
             if move_eligible.contains(&local)
                 || collector.consumed.contains(&local)
                 || collector.is_mutated_root(local)
+                || collector.consumed.contains(&path.root)
             {
                 return None;
             }
-            // The source root must not be consumed by value. A mutation of the
-            // shared storage other than a direct projection write — an aliased
-            // reference (`let x = self; x.rows[0].push(..)`) or a callee that
-            // mutates through the reference (`grow(self)`) — can only arise if the
-            // root is first passed by value / bound elsewhere, which marks it
-            // consumed. With the root unconsumed, every mutation reaching its
-            // storage is a direct write rooted exactly at it, so the disjointness
-            // check below is complete.
-            if collector.consumed.contains(&path.root) {
-                return None;
-            }
-            // Every direct mutation of the source root's storage is disjoint from
-            // the projected read (a distinct field / variant case). Mutations
-            // rooted elsewhere cannot reach it (the root is unconsumed).
             let safe = collector
                 .mutated
                 .iter()
@@ -465,12 +439,8 @@ impl ShareCollector<'_> {
         });
     }
 
-    /// The access path a binding's value projects, if it aliases a place: a
-    /// direct place expression, or a call to a *self-projecting* accessor
-    /// (`self.rows.index_value(0)` returns a projection of `self.rows`, so the
-    /// binding aliases the receiver's storage). A prefix path is sound for
-    /// disjointness — a mutation disjoint from `self.rows` is disjoint from
-    /// `self.rows[0]`.
+    /// The access path a binding's value projects: a direct place, or a
+    /// receiver-aliasing accessor call whose receiver / first arg is a place.
     fn source_path(&self, value: &TirExpr) -> Option<AccessPath> {
         if let Some(p) = place_path(value) {
             return Some(p);
@@ -537,22 +507,19 @@ impl ShareCollector<'_> {
             }
             TirStmtKind::Loop { body } => self.walk_block(body),
             TirStmtKind::LabeledBlock { block, .. } => self.walk_block(block),
-            // Filtered by `has_unsupported_form`.
             TirStmtKind::VariadicForOf { .. } => {}
         }
     }
 
-    /// Walk `expr` in a value position: a whole-local read here is a consumption.
-    /// Projection bases and borrow referents are only observed, not consumed.
-    /// Mutation-bearing forms record their writes. An unrecognized form falls
-    /// back to consuming every local it mentions — sound (fewer shares).
+    /// Walk `expr` in a value position: a whole-local read is a consumption,
+    /// projection bases and borrow referents are only observed, a `&mut`
+    /// referent is recorded mutated, and an unrecognized form conservatively
+    /// consumes every local it mentions.
     fn walk_value(&mut self, expr: &TirExpr) {
         match &expr.kind {
             TirExprKind::Local { index, .. } => {
                 self.consumed.insert(*index);
             }
-            // Reading a field / element / payload by value copies it out; the
-            // base is only observed.
             TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::VariantPayload { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. } => self.walk_place_base(inner),
@@ -560,12 +527,10 @@ impl ShareCollector<'_> {
                 self.walk_place_base(inner);
                 self.walk_value(index);
             }
-            // A shared borrow observes its referent; it does not consume it.
             TirExprKind::Unary {
                 op: TirUnaryOp::Ref,
                 expr: place,
             } => self.walk_place_base(place),
-            // A `&mut` borrow may be written through: the referent is mutated.
             TirExprKind::Unary {
                 op: TirUnaryOp::MutRef,
                 expr: place,
@@ -595,8 +560,6 @@ impl ShareCollector<'_> {
                 if self.mut_receiver_methods.contains(&key) {
                     self.record_mutation(receiver);
                 }
-                // A `&self` / `&mut self` receiver is borrowed, not consumed; a
-                // by-value `self` receiver is consumed.
                 if self.ref_receiver_methods.contains(&key) {
                     self.walk_place_base(receiver);
                 } else {
@@ -630,9 +593,6 @@ impl ShareCollector<'_> {
                 self.walk_block(block);
             }
             TirExprKind::GlobalVarSet { value, .. } => self.walk_value(value),
-            // Everything else: recurse into every child as a value (consuming its
-            // locals), the conservative default that never under-reports a
-            // consumption or a mutation-free read.
             _ => {
                 let mut children: Vec<&TirExpr> = Vec::new();
                 collect_child_exprs(expr, &mut children);
@@ -643,8 +603,7 @@ impl ShareCollector<'_> {
         }
     }
 
-    /// A place base: a whole `Local` here is observed (the projection borrows
-    /// it), not consumed. Deeper projections stay place bases; a non-place
+    /// A place base: a whole `Local` is observed, not consumed; a non-place
     /// recurses as a value.
     fn walk_place_base(&mut self, expr: &TirExpr) {
         match &expr.kind {

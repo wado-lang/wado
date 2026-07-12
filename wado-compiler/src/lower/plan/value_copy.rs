@@ -46,10 +46,8 @@ pub struct ValueCopyPlan {
     /// treats such a call's receiver as a sibling mutation, so a by-value
     /// argument aliasing it keeps its copy.
     pub mut_receiver_methods: IndexSet<FunctionId>,
-    /// Per-parameter confinement: a call passing a still-live value into a
-    /// confined parameter needs no defensive copy, because the callee neither
-    /// returns nor leaks it. The caller-side replacement for `optimize::escape`'s
-    /// `param_escapes`.
+    /// Per-parameter confinement: a still-live value into a confined parameter
+    /// needs no defensive copy (caller-side replacement for `param_escapes`).
     pub confined_params: confine::ConfinedParams,
     /// Per-callee, which parameters are `&mut` — the only siblings that can
     /// mutate a shared by-value argument during the call. A confined by-value
@@ -59,8 +57,7 @@ pub struct ValueCopyPlan {
     /// borrowing, not consuming, receiver. Used by the read-only-share analysis.
     pub ref_receiver_methods: IndexSet<FunctionId>,
     /// Functions whose result aliases their receiver's storage (a borrowed
-    /// projection / element read). Used only by the read-only-share analysis to
-    /// learn that `row = list.index_value(i)` aliases `list`.
+    /// projection / element read). Used only by the read-only-share analysis.
     pub returns_receiver_alias: IndexSet<FunctionId>,
 }
 

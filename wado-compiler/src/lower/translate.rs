@@ -792,15 +792,9 @@ impl FunctionTranslator<'_, '_> {
         let val_idx = self.alloc_local(inner_type_id, "__deref_val".to_string());
 
         let ref_nir = self.convert_expr(ref_expr);
-        // The RHS is an operand position: a literal (e.g. `*s = "goodbye"`)
-        // is interned as `Operand::Value`, never a skeleton `ExprId`.
-        // This `Let` is synthesized after `value_copy::insert`'s walk, so the
-        // defensive copy is requested explicitly here; otherwise the per-field
-        // write-back would alias the RHS's storage (e.g. a `List`'s backing
-        // array). It is elided for a fresh / moved RHS by the same predicate the
-        // fold uses everywhere — a fresh value aliases nothing, so the per-field
-        // write-back is safe without a copy. The `analyze` seed walker registers
-        // a helper for the deref-target RHS type so the wrap resolves.
+        // Copy the RHS unless it is fresh/moved: the per-field write-back would
+        // otherwise alias the RHS's storage. The seed walker registers a helper
+        // for the deref-target RHS type so the wrap resolves.
         let converted_val = self.convert_operand(value);
         let val_nir = if self.should_wrap_value_copy(value) {
             self.wrap_value_copy_operand(converted_val, inner_type_id)
@@ -1862,15 +1856,8 @@ impl FunctionTranslator<'_, '_> {
             .collect()
     }
 
-    /// Convert one call argument, inserting a defensive `$value_copy$T` wrap
-    /// unless the copy is provably unnecessary. Value semantics deep-copies a
-    /// value passed to a function; `should_wrap_value_copy` excludes references,
-    /// fresh values, moves, and non-copy types. A copy is additionally skipped
-    /// when the callee parameter is *confined* (WEP 2026-05-21): the callee
-    /// neither returns nor leaks the argument, so a still-live source can be
-    /// shared. `callee` / `param_index` locate the parameter; `mut_roots` are the
-    /// storage roots the call mutates, so a by-value argument aliasing one keeps
-    /// its copy.
+    /// Convert one call argument, wrapping it in `$value_copy$T` unless
+    /// `should_wrap_value_copy` says no or the callee parameter is confined.
     fn convert_call_arg_at(
         &self,
         arg: &CallArg,
@@ -1893,10 +1880,8 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Whether a by-value argument into a confined parameter can skip its
-    /// defensive copy. Kept when: the callee declares the parameter `mut`
-    /// (mutated in place by the callee), the callee is unknown / not confined, or
-    /// the argument's storage may alias a sibling the call mutates (`mut_roots`).
+    /// Whether a by-value argument into a confined parameter can skip its copy:
+    /// the parameter is not `mut`-declared and the argument aliases no `mut_root`.
     fn arg_confined(
         &self,
         arg: &CallArg,
@@ -1925,9 +1910,7 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// The storage roots a call mutates: the referent of each `&mut` parameter
-    /// position (including a `&mut self` receiver at index 0). A confined
-    /// by-value argument aliasing one of these keeps its copy, so the mutation
-    /// cannot leak into the shared value.
+    /// (the receiver is index 0).
     fn call_mut_roots(
         &self,
         callee: &FunctionRef,
