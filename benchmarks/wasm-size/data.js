@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783828392621,
+  "lastUpdate": 1783834250838,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -39613,6 +39613,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0a4f1c006b9708eb063eeec5785d0ebdbf613fa6"
         },
         "date": 1783828391878,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16412,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265859,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "71b119717fe48b4668840ca4838700f93e300d2f",
+          "message": "Merge pull request #1562 from wado-lang/claude/wado-compiler-fixture-drift-v48ph3\n\nfix(compiler): make local-item mangled names deterministic and collision-safe",
+          "timestamp": "2026-07-12T14:20:59+09:00",
+          "tree_id": "807d2d27ea657a34e3029567724433b513b2289c",
+          "url": "https://github.com/wado-lang/wado/commit/71b119717fe48b4668840ca4838700f93e300d2f"
+        },
+        "date": 1783834250373,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
