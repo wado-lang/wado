@@ -1,4 +1,4 @@
-# Compile-Time Location Literals
+# WEP: Compile-Time Location Literals
 
 ## Context
 

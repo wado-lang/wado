@@ -1,4 +1,4 @@
-# Effect System and Randomness in Collections
+# WEP: Effect System and Randomness in Collections
 
 ## Context
 

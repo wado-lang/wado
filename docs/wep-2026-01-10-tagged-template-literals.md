@@ -1,4 +1,4 @@
-# Tagged Template Literals for Compile-Time Execution
+# WEP: Tagged Template Literals for Compile-Time Execution
 
 ## Context
 

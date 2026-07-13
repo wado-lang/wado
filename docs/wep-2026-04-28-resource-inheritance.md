@@ -1,4 +1,4 @@
-# Resource Inheritance and Downcast (`resource extends`)
+# WEP: Resource Inheritance and Downcast (`resource extends`)
 
 ## Context
 
