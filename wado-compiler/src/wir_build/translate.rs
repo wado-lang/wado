@@ -14,11 +14,6 @@ use crate::wir::{CanonicalIntrinsic, WirInstr, WirName, WirType, WirTypeDef, Wir
 use super::context::WirContext;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 
-/// Whether a value of WIR type `source_wir` must be boxed into the `Box<T>`
-/// struct that `binding_wir` denotes. True when the binding is a `Ref` to a
-/// different struct than the source produces — the address-taken boxing of a
-/// primitive / variant into `Box<T>`. A matching ref (same struct), an
-/// `AbstractRef` source, or a non-ref binding needs no boxing.
 pub(super) fn ref_binding_needs_boxing(binding_wir: &WirType, source_wir: Option<&WirType>) -> bool {
     match (binding_wir, source_wir) {
         (WirType::Ref { type_id: bt, .. }, Some(WirType::Ref { type_id: st, .. })) => bt != st,

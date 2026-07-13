@@ -28,12 +28,6 @@ use crate::tir::{
 };
 use crate::tir_visitor::TirRefVisitor;
 
-/// Core builtins whose result *borrows* (aliases) their container argument
-/// rather than returning a freshly owned value: `array_get` deep-copies to
-/// preserve value semantics but its element read still aliases the container,
-/// and `array_get_ref` returns a reference straight into it. Both must be
-/// excluded from the "builtins return owned" seed and recognized as
-/// container-alias reads, or the fold would treat their results as fresh.
 fn aliases_container_builtin(name: &str) -> bool {
     name == "array_get" || name == "array_get_ref"
 }
@@ -166,9 +160,9 @@ fn is_receiver_projection(expr: &TirExpr, param: u32, set: &FuncKeySet) -> bool 
 }
 
 /// Least fixpoint over the two return conventions. Seeds the always-owned
-/// callees (value-copy helpers clone; builtins except the container-alias reads
-/// `array_get` / `array_get_ref` allocate) and
-/// grows: a body function becomes owned once every value it returns is owned,
+/// callees (value-copy helpers clone; builtins except the container-alias
+/// reads `array_get` / `array_get_ref` allocate) and grows: a body function
+/// becomes owned once every value it returns is owned,
 /// and self-projecting once every value it returns is owned *or* a projection of
 /// its first parameter (`return *self`). `returns_owned` is a subset of
 /// `returns_self_projection`.

@@ -486,10 +486,6 @@ impl FunctionTranslator<'_, '_> {
                         index: Box::new(idx),
                         result_ty: elem_ty.clone(),
                     };
-                    // Coerce the element value into the `&T` result shape: a
-                    // reference-typed element is already `&T` (return the bare
-                    // ref); a primitive / variant element must be boxed into
-                    // `Box<T>`, matching what `&array_get(...)` would produce.
                     let result_wir = self.ctx.type_id_to_wir_type(self.type_table, result_type_id);
                     if super::translate::ref_binding_needs_boxing(&result_wir, Some(&elem_ty))
                         && let WirType::Ref { type_id: box_tid, .. } = result_wir

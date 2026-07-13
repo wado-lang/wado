@@ -62,12 +62,7 @@ fn array_new<T>(len: i32) -> Array<T>;
 /// Returns an element from a Array<T> at the given index.
 fn array_get<T>(arr: &Array<T>, idx: i32) -> T;
 
-/// Returns a reference to the element of a Array<T> at the given index,
-/// without the defensive value-copy `array_get` performs to preserve value
-/// semantics. For a reference-typed element the borrow aliases the element
-/// in place (no copy, no box); for a primitive element it boxes the read
-/// value exactly as `&array_get(...)` would. The borrow reads the array — the
-/// caller must not mutate the array while the reference is live.
+/// Returns a reference to the element at `idx` without `array_get`'s value-copy.
 fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
 
 /// Sets an element in a Array<T> at the given index.
