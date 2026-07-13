@@ -1307,8 +1307,7 @@ global PORT: i32 = 8080;
 
 ### core:prelude
 
-Auto-imported into every module (disable with `#![no_prelude]`). Provides the
-core types and traits used throughout this cheatsheet: `String`, `List<T>`,
+Auto-imported (disable with `#![no_prelude]`). Home of `String`, `List<T>`,
 `Option<T>`, `Result<T, E>`, `RangeExclusive`/`RangeInclusive`, the primitive
 type methods, and the prelude traits (`Eq`, `Ord`, `Default`, `Display`,
 `Inspect`, `FromStr`, `Iterator`, `IntoIterator`, …). See
@@ -1321,9 +1320,9 @@ unreachable();            // trap on unreachable code
 
 ### core:cli
 
-`println` / `eprintln` / `print` / `eprint` (effectful), plus `args`, `env`,
-`cwd`, `exit`. `log_stdout` / `log_stderr` print without requiring an effect.
-See [`core:cli`](./stdlib-core-cli.md).
+`println` / `eprintln` / `print` / `eprint` (effectful), `args`, `env`, `cwd`,
+`exit`; `log_stdout` / `log_stderr` print with no effect. See
+[`core:cli`](./stdlib-core-cli.md).
 
 ```wado
 use { println, eprintln, print, eprint, Stdout, Stderr } from "core:cli";
@@ -1336,9 +1335,9 @@ if let Some(home) = env("HOME") { println(`HOME={home}`); }
 
 ### core:collections
 
-`TreeMap<K, V>` and `TreeSet<T>`, both iterating in insertion order. `TreeMap`
-has no `insert` — assign via `map[key] = value` or a `{ key: value }` literal.
-See [`core:collections`](./stdlib-core-collections.md).
+`TreeMap<K, V>` and `TreeSet<T>`, iterating in insertion order. `TreeMap` has
+no `insert` — use `map[key] = value` or a `{ key: value }` literal. See
+[`core:collections`](./stdlib-core-collections.md).
 
 ```wado
 use { TreeMap, TreeSet } from "core:collections";
@@ -1357,14 +1356,12 @@ set.contains("foo");          // -> bool; set.insert(x) -> bool
 
 ### core:serde
 
-Format-agnostic `Serialize` / `Deserialize` framework. A `T: Serialize` bound
-is satisfied structurally once every field/case is serializable, so a plain
-struct needs no marker; write `impl Serialize for T;` (empty body) to force it
-or to attach `#[serde(...)]`. Wire key defaults to the field name verbatim;
-`#[serde(rename_all = "...")]` (per struct) and `#[serde(rename = "...")]` (per
-field, wins) override it. A field with a default (`f: T = expr`) is optional on
-deserialize; a missing required field errors. See
-[`core:serde`](./stdlib-core-serde.md) and [WEP: Serde](./wep-2026-02-28-serde.md).
+Format-agnostic `Serialize` / `Deserialize`. A plain struct derives with no
+marker (see Auto-Derived Traits); `impl Serialize for T;` attaches
+`#[serde(...)]` customization. Wire keys default to the field name; override
+with `#[serde(rename_all = "...")]` (per struct) or `#[serde(rename = "...")]`
+(per field). See [`core:serde`](./stdlib-core-serde.md) and
+[WEP: Serde](./wep-2026-02-28-serde.md).
 
 ```wado
 struct Point { x: i32, y: i32 }         // serializable, no marker needed
@@ -1387,8 +1384,8 @@ impl Deserialize for Config;
 
 ### core:json
 
-JSON `Serializer` / `Deserializer` over `core:serde`. I/O is bytes-primary:
-prefer `to_bytes` / `from_bytes`. See [`core:json`](./stdlib-core-json.md).
+JSON over `core:serde`; bytes-primary (prefer `to_bytes` / `from_bytes`). See
+[`core:json`](./stdlib-core-json.md).
 
 ```wado
 use { to_string, to_bytes, from_string, from_bytes } from "core:json";
@@ -1403,9 +1400,8 @@ let canon = to_bytes_canonical(&p);                // sorted keys, for signing
 
 ### core:cbor
 
-CBOR (RFC 8949) `Serializer` / `Deserializer` — a strict superset of JSON's
-data model, so any JSON-serializable type works with no source change.
-Bytes-only. See [`core:cbor`](./stdlib-core-cbor.md).
+CBOR (RFC 8949), same serde model as JSON — any JSON-serializable type works
+unchanged. Bytes-only. See [`core:cbor`](./stdlib-core-cbor.md).
 
 ```wado
 use { to_bytes, from_bytes, to_bytes_canonical } from "core:cbor";
