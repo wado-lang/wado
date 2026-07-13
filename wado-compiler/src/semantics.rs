@@ -429,6 +429,17 @@ impl Semantics {
         ))
     }
 
+    /// Whether the method call at `id` takes its receiver `self` by value,
+    /// transferring ownership. False for a `&self` / `&mut self` receiver, a
+    /// static call, or any call site with no recorded dispatch. The resource
+    /// move check uses this to treat the receiver as consumed.
+    #[must_use]
+    pub fn method_call_consumes_receiver(&self, id: AstId) -> bool {
+        self.method_dispatch
+            .get(&id)
+            .is_some_and(|dispatch| dispatch.consumes_self)
+    }
+
     /// Iterate every recorded method-dispatch decision keyed by the
     /// `MethodCallExpr`'s `(module, AstId)`. Pair with
     /// [`Self::method_dispatch_view`] for the stable public view onto

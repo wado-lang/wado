@@ -22,6 +22,16 @@ use super::tysys::TypeSystem;
 
 use super::util::placeholder;
 
+/// A method takes its receiver `self` by value — transferring ownership —
+/// when the first parameter is named `self` and is not a reference. The
+/// `&self` / `&mut self` shorthand carries an empty parameter name, so it is
+/// excluded, as is a static method (no leading `self`).
+pub(crate) fn takes_self_by_value(params: &[ast::Param]) -> bool {
+    params.first().is_some_and(|p| {
+        p.name == "self" && !matches!(p.ty, Type::Reference(_) | Type::MutReference(_))
+    })
+}
+
 /// Lightweight reference to an impl block, avoiding deep clones. Stores
 /// `(module_source, item_id)` into `loaded_modules`, re-accessed on demand
 /// via `Module::item_by_id` instead of cloning the impl block's fields.
@@ -451,6 +461,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             from_concrete_impl: false,
                             param_defaults: vec![],
                             param_names: vec![],
+                            consumes_self: false,
                         });
                     }
                     if method_name == "zip" {
@@ -490,6 +501,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             from_concrete_impl: false,
                             param_defaults: vec![],
                             param_names: vec![],
+                            consumes_self: false,
                         });
                     }
                     (
@@ -772,6 +784,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     from_concrete_impl,
                     param_defaults,
                     param_names,
+                    consumes_self: takes_self_by_value(&method.params),
                 });
             }
         }
@@ -893,6 +906,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 from_concrete_impl,
                                 param_defaults,
                                 param_names,
+                                consumes_self: takes_self_by_value(&method.params),
                             });
                         }
                     }
@@ -1043,6 +1057,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 from_concrete_impl: false,
                 param_defaults,
                 param_names,
+                consumes_self: takes_self_by_value(&method.params),
             });
         }
         None
@@ -2427,6 +2442,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     from_concrete_impl: impl_is_concrete,
                     param_defaults,
                     param_names,
+                    consumes_self: takes_self_by_value(&params),
                 },
                 impl_module_source: impl_module_source.clone(),
                 blanket_type_param: blanket_type_param.clone(),
@@ -2551,6 +2567,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 from_concrete_impl: impl_is_concrete,
                                 param_defaults,
                                 param_names,
+                                consumes_self: takes_self_by_value(&default_method.params),
                             },
                             impl_module_source: impl_module_source.clone(),
                             blanket_type_param: blanket_type_param.clone(),
@@ -3399,6 +3416,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             from_concrete_impl: _,
             param_defaults: method_param_defaults,
             param_names: method_param_names,
+            consumes_self: _,
         } = method_info?;
 
         // Only use IndexMut if the method requires &mut self
@@ -3511,6 +3529,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_param_defaults,
             return_type,
             type_args,
+            false,
         );
         self.record_desugar(
             method_call.id,

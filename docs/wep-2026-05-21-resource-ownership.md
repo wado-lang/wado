@@ -91,9 +91,14 @@ It is independent of the value-copy client's last-use liveness
 (`lower/plan/value_copy/last_use.rs`, post-mono over TIR); unifying the two is
 future work, not a present fact.
 
-Done: use-after-move of a bare resource local (`Resource` / `GenericResource`).
-Remaining: resource-carrying aggregates (`Result<Fields, E>`, structs / tuples),
-by-value `self` consumption, and the no-move-out-of-borrow rule below.
+Done: use-after-move of a bare resource local (`Resource` / `GenericResource`)
+and by-value `self` consumption — a method call whose receiver is `self: R`
+(not `&self`) moves the receiver, so a later use is reported. The receiver
+convention rides a `consumes_self` fact recorded on the method dispatch (the
+semantic-layer twin of `resource_cleanup`'s `owned_self`), read at the call
+site via `Semantics::method_call_consumes_receiver`.
+Remaining: resource-carrying aggregates (`Result<Fields, E>`, structs / tuples)
+and the no-move-out-of-borrow rule below.
 
 ### No move out of a borrow (planned)
 
@@ -195,7 +200,9 @@ Verified against the tree.
 - [x] Use-after-move of a bare resource local: forward walker, branch-join
       union, divergence-aware, loop-carried, reassignment/rebind clears.
 - [x] Covers free / `impl` / `trait` / `test` / function-local bodies.
-- [ ] Aggregates and by-value `self` consumption.
+- [x] By-value `self` consumption via the dispatch `consumes_self` fact
+      (`Semantics::method_call_consumes_receiver`).
+- [ ] Resource-carrying aggregates (`Result<Fields, E>`, structs / tuples).
 - [ ] No-move-out-of-borrow (rejects `Result::unwrap` on a resource).
 - [ ] Unify with the value-copy last-use liveness.
 

@@ -1076,6 +1076,11 @@ pub(super) struct MethodInfo {
     /// function named per-instantiation (`List<u8>::method`) and called
     /// directly, so the call site emits no `monomorph_info` for it.
     pub(super) from_concrete_impl: bool,
+    /// True when the receiver `self` is taken by value (not `&self` / `&mut
+    /// self` / `self: &T`), so a call transfers ownership of the receiver.
+    /// Mirrors `resource_cleanup`'s `owned_self` at the semantic layer; the
+    /// move check reads it to flag use-after-move through a consuming method.
+    pub(super) consumes_self: bool,
 }
 
 /// Labeled block expression target for tracking break types

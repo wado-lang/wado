@@ -113,6 +113,10 @@ pub(crate) struct MethodDispatch {
     /// so reify needs its own un-zeroed copy to avoid re-resolving the AST
     /// type-arg list against the current type-param scope.
     pub(crate) method_type_args: Vec<TypeId>,
+    /// True when the method takes its receiver `self` by value, so the call
+    /// transfers ownership of the receiver. The resource move check reads this
+    /// to flag a use of the receiver binding after a consuming call.
+    pub(crate) consumes_self: bool,
 }
 
 /// Which sub-coercion [`super::super::Elaborator::try_coerce`] applied at

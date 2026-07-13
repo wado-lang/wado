@@ -178,7 +178,11 @@ impl MoveWalker<'_> {
                 }
             }
             Expr::MethodCall(mc) => {
-                self.visit_expr(&mc.receiver);
+                if self.sem.method_call_consumes_receiver(mc.id) {
+                    self.visit_value(&mc.receiver);
+                } else {
+                    self.visit_expr(&mc.receiver);
+                }
                 for arg in &mc.args {
                     self.visit_value(arg);
                 }
