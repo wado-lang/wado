@@ -8,16 +8,41 @@ See [docs/design-philosophy.md](docs/design-philosophy.md) for the reasoning beh
 
 ### Pre-built binary (recommended)
 
-Download the latest release for your platform from
-[GitHub Releases](https://github.com/wado-lang/wado/releases/latest).
-Pre-built binaries are published for:
+Pre-built binaries are published on
+[GitHub Releases](https://github.com/wado-lang/wado/releases/latest) for:
 
 - Linux (`x86_64`, `aarch64`) — `tar.gz`
 - macOS (Apple Silicon) — `tar.gz`
 - Windows (`x86_64`, `aarch64`) — `zip`
 
-Each archive contains the `wado` binary plus `LICENSE` and `README.md`.
-Verify the download against `SHA256SUMS.txt` attached to the same release.
+Each archive contains the `wado` binary plus `LICENSE` and `README.md`. The
+asset name is derived from `uname`, so this block downloads, verifies, and
+installs in one go on macOS (Apple Silicon) and Linux (`x86_64`, `aarch64`) —
+copy the whole thing:
+
+```sh
+BASE=https://github.com/wado-lang/wado/releases/latest/download
+ASSET="wado-$(uname -s | tr A-Z a-z)-$(uname -m).tar.gz"
+
+curl -fsSLO "$BASE/$ASSET"
+
+# Verify the checksum and the build provenance (needs the GitHub CLI).
+if command -v shasum >/dev/null; then
+  curl -fsSL "$BASE/SHA256SUMS.txt" | shasum -a 256 --ignore-missing -c -
+else
+  curl -fsSL "$BASE/SHA256SUMS.txt" | sha256sum --ignore-missing -c -
+fi
+gh attestation verify --repo wado-lang/wado "$ASSET"
+
+tar xzf "$ASSET"
+mkdir -p ~/bin
+install -m 755 "${ASSET%.tar.gz}/wado" ~/bin/wado   # ensure ~/bin is on PATH
+```
+
+Every release archive carries a signed [build provenance attestation](https://docs.github.com/en/actions/security-guides/using-artifact-attestations)
+binding the file to the workflow run that built it; the `gh attestation verify`
+step above checks it. Windows archives (`.zip`) install the same way — download
+the matching `wado-windows-*.zip` and verify it against `SHA256SUMS.txt`.
 
 ### From source
 
@@ -149,7 +174,7 @@ How it works:
 
 1. Every push to `main` (re)opens a **Release PR** that bumps `[workspace.package].version` in both `Cargo.toml` and `wado.toml` (kept in lockstep so the CLI and the published Wado packages ship one version), regenerates `Cargo.lock`, and updates `CHANGELOG.md` from PRs merged since the previous tag.
 2. Merging the Release PR pushes tag `v<next>`, which triggers `.github/workflows/release.yml` to:
-   - build pre-built binaries for five targets in parallel — Linux (`x86_64`, `aarch64`), macOS (Apple Silicon), Windows (`x86_64`, `aarch64`) — and publish them to a [GitHub Release](https://github.com/wado-lang/wado/releases) with `SHA256SUMS.txt`;
+   - build pre-built binaries for five targets in parallel — Linux (`x86_64`, `aarch64`), macOS (Apple Silicon), Windows (`x86_64`, `aarch64`) — publish them to a [GitHub Release](https://github.com/wado-lang/wado/releases) with `SHA256SUMS.txt`, and attest each archive's build provenance;
    - run `wado publish` to push the workspace's Wado packages to [GHCR](https://github.com/orgs/wado-lang/packages) as OCI artifacts.
 3. Default bump is **patch**. Add a `tagpr:minor` or `tagpr:major` label on the Release PR to override.
 
