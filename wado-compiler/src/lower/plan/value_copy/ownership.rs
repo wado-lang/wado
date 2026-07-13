@@ -28,6 +28,16 @@ use crate::tir::{
 };
 use crate::tir_visitor::TirRefVisitor;
 
+/// Core builtins whose result *borrows* (aliases) their container argument
+/// rather than returning a freshly owned value: `array_get` deep-copies to
+/// preserve value semantics but its element read still aliases the container,
+/// and `array_get_ref` returns a reference straight into it. Both must be
+/// excluded from the "builtins return owned" seed and recognized as
+/// container-alias reads, or the fold would treat their results as fresh.
+fn aliases_container_builtin(name: &str) -> bool {
+    name == "array_get" || name == "array_get_ref"
+}
+
 /// Oracle the freshness checker consults for a call's return convention.
 pub struct OwnedCalls<'a> {
     returns_owned: &'a FuncKeySet,
@@ -48,7 +58,7 @@ impl<'a> OwnedCalls<'a> {
     /// the fixpoint proved it so; extern / opaque callees default to borrowed.
     pub fn is_owned(&self, func: &FunctionRef) -> bool {
         if func.module_source.is_core_builtin() || func.module_source.is_wasm_asset() {
-            return func.name != "array_get";
+            return !aliases_container_builtin(&func.name);
         }
         self.returns_owned.contains(&func.module_source, &func.name)
     }
@@ -137,7 +147,7 @@ fn is_receiver_projection(expr: &TirExpr, param: u32, set: &FuncKeySet) -> bool 
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::Index { expr: inner, .. } => is_receiver_projection(inner, param, set),
         TirExprKind::Call { func, args, .. }
-            if func.module_source.is_core_builtin() && func.name == "array_get" =>
+            if func.module_source.is_core_builtin() && aliases_container_builtin(&func.name) =>
         {
             args.first()
                 .is_some_and(|a| is_receiver_projection(&a.expr, param, set))
@@ -156,7 +166,8 @@ fn is_receiver_projection(expr: &TirExpr, param: u32, set: &FuncKeySet) -> bool 
 }
 
 /// Least fixpoint over the two return conventions. Seeds the always-owned
-/// callees (value-copy helpers clone; builtins except `array_get` allocate) and
+/// callees (value-copy helpers clone; builtins except the container-alias reads
+/// `array_get` / `array_get_ref` allocate) and
 /// grows: a body function becomes owned once every value it returns is owned,
 /// and self-projecting once every value it returns is owned *or* a projection of
 /// its first parameter (`return *self`). `returns_owned` is a subset of
@@ -169,7 +180,7 @@ pub fn compute_return_conventions(project: &FlatPackage) -> ReturnConventions {
         let func = func.borrow();
         let is_helper = matches!(func.kind, FunctionKind::ValueCopy { .. });
         let is_builtin = func.module_source.is_core_builtin() || func.module_source.is_wasm_asset();
-        if is_helper || (is_builtin && func.name != "array_get") {
+        if is_helper || (is_builtin && !aliases_container_builtin(&func.name)) {
             owned.insert(func.module_source.clone(), func.name.clone());
         }
     }

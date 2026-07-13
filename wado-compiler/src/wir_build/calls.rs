@@ -488,18 +488,11 @@ impl FunctionTranslator<'_, '_> {
                     };
                     // Coerce the element value into the `&T` result shape: a
                     // reference-typed element is already `&T` (return the bare
-                    // ref); a primitive element must be boxed into `Box<T>`,
-                    // matching what `&array_get(...)` would have produced.
+                    // ref); a primitive / variant element must be boxed into
+                    // `Box<T>`, matching what `&array_get(...)` would produce.
                     let result_wir = self.ctx.type_id_to_wir_type(self.type_table, result_type_id);
-                    let needs_boxing = match (&result_wir, &elem_ty) {
-                        (WirType::Ref { type_id: bt, .. }, WirType::Ref { type_id: st, .. }) => {
-                            bt != st
-                        }
-                        (WirType::Ref { .. }, _) => true,
-                        _ => false,
-                    };
-                    if let WirType::Ref { type_id: box_tid, .. } = result_wir
-                        && needs_boxing
+                    if super::translate::ref_binding_needs_boxing(&result_wir, Some(&elem_ty))
+                        && let WirType::Ref { type_id: box_tid, .. } = result_wir
                     {
                         Some(self.struct_new(box_tid, vec![get]))
                     } else {
