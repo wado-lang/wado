@@ -1,0 +1,44 @@
+// Read-only-share soundness: a binding that shares a projection of a reference
+// root (`let row = self.rows[0]`) must NOT drop its copy when the root's storage
+// can be mutated through a channel other than a direct disjoint write — a callee
+// that receives the reference, or an aliased reference. Both mutate the shared
+// element; sharing it would corrupt the read. The share is gated on the source
+// root being unconsumed, which both channels violate.
+
+struct Counter {
+    rows: List<List<i32>>,
+}
+
+fn mutate_first(c: &mut Counter) {
+    c.rows[0].push(99);
+}
+
+impl Counter {
+    fn read_via_helper(&mut self) -> i32 {
+        let row = self.rows[0];
+        mutate_first(self);
+        return row.len();
+    }
+
+    fn read_via_alias(&mut self) -> i32 {
+        let row = self.rows[0];
+        let x = self;
+        x.rows[0].push(99);
+        return row.len();
+    }
+}
+
+test "share must copy when a callee mutates the source through the reference" {
+    let mut c = Counter { rows: [[1, 2, 3]] };
+    assert c.read_via_helper() == 3;
+    assert c.rows[0].len() == 4;
+}
+
+test "share must copy when the source is mutated through an aliased reference" {
+    let mut c = Counter { rows: [[1, 2, 3]] };
+    assert c.read_via_alias() == 3;
+    assert c.rows[0].len() == 4;
+}
+
+__DATA__
+{"test": {}}

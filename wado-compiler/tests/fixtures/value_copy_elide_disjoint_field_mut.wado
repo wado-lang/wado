@@ -1,8 +1,9 @@
-// Field-sensitive source-side elision: a copy whose source reads one field
-// (`self.rows`) must be stripped even when a *disjoint* field of the same
-// receiver (`self.tick`) is mutated in the same body. This is the shape of
-// `ArrayRefIter::next` (`let x = array_get(self.repr, self.index); self.index
-// += 1`), whose element copy a field-insensitive oracle wrongly retains.
+// Read-only-share refinement (WEP 2026-05-21): a read-only binding whose source
+// reads one field (`self.rows[0]`) needs no defensive copy even when a *disjoint*
+// field of the same receiver (`self.tick`) is mutated in the same body. The
+// caller-side share analysis inserts no copy at all, so none appears at any
+// optimization level. This is the shape of `ArrayRefIter::next` (`let x =
+// array_get(self.repr, self.index); self.index += 1`).
 
 struct Counter {
     tick: i32,
@@ -26,6 +27,6 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
-    "wir_expect:O0": ["$value_copy"],
-    "wir_not_expect:O2": ["__array_clone"]
+    "wir_not_expect:O0": ["$value_copy"],
+    "wir_not_expect:O2": ["array_clone"]
 }

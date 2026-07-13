@@ -18,33 +18,24 @@
 //! and its element stays aliased — which the callee-side copy-on-extract model
 //! cannot achieve.
 
+use super::callgraph::CallGraph;
+use super::funcset::FuncKeySet;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::module_source::ModuleSource;
-use crate::name::{FreeFunctionName, FunctionId};
 use crate::tir::{
-    FunctionKind, FunctionRef, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TirUnaryOp,
-    TypeTable,
+    FunctionKind, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
-/// The canonical id of a function, matching `nir::FunctionRef::function_id`
-/// (module + name; the mangled name is unique post-monomorphization).
-pub fn func_key(module: &ModuleSource, name: &str) -> FunctionId {
-    FunctionId::Free(FreeFunctionName::from_module_source(module, name))
-}
-
 /// Oracle the freshness checker consults for a call's return convention.
 pub struct OwnedCalls<'a> {
-    returns_owned: &'a IndexSet<FunctionId>,
-    returns_self_projection: &'a IndexSet<FunctionId>,
+    returns_owned: &'a FuncKeySet,
+    returns_self_projection: &'a FuncKeySet,
 }
 
 impl<'a> OwnedCalls<'a> {
-    pub fn new(
-        returns_owned: &'a IndexSet<FunctionId>,
-        returns_self_projection: &'a IndexSet<FunctionId>,
-    ) -> Self {
+    pub fn new(returns_owned: &'a FuncKeySet, returns_self_projection: &'a FuncKeySet) -> Self {
         Self {
             returns_owned,
             returns_self_projection,
@@ -59,8 +50,7 @@ impl<'a> OwnedCalls<'a> {
         if func.module_source.is_core_builtin() || func.module_source.is_wasm_asset() {
             return func.name != "array_get";
         }
-        self.returns_owned
-            .contains(&func_key(&func.module_source, &func.name))
+        self.returns_owned.contains(&func.module_source, &func.name)
     }
 
     /// Whether `func` returns a projection of its receiver / first parameter
@@ -73,7 +63,7 @@ impl<'a> OwnedCalls<'a> {
             return false;
         }
         self.returns_self_projection
-            .contains(&func_key(&func.module_source, &func.name))
+            .contains(&func.module_source, &func.name)
     }
 }
 
@@ -82,8 +72,87 @@ impl<'a> OwnedCalls<'a> {
 /// `returns_self_projection` (every returned value is owned *or* a projection of
 /// the receiver / first parameter).
 pub struct ReturnConventions {
-    pub returns_owned: IndexSet<FunctionId>,
-    pub returns_self_projection: IndexSet<FunctionId>,
+    pub returns_owned: FuncKeySet,
+    pub returns_self_projection: FuncKeySet,
+}
+
+/// Functions whose every value-return aliases the receiver / first parameter
+/// (a *borrowed* projection, through `array_get` and nested accessor calls).
+/// Because it admits borrowed projections it must NOT feed the move/owned
+/// decision; only the read-only-share analysis consumes it.
+pub fn compute_receiver_alias(project: &FlatPackage) -> FuncKeySet {
+    let call_graph = CallGraph::build(project);
+    let mut set = FuncKeySet::default();
+    call_graph.solve(project, |id| {
+        let func = project.functions[id as usize].borrow();
+        if set.contains(&func.module_source, &func.name) {
+            return false;
+        }
+        let Some(body) = &func.body else { return false };
+        if function_returns_receiver_alias(body, &set) {
+            set.insert(func.module_source.clone(), func.name.clone());
+            true
+        } else {
+            false
+        }
+    });
+    set
+}
+
+fn function_returns_receiver_alias(body: &TirBlock, set: &FuncKeySet) -> bool {
+    struct W<'a> {
+        set: &'a FuncKeySet,
+        all_alias: bool,
+        saw_return: bool,
+    }
+    impl TirRefVisitor for W<'_> {
+        fn visit_stmt(&mut self, stmt: &TirStmt) {
+            if let TirStmtKind::Return { value: Some(v) } = &stmt.kind {
+                self.saw_return = true;
+                if !is_receiver_projection(v, 0, self.set) {
+                    self.all_alias = false;
+                }
+            }
+            self.walk_stmt(stmt);
+        }
+    }
+    let mut w = W {
+        set,
+        all_alias: true,
+        saw_return: false,
+    };
+    w.visit_block(body);
+    w.saw_return && w.all_alias
+}
+
+/// Whether `expr` aliases the storage of parameter `param`: a projection chain,
+/// an `array_get` element read of one, or a call to a receiver-aliasing callee
+/// whose receiver / first argument is one.
+fn is_receiver_projection(expr: &TirExpr, param: u32, set: &FuncKeySet) -> bool {
+    match &expr.kind {
+        TirExprKind::Local { index, .. } => *index == param,
+        TirExprKind::Unary { expr: inner, .. }
+        | TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::Index { expr: inner, .. } => is_receiver_projection(inner, param, set),
+        TirExprKind::Call { func, args, .. }
+            if func.module_source.is_core_builtin() && func.name == "array_get" =>
+        {
+            args.first()
+                .is_some_and(|a| is_receiver_projection(&a.expr, param, set))
+        }
+        TirExprKind::MethodCall { func, receiver, .. }
+            if set.contains(&func.module_source, &func.name) =>
+        {
+            is_receiver_projection(receiver, param, set)
+        }
+        TirExprKind::Call { func, args, .. } if set.contains(&func.module_source, &func.name) => {
+            args.first()
+                .is_some_and(|a| is_receiver_projection(&a.expr, param, set))
+        }
+        _ => false,
+    }
 }
 
 /// Least fixpoint over the two return conventions. Seeds the always-owned
@@ -95,55 +164,44 @@ pub struct ReturnConventions {
 pub fn compute_return_conventions(project: &FlatPackage) -> ReturnConventions {
     let type_table = project.type_table.borrow();
 
-    let mut owned: IndexSet<FunctionId> = IndexSet::default();
+    let mut owned = FuncKeySet::default();
     for func in &project.functions {
         let func = func.borrow();
         let is_helper = matches!(func.kind, FunctionKind::ValueCopy { .. });
         let is_builtin = func.module_source.is_core_builtin() || func.module_source.is_wasm_asset();
         if is_helper || (is_builtin && func.name != "array_get") {
-            owned.insert(func_key(&func.module_source, &func.name));
+            owned.insert(func.module_source.clone(), func.name.clone());
         }
     }
-    let mut self_proj: IndexSet<FunctionId> = owned.clone();
+    let mut self_proj = owned.clone();
 
-    loop {
-        let mut newly_owned: Vec<FunctionId> = Vec::new();
-        let mut newly_self_proj: Vec<FunctionId> = Vec::new();
-        {
+    let call_graph = CallGraph::build(project);
+    call_graph.solve(project, |id| {
+        let func = project.functions[id as usize].borrow();
+        let already_owned = owned.contains(&func.module_source, &func.name);
+        let already_self_proj = self_proj.contains(&func.module_source, &func.name);
+        if already_owned && already_self_proj {
+            return false;
+        }
+        let Some(body) = &func.body else {
+            return false;
+        };
+        let (ret_owned, ret_self_proj) = {
             let oracle = OwnedCalls::new(&owned, &self_proj);
-            for func in &project.functions {
-                let func = func.borrow();
-                let key = func_key(&func.module_source, &func.name);
-                let already_owned = owned.contains(&key);
-                let already_self_proj = self_proj.contains(&key);
-                if already_owned && already_self_proj {
-                    continue;
-                }
-                let Some(body) = &func.body else {
-                    continue;
-                };
-                let n_params = u32::try_from(func.params.len()).unwrap_or(u32::MAX);
-                let (ret_owned, ret_self_proj) =
-                    function_return_convention(body, n_params, &oracle, &type_table);
-                if !already_owned && ret_owned {
-                    newly_owned.push(key.clone());
-                }
-                if !already_self_proj && ret_self_proj {
-                    newly_self_proj.push(key);
-                }
-            }
+            function_return_convention(body, &func.params, &oracle, &type_table)
+        };
+        let mut changed = false;
+        if !already_owned && ret_owned {
+            self_proj.insert(func.module_source.clone(), func.name.clone());
+            owned.insert(func.module_source.clone(), func.name.clone());
+            changed = true;
         }
-        if newly_owned.is_empty() && newly_self_proj.is_empty() {
-            break;
+        if !already_self_proj && ret_self_proj {
+            self_proj.insert(func.module_source.clone(), func.name.clone());
+            changed = true;
         }
-        for key in newly_owned {
-            self_proj.insert(key.clone());
-            owned.insert(key);
-        }
-        for key in newly_self_proj {
-            self_proj.insert(key);
-        }
-    }
+        changed
+    });
 
     ReturnConventions {
         returns_owned: owned,
@@ -158,11 +216,11 @@ pub fn compute_return_conventions(project: &FlatPackage) -> ReturnConventions {
 /// match-arm bindings that destructure an owned source).
 fn function_return_convention(
     body: &TirBlock,
-    n_params: u32,
+    params: &[crate::tir::TirParam],
     oracle: &OwnedCalls,
     type_table: &TypeTable,
 ) -> (bool, bool) {
-    let fresh = compute_fresh_locals(body, n_params, oracle, type_table);
+    let fresh = compute_fresh_locals(body, params, oracle, type_table);
     let mut walker = ReturnWalker {
         fresh: &fresh,
         oracle,
@@ -230,10 +288,11 @@ pub(super) fn is_projection_of_param(expr: &TirExpr, param: u32) -> bool {
 /// shrinking).
 fn compute_fresh_locals(
     body: &TirBlock,
-    n_params: u32,
+    params: &[crate::tir::TirParam],
     oracle: &OwnedCalls,
     type_table: &TypeTable,
 ) -> IndexSet<u32> {
+    let n_params = u32::try_from(params.len()).unwrap_or(u32::MAX);
     let mut collector = BindingCollector {
         n_params,
         let_sources: IndexMap::default(),
@@ -244,6 +303,16 @@ fn compute_fresh_locals(
     let mut fresh: IndexSet<u32> = collector.let_sources.keys().copied().collect();
     for (local, _) in &collector.match_sources {
         fresh.insert(*local);
+    }
+    // A by-value parameter is owned: returning it is owned because a returned
+    // parameter is never confined, so the caller always copies it in.
+    for p in params {
+        if !matches!(
+            type_table.get(p.type_id),
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+        ) {
+            fresh.insert(p.local_index);
+        }
     }
 
     let mut changed = true;

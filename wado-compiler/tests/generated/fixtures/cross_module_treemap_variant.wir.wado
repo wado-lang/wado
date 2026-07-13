@@ -373,7 +373,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify"(v) {
                 }
                 __local_12 = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, ./sub/cross_module_treemap_variant_helper.wado/Value]">(entries.repr, i);
                 key = __local_12.0;
-                __sroa_val_value = __local_12.1;
+                __sroa_val_value = "cross_module_treemap_variant.wado/$value_copy$T38"(__local_12.1);
                 __local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(51), used: 0 };
                 "core:prelude/string.wado/String::push_str"(__local_10, result);
                 "core:prelude/string.wado/String::push"(__local_10, 34);
@@ -854,7 +854,7 @@ fn "core:prelude/slice.wado/ArrayIter<core:collections/TreeMapEntry<core:prelude
     if self.index >= self.end {
         return ref.null none;
     }
-    item = builtin::array_get<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>">(self.repr, self.index);
+    item = "cross_module_treemap_variant.wado/$value_copy$T1042"(builtin::array_get<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>">(self.repr, self.index));
     self.index = self.index + 1;
     return item;
 }
@@ -866,7 +866,7 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,./sub/cross_module_
     let __v1: i32;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    existing_index = "core:collections/TreeMap<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>::find_index"(self, key);
+    existing_index = "core:collections/TreeMap<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>::find_index"(self, "cross_module_treemap_variant.wado/$value_copy$T37"(key));
     if existing_index >= 0 {
         __v1 = self.entries.used; if @unlikely(existing_index >= __v1) {
             cold_path;
@@ -876,7 +876,7 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,./sub/cross_module_
         return;
     }
     new_index = self.entries.used;
-    entry = struct.new "core:collections//TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>" { key: key, value: value, deleted: 0 };
+    entry = struct.new "core:collections//TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>" { key: ref.as_non_null("cross_module_treemap_variant.wado/$value_copy$T37"(key)), value: value, deleted: 0 };
     "core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>>::push"(self.entries, entry);
     self.root = ref.as_non_null("core:collections/TreeMap<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>::insert_node"(self, self.root, key, new_index));
     self.size = self.size + 1;

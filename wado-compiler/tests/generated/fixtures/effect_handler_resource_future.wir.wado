@@ -266,8 +266,6 @@ global global:effect_handler_resource_future.wado::__const_obj_8: ref null "core
 
 fn "effect_handler_resource_future.wado/run"() with Stdout {
     let f_0: ref "effect_handler_resource_future.wado//MockFuture";
-    let rx: i32;
-    let tx: i32;
     let value: ref "core:prelude/types.wado//Option<i32>";
     let __cond_4: bool;
     let __v0_5: i32;
@@ -284,10 +282,12 @@ fn "effect_handler_resource_future.wado/run"() with Stdout {
     let __d_Future<i32>: ref "effect_handler_resource_future.wado//__Dispatch_Future<i32>";
     let __save_FutureWritable<i32>: ref null "effect_handler_resource_future.wado//__Dispatch_FutureWritable<i32>";
     let __d_FutureWritable<i32>: ref "effect_handler_resource_future.wado//__Dispatch_FutureWritable<i32>";
-    let __pattern_temp_0: ref "tuple//[Future<i32>, FutureWritable<i32>]";
     let __local_23: i32;
-    let f_27: ref "core:prelude/format.wado//Formatter";
-    let f_32: ref "core:prelude/format.wado//Formatter";
+    let v: ref "tuple//[Future<i32>, FutureWritable<i32>]";
+    let f_28: ref "core:prelude/format.wado//Formatter";
+    let f_33: ref "core:prelude/format.wado//Formatter";
+    let __sroa___pattern_temp_0_0: i32;
+    let __sroa___pattern_temp_0_1: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:effect_handler_resource_future.wado::__modules_initialized);
         cold_path;
@@ -301,10 +301,11 @@ fn "effect_handler_resource_future.wado/run"() with Stdout {
     __save_FutureWritable<i32> = global:effect_handler_resource_future.wado::__effect_FutureWritable<i32>;
     __d_FutureWritable<i32> = struct.new "effect_handler_resource_future.wado//__Dispatch_FutureWritable<i32>" { outer: __save_FutureWritable<i32>, op_write: struct.new "canonical//CanonicalClosure_3" { env: struct.new "effect_handler_resource_future.wado//__Closure_6" { __capture_0: f_0 }, func: ref.func "closure/effect_handler_resource_future.wado/__closure_wrapper_4" }, op_cancel_write: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_resource_future.wado//__Closure_7" {  }, func: ref.func "closure/effect_handler_resource_future.wado/__closure_wrapper_5" }, op_drop: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_resource_future.wado//__Closure_8" { __capture_0: f_0 }, func: ref.func "closure/effect_handler_resource_future.wado/__closure_wrapper_6" } };
     global:effect_handler_resource_future.wado::__effect_FutureWritable<i32> = __d_FutureWritable<i32>;
-    __pattern_temp_0 = "effect_handler_resource_future.wado/__effect_dispatch__Future<i32>__new"();
-    rx = __pattern_temp_0.0;
-    "effect_handler_resource_future.wado/__effect_dispatch__FutureWritable<i32>__write"(local.tee tx(__pattern_temp_0.1), 42);
-    value = "effect_handler_resource_future.wado/__effect_dispatch__Future<i32>__read"(rx);
+    v = "effect_handler_resource_future.wado/__effect_dispatch__Future<i32>__new"();
+    __sroa___pattern_temp_0_0 = v.0;
+    __sroa___pattern_temp_0_1 = v.1;
+    "effect_handler_resource_future.wado/__effect_dispatch__FutureWritable<i32>__write"(__sroa___pattern_temp_0_1, 42);
+    value = "effect_handler_resource_future.wado/__effect_dispatch__Future<i32>__read"(__sroa___pattern_temp_0_0);
     __cond_4 = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(value) -> i32 {
         local.tee __local_23(ref.cast "core:prelude/types.wado//Option<i32>::Some"(value).payload_0) == 42;
     } else {
@@ -315,8 +316,8 @@ fn "effect_handler_resource_future.wado/run"() with Stdout {
         "core:rt/panic"(__local_9 = "core:prelude/string.wado/String::with_capacity"(112); "core:prelude/string.wado/String::push_str"(__local_9, global:effect_handler_resource_future.wado::__const_obj_3); "core:prelude/string.wado/String::push"(__local_9, 114); "core:prelude/string.wado/String::push"(__local_9, 117); "core:prelude/string.wado/String::push"(__local_9, 110); "core:prelude/string.wado/String::push"(__local_9, 32); "core:prelude/string.wado/String::push"(__local_9, 97); "core:prelude/string.wado/String::push"(__local_9, 116); "core:prelude/string.wado/String::push"(__local_9, 32); "core:prelude/string.wado/String::push_str"(__local_9, global:effect_handler_resource_future.wado::__const_obj_2); "core:prelude/string.wado/String::push"(__local_9, 58); __local_10 = "core:prelude/format.wado/Formatter::new"(__local_9); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 67 }, __local_10); "core:prelude/string.wado/String::push_str"(__local_9, global:effect_handler_resource_future.wado::__const_obj_8); __local_9);
         unreachable;
     }
-    "effect_handler_resource_future.wado/__effect_dispatch__FutureWritable<i32>__drop"(tx);
-    "effect_handler_resource_future.wado/__effect_dispatch__Future<i32>__drop"(rx);
+    "effect_handler_resource_future.wado/__effect_dispatch__FutureWritable<i32>__drop"(__sroa___pattern_temp_0_1);
+    "effect_handler_resource_future.wado/__effect_dispatch__Future<i32>__drop"(__sroa___pattern_temp_0_0);
     global:effect_handler_resource_future.wado::__effect_FutureWritable<i32> = __save_FutureWritable<i32>;
     global:effect_handler_resource_future.wado::__effect_Future<i32> = __save_Future<i32>;
     __v0_5 = f_0.write_count;
@@ -331,23 +332,25 @@ fn "effect_handler_resource_future.wado/run"() with Stdout {
         "core:rt/panic"(__local_13 = "core:prelude/string.wado/String::with_capacity"(134); "core:prelude/string.wado/String::push_str"(__local_13, global:effect_handler_resource_future.wado::__const_obj_3); "core:prelude/string.wado/String::push"(__local_13, 114); "core:prelude/string.wado/String::push"(__local_13, 117); "core:prelude/string.wado/String::push"(__local_13, 110); "core:prelude/string.wado/String::push"(__local_13, 32); "core:prelude/string.wado/String::push"(__local_13, 97); "core:prelude/string.wado/String::push"(__local_13, 116); "core:prelude/string.wado/String::push"(__local_13, 32); "core:prelude/string.wado/String::push_str"(__local_13, global:effect_handler_resource_future.wado::__const_obj_2); "core:prelude/string.wado/String::push"(__local_13, 58); __local_14 = "core:prelude/format.wado/Formatter::new"(__local_13); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 72 }, __local_14); "core:prelude/string.wado/String::push_str"(__local_13, global:effect_handler_resource_future.wado::__const_obj_1); "core:prelude/string.wado/String::push_str"(__local_13, global:effect_handler_resource_future.wado::__const_obj_0); __local_14 = "core:prelude/format.wado/Formatter::new"(__local_13); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_7 }, __local_14); "core:prelude/string.wado/String::push"(__local_13, 10); __local_13);
         unreachable;
     }
-    "core:cli/println"(__local_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(46), used: 0 }; "core:prelude/string.wado/String::push"(__local_15, 119); "core:prelude/string.wado/String::push"(__local_15, 114); "core:prelude/string.wado/String::push"(__local_15, 105); "core:prelude/string.wado/String::push"(__local_15, 116); "core:prelude/string.wado/String::push"(__local_15, 101); "core:prelude/string.wado/String::push"(__local_15, 115); "core:prelude/string.wado/String::push"(__local_15, 61); __local_16 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_15 }; f_27 = __local_16; "core:prelude/primitive.wado/i32::fmt_decimal"(f_0.write_count, f_27); "core:prelude/string.wado/String::push"(__local_15, 32); "core:prelude/string.wado/String::push"(__local_15, 114); "core:prelude/string.wado/String::push"(__local_15, 101); "core:prelude/string.wado/String::push"(__local_15, 97); "core:prelude/string.wado/String::push"(__local_15, 100); "core:prelude/string.wado/String::push"(__local_15, 115); "core:prelude/string.wado/String::push"(__local_15, 61); __local_16 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_15 }; f_32 = __local_16; "core:prelude/primitive.wado/i32::fmt_decimal"(f_0.read_count, f_32); __local_15);
+    "core:cli/println"(__local_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(46), used: 0 }; "core:prelude/string.wado/String::push"(__local_15, 119); "core:prelude/string.wado/String::push"(__local_15, 114); "core:prelude/string.wado/String::push"(__local_15, 105); "core:prelude/string.wado/String::push"(__local_15, 116); "core:prelude/string.wado/String::push"(__local_15, 101); "core:prelude/string.wado/String::push"(__local_15, 115); "core:prelude/string.wado/String::push"(__local_15, 61); __local_16 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_15 }; f_28 = __local_16; "core:prelude/primitive.wado/i32::fmt_decimal"(f_0.write_count, f_28); "core:prelude/string.wado/String::push"(__local_15, 32); "core:prelude/string.wado/String::push"(__local_15, 114); "core:prelude/string.wado/String::push"(__local_15, 101); "core:prelude/string.wado/String::push"(__local_15, 97); "core:prelude/string.wado/String::push"(__local_15, 100); "core:prelude/string.wado/String::push"(__local_15, 115); "core:prelude/string.wado/String::push"(__local_15, 61); __local_16 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_15 }; f_33 = __local_16; "core:prelude/primitive.wado/i32::fmt_decimal"(f_0.read_count, f_33); __local_15);
 }
 
 fn "effect_handler_resource_future.wado/__effect_dispatch__Future<i32>__new"() {
     let __saved: ref null "effect_handler_resource_future.wado//__Dispatch_Future<i32>";
     let __local_1: ref "effect_handler_resource_future.wado//__Dispatch_Future<i32>";
     let __local_2: ref "tuple//[Future<i32>, FutureWritable<i32>]";
+    let v: ref "tuple//[Future<i32>, FutureWritable<i32>]";
     let packed: i64;
     __saved = global:effect_handler_resource_future.wado::__effect_Future<i32>;
     if ref.is_null(__saved) == 0 {
         __local_1 = ref.as_non_null(__saved);
         global:effect_handler_resource_future.wado::__effect_Future<i32> = __local_1.outer;
-        __local_2 = block -> ref "tuple//[Future<i32>, FutureWritable<i32>]" {
+        v = block -> ref "tuple//[Future<i32>, FutureWritable<i32>]" {
             let __indirect_call_0: ref "canonical//CanonicalClosure_0";
             __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(__local_1.op_new);
             call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env);
         };
+        __local_2 = struct.new "tuple//[Future<i32>, FutureWritable<i32>]" { 0: v.0, 1: v.1 };
         global:effect_handler_resource_future.wado::__effect_Future<i32> = __saved;
         return __local_2;
     } else {

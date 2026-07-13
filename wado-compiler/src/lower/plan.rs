@@ -46,11 +46,34 @@ fn capture_param_mut_ref(flat: &mut FlatPackage) {
     }
 }
 
+/// Functions whose first parameter is a reference (`&self` / `&mut self`),
+/// captured before `boxing::prepare_types` erases the reference into `Box<T>`.
+fn ref_receiver_methods(flat: &FlatPackage) -> value_copy::funcset::FuncKeySet {
+    let type_table = flat.type_table.borrow();
+    let mut set = value_copy::funcset::FuncKeySet::default();
+    for f in &flat.functions {
+        let f = f.borrow();
+        let Some(p0) = f.params.first() else { continue };
+        if matches!(
+            type_table.get(p0.type_id),
+            crate::tir::ResolvedType::Ref(_) | crate::tir::ResolvedType::MutRef(_)
+        ) {
+            set.insert(f.module_source.clone(), f.name.clone());
+        }
+    }
+    set
+}
+
 pub fn plan(flat: &mut FlatPackage) -> LowerPlan {
     globals::extract(flat);
     // Record each parameter's `&mut`-ness before `boxing::prepare_types`
     // rewrites `&mut T` / `&T` to the same `Box<T>`, erasing the distinction.
     capture_param_mut_ref(flat);
+    // Confinement and receiver-ref capture run before boxing collapses `&mut T`
+    // / `&T` onto `Box<T>`; both results key on parameter position, unchanged by
+    // boxing.
+    let confined_params = value_copy::confine::compute_confined_params(flat);
+    let ref_receiver_methods = ref_receiver_methods(flat);
     let box_plan = boxing::prepare_types(flat);
     boxing::shadow_params(flat, &box_plan);
     let lifted_from = flat.functions.len();
@@ -59,7 +82,7 @@ pub fn plan(flat: &mut FlatPackage) -> LowerPlan {
     globals::build_initialize_modules(flat);
     flat.rebuild_variant_indices();
     lift_mut::lift_mut_match_bindings(flat);
-    let value_copy = value_copy::plan(flat);
+    let value_copy = value_copy::plan(flat, confined_params, ref_receiver_methods);
     LowerPlan {
         box_plan,
         closure,

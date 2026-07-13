@@ -457,6 +457,9 @@ fn "stream_http_response_body_string.wado/handle"(request) {
     let packed_166: i64;
     let rx_167: i32;
     let tx_168: i32;
+    let v_169: ref "wasi:http/types.wado//FieldSizePayload";
+    let v_170: ref null "core:prelude/string.wado//String";
+    let __vc_payload_0: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:stream_http_response_body_string.wado::__modules_initialized);
         cold_path;
@@ -575,7 +578,13 @@ fn "stream_http_response_body_string.wado/handle"(request) {
             __local_63 = 0;
             __local_64 = 0;
             if __local_59 != 0 {
-                __local_65 = ref.as_non_null(__local_57);
+                v_169 = ref.as_non_null(__local_57);
+                __local_65 = struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: v_170 = v_169.field_name; (if ref.is_null(v_170) == 0 -> ref null "core:prelude/string.wado//String" {
+                    __vc_payload_0 = ref.as_non_null(v_170);
+                    struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = __vc_payload_0.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: __vc_payload_0.used };
+                } else {
+                    v_170;
+                }), field_size: v_169.field_size };
                 __local_66 = __local_65.field_name;
                 __local_67 = ref.is_null(__local_66) == 0;
                 __local_68 = 0;
@@ -821,12 +830,12 @@ fn "stream_http_response_body_string.wado/__cm_export__handle"(request) {
 fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b66: block {
-        l67: loop {
-            break_if b66 i >= len;
+    b67: block {
+        l68: loop {
+            break_if b67 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l67;
+            continue l68;
         };
     };
 }
@@ -877,20 +886,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b68: block {
-        l69: loop {
-            break_if b68 offset >= count;
+    b69: block {
+        l70: loop {
+            break_if b69 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/wait_for_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b68 (if (result >> 4) == 0 -> i32 {
+            break_if b69 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l69;
+            continue l70;
         };
     };
 }

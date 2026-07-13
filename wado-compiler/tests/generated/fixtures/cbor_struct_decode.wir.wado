@@ -197,9 +197,9 @@ type "functype//cbor_struct_decode.wado/$value_copy$T256" = fn(ref null "core:se
 
 type "functype//cbor_struct_decode.wado/$value_copy$T72" = fn(ref "core:serde//DeserializeError") -> ref "core:serde//DeserializeError";  // TypeId(46)
 
-type "functype//cbor_struct_decode.wado/$value_copy$T996" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref "core:prelude/slice.wado//ArraySlice<u8>";  // TypeId(47)
+type "functype//cbor_struct_decode.wado/$value_copy$T25" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref "core:prelude/slice.wado//ArraySlice<u8>";  // TypeId(47)
 
-type "functype//cbor_struct_decode.wado/$value_copy$T25" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref "core:prelude/slice.wado//ArraySlice<u8>";  // TypeId(48)
+type "functype//cbor_struct_decode.wado/$value_copy$T74" = fn(ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(48)
 
 type "functype//cbor_struct_decode.wado/$value_copy$T31" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(49)
 
@@ -389,7 +389,6 @@ global global:cbor_struct_decode.wado::__const_obj_39: ref null "core:prelude/st
 
 fn "cbor_struct_decode.wado/__test_0_decode_struct_from_a_cbor_map"() {
     let __b: ref "core:prelude//List<u8>";
-    let bytes: ref "core:prelude//List<u8>";
     let v_2: ref "cbor_struct_decode.wado//Point";
     let p: ref "cbor_struct_decode.wado//Point";
     let __v0_4: i32;
@@ -399,11 +398,10 @@ fn "cbor_struct_decode.wado/__test_0_decode_struct_from_a_cbor_map"() {
     let __local_10: ref "core:prelude/string.wado//String";
     let __local_11: ref "core:prelude/format.wado//Formatter";
     __b = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(162, 97, 120, 1, 97, 121, 2), used: 7 };
-    bytes = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let __array_clone_src_5: ref Array<u8>; __array_clone_src_5 = __b.repr; let __array_clone_len_5: i32; __array_clone_len_5 = builtin::array_len(__array_clone_src_5); let __array_clone_dst_5: ref Array<u8>; __array_clone_dst_5 = builtin::array_new<u8>(__array_clone_len_5); builtin::array_copy<u8>(__array_clone_dst_5, 0, __array_clone_src_5, 0, __array_clone_len_5); __array_clone_dst_5), used: 7 };
     let __sroa___match_scrut_0_discriminant: i32;
     let __sroa___match_scrut_0_case0_payload_0: ref null "cbor_struct_decode.wado//Point";
     let __sroa___match_scrut_0_case1_payload_0: ref null "core:serde//DeserializeError";
-    multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_case0_payload_0, __sroa___match_scrut_0_case1_payload_0] = "core:cbor/core/cbor/from_bytes<cbor_struct_decode.wado/Point,core:prelude/bytes.wado/ByteList>"(bytes, 1);
+    multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_case0_payload_0, __sroa___match_scrut_0_case1_payload_0] = "core:cbor/core/cbor/from_bytes<cbor_struct_decode.wado/Point,core:prelude/bytes.wado/ByteList>"(struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let __array_clone_src_5: ref Array<u8>; __array_clone_src_5 = __b.repr; let __array_clone_len_5: i32; __array_clone_len_5 = builtin::array_len(__array_clone_src_5); let __array_clone_dst_5: ref Array<u8>; __array_clone_dst_5 = builtin::array_new<u8>(__array_clone_len_5); builtin::array_copy<u8>(__array_clone_dst_5, 0, __array_clone_src_5, 0, __array_clone_len_5); __array_clone_dst_5), used: __b.used }, 1);
     p = (if @likely(__sroa___match_scrut_0_discriminant == 0) -> ref "cbor_struct_decode.wado//Point" {
         v_2 = ref.as_non_null(__sroa___match_scrut_0_case0_payload_0);
         v_2;
@@ -428,7 +426,7 @@ fn "cbor_struct_decode.wado/__test_0_decode_struct_from_a_cbor_map"() {
 fn "cbor_struct_decode.wado/__test_1_round_trip_a_derived_struct_through_cbor"() {
     let b: ref "core:prelude//List<u8>";
     let bytes: ref "core:prelude//List<u8>";
-    let v: ref "cbor_struct_decode.wado//Point";
+    let v_3: ref "cbor_struct_decode.wado//Point";
     let back: ref "cbor_struct_decode.wado//Point";
     let __v0_5: i32;
     let __v0_7: i32;
@@ -450,10 +448,10 @@ fn "cbor_struct_decode.wado/__test_1_round_trip_a_derived_struct_through_cbor"()
     let __sroa___match_scrut_1_discriminant: i32;
     let __sroa___match_scrut_1_case0_payload_0: ref null "cbor_struct_decode.wado//Point";
     let __sroa___match_scrut_1_case1_payload_0: ref null "core:serde//DeserializeError";
-    multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_case0_payload_0, __sroa___match_scrut_1_case1_payload_0] = "core:cbor/core/cbor/from_bytes<cbor_struct_decode.wado/Point,core:prelude/bytes.wado/ByteList>"(bytes, 1);
+    multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_case0_payload_0, __sroa___match_scrut_1_case1_payload_0] = "core:cbor/core/cbor/from_bytes<cbor_struct_decode.wado/Point,core:prelude/bytes.wado/ByteList>"(struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let __array_clone_src_5: ref Array<u8>; __array_clone_src_5 = bytes.repr; let __array_clone_len_5: i32; __array_clone_len_5 = builtin::array_len(__array_clone_src_5); let __array_clone_dst_5: ref Array<u8>; __array_clone_dst_5 = builtin::array_new<u8>(__array_clone_len_5); builtin::array_copy<u8>(__array_clone_dst_5, 0, __array_clone_src_5, 0, __array_clone_len_5); __array_clone_dst_5), used: bytes.used }, 1);
     back = (if @likely(__sroa___match_scrut_1_discriminant == 0) -> ref "cbor_struct_decode.wado//Point" {
-        v = ref.as_non_null(__sroa___match_scrut_1_case0_payload_0);
-        v;
+        v_3 = ref.as_non_null(__sroa___match_scrut_1_case0_payload_0);
+        v_3;
     } else {
         "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("decode failed"), used: 13 });
         unreachable;
@@ -512,12 +510,12 @@ fn "cbor_struct_decode.wado/$value_copy$T72"(v) {
     return struct.new "core:serde//DeserializeError" { kind: v.kind, message: ref.as_non_null(v_1 = v.message; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_5: ref Array<u8>; __array_clone_src_5 = v_1.repr; let __array_clone_len_5: i32; __array_clone_len_5 = builtin::array_len(__array_clone_src_5); let __array_clone_dst_5: ref Array<u8>; __array_clone_dst_5 = builtin::array_new<u8>(__array_clone_len_5); builtin::array_copy<u8>(__array_clone_dst_5, 0, __array_clone_src_5, 0, __array_clone_len_5); __array_clone_dst_5), used: v_1.used }), offset: v.offset };
 }
 
-fn "cbor_struct_decode.wado/$value_copy$T996"(v) {
+fn "cbor_struct_decode.wado/$value_copy$T25"(v) {
     return struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: v.repr, start: v.start, end: v.end };
 }
 
-fn "cbor_struct_decode.wado/$value_copy$T25"(v) {
-    return struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: v.repr, start: v.start, end: v.end };
+fn "cbor_struct_decode.wado/$value_copy$T74"(v) {
+    return struct.new "core:prelude/int128.wado//u128" { low: v.low, high: v.high };
 }
 
 fn "cbor_struct_decode.wado/$value_copy$T31"(v) {
@@ -887,7 +885,7 @@ fn "core:cbor/core/cbor/from_bytes<cbor_struct_decode.wado/Point,core:prelude/by
     let __qm_v: ref "cbor_struct_decode.wado//Point";
     let __qm_e: ref "core:serde//DeserializeError";
     let v: ref "cbor_struct_decode.wado//Point";
-    de = struct.new "core:cbor//CborDeserializer" { input: ref.as_non_null("cbor_struct_decode.wado/$value_copy$T25"(struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: input.used })), pos: 0, depth: 0, strict: strict };
+    de = struct.new "core:cbor//CborDeserializer" { input: struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: input.used }, pos: 0, depth: 0, strict: strict };
     let __sroa___match_scrut_0_discriminant: i32;
     let __sroa___match_scrut_0_case0_payload_0: ref null "cbor_struct_decode.wado//Point";
     let __sroa___match_scrut_0_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -1075,7 +1073,7 @@ fn "core:prelude/string.wado/String::is_valid_utf8"(bytes) {
             let scalar_mv_code: u32;
             let scalar_mv_advance: i32;
             let scalar_mv_valid: bool;
-            multivalue_bind [scalar_mv_code, scalar_mv_advance, scalar_mv_valid] = "core:prelude/string.wado/decode_utf8_scalar"(bytes, i, len);
+            multivalue_bind [scalar_mv_code, scalar_mv_advance, scalar_mv_valid] = "core:prelude/string.wado/decode_utf8_scalar"("cbor_struct_decode.wado/$value_copy$T25"(bytes), i, len);
             if @unlikely(scalar_mv_valid == 0) {
                 cold_path;
                 return 0;
@@ -1286,7 +1284,7 @@ fn "core:cbor/CborDeserializer::read_definite_text"(self, len) {
     }
     n = builtin::i32_wrap_i64(len);
     slice = "core:prelude/slice.wado/ArraySlice<u8>::slice"(self.input, self.pos, self.pos + n);
-    if @unlikely("core:prelude/string.wado/String::is_valid_utf8"(slice) == 0) {
+    if @unlikely("core:prelude/string.wado/String::is_valid_utf8"("cbor_struct_decode.wado/$value_copy$T25"(slice)) == 0) {
         cold_path;
         drop(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8"), used: 13 });
         cold_path;
@@ -1369,7 +1367,6 @@ fn "core:cbor/CborDeserializer::read_text_body"(self, arg, indef) {
 
 fn "core:cbor/CborDeserializer::read_bytes_body"(self, arg, indef) {
     let __b: ref "core:prelude//List<u8>";
-    let out: ref "core:prelude//List<u8>";
     let __qm_e_6: ref "core:serde//DeserializeError";
     let __qm_v_7: u8;
     let __qm_e_8: ref "core:serde//DeserializeError";
@@ -1381,16 +1378,16 @@ fn "core:cbor/CborDeserializer::read_bytes_body"(self, arg, indef) {
     let __match_17: ref null "core:serde//DeserializeError";
     let __pattern_temp_0: ref "tuple//[u8, u8, u64, bool]";
     let __match_19: ref null "core:serde//DeserializeError";
-    out = "cbor_struct_decode.wado/$value_copy$T23"(__b = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 }; __b);
+    __b = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
     if indef == 0 {
-        __match_17 = "core:cbor/CborDeserializer::append_bytes"(self, out, arg);
+        __match_17 = "core:cbor/CborDeserializer::append_bytes"(self, __b, arg);
         if @likely(ref.is_null(__match_17)) {
         } else {
             __qm_e_6 = ref.as_non_null(__match_17);
             cold_path;
             return 1, ref.null none, __qm_e_6;
         }
-        return 0, ref.as_non_null("cbor_struct_decode.wado/$value_copy$T23"(out)), ref.null none;
+        return 0, __b, ref.null none;
     }
     block {
         l134: loop {
@@ -1403,7 +1400,7 @@ fn "core:cbor/CborDeserializer::read_bytes_body"(self, arg, indef) {
                 return 1, ref.null none, __qm_e_8;
             }) == 255 {
                 self.pos = self.pos + 1;
-                return 0, ref.as_non_null("cbor_struct_decode.wado/$value_copy$T23"(out)), ref.null none;
+                return 0, __b, ref.null none;
             }
             let __sroa___match_scrut_2_discriminant: i32;
             let __sroa___match_scrut_2_case0_payload_0: ref null "tuple//[u8, u8, u64, bool]";
@@ -1427,7 +1424,7 @@ fn "core:cbor/CborDeserializer::read_bytes_body"(self, arg, indef) {
                 cold_path;
                 return 1, ref.null none, ref.as_non_null("core:serde/DeserializeError::malformed"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid chunk in indefinite byte string"), used: 39 }, builtin::i64_extend_i32_s(self.pos)));
             }
-            __match_19 = "core:cbor/CborDeserializer::append_bytes"(self, out, len);
+            __match_19 = "core:cbor/CborDeserializer::append_bytes"(self, __b, len);
             if @likely(ref.is_null(__match_19)) {
             } else {
                 __qm_e_16 = ref.as_non_null(__match_19);
@@ -1446,7 +1443,7 @@ fn "core:cbor/CborDeserializer::append_bytes"(self, out, len) {
         return ref.as_non_null("core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(self.pos)));
     }
     n = builtin::i32_wrap_i64(len);
-    "core:prelude/list.wado/List<u8>::extend_from_slice"(out, "cbor_struct_decode.wado/$value_copy$T996"("core:prelude/slice.wado/ArraySlice<u8>::slice"(self.input, self.pos, self.pos + n)));
+    "core:prelude/list.wado/List<u8>::extend_from_slice"(out, "core:prelude/slice.wado/ArraySlice<u8>::slice"(self.input, self.pos, self.pos + n));
     self.pos = self.pos + n;
     return ref.null none;
 }
@@ -1540,7 +1537,7 @@ fn "core:cbor/CborDeserializer::read_signed_i128"(self) {
     let __qm_e_12: ref "core:serde//DeserializeError";
     let mag_13: ref "core:prelude/int128.wado//u128";
     let __pattern_temp_0: ref "tuple//[u8, u8, u64, bool]";
-    i128_max = global:core:cbor::I128_MAX_AS_U128;
+    i128_max = "cbor_struct_decode.wado/$value_copy$T74"(global:core:cbor::I128_MAX_AS_U128);
     block {
         l150: loop {
             let __sroa___match_scrut_0_discriminant: i32;

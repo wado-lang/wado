@@ -2,13 +2,14 @@
 //! shallow spine copy when the binding's elements are provably never mutated
 //! through it (nor through the source the copy reads from).
 //!
-//! `value_copy_elide` removes a `$value_copy$T` wrapper entirely when the
-//! target is read-only — that aliases the binding to the source. When the
-//! target is *spine*-mutated (`sort`, `push`, …) full elision is unsound, but
-//! a shallow copy is still safe: the binding gets its own `repr` spine while
-//! sharing the (immutable-through-this-handle) element objects. This pass
-//! proves the element-immutability precondition and rewrites the call to a
-//! synthesized shallow sibling helper that uses `array_clone_shallow`.
+//! A `$value_copy$T` reaching the optimizer is one the lower-phase ownership
+//! analysis could not prove unnecessary — its binding is not fully read-only, so
+//! it cannot be dropped. But when the binding is only *spine*-mutated (`sort`,
+//! `push`, …) and never mutates an element, a shallow copy is still safe: the
+//! binding gets its own `repr` spine while sharing the
+//! (immutable-through-this-handle) element objects. This pass proves the
+//! element-immutability precondition and rewrites the call to a synthesized
+//! shallow sibling helper that uses `array_clone_shallow`.
 //!
 //! The element-immutability analysis (`fn`s prefixed `analyze_`/`verify_`) is
 //! shape-compatible with what `container_sroa` needs but currently kept

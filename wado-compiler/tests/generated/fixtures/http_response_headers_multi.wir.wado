@@ -420,6 +420,9 @@ fn "http_response_headers_multi.wado/handle"(request) {
     let packed: i64;
     let rx: i32;
     let tx: i32;
+    let v_192: ref "wasi:http/types.wado//FieldSizePayload";
+    let v_193: ref null "core:prelude/string.wado//String";
+    let __vc_payload_0: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:http_response_headers_multi.wado::__modules_initialized);
         cold_path;
@@ -541,7 +544,13 @@ fn "http_response_headers_multi.wado/handle"(request) {
             __local_64 = 0;
             __local_65 = 0;
             if __local_60 != 0 {
-                __local_66 = ref.as_non_null(__local_58);
+                v_192 = ref.as_non_null(__local_58);
+                __local_66 = struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: v_193 = v_192.field_name; (if ref.is_null(v_193) == 0 -> ref null "core:prelude/string.wado//String" {
+                    __vc_payload_0 = ref.as_non_null(v_193);
+                    struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = __vc_payload_0.repr; let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__array_clone_src_1); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: __vc_payload_0.used };
+                } else {
+                    v_193;
+                }), field_size: v_192.field_size };
                 __local_67 = __local_66.field_name;
                 __local_68 = ref.is_null(__local_67) == 0;
                 __local_69 = 0;
@@ -833,12 +842,12 @@ fn "core:rt/memory_to_gc_array"(ptr, len) {
     let i: i32;
     arr = builtin::array_new<u8>(len);
     i = 0;
-    b69: block {
-        l70: loop {
-            break_if b69 i >= len;
+    b70: block {
+        l71: loop {
+            break_if b70 i >= len;
             builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
             i = i + 1;
-            continue l70;
+            continue l71;
         };
     };
     return arr;
@@ -847,12 +856,12 @@ fn "core:rt/memory_to_gc_array"(ptr, len) {
 fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b71: block {
-        l72: loop {
-            break_if b71 i >= len;
+    b72: block {
+        l73: loop {
+            break_if b72 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l72;
+            continue l73;
         };
     };
 }

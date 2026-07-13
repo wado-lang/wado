@@ -1007,7 +1007,7 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,i32>^IndexValue<K>:
     let __v1: i32;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    index_2 = "core:collections/TreeMap<core:prelude/string.wado/String,i32>::find_index"(self, key);
+    index_2 = "core:collections/TreeMap<core:prelude/string.wado/String,i32>::find_index"(self, "treemap_literal_basic.wado/$value_copy$T38"(key));
     if @unlikely(index_2 < 0) {
         "core:rt/panic"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(31), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_3, global:core:collections::__const_obj_28); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/format.wado/String^Inspect::inspect"(key, __local_4); __local_3);
         unreachable;
@@ -1032,7 +1032,7 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert"(self,
     let __v1: i32;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    existing_index = "core:collections/TreeMap<core:prelude/string.wado/String,i32>::find_index"(self, key);
+    existing_index = "core:collections/TreeMap<core:prelude/string.wado/String,i32>::find_index"(self, "treemap_literal_basic.wado/$value_copy$T38"(key));
     if existing_index >= 0 {
         __v1 = self.entries.used; if @unlikely(existing_index >= __v1) {
             cold_path;
@@ -1042,7 +1042,7 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert"(self,
         return;
     }
     new_index = self.entries.used;
-    entry = struct.new "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>" { key: key, value: value, deleted: 0 };
+    entry = struct.new "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>" { key: ref.as_non_null("treemap_literal_basic.wado/$value_copy$T38"(key)), value: value, deleted: 0 };
     "core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>::push"(self.entries, entry);
     self.root = ref.as_non_null("core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert_node"(self, self.root, key, new_index));
     self.size = self.size + 1;

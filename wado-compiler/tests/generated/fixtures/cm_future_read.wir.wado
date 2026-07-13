@@ -422,6 +422,9 @@ fn "cm_future_read.wado/handle"(request) {
     let packed_166: i64;
     let rx_167: i32;
     let tx_168: i32;
+    let v_169: ref "wasi:http/types.wado//FieldSizePayload";
+    let v_170: ref null "core:prelude/string.wado//String";
+    let __vc_payload_0: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:cm_future_read.wado::__modules_initialized);
         cold_path;
@@ -542,7 +545,13 @@ fn "cm_future_read.wado/handle"(request) {
             __local_63 = 0;
             __local_64 = 0;
             if __local_59 != 0 {
-                __local_65 = ref.as_non_null(__local_57);
+                v_169 = ref.as_non_null(__local_57);
+                __local_65 = struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: v_170 = v_169.field_name; (if ref.is_null(v_170) == 0 -> ref null "core:prelude/string.wado//String" {
+                    __vc_payload_0 = ref.as_non_null(v_170);
+                    struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = __vc_payload_0.repr; let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__array_clone_src_1); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: __vc_payload_0.used };
+                } else {
+                    v_170;
+                }), field_size: v_169.field_size };
                 __local_66 = __local_65.field_name;
                 __local_67 = ref.is_null(__local_66) == 0;
                 __local_68 = 0;
@@ -808,12 +817,12 @@ fn "cm_future_read.wado/__cm_future_write_i32"(handle, value) {
 fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b65: block {
-        l66: loop {
-            break_if b65 i >= len;
+    b66: block {
+        l67: loop {
+            break_if b66 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l66;
+            continue l67;
         };
     };
 }

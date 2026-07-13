@@ -227,8 +227,8 @@ impl NirPackage {
             .collect()
     }
 
-    /// The [`FuncId`]s of the synthesized `$value_copy$T` helpers. The
-    /// `value_copy_elide` pass identifies a wrapper call by id membership.
+    /// The [`FuncId`]s of the synthesized `$value_copy$T` helpers, so a pass can
+    /// identify a wrapper call by id membership (e.g. `value_copy_demote`).
     pub fn value_copy_func_ids(&self) -> crate::hashmap::IndexSet<FuncId> {
         self.functions
             .iter()

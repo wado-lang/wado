@@ -485,6 +485,7 @@ fn "serde_json_string_escape.wado/__test_5_roundtrip_string_with_special_chars"(
     let __cond: bool;
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
+    let input: ref "core:prelude/string.wado//String";
     let len_a: i32;
     orig = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("tab:	here
 newline"), used: 17 };
@@ -497,15 +498,16 @@ newline"), used: 17 };
         let __sroa_parsed_r_discriminant: i32;
         let __sroa_parsed_r_case0_payload_0: ref null "core:prelude/string.wado//String";
         let __sroa_parsed_r_case1_payload_0: ref null "core:serde//DeserializeError";
-        multivalue_bind [__sroa_parsed_r_discriminant, __sroa_parsed_r_case0_payload_0, __sroa_parsed_r_case1_payload_0] = "core:json/core/json/from_bytes<core:prelude/string.wado/String,core:prelude/string.wado/String>"(json);
+        input = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_6: ref Array<u8>; __array_clone_src_6 = json.repr; let __array_clone_len_6: i32; __array_clone_len_6 = builtin::array_len(__array_clone_src_6); let __array_clone_dst_6: ref Array<u8>; __array_clone_dst_6 = builtin::array_new<u8>(__array_clone_len_6); builtin::array_copy<u8>(__array_clone_dst_6, 0, __array_clone_src_6, 0, __array_clone_len_6); __array_clone_dst_6), used: json.used };
+        multivalue_bind [__sroa_parsed_r_discriminant, __sroa_parsed_r_case0_payload_0, __sroa_parsed_r_case1_payload_0] = "core:json/core/json/from_bytes<core:prelude/string.wado/String,core:prelude/string.wado/String>"(input);
         if @likely(__sroa_parsed_r_discriminant == 0) {
             parsed = ref.as_non_null(__sroa_parsed_r_case0_payload_0);
-            __cond = __inline_String_Eq__eq_1: block -> bool {
+            __cond = __inline_String_Eq__eq_2: block -> bool {
                 len_a = parsed.used;
                 if len_a != orig.used {
-                    break __inline_String_Eq__eq_1: 0;
+                    break __inline_String_Eq__eq_2: 0;
                 }
-                break __inline_String_Eq__eq_1: "core:prelude/string.wado/String^Eq::eq_bytes"(parsed.repr, orig.repr, len_a);
+                break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(parsed.repr, orig.repr, len_a);
             };
             if @unlikely(__cond == 0) {
                 cold_path;
@@ -529,6 +531,7 @@ fn "serde_json_string_escape.wado/__test_6_roundtrip_multibyte_utf8_string"() {
     let __cond: bool;
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
+    let input: ref "core:prelude/string.wado//String";
     let len_a: i32;
     orig = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("café 日本語 🎉"), used: 20 };
     let __sroa_json_r_discriminant: i32;
@@ -540,15 +543,16 @@ fn "serde_json_string_escape.wado/__test_6_roundtrip_multibyte_utf8_string"() {
         let __sroa_parsed_r_discriminant: i32;
         let __sroa_parsed_r_case0_payload_0: ref null "core:prelude/string.wado//String";
         let __sroa_parsed_r_case1_payload_0: ref null "core:serde//DeserializeError";
-        multivalue_bind [__sroa_parsed_r_discriminant, __sroa_parsed_r_case0_payload_0, __sroa_parsed_r_case1_payload_0] = "core:json/core/json/from_bytes<core:prelude/string.wado/String,core:prelude/string.wado/String>"(json);
+        input = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_6: ref Array<u8>; __array_clone_src_6 = json.repr; let __array_clone_len_6: i32; __array_clone_len_6 = builtin::array_len(__array_clone_src_6); let __array_clone_dst_6: ref Array<u8>; __array_clone_dst_6 = builtin::array_new<u8>(__array_clone_len_6); builtin::array_copy<u8>(__array_clone_dst_6, 0, __array_clone_src_6, 0, __array_clone_len_6); __array_clone_dst_6), used: json.used };
+        multivalue_bind [__sroa_parsed_r_discriminant, __sroa_parsed_r_case0_payload_0, __sroa_parsed_r_case1_payload_0] = "core:json/core/json/from_bytes<core:prelude/string.wado/String,core:prelude/string.wado/String>"(input);
         if @likely(__sroa_parsed_r_discriminant == 0) {
             parsed = ref.as_non_null(__sroa_parsed_r_case0_payload_0);
-            __cond = __inline_String_Eq__eq_1: block -> bool {
+            __cond = __inline_String_Eq__eq_2: block -> bool {
                 len_a = parsed.used;
                 if len_a != orig.used {
-                    break __inline_String_Eq__eq_1: 0;
+                    break __inline_String_Eq__eq_2: 0;
                 }
-                break __inline_String_Eq__eq_1: "core:prelude/string.wado/String^Eq::eq_bytes"(parsed.repr, orig.repr, len_a);
+                break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(parsed.repr, orig.repr, len_a);
             };
             if @unlikely(__cond == 0) {
                 cold_path;
@@ -576,7 +580,8 @@ fn "serde_json_string_escape.wado/__test_7_roundtrip_empty_string"() {
     let __local_12: ref "core:prelude/string.wado//String";
     let __local_13: ref "core:prelude/format.wado//Formatter";
     let len_a_16: i32;
-    let len_a_24: i32;
+    let input: ref "core:prelude/string.wado//String";
+    let len_a_25: i32;
     let __sroa_json_r_discriminant: i32;
     let __sroa_json_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_json_r_case1_payload_0: ref null "core:serde//SerializeError";
@@ -599,15 +604,16 @@ fn "serde_json_string_escape.wado/__test_7_roundtrip_empty_string"() {
         let __sroa_parsed_r_discriminant: i32;
         let __sroa_parsed_r_case0_payload_0: ref null "core:prelude/string.wado//String";
         let __sroa_parsed_r_case1_payload_0: ref null "core:serde//DeserializeError";
-        multivalue_bind [__sroa_parsed_r_discriminant, __sroa_parsed_r_case0_payload_0, __sroa_parsed_r_case1_payload_0] = "core:json/core/json/from_bytes<core:prelude/string.wado/String,core:prelude/string.wado/String>"(json);
+        input = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_6: ref Array<u8>; __array_clone_src_6 = json.repr; let __array_clone_len_6: i32; __array_clone_len_6 = builtin::array_len(__array_clone_src_6); let __array_clone_dst_6: ref Array<u8>; __array_clone_dst_6 = builtin::array_new<u8>(__array_clone_len_6); builtin::array_copy<u8>(__array_clone_dst_6, 0, __array_clone_src_6, 0, __array_clone_len_6); __array_clone_dst_6), used: json.used };
+        multivalue_bind [__sroa_parsed_r_discriminant, __sroa_parsed_r_case0_payload_0, __sroa_parsed_r_case1_payload_0] = "core:json/core/json/from_bytes<core:prelude/string.wado/String,core:prelude/string.wado/String>"(input);
         if @likely(__sroa_parsed_r_discriminant == 0) {
             parsed = ref.as_non_null(__sroa_parsed_r_case0_payload_0);
-            __cond_9 = __inline_String_Eq__eq_6: block -> bool {
-                len_a_24 = parsed.used;
-                if len_a_24 != 0 {
-                    break __inline_String_Eq__eq_6: 0;
+            __cond_9 = __inline_String_Eq__eq_7: block -> bool {
+                len_a_25 = parsed.used;
+                if len_a_25 != 0 {
+                    break __inline_String_Eq__eq_7: 0;
                 }
-                break __inline_String_Eq__eq_6: "core:prelude/string.wado/String^Eq::eq_bytes"(parsed.repr, builtin::array_new<u8>(0), len_a_24);
+                break __inline_String_Eq__eq_7: "core:prelude/string.wado/String^Eq::eq_bytes"(parsed.repr, builtin::array_new<u8>(0), len_a_25);
             };
             if @unlikely(__cond_9 == 0) {
                 cold_path;
@@ -1141,7 +1147,7 @@ fn "core:json/core/json/from_bytes<core:prelude/string.wado/String,core:prelude/
     let __qm_v: ref "core:prelude/string.wado//String";
     let __qm_e: ref "core:serde//DeserializeError";
     let v: ref "core:prelude/string.wado//String";
-    de = struct.new "core:json//JsonDeserializer" { input: ref.as_non_null("serde_json_string_escape.wado/$value_copy$T25"(struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: input.used })), pos: 0 };
+    de = struct.new "core:json//JsonDeserializer" { input: struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: input.used }, pos: 0 };
     let __match_scrut_0: ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>";
     __match_scrut_0 = "core:json/JsonDeserializer::read_json_string"(de);
     v = (if @likely(ref.test "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Ok"(__match_scrut_0)) -> ref "core:prelude/string.wado//String" {
@@ -1457,7 +1463,7 @@ fn "core:prelude/string.wado/String::is_valid_utf8"(bytes) {
             let scalar_mv_code: u32;
             let scalar_mv_advance: i32;
             let scalar_mv_valid: bool;
-            multivalue_bind [scalar_mv_code, scalar_mv_advance, scalar_mv_valid] = "core:prelude/string.wado/decode_utf8_scalar"(bytes, i, len);
+            multivalue_bind [scalar_mv_code, scalar_mv_advance, scalar_mv_valid] = "core:prelude/string.wado/decode_utf8_scalar"("serde_json_string_escape.wado/$value_copy$T25"(bytes), i, len);
             if @unlikely(scalar_mv_valid == 0) {
                 cold_path;
                 return 0;
@@ -1574,7 +1580,7 @@ fn "core:json/JsonDeserializer::append_scanned_run"(self, dst, start, end, all_a
     let slice: ref "core:prelude/slice.wado//ArraySlice<u8>";
     slice = "core:prelude/slice.wado/ArraySlice<u8>::slice"(self.input, start, end);
     if (if all_ascii == 0 -> i32 {
-        "core:prelude/string.wado/String::is_valid_utf8"(slice) == 0;
+        "core:prelude/string.wado/String::is_valid_utf8"("serde_json_string_escape.wado/$value_copy$T25"(slice)) == 0;
     } else {
         0;
     }) {

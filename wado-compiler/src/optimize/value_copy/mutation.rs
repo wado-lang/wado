@@ -14,6 +14,24 @@
 use crate::hashmap::IndexMap;
 use crate::nir::{FuncId, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, Operand};
+use crate::nir_package::NirPackage;
+
+/// Per-callee declared `&mut` parameter bits, captured before boxing erases the
+/// `&mut` / `&` distinction. Bodyless callees stay absent (their metadata is not
+/// trustworthy here). Consumed by [`MutationOracle`] and the copy-propagation
+/// alias analysis.
+pub(in crate::optimize) fn build_param_mut(project: &NirPackage) -> IndexMap<FuncId, Vec<bool>> {
+    let mut map = IndexMap::default();
+    for func in &project.functions {
+        let func = func.borrow();
+        if func.body.is_none() {
+            continue;
+        }
+        let Some(id) = func.id else { continue };
+        map.insert(id, func.params.iter().map(|p| p.is_mut_ref).collect());
+    }
+    map
+}
 
 pub(in crate::optimize) struct MutationOracle<'a> {
     param_mut: &'a IndexMap<FuncId, Vec<bool>>,

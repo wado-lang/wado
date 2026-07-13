@@ -844,7 +844,7 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,()>::insert"(self, 
     let __v1: i32;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    existing_index = "core:collections/TreeMap<core:prelude/string.wado/String,()>::find_index"(self, key);
+    existing_index = "core:collections/TreeMap<core:prelude/string.wado/String,()>::find_index"(self, "ice_treeset_iter_by_ref.wado/$value_copy$T38"(key));
     if existing_index >= 0 {
         __v1 = self.entries.used;
         if @unlikely(existing_index >= __v1) {
@@ -856,7 +856,7 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,()>::insert"(self, 
         return;
     }
     new_index = self.entries.used;
-    entry = struct.new "core:collections//TreeMapEntry<core:prelude/string.wado/String,()>" { key: key, deleted: 0 };
+    entry = struct.new "core:collections//TreeMapEntry<core:prelude/string.wado/String,()>" { key: ref.as_non_null("ice_treeset_iter_by_ref.wado/$value_copy$T38"(key)), deleted: 0 };
     "core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,()>>::push"(self.entries, entry);
     self.root = ref.as_non_null("core:collections/TreeMap<core:prelude/string.wado/String,()>::insert_node"(self, self.root, key, new_index));
     self.size = self.size + 1;

@@ -406,19 +406,21 @@ global global:core:prelude/slice.wado::__const_obj_117: ref null "core:prelude/s
 global global:core:prelude/slice.wado::__const_obj_118: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(105, 51, 50, 95, 99, 108, 97, 109, 112)), used: 9 };
 
 fn "serde_json_deser_error.wado/__test_2_invalid_json___truncated_string"() {
-    let __v0: ref "core:prelude/string.wado//String";
     let __v1: ref "core:prelude/string.wado//String";
     let __cond: bool;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
+    let input_5: ref "core:prelude/string.wado//String";
     let e: ref "core:serde//DeserializeError";
     let len_a: i32;
-    __v0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"name\":\"Al"), used: 11 };
+    let __sroa___v0_repr: ref Array<u8>;
+    __sroa___v0_repr = array.new_data<u8>("{\"name\":\"Al");
     __v1 = __inline_deser_msg_0: block -> ref "core:prelude/string.wado//String" {
+        input_5 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_9: i32; __array_clone_len_9 = builtin::array_len(__sroa___v0_repr); let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __sroa___v0_repr, 0, __array_clone_len_9); __array_clone_dst_9), used: 11 };
         let __sroa_r_discriminant: i32;
         let __sroa_r_case0_payload_0: ref null "serde_json_deser_error.wado//User";
         let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
-        multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<serde_json_deser_error.wado/User,core:prelude/string.wado/String>"(__v0);
+        multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<serde_json_deser_error.wado/User,core:prelude/string.wado/String>"(input_5);
         if __sroa_r_discriminant == 1 {
             e = ref.as_non_null(__sroa_r_case1_payload_0);
             break __inline_deser_msg_0: e.message;
@@ -426,36 +428,38 @@ fn "serde_json_deser_error.wado/__test_2_invalid_json___truncated_string"() {
         }
         break __inline_deser_msg_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(79, 75), used: 2 };
     };
-    __cond = __inline_String_Eq__eq_2: block -> bool {
+    __cond = __inline_String_Eq__eq_3: block -> bool {
         len_a = __v1.used;
         if len_a != 23 {
-            break __inline_String_Eq__eq_2: 0;
+            break __inline_String_Eq__eq_3: 0;
         }
-        break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(__v1.repr, array.new_data<u8>("unexpected end of input"), len_a);
+        break __inline_String_Eq__eq_3: "core:prelude/string.wado/String^Eq::eq_bytes"(__v1.repr, array.new_data<u8>("unexpected end of input"), len_a);
     };
     if @unlikely(__cond == 0) {
         cold_path;
         "core:rt/panic"(__local_3 = "core:prelude/string.wado/String::with_capacity"(217); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_67); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_66); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push"(__local_3, 97); "core:prelude/string.wado/String::push"(__local_3, 116); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_65); "core:prelude/string.wado/String::push"(__local_3, 58); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 31 }, __local_4); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_64 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: deser_msg(`\\{\"name\":\"Al`) == \"unexpected end of input\"
-"), used: 67 }; global:serde_json_deser_error.wado::__const_obj_64); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_63); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(__v0, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_62); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(__v1, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); __local_3);
+"), used: 67 }; global:serde_json_deser_error.wado::__const_obj_64); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_63); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(struct.new "core:prelude/string.wado//String" { repr: __sroa___v0_repr, used: 11 }, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_62); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(__v1, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); __local_3);
         unreachable;
     }
 }
 
 fn "serde_json_deser_error.wado/__test_3_missing_required_field"() {
-    let __v0: ref "core:prelude/string.wado//String";
     let __v1: ref "core:prelude/string.wado//String";
     let __cond: bool;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
+    let input_5: ref "core:prelude/string.wado//String";
     let e: ref "core:serde//DeserializeError";
     let len_a: i32;
-    __v0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"name\":\"Alice\",\"active\":true}"), used: 30 };
+    let __sroa___v0_repr: ref Array<u8>;
+    __sroa___v0_repr = array.new_data<u8>("{\"name\":\"Alice\",\"active\":true}");
     __v1 = __inline_deser_msg_0: block -> ref "core:prelude/string.wado//String" {
+        input_5 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_9: i32; __array_clone_len_9 = builtin::array_len(__sroa___v0_repr); let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __sroa___v0_repr, 0, __array_clone_len_9); __array_clone_dst_9), used: 30 };
         let __sroa_r_discriminant: i32;
         let __sroa_r_case0_payload_0: ref null "serde_json_deser_error.wado//User";
         let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
-        multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<serde_json_deser_error.wado/User,core:prelude/string.wado/String>"(__v0);
+        multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<serde_json_deser_error.wado/User,core:prelude/string.wado/String>"(input_5);
         if __sroa_r_discriminant == 1 {
             e = ref.as_non_null(__sroa_r_case1_payload_0);
             break __inline_deser_msg_0: e.message;
@@ -463,36 +467,38 @@ fn "serde_json_deser_error.wado/__test_3_missing_required_field"() {
         }
         break __inline_deser_msg_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(79, 75), used: 2 };
     };
-    __cond = __inline_String_Eq__eq_2: block -> bool {
+    __cond = __inline_String_Eq__eq_3: block -> bool {
         len_a = __v1.used;
         if len_a != 22 {
-            break __inline_String_Eq__eq_2: 0;
+            break __inline_String_Eq__eq_3: 0;
         }
-        break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(__v1.repr, array.new_data<u8>("required field missing"), len_a);
+        break __inline_String_Eq__eq_3: "core:prelude/string.wado/String^Eq::eq_bytes"(__v1.repr, array.new_data<u8>("required field missing"), len_a);
     };
     if @unlikely(__cond == 0) {
         cold_path;
         "core:rt/panic"(__local_3 = "core:prelude/string.wado/String::with_capacity"(276); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_67); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_72); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push"(__local_3, 97); "core:prelude/string.wado/String::push"(__local_3, 116); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_65); "core:prelude/string.wado/String::push"(__local_3, 58); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 35 }, __local_4); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_70 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: deser_msg(`\\{\"name\":\"Alice\",\"active\":true\\}`) == \"required field missing\"
-"), used: 86 }; global:serde_json_deser_error.wado::__const_obj_70); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_69); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(__v0, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_68); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(__v1, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); __local_3);
+"), used: 86 }; global:serde_json_deser_error.wado::__const_obj_70); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_69); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(struct.new "core:prelude/string.wado//String" { repr: __sroa___v0_repr, used: 30 }, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_68); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(__v1, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); __local_3);
         unreachable;
     }
 }
 
 fn "serde_json_deser_error.wado/__test_4_type_mismatch___string_where_number_expected"() {
-    let __v0: ref "core:prelude/string.wado//String";
     let __v1: ref "core:prelude/string.wado//String";
     let __cond: bool;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
+    let input_5: ref "core:prelude/string.wado//String";
     let e: ref "core:serde//DeserializeError";
     let len_a: i32;
-    __v0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"name\":\"Alice\",\"age\":\"thirty\",\"active\":true}"), used: 45 };
+    let __sroa___v0_repr: ref Array<u8>;
+    __sroa___v0_repr = array.new_data<u8>("{\"name\":\"Alice\",\"age\":\"thirty\",\"active\":true}");
     __v1 = __inline_deser_msg_0: block -> ref "core:prelude/string.wado//String" {
+        input_5 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_9: i32; __array_clone_len_9 = builtin::array_len(__sroa___v0_repr); let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __sroa___v0_repr, 0, __array_clone_len_9); __array_clone_dst_9), used: 45 };
         let __sroa_r_discriminant: i32;
         let __sroa_r_case0_payload_0: ref null "serde_json_deser_error.wado//User";
         let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
-        multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<serde_json_deser_error.wado/User,core:prelude/string.wado/String>"(__v0);
+        multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<serde_json_deser_error.wado/User,core:prelude/string.wado/String>"(input_5);
         if __sroa_r_discriminant == 1 {
             e = ref.as_non_null(__sroa_r_case1_payload_0);
             break __inline_deser_msg_0: e.message;
@@ -500,36 +506,38 @@ fn "serde_json_deser_error.wado/__test_4_type_mismatch___string_where_number_exp
         }
         break __inline_deser_msg_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(79, 75), used: 2 };
     };
-    __cond = __inline_String_Eq__eq_2: block -> bool {
+    __cond = __inline_String_Eq__eq_3: block -> bool {
         len_a = __v1.used;
         if len_a != 15 {
-            break __inline_String_Eq__eq_2: 0;
+            break __inline_String_Eq__eq_3: 0;
         }
-        break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(__v1.repr, array.new_data<u8>("expected number"), len_a);
+        break __inline_String_Eq__eq_3: "core:prelude/string.wado/String^Eq::eq_bytes"(__v1.repr, array.new_data<u8>("expected number"), len_a);
     };
     if @unlikely(__cond == 0) {
         cold_path;
         "core:rt/panic"(__local_3 = "core:prelude/string.wado/String::with_capacity"(314); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_67); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_78); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push"(__local_3, 97); "core:prelude/string.wado/String::push"(__local_3, 116); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_65); "core:prelude/string.wado/String::push"(__local_3, 58); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 39 }, __local_4); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_76 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: deser_msg(`\\{\"name\":\"Alice\",\"age\":\"thirty\",\"active\":true\\}`) == \"expected number\"
-"), used: 94 }; global:serde_json_deser_error.wado::__const_obj_76); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_75); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(__v0, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_74); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(__v1, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); __local_3);
+"), used: 94 }; global:serde_json_deser_error.wado::__const_obj_76); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_75); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(struct.new "core:prelude/string.wado//String" { repr: __sroa___v0_repr, used: 45 }, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_74); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(__v1, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); __local_3);
         unreachable;
     }
 }
 
 fn "serde_json_deser_error.wado/__test_5_type_mismatch___number_where_string_expected"() {
-    let __v0: ref "core:prelude/string.wado//String";
     let __v1: ref "core:prelude/string.wado//String";
     let __cond: bool;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
+    let input_5: ref "core:prelude/string.wado//String";
     let e: ref "core:serde//DeserializeError";
     let len_a: i32;
-    __v0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"name\":42,\"age\":30,\"active\":true}"), used: 34 };
+    let __sroa___v0_repr: ref Array<u8>;
+    __sroa___v0_repr = array.new_data<u8>("{\"name\":42,\"age\":30,\"active\":true}");
     __v1 = __inline_deser_msg_0: block -> ref "core:prelude/string.wado//String" {
+        input_5 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_9: i32; __array_clone_len_9 = builtin::array_len(__sroa___v0_repr); let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __sroa___v0_repr, 0, __array_clone_len_9); __array_clone_dst_9), used: 34 };
         let __sroa_r_discriminant: i32;
         let __sroa_r_case0_payload_0: ref null "serde_json_deser_error.wado//User";
         let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
-        multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<serde_json_deser_error.wado/User,core:prelude/string.wado/String>"(__v0);
+        multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<serde_json_deser_error.wado/User,core:prelude/string.wado/String>"(input_5);
         if __sroa_r_discriminant == 1 {
             e = ref.as_non_null(__sroa_r_case1_payload_0);
             break __inline_deser_msg_0: e.message;
@@ -537,36 +545,38 @@ fn "serde_json_deser_error.wado/__test_5_type_mismatch___number_where_string_exp
         }
         break __inline_deser_msg_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(79, 75), used: 2 };
     };
-    __cond = __inline_String_Eq__eq_2: block -> bool {
+    __cond = __inline_String_Eq__eq_3: block -> bool {
         len_a = __v1.used;
         if len_a != 15 {
-            break __inline_String_Eq__eq_2: 0;
+            break __inline_String_Eq__eq_3: 0;
         }
-        break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(__v1.repr, array.new_data<u8>("expected string"), len_a);
+        break __inline_String_Eq__eq_3: "core:prelude/string.wado/String^Eq::eq_bytes"(__v1.repr, array.new_data<u8>("expected string"), len_a);
     };
     if @unlikely(__cond == 0) {
         cold_path;
         "core:rt/panic"(__local_3 = "core:prelude/string.wado/String::with_capacity"(281); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_67); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_84); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push"(__local_3, 97); "core:prelude/string.wado/String::push"(__local_3, 116); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_65); "core:prelude/string.wado/String::push"(__local_3, 58); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 43 }, __local_4); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_82 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: deser_msg(`\\{\"name\":42,\"age\":30,\"active\":true\\}`) == \"expected string\"
-"), used: 83 }; global:serde_json_deser_error.wado::__const_obj_82); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_81); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(__v0, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_80); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(__v1, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); __local_3);
+"), used: 83 }; global:serde_json_deser_error.wado::__const_obj_82); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_81); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(struct.new "core:prelude/string.wado//String" { repr: __sroa___v0_repr, used: 34 }, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_80); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(__v1, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); __local_3);
         unreachable;
     }
 }
 
 fn "serde_json_deser_error.wado/__test_6_type_mismatch___number_where_bool_expected"() {
-    let __v0: ref "core:prelude/string.wado//String";
     let __v1: ref "core:prelude/string.wado//String";
     let __cond: bool;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
+    let input_5: ref "core:prelude/string.wado//String";
     let e: ref "core:serde//DeserializeError";
     let len_a: i32;
-    __v0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"name\":\"Alice\",\"age\":30,\"active\":1}"), used: 36 };
+    let __sroa___v0_repr: ref Array<u8>;
+    __sroa___v0_repr = array.new_data<u8>("{\"name\":\"Alice\",\"age\":30,\"active\":1}");
     __v1 = __inline_deser_msg_0: block -> ref "core:prelude/string.wado//String" {
+        input_5 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_9: i32; __array_clone_len_9 = builtin::array_len(__sroa___v0_repr); let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __sroa___v0_repr, 0, __array_clone_len_9); __array_clone_dst_9), used: 36 };
         let __sroa_r_discriminant: i32;
         let __sroa_r_case0_payload_0: ref null "serde_json_deser_error.wado//User";
         let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
-        multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<serde_json_deser_error.wado/User,core:prelude/string.wado/String>"(__v0);
+        multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<serde_json_deser_error.wado/User,core:prelude/string.wado/String>"(input_5);
         if __sroa_r_discriminant == 1 {
             e = ref.as_non_null(__sroa_r_case1_payload_0);
             break __inline_deser_msg_0: e.message;
@@ -574,36 +584,38 @@ fn "serde_json_deser_error.wado/__test_6_type_mismatch___number_where_bool_expec
         }
         break __inline_deser_msg_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(79, 75), used: 2 };
     };
-    __cond = __inline_String_Eq__eq_2: block -> bool {
+    __cond = __inline_String_Eq__eq_3: block -> bool {
         len_a = __v1.used;
         if len_a != 13 {
-            break __inline_String_Eq__eq_2: 0;
+            break __inline_String_Eq__eq_3: 0;
         }
-        break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(__v1.repr, array.new_data<u8>("expected bool"), len_a);
+        break __inline_String_Eq__eq_3: "core:prelude/string.wado/String^Eq::eq_bytes"(__v1.repr, array.new_data<u8>("expected bool"), len_a);
     };
     if @unlikely(__cond == 0) {
         cold_path;
         "core:rt/panic"(__local_3 = "core:prelude/string.wado/String::with_capacity"(285); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_67); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_90); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push"(__local_3, 97); "core:prelude/string.wado/String::push"(__local_3, 116); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_65); "core:prelude/string.wado/String::push"(__local_3, 58); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 47 }, __local_4); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_88 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: deser_msg(`\\{\"name\":\"Alice\",\"age\":30,\"active\":1\\}`) == \"expected bool\"
-"), used: 83 }; global:serde_json_deser_error.wado::__const_obj_88); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_87); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(__v0, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_86); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(__v1, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); __local_3);
+"), used: 83 }; global:serde_json_deser_error.wado::__const_obj_88); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_87); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(struct.new "core:prelude/string.wado//String" { repr: __sroa___v0_repr, used: 36 }, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_86); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(__v1, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); __local_3);
         unreachable;
     }
 }
 
 fn "serde_json_deser_error.wado/__test_7_trailing_data_after_valid_json"() {
-    let __v0: ref "core:prelude/string.wado//String";
     let __v1: ref "core:prelude/string.wado//String";
     let __cond: bool;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
+    let input_5: ref "core:prelude/string.wado//String";
     let e: ref "core:serde//DeserializeError";
     let len_a: i32;
-    __v0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"name\":\"Alice\",\"age\":30,\"active\":true}extra"), used: 44 };
+    let __sroa___v0_repr: ref Array<u8>;
+    __sroa___v0_repr = array.new_data<u8>("{\"name\":\"Alice\",\"age\":30,\"active\":true}extra");
     __v1 = __inline_deser_msg_0: block -> ref "core:prelude/string.wado//String" {
+        input_5 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_9: i32; __array_clone_len_9 = builtin::array_len(__sroa___v0_repr); let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __sroa___v0_repr, 0, __array_clone_len_9); __array_clone_dst_9), used: 44 };
         let __sroa_r_discriminant: i32;
         let __sroa_r_case0_payload_0: ref null "serde_json_deser_error.wado//User";
         let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
-        multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<serde_json_deser_error.wado/User,core:prelude/string.wado/String>"(__v0);
+        multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<serde_json_deser_error.wado/User,core:prelude/string.wado/String>"(input_5);
         if __sroa_r_discriminant == 1 {
             e = ref.as_non_null(__sroa_r_case1_payload_0);
             break __inline_deser_msg_0: e.message;
@@ -611,18 +623,18 @@ fn "serde_json_deser_error.wado/__test_7_trailing_data_after_valid_json"() {
         }
         break __inline_deser_msg_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(79, 75), used: 2 };
     };
-    __cond = __inline_String_Eq__eq_2: block -> bool {
+    __cond = __inline_String_Eq__eq_3: block -> bool {
         len_a = __v1.used;
         if len_a != 25 {
-            break __inline_String_Eq__eq_2: 0;
+            break __inline_String_Eq__eq_3: 0;
         }
-        break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(__v1.repr, array.new_data<u8>("trailing data after value"), len_a);
+        break __inline_String_Eq__eq_3: "core:prelude/string.wado/String^Eq::eq_bytes"(__v1.repr, array.new_data<u8>("trailing data after value"), len_a);
     };
     if @unlikely(__cond == 0) {
         cold_path;
         "core:rt/panic"(__local_3 = "core:prelude/string.wado/String::with_capacity"(321); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_67); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_96); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push"(__local_3, 97); "core:prelude/string.wado/String::push"(__local_3, 116); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_65); "core:prelude/string.wado/String::push"(__local_3, 58); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 51 }, __local_4); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_94 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: deser_msg(`\\{\"name\":\"Alice\",\"age\":30,\"active\":true\\}extra`) == \"trailing data after value\"
-"), used: 103 }; global:serde_json_deser_error.wado::__const_obj_94); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_93); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(__v0, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_92); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(__v1, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); __local_3);
+"), used: 103 }; global:serde_json_deser_error.wado::__const_obj_94); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_93); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(struct.new "core:prelude/string.wado//String" { repr: __sroa___v0_repr, used: 44 }, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); "core:prelude/string.wado/String::push_str"(__local_3, global:serde_json_deser_error.wado::__const_obj_92); __local_4 = "core:prelude/format.wado/Formatter::new"(__local_3); "core:prelude/format.wado/String^Inspect::inspect"(__v1, __local_4); "core:prelude/string.wado/String::push"(__local_3, 10); __local_3);
         unreachable;
     }
 }
@@ -1559,7 +1571,7 @@ fn "core:json/core/json/from_bytes<serde_json_deser_error.wado/User,core:prelude
     let __qm_v: ref "serde_json_deser_error.wado//User";
     let __qm_e: ref "core:serde//DeserializeError";
     let v: ref "serde_json_deser_error.wado//User";
-    de = struct.new "core:json//JsonDeserializer" { input: ref.as_non_null("serde_json_deser_error.wado/$value_copy$T25"(struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: input.used })), pos: 0 };
+    de = struct.new "core:json//JsonDeserializer" { input: struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: input.repr, start: 0, end: input.used }, pos: 0 };
     let __sroa___match_scrut_0_discriminant: i32;
     let __sroa___match_scrut_0_case0_payload_0: ref null "serde_json_deser_error.wado//User";
     let __sroa___match_scrut_0_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -1873,7 +1885,7 @@ fn "core:prelude/string.wado/String::is_valid_utf8"(bytes) {
             let scalar_mv_code: u32;
             let scalar_mv_advance: i32;
             let scalar_mv_valid: bool;
-            multivalue_bind [scalar_mv_code, scalar_mv_advance, scalar_mv_valid] = "core:prelude/string.wado/decode_utf8_scalar"(bytes, i, len);
+            multivalue_bind [scalar_mv_code, scalar_mv_advance, scalar_mv_valid] = "core:prelude/string.wado/decode_utf8_scalar"("serde_json_deser_error.wado/$value_copy$T25"(bytes), i, len);
             if @unlikely(scalar_mv_valid == 0) {
                 cold_path;
                 return 0;
@@ -2091,7 +2103,7 @@ fn "core:json/JsonDeserializer::append_scanned_run"(self, dst, start, end, all_a
     let slice: ref "core:prelude/slice.wado//ArraySlice<u8>";
     slice = "core:prelude/slice.wado/ArraySlice<u8>::slice"(self.input, start, end);
     if (if all_ascii == 0 -> i32 {
-        "core:prelude/string.wado/String::is_valid_utf8"(slice) == 0;
+        "core:prelude/string.wado/String::is_valid_utf8"("serde_json_deser_error.wado/$value_copy$T25"(slice)) == 0;
     } else {
         0;
     }) {

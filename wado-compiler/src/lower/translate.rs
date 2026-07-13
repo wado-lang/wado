@@ -282,6 +282,13 @@ struct FunctionTranslator<'a, 'p> {
     /// bodies the AST-keyed `func_moved_spans` cannot see (serde de/serialize,
     /// derives). Unioned with the span check.
     move_eligible_locals: IndexSet<u32>,
+    /// Locals whose binding copy is elided by sharing the source storage
+    /// (WEP 2026-05-21 read-only-share): a read-only local bound from a
+    /// projection whose storage is provably never mutated while it is live.
+    share_eligible_locals: IndexSet<u32>,
+    /// May-alias components for this function, so a confined by-value argument
+    /// keeps its copy exactly when it aliases a mutated sibling (WEP 2026-05-21).
+    alias_components: value_copy::last_use::AliasComponents,
     /// The arena every converter pushes nodes into. `convert_function` takes it
     /// (`into_inner`) as the function's `Body`; `convert_global` wraps the
     /// initializer it builds into a single-statement global-init `Body`.
@@ -312,7 +319,19 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             .collect();
         let address_taken = func.address_taken_locals.clone();
         let func_moved_spans = base.moved_local_spans.get(&func.module_source);
-        let move_eligible_locals = {
+        // The move/share/alias analyses only ever mark copyable-value locals; a
+        // function with none has nothing to elide, so all three are empty. Skip
+        // them — running them is otherwise pure per-function allocation, and most
+        // functions (scalar/reference-only) hit this path.
+        let needs_copy_analysis = {
+            let tt = base.type_table.borrow();
+            func.params
+                .iter()
+                .map(|p| p.type_id)
+                .chain(func.locals.iter().map(|l| l.type_id))
+                .any(|tid| value_copy::needs_value_copy(tid, &tt))
+        };
+        let move_eligible_locals = if needs_copy_analysis {
             let oracle = value_copy::ownership::OwnedCalls::new(
                 &base.value_copy.returns_owned,
                 &base.value_copy.returns_self_projection,
@@ -324,6 +343,24 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 &base.value_copy.functions_with_stores,
                 &base.value_copy.mut_receiver_methods,
             )
+        } else {
+            IndexSet::default()
+        };
+        let share_eligible_locals = if needs_copy_analysis {
+            value_copy::last_use::compute_share_eligible(
+                func,
+                &move_eligible_locals,
+                &base.value_copy.mut_receiver_methods,
+                &base.value_copy.ref_receiver_methods,
+                &base.value_copy.returns_receiver_alias,
+            )
+        } else {
+            IndexSet::default()
+        };
+        let alias_components = if needs_copy_analysis {
+            value_copy::last_use::AliasComponents::build(func)
+        } else {
+            value_copy::last_use::AliasComponents::empty()
         };
         Self {
             base,
@@ -336,6 +373,8 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             address_taken,
             func_moved_spans,
             move_eligible_locals,
+            share_eligible_locals,
+            alias_components,
             arena: RefCell::new(Body::empty()),
         }
     }
@@ -355,6 +394,8 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             address_taken: IndexSet::default(),
             func_moved_spans: None,
             move_eligible_locals: IndexSet::default(),
+            share_eligible_locals: IndexSet::default(),
+            alias_components: value_copy::last_use::AliasComponents::empty(),
             arena: RefCell::new(Body::empty()),
         }
     }
@@ -773,14 +814,15 @@ impl FunctionTranslator<'_, '_> {
         let val_idx = self.alloc_local(inner_type_id, "__deref_val".to_string());
 
         let ref_nir = self.convert_expr(ref_expr);
-        // The RHS is an operand position: a literal (e.g. `*s = "goodbye"`)
-        // is interned as `Operand::Value`, never a skeleton `ExprId`.
-        // This `Let` is synthesized after `value_copy::insert`'s walk, so the
-        // defensive copy is requested explicitly here; otherwise the per-field
-        // write-back would alias the RHS's storage (e.g. a `List`'s backing
-        // array). The `analyze` seed walker registers a helper for the
-        // deref-target RHS type so this wrap resolves.
-        let val_nir = self.wrap_value_copy_operand(self.convert_operand(value), inner_type_id);
+        // Copy the RHS unless it is fresh/moved: the per-field write-back would
+        // otherwise alias the RHS's storage. The seed walker registers a helper
+        // for the deref-target RHS type so the wrap resolves.
+        let converted_val = self.convert_operand(value);
+        let val_nir = if self.should_wrap_value_copy(value) {
+            self.wrap_value_copy_operand(converted_val, inner_type_id)
+        } else {
+            converted_val
+        };
 
         let mut out: Vec<StmtId> = Vec::with_capacity(2 + fields.len());
         out.push(self.alloc_stmt(
@@ -806,9 +848,9 @@ impl FunctionTranslator<'_, '_> {
                 is_reactive: false,
                 type_id: inner_type_id,
                 value: val_nir,
-                // The copy is applied above; `false` lets `value_copy_elide`
-                // drop it again when the RHS source is provably unmutated.
-                skip_value_copy: false,
+                // The copy decision is made above (`should_wrap_value_copy`), so
+                // this synthesized binding must not re-wrap.
+                skip_value_copy: true,
             },
             span,
         ));
@@ -971,6 +1013,7 @@ impl FunctionTranslator<'_, '_> {
                     (*type_id, None)
                 };
                 let needs_value_copy_wrap = !*skip_value_copy
+                    && !self.share_eligible_locals.contains(local_index)
                     && (*is_mut
                         || !value_copy::analyze::is_source_immutable(
                             value,
@@ -1402,13 +1445,21 @@ impl FunctionTranslator<'_, '_> {
                 args,
                 ..
             } => {
-                let func = convert_function_ref(func);
-                let func_id = self.base.interner.borrow_mut().resolve(&func);
+                let mut_roots = self.call_mut_roots(func, Some(receiver), args, 1);
+                let tir_callee = func;
+                let nir_func = convert_function_ref(func);
+                let func_id = self.base.interner.borrow_mut().resolve(&nir_func);
                 ExprKind::MethodCall {
                     func_id,
                     receiver: self.convert_operand(receiver),
                     type_args: type_args.clone(),
-                    args: args.iter().map(|a| self.convert_call_arg(a)).collect(),
+                    args: args
+                        .iter()
+                        .enumerate()
+                        .map(|(i, a)| {
+                            self.convert_call_arg_at(a, Some(tir_callee), i + 1, &mut_roots)
+                        })
+                        .collect(),
                 }
             }
             TirExprKind::FieldAccess {
@@ -1591,7 +1642,7 @@ impl FunctionTranslator<'_, '_> {
                 method_info: None,
             };
             let func_id = self.base.interner.borrow_mut().resolve(&func);
-            // Bypass `convert_call_arg`: wrapping a copy helper's own
+            // Bypass `convert_call_arg_at`: wrapping a copy helper's own
             // argument would emit copy(copy(x)).
             return ExprKind::Call {
                 func_id,
@@ -1605,12 +1656,18 @@ impl FunctionTranslator<'_, '_> {
                     .collect(),
             };
         }
-        let func = convert_function_ref(func);
-        let func_id = self.base.interner.borrow_mut().resolve(&func);
+        let mut_roots = self.call_mut_roots(func, None, args, 0);
+        let tir_callee = func;
+        let nir_func = convert_function_ref(func);
+        let func_id = self.base.interner.borrow_mut().resolve(&nir_func);
         ExprKind::Call {
             func_id,
             type_args: type_args.to_vec(),
-            args: args.iter().map(|a| self.convert_call_arg(a)).collect(),
+            args: args
+                .iter()
+                .enumerate()
+                .map(|(i, a)| self.convert_call_arg_at(a, Some(tir_callee), i, &mut_roots))
+                .collect(),
         }
     }
 
@@ -1821,16 +1878,17 @@ impl FunctionTranslator<'_, '_> {
             .collect()
     }
 
-    fn convert_call_arg(&self, arg: &CallArg) -> ArenaCallArg {
-        // Every by-value argument gets a defensive `$value_copy$T` wrap —
-        // value semantics deep-copies a value passed to a function.
-        // `should_wrap_value_copy` excludes references (`&T` / `&mut T`), fresh
-        // values, and non-copy types, so a `&mut` arg is passed through.
-        // Specialised-callee fn-param `Local` args get a `ClosureToCanonical`
-        // wrap; the two don't interact: the value-copy predicate matches on the
-        // raw TIR, the specialised wrap on the converted (non-value-semantic)
-        // NIR.
-        let needs_value_copy = self.should_wrap_value_copy(&arg.expr);
+    /// Convert one call argument, wrapping it in `$value_copy$T` unless
+    /// `should_wrap_value_copy` says no or the callee parameter is confined.
+    fn convert_call_arg_at(
+        &self,
+        arg: &CallArg,
+        callee: Option<&FunctionRef>,
+        param_index: usize,
+        mut_roots: &[u32],
+    ) -> ArenaCallArg {
+        let needs_value_copy = self.should_wrap_value_copy(&arg.expr)
+            && !self.arg_confined(arg, callee, param_index, mut_roots);
         let value_type = arg.expr.type_id;
         let converted = self.convert_specialized_arg_operand(&arg.expr);
         let expr = if needs_value_copy {
@@ -1842,6 +1900,70 @@ impl FunctionTranslator<'_, '_> {
             expr,
             is_mut: arg.is_mut,
         }
+    }
+
+    /// Whether a by-value argument into a confined parameter can skip its copy:
+    /// the parameter is not `mut`-declared and the argument aliases no `mut_root`.
+    fn arg_confined(
+        &self,
+        arg: &CallArg,
+        callee: Option<&FunctionRef>,
+        param_index: usize,
+        mut_roots: &[u32],
+    ) -> bool {
+        if arg.is_mut {
+            return false;
+        }
+        let confined = callee.is_some_and(|c| {
+            self.base
+                .value_copy
+                .confined_params
+                .is_confined(c, param_index)
+        });
+        if !confined {
+            return false;
+        }
+        match value_copy::last_use::alias_root(&arg.expr) {
+            Some(r) => !mut_roots
+                .iter()
+                .any(|m| self.alias_components.may_alias(*m, r)),
+            None => mut_roots.is_empty(),
+        }
+    }
+
+    /// The storage roots a call mutates: the referent of each `&mut` parameter
+    /// (the receiver is index 0).
+    fn call_mut_roots(
+        &self,
+        callee: &FunctionRef,
+        receiver: Option<&TirExpr>,
+        args: &[CallArg],
+        param_offset: usize,
+    ) -> Vec<u32> {
+        let mut_of = |i: usize| {
+            self.base
+                .value_copy
+                .mut_ref_params
+                .get(&callee.module_source, &callee.name)
+                .and_then(|v| v.get(i))
+                .copied()
+                .unwrap_or(false)
+        };
+        let mut roots = Vec::new();
+        if let Some(recv) = receiver
+            && mut_of(0)
+            && let Some(r) = value_copy::last_use::alias_root(recv)
+        {
+            roots.push(r);
+        }
+        for (i, a) in args.iter().enumerate() {
+            if mut_of(param_offset + i)
+                && let Some(r) = value_copy::last_use::alias_root(&a.expr)
+            {
+                roots.push(r);
+            }
+        }
+        roots
     }
 
     fn convert_field(&self, field: &TirField) -> NirField {
