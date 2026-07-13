@@ -1,4 +1,4 @@
-# Literal Spread (`..base`)
+# WEP: Literal Spread (`..base`)
 
 ## Context
 

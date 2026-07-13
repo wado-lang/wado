@@ -1,4 +1,4 @@
-# Associated Types in Traits
+# WEP: Associated Types in Traits
 
 This WEP defines associated types for Wado's trait system.
 

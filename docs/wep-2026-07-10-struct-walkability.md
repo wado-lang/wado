@@ -1,4 +1,4 @@
-# Struct Walkability — Field Walks over `Reflect` and `#[secret]` Fields
+# WEP: Struct Walkability — Field Walks over `Reflect` and `#[secret]` Fields
 
 Status: Draft
 

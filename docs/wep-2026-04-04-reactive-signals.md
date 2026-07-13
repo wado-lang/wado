@@ -1,4 +1,4 @@
-# Reactive Signals
+# WEP: Reactive Signals
 
 **Status: Not yet implemented**
 

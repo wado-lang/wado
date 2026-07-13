@@ -1,4 +1,4 @@
-# String Template Desugaring
+# WEP: String Template Desugaring
 
 ## Context
 

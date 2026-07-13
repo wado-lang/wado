@@ -200,7 +200,7 @@ wado dump --nir-lowered file.wado        # show NIR right after lowering (before
 
 `wado query` answers compiler questions about a symbol, for tooling and docs. A symbol is addressed either by position (`--line`/`--column` in a file) or by _symbol notation_ `MODULE#SYMBOL`:
 
-- `MODULE` is the import specifier (`core:json`, `./utils.wado`); quote it only when it contains `#`.
+- `MODULE` is the import specifier; quote it as in `use` — droppable for a scheme or bare name (`core:json`), required for a path or URL (`"./utils.wado"`).
 - `SYMBOL` uses Wado's operators: bare `name` (free function/type/global), `Type::name` (associated const/fn), `Type.name` (method), `Type^Trait::name` (trait-impl member).
 
 ```sh

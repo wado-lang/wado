@@ -1,4 +1,4 @@
-# Structured Logging and Tracing Standard Library (`core:log`)
+# WEP: Structured Logging and Tracing Standard Library (`core:log`)
 
 Status: Draft
 

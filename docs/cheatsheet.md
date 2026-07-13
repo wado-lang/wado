@@ -609,6 +609,14 @@ let grade = match score {
     90..=100 => "A",
     _ => "invalid",
 };
+
+// Constant patterns: an immutable global or associated const matches by
+// value, not a binding. TK_FOO/TK_BAR are `global`s.
+let kind = match token {
+    TK_FOO | TK_BAR => "keyword",
+    i32::MAX        => "max",
+    _               => "other",
+};
 ```
 
 Semicolons do not have particular semantics; they are just separators to statements. Convention in `wado format`: single-line block does not use semicolon.
@@ -957,15 +965,24 @@ impl<T: Eq> Eq for Pair<T> {
 
 ### Auto-Derived Traits
 
-All primitives implement `Eq` and `Ord`. Structs and enums auto-derive both (variants: `Eq` only) when every field/case implements the trait — synthesized on demand, not for every type. An explicit `impl Eq for T;` / `impl Ord for T;` marker forces it and is a compile error if ineligible. `Option<T: Eq>`, `Result<T: Eq, E: Eq>`, `List<T: Eq>` implement `Eq`; `List<T: Ord>` implements `Ord`.
+`Eq`, `Ord`, `Default`, `Serialize`, and `Deserialize` are _bound-driven_: the compiler synthesizes them where a use or bound needs them, no marker required. A plain struct is comparable and serializable with no declaration:
 
-`Inspect` and `InspectAlt` are auto-derived unconditionally for every type. The delegation chain when a trait is not explicitly implemented is `InspectAlt → Inspect`, `Display → Inspect`, and `DisplayAlt → Display` — so `{x:#}` defaults to plain display, while pretty-printing stays on the inspect side (`{x:#?}`). A newtype's `Display`/`DisplayAlt` render transparently like the base value; only `Inspect`/`InspectAlt` add the `as Name` annotation.
+```wado
+struct Point { x: i32, y: i32 }
+Point { x: 1, y: 2 } == Point { x: 1, y: 2 };  // Eq synthesized here
+to_string(&Point { x: 1, y: 2 });              // Serialize synthesized here
+```
 
-`Default` is auto-derived unconditionally for a non-generic struct when every field has a declared default expression (`f: T = expr`).
+An empty marker `impl Trait for T;` asserts conformance: the compiler checks `T` is eligible and errors if not. Optional for these traits, but it documents intent and is the way to attach `#[serde(...)]` customization.
 
-`Serialize` / `Deserialize` (`core:serde`) derive the same on-demand way, for struct (including anonymous), variant, enum, or flags — no marker required, though their marker (unlike `Eq`/`Ord`'s) doesn't pre-validate. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
+```wado
+struct Broken { retries: i32 = 3, name: String }
+impl Default for Broken;   // ERROR: `name` has no default expression
+```
 
-Auto-derived traits are overridden by user-written `impl Trait for T`.
+The format traits (`Inspect` / `InspectAlt` / `Display` / `DisplayAlt`) are always available for every type. Unimplemented ones delegate `InspectAlt → Inspect`, `Display → Inspect`, `DisplayAlt → Display` — so `{x:#}` defaults to plain display while `{x:#?}` pretty-prints. A newtype renders transparently under `Display`; only `Inspect` adds the `as Name` annotation.
+
+A hand-written `impl Trait for T { … }` always wins. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
 ## Associated Constants
 
@@ -1235,57 +1252,6 @@ test {
 }
 ```
 
-## Standard Library
-
-For full API reference, see:
-
-- Core library:
-  - [`core:prelude`](./stdlib-core-prelude.md) - auto-imported types and traits
-  - [`core:cli`](./stdlib-core-cli.md) - stdout/stderr printing
-  - [`core:collections`](./stdlib-core-collections.md) - `TreeMap<K,V>` and `TreeSet<T>`
-  - [`core:serde`](./stdlib-core-serde.md) - `Serialize` and `Deserialize` framework
-  - [`core:json`](./stdlib-core-json.md) - JSON and its serde integration
-  - [`core:json_nsd`](./stdlib-core-json_nsd.md) - non-self-describing JSON and its serde integration
-  - [`core:args`](./stdlib-core-args.md) - command-line argument parsing via serde
-  - [`core:value`](./stdlib-core-value.md) - dynamic, format-agnostic value and its serde integration
-  - [`core:cbor`](./stdlib-core-cbor.md) - CBOR (RFC 8949) binary serialization and its serde integration
-  - [`core:base64`](./stdlib-core-base64.md) - base64 encoding and decoding
-  - [`core:digest`](./stdlib-core-digest.md) - cryptographic hash functions (SHA-256)
-  - [`core:zlib`](./stdlib-core-zlib.md) - zlib/gzip compression and decompression
-  - [`core:simd`](./stdlib-core-simd.md) - Wasm 128-bit SIMD
-  - [`core:url`](./stdlib-core-url.md) - WHATWG URL parsing
-  - [`core:uuid`](./stdlib-core-uuid.md) - UUID v4 / v7 generation and parsing
-  - [`core:temporal`](./stdlib-core-temporal.md) - date/time types (`Instant`, `ZonedDateTime`)
-  - [`core:kiln`](./stdlib-core-kiln.md) - Kiln IDL host bindings
-- [WASI Standard Library Reference](./stdlib-wasi.md)
-  - `wasi:cli`
-  - `wasi:random`
-  - `wasi:clocks`
-  - `wasi:http`
-  - `wasi:filesystem`
-  - `wasi:sockets`
-  - `wasi:tls`
-
-```wado
-// core:prelude (auto-imported)
-panic("error message");   // trap with message
-unreachable();            // trap
-
-// core:cli
-use { println, eprintln, print, eprint, Stdout, Stderr } from "core:cli";
-use { log_stdout, log_stderr } from "core:cli";  // no effect required
-
-// core:collections
-use { TreeMap, TreeSet } from "core:collections";
-let mut map = TreeMap::<String, i32>::new();
-map["key"] = 42;          // index assignment
-let v = map["key"];       // index access (panics if not found)
-let opt = map.get("key"); // fallible access returns Option<V>
-
-let set = ["foo", "bar", "baz"] as TreeSet<String>;
-assert set.contains("foo");
-```
-
 ## Compile-Time Literals
 
 ```wado
@@ -1342,13 +1308,136 @@ struct Foo {
 global PORT: i32 = 8080;
 ```
 
-## Serialization and Deserialization
+## Standard Library
 
-Wado supports automatic serialization/deserialization via `core:serde`. See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
+`core:*` and `wasi:*` modules. Full API in each linked module doc.
 
-## SIMD
+### core:prelude
 
-Wado supports 128-bit SIMD operations including Relaxed SIMD. See [WEP: SIMD v128](./wep-2026-01-31-simd-v128.md).
+Auto-imported (disable with `#![no_prelude]`). Home of `String`, `List<T>`,
+`Option<T>`, `Result<T, E>`, `RangeExclusive`/`RangeInclusive`, the primitive
+type methods, and the prelude traits (`Eq`, `Ord`, `Default`, `Display`,
+`Inspect`, `FromStr`, `Iterator`, `IntoIterator`, …). See
+[`core:prelude`](./stdlib-core-prelude.md).
+
+```wado
+panic("error message");   // log to stderr and trap
+unreachable();            // trap on unreachable code
+```
+
+### core:cli
+
+`println` / `eprintln` / `print` / `eprint` (effectful), `args`, `env`, `cwd`,
+`exit`; `log_stdout` / `log_stderr` print with no effect. See
+[`core:cli`](./stdlib-core-cli.md).
+
+```wado
+use { println, eprintln, print, eprint, Stdout, Stderr } from "core:cli";
+use { args, env } from "core:cli";
+
+println("hello");
+for let arg of args() { println(`arg: {arg}`); }
+if let Some(home) = env("HOME") { println(`HOME={home}`); }
+```
+
+### core:collections
+
+`TreeMap<K, V>` and `TreeSet<T>`, iterating in insertion order. `TreeMap` has
+no `insert` — use `map[key] = value` or a `{ key: value }` literal. See
+[`core:collections`](./stdlib-core-collections.md).
+
+```wado
+use { TreeMap, TreeSet } from "core:collections";
+
+let mut map = TreeMap::<String, i32>::new();
+map["key"] = 42;              // index assignment
+let v = map["key"];           // index access (panics if absent)
+let opt = map.get("key");     // fallible access -> Option<V>
+map.remove("key");            // -> bool
+for let [k, v] of map.entries() { println(`{k}={v}`); }
+
+let sizes = { small: 1, large: 3 } as TreeMap<String, i32>;  // literal
+let set = ["foo", "bar", "baz"] as TreeSet<String>;
+set.contains("foo");          // -> bool; set.insert(x) -> bool
+```
+
+### core:serde
+
+Format-agnostic `Serialize` / `Deserialize`. A plain struct derives with no
+marker (see Auto-Derived Traits); `impl Serialize for T;` attaches
+`#[serde(...)]` customization. Wire keys default to the field name; override
+with `#[serde(rename_all = "...")]` (per struct) or `#[serde(rename = "...")]`
+(per field). See [`core:serde`](./stdlib-core-serde.md) and
+[WEP: Serde](./wep-2026-02-28-serde.md).
+
+```wado
+struct Point { x: i32, y: i32 }         // serializable, no marker needed
+
+// rename_all: camelCase / snake_case / PascalCase / SCREAMING_SNAKE_CASE /
+//             kebab-case / SCREAMING-KEBAB-CASE
+#[serde(rename_all = "camelCase")]
+struct Event {
+    created_at: String,                 // wire key: "createdAt"
+    #[serde(rename = "type")]
+    event_type: String,                 // wire key: "type"
+}
+
+struct Config {
+    host: String,                       // required — error if missing
+    port: i32 = 8080,                   // missing -> 8080
+}
+impl Deserialize for Config;
+```
+
+### core:json
+
+JSON over `core:serde`; bytes-primary (prefer `to_bytes` / `from_bytes`). See
+[`core:json`](./stdlib-core-json.md).
+
+```wado
+use { to_string, to_bytes, from_string, from_bytes } from "core:json";
+use { to_bytes_pretty, to_bytes_canonical } from "core:json";
+
+let json = to_string(&Point { x: 1, y: 2 });      // Ok("{\"x\":1,\"y\":2}")
+let p = from_string::<Point>("{\"x\":1,\"y\":2}"); // Ok(Point { x: 1, y: 2 })
+let bytes = to_bytes(&p);                          // UTF-8 bytes, no re-encode
+let pretty = to_bytes_pretty(&p);                  // indented
+let canon = to_bytes_canonical(&p);                // sorted keys, for signing
+```
+
+### core:cbor
+
+CBOR (RFC 8949), same serde model as JSON — any JSON-serializable type works
+unchanged. Bytes-only. See [`core:cbor`](./stdlib-core-cbor.md).
+
+```wado
+use { to_bytes, from_bytes, to_bytes_canonical } from "core:cbor";
+
+let enc = to_bytes(&Point { x: 1, y: 2 });   // preferred (shortest) encoding
+let dec = from_bytes::<Point>(enc);          // variation-tolerant decode
+let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
+```
+
+### Other core modules
+
+- [`core:json_nsd`](./stdlib-core-json_nsd.md) — non-self-describing JSON
+- [`core:args`](./stdlib-core-args.md) — command-line argument parsing via serde
+- [`core:value`](./stdlib-core-value.md) — dynamic, format-agnostic value
+- [`core:base64`](./stdlib-core-base64.md) — base64 encoding and decoding
+- [`core:digest`](./stdlib-core-digest.md) — cryptographic hashes (SHA-256)
+- [`core:zlib`](./stdlib-core-zlib.md) — zlib/gzip compression
+- [`core:simd`](./stdlib-core-simd.md) — Wasm 128-bit SIMD, incl. Relaxed SIMD
+- [`core:url`](./stdlib-core-url.md) — WHATWG URL parsing
+- [`core:uuid`](./stdlib-core-uuid.md) — UUID v4 / v7
+- [`core:temporal`](./stdlib-core-temporal.md) — date/time (`Instant`, `ZonedDateTime`)
+- [`core:router`](./stdlib-core-router.md) — HTTP path router
+- [`core:kiln`](./stdlib-core-kiln.md) — Kiln IDL host bindings
+- [`core:benchmark`](./stdlib-core-benchmark.md) — benchmark timing/throughput utilities
+
+### WASI
+
+[WASI Standard Library Reference](./stdlib-wasi.md): `wasi:cli`, `wasi:random`,
+`wasi:clocks`, `wasi:http`, `wasi:filesystem`, `wasi:sockets`, `wasi:tls`.
 
 ## See Also
 

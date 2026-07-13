@@ -1,4 +1,4 @@
-# Compile-Time Tuple Enumeration
+# WEP: Compile-Time Tuple Enumeration
 
 ## Context
 

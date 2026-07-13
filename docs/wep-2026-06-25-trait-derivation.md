@@ -1,4 +1,4 @@
-# Trait Derivation Policy — Bound-Driven Synthesis
+# WEP: Trait Derivation Policy — Bound-Driven Synthesis
 
 Status: Implemented. `Eq` / `Ord` / `Default` / `Serialize` / `Deserialize`
 are _demand_ `on_bound`: a body is synthesized only where a reference needs

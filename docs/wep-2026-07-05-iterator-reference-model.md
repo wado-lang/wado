@@ -1,4 +1,4 @@
-# Iterator Reference Model
+# WEP: Iterator Reference Model
 
 Align `List` iteration with Rust's `iter` / `iter_mut` / `into_iter`.
 

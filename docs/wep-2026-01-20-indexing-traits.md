@@ -1,4 +1,4 @@
-# Indexing Traits Design
+# WEP: Indexing Traits Design
 
 This WEP defines the trait system for indexing operations (`[]` operator) in Wado.
 

@@ -1,4 +1,4 @@
-# Effect Handler
+# WEP: Effect Handler
 
 Status: Stable
 
