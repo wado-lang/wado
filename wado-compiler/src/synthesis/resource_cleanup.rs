@@ -141,12 +141,6 @@ fn carries_resource(tt: &TypeTable, reg: &CmInterfaceRegistry, type_id: TypeId) 
 
 /// Whether `type_id` is a resource-carrying *aggregate* (e.g.
 /// `Result<Fields, E>`) rather than a bare resource handle.
-///
-/// A method call on such a receiver may move the inner resource out — Wado's
-/// `Result::unwrap(&self) -> T` copies the wrapped handle into its result.
-/// Treating the receiver as consumed is conservative: the structural drop is
-/// skipped, so the inner resource is released exactly once (through whatever
-/// binding the extraction produced) and never double-freed.
 fn is_resource_aggregate(tt: &TypeTable, reg: &CmInterfaceRegistry, type_id: TypeId) -> bool {
     carries_resource(tt, reg, type_id)
         && !matches!(
@@ -525,17 +519,13 @@ fn scan_transfers(expr: &TirExpr, consuming: bool, consumed: &mut Vec<u32>, cx: 
                 } => expr.as_ref(),
                 _ => receiver.as_ref(),
             };
-            // The receiver is consumed when the method takes `self` by value,
-            // or when it is a resource-carrying aggregate whose inner resource
-            // a method may move out (e.g. `Result::unwrap`). A plain `&self`
-            // method on a bare resource only borrows it. Arguments are always
-            // passed by value and transfer ownership.
             let owned_self = func
                 .method_info
                 .as_ref()
                 .is_some_and(|info| cx.owned_self.contains(&info.to_mangled_name()));
-            let receiver_consumed =
-                owned_self || is_resource_aggregate(cx.tt, cx.reg, recv_inner.type_id);
+            let extracts_from_aggregate = is_resource_aggregate(cx.tt, cx.reg, recv_inner.type_id)
+                && carries_resource(cx.tt, cx.reg, expr.type_id);
+            let receiver_consumed = owned_self || extracts_from_aggregate;
             scan_transfers(recv_inner, receiver_consumed, consumed, cx);
             for arg in args {
                 scan_transfers(&arg.expr, true, consumed, cx);
@@ -767,13 +757,14 @@ fn elab_block_entry(
     let mut out: Vec<TirStmt> = Vec::new();
     let mut flow = Flow::Normal;
 
-    for stmt in stmts {
+    let last = stmts.len().wrapping_sub(1);
+    for (idx, stmt) in stmts.into_iter().enumerate() {
         if flow == Flow::Diverged {
             // Unreachable after a diverging statement; preserve verbatim.
             out.push(stmt);
             continue;
         }
-        flow = elab_stmt(stmt, owned, cx, entry, &mut out);
+        flow = elab_stmt(stmt, owned, cx, entry, idx == last, &mut out);
     }
 
     if flow == Flow::Normal {
@@ -868,6 +859,7 @@ fn elab_stmt(
     owned: &mut Owned,
     cx: &mut Cx,
     entry: usize,
+    is_tail: bool,
     out: &mut Vec<TirStmt>,
 ) -> Flow {
     let span = stmt.span;
@@ -926,10 +918,15 @@ fn elab_stmt(
 
         TirStmtKind::Expr(expr) => {
             let elaborated = elab_value_expr(expr, owned, cx);
-            out.push(TirStmt {
-                kind: TirStmtKind::Expr(elaborated),
-                span,
-            });
+            if !is_tail && carries_resource(cx.tt, cx.reg, elaborated.type_id) {
+                let ty = elaborated.type_id;
+                out.extend(drop_value(elaborated, ty, cx));
+            } else {
+                out.push(TirStmt {
+                    kind: TirStmtKind::Expr(elaborated),
+                    span,
+                });
+            }
             Flow::Normal
         }
 

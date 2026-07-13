@@ -1,0 +1,32 @@
+// Regression test for the move check (WEP 2026-05-21): a resource created
+// fresh inside a loop and moved each iteration is re-bound on the next
+// iteration, not used-after-move. The move check must clear a `let` binding's
+// moved state when the same `let` re-executes, or it false-positives on the
+// second iteration. Each `Fields` is also dropped, so the resource-table check
+// confirms no leak.
+
+use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Trailers } from "wasi:http";
+
+fn take_fields(f: Fields) {
+    let name = "x" as FieldName;
+    let value: List<u8> = [120 as u8];
+    let _ = f.append(name, value as FieldValue);
+}
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let mut i = 0;
+    while i < 3 {
+        let scratch = Fields::new();
+        take_fields(scratch);
+        i = i + 1;
+    }
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"status": 200}}

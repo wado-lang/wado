@@ -1,0 +1,22 @@
+// A resource is move-only (WEP 2026-05-21). Passing it by value consumes it;
+// using the binding afterward is a compile error.
+
+pub resource Counter {
+    fn bump(&self);
+}
+
+fn consume(c: Counter) {
+    let _ = c;
+}
+
+fn misuse(c: Counter) {
+    consume(c); // moves `c`
+    c.bump(); // use after move
+}
+
+export fn run() {
+    assert true;
+}
+
+__DATA__
+{"compile_error": "resource `c` used after it was moved"}

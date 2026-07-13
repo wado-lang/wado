@@ -39,6 +39,7 @@ pub mod param_resolution;
 pub mod parser;
 pub mod path;
 pub mod remarks;
+pub mod resource_move_check;
 pub mod semantics;
 pub mod stdlib;
 pub(crate) mod stdlib_snapshot;
@@ -97,6 +98,7 @@ pub use monomorphize::monomorphize;
 pub use optimize::{OptLevel, optimize};
 pub use package::Package;
 pub use parser::{ParseError, Parser};
+pub use resource_move_check::{ResourceMoveError, check_resource_moves_semantic};
 pub use token::Span;
 
 /// Build the diagnostic message for an unresolved `Type^Trait::method` call —
@@ -699,7 +701,8 @@ fn compile_after_load<H: CompilerHost>(
     {
         let _span = logger.span("effect-check");
         let diags = effect_check::check_semantics(&sem);
-        let had_error = !diags.is_empty();
+        let move_errors = resource_move_check::check_resource_moves_semantic(&sem);
+        let had_error = !diags.is_empty() || !move_errors.is_empty();
         for error in diags.effects {
             let _ = logger.error(error);
         }
@@ -707,6 +710,9 @@ fn compile_after_load<H: CompilerHost>(
             let _ = logger.error(error);
         }
         for error in diags.purity {
+            let _ = logger.error(error);
+        }
+        for error in move_errors {
             let _ = logger.error(error);
         }
         if had_error {
