@@ -1,0 +1,342 @@
+//! Parser for Gale highlight queries — a strict subset of tree-sitter
+//! `highlights.scm`. The accepted shape is exactly the runtime's two tiers:
+//!
+//!   (TOKEN) @capture              default: lexer token kind -> capture
+//!   "literal" @capture            default: literal token -> capture
+//!   (rule (TOKEN) @capture)       override: within parser rule, token -> capture
+//!   (rule "literal" @capture)     override: within parser rule, literal -> capture
+//!
+//! `; ...` is a line comment. Anything the runtime cannot express (deeper
+//! nesting, predicates, fields, wildcards) is a parse error, not a silent
+//! accept. Name resolution against the grammar happens later in
+//! `highlight_gen`; this module is purely syntactic.
+
+/// The token side of a highlight rule: either a lexer rule name `(NAME)` or a
+/// literal token `"text"`.
+pub variant TokenSelector {
+    Name(String),
+    Literal(String),
+}
+
+/// One highlight rule. `rule_context` is `None` for a default (token kind ->
+/// capture) and `Some(rule)` for an override (in parser rule -> capture).
+pub struct HighlightRule {
+    pub rule_context: Option<String>,
+    pub selector: TokenSelector,
+    pub capture: String,
+}
+
+/// A parse failure with a 1-based source position for diagnostics.
+pub struct HighlightQueryError {
+    pub message: String,
+    pub line: i32,
+    pub col: i32,
+}
+
+variant Tok {
+    LParen,
+    RParen,
+    At,
+    Str(String),
+    Ident(String),
+    Eof,
+}
+
+struct Lexeme {
+    tok: Tok,
+    line: i32,
+    col: i32,
+}
+
+struct Lexer {
+    chars: List<char>,
+    pos: i32,
+    line: i32,
+    col: i32,
+}
+
+impl Lexer {
+    fn new(src: &String) -> Lexer {
+        return Lexer { chars: src.chars().collect(), pos: 0, line: 1, col: 1 };
+    }
+
+    fn at_end(&self) -> bool {
+        return self.pos >= self.chars.len();
+    }
+
+    fn peek_char(&self) -> char {
+        return self.chars[self.pos];
+    }
+
+    fn bump(&mut self) -> char {
+        let c = self.chars[self.pos];
+        self.pos += 1;
+        if c == '\n' {
+            self.line += 1;
+            self.col = 1;
+        } else {
+            self.col += 1;
+        }
+        return c;
+    }
+
+    fn skip_trivia(&mut self) {
+        while !self.at_end() {
+            let c = self.peek_char();
+            if c == ' ' || c == '\t' || c == '\r' || c == '\n' {
+                self.bump();
+            } else if c == ';' {
+                while !self.at_end() && self.peek_char() != '\n' {
+                    self.bump();
+                }
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn next_lexeme(&mut self) -> Result<Lexeme, HighlightQueryError> {
+        self.skip_trivia();
+        let line = self.line;
+        let col = self.col;
+        if self.at_end() {
+            return Result::Ok(Lexeme { tok: Tok::Eof, line, col });
+        }
+        let c = self.peek_char();
+        if c == '(' {
+            self.bump();
+            return Result::Ok(Lexeme { tok: Tok::LParen, line, col });
+        }
+        if c == ')' {
+            self.bump();
+            return Result::Ok(Lexeme { tok: Tok::RParen, line, col });
+        }
+        if c == '@' {
+            self.bump();
+            return Result::Ok(Lexeme { tok: Tok::At, line, col });
+        }
+        if c == '"' {
+            return self.lex_string(line, col);
+        }
+        if is_ident_start(c) {
+            return self.lex_ident(line, col);
+        }
+        return Result::Err(HighlightQueryError { message: `unexpected character '{c}'`, line, col });
+    }
+
+    fn lex_string(&mut self, line: i32, col: i32) -> Result<Lexeme, HighlightQueryError> {
+        self.bump();
+        let mut out = String::new();
+        while !self.at_end() {
+            let c = self.bump();
+            if c == '"' {
+                return Result::Ok(Lexeme { tok: Tok::Str(out), line, col });
+            }
+            if c == '\\' {
+                if self.at_end() {
+                    break;
+                }
+                let e = self.bump();
+                match e {
+                    'n' => out.push('\n'),
+                    't' => out.push('\t'),
+                    'r' => out.push('\r'),
+                    '"' => out.push('"'),
+                    '\\' => out.push('\\'),
+                    // Reject unknown escapes rather than silently dropping the
+                    // backslash (which would corrupt `\uXXXX` into `uXXXX`).
+                    // Non-ASCII token text can be written literally — the file
+                    // is UTF-8.
+                    _ => {
+                        return Result::Err(HighlightQueryError {
+                            message: `unsupported escape '\\{e}' in string literal`,
+                            line,
+                            col,
+                        });
+                    },
+                }
+            } else {
+                out.push(c);
+            }
+        }
+        return Result::Err(HighlightQueryError { message: "unterminated string literal", line, col });
+    }
+
+    fn lex_ident(&mut self, line: i32, col: i32) -> Result<Lexeme, HighlightQueryError> {
+        let mut out = String::new();
+        while !self.at_end() && is_ident_cont(self.peek_char()) {
+            out.push(self.bump());
+        }
+        return Result::Ok(Lexeme { tok: Tok::Ident(out), line, col });
+    }
+}
+
+fn is_ident_start(c: char) -> bool {
+    return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_';
+}
+
+fn is_ident_cont(c: char) -> bool {
+    return is_ident_start(c) || c >= '0' && c <= '9' || c == '.' || c == '-';
+}
+
+struct Parser {
+    lexer: Lexer,
+    cur: Lexeme,
+}
+
+impl Parser {
+    fn new(src: &String) -> Result<Parser, HighlightQueryError> {
+        let mut lexer = Lexer::new(src);
+        let cur = match lexer.next_lexeme() {
+            Ok(lx) => lx,
+            Err(e) => {
+                return Result::Err(e);
+            },
+        };
+        return Result::Ok(Parser { lexer, cur });
+    }
+
+    fn advance(&mut self) -> Result<(), HighlightQueryError> {
+        let lx = match self.lexer.next_lexeme() {
+            Ok(lx) => lx,
+            Err(e) => {
+                return Result::Err(e);
+            },
+        };
+        self.cur = lx;
+        return Result::Ok(());
+    }
+
+    fn mk_err(&self, message: String) -> HighlightQueryError {
+        return HighlightQueryError { message, line: self.cur.line, col: self.cur.col };
+    }
+
+    /// Consume the current `@capture` pair and return the capture name.
+    fn expect_capture(&mut self) -> Result<String, HighlightQueryError> {
+        if !self.cur.tok matches { At } {
+            return Result::Err(self.mk_err("expected '@capture'"));
+        }
+        self.advance()?;
+        let name = match &self.cur.tok {
+            Ident(s) => *s,
+            _ => {
+                return Result::Err(self.mk_err("expected a capture name after '@'"));
+            },
+        };
+        self.advance()?;
+        return Result::Ok(name);
+    }
+
+    fn parse(&mut self) -> Result<List<HighlightRule>, HighlightQueryError> {
+        let mut rules: List<HighlightRule> = [];
+        loop {
+            match &self.cur.tok {
+                Eof => {
+                    break;
+                },
+                Str(s) => {
+                    let text = *s;
+                    self.advance()?;
+                    let cap = self.expect_capture()?;
+                    rules.push(HighlightRule {
+                        rule_context: null,
+                        selector: TokenSelector::Literal(text),
+                        capture: cap,
+                    });
+                },
+                LParen => rules.push(self.parse_paren()?),
+                _ => {
+                    return Result::Err(self.mk_err("expected a pattern: '(' or a string literal"));
+                },
+            }
+        }
+        return Result::Ok(rules);
+    }
+
+    /// A top-level `(...)` pattern: either `(NAME) @cap` (default on a token
+    /// kind) or `(rule <selector> @cap)` (override within a parser rule).
+    fn parse_paren(&mut self) -> Result<HighlightRule, HighlightQueryError> {
+        self.advance()?;
+        let name = match &self.cur.tok {
+            Ident(s) => *s,
+            _ => {
+                return Result::Err(self.mk_err("expected a rule or token name after '('"));
+            },
+        };
+        self.advance()?;
+        match &self.cur.tok {
+            RParen => {
+                self.advance()?;
+                let cap = self.expect_capture()?;
+                return Result::Ok(HighlightRule {
+                    rule_context: null,
+                    selector: TokenSelector::Name(name),
+                    capture: cap,
+                });
+            },
+            LParen => {
+                let sel = self.parse_inner_selector()?;
+                let cap = self.expect_capture()?;
+                self.expect_rparen()?;
+                return Result::Ok(HighlightRule {
+                    rule_context: Option::Some(name),
+                    selector: sel,
+                    capture: cap,
+                });
+            },
+            Str(s) => {
+                let text = *s;
+                self.advance()?;
+                let cap = self.expect_capture()?;
+                self.expect_rparen()?;
+                return Result::Ok(HighlightRule {
+                    rule_context: Option::Some(name),
+                    selector: TokenSelector::Literal(text),
+                    capture: cap,
+                });
+            },
+            _ => {
+                return Result::Err(self.mk_err("expected ')' or a nested token pattern"));
+            },
+        }
+    }
+
+    /// A nested `(TOKEN)` selector inside an override. A further `(` or string
+    /// here means nesting deeper than one rule context, which the runtime
+    /// cannot express — reject it loudly.
+    fn parse_inner_selector(&mut self) -> Result<TokenSelector, HighlightQueryError> {
+        self.advance()?;
+        let name = match &self.cur.tok {
+            Ident(s) => *s,
+            _ => {
+                return Result::Err(self.mk_err("expected a token name in the nested pattern"));
+            },
+        };
+        self.advance()?;
+        if self.cur.tok matches { LParen } || self.cur.tok matches { Str(_) } {
+            return Result::Err(self.mk_err("nesting deeper than one rule context is not supported"));
+        }
+        self.expect_rparen()?;
+        return Result::Ok(TokenSelector::Name(name));
+    }
+
+    fn expect_rparen(&mut self) -> Result<(), HighlightQueryError> {
+        if !self.cur.tok matches { RParen } {
+            return Result::Err(self.mk_err("expected ')'"));
+        }
+        self.advance()?;
+        return Result::Ok(());
+    }
+}
+
+/// Parse a highlight query into a flat rule list. Names are resolved against
+/// the grammar later, in `highlight_gen`.
+pub fn parse_highlight_query(src: &String) -> Result<List<HighlightRule>, HighlightQueryError> {
+    let mut parser = match Parser::new(src) {
+        Ok(p) => p,
+        Err(e) => {
+            return Result::Err(e);
+        },
+    };
+    return parser.parse();
+}

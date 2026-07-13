@@ -1,13 +1,16 @@
-//! Tests for `highlight_gen.wado`. Focus: the `defaults` capture table is
-//! indexed by token kind at runtime (`defaults[kind]`), so its row order
-//! must match the token numbering emitted by `gen_token_constants` —
-//! deferred `more` / `type(...)` rules at the back, and no sentinel
-//! `TK_ERROR` row when a user rule named `ERROR` claims the id.
+//! Tests for `highlight_gen.wado`. The `defaults` capture table is indexed by
+//! token kind at runtime (`defaults[kind]`), so its row order must match the
+//! token numbering emitted by `gen_token_constants` — deferred `more` /
+//! `type(...)` rules at the back, and no sentinel `TK_ERROR` row when a user
+//! rule named `ERROR` claims the id. Captures and overrides come from the
+//! highlight query.
 
 use { Grammar } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
 use { collect_literal_tokens } from "./lexer_gen.wado";
 use { gen_highlight } from "./highlight_gen.wado";
+use { parse_highlight_query } from "./highlight_query.wado";
+use { GenContext } from "./gen_context.wado";
 use { CodeWriter } from "./wadopoet.wado";
 
 fn parse_grammar(input: String) -> Grammar {
@@ -16,12 +19,18 @@ fn parse_grammar(input: String) -> Grammar {
     return g;
 }
 
-fn highlight_output(input: String) -> String {
+fn highlight_output_q(input: String, query_src: String) -> String {
     let g = parse_grammar(input);
     let lits = collect_literal_tokens(&g.parser_rules);
+    let query = parse_highlight_query(&query_src).unwrap();
+    let mut ctx = GenContext::new(&g.parser_rules, &lits);
     let mut w = CodeWriter::new();
-    gen_highlight(&mut w, &g, &lits);
+    gen_highlight(&mut w, &g, &lits, &query, &mut ctx);
     return w.to_string();
+}
+
+fn highlight_output(input: String) -> String {
+    return highlight_output_q(input, "");
 }
 
 fn index_of(haystack: &String, needle: String) -> i32 {
@@ -92,4 +101,84 @@ ERROR : . ;
 ");
     let n = count_occurrences(&out, "// TK_ERROR");
     assert n == 1, `expected exactly one TK_ERROR row (the user rule), got {n}:\n{out}`;
+}
+
+test "query maps a token to its default capture" {
+    let out = highlight_output_q("grammar T;
+r : B ;
+B : 'b' ;
+", "(B) @keyword");
+    assert index_of(&out, "\"keyword\",  // TK_B") >= 0, out;
+}
+
+test "query maps a literal token to its default capture" {
+    let out = highlight_output_q("grammar T;
+r : 'let' B ;
+B : 'b' ;
+", "\"let\" @keyword");
+    assert index_of(&out, "\"keyword\",  // ") >= 0, out;
+}
+
+test "query override emits a HighlightOverride row" {
+    let out = highlight_output_q("grammar T;
+r : B ;
+B : 'b' ;
+", "(r (B) @string)");
+    assert index_of(&out, "HighlightOverride {") >= 0, out;
+    assert index_of(&out, "rule_name: \"r\"") >= 0, out;
+    assert index_of(&out, "capture: \"string\"") >= 0, out;
+}
+
+test "default on a literal-shadowed named token maps the shadowing literal kind" {
+    // LP is `'('` and the parser also uses '(' inline, so the lexer emits the
+    // literal token, not TK_LP. Mapping (LP) must still colour '(' by also
+    // targeting the literal kind, otherwise the mapping is a silent no-op.
+    let out = highlight_output_q("grammar T;
+r : '(' B ')' ;
+B : 'b' ;
+LP : '(' ;
+RP : ')' ;
+", "(LP) @punctuation.bracket");
+    assert index_of(&out, "\"punctuation.bracket\",  // TK_LIT") >= 0, out;
+}
+
+test "later override for the same rule and token wins (last-wins)" {
+    let out = highlight_output_q("grammar T;
+r : B ;
+B : 'b' ;
+", "(r (B) @string)
+(r (B) @keyword)");
+    assert count_occurrences(&out, "HighlightOverride {") == 1, out;
+    assert index_of(&out, "capture: \"keyword\"") >= 0, out;
+    assert index_of(&out, "capture: \"string\"") == -1, out;
+}
+
+test "unknown token in query warns via ctx diagnostics" {
+    let g = parse_grammar("grammar T;
+r : B ;
+B : 'b' ;
+");
+    let lits = collect_literal_tokens(&g.parser_rules);
+    let query = parse_highlight_query(&"(NOPE) @keyword").unwrap();
+    let mut ctx = GenContext::new(&g.parser_rules, &lits);
+    let mut w = CodeWriter::new();
+    gen_highlight(&mut w, &g, &lits, &query, &mut ctx);
+    let diags = ctx.copy_diagnostics();
+    assert diags.len() == 1, `expected one diagnostic, got {diags.len()}`;
+    assert diags[0].message.contains("unknown token"), diags[0].message;
+}
+
+test "unknown parser rule in an override warns via ctx diagnostics" {
+    let g = parse_grammar("grammar T;
+r : B ;
+B : 'b' ;
+");
+    let lits = collect_literal_tokens(&g.parser_rules);
+    let query = parse_highlight_query(&"(nope (B) @string)").unwrap();
+    let mut ctx = GenContext::new(&g.parser_rules, &lits);
+    let mut w = CodeWriter::new();
+    gen_highlight(&mut w, &g, &lits, &query, &mut ctx);
+    let diags = ctx.copy_diagnostics();
+    assert diags.len() == 1, `expected one diagnostic, got {diags.len()}`;
+    assert diags[0].message.contains("unknown parser rule"), diags[0].message;
 }

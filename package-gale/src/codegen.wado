@@ -12,6 +12,7 @@ use {
     assign_action_ids,
 } from "./ir.wado";
 use { build as build_follow_env } from "./follow_env.wado";
+use { TokenKinds, resolve_kind_ids } from "./token_kinds.wado";
 use { rule_type_name, all_alts_are_single_token } from "./gen_util.wado";
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
 use {
@@ -24,6 +25,7 @@ use {
 use { gen_node_kinds, gen_alt_enums, gen_string_tree_helper } from "./cst_gen.wado";
 use { should_emit_actions, collect_member_method_names, translate_attr_types } from "./java2wado.wado";
 use { gen_highlight } from "./highlight_gen.wado";
+use { HighlightRule } from "./highlight_query.wado";
 use { GenContext, sets_overlap } from "./gen_context.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec, Vis } from "./wadopoet.wado";
 use { lower } from "./lower.wado";
@@ -50,7 +52,11 @@ use {
 } from "./gir.wado";
 
 pub struct GenerateOptions {
-    pub highlight: bool,
+    /// Parsed highlight query. `Some` emits the highlighter (defaults +
+    /// overrides tables compiled from the query); `None` (the default)
+    /// keeps generated output byte-identical to a highlight-free build.
+    /// Presence of a `.scm` query input is what turns highlighting on.
+    pub highlight_query: Option<List<HighlightRule>> = null,
     /// Emit trace logging to stderr (via `log_stderr`) in the generated
     /// parser: rule enter/ok/fail frames plus the multi-alt scan/pick/try
     /// decisions. Off by default; enabled by `gale gen --trace` or the
@@ -98,6 +104,12 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     assign_action_ids(grammar);
     translate_attr_types(grammar);
     normalize_caches(grammar);
+    // Stamp each terminal element with its canonical token kind id
+    // (`token_slot_order` position, == the emitted `TK_*` value) so FIRST-set
+    // analysis can carry the integer instead of the `TK_*` name. Inert until
+    // the analysis reads `kind_id`; names are recovered from the table at emit.
+    let token_kinds = TokenKinds::build(grammar);
+    resolve_kind_ids(grammar, &token_kinds);
     // Pre-size the output buffer from the grammar's rule count so the
     // bulk of `String::push_str` calls in `CodeWriter::line` don't
     // trigger `String::grow` doubling events. Empirical Rust*.g4 output
@@ -112,10 +124,12 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // / scannable caches for the subsequent parser emit.
     let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
     let mut ctx = GenContext::new(&grammar.parser_rules, &lit_tokens);
+    ctx.set_token_kinds(token_kinds);
     ctx.set_trace(options.trace);
     ctx.set_emit_actions(should_emit_actions(grammar));
     ctx.set_action_language(&grammar.action_language);
     ctx.set_action_grammar(&grammar.name, collect_member_method_names(grammar));
+    ctx.precompute_scannability();
     let lowered = lower(grammar, &lit_tokens, &mut ctx);
     // Build the ATN up front when the grammar needs the simulator, so parser
     // emit can push each rule call's exact return state (`call_site_returns`)
@@ -173,7 +187,8 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // needs a longest-match tournament; the FOLLOW runtime / mask globals only
     // when lowering built a caller-FOLLOW gate (`emit_follow`).
     let ef = ctx.emit_follow();
-    gen_runtime(&mut w, ef, ctx.needs_atn(), needs_latn, options.highlight);
+    let emit_highlight = options.highlight_query matches { Some(_) };
+    gen_runtime(&mut w, ef, ctx.needs_atn(), needs_latn, emit_highlight);
     gen_token_kind(&mut w, &grammar.lexer_rules);
     gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
     gen_lexer(&mut w, grammar, &lit_tokens, &atn_class_map);
@@ -181,8 +196,8 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     gen_alt_enums(&mut w, grammar);
     gen_parser(&mut w, grammar, &lowered, &mut ctx);
     gen_string_tree_helper(&mut w, grammar, &lit_tokens);
-    if options.highlight {
-        gen_highlight(&mut w, grammar, &lit_tokens);
+    if let Some(query) = &options.highlight_query {
+        gen_highlight(&mut w, grammar, &lit_tokens, query, &mut ctx);
     }
     // The scan emission may intern kind-set helpers (`_kind_set_N`);
     // emit whatever was interned (a no-op when none).

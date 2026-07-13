@@ -26,7 +26,7 @@ use { generate, GenerateOptions } from "./codegen.wado";
 use { DiagnosticKind } from "./gir.wado";
 use { parse } from "./g4/parser.wado";
 
-global DEFAULT_OPTIONS: GenerateOptions = GenerateOptions { highlight: false };
+global DEFAULT_OPTIONS: GenerateOptions = GenerateOptions {};
 
 test "generate header" {
     let mut grammar = Grammar {
@@ -651,7 +651,7 @@ a : 'x' b ;
 b : 'y' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
-    let traced = generate(&mut grammar, &GenerateOptions { highlight: false, trace: true }).source;
+    let traced = generate(&mut grammar, &GenerateOptions { trace: true }).source;
     // The ambient logger import, the trace helpers, the depth field, and the
     // per-rule calls are all present.
     assert str_contains(&traced, &"use { log_stderr } from \"core:rt\";");
@@ -664,7 +664,7 @@ b : 'y' ;
     // Default generation (trace off) must contain none of it — the feature
     // is strictly opt-in and adds zero instrumentation otherwise.
     let mut grammar2 = parse_grammar(input, "test.g4");
-    let plain = generate(&mut grammar2, &GenerateOptions { highlight: false, trace: false }).source;
+    let plain = generate(&mut grammar2, &GenerateOptions { trace: false }).source;
     assert !str_contains(&plain, &"trace_enter");
     assert !str_contains(&plain, &"trace_depth");
     assert !str_contains(&plain, &"log_stderr");
@@ -717,14 +717,14 @@ Y : 'Y' ;
 Z : 'Z' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
-    let traced = generate(&mut grammar, &GenerateOptions { highlight: false, trace: true }).source;
+    let traced = generate(&mut grammar, &GenerateOptions { trace: true }).source;
     assert str_contains(&traced, &"trace_scan_alt(p, &\"a\",");
     assert str_contains(&traced, &"trace_pick(p, &\"a\", _sd_best_i);");
     assert str_contains(&traced, &"fn trace_scan_alt(p: &Parser, rule: &String, alt: i32, end: i32)");
 
     // Default generation (trace off) emits none of the decision-point hooks.
     let mut grammar2 = parse_grammar(input, "test.g4");
-    let plain = generate(&mut grammar2, &GenerateOptions { highlight: false, trace: false }).source;
+    let plain = generate(&mut grammar2, &GenerateOptions { trace: false }).source;
     assert !str_contains(&plain, &"trace_scan_alt");
     assert !str_contains(&plain, &"trace_pick");
     assert !str_contains(&plain, &"trace_try");
@@ -746,7 +746,7 @@ B : 'b' ;
 C : 'c' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
-    let traced = generate(&mut grammar, &GenerateOptions { highlight: false, trace: true }).source;
+    let traced = generate(&mut grammar, &GenerateOptions { trace: true }).source;
     assert !str_contains(&traced, &"trace_pick(p, &\"tok\",");
     assert str_contains(&traced, &"trace_pick(p, &\"sub\",");
 }

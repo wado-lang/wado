@@ -98,7 +98,6 @@ use arith from "./Arith.g4"
     with {
         generator: {
             module: "../src/generator.wado",   // the Gale generator
-            options: { highlight: false },
         },
     };
 ```
@@ -296,18 +295,110 @@ wado run package-gale gen --output Grammar_parser.wado Grammar.g4
 
 # Options:
 #   --output <f>  write the generated parser to <f> instead of stdout
-#   --highlight   emit a syntax-highlighting table in the parser
 #   --trace       emit a parser that logs its recursive descent to stderr
 wado run package-gale gen --trace Grammar.g4
+
+# A `.scm` positional arg is a highlight query (see "Syntax highlighting").
+wado run package-gale gen Grammar.g4 Grammar.highlights.scm
 
 # Inspect the prediction decision for every rule (add --atn for the automaton).
 wado run package-gale dump Grammar.g4
 wado run package-gale dump --atn Grammar.g4
 ```
 
-Multiple `.g4` files are merged (e.g. a split lexer/parser grammar). The same
-`highlight` / `trace` options are available on the `use ... with` generator
-config.
+Multiple `.g4` files are merged (e.g. a split lexer/parser grammar). The
+`trace` option is available on the `use ... with` generator config; a
+highlight query rides in as a `.scm` input (see below).
+
+## Syntax highlighting
+
+Gale can emit a `highlight(input) -> String` function that renders source to
+HTML `<span class="…">` spans. It is enabled by supplying a **highlight query**
+— a `.scm` file (a subset of tree-sitter's `highlights.scm`) — as a generator
+input. No query, no highlighter (output stays byte-identical).
+
+```wado
+use hl from "./JSON.g4"
+    with {
+        generator: {
+            module: "wado:gale",
+            inputs: ["./JSON.highlights.scm"],   // presence enables highlighting
+        },
+    };
+
+let html = hl::highlight(&"{\"k\": 42}");
+```
+
+A query maps tokens to capture names from the tree-sitter standard vocabulary
+(`keyword`, `string`, `number`, `comment`, `constant.builtin`,
+`punctuation.bracket`, `operator`, …); each capture becomes a CSS class
+(`punctuation.bracket` → `class="punctuation bracket"`), which you style
+yourself. Two forms:
+
+```scheme
+; default: a token kind -> capture
+(STRING) @string        ; by lexer-rule name
+"true" @constant.builtin ; by literal text
+"{" @punctuation.bracket
+
+; override: within a parser rule, a token -> capture (the context tier)
+(functionCall (IDENTIFIER) @function)
+```
+
+Match a token by its **lexer-rule name** `(NAME)` when the parser references it
+by name, and by **literal text** `"…"` when it appears inline in parser rules
+(e.g. punctuation and operators). Unknown names are reported as build warnings
+and skipped.
+
+### Starter query
+
+A general-purpose starting point — adapt the token names to your grammar:
+
+```scheme
+; Comments, strings, numbers (by lexer-rule name)
+(COMMENT) @comment
+(LINE_COMMENT) @comment
+(BLOCK_COMMENT) @comment
+(STRING) @string
+(STRING_LITERAL) @string
+(CHAR_LITERAL) @string
+(NUMBER) @number
+(INT) @number
+(FLOAT) @number
+
+; Keyword tokens — list each keyword your grammar defines
+(K_SELECT) @keyword
+(K_FROM) @keyword
+
+; Boolean / null constants (usually inline literals)
+"true" @constant.builtin
+"false" @constant.builtin
+"null" @constant.builtin
+
+; Brackets and delimiters (inline literals)
+"(" @punctuation.bracket
+")" @punctuation.bracket
+"[" @punctuation.bracket
+"]" @punctuation.bracket
+"{" @punctuation.bracket
+"}" @punctuation.bracket
+"," @punctuation.delimiter
+";" @punctuation.delimiter
+"." @punctuation.delimiter
+
+; Operators (inline literals)
+"+" @operator
+"-" @operator
+"*" @operator
+"/" @operator
+"=" @operator
+```
+
+See [`tests/grammars/JSON.highlights.scm`](./tests/grammars/JSON.highlights.scm)
+and [`SQLite.highlights.scm`](./tests/grammars/SQLite.highlights.scm) for
+complete real examples, and
+[WEP: Gale Highlight Query](../docs/wep-2026-07-12-gale-highlight-query.md) for
+the design.
 
 ## Compatibility and further reading
 

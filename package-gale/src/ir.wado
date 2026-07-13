@@ -489,6 +489,11 @@ pub struct TokenRefElement {
     pub lower_name: String = "",
     /// Cached `escape_ident(lower_name)` — standalone field name in CST structs.
     pub field_name: String = "",
+    /// Canonical token kind id (`token_slot_order` position, i.e. the value of
+    /// the emitted `TK_{name}` global). Resolved once by `resolve_kind_ids` on
+    /// the `generate()` path so FIRST-set analysis carries the integer, not the
+    /// name. -1 until resolved (or for an unresolved reference).
+    pub kind_id: i32 = -1,
 }
 
 impl TokenRefElement {
@@ -506,6 +511,10 @@ impl TokenRefElement {
 pub struct LiteralElement {
     pub text: String,
     pub options: List<GrammarOption>,
+    /// Canonical token kind id for this literal's synthesized token
+    /// (`literal_const_name(text)`'s `TK_LIT_*` global value). Resolved once by
+    /// `resolve_kind_ids`; -1 until resolved. See `TokenRefElement::kind_id`.
+    pub kind_id: i32 = -1,
 }
 
 impl LiteralElement {
