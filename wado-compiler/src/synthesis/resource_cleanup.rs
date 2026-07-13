@@ -141,13 +141,6 @@ fn carries_resource(tt: &TypeTable, reg: &CmInterfaceRegistry, type_id: TypeId) 
 
 /// Whether `type_id` is a resource-carrying *aggregate* (e.g.
 /// `Result<Fields, E>`) rather than a bare resource handle.
-///
-/// A method call on such a receiver *may* move the inner resource out — Wado's
-/// `Result::unwrap(&self) -> T` copies the wrapped handle into its result. The
-/// caller pairs this with a return-type check: the receiver is treated as
-/// consumed only when the call result itself carries a resource, so an
-/// extracting `unwrap` skips the structural drop (the extracted binding drops
-/// the handle) while a borrowing `is_ok(&self) -> bool` leaves the drop intact.
 fn is_resource_aggregate(tt: &TypeTable, reg: &CmInterfaceRegistry, type_id: TypeId) -> bool {
     carries_resource(tt, reg, type_id)
         && !matches!(
@@ -527,24 +520,14 @@ fn scan_transfers(expr: &TirExpr, consuming: bool, consumed: &mut Vec<u32>, cx: 
                 _ => receiver.as_ref(),
             };
             // The receiver is consumed when the method takes `self` by value,
-            // or when it is a resource-carrying aggregate and the call actually
-            // extracts the inner resource — i.e. the call result itself carries
-            // a resource (`Result::unwrap -> Fields`). A `&self` inspector that
-            // returns a non-resource (`Result::is_ok -> bool`) only borrows the
-            // aggregate, so its inner resource still needs a structural drop.
-            // A plain `&self` method on a bare resource only borrows it.
-            // Arguments are always passed by value and transfer ownership.
+            // or when it is a resource-carrying aggregate whose inner resource
+            // a method may move out (e.g. `Result::unwrap`). A plain `&self`
+            // method on a bare resource only borrows it. Arguments are always
+            // passed by value and transfer ownership.
             let owned_self = func
                 .method_info
                 .as_ref()
                 .is_some_and(|info| cx.owned_self.contains(&info.to_mangled_name()));
-            // `carries_resource` recognises a bare resource or a `Result`
-            // payload, not a resource wrapped in a returned struct / tuple /
-            // variant. A `&self` method that extracts a resource into such a
-            // wrapper would therefore be misread as non-extracting (the
-            // aggregate kept, a double drop). No stdlib method has that shape;
-            // the move check (WEP 2026-05-21) forbids `&self` extraction
-            // outright, which retires this heuristic.
             let extracts_from_aggregate = is_resource_aggregate(cx.tt, cx.reg, recv_inner.type_id)
                 && carries_resource(cx.tt, cx.reg, expr.type_id);
             let receiver_consumed = owned_self || extracts_from_aggregate;
@@ -876,10 +859,6 @@ fn stmt_flow(stmt: &TirStmt) -> Flow {
 
 /// Elaborate one statement, appending the result to `out`. Returns whether
 /// control falls through to the next statement.
-///
-/// `is_tail` marks the block's final statement, whose value may be the block's
-/// result and is therefore consumed by the enclosing context rather than
-/// discarded here.
 fn elab_stmt(
     stmt: TirStmt,
     owned: &mut Owned,
@@ -944,11 +923,6 @@ fn elab_stmt(
 
         TirStmtKind::Expr(expr) => {
             let elaborated = elab_value_expr(expr, owned, cx);
-            // A non-tail expression statement discards its value. If that value
-            // carries an owned resource (a produced-and-ignored handle, e.g.
-            // `Fields::new();` or `let _ = Fields::new()`), drop it here — it is
-            // bound to nothing and would otherwise leak. The tail statement's
-            // value belongs to the enclosing context and is left intact.
             if !is_tail && carries_resource(cx.tt, cx.reg, elaborated.type_id) {
                 let ty = elaborated.type_id;
                 out.extend(drop_value(elaborated, ty, cx));

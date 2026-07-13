@@ -1,22 +1,3 @@
-//! Resource move checking (WEP 2026-05-21, R2 — the move-check engine).
-//!
-//! Resources are move-only: a resource handle is a one-shot, `dtor`-bearing
-//! value, so copying it would alias it. This pass flags a *use after move* —
-//! reading a resource binding after it has been consumed (moved by value) — as
-//! a compile error, giving resources their move-only semantics.
-//!
-//! It runs over [`Semantics`] (the AST plus the facts recorded during
-//! `annotate`), a sibling of `effect_check::check_semantics`: the LSP + batch
-//! shared path, with source spans and a diagnostic channel. Violations are
-//! returned for the caller to route.
-//!
-//! This is the first slice of the move check. It tracks bare resource-typed
-//! locals through the unambiguous consuming forms (a by-value `let` initializer,
-//! a by-value call / constructor argument, a returned value) and reports a later
-//! use of a moved binding. Classification is conservative — an unrecognised
-//! position is treated as a borrow — so the pass never rejects a valid program;
-//! it only under-reports moves, which later slices tighten.
-
 use crate::ast::{
     self, AssignExpr, AstId, Block, Condition, ConditionElement, Expr, Function, IdentExpr, Item,
     Pattern, Stmt,
@@ -27,14 +8,10 @@ use crate::semantics::Semantics;
 use crate::tir::ResolvedType;
 use crate::token::Span;
 
-/// A resource binding used after it was moved.
 #[derive(Debug, Clone)]
 pub struct ResourceMoveError {
-    /// The moved binding's name.
     pub name: String,
-    /// Span of the offending later use.
     pub use_span: Span,
-    /// Span of the earlier move that consumed the binding.
     pub move_span: Span,
     pub module: String,
 }
@@ -70,7 +47,6 @@ impl From<ResourceMoveError> for crate::compiler_host::Diagnostic {
     }
 }
 
-/// Check every user-authored function for use-after-move of a resource binding.
 #[must_use]
 pub fn check_resource_moves_semantic(sem: &Semantics) -> Vec<ResourceMoveError> {
     let mut out = Vec::new();
@@ -85,9 +61,6 @@ pub fn check_resource_moves_semantic(sem: &Semantics) -> Vec<ResourceMoveError> 
     out
 }
 
-/// Check every body-bearing form of `item`: free functions, `impl` and `trait`
-/// methods (default bodies), and `test` blocks. Nested (function-local) items
-/// are reached from the body walk, so this recurses through them too.
 fn check_item(
     sem: &Semantics,
     module: &ModuleSource,
@@ -138,21 +111,15 @@ fn check_block(
     walker.visit_block(body);
 }
 
-/// Forward move-state walker. `moved` maps a resource binding's definition
-/// `AstId` to the span of the move that consumed it.
 struct MoveWalker<'a> {
     sem: &'a Semantics,
     module: &'a ModuleSource,
     moved: IndexMap<AstId, Span>,
-    /// Nonzero while pre-scanning a loop body for the moves it performs, so the
-    /// scan records moves without emitting duplicate diagnostics.
     suppress: u32,
     out: &'a mut Vec<ResourceMoveError>,
 }
 
 impl MoveWalker<'_> {
-    /// Resolve an identifier use to the definition of a bare resource-typed
-    /// local, if that is what it refers to.
     fn resource_def(&self, use_id: AstId) -> Option<AstId> {
         let def = self.sem.referenced_symbol(use_id)?;
         let type_id = self.sem.expression_type(use_id)?;
@@ -163,7 +130,6 @@ impl MoveWalker<'_> {
         .then_some(def)
     }
 
-    /// A borrowing read of `ident`: an error only if the binding is already moved.
     fn read(&mut self, ident: &IdentExpr) {
         if let Some(def) = self.resource_def(ident.id)
             && let Some(&move_span) = self.moved.get(&def)
@@ -172,8 +138,6 @@ impl MoveWalker<'_> {
         }
     }
 
-    /// A consuming use of `ident`: an error if already moved, otherwise records
-    /// the move.
     fn consume(&mut self, ident: &IdentExpr) {
         if let Some(def) = self.resource_def(ident.id) {
             if let Some(&move_span) = self.moved.get(&def) {
@@ -196,9 +160,6 @@ impl MoveWalker<'_> {
         });
     }
 
-    /// Visit an expression whose value is consumed into an owner (a binding,
-    /// argument, return, or aggregate element): a bare identifier is moved;
-    /// anything else is visited for the reads / moves it performs internally.
     fn visit_value(&mut self, expr: &Expr) {
         match expr {
             Expr::Ident(ident) => self.consume(ident),
@@ -217,8 +178,6 @@ impl MoveWalker<'_> {
                 }
             }
             Expr::MethodCall(mc) => {
-                // Slice 1 treats every method receiver as a borrow; by-value
-                // `self` consumption is a later refinement.
                 self.visit_expr(&mc.receiver);
                 for arg in &mc.args {
                     self.visit_value(arg);
@@ -230,9 +189,6 @@ impl MoveWalker<'_> {
                 }
             }
 
-            // Unary operands are never consumed: `&x` / `&mut x` borrow, and
-            // arithmetic / logical operators do not apply to resources. Visiting
-            // as a read still flags a use of an already-moved binding.
             Expr::Unary(u) => self.visit_expr(&u.expr),
             Expr::Binary(b) => {
                 self.visit_expr(&b.left);
@@ -303,17 +259,12 @@ impl MoveWalker<'_> {
                 }
             }
 
-            // Closures capture into a separate frame; their body's locals are a
-            // different scope, out of this slice's scope.
             Expr::Closure(_) | Expr::Literal(_) | Expr::Error(_) => {}
         }
     }
 
     fn visit_assign(&mut self, a: &AssignExpr) {
         self.visit_value(&a.value);
-        // The target is a write, not a read. Re-assigning a resource binding
-        // re-initialises it, so it is live again — clear any moved state instead
-        // of flagging the write as a use.
         match &a.target {
             Expr::Ident(ident) => {
                 if let Some(def) = self.resource_def(ident.id) {
@@ -324,10 +275,6 @@ impl MoveWalker<'_> {
         }
     }
 
-    /// Visit a block, returning whether it diverges (its reachable end does not
-    /// fall through — a `return` / `break` / `continue`, or an `if` whose
-    /// branches all diverge). Statements after a diverging one are unreachable
-    /// and skipped, so a move on a non-returning path is never carried past it.
     fn visit_block(&mut self, block: &Block) -> bool {
         for stmt in &block.stmts {
             if self.visit_stmt(stmt) {
@@ -343,18 +290,10 @@ impl MoveWalker<'_> {
                 if let Some(value) = &l.value {
                     self.visit_value(value);
                 }
-                // The pattern's bindings are freshly initialised here, so they
-                // are live regardless of any prior state. Clearing matters when
-                // the same `let` re-executes in a loop body: a binding moved on
-                // one iteration is re-bound (not used-after-move) on the next.
                 self.clear_pattern(&l.pattern);
                 false
             }
             Stmt::Expr(e) => {
-                // An expression statement's value is consumed: a non-tail one is
-                // discarded (and dropped by resource cleanup), a tail one is the
-                // block's value (moved to its consumer). Either way a bare
-                // resource identifier here is a move, so a later use is an error.
                 self.visit_value(&e.expr);
                 false
             }
@@ -396,7 +335,6 @@ impl MoveWalker<'_> {
             }
             Stmt::ForOf(s) => {
                 self.visit_expr(&s.iterable);
-                // The element binding is freshly bound each iteration.
                 self.visit_loop_body(&s.body, Some(&s.binding));
                 false
             }
@@ -416,8 +354,6 @@ impl MoveWalker<'_> {
             }
             Stmt::LabeledBlock(lb) => self.visit_block(&lb.block),
             Stmt::Continue(_) => true,
-            // A function-local item (nested `fn` / `impl` / `trait` / `test`) is
-            // its own scope; check it with fresh move state.
             Stmt::Item(item) => {
                 check_item(self.sem, self.module, item, self.out);
                 false
@@ -426,10 +362,6 @@ impl MoveWalker<'_> {
         }
     }
 
-    /// Walk a loop body so a value moved on one iteration is seen as
-    /// already-moved on the next. A silent pre-scan collects the moves the body
-    /// performs; seeding those, the real walk then flags a use that a prior
-    /// iteration's move already invalidated.
     fn visit_loop_body(&mut self, body: &Block, rebind: Option<&Pattern>) {
         if let Some(pattern) = rebind {
             self.clear_pattern(pattern);
@@ -437,17 +369,12 @@ impl MoveWalker<'_> {
         self.suppress += 1;
         self.visit_block(body);
         self.suppress -= 1;
-        // `self.moved` now carries the moves the body performs; walk again from
-        // that seeded state to report cross-iteration use-after-move. The
-        // per-iteration binding is re-bound, so clear it before the real walk.
         if let Some(pattern) = rebind {
             self.clear_pattern(pattern);
         }
         self.visit_block(body);
     }
 
-    /// Remove every binding introduced by `pattern` from the moved set: a fresh
-    /// binding is live no matter what state a same-named prior binding was in.
     fn clear_pattern(&mut self, pattern: &Pattern) {
         match pattern {
             Pattern::Ident { id, .. } | Pattern::MutIdent { id, .. } => {
@@ -477,8 +404,6 @@ impl MoveWalker<'_> {
         }
     }
 
-    /// Merge the two arms of an `if`, keeping the moves only from branches that
-    /// fall through. Returns whether the `if` diverges (both branches diverge).
     fn merge_if(&mut self, then_block: &Block, else_block: Option<&Block>) -> bool {
         let base = self.moved.clone();
         let then_div = self.visit_block(then_block);
@@ -487,8 +412,6 @@ impl MoveWalker<'_> {
             Some(eb) => self.visit_block(eb),
             None => false,
         };
-        // `self.moved` now holds the else path (or the untouched base for no
-        // else). Fold in the then path only when it falls through.
         if !then_div {
             self.union_into(then_moved);
         }
@@ -496,13 +419,9 @@ impl MoveWalker<'_> {
     }
 
     fn visit_match(&mut self, scrutinee: &Expr, arms: &[ast::MatchArm]) -> bool {
-        // Slice 1 treats the scrutinee as a borrow (a pattern match that moves a
-        // resource out is a later refinement).
         self.visit_expr(scrutinee);
         let base = std::mem::take(&mut self.moved);
         let mut merged = base.clone();
-        // An arm-less `match` (a never-typed scrutinee) has no fall-through path,
-        // so it diverges; otherwise it diverges only if every arm does.
         let mut all_diverge = true;
         for arm in arms {
             self.moved.clone_from(&base);
@@ -522,8 +441,6 @@ impl MoveWalker<'_> {
         all_diverge
     }
 
-    /// Visit an expression used as a branch/arm body, returning whether it
-    /// diverges. Only block-like bodies can; anything else falls through.
     fn visit_expr_diverges(&mut self, expr: &Expr) -> bool {
         match expr {
             Expr::Block(block) => self.visit_block(block),
@@ -541,7 +458,6 @@ impl MoveWalker<'_> {
             Condition::LetChain { elements, .. } => {
                 for element in elements {
                     match element {
-                        // A `let PAT = EXPR` scrutinee is a borrow in this slice.
                         ConditionElement::Let { expr, .. } => self.visit_expr(expr),
                         ConditionElement::Expr(e) => self.visit_expr(e),
                     }
@@ -550,7 +466,6 @@ impl MoveWalker<'_> {
         }
     }
 
-    /// Union `other` into `self.moved`, keeping the earliest recorded move span.
     fn union_into(&mut self, other: IndexMap<AstId, Span>) {
         for (def, span) in other {
             self.moved.entry(def).or_insert(span);
