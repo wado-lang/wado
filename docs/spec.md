@@ -681,19 +681,20 @@ match command {
 
 **Pattern Syntax:**
 
-| Pattern       | Example                      | Description                            |
-| ------------- | ---------------------------- | -------------------------------------- |
-| Wildcard      | `_`                          | Matches anything                       |
-| Variable      | `x`                          | Binds matched value                    |
-| Mut variable  | `mut x`, `Some(mut x)`       | Binds as mutable                       |
-| Literal       | `0`, `"hello"`, `true`       | Matches exact value                    |
-| Variant       | `Some(x)`, `None`            | Matches variant case                   |
-| Tuple         | `[a, b, c]`                  | Destructures tuple                     |
-| Nested tuple  | `[10, Some(x)]`              | Literal/variant sub-patterns in tuple  |
-| Struct        | `{ x, y }`, `Point { x, y }` | Destructures struct                    |
-| Nested struct | `{ x: 0, y }`                | Literal/variant sub-patterns in struct |
-| Or            | `Red \| Blue`                | Matches either pattern                 |
-| Guard         | `Some(x) && x > 0`           | Pattern with condition                 |
+| Pattern       | Example                      | Description                                  |
+| ------------- | ---------------------------- | -------------------------------------------- |
+| Wildcard      | `_`                          | Matches anything                             |
+| Variable      | `x`                          | Binds matched value                          |
+| Mut variable  | `mut x`, `Some(mut x)`       | Binds as mutable                             |
+| Literal       | `0`, `"hello"`, `true`       | Matches exact value                          |
+| Constant      | `MAX_LEN`, `i32::MAX`        | Matches an immutable global / const by value |
+| Variant       | `Some(x)`, `None`            | Matches variant case                         |
+| Tuple         | `[a, b, c]`                  | Destructures tuple                           |
+| Nested tuple  | `[10, Some(x)]`              | Literal/variant sub-patterns in tuple        |
+| Struct        | `{ x, y }`, `Point { x, y }` | Destructures struct                          |
+| Nested struct | `{ x: 0, y }`                | Literal/variant sub-patterns in struct       |
+| Or            | `Red \| Blue`                | Matches either pattern                       |
+| Guard         | `Some(x) && x > 0`           | Pattern with condition                       |
 
 **Exhaustiveness:**
 
@@ -717,6 +718,21 @@ match customer {
     Premium(_) => 0.2,
     _ => 0.1,
 }
+```
+
+**Constant Patterns:**
+
+A pattern identifier that resolves to an immutable `global` or an associated constant matches by value, instead of binding a new variable:
+
+```wado
+global TK_FOO: i32 = 1;
+global TK_BAR: i32 = 2;
+
+let kind = match token {
+    TK_FOO | TK_BAR => "keyword",
+    i32::MAX        => "max",
+    _               => "other",
+};
 ```
 
 **Or Patterns:**
@@ -2966,6 +2982,23 @@ impl Default for Point {
 }
 ```
 
+### String Parsing Traits
+
+Two prelude traits parse a value from a `String`, both returning `Result`. `FromStr` is strict; `LenientFromStr` is forgiving of human input. The built-in scalars (`String`, `char`, the integer types, `f32`/`f64`, `bool`) implement both.
+
+```wado
+i32::from_str(&"42")              // Ok(42)
+i32::from_str(&"0x2A")            // Err — strict rejects the prefix
+
+i32::from_str_lenient(&"0x2A")    // Ok(42)  — radix prefixes 0x/0o/0b
+i32::from_str_lenient(&"1_000")   // Ok(1000) — `_` digit separators
+bool::from_str_lenient(&"TRUE")   // Ok(true) — casing, plus 1/0
+f64::from_str_lenient(&"inf")     // Ok(f64::INFINITY)
+i32::from_str_lenient(&" 1 ")     // Err — never trims whitespace
+```
+
+`FromStr`'s fundamental operation is `from_str_range(s, start, end)` (parse a byte range with no substring allocation); `from_str` defaults to calling it over the whole string. See [WEP: Lenient String Parsing](./wep-2026-06-22-lenient-from-str.md).
+
 ### Indexing Traits
 
 The prelude defines traits for index-based access:
@@ -3279,7 +3312,7 @@ let base = { user_id: 1, ip: "10.0.0.1" };
 let event = { ..base, level: "warn" };  // { user_id, ip, level } — auto-Serialize
 ```
 
-The explicit marker `impl Serialize for T;` still works — write it to force the impl with no bound present, or to attach `#[serde(rename_all = "...")]` customization. Unlike `Eq` / `Ord`'s marker (below), it doesn't pre-validate: an ineligible field is a compile error at the bound site, not the marker. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
+The explicit marker `impl Serialize for T;` still works — write it to force the impl with no bound present, or to attach `#[serde(rename_all = "...")]` customization. Like `Eq` / `Ord`'s marker (below), it is a conformance check: an ineligible field or case is a compile error at the marker's own span. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
 ### Bound-Driven Eq / Ord
 
@@ -3839,6 +3872,14 @@ test "slow computation" {
     let result = expensive_computation();
     assert result == 42;
 }
+
+// Synopsis test: runs like any test; `wado doc` renders its body as the
+// module's `## Synopsis` section.
+#[synopsis]
+test {
+    let p = Point { x: 3, y: 4 };
+    assert p.length() == 5.0;
+}
 ```
 
 **Syntax Rules:**
@@ -3848,7 +3889,7 @@ test "slow computation" {
 - Test body is a block containing statements
 - No return type or effect declarations needed
 - Tests can use any effects (side effects are allowed in tests)
-- Attributes (e.g., `#[expect_trap]`, `#[TODO]`, `#[timeout_ms(N)]`) may appear before the `test` keyword
+- Attributes (e.g., `#[expect_trap]`, `#[TODO]`, `#[timeout_ms(N)]`, `#[synopsis]`) may appear before the `test` keyword
 
 **Test Identification:**
 
@@ -4712,6 +4753,18 @@ Test block attribute. Overrides the default test timeout (1000ms). `N` is an int
 test "slow computation" {
     let result = expensive_computation();
     assert result == 42;
+}
+```
+
+#### `#[synopsis]`
+
+Test block attribute. The test runs like any other, and `wado doc` renders its body as the module's `## Synopsis` section — a compiled, always-current usage example. See [WEP: Synopsis Tests](./wep-2026-04-26-synopsis-tests.md).
+
+```wado
+#[synopsis]
+test {
+    let p = Point { x: 3, y: 4 };
+    assert p.length() == 5.0;
 }
 ```
 
