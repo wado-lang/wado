@@ -30,6 +30,10 @@ runs the wasmtime runtime / GC / allocator at dev speed, so profiles over-weight
 allocation/GC frames — read percentages as relative and confirm a GC/alloc win
 on a release build.
 
+**Rule out a super-linear pass before blaming GC** — that same inflation makes an
+algorithmic blow-up read as GC-bound; sweep input size (faster-than-linear growth
+⇒ the fix is the algorithm, not allocation) to tell them apart.
+
 ## 2. Read the WIR — allocations and copies first
 
 ```sh
