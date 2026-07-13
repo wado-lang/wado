@@ -958,29 +958,24 @@ impl<T: Eq> Eq for Pair<T> {
 
 ### Auto-Derived Traits
 
-Derivation is _bound-driven_: `Eq`, `Ord`, `Default`, `Serialize`, and `Deserialize` are synthesized for a type only where something actually needs it — an `==`/`<` operator, a `T::default()` call, a serialize/deserialize call, a `T: Trait` bound, or an explicit marker. A declared type nothing uses gets no synthesized code. Synthesis is structural and recursive: it succeeds only when every field/case satisfies the trait, and covers structs (including anonymous), enums, variants (`Ord` excluded), and flags. `Default` instead requires every field of a non-generic struct to carry a default expression (`f: T = expr`). So a plain struct is comparable and serializable with no declaration:
+`Eq`, `Ord`, `Default`, `Serialize`, and `Deserialize` are _bound-driven_: the compiler synthesizes them where a use or bound needs them, no marker required. A plain struct is comparable and serializable with no declaration:
 
 ```wado
 struct Point { x: i32, y: i32 }
-let same = Point { x: 1, y: 2 } == Point { x: 1, y: 2 };  // Eq synthesized here
-let json = to_string(&Point { x: 1, y: 2 });              // Serialize synthesized here
+Point { x: 1, y: 2 } == Point { x: 1, y: 2 };  // Eq synthesized here
+to_string(&Point { x: 1, y: 2 });              // Serialize synthesized here
 ```
 
-All primitives implement `Eq` and `Ord`. `Option<T: Eq>`, `Result<T: Eq, E: Eq>`, and `List<T: Eq>` implement `Eq`; `List<T: Ord>` implements `Ord`.
-
-An empty marker `impl Trait for T;` is a static conformance check — like Java's `implements`. It validates `T` structurally at its own span, is a hard compile error if `T` is ineligible, then records the derive exactly as a use would. Writing it is optional for these traits (a use suffices), but it pins down intent, fails loudly if a later field breaks eligibility, and is the way to attach `#[serde(...)]` customization or to derive a type with no current use site.
+An empty marker `impl Trait for T;` is a static conformance check (like Java's `implements`): it's a hard compile error if `T` is ineligible. Optional for these traits, but it documents intent and is the way to attach `#[serde(...)]` customization.
 
 ```wado
 struct Broken { retries: i32 = 3, name: String }
 impl Default for Broken;   // ERROR: `name` has no default expression
-
-variant Shape { Callback(fn(i32) -> i32), Point }
-impl Serialize for Shape;  // ERROR: the `Callback` payload is not serializable
 ```
 
-The format traits `Inspect` / `InspectAlt` / `Display` / `DisplayAlt` are _total_: every type is structurally formattable, so a `T: Inspect` / `T: Display` bound always holds, a marker always validates, and bodies are generated eagerly for every type. When a trait is not explicitly implemented the delegation chain is `InspectAlt → Inspect`, `Display → Inspect`, and `DisplayAlt → Display` — so `{x:#}` defaults to plain display, while pretty-printing stays on the inspect side (`{x:#?}`). A newtype's `Display`/`DisplayAlt` render transparently like the base value; only `Inspect`/`InspectAlt` add the `as Name` annotation.
+The format traits (`Inspect` / `InspectAlt` / `Display` / `DisplayAlt`) are always available for every type. Unimplemented ones delegate `InspectAlt → Inspect`, `Display → Inspect`, `DisplayAlt → Display` — so `{x:#}` defaults to plain display while `{x:#?}` pretty-prints. A newtype renders transparently under `Display`; only `Inspect` adds the `as Name` annotation.
 
-A hand-written `impl Trait for T { … }` always wins over synthesis. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
+A hand-written `impl Trait for T { … }` always wins. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
 ## Associated Constants
 
