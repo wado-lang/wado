@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783921952650,
+  "lastUpdate": 1783928339943,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -39897,6 +39897,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 265887,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6e845e861b6407b15f71ba9fb106e859a0397c4b",
+          "message": "Merge pull request #1563 from wado-lang/claude/resource-ownership-wep-ol98hz\n\nrefactor(value-copy): decide every copy at lowering and delete the elision passes",
+          "timestamp": "2026-07-13T16:29:53+09:00",
+          "tree_id": "2cd7270414218c0ce53e507ce7a91693d0573530",
+          "url": "https://github.com/wado-lang/wado/commit/6e845e861b6407b15f71ba9fb106e859a0397c4b"
+        },
+        "date": 1783928339458,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16422,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 266286,
             "unit": "bytes"
           }
         ]
