@@ -194,8 +194,13 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
   the synthetic repro 5.6 s → 0.10 s. Lesson: profile keyword-heavy grammars
   end-to-end — a super-linear analysis hides behind the GC number, and micro-
   grammars miss it (the trigger is deep *mutual recursion*, not size/alt-count).
-  The other SCC-memoized analyses (`first_of_rule_at`, `tail_greedy_first_of_rule_at`)
-  share the same partial-caching shape and are latent suspects on other grammars.
+  The four other SCC-memoized analyses — `first_of_rule_at`, `rule_is_nullable_at`,
+  `rule_is_single_token_at`, `tail_greedy_first_of_rule_at` — share the same
+  SCC-root-only caching (`local_min >= p`) and are latent suspects on other
+  grammars (they did *not* dominate the TS/Rust profiles, so not yet active).
+  Unlike scannability (pure reachability, precomputable), these compute real
+  fixpoint values, so the fix is a shared SCC-complete cache (Tarjan: fix all
+  members once the SCC closes), not a reachability precompute.
 
 - **Two levers only: compute, and GC.** Isolate GC with `--collector null` (no
   GC; leaks, so only for a one-shot gen) vs the default `copying`:
