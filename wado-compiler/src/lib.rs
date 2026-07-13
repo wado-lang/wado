@@ -98,6 +98,7 @@ pub use monomorphize::monomorphize;
 pub use optimize::{OptLevel, optimize};
 pub use package::Package;
 pub use parser::{ParseError, Parser};
+pub use resource_move_check::{ResourceMoveError, check_resource_moves_semantic};
 pub use token::Span;
 
 /// Build the diagnostic message for an unresolved `Type^Trait::method` call —

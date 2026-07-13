@@ -538,6 +538,13 @@ fn scan_transfers(expr: &TirExpr, consuming: bool, consumed: &mut Vec<u32>, cx: 
                 .method_info
                 .as_ref()
                 .is_some_and(|info| cx.owned_self.contains(&info.to_mangled_name()));
+            // `carries_resource` recognises a bare resource or a `Result`
+            // payload, not a resource wrapped in a returned struct / tuple /
+            // variant. A `&self` method that extracts a resource into such a
+            // wrapper would therefore be misread as non-extracting (the
+            // aggregate kept, a double drop). No stdlib method has that shape;
+            // the move check (WEP 2026-05-21) forbids `&self` extraction
+            // outright, which retires this heuristic.
             let extracts_from_aggregate = is_resource_aggregate(cx.tt, cx.reg, recv_inner.type_id)
                 && carries_resource(cx.tt, cx.reg, expr.type_id);
             let receiver_consumed = owned_self || extracts_from_aggregate;

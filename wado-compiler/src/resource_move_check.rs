@@ -19,7 +19,7 @@
 
 use crate::ast::{
     self, AssignExpr, AstId, Block, Condition, ConditionElement, Expr, Function, IdentExpr, Item,
-    Stmt,
+    Pattern, Stmt,
 };
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
@@ -79,18 +79,36 @@ pub fn check_resource_moves_semantic(sem: &Semantics) -> Vec<ResourceMoveError> 
             continue;
         }
         for item in &module.items {
-            match item {
-                Item::Function(func) => check_function(sem, src, func, &mut out),
-                Item::Impl(impl_block) => {
-                    for method in &impl_block.methods {
-                        check_function(sem, src, method, &mut out);
-                    }
-                }
-                _ => {}
-            }
+            check_item(sem, src, item, &mut out);
         }
     }
     out
+}
+
+/// Check every body-bearing form of `item`: free functions, `impl` and `trait`
+/// methods (default bodies), and `test` blocks. Nested (function-local) items
+/// are reached from the body walk, so this recurses through them too.
+fn check_item(
+    sem: &Semantics,
+    module: &ModuleSource,
+    item: &Item,
+    out: &mut Vec<ResourceMoveError>,
+) {
+    match item {
+        Item::Function(func) => check_function(sem, module, func, out),
+        Item::Impl(impl_block) => {
+            for method in &impl_block.methods {
+                check_function(sem, module, method, out);
+            }
+        }
+        Item::Trait(trait_decl) => {
+            for method in &trait_decl.methods {
+                check_function(sem, module, method, out);
+            }
+        }
+        Item::Test(test) => check_block(sem, module, &test.body, out),
+        _ => {}
+    }
 }
 
 fn check_function(
@@ -99,13 +117,22 @@ fn check_function(
     func: &Function,
     out: &mut Vec<ResourceMoveError>,
 ) {
-    let Some(body) = &func.body else {
-        return;
-    };
+    if let Some(body) = &func.body {
+        check_block(sem, module, body, out);
+    }
+}
+
+fn check_block(
+    sem: &Semantics,
+    module: &ModuleSource,
+    body: &Block,
+    out: &mut Vec<ResourceMoveError>,
+) {
     let mut walker = MoveWalker {
         sem,
-        module: module.source_path(),
+        module,
         moved: IndexMap::default(),
+        suppress: 0,
         out,
     };
     walker.visit_block(body);
@@ -115,8 +142,11 @@ fn check_function(
 /// `AstId` to the span of the move that consumed it.
 struct MoveWalker<'a> {
     sem: &'a Semantics,
-    module: String,
+    module: &'a ModuleSource,
     moved: IndexMap<AstId, Span>,
+    /// Nonzero while pre-scanning a loop body for the moves it performs, so the
+    /// scan records moves without emitting duplicate diagnostics.
+    suppress: u32,
     out: &'a mut Vec<ResourceMoveError>,
 }
 
@@ -155,11 +185,14 @@ impl MoveWalker<'_> {
     }
 
     fn emit(&mut self, ident: &IdentExpr, move_span: Span) {
+        if self.suppress > 0 {
+            return;
+        }
         self.out.push(ResourceMoveError {
             name: ident.name.clone(),
             use_span: ident.span,
             move_span,
-            module: self.module.clone(),
+            module: self.module.source_path(),
         });
     }
 
@@ -169,7 +202,7 @@ impl MoveWalker<'_> {
     fn visit_value(&mut self, expr: &Expr) {
         match expr {
             Expr::Ident(ident) => self.consume(ident),
-            _ => self.visit_expr(expr),
+            other => self.visit_expr(other),
         }
     }
 
@@ -310,10 +343,19 @@ impl MoveWalker<'_> {
                 if let Some(value) = &l.value {
                     self.visit_value(value);
                 }
+                // The pattern's bindings are freshly initialised here, so they
+                // are live regardless of any prior state. Clearing matters when
+                // the same `let` re-executes in a loop body: a binding moved on
+                // one iteration is re-bound (not used-after-move) on the next.
+                self.clear_pattern(&l.pattern);
                 false
             }
             Stmt::Expr(e) => {
-                self.visit_expr(&e.expr);
+                // An expression statement's value is consumed: a non-tail one is
+                // discarded (and dropped by resource cleanup), a tail one is the
+                // block's value (moved to its consumer). Either way a bare
+                // resource identifier here is a move, so a later use is an error.
+                self.visit_value(&e.expr);
                 false
             }
             Stmt::Return(r) => {
@@ -332,11 +374,11 @@ impl MoveWalker<'_> {
             }
             Stmt::While(s) => {
                 self.visit_condition(&s.condition);
-                self.visit_block(&s.body);
+                self.visit_loop_body(&s.body, None);
                 false
             }
             Stmt::Loop(s) => {
-                self.visit_block(&s.body);
+                self.visit_loop_body(&s.body, None);
                 false
             }
             Stmt::For(s) => {
@@ -349,12 +391,13 @@ impl MoveWalker<'_> {
                 if let Some(update) = &s.update {
                     self.visit_expr(update);
                 }
-                self.visit_block(&s.body);
+                self.visit_loop_body(&s.body, None);
                 false
             }
             Stmt::ForOf(s) => {
                 self.visit_expr(&s.iterable);
-                self.visit_block(&s.body);
+                // The element binding is freshly bound each iteration.
+                self.visit_loop_body(&s.body, Some(&s.binding));
                 false
             }
             Stmt::Match(m) => self.visit_match(&m.expr, &m.arms),
@@ -373,7 +416,64 @@ impl MoveWalker<'_> {
             }
             Stmt::LabeledBlock(lb) => self.visit_block(&lb.block),
             Stmt::Continue(_) => true,
-            Stmt::Item(_) | Stmt::Error(_) => false,
+            // A function-local item (nested `fn` / `impl` / `trait` / `test`) is
+            // its own scope; check it with fresh move state.
+            Stmt::Item(item) => {
+                check_item(self.sem, self.module, item, self.out);
+                false
+            }
+            Stmt::Error(_) => false,
+        }
+    }
+
+    /// Walk a loop body so a value moved on one iteration is seen as
+    /// already-moved on the next. A silent pre-scan collects the moves the body
+    /// performs; seeding those, the real walk then flags a use that a prior
+    /// iteration's move already invalidated.
+    fn visit_loop_body(&mut self, body: &Block, rebind: Option<&Pattern>) {
+        if let Some(pattern) = rebind {
+            self.clear_pattern(pattern);
+        }
+        self.suppress += 1;
+        self.visit_block(body);
+        self.suppress -= 1;
+        // `self.moved` now carries the moves the body performs; walk again from
+        // that seeded state to report cross-iteration use-after-move. The
+        // per-iteration binding is re-bound, so clear it before the real walk.
+        if let Some(pattern) = rebind {
+            self.clear_pattern(pattern);
+        }
+        self.visit_block(body);
+    }
+
+    /// Remove every binding introduced by `pattern` from the moved set: a fresh
+    /// binding is live no matter what state a same-named prior binding was in.
+    fn clear_pattern(&mut self, pattern: &Pattern) {
+        match pattern {
+            Pattern::Ident { id, .. } | Pattern::MutIdent { id, .. } => {
+                self.moved.swap_remove(id);
+            }
+            Pattern::Tuple(subs, _) => {
+                for sub in subs {
+                    self.clear_pattern(sub);
+                }
+            }
+            Pattern::Variant { bindings, .. } => {
+                for sub in bindings {
+                    self.clear_pattern(sub);
+                }
+            }
+            Pattern::Struct { fields, .. } => {
+                for field in fields {
+                    self.clear_pattern(&field.pattern);
+                }
+            }
+            Pattern::Or(alts) => {
+                for alt in alts {
+                    self.clear_pattern(alt);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -401,7 +501,9 @@ impl MoveWalker<'_> {
         self.visit_expr(scrutinee);
         let base = std::mem::take(&mut self.moved);
         let mut merged = base.clone();
-        let mut all_diverge = !arms.is_empty();
+        // An arm-less `match` (a never-typed scrutinee) has no fall-through path,
+        // so it diverges; otherwise it diverges only if every arm does.
+        let mut all_diverge = true;
         for arm in arms {
             self.moved.clone_from(&base);
             if let Some(guard) = &arm.guard {
@@ -426,8 +528,8 @@ impl MoveWalker<'_> {
         match expr {
             Expr::Block(block) => self.visit_block(block),
             Expr::LabeledBlock(lb) => self.visit_block(&lb.block),
-            _ => {
-                self.visit_expr(expr);
+            other => {
+                self.visit_expr(other);
                 false
             }
         }
