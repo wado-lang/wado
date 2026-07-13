@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.0.14](https://github.com/wado-lang/wado/compare/v0.0.13...v0.0.14) - 2026-07-13
+
+- chore(ci): add 60-minute timeout to all workflow jobs by @gfx in https://github.com/wado-lang/wado/pull/1570
+- docs: move the design philosophy out of the README into docs/ by @gfx in https://github.com/wado-lang/wado/pull/1572
+- ci: attest build provenance for release archives by @gfx in https://github.com/wado-lang/wado/pull/1573
+- feat(compiler): move-only resources — use-after-move check and cleanup leak fixes by @gfx in https://github.com/wado-lang/wado/pull/1575
+
 ## [v0.0.13](https://github.com/wado-lang/wado/compare/v0.0.12...v0.0.13) - 2026-07-13
 
 - feat(gale): customizable syntax highlighting + faster generation by @gfx in https://github.com/wado-lang/wado/pull/1566
