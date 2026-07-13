@@ -27,6 +27,7 @@ use {
 } from "./ir.wado";
 use { LitToken, collect_literal_tokens } from "./lexer_gen.wado";
 use { lower } from "./lower.wado";
+use { GenContext } from "./gen_context.wado";
 use { assign_atn_call_sites } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
 use {
@@ -419,14 +420,15 @@ test "lower interns multi-element first set from Direct dispatch branch" {
         ),
     ];
 
-    let lowered = lower(&g, &no_lit_tokens());
+    let mut ctx = GenContext::new(&g.parser_rules, &no_lit_tokens());
+    let lowered = lower(&g, &no_lit_tokens(), &mut ctx);
     assert lowered.kind_sets.len() == 1;
     let ks = &lowered.kind_sets[0];
     assert ks.id == 0;
-    // Canonical form: sorted alphabetically.
+    // Canonical form: sorted alphabetically by name.
     assert ks.tokens.len() == 2;
-    assert ks.tokens[0] == "TK_FLOAT";
-    assert ks.tokens[1] == "TK_INT";
+    assert ctx.token_name(ks.tokens[0]) == "TK_FLOAT";
+    assert ctx.token_name(ks.tokens[1]) == "TK_INT";
 }
 
 test "lower kind set registry collapses identical sets to one id" {
