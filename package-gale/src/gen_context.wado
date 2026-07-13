@@ -1352,6 +1352,54 @@ impl GenContext {
         };
     }
 
+    /// Seed `scannable_cache` for every parser rule in O(V+E). The only `false`
+    /// source in `is_element_scannable_at` is a reference that reaches an
+    /// undefined rule, so scannability is pure reachability: a rule is
+    /// non-scannable iff it can reach (through RuleRef / Label / Repeat / Group
+    /// structure) a reference to a name that is not a parser rule. Computing it
+    /// once makes the recursive check O(1). The recursion's SCC-root-only
+    /// memoization otherwise left interior nodes of a large mutual-recursion SCC
+    /// uncached and re-explored them exponentially — `gale gen` on TypeScript /
+    /// Rust blew up to tens of minutes.
+    pub fn precompute_scannability(&mut self) {
+        let n = self.parser_rules.len();
+        let mut bad: List<bool> = [];
+        for let mut i = 0; i < n; i += 1 {
+            bad.push(false);
+        }
+
+        // Backward-propagate badness to a fixpoint: a rule is bad if it
+        // references an undefined rule or an already-bad rule. Recompute each
+        // rule's refs per pass to avoid materializing a nested adjacency list.
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for let mut rid = 0; rid < n; rid += 1 {
+                if !bad[rid] {
+                    let mut names: List<String> = [];
+                    for let alt of &self.parser_rules[rid].alternatives {
+                        collect_scannable_refs(&alt.elements, &mut names);
+                    }
+                    let mut is_bad = false;
+                    for let name of &names {
+                        let r = self.rule_index_of(name);
+                        if r < 0 || bad[r] {
+                            is_bad = true;
+                        }
+                    }
+                    if is_bad {
+                        bad[rid] = true;
+                        changed = true;
+                    }
+                }
+            }
+        }
+
+        for let mut rid = 0; rid < n; rid += 1 {
+            self.scannable_cache[rid] = Option::Some(!bad[rid]);
+        }
+    }
+
     /// Get the rule name that owns the general group types inside a given
     /// single-alt group. Returns `fallback` if the type name is not a
     /// shared single-alt group (in practice every reached single-alt
@@ -1818,6 +1866,29 @@ fn none_list_cache(n: i32) -> List<Option<List<String>>> {
 
 /// Index of `name` in the visiting stack, or -1. Used by the scannability
 /// analysis to record how shallow a cycle reaches (see `is_rule_scannable_at`).
+/// Collect the parser-rule names an element sequence references for
+/// scannability, mirroring the descent in `is_element_scannable_at`
+/// (RuleRef / Label / Repeat / Group descend; terminals and `Not` do not).
+fn collect_scannable_refs(elements: &List<Element>, out: &mut List<String>) {
+    for let e of elements {
+        collect_scannable_refs_element(e, out);
+    }
+}
+
+fn collect_scannable_refs_element(elem: &Element, out: &mut List<String>) {
+    match elem {
+        RuleRef(r) => out.push(r.name),
+        Label(lab) => collect_scannable_refs_element(&lab.element, out),
+        Repeat(rep) => collect_scannable_refs_element(&rep.element, out),
+        Group(g) => {
+            for let alt of &g.alternatives {
+                collect_scannable_refs(&alt.elements, out);
+            }
+        },
+        TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {},
+    }
+}
+
 fn visiting_index(visiting: &List<String>, name: &String) -> i32 {
     for let mut i = 0; i < visiting.len(); i += 1 {
         if visiting[i] == *name {

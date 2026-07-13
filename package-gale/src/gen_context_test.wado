@@ -699,3 +699,27 @@ test "warn keeps distinct diagnostics" {
     let diags = ctx.copy_diagnostics();
     assert diags.len() == 3, `expected 3 distinct diagnostics, got {diags.len()}`;
 }
+
+test "precompute_scannability: mutually recursive defined rules are scannable" {
+    // r0 : (r1)? Z ;  r1 : (r0)? X ;  — a cycle of only defined rules.
+    let r0 = mk_rule("r0", [alt([opt(rr("r1")), tk("Z")])]);
+    let r1 = mk_rule("r1", [alt([opt(rr("r0")), tk("X")])]);
+    let mut ctx = mk_ctx_with([r0, r1]);
+    ctx.precompute_scannability();
+    let mut v0: List<String> = [];
+    assert ctx.is_rule_scannable(&"r0", &mut v0);
+    let mut v1: List<String> = [];
+    assert ctx.is_rule_scannable(&"r1", &mut v1);
+}
+
+test "precompute_scannability: reaching an undefined rule is not scannable and propagates" {
+    // r0 : r1 ;  r1 : ghost ;   — `ghost` is not a defined rule.
+    let r0 = mk_rule("r0", [alt([rr("r1")])]);
+    let r1 = mk_rule("r1", [alt([rr("ghost")])]);
+    let mut ctx = mk_ctx_with([r0, r1]);
+    ctx.precompute_scannability();
+    let mut v1: List<String> = [];
+    assert !ctx.is_rule_scannable(&"r1", &mut v1);
+    let mut v0: List<String> = [];
+    assert !ctx.is_rule_scannable(&"r0", &mut v0);
+}

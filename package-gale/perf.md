@@ -173,6 +173,30 @@ grammar. Keyword-heavy grammars (SQLite, TypeScript, Rust) are slow; the Kiln
 build path (copying collector + fuel) makes TypeScript/Rust take on the order of
 an hour. Measured findings, `wado run … gen` (`cargo run` host):
 
+- **The dominant cost was not GC — it was an exponential analysis (2026-07,
+  fixed).** `gale gen` on TypeScript (30 min+) and Rust was ~99% inside
+  `GenContext::is_rule_scannable_at`, the recursive scannability check the
+  optional-scan-guard lowering runs per optional/repeat element. Profiling the
+  exploding run (guest profiler with a `WADO_PROFILE_MAX_SECS` bounded flush —
+  the profile only writes on clean exit, so an unbounded 30-min run is unusable)
+  put `is_element/alt/rule_scannable_at` at **98.8% inclusive**; it barely
+  registered on SQLite (57 s). Root cause: the SCC-aware memoization (`80ab9ed7e`)
+  caches a rule only once its SCC has closed (`local_min >= p`); in a large
+  mutual-recursion SCC (TS's expression / type / statement web) nearly every node
+  stays provisional and is recomputed on every path → exponential (a synthetic
+  dense-recursion grammar scaled ≈`1.4^R`; R=20 → 5.6 s, R=24 blew past minutes).
+  Scannability is actually pure reachability — a rule is non-scannable iff it can
+  reach an *undefined*-rule reference, the only `false` source in
+  `is_element_scannable_at` — so `precompute_scannability` computes it once in
+  O(V+E) and seeds `scannable_cache`, making the recursion O(1). **Byte-identical
+  output** (css3 / SQLite / follow_gate md5 unchanged); **TypeScript 30 min+ →
+  ~15 s gen** (63 s wall incl. the ~48 s generator recompile), **Rust similar**;
+  the synthetic repro 5.6 s → 0.10 s. Lesson: profile keyword-heavy grammars
+  end-to-end — a super-linear analysis hides behind the GC number, and micro-
+  grammars miss it (the trigger is deep *mutual recursion*, not size/alt-count).
+  The other SCC-memoized analyses (`first_of_rule_at`, `tail_greedy_first_of_rule_at`)
+  share the same partial-caching shape and are latent suspects on other grammars.
+
 - **Two levers only: compute, and GC.** Isolate GC with `--collector null` (no
   GC; leaks, so only for a one-shot gen) vs the default `copying`:
 
