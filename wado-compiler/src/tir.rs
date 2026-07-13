@@ -622,14 +622,6 @@ pub struct TypeTable {
     /// live redirect, an absent slot means "no redirect". `get` consults it
     /// on every call, so the hash-free index matters here too.
     redirects: TypeMap<TypeId>,
-    /// Ultimate base type name of each newtype, keyed by `(name, module_source)`.
-    ///
-    /// A GC-immune snapshot taken by `erase_newtypes_and_flags()` (before the
-    /// NIR DCE `retain` may drop the newtype `TypeId`s and their redirects) and
-    /// read by `wir_build` for name-based newtype-method resolution. Keyed by
-    /// `(name, module_source)` — never the bare name — so two modules that each
-    /// declare a same-named newtype over different base types do not collide.
-    newtype_to_base_name: IndexMap<(String, ModuleSource), String>,
     /// Reverse mapping `Box<T>` `TypeId` → `T`'s `TypeId`, populated by the
     /// boxing pass (`lower/plan/boxing.rs`). The pass rewrites `&T` /
     /// `&mut T` into `Box<T>` wrapper structs for primitives, variants and
@@ -760,7 +752,6 @@ impl TypeTable {
             assoc_type_resolutions: IndexMap::default(),
             generic_assoc_type_defs: IndexMap::default(),
             redirects: TypeMap::default(),
-            newtype_to_base_name: IndexMap::default(),
             box_payload_types: TypeMap::default(),
             struct_name_index: IndexMap::default(),
             type_by_symbol: IndexMap::default(),
@@ -848,24 +839,6 @@ impl TypeTable {
     /// diverges and never yields a value (`panic`, `unreachable`, …).
     pub fn is_never(&self, id: TypeId) -> bool {
         matches!(self.get(id), ResolvedType::Never)
-    }
-
-    /// Ultimate base type name of the newtype declared as `name` in
-    /// `module_source`, or `None` if `(name, module_source)` is not a newtype.
-    ///
-    /// Reads the `(name, module_source)`-keyed snapshot populated by
-    /// [`Self::erase_newtypes_and_flags`], so it is collision-safe across
-    /// modules (two modules may declare a same-named newtype over different base
-    /// types) and available after the newtype `TypeId`s themselves have been
-    /// dropped by DCE.
-    pub fn newtype_ultimate_base_name(
-        &self,
-        name: &str,
-        module_source: &ModuleSource,
-    ) -> Option<&str> {
-        self.newtype_to_base_name
-            .get(&(name.to_string(), module_source.clone()))
-            .map(String::as_str)
     }
 
     /// Iterate over all live types in the type table. Erased slots (`None`,
@@ -2209,20 +2182,6 @@ impl TypeTable {
             };
             if let Some(target) = redirect {
                 self.redirects.set_growing(id, target);
-                // Snapshot the newtype→ultimate-base name now, keyed by
-                // (name, module_source): the newtype's own `TypeId` may be
-                // dropped by the later NIR DCE `retain`, but `wir_build` still
-                // needs this mapping for name-based newtype-method resolution.
-                if let Some(ResolvedType::Newtype {
-                    name,
-                    module_source,
-                    ..
-                }) = self.types.get(id)
-                {
-                    let key = (name.clone(), module_source.clone());
-                    let base_name = self.type_name(target);
-                    self.newtype_to_base_name.insert(key, base_name);
-                }
             }
         }
     }
@@ -4739,35 +4698,6 @@ mod tests {
         assert_eq!(table.type_of_symbol(&second), Some(second_type));
         assert_eq!(table.type_id_of_decl(first), first_type);
         assert_eq!(table.type_id_of_decl(second), second_type);
-    }
-
-    #[test]
-    fn newtype_ultimate_base_name_is_keyed_per_module() {
-        // Two modules each declare a newtype `Temp` over a *different* base
-        // struct. The snapshot must be keyed by (name, module_source): a
-        // name-only key would let one module's `Temp` overwrite the other's,
-        // misresolving newtype-method dispatch across modules.
-        let mut table = TypeTable::new();
-        let module_a = ModuleSource::entry_point_synthetic();
-        let module_b = ModuleSource::cli();
-
-        let celsius = table.make_struct("Celsius".to_string(), module_a.clone());
-        let fahrenheit = table.make_struct("Fahrenheit".to_string(), module_b.clone());
-        table.make_newtype("Temp".to_string(), module_a.clone(), celsius);
-        table.make_newtype("Temp".to_string(), module_b.clone(), fahrenheit);
-
-        table.erase_newtypes_and_flags();
-
-        assert_eq!(
-            table.newtype_ultimate_base_name("Temp", &module_a),
-            Some("Celsius")
-        );
-        assert_eq!(
-            table.newtype_ultimate_base_name("Temp", &module_b),
-            Some("Fahrenheit")
-        );
-        // A non-newtype name has no entry.
-        assert_eq!(table.newtype_ultimate_base_name("Celsius", &module_a), None);
     }
 
     #[test]

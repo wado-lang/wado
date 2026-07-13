@@ -93,10 +93,6 @@ impl FunctionTranslator<'_, '_> {
             if let Some(id) = self.ctx.func_map.get(&fq2) {
                 return Some(id.clone());
             }
-            // Newtype fallback: if struct name is a newtype, try the base type name
-            if let Some(id) = self.resolve_newtype_method(module_source, method_info) {
-                return Some(id);
-            }
         }
         None
     }
@@ -127,30 +123,6 @@ impl FunctionTranslator<'_, '_> {
         use cranelift_entity::EntityRef;
         let rec = self.ctx.package.functions[func_id.index()].borrow();
         crate::nir::FunctionRef::from_resolved(&rec, rec.module_source.clone())
-    }
-
-    /// Try to resolve a method call on a newtype by substituting the base type name.
-    /// For example, `Location::sum` → `Point::sum` when `type Location = Point`.
-    /// Follows the newtype chain for chained newtypes (C → B → A → Point).
-    fn resolve_newtype_method(
-        &self,
-        module_source: &ModuleSource,
-        method_info: &crate::name::LocalMethodName,
-    ) -> Option<crate::wir::WirFuncId> {
-        let struct_name = &method_info.base_struct_name;
-        // Resolve the newtype (identified by its (name, module_source)) to its
-        // ultimate base type name.
-        let base_name = self
-            .type_table
-            .newtype_ultimate_base_name(struct_name, module_source)?
-            .to_string();
-        // Build a new method name with the base type's struct name
-        let mut resolved_info = method_info.clone();
-        resolved_info.struct_name.clone_from(&base_name);
-        resolved_info.base_struct_name = base_name;
-        let mangled = resolved_info.to_mangled_name();
-        let fq = format!("{module_source}/{mangled}");
-        self.ctx.func_map.get(&fq).cloned()
     }
 
     /// Translate a builtin intrinsic call to a WIR instruction.
