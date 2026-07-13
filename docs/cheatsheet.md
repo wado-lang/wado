@@ -612,7 +612,7 @@ let grade = match score {
 };
 
 // Constant patterns: an immutable global or associated const matches by
-// value, not a binding (unlike Rust). TK_FOO/TK_BAR are `global`s.
+// value, not a binding. TK_FOO/TK_BAR are `global`s.
 let kind = match token {
     TK_FOO | TK_BAR => "keyword",
     i32::MAX        => "max",
