@@ -786,6 +786,33 @@ fn resolve_type(ty: &Type, aliases: &IndexMap<(String, String), Type>) -> Type {
     }
 }
 
+/// Replace `Self` with the enclosing resource's name (and its source interface)
+/// in a receiver type. The `self` / `&self` / `&mut self` forms carry `Self`,
+/// but the CM registry stores concrete types, so `&self` on `resource
+/// Descriptor` must register as `&Descriptor` carrying `Descriptor`'s source
+/// interface — the type the old `self: &Descriptor` spelling produced. Losing
+/// the source interface would make `collect_resources_in_type` miss the borrow.
+fn substitute_self_in_type(ty: &Type, resource_name: &str, source_interface: &str) -> Type {
+    match ty {
+        Type::Named(n) if n.name == "Self" => Type::Named(crate::ast::NamedType {
+            name: resource_name.to_string(),
+            source_interface: (!source_interface.is_empty()).then(|| source_interface.to_string()),
+            ..n.clone()
+        }),
+        Type::Reference(inner) => Type::Reference(Box::new(substitute_self_in_type(
+            inner,
+            resource_name,
+            source_interface,
+        ))),
+        Type::MutReference(inner) => Type::MutReference(Box::new(substitute_self_in_type(
+            inner,
+            resource_name,
+            source_interface,
+        ))),
+        other => other.clone(),
+    }
+}
+
 /// Captured `pub interface Foo { ... }` declarations across all parsed
 /// modules. Used by `WorldRegistry::register` (via lookup callbacks) to
 /// expand `export Foo;` into per-method exports and to resolve `import Foo;`
@@ -1484,6 +1511,7 @@ impl CmInterfaceRegistry {
         // Register resource methods with resolved types for params but NOT for return type
         for item in &module.items {
             if let Item::Resource(resource) = item {
+                let resource_source = Self::cm_source_interface(&resource.attrs);
                 for method in &resource.methods {
                     if let Some(wasi) = method.attrs.first().and_then(|a| a.as_cm_import()) {
                         // Extract CM param names from #[cm_params] attribute
@@ -1502,7 +1530,12 @@ impl CmInterfaceRegistry {
                                         )
                                     })
                                     .clone();
-                                (p.name.clone(), cm_name, resolve_type(&p.ty, &self.newtypes))
+                                let ty = substitute_self_in_type(
+                                    &p.ty,
+                                    &resource.name,
+                                    &resource_source,
+                                );
+                                (p.name.clone(), cm_name, resolve_type(&ty, &self.newtypes))
                             })
                             .collect();
 

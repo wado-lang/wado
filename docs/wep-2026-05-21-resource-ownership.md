@@ -67,9 +67,27 @@ An affine resource is move-only, with no keyword:
 - Using a binding after it is moved is a compile error.
 
 Transfer is implicit at the consumption site — there is no `move` operator, no
-lifetimes, no exclusivity analysis. A by-value `self` receiver is allowed only on
-a resource (on a copyable type it would just deep-copy), which licenses
-`fn drop(self)` and the consuming `AsyncCall<T>` methods.
+lifetimes, no exclusivity analysis.
+
+The receiver has exactly three spellings and never a type annotation:
+
+| Spelling    | Meaning                       | CM handle   |
+| ----------- | ----------------------------- | ----------- |
+| `self`      | by-value move — resource-only | `own<R>`    |
+| `&self`     | shared borrow                 | `borrow<R>` |
+| `&mut self` | mutable borrow                | `borrow<R>` |
+
+`self: T` and `self: &T` are rejected. A copyable type has no use for a value
+receiver (`&self` plus a `*self` deref-copy covers it), and a single borrow
+spelling removes a needless choice. Bare `self` is legal only on a resource; on
+a value type it is a diagnostic (`value types are not move-only; use &self`) —
+this is how the value-semantics friction is mitigated, not with a keyword. The
+rule licenses `fn drop(self)` and the consuming `AsyncCall<T>` methods.
+
+Because the annotated forms are gone, the receiver kind is carried entirely by
+`SelfKind` (`Value` / `Ref` / `MutRef`); `SelfKind::None` means a genuine
+non-method, and a call consumes its receiver iff the dispatch resolves to
+`SelfKind::Value`.
 
 ### The move check
 
@@ -212,6 +230,17 @@ Verified against the tree.
 - [x] Discarded resource value is dropped, not leaked.
 - [ ] Retire `is_resource_aggregate` once no-move-out-of-borrow lands.
 
+### Receiver grammar (`self` / `&self` / `&mut self`)
+
+- [ ] Add `SelfKind::Value`; parser accepts bare `self`, rejects every `self:`
+      annotation. Fold the `consumes_self` dispatch fact into
+      `self_kind == Value` and drop the name/type sniffing.
+- [ ] Semantic check: a `Value` receiver on a non-resource type is a diagnostic.
+- [ ] Migrate the stdlib's `self: &R` borrows to `&self`. The `wasi/*` modules
+      are generated, so fix the `wado-from-idl` / kiln emit, not the `.wado`.
+- [ ] `syntax.rs` grammar + VS Code grammar + `format.fixtures` for the new
+      receiver forms.
+
 ### Consuming drop
 
 - [ ] Migrate `types.wado`'s `drop` methods to `fn drop(self)`. These are
@@ -229,9 +258,11 @@ Verified against the tree.
 ## Deferred: the `move` and `unique` keywords
 
 Intentionally not implemented. Move-only semantics need no syntax: transfer is
-implicit and a use-after-move diagnostic replaces a `move` operator's local
-visibility. `unique` as a `struct` modifier only matters for a move-only type
-that carries no resource — a resource-bearing aggregate is already move-only by
+implicit, a use-after-move diagnostic replaces a `move` operator's local
+visibility, and the consuming receiver is spelled bare `self` (scoped to
+resources, so it never contradicts value semantics — see the receiver grammar
+above). `unique` as a `struct` modifier only matters for a move-only type that
+carries no resource — a resource-bearing aggregate is already move-only by
 composition, and no use case has appeared. Current state: `move` is not
 tokenized; `unique` is lexed to `TokenKind::Unique` but never parsed. If revived,
 `unique struct` reuses the same move-check machinery, resources being its first

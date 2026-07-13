@@ -153,6 +153,6 @@ interface storage {
     let output = parse_wit_and_generate(wit);
 
     assert!(output.contains("pub resource File {"));
-    assert!(output.contains("fn read(self: &File, len: u32) -> List<u8>;"));
-    assert!(output.contains("fn write(self: &File, data: List<u8>);"));
+    assert!(output.contains("fn read(&self, len: u32) -> List<u8>;"));
+    assert!(output.contains("fn write(&self, data: List<u8>);"));
 }

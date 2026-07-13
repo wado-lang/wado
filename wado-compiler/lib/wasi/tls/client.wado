@@ -13,13 +13,13 @@ pub resource Connector {
     /// Closing the `cleartext` stream will cause a `close_notify` packet to be emitted on the returned output stream.
     #[cm("wasi:tls/client@0.3.0-draft#[method]connector.send")]
     #[cm_params("self", "cleartext")]
-    fn send(self: &Connector, cleartext: Stream<u8>) -> [Stream<u8>, Future<Result<(), Error>>];
+    fn send(&self, cleartext: Stream<u8>) -> [Stream<u8>, Future<Result<(), Error>>];
     /// Set up the decryption stream transform.
     /// This takes an encrypted data stream, as received via e.g. the network,
     /// and returns a decrypted application data stream.
     #[cm("wasi:tls/client@0.3.0-draft#[method]connector.receive")]
     #[cm_params("self", "ciphertext")]
-    fn receive(self: &Connector, ciphertext: Stream<u8>) -> [Stream<u8>, Future<Result<(), Error>>];
+    fn receive(&self, ciphertext: Stream<u8>) -> [Stream<u8>, Future<Result<(), Error>>];
     /// Perform the handshake.
     /// The `send` & `receive` streams must be set up before calling this method.
     #[cm("wasi:tls/client@0.3.0-draft#[static]connector.connect")]
