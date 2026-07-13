@@ -723,3 +723,22 @@ test "precompute_scannability: reaching an undefined rule is not scannable and p
     let mut v0: List<String> = [];
     assert !ctx.is_rule_scannable(&"r0", &mut v0);
 }
+
+test "precompute_scannability: undefined reached only through a Group is not scannable" {
+    // r0 : (ghost) X ;  — the undefined ref sits inside a Group; only Group descent finds it.
+    let r0 = mk_rule("r0", [alt([group([alt([rr("ghost")])]), tk("X")])]);
+    let mut ctx = mk_ctx_with([r0]);
+    ctx.precompute_scannability();
+    let mut v0: List<String> = [];
+    assert !ctx.is_rule_scannable(&"r0", &mut v0);
+}
+
+test "precompute_scannability: undefined reached only through a Label is not scannable" {
+    // r0 : g=ghost ;  — the undefined ref is wrapped in a Label; only Label descent finds it.
+    let labelled = Element::Label(LabelElement { name: "g", list: false, element: rr("ghost") });
+    let r0 = mk_rule("r0", [alt([labelled])]);
+    let mut ctx = mk_ctx_with([r0]);
+    ctx.precompute_scannability();
+    let mut v0: List<String> = [];
+    assert !ctx.is_rule_scannable(&"r0", &mut v0);
+}

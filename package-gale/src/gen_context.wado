@@ -1866,6 +1866,15 @@ fn none_list_cache(n: i32) -> List<Option<List<String>>> {
 
 /// Index of `name` in the visiting stack, or -1. Used by the scannability
 /// analysis to record how shallow a cycle reaches (see `is_rule_scannable_at`).
+fn visiting_index(visiting: &List<String>, name: &String) -> i32 {
+    for let mut i = 0; i < visiting.len(); i += 1 {
+        if visiting[i] == *name {
+            return i;
+        }
+    }
+    return -1;
+}
+
 /// Collect the parser-rule names an element sequence references for
 /// scannability, mirroring the descent in `is_element_scannable_at`
 /// (RuleRef / Label / Repeat / Group descend; terminals and `Not` do not).
@@ -1887,15 +1896,6 @@ fn collect_scannable_refs_element(elem: &Element, out: &mut List<String>) {
         },
         TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {},
     }
-}
-
-fn visiting_index(visiting: &List<String>, name: &String) -> i32 {
-    for let mut i = 0; i < visiting.len(); i += 1 {
-        if visiting[i] == *name {
-            return i;
-        }
-    }
-    return -1;
 }
 
 fn remove_from_visiting(visiting: &mut List<String>, name: &String) {
