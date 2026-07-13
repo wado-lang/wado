@@ -252,12 +252,11 @@ impl CliGeneratorProvider {
                     loaded: loaded_for_task,
                 };
                 let options = CompilerOptions {
-                    // Compile the generator at O0. It recompiles far more often
-                    // than it runs — its output is cached and usually committed —
-                    // so the compile saving (O0 skips the optimizer) dominates,
-                    // while generation runtime measures opt-level-insensitive. O0
-                    // output is byte-identical to O2, so nothing downstream shifts.
-                    opt_level: wado_compiler::OptLevel::O0,
+                    // Optimize the generator: its runtime dominates for heavy
+                    // grammars (minutes of generation), and CI runs it cold on
+                    // every build since build/kiln is gitignored, so the O2
+                    // compile cost is repaid many times over by faster generation.
+                    opt_level: wado_compiler::OptLevel::O2,
                     target_world: Some("core:kiln/generator".to_string()),
                     skip_validation: false,
                     log_level: Some(LogLevel::Warn),
