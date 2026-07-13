@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783901233737,
+  "lastUpdate": 1783921952650,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -39853,6 +39853,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 265859,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5e865be151c2d80aacfd0f431238516f0ce43c9a",
+          "message": "Merge pull request #1566 from wado-lang/claude/package-gale-syntax-highlight-5gc2iw\n\nfeat(gale): customizable syntax highlighting + faster generation",
+          "timestamp": "2026-07-13T14:43:27+09:00",
+          "tree_id": "f98e566000dc32d393a35f93617933bfbc110fe0",
+          "url": "https://github.com/wado-lang/wado/commit/5e865be151c2d80aacfd0f431238516f0ce43c9a"
+        },
+        "date": 1783921952265,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16412,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265887,
             "unit": "bytes"
           }
         ]
