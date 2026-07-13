@@ -610,6 +610,15 @@ let grade = match score {
     90..=100 => "A",
     _ => "invalid",
 };
+
+// Constant patterns: a name resolving to an immutable global or an
+// associated const matches by value, not a binding (differs from Rust,
+// where a bare lowercase name always binds). TK_FOO/TK_BAR are `global`s.
+let kind = match token {
+    TK_FOO | TK_BAR => "keyword",
+    i32::MAX        => "max",
+    _               => "other",
+};
 ```
 
 Semicolons do not have particular semantics; they are just separators to statements. Convention in `wado format`: single-line block does not use semicolon.
