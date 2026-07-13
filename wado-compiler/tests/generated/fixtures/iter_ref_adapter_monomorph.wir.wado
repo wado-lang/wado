@@ -958,13 +958,13 @@ fn "core:prelude/list.wado/List<i32>::grow"(self) {
 }
 
 fn "core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(self) {
-    let val: ref "core:prelude/types.wado//Box<i32>";
+    let ref_val: ref "core:prelude/types.wado//Box<i32>";
     if self.index >= self.end {
         return ref.null none;
     }
-    val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get<i32>(self.repr, self.index) };
+    ref_val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get<i32>(self.repr, self.index) };
     self.index = self.index + 1;
-    return val;
+    return ref_val;
 }
 
 fn "iter_ref_adapter_monomorph.wado/__Closure_2::__call"(self, x) {

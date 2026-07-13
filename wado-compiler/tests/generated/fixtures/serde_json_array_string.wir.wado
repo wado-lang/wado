@@ -138,7 +138,7 @@ type "functype//serde_json_array_string.wado/__cm_export____test_1_serialize_lis
 
 type "functype//serde_json_array_string.wado/__cm_export____test_2_roundtrip_i32" = fn();  // TypeId(34)
 
-type "functype//serde_json_array_string.wado/$value_copy$T86" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(35)
+type "functype//serde_json_array_string.wado/$value_copy$T87" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(35)
 
 type "functype//serde_json_array_string.wado/$value_copy$T27" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(36)
 
@@ -430,7 +430,7 @@ fn "serde_json_array_string.wado/__cm_export____test_2_roundtrip_i32"() {
     "wasi/task-return"(0);
 }
 
-fn "serde_json_array_string.wado/$value_copy$T86"(v) {
+fn "serde_json_array_string.wado/$value_copy$T87"(v) {
     return struct.new "core:prelude/string.wado//StrCharIter" { repr: v.repr, used: v.used, byte_index: v.byte_index };
 }
 
@@ -1760,7 +1760,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
     count = 0;
     truncated = 0;
-    __iter_5 = "serde_json_array_string.wado/$value_copy$T86"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
+    __iter_5 = "serde_json_array_string.wado/$value_copy$T87"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
     _licm_arith_52 = limit >= 0;
     b209: block {
         l210: loop {
@@ -1918,13 +1918,13 @@ fn "core:json/JsonSeqSerializer^SerializeSeq::element<i32>"(self, value) {
 }
 
 fn "core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(self) {
-    let val: ref "core:prelude/types.wado//Box<i32>";
+    let ref_val: ref "core:prelude/types.wado//Box<i32>";
     if self.index >= self.end {
         return ref.null none;
     }
-    val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get<i32>(self.repr, self.index) };
+    ref_val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get<i32>(self.repr, self.index) };
     self.index = self.index + 1;
-    return val;
+    return ref_val;
 }
 
 fn "core:json/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>"(self, value) {
@@ -1942,13 +1942,13 @@ fn "core:json/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/S
 }
 
 fn "core:prelude/slice.wado/ArrayRefIter<core:prelude/string.wado/String>^Iterator::next"(self) {
-    let val: ref "core:prelude/string.wado//String";
+    let ref_val: ref "core:prelude/string.wado//String";
     if self.index >= self.end {
         return ref.null none;
     }
-    val = "serde_json_array_string.wado/$value_copy$T27"(builtin::array_get<ref "core:prelude/string.wado//String">(self.repr, self.index));
+    ref_val = builtin::array_get<ref "core:prelude/string.wado//String">(self.repr, self.index);
     self.index = self.index + 1;
-    return val;
+    return ref_val;
 }
 
 export fn "serde_json_array_string.wado/__cm_export____test_0_serialize_list_string_" as "__test_0_serialize_list_string_"

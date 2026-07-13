@@ -14,7 +14,10 @@ use crate::wir::{CanonicalIntrinsic, WirInstr, WirName, WirType, WirTypeDef, Wir
 use super::context::WirContext;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 
-pub(super) fn ref_binding_needs_boxing(binding_wir: &WirType, source_wir: Option<&WirType>) -> bool {
+pub(super) fn ref_binding_needs_boxing(
+    binding_wir: &WirType,
+    source_wir: Option<&WirType>,
+) -> bool {
     match (binding_wir, source_wir) {
         (WirType::Ref { type_id: bt, .. }, Some(WirType::Ref { type_id: st, .. })) => bt != st,
         (WirType::Ref { .. }, Some(WirType::AbstractRef { .. })) => false,

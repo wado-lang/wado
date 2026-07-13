@@ -72,7 +72,7 @@ type "functype//anon_struct_various_types.wado/__cm_binding__Stdout_write_via_st
 
 type "functype//anon_struct_various_types.wado/__cm_export__run" = fn();  // TypeId(21)
 
-type "functype//anon_struct_various_types.wado/$value_copy$T97" = fn(ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(22)
+type "functype//anon_struct_various_types.wado/$value_copy$T98" = fn(ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(22)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(23)
 
@@ -238,7 +238,7 @@ fn "anon_struct_various_types.wado/__cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "anon_struct_various_types.wado/$value_copy$T97"(v) {
+fn "anon_struct_various_types.wado/$value_copy$T98"(v) {
     return struct.new "core:prelude/int128.wado//u128" { low: v.low, high: v.high };
 }
 
@@ -423,7 +423,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
         unreachable;
     }
     if "core:prelude/int128.wado/u128^Ord::cmp"(self, divisor) == 0 {
-        return struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }, ref.as_non_null("anon_struct_various_types.wado/$value_copy$T97"(self));
+        return struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }, ref.as_non_null("anon_struct_various_types.wado/$value_copy$T98"(self));
     }
     if (if self.low == divisor.low -> i32 {
         self.high == divisor.high;
@@ -438,7 +438,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
     b21: block {
         l22: loop {
             break_if b21 i < 0;
-            remainder = "anon_struct_various_types.wado/$value_copy$T97"("core:prelude/int128.wado/u128^Shl::shl"(remainder, 1));
+            remainder = "anon_struct_various_types.wado/$value_copy$T98"("core:prelude/int128.wado/u128^Shl::shl"(remainder, 1));
             bit = "core:prelude/int128.wado/u128::get_bit"(self, i);
             if bit {
                 remainder = struct.new "core:prelude/int128.wado//u128" { low: remainder.low | 1_i64, high: remainder.high | 0_i64 };
@@ -505,7 +505,7 @@ fn "core:prelude/int128.wado/u128::fmt_decimal_magnitude"(self, f, is_neg) {
     }
     ten = struct.new "core:prelude/int128.wado//u128" { low: 10_i64, high: 0_i64 };
     digit_count = 0;
-    temp_7 = "anon_struct_various_types.wado/$value_copy$T97"(self);
+    temp_7 = "anon_struct_various_types.wado/$value_copy$T98"(self);
     b29: block {
         l30: loop {
             break_if b29 "core:prelude/int128.wado/u128^Ord::cmp"(temp_7, global:core:prelude/int128.wado::__const_obj_5) != 2;
@@ -522,7 +522,7 @@ fn "core:prelude/int128.wado/u128::fmt_decimal_magnitude"(self, f, is_neg) {
     self_27 = f.buf;
     arr_9 = self_27.repr;
     pos = offset_8 + digit_count;
-    temp_11 = "anon_struct_various_types.wado/$value_copy$T97"(self);
+    temp_11 = "anon_struct_various_types.wado/$value_copy$T98"(self);
     b31: block {
         l32: loop {
             break_if b31 "core:prelude/int128.wado/u128^Ord::cmp"(temp_11, global:core:prelude/int128.wado::__const_obj_5) != 2;
