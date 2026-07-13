@@ -633,17 +633,29 @@ affine-type surface for a later increment.
 
 ### R1: Robust cleanup (heuristic removal)
 
-Replace the borrow-vs-transfer heuristic with authoritative ownership facts.
-Each defect is a P0 compiler bug: fixed red/green with an e2e fixture whose
-runtime resource-table check proves the drop fires exactly once.
+Close the concrete leak / double-drop gaps in the cleanup pass. Each defect is
+a P0 compiler bug: fixed red/green with an e2e fixture whose runtime
+resource-table check proves the drop fires exactly once.
 
-- [ ] Known gap: a `&self` method on a `Result<Resource, E>` (`is_ok`, …) is
+- [x] A `&self` method on a `Result<Resource, E>` (`is_ok`, …) was
       mis-classified as consuming by `is_resource_aggregate`, dropping the
-      structural cleanup of the inner resource — a leak. Reproduce, file, fix.
-- [ ] Derive the transferred / owned-at-scope-exit sets from last-use liveness
-      instead of the `is_resource_aggregate` guess.
-- [ ] Remove `is_resource_aggregate` and the borrow-vs-transfer heuristics once
-      the authoritative facts cover every fixture.
+      structural cleanup of the inner resource — a leak (#1569). Fixed by gating
+      the aggregate-consumes rule on the call result carrying a resource, so
+      only an extracting call (`unwrap -> Fields`) consumes the aggregate.
+- [x] A resource-carrying value produced in a discarding statement position (a
+      non-tail expression statement, or `let _ = …`, which lowers to the same)
+      was tracked by nothing and leaked. Fixed by dropping the value of a
+      discarded resource-carrying expression statement. A tail expression is the
+      block's value and flows to its consumer (a binding, or the function return
+      the caller then drops), so it is left intact.
+- [ ] `is_resource_aggregate` cannot be fully removed yet: `Result::unwrap`
+      extracts through a `&self` receiver, so "this call extracts the inner
+      resource" cannot be derived from ownership alone — it needs the extracting
+      methods to consume `self` (the deferred affine work, M-A / R3). Until then
+      the return-type-gated rule above is the authoritative approximation.
+- [ ] Unify with the value-copy client's last-use liveness once that analysis
+      and the cleanup pass share a pipeline stage (both currently distinct: this
+      pass is pre-monomorphize, `value_copy` is post).
 
 ### R2: Use-after-move diagnostics
 

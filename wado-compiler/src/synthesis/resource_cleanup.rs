@@ -772,13 +772,14 @@ fn elab_block_entry(
     let mut out: Vec<TirStmt> = Vec::new();
     let mut flow = Flow::Normal;
 
-    for stmt in stmts {
+    let last = stmts.len().wrapping_sub(1);
+    for (idx, stmt) in stmts.into_iter().enumerate() {
         if flow == Flow::Diverged {
             // Unreachable after a diverging statement; preserve verbatim.
             out.push(stmt);
             continue;
         }
-        flow = elab_stmt(stmt, owned, cx, entry, &mut out);
+        flow = elab_stmt(stmt, owned, cx, entry, idx == last, &mut out);
     }
 
     if flow == Flow::Normal {
@@ -868,11 +869,16 @@ fn stmt_flow(stmt: &TirStmt) -> Flow {
 
 /// Elaborate one statement, appending the result to `out`. Returns whether
 /// control falls through to the next statement.
+///
+/// `is_tail` marks the block's final statement, whose value may be the block's
+/// result and is therefore consumed by the enclosing context rather than
+/// discarded here.
 fn elab_stmt(
     stmt: TirStmt,
     owned: &mut Owned,
     cx: &mut Cx,
     entry: usize,
+    is_tail: bool,
     out: &mut Vec<TirStmt>,
 ) -> Flow {
     let span = stmt.span;
@@ -931,10 +937,20 @@ fn elab_stmt(
 
         TirStmtKind::Expr(expr) => {
             let elaborated = elab_value_expr(expr, owned, cx);
-            out.push(TirStmt {
-                kind: TirStmtKind::Expr(elaborated),
-                span,
-            });
+            // A non-tail expression statement discards its value. If that value
+            // carries an owned resource (a produced-and-ignored handle, e.g.
+            // `Fields::new();` or `let _ = Fields::new()`), drop it here — it is
+            // bound to nothing and would otherwise leak. The tail statement's
+            // value belongs to the enclosing context and is left intact.
+            if !is_tail && carries_resource(cx.tt, cx.reg, elaborated.type_id) {
+                let ty = elaborated.type_id;
+                out.extend(drop_value(elaborated, ty, cx));
+            } else {
+                out.push(TirStmt {
+                    kind: TirStmtKind::Expr(elaborated),
+                    span,
+                });
+            }
             Flow::Normal
         }
 
