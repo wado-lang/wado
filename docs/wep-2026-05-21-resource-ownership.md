@@ -648,19 +648,53 @@ resource-table check proves the drop fires exactly once.
       discarded resource-carrying expression statement. A tail expression is the
       block's value and flows to its consumer (a binding, or the function return
       the caller then drops), so it is left intact.
-- [ ] `is_resource_aggregate` cannot be fully removed yet: `Result::unwrap`
-      extracts through a `&self` receiver, so "this call extracts the inner
-      resource" cannot be derived from ownership alone — it needs the extracting
-      methods to consume `self` (the deferred affine work, M-A / R3). Until then
-      the return-type-gated rule above is the authoritative approximation.
-- [ ] Unify with the value-copy client's last-use liveness once that analysis
-      and the cleanup pass share a pipeline stage (both currently distinct: this
-      pass is pre-monomorphize, `value_copy` is post).
+- [ ] Remove `is_resource_aggregate` once the move check (below) forbids
+      `&self` resource extraction, so an aggregate method call is always a
+      borrow and cleanup never guesses.
+
+The last two remaining bullets are gated on the same missing piece — resource
+move semantics — so R1 completes by building the move check, not by more
+heuristic patches. This is Path B, chosen directly: the move check is the one
+thing that makes cleanup authoritative, and it delivers R2 in the same pass.
+
+### Move check (the R1/R2 engine)
+
+A single diagnostic pass gives resources move-only semantics. It makes cleanup
+authoritative (R1) and use-after-move an error (R2) at once.
+
+Layer — the `Semantics` layer (AST + type annotations), as a sibling of
+`effect_check::check_semantics`. This is the LSP + batch shared path with
+spanned diagnostics and, unlike post-monomorphize TIR, has both a diagnostic
+mechanism and source spans. It is also where the WEP always wanted the analysis.
+
+Substrate — reuse the last-use liveness already computed there
+(`elaborator::liveness::Liveness::last_uses`, WEP 2026-05-21): a resource
+binding is live until its last use, moved at it.
+
+Rules:
+
+- Non-copyable / use-after-move. A resource value copied (`let b = a`) or
+  otherwise consumed and then used again is an error. Directly reads
+  `last_uses`: a use of a resource binding that is not its last use, where the
+  value is consumed, is use-after-move.
+- No move out of a borrow. Moving a resource out of a borrowed place (`*self`,
+  `borrow.field`, a pattern binding from `*borrow`) is forbidden — this is what
+  makes `Result::unwrap(&self) -> T` illegal for a resource `T` and directs
+  extraction to `if let Ok(r) = …` (a move) instead. Because `unwrap`'s body is
+  generic (`match *self { Ok(v) => v }`, `v: T`), the check is a per-function
+  summary ("returns a value rooted in a borrowed parameter"), computed on the
+  generic body and reported at each call site whose concrete return carries a
+  resource — so the error lands on the user's `.unwrap()`, not in the stdlib.
+  A `&self` method that returns a freshly produced resource (`dir.open_at() ->
+  Descriptor`) is not rooted in the borrow and stays legal.
+
+Staging — runs pre-monomorphize on `Semantics`; the summary is generic, the
+resource-ness test is at the concrete call site. Cleanup then drops "owned and
+not moved at scope exit" with no `is_resource_aggregate`.
 
 ### R2: Use-after-move diagnostics
 
-- [ ] Diagnose use-after-move / use-after-transfer of a resource binding as a
-      compile error (resources cannot copy). Reuses the R1 liveness; no keyword.
+- [ ] Delivered by the move check above (non-copyable / use-after-move rule).
 
 ### R3: Consuming `drop`
 
