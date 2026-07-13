@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783975525498,
+  "lastUpdate": 1783977223320,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -40053,6 +40053,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/04f1849e96c1eaeb3876650aaa1bd67038278818"
         },
         "date": 1783975524801,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16422,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 266286,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c25e7dc0119c52fed5363272fdbe53e2c21f7546",
+          "message": "Merge pull request #1575 from wado-lang/claude/wizardly-cori-99gfhd\n\nfeat(compiler): move-only resources — use-after-move check and cleanup leak fixes",
+          "timestamp": "2026-07-14T06:05:47+09:00",
+          "tree_id": "e3318f6a0985e415fae68e1fbb56b7cd68534e5c",
+          "url": "https://github.com/wado-lang/wado/commit/c25e7dc0119c52fed5363272fdbe53e2c21f7546"
+        },
+        "date": 1783977223126,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
