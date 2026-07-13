@@ -132,7 +132,7 @@ fn carries_resource(tt: &TypeTable, reg: &CmInterfaceRegistry, type_id: TypeId) 
             name,
             module_source,
         } => reg
-            .get_resource_cm_name_by_source(&module_source.to_string(), name)
+            .get_resource_cm_name_by_module(&module_source.to_string(), name)
             .is_some(),
         _ => {
             if let Some((ok, err)) = result_args(tt, type_id) {
@@ -368,7 +368,10 @@ fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> 
         module_source,
     } = cx.tt.get(base).clone()
     {
-        return match cx.reg.get_resource_cm_name_by_source(&module_source.to_string(), &name) {
+        return match cx
+            .reg
+            .get_resource_cm_name_by_module(&module_source.to_string(), &name)
+        {
             Some(cm) => vec![expr_stmt(cm_raw_call(
                 &format!("resource-drop:{cm}"),
                 vec![scrutinee],

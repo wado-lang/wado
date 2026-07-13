@@ -2000,9 +2000,9 @@ fn parameterize_stream_cm_name(
             if let Some(payload) = crate::component_model::cm_payload_type_from_type_id(tt, elem) {
                 return format!("{cm_name}:val-{}", payload.name_suffix());
             }
-            // The element's declaring interface keys the CM-name lookup;
-            // `ModuleSource`'s `Display` matches the `#[cm(...)]` registration
-            // source (`wasi:{interface}`).
+            // The element's declaring interface keys the CM-name lookup. Its
+            // `module_source` is the loader identity (a `.wado` path); the
+            // registry bridges it to the versioned `#[cm(...)]` key.
             let elem_source = match tt.get(tt.get_ultimate_base_type(elem)) {
                 ResolvedType::Struct { module_source, .. }
                 | ResolvedType::Variant { module_source, .. }
@@ -2021,16 +2021,21 @@ fn parameterize_stream_cm_name(
     cm_name.to_string()
 }
 
-/// Look up the canonical `#[cm("…")]` CM name for a Wado type declared in
-/// `source`, across the registry's stream-eligible categories (struct,
-/// resource, variant, enum, flags). Returns `None` for an unregistered name.
-fn registered_cm_name(name: &str, source: &str, registry: &CmInterfaceRegistry) -> Option<String> {
+/// Look up the canonical `#[cm("…")]` CM name for a Wado type declared in the
+/// interface identified by the coarse `module_source` string, across the
+/// registry's stream-eligible categories (struct, resource, variant, enum,
+/// flags). Returns `None` for an unregistered name.
+fn registered_cm_name(
+    name: &str,
+    module_source: &str,
+    registry: &CmInterfaceRegistry,
+) -> Option<String> {
     registry
-        .get_struct_cm_name_by_source(source, name)
-        .or_else(|| registry.get_resource_cm_name_by_source(source, name))
-        .or_else(|| registry.get_variant_cm_name_by_source(source, name))
-        .or_else(|| registry.get_enum_cm_name_by_source(source, name))
-        .or_else(|| registry.get_flags_cm_name_by_source(source, name))
+        .get_struct_cm_name_by_module(module_source, name)
+        .or_else(|| registry.get_resource_cm_name_by_module(module_source, name))
+        .or_else(|| registry.get_variant_cm_name_by_module(module_source, name))
+        .or_else(|| registry.get_enum_cm_name_by_module(module_source, name))
+        .or_else(|| registry.get_flags_cm_name_by_module(module_source, name))
         .map(str::to_string)
 }
 

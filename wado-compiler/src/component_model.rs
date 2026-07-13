@@ -747,6 +747,31 @@ fn find_unique_source_in<'a, V>(
     found
 }
 
+/// The interface "stem" of a source string: its path without a trailing
+/// `.wado` file suffix or an `@version` tag. Bridges the loader's
+/// [`ModuleSource`] identity (e.g. `wasi:http/types.wado`) to the CM
+/// registration key (e.g. `wasi:http/types@0.3.0`), which name the same
+/// interface but differ in exactly those two decorations.
+fn interface_stem(source: &str) -> &str {
+    let source = source.strip_suffix(".wado").unwrap_or(source);
+    source.split_once('@').map_or(source, |(base, _)| base)
+}
+
+/// The exact registration source for `name` in `map`, given a coarse
+/// [`ModuleSource`] string. Matches on interface stem so a `.wado` suffix or
+/// `@version` tag on either side does not defeat the lookup. Returns the key's
+/// source, or `None` when no registered entry shares the stem and name.
+fn source_for_module<'a, V>(
+    map: &'a IndexMap<(String, String), V>,
+    module_source: &str,
+    name: &str,
+) -> Option<&'a str> {
+    let stem = interface_stem(module_source);
+    map.iter()
+        .find(|((src, n), _)| n == name && interface_stem(src) == stem)
+        .map(|((src, _), _)| src.as_str())
+}
+
 /// Walk a parsed stdlib module and return `name -> source_interface` for
 /// every top-level declaration that carries a `#[cm("...")]` attribute.
 ///
@@ -1702,6 +1727,50 @@ impl CmInterfaceRegistry {
         self.resources
             .get(&(interface.to_string(), name.to_string()))
             .map(String::as_str)
+    }
+
+    // -- `ModuleSource`-bridged lookups ------------------------------------
+    //
+    // A `ResolvedType`'s `module_source` names its declaring interface in the
+    // loader's identity namespace (a `.wado` file path, version-agnostic),
+    // which differs from the `#[cm(...)]` registration key by a `.wado` suffix
+    // and an `@version` tag. These accessors bridge that gap via
+    // `source_for_module` so codegen can resolve a CM name straight from a
+    // resolved type without reconstructing the versioned source string.
+
+    /// Resource CM name for `name` declared in the interface identified by the
+    /// coarse `module_source` string.
+    pub fn get_resource_cm_name_by_module(
+        &self,
+        module_source: &str,
+        name: &str,
+    ) -> Option<&str> {
+        source_for_module(&self.resources, module_source, name)
+            .and_then(|src| self.get_resource_cm_name_by_source(src, name))
+    }
+
+    /// Struct CM name for `name` declared in `module_source`'s interface.
+    pub fn get_struct_cm_name_by_module(&self, module_source: &str, name: &str) -> Option<&str> {
+        source_for_module(&self.structs, module_source, name)
+            .and_then(|src| self.get_struct_cm_name_by_source(src, name))
+    }
+
+    /// Variant CM name for `name` declared in `module_source`'s interface.
+    pub fn get_variant_cm_name_by_module(&self, module_source: &str, name: &str) -> Option<&str> {
+        source_for_module(&self.variants, module_source, name)
+            .and_then(|src| self.get_variant_cm_name_by_source(src, name))
+    }
+
+    /// Enum CM name for `name` declared in `module_source`'s interface.
+    pub fn get_enum_cm_name_by_module(&self, module_source: &str, name: &str) -> Option<&str> {
+        source_for_module(&self.enums, module_source, name)
+            .and_then(|src| self.get_enum_cm_name_by_source(src, name))
+    }
+
+    /// Flags CM name for `name` declared in `module_source`'s interface.
+    pub fn get_flags_cm_name_by_module(&self, module_source: &str, name: &str) -> Option<&str> {
+        source_for_module(&self.flags, module_source, name)
+            .and_then(|src| self.get_flags_cm_name_by_source(src, name))
     }
 
     /// Struct registered at `(interface, name)`; returns the CM kebab name.
