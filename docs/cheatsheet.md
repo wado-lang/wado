@@ -958,15 +958,29 @@ impl<T: Eq> Eq for Pair<T> {
 
 ### Auto-Derived Traits
 
-All primitives implement `Eq` and `Ord`. Structs and enums auto-derive both (variants: `Eq` only) when every field/case implements the trait — synthesized on demand, not for every type. An explicit `impl Eq for T;` / `impl Ord for T;` marker forces it and is a compile error if ineligible. `Option<T: Eq>`, `Result<T: Eq, E: Eq>`, `List<T: Eq>` implement `Eq`; `List<T: Ord>` implements `Ord`.
+Derivation is _bound-driven_: `Eq`, `Ord`, `Default`, `Serialize`, and `Deserialize` are synthesized for a type only where something actually needs it — an `==`/`<` operator, a `T::default()` call, a serialize/deserialize call, a `T: Trait` bound, or an explicit marker. A declared type nothing uses gets no synthesized code. Synthesis is structural and recursive: it succeeds only when every field/case satisfies the trait, and covers structs (including anonymous), enums, variants (`Ord` excluded), and flags. `Default` instead requires every field of a non-generic struct to carry a default expression (`f: T = expr`). So a plain struct is comparable and serializable with no declaration:
 
-`Inspect` and `InspectAlt` are auto-derived unconditionally for every type. The delegation chain when a trait is not explicitly implemented is `InspectAlt → Inspect`, `Display → Inspect`, and `DisplayAlt → Display` — so `{x:#}` defaults to plain display, while pretty-printing stays on the inspect side (`{x:#?}`). A newtype's `Display`/`DisplayAlt` render transparently like the base value; only `Inspect`/`InspectAlt` add the `as Name` annotation.
+```wado
+struct Point { x: i32, y: i32 }
+let same = Point { x: 1, y: 2 } == Point { x: 1, y: 2 };  // Eq synthesized here
+let json = to_string(&Point { x: 1, y: 2 });              // Serialize synthesized here
+```
 
-`Default` is auto-derived unconditionally for a non-generic struct when every field has a declared default expression (`f: T = expr`).
+All primitives implement `Eq` and `Ord`. `Option<T: Eq>`, `Result<T: Eq, E: Eq>`, and `List<T: Eq>` implement `Eq`; `List<T: Ord>` implements `Ord`.
 
-`Serialize` / `Deserialize` (`core:serde`) derive the same on-demand way, for struct (including anonymous), variant, enum, or flags — no marker required, though their marker (unlike `Eq`/`Ord`'s) doesn't pre-validate. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
+An empty marker `impl Trait for T;` is a static conformance check — like Java's `implements`. It validates `T` structurally at its own span, is a hard compile error if `T` is ineligible, then records the derive exactly as a use would. Writing it is optional for these traits (a use suffices), but it pins down intent, fails loudly if a later field breaks eligibility, and is the way to attach `#[serde(...)]` customization or to derive a type with no current use site.
 
-Auto-derived traits are overridden by user-written `impl Trait for T`.
+```wado
+struct Broken { retries: i32 = 3, name: String }
+impl Default for Broken;   // ERROR: `name` has no default expression
+
+variant Shape { Callback(fn(i32) -> i32), Point }
+impl Serialize for Shape;  // ERROR: the `Callback` payload is not serializable
+```
+
+The format traits `Inspect` / `InspectAlt` / `Display` / `DisplayAlt` are _total_: every type is structurally formattable, so a `T: Inspect` / `T: Display` bound always holds, a marker always validates, and bodies are generated eagerly for every type. When a trait is not explicitly implemented the delegation chain is `InspectAlt → Inspect`, `Display → Inspect`, and `DisplayAlt → Display` — so `{x:#}` defaults to plain display, while pretty-printing stays on the inspect side (`{x:#?}`). A newtype's `Display`/`DisplayAlt` render transparently like the base value; only `Inspect`/`InspectAlt` add the `as Name` annotation.
+
+A hand-written `impl Trait for T { … }` always wins over synthesis. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
 ## Associated Constants
 
