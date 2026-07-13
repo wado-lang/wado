@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783934195562,
+  "lastUpdate": 1783937594488,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -39965,6 +39965,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/064929af6b3017395aea0c3d348a0bac2ea3d149"
         },
         "date": 1783934195223,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16422,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 266286,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "729806b1a103cd71e0160b0cc42eca82414b09b7",
+          "message": "Merge pull request #1570 from wado-lang/claude/workflow-60min-timeout-cayegx\n\nchore(ci): add 60-minute timeout to all workflow jobs",
+          "timestamp": "2026-07-13T19:03:56+09:00",
+          "tree_id": "d08ec16846dcbbb13a678cec5e948dad66cc1f76",
+          "url": "https://github.com/wado-lang/wado/commit/729806b1a103cd71e0160b0cc42eca82414b09b7"
+        },
+        "date": 1783937593742,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
