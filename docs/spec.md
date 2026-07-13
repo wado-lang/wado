@@ -3505,6 +3505,21 @@ Module paths are validated before loading to provide clear error messages:
 
 Bare names (`"router"`) are rejected. See [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md) for resolution and version rules.
 
+### Symbol Notation
+
+A symbol is named `MODULE#SYMBOL` — the written form used by docs, `wado query`, and diagnostics. `MODULE` is the import specifier verbatim (quoted as in `use`; quotes may be dropped for a scheme or bare name with no whitespace). `SYMBOL` uses Wado's own operators, so its kind is visible from the separator: `::` for static scope, `.` for an instance method, `^` for a trait-impl member.
+
+```
+core:json#parse                      # free function / global
+core:math#f64::PI                    # associated const / static fn
+core:collections#TreeMap.insert      # instance method
+core:collections#List<String>::len   # generics use Wado angle brackets
+core:fmt#Point^Display::fmt          # trait-impl member
+"./utils.wado"#Helper::new           # relative path — must be quoted
+```
+
+See [WEP: Symbol Notation](./wep-2026-06-14-symbol-notation.md).
+
 ### Import Syntax
 
 ```wado
