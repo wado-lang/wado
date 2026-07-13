@@ -1352,15 +1352,11 @@ impl GenContext {
         };
     }
 
-    /// Seed `scannable_cache` for every parser rule in O(V+E). The only `false`
-    /// source in `is_element_scannable_at` is a reference that reaches an
-    /// undefined rule, so scannability is pure reachability: a rule is
-    /// non-scannable iff it can reach (through RuleRef / Label / Repeat / Group
-    /// structure) a reference to a name that is not a parser rule. Computing it
-    /// once makes the recursive check O(1). The recursion's SCC-root-only
-    /// memoization otherwise left interior nodes of a large mutual-recursion SCC
-    /// uncached and re-explored them exponentially — `gale gen` on TypeScript /
-    /// Rust blew up to tens of minutes.
+    /// Seed `scannable_cache` for every parser rule. Scannability is pure
+    /// reachability — a rule is non-scannable iff it can reach a reference to a
+    /// name that is not a parser rule, the only `false` source in
+    /// `is_element_scannable_at` — so one O(V+E) fixpoint replaces the recursive
+    /// check, which was exponential on large mutual-recursion SCCs (see perf.md).
     pub fn precompute_scannability(&mut self) {
         let n = self.parser_rules.len();
         let mut bad: List<bool> = [];
@@ -1368,29 +1364,13 @@ impl GenContext {
             bad.push(false);
         }
 
-        // Backward-propagate badness to a fixpoint: a rule is bad if it
-        // references an undefined rule or an already-bad rule. Recompute each
-        // rule's refs per pass to avoid materializing a nested adjacency list.
         let mut changed = true;
         while changed {
             changed = false;
             for let mut rid = 0; rid < n; rid += 1 {
-                if !bad[rid] {
-                    let mut names: List<String> = [];
-                    for let alt of &self.parser_rules[rid].alternatives {
-                        collect_scannable_refs(&alt.elements, &mut names);
-                    }
-                    let mut is_bad = false;
-                    for let name of &names {
-                        let r = self.rule_index_of(name);
-                        if r < 0 || bad[r] {
-                            is_bad = true;
-                        }
-                    }
-                    if is_bad {
-                        bad[rid] = true;
-                        changed = true;
-                    }
+                if !bad[rid] && self.references_bad_rule(rid, &bad) {
+                    bad[rid] = true;
+                    changed = true;
                 }
             }
         }
@@ -1398,6 +1378,22 @@ impl GenContext {
         for let mut rid = 0; rid < n; rid += 1 {
             self.scannable_cache[rid] = Option::Some(!bad[rid]);
         }
+    }
+
+    /// The scannability fixpoint's step relation: rule `rid` references an
+    /// undefined rule, or one already marked bad.
+    fn references_bad_rule(&self, rid: i32, bad: &List<bool>) -> bool {
+        let mut names: List<String> = [];
+        for let alt of &self.parser_rules[rid].alternatives {
+            collect_scannable_refs(&alt.elements, &mut names);
+        }
+        for let name of &names {
+            let r = self.rule_index_of(name);
+            if r < 0 || bad[r] {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// Get the rule name that owns the general group types inside a given
