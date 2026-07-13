@@ -78,7 +78,10 @@ fn type_name(resolve: &wit_parser::Resolve, ty: &wit_parser::Type) -> Option<Str
 }
 
 fn compile_lib_source(source: &str) -> Vec<u8> {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/nt_boundary.wado");
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/nt_boundary.wado"
+    );
     let options = CompilerOptions {
         opt_level: OptLevel::O2,
         lib_world: Some(LIB_WORLD_FQ.to_string()),
@@ -87,6 +90,51 @@ fn compile_lib_source(source: &str) -> Vec<u8> {
     common::compile_source_with_compiler_options(Path::new(path), source, options)
         .expect("compile inline --lib source")
         .wasm
+}
+
+/// Regression: the CM export adapter lifted an `Option<newtype>` payload as
+/// `i32` (the fall-through default) instead of the newtype's base, producing
+/// invalid core Wasm (`expected f64, found i32`). Compiling validates the
+/// module, so a bad adapter panics in codegen.
+#[test]
+fn lib_option_newtype_compiles_to_valid_wasm() {
+    let source = r#"
+pub type Meters = f64;
+export fn id_opt(v: Option<Meters>) -> Option<Meters> {
+    return v;
+}
+test "shape compiles" {}
+"#;
+    let wasm = compile_lib_source(source);
+    assert!(
+        wit_component::decode(&wasm).is_ok(),
+        "compiled Option<newtype> component does not decode"
+    );
+}
+
+/// The flat-ABI newtype fix must cover every container the export adapter
+/// flattens through, not just `Option` — `Result`, tuples, and nested
+/// compositions all read the newtype's base flat slots.
+#[test]
+fn lib_newtype_containers_compile_to_valid_wasm() {
+    let source = r#"
+pub type Meters = f64;
+export fn id_result(v: Result<Meters, u32>) -> Result<Meters, u32> {
+    return v;
+}
+export fn id_tuple(v: [Meters, u32]) -> [Meters, u32] {
+    return v;
+}
+export fn id_opt_list(v: Option<List<Meters>>) -> Option<List<Meters>> {
+    return v;
+}
+test "shape compiles" {}
+"#;
+    let wasm = compile_lib_source(source);
+    assert!(
+        wit_component::decode(&wasm).is_ok(),
+        "compiled newtype-container component does not decode"
+    );
 }
 
 /// A local newtype is preserved in *nested* positions too — a record field, a

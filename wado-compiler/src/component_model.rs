@@ -3240,9 +3240,14 @@ impl CmTypeGen {
                         // recursed into as a nested alias. Passing the raw base
                         // would reach the unsupported-name panic below for an
                         // imported-newtype base.
-                        let base = cm_interface_registry.resolve_type_preserving_local_newtypes(&base);
-                        let base_val =
-                            self.ast_type_to_cm(sink, &base, cm_interface_registry, resource_exports);
+                        let base =
+                            cm_interface_registry.resolve_type_preserving_local_newtypes(&base);
+                        let base_val = self.ast_type_to_cm(
+                            sink,
+                            &base,
+                            cm_interface_registry,
+                            resource_exports,
+                        );
                         // A primitive base has no defined-type index to alias, so
                         // define one; an aggregate base already has an index we
                         // name directly (`type meters = point`).
@@ -4525,9 +4530,10 @@ mod tests {
             ("wasi:clocks/types@0.3.0".into(), "Temp".into()),
             named("u64", None),
         );
-        registry
-            .newtypes
-            .insert(("pkg:app/app@1".into(), "Celsius".into()), named("Temp", None));
+        registry.newtypes.insert(
+            ("pkg:app/app@1".into(), "Celsius".into()),
+            named("Temp", None),
+        );
 
         let celsius = named("Celsius", Some("pkg:app/app@1"));
         assert!(matches!(
