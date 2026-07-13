@@ -519,11 +519,6 @@ fn scan_transfers(expr: &TirExpr, consuming: bool, consumed: &mut Vec<u32>, cx: 
                 } => expr.as_ref(),
                 _ => receiver.as_ref(),
             };
-            // The receiver is consumed when the method takes `self` by value,
-            // or when it is a resource-carrying aggregate whose inner resource
-            // a method may move out (e.g. `Result::unwrap`). A plain `&self`
-            // method on a bare resource only borrows it. Arguments are always
-            // passed by value and transfer ownership.
             let owned_self = func
                 .method_info
                 .as_ref()
