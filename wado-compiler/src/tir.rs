@@ -3789,6 +3789,14 @@ pub struct MonomorphInfo {
     pub is_blanket: bool,
 }
 
+/// Whether a function identifies as the core builtin `builtin`, matching both
+/// the plain generic form (`name`) and a monomorphized instance whose `name` is
+/// mangled but whose `monomorph_info.generic_name` is the base name. A name
+/// check that only compares `name` silently misses monomorphized builtins.
+pub fn matches_builtin(name: &str, monomorph_info: Option<&MonomorphInfo>, builtin: &str) -> bool {
+    name == builtin || monomorph_info.is_some_and(|m| m.generic_name == builtin)
+}
+
 /// A `#[param]` compile-time parameter declared on a `global`.
 ///
 /// Carried from reify (which validates the attribute shape) to the

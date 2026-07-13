@@ -87,11 +87,8 @@ pub(super) fn resolve_array_new_ids(project: &NirPackage) -> IndexSet<FuncId> {
         .iter()
         .filter_map(|f| {
             let func = f.borrow();
-            let is_array_new = func.name == ARRAY_NEW
-                || func
-                    .monomorph_info
-                    .as_ref()
-                    .is_some_and(|m| m.generic_name == ARRAY_NEW);
+            let is_array_new =
+                crate::nir::matches_builtin(&func.name, func.monomorph_info.as_ref(), ARRAY_NEW);
             (is_array_new).then_some(func.id).flatten()
         })
         .collect()

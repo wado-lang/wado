@@ -23,13 +23,14 @@ use super::funcset::FuncKeySet;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
-    FunctionKind, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeTable,
+    FunctionKind, FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind,
+    TirStmt, TirStmtKind, TirUnaryOp, TypeTable, matches_builtin,
 };
 use crate::tir_visitor::TirRefVisitor;
 
-fn aliases_container_builtin(name: &str) -> bool {
-    name == "array_get" || name == "array_get_ref"
+fn is_container_alias_read(name: &str, monomorph_info: Option<&MonomorphInfo>) -> bool {
+    matches_builtin(name, monomorph_info, "array_get")
+        || matches_builtin(name, monomorph_info, "array_get_ref")
 }
 
 /// Oracle the freshness checker consults for a call's return convention.
@@ -47,12 +48,13 @@ impl<'a> OwnedCalls<'a> {
     }
 
     /// Whether a call to `func` yields an owned (fresh) value. A core builtin
-    /// allocates or computes a fresh result — except `array_get`, which reads an
-    /// element in place and aliases its container. A body function is owned iff
-    /// the fixpoint proved it so; extern / opaque callees default to borrowed.
+    /// allocates or computes a fresh result — except the container-alias reads
+    /// `array_get` / `array_get_ref`, which borrow an element in place. A body
+    /// function is owned iff the fixpoint proved it so; extern / opaque callees
+    /// default to borrowed.
     pub fn is_owned(&self, func: &FunctionRef) -> bool {
         if func.module_source.is_core_builtin() || func.module_source.is_wasm_asset() {
-            return !aliases_container_builtin(&func.name);
+            return !is_container_alias_read(&func.name, func.monomorph_info.as_ref());
         }
         self.returns_owned.contains(&func.module_source, &func.name)
     }
@@ -130,8 +132,8 @@ fn function_returns_receiver_alias(body: &TirBlock, set: &FuncKeySet) -> bool {
 }
 
 /// Whether `expr` aliases the storage of parameter `param`: a projection chain,
-/// an `array_get` element read of one, or a call to a receiver-aliasing callee
-/// whose receiver / first argument is one.
+/// an `array_get` / `array_get_ref` element read of one, or a call to a
+/// receiver-aliasing callee whose receiver / first argument is one.
 fn is_receiver_projection(expr: &TirExpr, param: u32, set: &FuncKeySet) -> bool {
     match &expr.kind {
         TirExprKind::Local { index, .. } => *index == param,
@@ -141,7 +143,8 @@ fn is_receiver_projection(expr: &TirExpr, param: u32, set: &FuncKeySet) -> bool 
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::Index { expr: inner, .. } => is_receiver_projection(inner, param, set),
         TirExprKind::Call { func, args, .. }
-            if func.module_source.is_core_builtin() && aliases_container_builtin(&func.name) =>
+            if func.module_source.is_core_builtin()
+                && is_container_alias_read(&func.name, func.monomorph_info.as_ref()) =>
         {
             args.first()
                 .is_some_and(|a| is_receiver_projection(&a.expr, param, set))
@@ -174,7 +177,7 @@ pub fn compute_return_conventions(project: &FlatPackage) -> ReturnConventions {
         let func = func.borrow();
         let is_helper = matches!(func.kind, FunctionKind::ValueCopy { .. });
         let is_builtin = func.module_source.is_core_builtin() || func.module_source.is_wasm_asset();
-        if is_helper || (is_builtin && !aliases_container_builtin(&func.name)) {
+        if is_helper || (is_builtin && !is_container_alias_read(&func.name, func.monomorph_info.as_ref())) {
             owned.insert(func.module_source.clone(), func.name.clone());
         }
     }

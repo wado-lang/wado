@@ -170,7 +170,8 @@ fn is_copy_value_call(expr: &TirExpr) -> bool {
     matches!(
         &expr.kind,
         TirExprKind::Call { func, .. }
-            if func.module_source.is_core_builtin() && func.name == "copy_value"
+            if func.module_source.is_core_builtin()
+                && crate::tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "copy_value")
     )
 }
 
@@ -447,7 +448,7 @@ pub fn is_source_immutable(expr: &TirExpr, immutable_locals: &IndexSet<u32>) -> 
 fn array_clone_element_type_arg(expr: &TirExpr) -> Option<TypeId> {
     if let TirExprKind::Call { func, .. } = &expr.kind
         && func.module_source.is_core_builtin()
-        && func.name == "array_clone"
+        && crate::tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "array_clone")
     {
         func.monomorph_info
             .as_ref()
