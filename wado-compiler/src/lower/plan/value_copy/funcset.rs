@@ -69,7 +69,10 @@ impl<V> FuncKeyMap<V> {
     }
 
     pub fn insert(&mut self, module: ModuleSource, name: String, value: V) {
-        self.by_module.entry(module).or_default().insert(name, value);
+        self.by_module
+            .entry(module)
+            .or_default()
+            .insert(name, value);
     }
 
     /// Transform every value, preserving keys.
