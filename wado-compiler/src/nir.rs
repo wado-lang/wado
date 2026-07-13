@@ -92,6 +92,7 @@ impl FunctionRef {
 
         match generic_name {
             "array_get"
+            | "array_get_ref"
             | "array_set"
             | "array_new"
             | "array_len"
