@@ -4730,6 +4730,21 @@ struct Foo {
 }
 ```
 
+#### `#[param]` / `#[param(from_env = "...")]` / `#[param(name = "...")]`
+
+Marks a `global` as a compile-time build input. The type annotation gives the type, the initializer is the fallback, and read sites are ordinary global references. Each parameter resolves highest-priority-first: `-D NAME=value` (alias `--define`) on the `wado` invocation, then `from_env`, then the initializer. Overrides are parsed into the declared scalar type with the `LenientFromStr` spellings. See [WEP: Compile-Time Parameters](./wep-2026-04-26-compile-time-params.md).
+
+```wado
+#[param]
+global API_URL: String = "http://localhost";   // -D API_URL=...
+
+#[param(from_env = "PORT")]
+global PORT: i32 = 8080;                        // read from an env var
+
+#[param(name = "build.id")]
+global BUILD_ID: String = "dev";                // -D build.id=...
+```
+
 #### `#[expect_trap]`
 
 Test block attribute. Marks a test that is expected to trap. The test passes if the body traps, and fails if it completes normally.
