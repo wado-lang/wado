@@ -2011,7 +2011,9 @@ fn emit_world_exports(
                 .expect("lib type-gen present for sync-lift export");
             let mut param_vals: Vec<(String, ComponentValType)> = Vec::new();
             for (pname, pty) in &export.param_types {
-                let resolved = project.cm_interface_registry.resolve_type(pty);
+                let resolved = project
+                    .cm_interface_registry
+                    .resolve_type_preserving_local_newtypes(pty);
                 let mut sink = TopLevelSink {
                     builder: &mut *builder,
                     ctx: &mut *ctx,
@@ -2025,7 +2027,9 @@ fn emit_world_exports(
                 param_vals.push((pname.clone(), val));
             }
             let result_val = export.result_type.as_ref().map(|rty| {
-                let resolved = project.cm_interface_registry.resolve_type(rty);
+                let resolved = project
+                    .cm_interface_registry
+                    .resolve_type_preserving_local_newtypes(rty);
                 let mut sink = TopLevelSink {
                     builder: &mut *builder,
                     ctx: &mut *ctx,

@@ -1994,6 +1994,18 @@ impl CmInterfaceRegistry {
         find_unique_in(&self.newtypes, name)
     }
 
+    /// The base type of a *local* newtype `name` — one declared in the compiled
+    /// package rather than imported from a CM interface (`wasi:*`, kiln, or a
+    /// registered component interface). Returns `None` for CM-imported newtypes
+    /// and non-newtype names. The CM codegen emits a local newtype as a named
+    /// type alias at the boundary (issue #1456) instead of erasing it to its
+    /// base, so the compiled component's structural type matches `wado wit`.
+    pub fn local_newtype_base(&self, name: &str) -> Option<&Type> {
+        self.newtypes
+            .iter()
+            .find_map(|((source, n), ty)| (n == name && !self.is_cm_source(source)).then_some(ty))
+    }
+
     /// Iterate all newtypes as `((source_interface, name), type)`.
     pub fn newtypes(&self) -> &IndexMap<(String, String), Type> {
         &self.newtypes
@@ -2676,11 +2688,26 @@ impl CmInterfaceRegistry {
     /// This resolves newtypes like `Instant` -> `u64` throughout the type tree,
     /// including within generic type arguments.
     pub fn resolve_type(&self, ty: &Type) -> Type {
+        self.resolve_type_impl(ty, false)
+    }
+
+    /// Like [`Self::resolve_type`], but a *local* newtype (no `#[cm(...)]`
+    /// source) is kept as its named reference instead of peeled to its base.
+    /// The CM codegen then emits it as a named type alias (`type meters = f64`)
+    /// so the compiled component's structural type matches `wado wit`
+    /// (issue #1456). WASI/CM-imported newtypes still resolve through.
+    pub fn resolve_type_preserving_local_newtypes(&self, ty: &Type) -> Type {
+        self.resolve_type_impl(ty, true)
+    }
+
+    fn resolve_type_impl(&self, ty: &Type, preserve_local: bool) -> Type {
         match ty {
             Type::Named(named) => {
-                if let Some(aliased_ty) = self.get_newtype(&named.name) {
+                if preserve_local && self.local_newtype_base(&named.name).is_some() {
+                    ty.clone()
+                } else if let Some(aliased_ty) = self.get_newtype(&named.name) {
                     // Recursively resolve the aliased type
-                    self.resolve_type(aliased_ty)
+                    self.resolve_type_impl(aliased_ty, preserve_local)
                 } else {
                     ty.clone()
                 }
@@ -2690,7 +2717,7 @@ impl CmInterfaceRegistry {
                 let resolved_args: Vec<Type> = generic
                     .args
                     .iter()
-                    .map(|arg| self.resolve_type(arg))
+                    .map(|arg| self.resolve_type_impl(arg, preserve_local))
                     .collect();
                 Type::Generic(GenericType {
                     id: generic.id,
@@ -2700,19 +2727,26 @@ impl CmInterfaceRegistry {
                 })
             }
             Type::Tuple(types) => {
-                let resolved: Vec<Type> = types.iter().map(|t| self.resolve_type(t)).collect();
+                let resolved: Vec<Type> = types
+                    .iter()
+                    .map(|t| self.resolve_type_impl(t, preserve_local))
+                    .collect();
                 Type::Tuple(resolved)
             }
-            Type::Reference(inner) => Type::Reference(Box::new(self.resolve_type(inner))),
-            Type::MutReference(inner) => Type::MutReference(Box::new(self.resolve_type(inner))),
+            Type::Reference(inner) => {
+                Type::Reference(Box::new(self.resolve_type_impl(inner, preserve_local)))
+            }
+            Type::MutReference(inner) => {
+                Type::MutReference(Box::new(self.resolve_type_impl(inner, preserve_local)))
+            }
             Type::Function(func_ty) => {
                 // For function types, resolve params and return type
                 let resolved_params: Vec<Type> = func_ty
                     .params
                     .iter()
-                    .map(|t| self.resolve_type(t))
+                    .map(|t| self.resolve_type_impl(t, preserve_local))
                     .collect();
-                let resolved_return = self.resolve_type(&func_ty.return_type);
+                let resolved_return = self.resolve_type_impl(&func_ty.return_type, preserve_local);
                 Type::Function(Box::new(crate::ast::FunctionType {
                     is_mut: func_ty.is_mut,
                     params: resolved_params,
@@ -2724,8 +2758,11 @@ impl CmInterfaceRegistry {
             }
             // NamespacedGeneric types (like `ns::Type<T>`) are passed through
             Type::NamespacedGeneric(ng) => {
-                let resolved_args: Vec<Type> =
-                    ng.args.iter().map(|arg| self.resolve_type(arg)).collect();
+                let resolved_args: Vec<Type> = ng
+                    .args
+                    .iter()
+                    .map(|arg| self.resolve_type_impl(arg, preserve_local))
+                    .collect();
                 Type::NamespacedGeneric(crate::ast::NamespacedGenericType {
                     id: ng.id,
                     namespace: ng.namespace.clone(),
@@ -2763,6 +2800,9 @@ pub enum CmDefined<'a> {
     Borrow(u32),
     Future(Option<ComponentValType>),
     Stream(Option<ComponentValType>),
+    /// A type alias to a primitive (`type meters = f64`), used to preserve a
+    /// local newtype at the CM boundary.
+    Primitive(PrimitiveValType),
 }
 
 /// Emission target for the CM type engine. Decouples *what* type to build (the
@@ -2827,6 +2867,7 @@ pub(crate) fn emit_cm_defined(
         CmDefined::Borrow(resource) => enc.borrow(resource),
         CmDefined::Future(payload) => enc.future(payload),
         CmDefined::Stream(payload) => enc.stream(payload),
+        CmDefined::Primitive(prim) => enc.primitive(prim),
     }
 }
 
@@ -3138,6 +3179,35 @@ impl CmTypeGen {
                 "f64" => ComponentValType::Primitive(PrimitiveValType::F64),
                 "char" => ComponentValType::Primitive(PrimitiveValType::Char),
                 name => {
+                    // A local newtype (declared in the compiled package, not
+                    // imported from a CM interface) is preserved as a named CM
+                    // alias (`type meters = f64`) so the compiled component's
+                    // structural type matches `wado wit`, rather than erasing to
+                    // its base (issue #1456).
+                    if let Some(base) = cm_interface_registry.local_newtype_base(name).cloned() {
+                        let cache_key = format!("newtype:{name}");
+                        if let Some(&idx) = self.cache.get(&cache_key) {
+                            return ComponentValType::Type(idx);
+                        }
+                        let base_val = self.ast_type_to_cm(
+                            sink,
+                            &base,
+                            cm_interface_registry,
+                            resource_exports,
+                        );
+                        // A primitive base has no defined-type index to alias, so
+                        // define one; an aggregate base already has an index we
+                        // name directly (`type meters = point`).
+                        let base_idx = match base_val {
+                            ComponentValType::Primitive(prim) => {
+                                sink.define(CmDefined::Primitive(prim))
+                            }
+                            ComponentValType::Type(idx) => idx,
+                        };
+                        let named = sink.name(&to_kebab(name), base_idx);
+                        self.cache.insert(cache_key, named);
+                        return ComponentValType::Type(named);
+                    }
                     // Every branch here is emitting a WASI interface
                     // declaration. The type reference must have a resolved
                     // `wasi:*` source_interface from stdlib bootstrap, or
