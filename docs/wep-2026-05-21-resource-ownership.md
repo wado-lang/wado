@@ -80,6 +80,58 @@ Read as language-wide claims these contradict each other. This WEP resolves
 the tension by splitting the model by _resource kind_ — affine resources
 versus host-object resources — a distinction both earlier WEPs already draw.
 
+## Reconsideration (2026-07-13): defer `move` / `unique`, focus on robust cleanup
+
+Revisited from scratch, the `move` and `unique` _keywords_ are not necessary,
+and their user-visible affine-type surface is deferred. What is necessary is a
+robust, non-heuristic implementation of resource cleanup. The distinction:
+
+- Move-only _semantics_ for resources are already in force. A resource handle
+  is a one-shot, `dtor`-bearing thing; copying it would alias it. The value-copy
+  machinery already treats resources as non-copyable (identity, never a deep
+  copy), so resources never physically duplicate today.
+- The last-use liveness analysis is already built — for the value-copy client
+  (`lower/plan/value_copy/`). Resource safety is the same analysis with a
+  different action at a would-be-copy of a live source: a copyable type inserts a
+  deep copy; a resource cannot, so that site is a use-after-move error.
+- A `move` keyword only adds local visibility of a consumption; a good
+  diagnostic covers that. It is not required for soundness. Rust needs `move`
+  mainly for closures; statement-level moves are implicit there too.
+- A `unique struct` is only needed for a move-only type that carries no
+  resource. A resource-carrying aggregate is already affine by composition. No
+  concrete use case for keyword-declared `unique` exists yet.
+
+Introducing a new affine-type surface into an otherwise value-semantics,
+"no borrow checker" language is a real conceptual cost (the WEP's own Negative
+section). Absent a driving use case, that cost is not paid now.
+
+What this WEP now pursues, in priority order:
+
+- [ ] Make resource cleanup authoritative, not heuristic. Replace
+      `resource_cleanup.rs`'s `is_resource_aggregate` borrow-vs-transfer guessing
+      with ownership facts derived from last-use liveness, so no owned resource
+      is ever missed (leak) or double-counted (double-drop). Every fix lands
+      red/green with an e2e fixture that a runtime resource-table check verifies.
+- [ ] Diagnose genuine use-after-move / use-after-transfer of a resource as a
+      compile error (resources cannot fall back to copy). Reuses the same
+      liveness; needs no keyword.
+- [ ] Migrate the resource `drop` methods from `fn drop(&self)` to consuming
+      `fn drop(self)` (the WEP 2026-03-01 amendment) — a `&self` drop is unsound
+      regardless of the keyword question.
+
+Deferred, kept for a future increment if a use case appears:
+
+- [ ] `move` keyword (lexer / AST / parser). `move` is currently not even
+      tokenized; leave it that way.
+- [ ] `unique` struct modifier. `unique` is tokenized but intentionally not
+      consumed by the parser.
+- [ ] Re-homing the analysis onto the `AstId`-keyed `Semantics` layer for LSP
+      surfacing. Batch-side (TIR) diagnostics are sufficient first; the editor
+      lift is additive later.
+
+The rest of this WEP records the full affine-resources design as the eventual
+target. The roadmap below is re-scoped to the robustness work.
+
 ## Decision
 
 ### Split the ownership model by resource kind
@@ -575,34 +627,46 @@ note in that WEP.
 
 ## Implementation Roadmap
 
-### M1: Affine resources + move checking
+Re-scoped per the 2026-07-13 reconsideration: robust cleanup first, keyword
+surface deferred. R1–R3 are the active track; M-A/M-B record the deferred
+affine-type surface for a later increment.
 
-- [ ] `move` keyword in lexer / AST / parser; `unique` token consumed by the
-      parser as a `struct` modifier and recognized as implicit on resources.
-- [ ] Move-tracking pass over the resolved `Semantics` layer (`AstId`-keyed,
-      shared LSP + batch path — not TIR): per-binding `unborrowed` / `borrowed`
-      / `moved` lattice, backward last-use liveness, structural walk, join-point
-      merge. The per-consumption classification is the shared output.
-- [ ] use-after-move and move-while-borrowed diagnostics with source spans.
-- [ ] Reject copying a resource binding; require `move` at value-consuming
-      argument positions.
+### R1: Robust cleanup (heuristic removal)
 
-### M2: Borrow scoping
+Replace the borrow-vs-transfer heuristic with authoritative ownership facts.
+Each defect is a P0 compiler bug: fixed red/green with an e2e fixture whose
+runtime resource-table check proves the drop fires exactly once.
 
-- [ ] Borrow-escape diagnostic: reject returning or storing a `&R`.
-- [ ] Lexical move-or-drop-while-borrowed enforcement for `let b = &r;`.
+- [ ] Known gap: a `&self` method on a `Result<Resource, E>` (`is_ok`, …) is
+      mis-classified as consuming by `is_resource_aggregate`, dropping the
+      structural cleanup of the inner resource — a leak. Reproduce, file, fix.
+- [ ] Derive the transferred / owned-at-scope-exit sets from last-use liveness
+      instead of the `is_resource_aggregate` guess.
+- [ ] Remove `is_resource_aggregate` and the borrow-vs-transfer heuristics once
+      the authoritative facts cover every fixture.
 
-### M3: Drop elaboration off the checker
+### R2: Use-after-move diagnostics
 
-- [ ] Remove heuristic ownership reconstruction from `resource_cleanup.rs`.
-- [ ] Drive `resource.drop` / destructor insertion from the checker's
-      owned-and-not-moved set.
-- [ ] Compositional destructor synthesis for `unique struct` / variant /
-      array carrying resources (per WEP 2026-01-12), in declaration order.
+- [ ] Diagnose use-after-move / use-after-transfer of a resource binding as a
+      compile error (resources cannot copy). Reuses the R1 liveness; no keyword.
+
+### R3: Consuming `drop`
+
 - [ ] Migrate the resource `drop` methods in `types.wado` from `fn drop(&self)`
-      to consuming `fn drop(self)` (per the WEP 2026-03-01 amendment).
+      to consuming `fn drop(self)` (per the WEP 2026-03-01 amendment), so a
+      `r.drop()` call and the automatic scope-exit drop never double-fire.
+- [ ] Compositional destructor synthesis for aggregates carrying resources
+      (per WEP 2026-01-12), in declaration order.
 
-### M4: CM boundary + amendment
+### M-A (deferred): affine-type surface
+
+- [ ] `move` keyword in lexer / AST / parser (currently not tokenized).
+- [ ] `unique` struct modifier consumed by the parser (currently tokenized,
+      not consumed); recognized as implicit on resources.
+- [ ] Re-home the analysis onto the `AstId`-keyed `Semantics` layer so
+      use-after-move surfaces in the editor (batch-side is sufficient first).
+
+### M-B (deferred): CM boundary confirmation
 
 - [ ] Confirm CM-binding synthesis maps by-value `R` → `own`, `&R` → `borrow`
       with no ownership heuristics left.
