@@ -10,7 +10,7 @@ thousands of small `String` objects (measured: css3 2.4s GC vs SQLite 24s GC;
 GC scales with distinct-token count, not output size). Two naive fixes failed:
 
 - **Lazy interner + cache** (`String→i32` `TreeMap`, id cached on nothing): a
-  net *loss* — per-call `intern` is a String tree-lookup that costs more than
+  net _loss_ — per-call `intern` is a String tree-lookup that costs more than
   the compare it replaced, and it still rebuilds `` `TK_{name}` `` strings.
   SQLite copying 61s → 80s, null 38.5s → 48s.
 
@@ -23,7 +23,7 @@ re-stringified during analysis.
 `lexer_gen.wado::token_slot_order(lexer_rules, lit_tokens) -> List<TokenSlot>`
 is the canonical token numbering: **slot `i` has kind id `i`**, and that `i` is
 exactly the value emitted for the `TK_*` global (`gen_token_constants`,
-lexer_gen.wado:215). So every terminal already *has* a dense integer identity —
+lexer_gen.wado:215). So every terminal already _has_ a dense integer identity —
 the pipeline just discards it and carries the name instead. Nothing new to
 number; we thread the id that already exists.
 
@@ -49,10 +49,10 @@ struct TokenKinds {
 }
 ```
 
-`names` is the *only* place `TK_*` strings live long-term — one shared table,
+`names` is the _only_ place `TK_*` strings live long-term — one shared table,
 replacing the thousands of copies now in the caches. Passed into `GenContext`.
 
-### 2. The token *is* an integer: `kind_id` on the terminal IR
+### 2. The token _is_ an integer: `kind_id` on the terminal IR
 
 Add a resolved id to the terminal elements (same pattern as the already-cached
 `TokenRefElement.lower_name` / `field_name`):
@@ -88,16 +88,16 @@ Output must stay byte-identical for every grammar. Three ordering rules:
 1. **FIRST-set order = insertion order of ids** — identical to today's
    insertion order of names (ids ↔ names are 1:1), so emit through `names`
    reproduces the same sequence.
-2. **Kind-set canonical order**: today `canonical_kind_set` sorts token *names*
-   lexicographically. Kind ids sort in declaration order, *not* name order, so
+2. **Kind-set canonical order**: today `canonical_kind_set` sorts token _names_
+   lexicographically. Kind ids sort in declaration order, _not_ name order, so
    the canonicalisation must still sort **by name** — done at `intern_kind_set`
    (map ids→names, sort, that is both the registry key and the emit order).
-   This is off the hot path (once per *distinct* set), so its String cost is
+   This is off the hot path (once per _distinct_ set), so its String cost is
    negligible.
 3. **Emit boundary**: `kind_check_str` / `first_check_str` /
    `intern_kind_set` / `dump` take `List<i32>` and stringify via
    `TokenKinds.names`. `p.peek_kind() == TK_FOO` is reproduced because `TK_FOO`'s
-   value *is* `kind_id`, but we emit the **name** (not the number) for identity.
+   value _is_ `kind_id`, but we emit the **name** (not the number) for identity.
 
 ## Emit boundary — the only stringify sites
 
@@ -107,6 +107,7 @@ helpers), the sync-set and follow-mask emit, and `dump`. Everything upstream is
 integer.
 
 ## Phased plan (tree stays green; each phase byte-identity-checked on css3 +
+
 SQLite md5; GC measured `--collector copying` vs `null` on SQLite)
 
 - **P0 — table + ids, unused.** Build `TokenKinds` in codegen; add `kind_id` to

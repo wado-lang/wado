@@ -1,10 +1,7 @@
 //! Stage 2b migration probe: ci_rule_override.
 use ci from "./grammars/ci_rule_override.g4"
     with {
-        generator: {
-            module: "../src/generator.wado",
-            output_dir: "./generated/cst_ci_rule_override",
-        },
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ci_rule_override" },
     };
 fn ok(input: &String) {
     assert ci::parse(input).ok(), `unexpected diagnostics for {*input}`;

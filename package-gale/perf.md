@@ -168,7 +168,7 @@ mid-size ones are noisy, so re-measure before committing.
 
 ### Generation-time cost: the generator itself (2026-07)
 
-Distinct from the *generated parser*: how long `gale gen` takes to emit a large
+Distinct from the _generated parser_: how long `gale gen` takes to emit a large
 grammar. Keyword-heavy grammars (SQLite, TypeScript, Rust) are slow; the Kiln
 build path (copying collector + fuel) makes TypeScript/Rust take on the order of
 an hour. Measured findings, `wado run … gen` (`cargo run` host):
@@ -186,18 +186,18 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
   stays provisional and is recomputed on every path → exponential (a synthetic
   dense-recursion grammar scaled ≈`1.4^R`; R=20 → 5.6 s, R=24 blew past minutes).
   Scannability is actually pure reachability — a rule is non-scannable iff it can
-  reach an *undefined*-rule reference, the only `false` source in
+  reach an _undefined_-rule reference, the only `false` source in
   `is_element_scannable_at` — so `precompute_scannability` computes it once in
   O(V+E) and seeds `scannable_cache`, making the recursion O(1). **Byte-identical
   output** (css3 / SQLite / follow_gate md5 unchanged); **TypeScript 30 min+ →
   ~15 s gen** (63 s wall incl. the ~48 s generator recompile), **Rust similar**;
   the synthetic repro 5.6 s → 0.10 s. Lesson: profile keyword-heavy grammars
   end-to-end — a super-linear analysis hides behind the GC number, and micro-
-  grammars miss it (the trigger is deep *mutual recursion*, not size/alt-count).
+  grammars miss it (the trigger is deep _mutual recursion_, not size/alt-count).
   The four other SCC-memoized analyses — `first_of_rule_at`, `rule_is_nullable_at`,
   `rule_is_single_token_at`, `tail_greedy_first_of_rule_at` — share the same
   SCC-root-only caching (`local_min >= p`) and are latent suspects on other
-  grammars (they did *not* dominate the TS/Rust profiles, so not yet active).
+  grammars (they did _not_ dominate the TS/Rust profiles, so not yet active).
   Unlike scannability (pure reachability, precomputable), these compute real
   fixpoint values, so the fix is a shared SCC-complete cache (Tarjan: fix all
   members once the SCC closes), not a reachability precompute.
@@ -205,26 +205,26 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
 - **Two levers only: compute, and GC.** Isolate GC with `--collector null` (no
   GC; leaks, so only for a one-shot gen) vs the default `copying`:
 
-  | grammar | output | first-sets | null (compute) | copying | GC |
-  | ------- | ------ | ---------- | -------------- | ------- | -- |
-  | css3    | 1.76 MB | small | 39.1s | 41.5s | **2.4s** |
-  | SQLite  | 786 KB  | large (150+ kw) | 38.5s | 61–65s | **~24s** |
+  | grammar | output  | first-sets      | null (compute) | copying | GC       |
+  | ------- | ------- | --------------- | -------------- | ------- | -------- |
+  | css3    | 1.76 MB | small           | 39.1s          | 41.5s   | **2.4s** |
+  | SQLite  | 786 KB  | large (150+ kw) | 38.5s          | 61–65s  | **~24s** |
 
-- **GC scales with distinct-token count, not output size.** css3 emits a *bigger*
-  file with ~10× *less* GC — its first-sets are tiny. So the copying collector's
+- **GC scales with distinct-token count, not output size.** css3 emits a _bigger_
+  file with ~10× _less_ GC — its first-sets are tiny. So the copying collector's
   cost is re-tracing the thousands of `String` token objects held in the
   long-lived first / kind / FOLLOW caches, and it explodes on keyword grammars
   (TypeScript `null`-gen OOMs — it accumulates that many token Strings).
   `follow_env`'s bitset FOLLOW fixed point (2026-07) removed one such holder;
   the FIRST-set caches and kind-set registry are the remaining ones.
 
-- **Collector switch is a non-lever.** DRC (cost ∝ garbage) is *worse* on small
+- **Collector switch is a non-lever.** DRC (cost ∝ garbage) is _worse_ on small
   grammars — SQLite DRC 118s vs copying 61s — because its per-alloc overhead
   dwarfs the small live set; it only wins where copying thrashes a huge live set
   (TypeScript ~7min vs ~1h). A blanket kiln→DRC switch would regress the common
   case. Reduce allocation instead.
 
-- **The lever (landing): the token's identity *is* a dense integer, carried on
+- **The lever (landing): the token's identity _is_ a dense integer, carried on
   the IR, not a name we cache.** `token_slot_order` already numbers every token
   (slot index == the emitted `TK_*` value); `token_kinds.wado`'s `TokenKinds`
   table (id ↔ name) is built once and `resolve_kind_ids` stamps each
@@ -247,9 +247,9 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
   - P1+P2 (FIRST sets + prediction carry ids) — GC 21s, copying 59.3s, compute
     back to baseline (null 38.1s).
   - P3 (kind/sync/follow-mask registries store ids) — GC 17.5s, copying 56.5s.
-  Remaining P4 (the `lower`/`parser_gen` FIRST-set boundary, `rule_follow_kinds`)
-  is smaller and coupled on SQLite; the keyword-dense TS/Rust grammars (GC-bound)
-  are where the accumulated cut should matter most.
+    Remaining P4 (the `lower`/`parser_gen` FIRST-set boundary, `rule_follow_kinds`)
+    is smaller and coupled on SQLite; the keyword-dense TS/Rust grammars (GC-bound)
+    are where the accumulated cut should matter most.
 
   (A `type TokenId = i32` newtype for the id — so a `Display` can format token
   names later — currently trips a `$value_copy` codegen ICE when a

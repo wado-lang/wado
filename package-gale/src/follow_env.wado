@@ -328,7 +328,13 @@ fn collect_terminal_tokens_element(elem: &Element, intern: &mut TokenInterner) {
 /// a bitset. This is the deep first-of-suffix (`deep_first_of_elements_from`)
 /// without its `List<String>` + `dedup_append_arr` O(n²) merge: a bitset
 /// dedups by construction.
-fn suffix_first_bits(ctx: &mut GenContext, elements: &List<Element>, start: i32, intern: &mut TokenInterner, bits: &mut List<u64>) {
+fn suffix_first_bits(
+    ctx: &mut GenContext,
+    elements: &List<Element>,
+    start: i32,
+    intern: &mut TokenInterner,
+    bits: &mut List<u64>,
+) {
     for let mut i = start; i < elements.len(); i += 1 {
         accumulate_first_bits(ctx, &elements[i], intern, bits);
         let mut nv: List<String> = [];
@@ -356,7 +362,7 @@ fn bits_ensure(bits: &mut List<u64>, word: i32) {
 fn bits_set(bits: &mut List<u64>, id: i32) {
     let word = id / 64;
     bits_ensure(bits, word);
-    bits[word] = bits[word] | ((1 as u64) << ((id % 64) as u64));
+    bits[word] = bits[word] | 1 as u64 << (id % 64) as u64;
 }
 
 /// OR `src` into `dst`, growing `dst` as needed. Returns whether `dst` grew.
@@ -364,7 +370,7 @@ fn bits_union_into(dst: &mut List<u64>, src: &List<u64>) -> bool {
     let mut changed = false;
     for let mut i = 0; i < src.len(); i += 1 {
         let sv = src[i];
-        if sv == (0 as u64) {
+        if sv == 0 as u64 {
             continue;
         }
         bits_ensure(dst, i);
@@ -384,11 +390,11 @@ fn bits_to_follow_set(fb: &FollowBits, intern: &TokenInterner) -> FollowSet {
     let mut kinds = TreeSet::<String>::new();
     for let mut w = 0; w < fb.bits.len(); w += 1 {
         let word = fb.bits[w];
-        if word == (0 as u64) {
+        if word == 0 as u64 {
             continue;
         }
         for let mut b = 0; b < 64; b += 1 {
-            if (word & ((1 as u64) << (b as u64))) != (0 as u64) {
+            if word & 1 as u64 << b as u64 != 0 as u64 {
                 kinds.insert(intern.names[w * 64 + b]);
             }
         }

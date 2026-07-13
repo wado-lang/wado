@@ -322,16 +322,16 @@ async fn run_cli_component(
             .and_then(|s| s.parse::<u64>().ok());
         let stop = Arc::new(AtomicBool::new(false));
         let stop_clone = stop.clone();
-        let deadline_thread = deadline.clone();
+        let deadline_thread = deadline;
         let engine_clone = engine.clone();
         std::thread::spawn(move || {
             let start = std::time::Instant::now();
             while !stop_clone.load(Ordering::Relaxed) {
                 std::thread::sleep(interval);
-                if let Some(secs) = max_secs {
-                    if start.elapsed().as_secs() >= secs {
-                        deadline_thread.store(true, Ordering::Relaxed);
-                    }
+                if let Some(secs) = max_secs
+                    && start.elapsed().as_secs() >= secs
+                {
+                    deadline_thread.store(true, Ordering::Relaxed);
                 }
                 engine_clone.increment_epoch();
             }

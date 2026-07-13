@@ -702,8 +702,18 @@ test "warn keeps distinct diagnostics" {
 
 test "precompute_scannability: mutually recursive defined rules are scannable" {
     // r0 : (r1)? Z ;  r1 : (r0)? X ;  — a cycle of only defined rules.
-    let r0 = mk_rule("r0", [alt([opt(rr("r1")), tk("Z")])]);
-    let r1 = mk_rule("r1", [alt([opt(rr("r0")), tk("X")])]);
+    let r0 = mk_rule("r0", [
+        alt([
+            opt(rr("r1")),
+            tk("Z"),
+        ]),
+    ]);
+    let r1 = mk_rule("r1", [
+        alt([
+            opt(rr("r0")),
+            tk("X"),
+        ]),
+    ]);
     let mut ctx = mk_ctx_with([r0, r1]);
     ctx.precompute_scannability();
     let mut v0: List<String> = [];
@@ -726,7 +736,12 @@ test "precompute_scannability: reaching an undefined rule is not scannable and p
 
 test "precompute_scannability: undefined reached only through a Group is not scannable" {
     // r0 : (ghost) X ;  — the undefined ref sits inside a Group; only Group descent finds it.
-    let r0 = mk_rule("r0", [alt([group([alt([rr("ghost")])]), tk("X")])]);
+    let r0 = mk_rule("r0", [
+        alt([
+            group([alt([rr("ghost")])]),
+            tk("X"),
+        ]),
+    ]);
     let mut ctx = mk_ctx_with([r0]);
     ctx.precompute_scannability();
     let mut v0: List<String> = [];

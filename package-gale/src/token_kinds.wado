@@ -6,7 +6,17 @@
 //! FIRST/FOLLOW/kind-set analysis carry the integer instead of the `String`
 //! name, which is recovered only at codegen emit (`TokenKinds::name_of`).
 
-use { Grammar, Element, TokenRefElement, LiteralElement, RepeatElement, GroupElement, LabelElement, NotElement, Alternative } from "./ir.wado";
+use {
+    Grammar,
+    Element,
+    TokenRefElement,
+    LiteralElement,
+    RepeatElement,
+    GroupElement,
+    LabelElement,
+    NotElement,
+    Alternative,
+} from "./ir.wado";
 use { token_slot_order, collect_literal_tokens } from "./lexer_gen.wado";
 use { literal_const_name } from "./gen_util.wado";
 use { TreeMap } from "core:collections";
@@ -96,7 +106,7 @@ fn bits_ensure(bits: &mut List<u64>, word: i32) {
 pub fn bits_set(bits: &mut List<u64>, id: i32) {
     let word = id / 64;
     bits_ensure(bits, word);
-    bits[word] = bits[word] | ((1 as u64) << ((id % 64) as u64));
+    bits[word] = bits[word] | 1 as u64 << (id % 64) as u64;
 }
 
 /// Test the bit for `id`.
@@ -105,7 +115,7 @@ pub fn bits_test(bits: &List<u64>, id: i32) -> bool {
     if word >= bits.len() {
         return false;
     }
-    return (bits[word] & ((1 as u64) << ((id % 64) as u64))) != (0 as u64);
+    return bits[word] & 1 as u64 << (id % 64) as u64 != 0 as u64;
 }
 
 /// Append every id in `src` to `result`, skipping any already present (O(1)
@@ -129,7 +139,8 @@ pub fn resolve_kind_ids(grammar: &mut Grammar, kinds: &TokenKinds) {
 }
 
 fn resolve_alts(alts: &List<Alternative>, kinds: &TokenKinds) -> List<Alternative> {
-    return alts.iter().map(|a: &Alternative| Alternative { ..*a, elements: resolve_elements(&a.elements, kinds) }).collect();
+    return alts.iter().map(|a: &Alternative| Alternative { ..*a, elements: resolve_elements(&a.elements, kinds) }).collect(
+    );
 }
 
 fn resolve_elements(elements: &List<Element>, kinds: &TokenKinds) -> List<Element> {

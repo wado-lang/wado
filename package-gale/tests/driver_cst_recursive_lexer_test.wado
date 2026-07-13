@@ -1,10 +1,7 @@
 //! Stage 2b migration: recursive_lexer parses through the emitter.
 use g from "./grammars/recursive_lexer.g4"
     with {
-        generator: {
-            module: "../src/generator.wado",
-            output_dir: "./generated/cst_recursive_lexer",
-        },
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_recursive_lexer" },
     };
 fn ok(input: &String) {
     assert g::parse(input).ok(), `unexpected diagnostics for {*input}`;
