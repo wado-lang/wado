@@ -1,0 +1,117 @@
+//! Tests for the highlight-query parser (`highlight_query.wado`): the
+//! tree-sitter `highlights.scm` subset that feeds `highlight_gen`.
+
+use { parse_highlight_query, HighlightRule, TokenSelector } from "./highlight_query.wado";
+
+fn parse_ok(src: String) -> List<HighlightRule> {
+    return match parse_highlight_query(&src) {
+        Ok(rules) => rules,
+        Err(e) => panic(`unexpected parse error at {e.line}:{e.col}: {e.message}`),
+    };
+}
+
+fn parse_err(src: String) -> String {
+    return match parse_highlight_query(&src) {
+        Ok(_) => panic(`expected a parse error for: {src}`),
+        Err(e) => e.message,
+    };
+}
+
+fn is_name(sel: &TokenSelector, expected: String) -> bool {
+    return match sel {
+        Name(n) => *n == expected,
+        Literal(_) => false,
+    };
+}
+
+fn is_literal(sel: &TokenSelector, expected: String) -> bool {
+    return match sel {
+        Literal(t) => *t == expected,
+        Name(_) => false,
+    };
+}
+
+test "default rule on a token name" {
+    let rules = parse_ok("(STRING) @string");
+    assert rules.len() == 1;
+    assert rules[0].rule_context matches { None };
+    assert is_name(&rules[0].selector, "STRING");
+    assert rules[0].capture == "string";
+}
+
+test "default rule on a literal token" {
+    let rules = parse_ok("\"true\" @constant.builtin");
+    assert rules.len() == 1;
+    assert rules[0].rule_context matches { None };
+    assert is_literal(&rules[0].selector, "true");
+    assert rules[0].capture == "constant.builtin";
+}
+
+test "override rule: token within a parser rule" {
+    let rules = parse_ok("(functionCall (IDENTIFIER) @function)");
+    assert rules.len() == 1;
+    if let Some(r) = &rules[0].rule_context {
+        assert *r == "functionCall";
+    } else {
+        panic("expected an override with rule context");
+    }
+    assert is_name(&rules[0].selector, "IDENTIFIER");
+    assert rules[0].capture == "function";
+}
+
+test "override rule: literal within a parser rule" {
+    let rules = parse_ok("(call \"(\" @punctuation.bracket)");
+    assert rules.len() == 1;
+    assert rules[0].rule_context matches { Some(_) };
+    assert is_literal(&rules[0].selector, "(");
+    assert rules[0].capture == "punctuation.bracket";
+}
+
+test "comments and whitespace are ignored; multiple rules parse" {
+    let rules = parse_ok("; header comment
+(STRING) @string   ; trailing comment
+(NUMBER) @number
+");
+    assert rules.len() == 2;
+    assert is_name(&rules[0].selector, "STRING");
+    assert is_name(&rules[1].selector, "NUMBER");
+    assert rules[1].capture == "number";
+}
+
+test "hyphenated and dotted capture names" {
+    let rules = parse_ok("(CR) @carriage-return");
+    assert rules[0].capture == "carriage-return";
+}
+
+test "reject nesting deeper than one rule context" {
+    let msg = parse_err("(a (b (c) @x))");
+    assert msg.contains("deeper than one"), msg;
+}
+
+test "reject a pattern with no capture" {
+    let msg = parse_err("(STRING)");
+    assert msg.contains("@capture"), msg;
+}
+
+test "reject an unterminated string literal" {
+    let msg = parse_err("\"oops @string");
+    assert msg.contains("unterminated"), msg;
+}
+
+test "reject an unsupported escape rather than corrupting it" {
+    // \u must not be silently dropped to `u0041`; non-ASCII text can be
+    // written literally in the UTF-8 file instead.
+    let msg = parse_err("\"\\u0041\" @string");
+    assert msg.contains("unsupported escape"), msg;
+}
+
+test "known escapes are still decoded" {
+    let rules = parse_ok("\"\\t\" @string");
+    assert rules.len() == 1;
+    assert is_literal(&rules[0].selector, "\t");
+}
+
+test "empty query parses to no rules" {
+    let rules = parse_ok("; nothing here\n");
+    assert rules.len() == 0;
+}

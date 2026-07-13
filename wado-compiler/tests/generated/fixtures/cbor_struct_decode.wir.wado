@@ -197,7 +197,13 @@ type "functype//cbor_struct_decode.wado/$value_copy$T256" = fn(ref null "core:se
 
 type "functype//cbor_struct_decode.wado/$value_copy$T72" = fn(ref "core:serde//DeserializeError") -> ref "core:serde//DeserializeError";  // TypeId(46)
 
+<<<<<<< HEAD
 type "functype//cbor_struct_decode.wado/$value_copy$T25" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref "core:prelude/slice.wado//ArraySlice<u8>";  // TypeId(47)
+||||||| 71b119717
+type "functype//cbor_struct_decode.wado/$value_copy$T971" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref "core:prelude/slice.wado//ArraySlice<u8>";  // TypeId(47)
+=======
+type "functype//cbor_struct_decode.wado/$value_copy$T996" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref "core:prelude/slice.wado//ArraySlice<u8>";  // TypeId(47)
+>>>>>>> origin/main
 
 type "functype//cbor_struct_decode.wado/$value_copy$T74" = fn(ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(48)
 
@@ -510,7 +516,13 @@ fn "cbor_struct_decode.wado/$value_copy$T72"(v) {
     return struct.new "core:serde//DeserializeError" { kind: v.kind, message: ref.as_non_null(v_1 = v.message; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_5: ref Array<u8>; __array_clone_src_5 = v_1.repr; let __array_clone_len_5: i32; __array_clone_len_5 = builtin::array_len(__array_clone_src_5); let __array_clone_dst_5: ref Array<u8>; __array_clone_dst_5 = builtin::array_new<u8>(__array_clone_len_5); builtin::array_copy<u8>(__array_clone_dst_5, 0, __array_clone_src_5, 0, __array_clone_len_5); __array_clone_dst_5), used: v_1.used }), offset: v.offset };
 }
 
+<<<<<<< HEAD
 fn "cbor_struct_decode.wado/$value_copy$T25"(v) {
+||||||| 71b119717
+fn "cbor_struct_decode.wado/$value_copy$T971"(v) {
+=======
+fn "cbor_struct_decode.wado/$value_copy$T996"(v) {
+>>>>>>> origin/main
     return struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: v.repr, start: v.start, end: v.end };
 }
 
@@ -1443,7 +1455,13 @@ fn "core:cbor/CborDeserializer::append_bytes"(self, out, len) {
         return ref.as_non_null("core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(self.pos)));
     }
     n = builtin::i32_wrap_i64(len);
+<<<<<<< HEAD
     "core:prelude/list.wado/List<u8>::extend_from_slice"(out, "core:prelude/slice.wado/ArraySlice<u8>::slice"(self.input, self.pos, self.pos + n));
+||||||| 71b119717
+    "core:prelude/list.wado/List<u8>::extend_from_slice"(out, "cbor_struct_decode.wado/$value_copy$T971"("core:prelude/slice.wado/ArraySlice<u8>::slice"(self.input, self.pos, self.pos + n)));
+=======
+    "core:prelude/list.wado/List<u8>::extend_from_slice"(out, "cbor_struct_decode.wado/$value_copy$T996"("core:prelude/slice.wado/ArraySlice<u8>::slice"(self.input, self.pos, self.pos + n)));
+>>>>>>> origin/main
     self.pos = self.pos + n;
     return ref.null none;
 }

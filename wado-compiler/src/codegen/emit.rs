@@ -1870,9 +1870,13 @@ impl<'a> WirEmitter<'a> {
                     Some(false) => f.instruction(&Instruction::ArrayGetU(wasm_idx)),
                     None => f.instruction(&Instruction::ArrayGet(wasm_idx)),
                 };
-                // List elements are nullable in Wasm (for array.new_default).
-                // Narrow to non-null since Wado values are always non-null.
-                if self.is_array_element_ref(type_id.index()) {
+                // Array elements are declared nullable in Wasm (for
+                // `array.new_default`), so `array.get` yields a nullable ref.
+                // Narrow back to non-null only when the Wado element type is
+                // itself non-nullable. A niche-optimized `Option<ref>` element
+                // stores `None` as a genuine null ref, so narrowing it would
+                // trap `ref.as_non_null` on every `None` read.
+                if self.is_array_element_non_nullable_ref(type_id.index()) {
                     f.instruction(&Instruction::RefAsNonNull);
                 }
             }
@@ -2832,13 +2836,17 @@ impl<'a> WirEmitter<'a> {
     /// Check if an array type has packed elements (i8/i16 storage).
     /// Returns `Some(true)` for signed packed (I8/I16), `Some(false)` for unsigned packed (U8/U16/Bool),
     /// or `None` if the array element is not packed.
-    fn is_array_element_ref(&self, wir_type_idx: u32) -> bool {
+    /// True when the array's Wado element type is a non-nullable reference.
+    /// The array is *declared* with a nullable element (for
+    /// `array.new_default`), but `array.get` results are narrowed back to
+    /// non-null only for these — a niche-optimized `Option<ref>` element is
+    /// legitimately nullable (`None` == null ref) and must not be narrowed.
+    fn is_array_element_non_nullable_ref(&self, wir_type_idx: u32) -> bool {
         let idx = wir_type_idx as usize;
         idx < self.wir.types.len()
             && matches!(
                 &self.wir.types[idx],
-                WirTypeDef::Array(arr)
-                    if matches!(arr.element_type, WirType::Ref { .. } | WirType::AbstractRef { .. })
+                WirTypeDef::Array(arr) if arr.element_type.is_nonnull_ref()
             )
     }
 

@@ -1,11 +1,7 @@
 //! Stage 2b migration: lexer_command_gaps parses through the emitter.
 use g from "./grammars/lexer_command_gaps.g4"
     with {
-        generator: {
-            module: "../src/generator.wado",
-            options: { highlight: false },
-            output_dir: "./generated/cst_lexer_command_gaps",
-        },
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_command_gaps" },
     };
 fn ok(input: &String) {
     assert g::parse(input).ok(), `unexpected diagnostics for {*input}`;

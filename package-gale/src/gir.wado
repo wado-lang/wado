@@ -135,6 +135,10 @@ pub variant DiagnosticKind {
     /// emit, or the identity translator does not cover it. Loud rather
     /// than silently discarding the body. See `package-gale/action.md`.
     UnsupportedAction,
+    /// A highlight query rule references a token or parser rule that does
+    /// not exist in the grammar. The rule is skipped; the rest of the
+    /// query still applies. See `highlight_query.wado`.
+    HighlightQuery,
 }
 
 // ==========================================================================
@@ -1011,8 +1015,8 @@ pub variant FieldKind {
 /// checks elsewhere route through the helper to share the body.
 pub struct KindSet {
     pub id: i32,
-    /// Canonical (sorted, unique) token kinds.
-    pub tokens: List<String>,
+    /// Canonical (name-sorted, unique) token kind ids; emitted as `TK_*` names.
+    pub tokens: List<i32>,
 }
 
 // ==========================================================================

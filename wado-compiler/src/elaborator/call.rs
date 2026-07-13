@@ -16,6 +16,13 @@ use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util::placeholder;
 
+struct StaticMethodSig {
+    type_level_names: Vec<String>,
+    method_type_params: Vec<ast::GenericParam>,
+    value_params: Vec<ast::Param>,
+    return_type: Option<ast::Type>,
+}
+
 /// Per-position `_` mask for a turbofish: `holes[i]` is true when argument `i`
 /// was written `_`. Slots past the end count as holes too (omitted trailing
 /// args), so the mask need only cover the supplied args.
@@ -609,6 +616,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     combined.extend_from_slice(&method_type_args);
                     self.record_generic_instantiation(call.id, combined, TypeTable::UNKNOWN);
                 }
+                self.report_uninferred_static_method_type_args(
+                    prefix,
+                    suffix,
+                    &impl_type_args_inferred,
+                    &method_type_args,
+                    call.span,
+                );
                 // Enforce the static method's type-arg bounds (shared rule).
                 if !method_type_args.is_empty() {
                     let mtype_params = self.lookup_static_method_type_params(prefix, suffix);
@@ -1931,6 +1945,125 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
+    fn find_resource_decl(&self, name: &str) -> Option<&ast::ResourceDecl> {
+        let canonical = self.canonical_decl_key(name).1;
+        for resources in self.tysys.all_resource_types.values() {
+            if let Some(info) = resources.get(name).or_else(|| resources.get(&canonical))
+                && let Some(ast::Item::Resource(decl)) = self
+                    .loaded_modules
+                    .get(&info.module_source)
+                    .and_then(|m| m.item_by_id(info.defined_at))
+            {
+                return Some(decl);
+            }
+        }
+        None
+    }
+
+    fn static_method_sig(&self, struct_name: &str, method_name: &str) -> Option<StaticMethodSig> {
+        if let Some((type_level_names, method)) =
+            self.find_static_method_def(struct_name, method_name)
+        {
+            return Some(StaticMethodSig {
+                type_level_names,
+                method_type_params: method.type_params,
+                value_params: method.params,
+                return_type: method.return_type,
+            });
+        }
+        let decl = self.find_resource_decl(struct_name)?;
+        let method = decl.methods.iter().find(|m| {
+            m.name == method_name && m.params.iter().all(|p| p.self_kind == ast::SelfKind::None)
+        })?;
+        Some(StaticMethodSig {
+            type_level_names: decl
+                .type_params
+                .iter()
+                .filter(|p| p.is_real_type_param())
+                .map(|p| p.name.clone())
+                .collect(),
+            method_type_params: Vec::new(),
+            value_params: method.params.clone(),
+            return_type: method.return_type.clone(),
+        })
+    }
+
+    fn report_uninferred_static_method_type_args(
+        &mut self,
+        prefix: &str,
+        suffix: &str,
+        impl_type_args: &[TypeId],
+        method_type_args: &[TypeId],
+        span: crate::token::Span,
+    ) {
+        let Some(sig) = self.static_method_sig(prefix, suffix) else {
+            return;
+        };
+        let method_params: Vec<&ast::GenericParam> = sig
+            .method_type_params
+            .iter()
+            .filter(|p| !p.is_effect)
+            .collect();
+        if sig.type_level_names.is_empty() && method_params.is_empty() {
+            return;
+        }
+
+        let scope_params: Vec<TypeId> = self
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .values()
+            .map(|&(_, tid)| tid)
+            .collect();
+        let unresolved = |this: &Self, slot: Option<&TypeId>| -> bool {
+            match slot {
+                None => true,
+                Some(&t) => this.is_unbound_type_param(t) && !scope_params.contains(&t),
+            }
+        };
+
+        let mut names: Vec<String> = sig
+            .type_level_names
+            .iter()
+            .enumerate()
+            .filter(|&(i, _)| unresolved(self, impl_type_args.get(i)))
+            .map(|(_, n)| n.clone())
+            .collect();
+        let type_level_unresolved = !names.is_empty();
+        names.extend(
+            method_params
+                .iter()
+                .enumerate()
+                .filter(|&(i, p)| {
+                    p.default.is_none()
+                        && !p.has_fn_bound()
+                        && unresolved(self, method_type_args.get(i))
+                })
+                .map(|(_, p)| p.name.clone()),
+        );
+        if names.is_empty() {
+            return;
+        }
+
+        let joined = names
+            .iter()
+            .map(|n| format!("`{n}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let turbofish = if type_level_unresolved {
+            format!("`{prefix}::<...>::{suffix}()`")
+        } else {
+            format!("`{prefix}::{suffix}::<...>()`")
+        };
+        let _ = self.logger.error(TypeError::CannotInferType {
+            message: format!(
+                "cannot infer type parameter {joined} of `{prefix}::{suffix}`; \
+                 add a turbofish ({turbofish}) or a type annotation"
+            ),
+            span,
+        });
+    }
+
     /// Substitute the declared default type (`fn f<T = Fallback>`) into any
     /// dense type-arg slot still left unbound by call-site inference. The
     /// dense index space matches [`Self::defer_or_report_uninferred_fn_type_args`]
@@ -2246,80 +2379,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[TirExpr],
         expected_type: Option<TypeId>,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
-        // Find the impl block + method (regardless of whether the method has
-        // its own type params — we also want to infer impl-level params from
-        // the LHS for static methods like `Container::make()`).
-        let method_info: Option<(
-            ast::Type,
-            Vec<ast::GenericParam>,
-            Vec<ast::Param>,
-            Option<ast::Type>,
-        )> = {
-            let mut found = None;
-            'outer: for (_, module) in self.loaded_modules {
-                for item in &module.items {
-                    if let Item::Impl(impl_block) = item
-                        && Self::get_type_name_static(&impl_block.ty) == struct_name
-                    {
-                        for method in &impl_block.methods {
-                            let has_self = method
-                                .params
-                                .iter()
-                                .any(|p| p.self_kind != ast::SelfKind::None);
-                            if method.name == method_name && !has_self {
-                                found = Some((
-                                    impl_block.ty.clone(),
-                                    method.type_params.clone(),
-                                    method.params.clone(),
-                                    method.return_type.clone(),
-                                ));
-                                break 'outer;
-                            }
-                        }
-                    }
-                }
-            }
-            // Also check current module items
-            if found.is_none() {
-                'outer2: for item in self.current_module_items {
-                    if let Item::Impl(impl_block) = item
-                        && Self::get_type_name_static(&impl_block.ty) == struct_name
-                    {
-                        for method in &impl_block.methods {
-                            let has_self = method
-                                .params
-                                .iter()
-                                .any(|p| p.self_kind != ast::SelfKind::None);
-                            if method.name == method_name && !has_self {
-                                found = Some((
-                                    impl_block.ty.clone(),
-                                    method.type_params.clone(),
-                                    method.params.clone(),
-                                    method.return_type.clone(),
-                                ));
-                                break 'outer2;
-                            }
-                        }
-                    }
-                }
-            }
-            found
-        };
-        let Some((impl_ty, method_type_params, params, return_type_ast)) = method_info else {
+        let Some(StaticMethodSig {
+            type_level_names: impl_type_param_names,
+            method_type_params,
+            value_params: params,
+            return_type: return_type_ast,
+        }) = self.static_method_sig(struct_name, method_name)
+        else {
             return (vec![], vec![]);
-        };
-
-        // Extract impl-level type param names (e.g. `impl Container<T>` -> ["T"]).
-        let impl_type_param_names: Vec<String> = match &impl_ty {
-            ast::Type::Generic(g) => g
-                .args
-                .iter()
-                .filter_map(|arg| match arg {
-                    ast::Type::Named(n) => Some(n.name.clone()),
-                    _ => None,
-                })
-                .collect(),
-            _ => vec![],
         };
 
         // Nothing generic to infer.

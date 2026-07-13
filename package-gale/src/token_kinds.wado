@@ -1,0 +1,160 @@
+//! Canonical token-kind table and the pass that stamps each terminal element
+//! with its dense kind id.
+//!
+//! The id is `token_slot_order`'s slot index — exactly the value emitted for
+//! the corresponding `TK_*` global. Threading it onto the IR (`kind_id`) lets
+//! FIRST/FOLLOW/kind-set analysis carry the integer instead of the `String`
+//! name, which is recovered only at codegen emit (`TokenKinds::name_of`).
+
+use {
+    Grammar,
+    Element,
+    TokenRefElement,
+    LiteralElement,
+    RepeatElement,
+    GroupElement,
+    LabelElement,
+    NotElement,
+    Alternative,
+} from "./ir.wado";
+use { token_slot_order, collect_literal_tokens } from "./lexer_gen.wado";
+use { literal_const_name } from "./gen_util.wado";
+use { TreeMap } from "core:collections";
+
+/// Bidirectional token-kind table: `id <-> "TK_*" name`. Built once from
+/// `token_slot_order`; the single long-term home for the `TK_*` strings.
+pub struct TokenKinds {
+    /// `names[id]` is the `TK_*` name of kind `id`.
+    pub names: List<String>,
+    by_name: TreeMap<String, i32>,
+}
+
+impl TokenKinds {
+    /// Empty self-extending table. Used where the canonical numbering isn't
+    /// available (unit tests that build a `GenContext` without running
+    /// `resolve_kind_ids`); `intern` then assigns ids lazily. Production uses
+    /// [`build`] so ids match the emitted `TK_*` values.
+    pub fn empty() -> TokenKinds {
+        return TokenKinds { names: [], by_name: TreeMap::<String, i32>::new() };
+    }
+
+    /// Fallback id assignment for a name not already present — only reached for
+    /// an element whose `kind_id` was never resolved (the test path). Extends
+    /// the table so `name_of` still round-trips.
+    pub fn intern(&mut self, name: &String) -> i32 {
+        if let Some(id) = self.by_name.get(*name) {
+            return id;
+        }
+        let id = self.names.len();
+        self.by_name[*name] = id;
+        self.names.push(*name);
+        return id;
+    }
+
+    /// Recover names for a list of ids, preserving order (the emit boundary).
+    pub fn names_of(&self, ids: &List<i32>) -> List<String> {
+        let mut out: List<String> = [];
+        for let id of ids {
+            out.push(self.names[*id]);
+        }
+        return out;
+    }
+
+    pub fn build(grammar: &Grammar) -> TokenKinds {
+        let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
+        let slots = token_slot_order(&grammar.lexer_rules, &lit_tokens);
+        let mut names: List<String> = [];
+        let mut by_name = TreeMap::<String, i32>::new();
+        for let mut idx = 0; idx < slots.len(); idx += 1 {
+            let name = match slots[idx] {
+                Rule(ri) => `TK_{grammar.lexer_rules[ri].name}`,
+                Eof => "TK_EOF",
+                Error => "TK_ERROR",
+                Lit(li) => lit_tokens[li].const_name,
+            };
+            by_name[name] = idx;
+            names.push(name);
+        }
+        return TokenKinds { names, by_name };
+    }
+
+    /// Kind id for a `TK_*` name, or -1 if the name is not a token kind.
+    pub fn id_of(&self, name: &String) -> i32 {
+        if let Some(id) = self.by_name.get(*name) {
+            return id;
+        }
+        return -1;
+    }
+
+    /// The `TK_*` name for a kind id. Caller must pass an id this table minted.
+    pub fn name_of(&self, id: i32) -> String {
+        return self.names[id];
+    }
+
+    pub fn len(&self) -> i32 {
+        return self.names.len();
+    }
+}
+
+fn bits_ensure(bits: &mut List<u64>, word: i32) {
+    while bits.len() <= word {
+        bits.push(0 as u64);
+    }
+}
+
+/// Set the bit for `id`.
+pub fn bits_set(bits: &mut List<u64>, id: i32) {
+    let word = id / 64;
+    bits_ensure(bits, word);
+    bits[word] = bits[word] | 1 as u64 << (id % 64) as u64;
+}
+
+/// Test the bit for `id`.
+pub fn bits_test(bits: &List<u64>, id: i32) -> bool {
+    let word = id / 64;
+    if word >= bits.len() {
+        return false;
+    }
+    return bits[word] & 1 as u64 << (id % 64) as u64 != 0 as u64;
+}
+
+/// Append every id in `src` to `result`, skipping any already present (O(1)
+/// bitset probe on `seen`); insertion order is preserved.
+pub fn append_ids(result: &mut List<i32>, seen: &mut List<u64>, src: &List<i32>) {
+    for let id of src {
+        if !bits_test(seen, *id) {
+            bits_set(seen, *id);
+            result.push(*id);
+        }
+    }
+}
+
+/// Stamp every terminal element in the parser rules with its canonical kind id.
+/// Runs on the `generate()` path after `token_slot_order`'s inputs are final;
+/// pure rebuild (mirrors `ir::stamp_element`).
+pub fn resolve_kind_ids(grammar: &mut Grammar, kinds: &TokenKinds) {
+    for let mut ri = 0; ri < grammar.parser_rules.len(); ri += 1 {
+        grammar.parser_rules[ri].alternatives = resolve_alts(&grammar.parser_rules[ri].alternatives, kinds);
+    }
+}
+
+fn resolve_alts(alts: &List<Alternative>, kinds: &TokenKinds) -> List<Alternative> {
+    return alts.iter().map(|a: &Alternative| Alternative { ..*a, elements: resolve_elements(&a.elements, kinds) }).collect(
+    );
+}
+
+fn resolve_elements(elements: &List<Element>, kinds: &TokenKinds) -> List<Element> {
+    return elements.iter().map(|e: &Element| resolve_element(e, kinds)).collect();
+}
+
+fn resolve_element(elem: &Element, kinds: &TokenKinds) -> Element {
+    return match *elem {
+        TokenRef(t) => Element::TokenRef(TokenRefElement { ..t, kind_id: kinds.id_of(&`TK_{t.name}`) }),
+        Literal(l) => Element::Literal(LiteralElement { ..l, kind_id: kinds.id_of(&literal_const_name(&l.text)) }),
+        Repeat(rep) => Element::Repeat(RepeatElement { ..rep, element: resolve_element(&rep.element, kinds) }),
+        Group(g) => Element::Group(GroupElement { ..g, alternatives: resolve_alts(&g.alternatives, kinds) }),
+        Label(lab) => Element::Label(LabelElement { ..lab, element: resolve_element(&lab.element, kinds) }),
+        Not(n) => Element::Not(NotElement { ..n, element: resolve_element(&n.element, kinds) }),
+        _ => *elem,
+    };
+}

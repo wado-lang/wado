@@ -301,21 +301,38 @@ async fn run_cli_component(
         )?;
         let profiler = Arc::new(Mutex::new(Some(profiler)));
 
+        let deadline = Arc::new(AtomicBool::new(false));
+        let deadline_cb = deadline.clone();
         let profiler_for_cb = profiler.clone();
         store.epoch_deadline_callback(move |store_ctx| {
             if let Some(ref mut p) = *profiler_for_cb.lock().unwrap() {
                 p.sample(&store_ctx, interval);
             }
+            if deadline_cb.load(Ordering::Relaxed) {
+                return Err(wasmtime::Error::msg(
+                    "profile time budget reached (WADO_PROFILE_MAX_SECS)",
+                ));
+            }
             Ok(UpdateDeadline::Continue(1))
         });
         store.set_epoch_deadline(1);
 
+        let max_secs = std::env::var("WADO_PROFILE_MAX_SECS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok());
         let stop = Arc::new(AtomicBool::new(false));
         let stop_clone = stop.clone();
+        let deadline_thread = deadline;
         let engine_clone = engine.clone();
         std::thread::spawn(move || {
+            let start = std::time::Instant::now();
             while !stop_clone.load(Ordering::Relaxed) {
                 std::thread::sleep(interval);
+                if let Some(secs) = max_secs
+                    && start.elapsed().as_secs() >= secs
+                {
+                    deadline_thread.store(true, Ordering::Relaxed);
+                }
                 engine_clone.increment_epoch();
             }
         });
@@ -330,9 +347,9 @@ async fn run_cli_component(
     let command =
         wasmtime_wasi::p3::bindings::Command::instantiate_async(&mut store, &component, &linker)
             .await?;
-    let result = store
+    let outer = store
         .run_concurrent(async |accessor| command.wasi_cli_run().call_run(accessor).await)
-        .await??;
+        .await;
 
     if let Some((profiler_arc, stop)) = profiler {
         stop.store(true, Ordering::Relaxed);
@@ -346,6 +363,7 @@ async fn run_cli_component(
         }
     }
 
+    let result = outer??;
     result.map_err(|()| anyhow::anyhow!("Component returned error"))?;
 
     Ok(())

@@ -7814,10 +7814,10 @@ pub fn gen_kind_set_helpers(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &
     for let mut idx = 0; idx < entries.len(); idx += 1 {
         if idx < lowered.kind_sets.len() {
             let ks = &lowered.kind_sets[idx];
-            gen_kind_set_helper_raw(w, ks.id, &ks.tokens);
+            gen_kind_set_helper_raw(w, ks.id, &ctx.token_names_of(&ks.tokens));
         } else {
             let entry = &entries[idx];
-            gen_kind_set_helper_raw(w, entry.id, &entry.tokens);
+            gen_kind_set_helper_raw(w, entry.id, &ctx.token_names_of(&entry.tokens));
         }
     }
 }
@@ -7837,7 +7837,7 @@ pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &GenContext) {
     for let entry of &entries {
         let mut depths: List<String> = [];
         for let depth_set of &entry.mask {
-            depths.push(`[{join_kinds(depth_set)}]`);
+            depths.push(`[{join_kinds(&ctx.token_names_of(depth_set))}]`);
         }
         w.line(&`global FOLLOW_MASK_{entry.id}: List<List<i32>> = [{join_kinds(&depths)}];`);
     }
@@ -7856,7 +7856,7 @@ pub fn gen_sync_set_globals(w: &mut CodeWriter, ctx: &GenContext) {
     }
     w.line(&"global EMPTY_SYNC: List<i32> = [];");
     for let entry of &ctx.sync_sets() {
-        w.line(&`global SYNC_{entry.id}: List<i32> = [{join_kinds(&entry.tokens)}];`);
+        w.line(&`global SYNC_{entry.id}: List<i32> = [{join_kinds(&ctx.token_names_of(&entry.tokens))}];`);
     }
     w.blank();
 }

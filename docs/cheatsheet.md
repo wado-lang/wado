@@ -43,7 +43,6 @@ Non-`.wado` files (`.g4`, `.proto`, ...) are imported via a generator declared i
 use { Parser } from "./Calc.g4" with { // Gale parses ANTLR4 grammar files
     generator: {
         module: "wado:gale@0.1",
-        options: { highlight: false },
     },
 };
 ```

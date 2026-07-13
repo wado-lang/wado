@@ -219,3 +219,22 @@ jobs:
 
       - name: Publish Wado packages
         run: wado publish
+
+  deploy-site:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate a token scoped to the site repository
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: "${{ secrets.GH_APP_ID }}"
+          private-key: "${{ secrets.GH_APP_PRIVATE_KEY }}"
+          owner: wado-lang
+          repositories: wado-lang.github.io
+          permission-contents: write
+
+      - name: Trigger the wado-lang.github.io deploy
+        env:
+          GH_TOKEN: "${{ steps.app-token.outputs.token }}"
+        run: gh api repos/wado-lang/wado-lang.github.io/dispatches -f event_type=deploy

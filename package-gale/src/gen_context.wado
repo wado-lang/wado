@@ -9,6 +9,7 @@ use {
     dedup_append_arr,
 } from "./gen_util.wado";
 use { Diagnostic, DiagnosticKind } from "./gir.wado";
+use { TokenKinds, append_ids } from "./token_kinds.wado";
 use { TreeMap } from "core:collections";
 
 /// A token-kind set interned during parser codegen. Multi-element
@@ -17,9 +18,9 @@ use { TreeMap } from "core:collections";
 /// helper function emitted at the end of the parser section.
 pub struct KindSetEntry {
     pub id: i32,
-    /// Canonical (sorted, unique) token list. Tokens are `TK_*` global
-    /// constants in the generated source.
-    pub tokens: List<String>,
+    /// Canonical (name-sorted, unique) token list, as kind ids. Emitted as the
+    /// `TK_*` global names via `GenContext::token_name` at codegen.
+    pub tokens: List<i32>,
 }
 
 /// A runtime FOLLOW-continuation mask interned during parser codegen.
@@ -32,9 +33,9 @@ pub struct KindSetEntry {
 /// distinct continuations, not the call graph.
 pub struct FollowMaskEntry {
     pub id: i32,
-    /// Canonical per-depth token sets. `mask[d]` lists the `TK_*`
-    /// constants valid at depth `d` of the caller's continuation.
-    pub mask: List<List<String>>,
+    /// Canonical per-depth token sets, as kind ids. `mask[d]` lists the kinds
+    /// valid at depth `d` of the caller's continuation; emitted as `TK_*` names.
+    pub mask: List<List<i32>>,
 }
 
 /// Maximum K-prefix depth carried into `intern_follow_mask` for the
@@ -55,10 +56,22 @@ pub struct GenContext {
     pub parser_rules: List<ParserRule>,
     pub lit_tokens: List<LitToken>,
     rule_index: TreeMap<String, i32>,
-    first_cache: TreeMap<String, List<String>>,
-    single_token_cache: TreeMap<String, bool>,
-    nullable_cache: TreeMap<String, bool>,
-    scannable_cache: TreeMap<String, bool>,
+    /// Canonical token-kind table (id <-> `TK_*` name). FIRST sets are carried
+    /// as `List<i32>` of these ids; names are recovered here at the emit
+    /// boundary. Set by `set_token_kinds` on the production path (so ids match
+    /// the resolved `Element::kind_id`); an empty self-extending table on the
+    /// test path, where `intern` assigns ids lazily.
+    token_kinds: TokenKinds,
+    /// Per-rule memo caches indexed by dense rule id (position in
+    /// `parser_rules`, i.e. what `rule_index_of` returns). `null` means
+    /// "not yet computed"; `Some(v)` is the memoized value. Dense arrays
+    /// replace the former `TreeMap<String, _>` so a cache probe on the hot
+    /// first/nullable/scannable recursion is an O(1) index instead of an
+    /// O(log n) rule-name string-tree walk.
+    first_cache: List<Option<List<i32>>>,
+    single_token_cache: List<Option<bool>>,
+    nullable_cache: List<Option<bool>>,
+    scannable_cache: List<Option<bool>>,
     /// Maps single-alt group type name → the rule name that first defines it.
     /// Used to resolve general group type names inside shared single-alt groups.
     single_alt_owner: TreeMap<String, String>,
@@ -76,8 +89,9 @@ pub struct GenContext {
     /// `SYNC_<id>: List<i32>` global passed to `expect` by reference, so a
     /// terminal on the valid hot path never rebuilds or copies the set.
     sync_set_registry: TreeMap<String, KindSetEntry>,
-    /// Cache of `tail_greedy_first(rule)` keyed by rule name.
-    tail_greedy_cache: TreeMap<String, List<String>>,
+    /// Cache of `tail_greedy_first(rule)` indexed by dense rule id (see
+    /// the memo caches above).
+    tail_greedy_cache: List<Option<List<String>>>,
     /// Prediction-strategy diagnostics raised during lowering, in the
     /// order lowering walked the rules. Drained into
     /// `LoweredGrammar.diagnostics` by `lower_with_ctx`. See
@@ -188,19 +202,21 @@ impl GenContext {
             rule_index[parser_rules[i].name] = i;
         }
         let single_alt_owner = build_single_alt_owner_map(parser_rules);
+        let rule_count = parser_rules.len();
         return GenContext {
             parser_rules: *parser_rules,
             lit_tokens: *lit_tokens,
             rule_index,
-            first_cache: TreeMap::new(),
-            single_token_cache: TreeMap::new(),
-            nullable_cache: TreeMap::new(),
-            scannable_cache: TreeMap::new(),
+            token_kinds: TokenKinds::empty(),
+            first_cache: none_int_list_cache(rule_count),
+            single_token_cache: none_bool_cache(rule_count),
+            nullable_cache: none_bool_cache(rule_count),
+            scannable_cache: none_bool_cache(rule_count),
             single_alt_owner,
             kind_set_registry: TreeMap::new(),
             follow_mask_registry: TreeMap::new(),
             sync_set_registry: TreeMap::new(),
-            tail_greedy_cache: TreeMap::new(),
+            tail_greedy_cache: none_list_cache(rule_count),
             diagnostics: [],
             caller_follow_gate_seen: false,
             needs_atn_seen: false,
@@ -532,53 +548,127 @@ impl GenContext {
         return &self.parser_rules;
     }
 
+    /// Install the canonical token-kind table (production path). Ids then match
+    /// the resolved `Element::kind_id`, and `name_of` reproduces the emitted
+    /// `TK_*` names.
+    pub fn set_token_kinds(&mut self, kinds: TokenKinds) {
+        self.token_kinds = kinds;
+    }
+
+    /// Kind id for a terminal element, using the resolved `kind_id` when
+    /// present (the fast path — no string, no lookup) and falling back to a
+    /// lazy intern for unresolved IR (unit tests).
+    pub fn token_ref_id(&mut self, name: &String, kind_id: i32) -> i32 {
+        if kind_id >= 0 {
+            return kind_id;
+        }
+        return self.token_kinds.intern(&`TK_{*name}`);
+    }
+
+    pub fn literal_id(&mut self, text: &String, kind_id: i32) -> i32 {
+        if kind_id >= 0 {
+            return kind_id;
+        }
+        return self.token_kinds.intern(&literal_const_name(text));
+    }
+
+    /// Recover terminal names for interned ids (the emit / String-boundary).
+    pub fn token_names_of(&self, ids: &List<i32>) -> List<String> {
+        return self.token_kinds.names_of(ids);
+    }
+
+    /// Recover a single terminal name for an interned id.
+    pub fn token_name(&self, id: i32) -> String {
+        return self.token_kinds.name_of(id);
+    }
+
     pub fn first_of_rule(&mut self, name: &String, visiting: &mut List<String>) -> List<String> {
-        let cached = self.first_cache.get(*name);
-        if let Some(result) = cached {
-            return result;
+        let ids = self.first_ids_of_rule(name, visiting);
+        return self.token_kinds.names_of(&ids);
+    }
+
+    /// FIRST set as interned kind ids (the internal representation). Public
+    /// callers that want names go through `first_of_rule`.
+    pub fn first_ids_of_rule(&mut self, name: &String, visiting: &mut List<String>) -> List<i32> {
+        let mut min_cycle = i32::MAX;
+        return self.first_of_rule_at(name, visiting, &mut min_cycle);
+    }
+
+    /// FIRST set with SCC-aware memoization; see `is_rule_scannable_at` for the
+    /// `min_cycle` mechanism. A FIRST set computed while ancestors are on the
+    /// stack may under-count (a cycle contributes the empty set), so it is only
+    /// cached once its whole SCC has closed at this frame (`local_min >= p`).
+    fn first_of_rule_at(&mut self, name: &String, visiting: &mut List<String>, min_cycle: &mut i32) -> List<i32> {
+        let rid = self.rule_index_of(name);
+        if rid >= 0 {
+            let cached = self.first_cache[rid];
+            if let Some(result) = cached {
+                return result;
+            }
         }
 
-        if visiting.contains(name) {
+        let on_stack = visiting_index(visiting, name);
+        if on_stack >= 0 {
+            if on_stack < *min_cycle {
+                *min_cycle = on_stack;
+            }
             return [];
         }
 
-        let is_top_level = visiting.is_empty();
+        let p = visiting.len();
         visiting.push(*name);
 
-        let mut result: List<String> = [];
+        let mut local_min = i32::MAX;
+        let mut result: List<i32> = [];
+        let mut seen: List<u64> = [];
 
-        let rule = self.find_rule(name);
-        if let Some(rule) = rule {
+        if rid >= 0 {
+            let rule = &self.parser_rules[rid];
             for let alt of &rule.alternatives {
-                let af = self.first_of_alt(alt, visiting);
-                dedup_append_arr(&mut result, &af);
+                let af = self.first_of_alt_at(alt, visiting, &mut local_min);
+                append_ids(&mut result, &mut seen, &af);
             }
         }
 
         remove_from_visiting(visiting, name);
 
-        if is_top_level {
-            self.first_cache[*name] = result;
+        if local_min >= p {
+            if rid >= 0 {
+                self.first_cache[rid] = Option::Some(result);
+            }
+        } else if local_min < *min_cycle {
+            *min_cycle = local_min;
         }
 
         return result;
     }
 
     pub fn first_of_element(&mut self, elem: &Element, visiting: &mut List<String>) -> List<String> {
+        let ids = self.first_ids_of_element(elem, visiting);
+        return self.token_kinds.names_of(&ids);
+    }
+
+    pub fn first_ids_of_element(&mut self, elem: &Element, visiting: &mut List<String>) -> List<i32> {
+        let mut min_cycle = i32::MAX;
+        return self.first_of_element_at(elem, visiting, &mut min_cycle);
+    }
+
+    fn first_of_element_at(&mut self, elem: &Element, visiting: &mut List<String>, min_cycle: &mut i32) -> List<i32> {
         return match elem {
-            TokenRef(t) => [`TK_{t.name}`],
-            Literal(l) => [literal_const_name(&l.text)],
-            RuleRef(r) => self.first_of_rule(&r.name, visiting),
+            TokenRef(t) => [self.token_ref_id(&t.name, t.kind_id)],
+            Literal(l) => [self.literal_id(&l.text, l.kind_id)],
+            RuleRef(r) => self.first_of_rule_at(&r.name, visiting, min_cycle),
             Group(g) => {
-                let mut result: List<String> = [];
+                let mut result: List<i32> = [];
+                let mut seen: List<u64> = [];
                 for let alt of &g.alternatives {
-                    let af = self.first_of_alt(alt, visiting);
-                    dedup_append_arr(&mut result, &af);
+                    let af = self.first_of_alt_at(alt, visiting, min_cycle);
+                    append_ids(&mut result, &mut seen, &af);
                 }
                 result;
             },
-            Repeat(rep) => self.first_of_element(&rep.element, visiting),
-            Label(lab) => self.first_of_element(&lab.element, visiting),
+            Repeat(rep) => self.first_of_element_at(&rep.element, visiting, min_cycle),
+            Label(lab) => self.first_of_element_at(&lab.element, visiting, min_cycle),
             // Wildcard and Not match an open-ended set of tokens; we cannot
             // enumerate FIRST statically. Returning [] disables static prediction
             // for alternatives starting with them — such alternatives must either
@@ -590,11 +680,22 @@ impl GenContext {
     }
 
     pub fn first_of_alt(&mut self, alt: &Alternative, visiting: &mut List<String>) -> List<String> {
-        let mut result: List<String> = [];
+        let ids = self.first_ids_of_alt(alt, visiting);
+        return self.token_kinds.names_of(&ids);
+    }
+
+    pub fn first_ids_of_alt(&mut self, alt: &Alternative, visiting: &mut List<String>) -> List<i32> {
+        let mut min_cycle = i32::MAX;
+        return self.first_of_alt_at(alt, visiting, &mut min_cycle);
+    }
+
+    fn first_of_alt_at(&mut self, alt: &Alternative, visiting: &mut List<String>, min_cycle: &mut i32) -> List<i32> {
+        let mut result: List<i32> = [];
+        let mut seen: List<u64> = [];
 
         for let elem of &alt.elements {
-            let elem_first = self.first_of_element(elem, visiting);
-            dedup_append_arr(&mut result, &elem_first);
+            let elem_first = self.first_of_element_at(elem, visiting, min_cycle);
+            append_ids(&mut result, &mut seen, &elem_first);
             if !is_nullable(elem) {
                 break;
             }
@@ -603,12 +704,18 @@ impl GenContext {
     }
 
     pub fn first_of_elements_from(&mut self, elements: &List<Element>, start: i32) -> List<String> {
-        let mut result: List<String> = [];
+        let ids = self.first_ids_of_elements_from(elements, start);
+        return self.token_kinds.names_of(&ids);
+    }
+
+    pub fn first_ids_of_elements_from(&mut self, elements: &List<Element>, start: i32) -> List<i32> {
+        let mut result: List<i32> = [];
+        let mut seen: List<u64> = [];
 
         for let mut i = start; i < elements.len(); i += 1 {
             let mut visiting: List<String> = [];
-            let elem_first = self.first_of_element(&elements[i], &mut visiting);
-            dedup_append_arr(&mut result, &elem_first);
+            let elem_first = self.first_ids_of_element(&elements[i], &mut visiting);
+            append_ids(&mut result, &mut seen, &elem_first);
             if !is_nullable(&elements[i]) {
                 break;
             }
@@ -800,11 +907,17 @@ impl GenContext {
     /// Like `first_of_elements_from` but uses deep nullability so it correctly
     /// flows through `RuleRef`s whose underlying rule matches zero tokens.
     pub fn deep_first_of_elements_from(&mut self, elements: &List<Element>, start: i32) -> List<String> {
-        let mut result: List<String> = [];
+        let ids = self.deep_first_ids_of_elements_from(elements, start);
+        return self.token_kinds.names_of(&ids);
+    }
+
+    pub fn deep_first_ids_of_elements_from(&mut self, elements: &List<Element>, start: i32) -> List<i32> {
+        let mut result: List<i32> = [];
+        let mut seen: List<u64> = [];
         for let mut i = start; i < elements.len(); i += 1 {
             let mut fv: List<String> = [];
-            let elem_first = self.first_of_element(&elements[i], &mut fv);
-            dedup_append_arr(&mut result, &elem_first);
+            let elem_first = self.first_ids_of_element(&elements[i], &mut fv);
+            append_ids(&mut result, &mut seen, &elem_first);
             let mut nv: List<String> = [];
             if !self.element_is_nullable_deep(&elements[i], &mut nv) {
                 break;
@@ -831,23 +944,28 @@ impl GenContext {
     }
 
     pub fn element_is_nullable_deep(&mut self, elem: &Element, visiting: &mut List<String>) -> bool {
+        let mut min_cycle = i32::MAX;
+        return self.element_is_nullable_deep_at(elem, visiting, &mut min_cycle);
+    }
+
+    fn element_is_nullable_deep_at(&mut self, elem: &Element, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
         return match elem {
             TokenRef(_) => false,
             Literal(_) => false,
             Wildcard(_) => false,
             Not(_) => false,
-            RuleRef(r) => self.rule_is_nullable(&r.name, visiting),
-            Label(lab) => self.element_is_nullable_deep(&lab.element, visiting),
+            RuleRef(r) => self.rule_is_nullable_at(&r.name, visiting, min_cycle),
+            Label(lab) => self.element_is_nullable_deep_at(&lab.element, visiting, min_cycle),
             Repeat(rep) => match rep.kind {
                 Star | Optional => true,
-                _ => self.element_is_nullable_deep(&rep.element, visiting),
+                _ => self.element_is_nullable_deep_at(&rep.element, visiting, min_cycle),
             },
             Group(g) => {
                 let mut any_nullable = false;
                 for let alt of &g.alternatives {
                     let mut all_null = true;
                     for let e of &alt.elements {
-                        if !self.element_is_nullable_deep(e, visiting) {
+                        if !self.element_is_nullable_deep_at(e, visiting, min_cycle) {
                             all_null = false;
                             break;
                         }
@@ -863,25 +981,42 @@ impl GenContext {
     }
 
     pub fn rule_is_nullable(&mut self, name: &String, visiting: &mut List<String>) -> bool {
-        let cached = self.nullable_cache.get(*name);
-        if let Some(val) = cached {
-            return val;
+        let mut min_cycle = i32::MAX;
+        return self.rule_is_nullable_at(name, visiting, &mut min_cycle);
+    }
+
+    /// Nullability with SCC-aware memoization (see `is_rule_scannable_at`). A
+    /// value computed while ancestors are on the stack may be provisional (a
+    /// cycle assumes not-nullable), so it is cached only once its SCC has
+    /// closed at this frame (`local_min >= p`).
+    fn rule_is_nullable_at(&mut self, name: &String, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
+        let rid = self.rule_index_of(name);
+        if rid >= 0 {
+            let cached = self.nullable_cache[rid];
+            if let Some(val) = cached {
+                return val;
+            }
         }
 
-        if visiting.contains(name) {
+        let on_stack = visiting_index(visiting, name);
+        if on_stack >= 0 {
+            if on_stack < *min_cycle {
+                *min_cycle = on_stack;
+            }
             return false;
         }
 
-        let is_top_level = visiting.is_empty();
+        let p = visiting.len();
         visiting.push(*name);
 
+        let mut local_min = i32::MAX;
         let mut result = false;
-        let rule = self.find_rule(name);
-        if let Some(rule) = rule {
+        if rid >= 0 {
+            let rule = &self.parser_rules[rid];
             for let alt of &rule.alternatives {
                 let mut all_null = true;
                 for let e of &alt.elements {
-                    if !self.element_is_nullable_deep(e, visiting) {
+                    if !self.element_is_nullable_deep_at(e, visiting, &mut local_min) {
                         all_null = false;
                         break;
                     }
@@ -895,8 +1030,12 @@ impl GenContext {
 
         remove_from_visiting(visiting, name);
 
-        if is_top_level {
-            self.nullable_cache[*name] = result;
+        if local_min >= p {
+            if rid >= 0 {
+                self.nullable_cache[rid] = Option::Some(result);
+            }
+        } else if local_min < *min_cycle {
+            *min_cycle = local_min;
         }
 
         return result;
@@ -1003,21 +1142,37 @@ impl GenContext {
     }
 
     pub fn rule_is_single_token(&mut self, name: &String, visiting: &mut List<String>) -> bool {
-        let cached = self.single_token_cache.get(*name);
-        if let Some(val) = cached {
-            return val;
+        let mut min_cycle = i32::MAX;
+        return self.rule_is_single_token_at(name, visiting, &mut min_cycle);
+    }
+
+    /// Single-token classification with SCC-aware memoization (see
+    /// `is_rule_scannable_at`): cache only once the SCC has closed at this
+    /// frame (`local_min >= p`).
+    fn rule_is_single_token_at(&mut self, name: &String, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
+        let rid = self.rule_index_of(name);
+        if rid >= 0 {
+            let cached = self.single_token_cache[rid];
+            if let Some(val) = cached {
+                return val;
+            }
         }
 
-        if visiting.contains(name) {
+        let on_stack = visiting_index(visiting, name);
+        if on_stack >= 0 {
+            if on_stack < *min_cycle {
+                *min_cycle = on_stack;
+            }
             return false;
         }
 
-        let is_top_level = visiting.is_empty();
+        let p = visiting.len();
         visiting.push(*name);
 
+        let mut local_min = i32::MAX;
         let mut result = false;
-        let rule = self.find_rule(name);
-        if let Some(rule) = rule {
+        if rid >= 0 {
+            let rule = &self.parser_rules[rid];
             let mut all_alts_ok = true;
             for let alt of &rule.alternatives {
                 let mut non_nullable_count = 0;
@@ -1040,7 +1195,7 @@ impl GenContext {
                     if let TokenRef(_) | Literal(_) = elem {
                         single_ok = true;
                     } else if let RuleRef(r) = elem {
-                        single_ok = self.rule_is_single_token(&r.name, visiting);
+                        single_ok = self.rule_is_single_token_at(&r.name, visiting, &mut local_min);
                     }
                 }
                 if has_nullable || non_nullable_count != 1 || !single_ok {
@@ -1053,8 +1208,12 @@ impl GenContext {
 
         remove_from_visiting(visiting, name);
 
-        if is_top_level {
-            self.single_token_cache[*name] = result;
+        if local_min >= p {
+            if rid >= 0 {
+                self.single_token_cache[rid] = Option::Some(result);
+            }
+        } else if local_min < *min_cycle {
+            *min_cycle = local_min;
         }
 
         return result;
@@ -1076,24 +1235,49 @@ impl GenContext {
     /// per-candidate LR scan is bounded, not run exhaustively for already-
     /// matched alts.
     pub fn is_rule_scannable(&mut self, name: &String, visiting: &mut List<String>) -> bool {
-        let cached = self.scannable_cache.get(*name);
-        if let Some(val) = cached {
-            return val;
+        let mut min_cycle = i32::MAX;
+        return self.is_rule_scannable_at(name, visiting, &mut min_cycle);
+    }
+
+    /// Scannability with SCC-aware memoization. `min_cycle` is an out-parameter:
+    /// the shallowest `visiting` index this computation cycled back to
+    /// (`i32::MAX` if none). Only top-level results were cacheable before,
+    /// because a value computed while ancestors are on the `visiting` stack
+    /// depends on the optimistic "cycle = scannable" assumption — recomputing
+    /// every non-top-level call is exponential for deeply mutually-recursive
+    /// grammars (Rust/TypeScript/css3). Tracking the cycle depth lets us cache
+    /// far more: a result is final once it no longer depends on an unresolved
+    /// ancestor, which the SCC condition below decides. Results stay identical
+    /// to the top-level-only scheme; only the number of recomputations drops.
+    fn is_rule_scannable_at(&mut self, name: &String, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
+        let rid = self.rule_index_of(name);
+        if rid >= 0 {
+            let cached = self.scannable_cache[rid];
+            if let Some(val) = cached {
+                return val;
+            }
         }
 
-        if visiting.contains(name) {
+        let on_stack = visiting_index(visiting, name);
+        if on_stack >= 0 {
+            // Cycle back to an on-stack rule: assume scannable (the analysis's
+            // optimistic fixpoint) and record how shallow the cycle reached.
+            if on_stack < *min_cycle {
+                *min_cycle = on_stack;
+            }
             return true;
         }
 
-        let is_top_level = visiting.is_empty();
+        let p = visiting.len();
         visiting.push(*name);
 
+        let mut local_min = i32::MAX;
         let mut result = false;
-        let rule = self.find_rule(name);
-        if let Some(rule) = rule {
+        if rid >= 0 {
+            let rule = &self.parser_rules[rid];
             let mut all_ok = true;
             for let alt of &rule.alternatives {
-                if !self.is_alt_scannable(&alt.elements, visiting) {
+                if !self.is_alt_scannable_at(&alt.elements, visiting, &mut local_min) {
                     all_ok = false;
                     break;
                 }
@@ -1103,8 +1287,17 @@ impl GenContext {
 
         remove_from_visiting(visiting, name);
 
-        if is_top_level {
-            self.scannable_cache[*name] = result;
+        // Cache once the result no longer depends on an unresolved ancestor's
+        // optimistic assumption: a `false` never does (cycles only make things
+        // optimistically `true`), and a `true` is final once its whole SCC
+        // closed at or below this frame (`local_min >= p`). Otherwise the value
+        // is provisional — propagate the escaping cycle depth to the caller.
+        if !result || local_min >= p {
+            if rid >= 0 {
+                self.scannable_cache[rid] = Option::Some(result);
+            }
+        } else if local_min < *min_cycle {
+            *min_cycle = local_min;
         }
 
         return result;
@@ -1112,8 +1305,18 @@ impl GenContext {
 
     /// Returns true if every element in the sequence is scannable.
     pub fn is_alt_scannable(&mut self, elements: &List<Element>, visiting: &mut List<String>) -> bool {
+        let mut min_cycle = i32::MAX;
+        return self.is_alt_scannable_at(elements, visiting, &mut min_cycle);
+    }
+
+    fn is_alt_scannable_at(
+        &mut self,
+        elements: &List<Element>,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> bool {
         for let elem of elements {
-            if !self.is_element_scannable(elem, visiting) {
+            if !self.is_element_scannable_at(elem, visiting, min_cycle) {
                 return false;
             }
         }
@@ -1122,14 +1325,19 @@ impl GenContext {
 
     /// Returns true if a single element is scannable.
     pub fn is_element_scannable(&mut self, elem: &Element, visiting: &mut List<String>) -> bool {
+        let mut min_cycle = i32::MAX;
+        return self.is_element_scannable_at(elem, visiting, &mut min_cycle);
+    }
+
+    fn is_element_scannable_at(&mut self, elem: &Element, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
         return match elem {
             TokenRef(_) | Literal(_) => true,
-            RuleRef(r) => self.is_rule_scannable(&r.name, visiting),
-            Label(lab) => self.is_element_scannable(&lab.element, visiting),
-            Repeat(rep) => self.is_element_scannable(&rep.element, visiting),
+            RuleRef(r) => self.is_rule_scannable_at(&r.name, visiting, min_cycle),
+            Label(lab) => self.is_element_scannable_at(&lab.element, visiting, min_cycle),
+            Repeat(rep) => self.is_element_scannable_at(&rep.element, visiting, min_cycle),
             Group(g) => {
                 for let alt of &g.alternatives {
-                    if !self.is_alt_scannable(&alt.elements, visiting) {
+                    if !self.is_alt_scannable_at(&alt.elements, visiting, min_cycle) {
                         return false;
                     }
                 }
@@ -1142,6 +1350,50 @@ impl GenContext {
             // terminal or a simple terminal set, both of which are scannable.
             Not(_) => true,
         };
+    }
+
+    /// Seed `scannable_cache` for every parser rule. Scannability is pure
+    /// reachability — a rule is non-scannable iff it can reach a reference to a
+    /// name that is not a parser rule, the only `false` source in
+    /// `is_element_scannable_at` — so one O(V+E) fixpoint replaces the recursive
+    /// check, which was exponential on large mutual-recursion SCCs (see perf.md).
+    pub fn precompute_scannability(&mut self) {
+        let n = self.parser_rules.len();
+        let mut bad: List<bool> = [];
+        for let mut i = 0; i < n; i += 1 {
+            bad.push(false);
+        }
+
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for let mut rid = 0; rid < n; rid += 1 {
+                if !bad[rid] && self.references_bad_rule(rid, &bad) {
+                    bad[rid] = true;
+                    changed = true;
+                }
+            }
+        }
+
+        for let mut rid = 0; rid < n; rid += 1 {
+            self.scannable_cache[rid] = Option::Some(!bad[rid]);
+        }
+    }
+
+    /// The scannability fixpoint's step relation: rule `rid` references an
+    /// undefined rule, or one already marked bad.
+    fn references_bad_rule(&self, rid: i32, bad: &List<bool>) -> bool {
+        let mut names: List<String> = [];
+        for let alt of &self.parser_rules[rid].alternatives {
+            collect_scannable_refs(&alt.elements, &mut names);
+        }
+        for let name of &names {
+            let r = self.rule_index_of(name);
+            if r < 0 || bad[r] {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// Get the rule name that owns the general group types inside a given
@@ -1166,8 +1418,19 @@ impl GenContext {
             return entry.id;
         }
         let id = self.kind_set_registry.len();
-        self.kind_set_registry[key] = KindSetEntry { id, tokens: canonical };
+        let ids = self.names_to_ids(&canonical);
+        self.kind_set_registry[key] = KindSetEntry { id, tokens: ids };
         return id;
+    }
+
+    /// Map `TK_*` names to their kind ids (in the given order). Names come from
+    /// the canonicalised (name-sorted) set, so emit re-derives the same order.
+    fn names_to_ids(&mut self, names: &List<String>) -> List<i32> {
+        let mut out: List<i32> = [];
+        for let n of names {
+            out.push(self.token_kinds.intern(n));
+        }
+        return out;
     }
 
     /// All interned kind sets in helper-ID order (i.e. insertion order).
@@ -1189,7 +1452,8 @@ impl GenContext {
             return Option::<i32>::Some(entry.id);
         }
         let id = self.sync_set_registry.len();
-        self.sync_set_registry[key] = KindSetEntry { id, tokens: canonical };
+        let ids = self.names_to_ids(&canonical);
+        self.sync_set_registry[key] = KindSetEntry { id, tokens: ids };
         return Option::<i32>::Some(id);
     }
 
@@ -1229,7 +1493,11 @@ impl GenContext {
             return Option::<i32>::Some(entry.id);
         }
         let id = self.follow_mask_registry.len();
-        self.follow_mask_registry[key] = FollowMaskEntry { id, mask: canonical };
+        let mut mask_ids: List<List<i32>> = [];
+        for let depth of &canonical {
+            mask_ids.push(self.names_to_ids(depth));
+        }
+        self.follow_mask_registry[key] = FollowMaskEntry { id, mask: mask_ids };
         return Option::<i32>::Some(id);
     }
 
@@ -1275,31 +1543,55 @@ impl GenContext {
     /// callee's tail-greedy elements cannot collide with the caller's
     /// expectations and no FOLLOW argument is needed.
     pub fn tail_greedy_first_of_rule(&mut self, name: &String, visiting: &mut List<String>) -> List<String> {
-        let cached = self.tail_greedy_cache.get(*name);
-        if let Some(result) = cached {
-            return result;
+        let mut min_cycle = i32::MAX;
+        return self.tail_greedy_first_of_rule_at(name, visiting, &mut min_cycle);
+    }
+
+    /// Tail-greedy FIRST with SCC-aware memoization (see `is_rule_scannable_at`):
+    /// cache only once the SCC has closed at this frame (`local_min >= p`).
+    fn tail_greedy_first_of_rule_at(
+        &mut self,
+        name: &String,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> List<String> {
+        let rid = self.rule_index_of(name);
+        if rid >= 0 {
+            let cached = self.tail_greedy_cache[rid];
+            if let Some(result) = cached {
+                return result;
+            }
         }
 
-        if visiting.contains(name) {
+        let on_stack = visiting_index(visiting, name);
+        if on_stack >= 0 {
+            if on_stack < *min_cycle {
+                *min_cycle = on_stack;
+            }
             return [];
         }
 
-        let is_top_level = visiting.is_empty();
+        let p = visiting.len();
         visiting.push(*name);
 
+        let mut local_min = i32::MAX;
         let mut result: List<String> = [];
-        let rule = self.find_rule(name);
-        if let Some(rule) = rule {
+        if rid >= 0 {
+            let rule = &self.parser_rules[rid];
             for let alt of &rule.alternatives {
-                let af = self.tail_greedy_first_of_elements(&alt.elements, visiting);
+                let af = self.tail_greedy_first_of_elements(&alt.elements, visiting, &mut local_min);
                 dedup_append_arr(&mut result, &af);
             }
         }
 
         remove_from_visiting(visiting, name);
 
-        if is_top_level {
-            self.tail_greedy_cache[*name] = result;
+        if local_min >= p {
+            if rid >= 0 {
+                self.tail_greedy_cache[rid] = Option::Some(result);
+            }
+        } else if local_min < *min_cycle {
+            *min_cycle = local_min;
         }
 
         return result;
@@ -1310,12 +1602,17 @@ impl GenContext {
     /// `Repeat (Optional|Star|Plus)` contributes `first_of_element(inner)`.
     /// A nested `Group` recurses per alt. A `RuleRef` to a rule with a
     /// non-empty `tail_greedy_first` contributes that set transitively.
-    fn tail_greedy_first_of_elements(&mut self, elements: &List<Element>, visiting: &mut List<String>) -> List<String> {
+    fn tail_greedy_first_of_elements(
+        &mut self,
+        elements: &List<Element>,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> List<String> {
         let mut result: List<String> = [];
         let mut i = elements.len() - 1;
         while i >= 0 {
             let elem = &elements[i];
-            let tg = self.tail_greedy_first_of_element(elem, visiting);
+            let tg = self.tail_greedy_first_of_element(elem, visiting, min_cycle);
             dedup_append_arr(&mut result, &tg);
             let mut nv: List<String> = [];
             if !self.element_is_nullable_deep(elem, &mut nv) {
@@ -1326,7 +1623,12 @@ impl GenContext {
         return result;
     }
 
-    fn tail_greedy_first_of_element(&mut self, elem: &Element, visiting: &mut List<String>) -> List<String> {
+    fn tail_greedy_first_of_element(
+        &mut self,
+        elem: &Element,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> List<String> {
         return match elem {
             Repeat(rep) => {
                 // Only count Repeats whose inner consumes EXACTLY one
@@ -1354,13 +1656,13 @@ impl GenContext {
             Group(g) => {
                 let mut acc: List<String> = [];
                 for let alt of &g.alternatives {
-                    let inner = self.tail_greedy_first_of_elements(&alt.elements, visiting);
+                    let inner = self.tail_greedy_first_of_elements(&alt.elements, visiting, min_cycle);
                     dedup_append_arr(&mut acc, &inner);
                 }
                 acc;
             },
-            Label(lab) => self.tail_greedy_first_of_element(&lab.element, visiting),
-            RuleRef(r) => self.tail_greedy_first_of_rule(&r.name, visiting),
+            Label(lab) => self.tail_greedy_first_of_element(&lab.element, visiting, min_cycle),
+            RuleRef(r) => self.tail_greedy_first_of_rule_at(&r.name, visiting, min_cycle),
             // Token / Literal / Wildcard / Not consume exactly one token
             // and never leak — they are the "stop" condition.
             TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => [],
@@ -1532,6 +1834,78 @@ pub fn union_kind_arrays(a: &List<String>, b: &List<String>) -> List<String> {
     return result;
 }
 
+/// Dense `null`-initialised `List<i32>` memo cache of length `n`.
+fn none_int_list_cache(n: i32) -> List<Option<List<i32>>> {
+    let mut v: List<Option<List<i32>>> = [];
+    for let mut i = 0; i < n; i += 1 {
+        v.push(null);
+    }
+    return v;
+}
+
+/// Dense `null`-initialised memo cache of length `n`, indexed by rule id.
+fn none_bool_cache(n: i32) -> List<Option<bool>> {
+    let mut v: List<Option<bool>> = [];
+    for let mut i = 0; i < n; i += 1 {
+        v.push(null);
+    }
+    return v;
+}
+
+fn none_list_cache(n: i32) -> List<Option<List<String>>> {
+    let mut v: List<Option<List<String>>> = [];
+    for let mut i = 0; i < n; i += 1 {
+        v.push(null);
+    }
+    return v;
+}
+
+/// Index of `name` in the visiting stack, or -1. Used by the scannability
+/// analysis to record how shallow a cycle reaches (see `is_rule_scannable_at`).
+fn visiting_index(visiting: &List<String>, name: &String) -> i32 {
+    for let mut i = 0; i < visiting.len(); i += 1 {
+        if visiting[i] == *name {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/// Collect the parser-rule names an element sequence references for
+/// scannability, mirroring the descent in `is_element_scannable_at`
+/// (RuleRef / Label / Repeat / Group descend; terminals and `Not` do not).
+fn collect_scannable_refs(elements: &List<Element>, out: &mut List<String>) {
+    for let e of elements {
+        collect_scannable_refs_element(e, out);
+    }
+}
+
+fn collect_scannable_refs_element(elem: &Element, out: &mut List<String>) {
+    match elem {
+        RuleRef(r) => out.push(r.name),
+        Label(lab) => collect_scannable_refs_element(&lab.element, out),
+        Repeat(rep) => collect_scannable_refs_element(&rep.element, out),
+        Group(g) => {
+            for let alt of &g.alternatives {
+                collect_scannable_refs(&alt.elements, out);
+            }
+        },
+        TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {
+        },
+    }
+}
+
 fn remove_from_visiting(visiting: &mut List<String>, name: &String) {
+    // `visiting` is a stack: every caller pushes `name`, recurses (inner frames
+    // pop their own names), then removes `name` — so `name` is on top. Pop in
+    // O(1). The old `filter().collect()` rebuilt the whole list on every
+    // recursion frame; on deeply-recursive grammars that per-frame allocation
+    // dominated allocation and GC. Fall back to a scan if the invariant is ever
+    // violated.
+    let n = visiting.len();
+    if n > 0 && visiting[n - 1] == *name {
+        visiting.pop();
+        return;
+    }
     *visiting = visiting.iter().copied().filter(|v: String| v != *name).collect();
 }

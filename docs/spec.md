@@ -3551,7 +3551,6 @@ A `use` clause whose source is a non-`.wado`, non-`.wasm` schema file (e.g. `.g4
 use { Parser } from "./Calc.g4" with {
     generator: {
         module: "wado:gale@0.1",
-        options: { highlight: false },
     },
 };
 
