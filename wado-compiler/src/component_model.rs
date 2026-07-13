@@ -2000,10 +2000,42 @@ impl CmInterfaceRegistry {
     /// and non-newtype names. The CM codegen emits a local newtype as a named
     /// type alias at the boundary (issue #1456) instead of erasing it to its
     /// base, so the compiled component's structural type matches `wado wit`.
-    pub fn local_newtype_base(&self, name: &str) -> Option<&Type> {
-        self.newtypes
-            .iter()
-            .find_map(|((source, n), ty)| (n == name && !self.is_cm_source(source)).then_some(ty))
+    ///
+    /// Returns the newtype's *canonical* registration source and its base type.
+    /// `source` is the reference's declaring interface (`NamedType::source_interface`).
+    /// When present it keys the lookup exactly, so two modules that each declare
+    /// a same-named local newtype over different base types do not collide (the
+    /// same `(name, source)` discipline the rest of the registry uses). When
+    /// absent, a bare-name match is accepted only if it is unambiguous across
+    /// local newtypes.
+    ///
+    /// The returned canonical source is stable across references to the same
+    /// newtype (a reference may carry `Some(fq)` or `None`), so callers key the
+    /// emitted alias by it and never double-emit the same boundary type.
+    pub fn local_newtype_base(&self, source: Option<&str>, name: &str) -> Option<(&str, &Type)> {
+        if let Some(source) = source {
+            // An imported CM newtype keeps erasing; a local one resolves by its
+            // exact `(source, name)` key.
+            return if self.is_cm_source(source) {
+                None
+            } else {
+                self.newtypes
+                    .get_key_value(&(source.to_string(), name.to_string()))
+                    .map(|((s, _), ty)| (s.as_str(), ty))
+            };
+        }
+        // Source-less reference: accept a bare name only when it maps to a single
+        // local newtype (ambiguous → `None`, mirroring `find_unique_in`).
+        let mut found = None;
+        for ((s, n), ty) in &self.newtypes {
+            if n == name && !self.is_cm_source(s) {
+                if found.is_some() {
+                    return None;
+                }
+                found = Some((s.as_str(), ty));
+            }
+        }
+        found
     }
 
     /// Iterate all newtypes as `((source_interface, name), type)`.
@@ -2703,7 +2735,11 @@ impl CmInterfaceRegistry {
     fn resolve_type_impl(&self, ty: &Type, preserve_local: bool) -> Type {
         match ty {
             Type::Named(named) => {
-                if preserve_local && self.local_newtype_base(&named.name).is_some() {
+                if preserve_local
+                    && self
+                        .local_newtype_base(named.source_interface.as_deref(), &named.name)
+                        .is_some()
+                {
                     ty.clone()
                 } else if let Some(aliased_ty) = self.get_newtype(&named.name) {
                     // Recursively resolve the aliased type
@@ -2979,7 +3015,7 @@ impl CmTypeGen {
             .iter()
             .map(|case| {
                 case.payload.as_ref().map(|ty| {
-                    let resolved = cm_interface_registry.resolve_type(ty);
+                    let resolved = cm_interface_registry.resolve_type_preserving_local_newtypes(ty);
                     self.ast_type_to_cm(sink, &resolved, cm_interface_registry, resource_exports)
                 })
             })
@@ -3016,7 +3052,8 @@ impl CmTypeGen {
         let field_cm_types: Vec<(String, ComponentValType)> = fields
             .iter()
             .map(|(field_name, field_ty)| {
-                let resolved = cm_interface_registry.resolve_type(field_ty);
+                let resolved =
+                    cm_interface_registry.resolve_type_preserving_local_newtypes(field_ty);
                 let cm_type =
                     self.ast_type_to_cm(sink, &resolved, cm_interface_registry, resource_exports);
                 (field_name.clone(), cm_type)
@@ -3184,17 +3221,28 @@ impl CmTypeGen {
                     // alias (`type meters = f64`) so the compiled component's
                     // structural type matches `wado wit`, rather than erasing to
                     // its base (issue #1456).
-                    if let Some(base) = cm_interface_registry.local_newtype_base(name).cloned() {
-                        let cache_key = format!("newtype:{name}");
+                    let source = named.source_interface.as_deref();
+                    if let Some((canonical_source, base)) = cm_interface_registry
+                        .local_newtype_base(source, name)
+                        .map(|(s, ty)| (s.to_string(), ty.clone()))
+                    {
+                        // Key the cache by the newtype's *canonical* source so
+                        // same-named local newtypes from different modules stay
+                        // distinct, and every reference to one newtype (whether
+                        // or not it carries a source) dedups to a single alias.
+                        let cache_key = format!("newtype:{canonical_source}:{name}");
                         if let Some(&idx) = self.cache.get(&cache_key) {
                             return ComponentValType::Type(idx);
                         }
-                        let base_val = self.ast_type_to_cm(
-                            sink,
-                            &base,
-                            cm_interface_registry,
-                            resource_exports,
-                        );
+                        // Resolve the base through the registry first: a base that
+                        // is itself an imported (WASI) newtype peels to its
+                        // primitive, while a local-newtype base is kept and
+                        // recursed into as a nested alias. Passing the raw base
+                        // would reach the unsupported-name panic below for an
+                        // imported-newtype base.
+                        let base = cm_interface_registry.resolve_type_preserving_local_newtypes(&base);
+                        let base_val =
+                            self.ast_type_to_cm(sink, &base, cm_interface_registry, resource_exports);
                         // A primitive base has no defined-type index to alias, so
                         // define one; an aggregate base already has an index we
                         // name directly (`type meters = point`).
@@ -3204,9 +3252,9 @@ impl CmTypeGen {
                             }
                             ComponentValType::Type(idx) => idx,
                         };
-                        let named = sink.name(&to_kebab(name), base_idx);
-                        self.cache.insert(cache_key, named);
-                        return ComponentValType::Type(named);
+                        let named_idx = sink.name(&to_kebab(name), base_idx);
+                        self.cache.insert(cache_key, named_idx);
+                        return ComponentValType::Type(named_idx);
                     }
                     // Every branch here is emitting a WASI interface
                     // declaration. The type reference must have a resolved
@@ -4418,5 +4466,79 @@ mod tests {
             sockets_interface.is_some(),
             "wasi:sockets/types interface should be registered"
         );
+    }
+
+    fn named(name: &str, source: Option<&str>) -> Type {
+        Type::Named(crate::ast::NamedType {
+            id: crate::ast::AstId::fresh(),
+            name: name.to_string(),
+            span: make_span(),
+            source_interface: source.map(str::to_string),
+        })
+    }
+
+    #[test]
+    fn local_newtype_base_is_keyed_per_source() {
+        // Two modules each declare a local newtype `Id` over a *different* base.
+        // A bare-name lookup would collide; the (source, name) key must not.
+        let mut registry = CmInterfaceRegistry::new();
+        registry
+            .newtypes
+            .insert(("pkg:a/a@1".into(), "Id".into()), named("f64", None));
+        registry
+            .newtypes
+            .insert(("pkg:b/b@1".into(), "Id".into()), named("i32", None));
+
+        assert!(matches!(
+            registry.local_newtype_base(Some("pkg:a/a@1"), "Id"),
+            Some(("pkg:a/a@1", Type::Named(n))) if n.name == "f64"
+        ));
+        assert!(matches!(
+            registry.local_newtype_base(Some("pkg:b/b@1"), "Id"),
+            Some(("pkg:b/b@1", Type::Named(n))) if n.name == "i32"
+        ));
+        // A source-less reference to an ambiguous name resolves to nothing
+        // rather than picking one arbitrarily.
+        assert!(registry.local_newtype_base(None, "Id").is_none());
+
+        // A CM-imported (wasi:) newtype is never treated as local.
+        registry.newtypes.insert(
+            ("wasi:clocks/types@0.3.0".into(), "Temp".into()),
+            named("u64", None),
+        );
+        assert!(
+            registry
+                .local_newtype_base(Some("wasi:clocks/types@0.3.0"), "Temp")
+                .is_none()
+        );
+        assert!(registry.local_newtype_base(None, "Temp").is_none());
+    }
+
+    #[test]
+    fn resolve_preserving_keeps_local_but_peels_imported_newtype_base() {
+        // A local newtype `Celsius = Temp` whose base `Temp` is an imported
+        // (wasi:) newtype `= u64`. Preserving resolution keeps `Celsius` but
+        // peels `Temp` to `u64`, so the alias branch never recurses into an
+        // unhandled imported-newtype name (the #1456 review's ICE).
+        let mut registry = CmInterfaceRegistry::new();
+        registry.newtypes.insert(
+            ("wasi:clocks/types@0.3.0".into(), "Temp".into()),
+            named("u64", None),
+        );
+        registry
+            .newtypes
+            .insert(("pkg:app/app@1".into(), "Celsius".into()), named("Temp", None));
+
+        let celsius = named("Celsius", Some("pkg:app/app@1"));
+        assert!(matches!(
+            registry.resolve_type_preserving_local_newtypes(&celsius),
+            Type::Named(n) if n.name == "Celsius"
+        ));
+
+        let temp = named("Temp", Some("wasi:clocks/types@0.3.0"));
+        assert!(matches!(
+            registry.resolve_type_preserving_local_newtypes(&temp),
+            Type::Named(n) if n.name == "u64"
+        ));
     }
 }

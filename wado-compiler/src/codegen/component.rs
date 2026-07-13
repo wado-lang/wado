@@ -2597,7 +2597,9 @@ fn generate_cm_imports(
                     .params
                     .iter()
                     .map(|(_, cm_name, ty)| {
-                        let resolved_ty = project.cm_interface_registry.resolve_type(ty);
+                        let resolved_ty = project
+                            .cm_interface_registry
+                            .resolve_type_preserving_local_newtypes(ty);
                         let is_struct = matches!(&resolved_ty, Type::Named(named)
                         if named.source_interface.as_deref().is_some_and(|s| {
                             project
@@ -2605,7 +2607,14 @@ fn generate_cm_imports(
                                 .get_struct_fields_by_source(s, &named.name)
                                 .is_some()
                         }));
-                        let val_type = if is_component_import || is_struct {
+                        // A preserved local newtype routes through the type gen
+                        // like a struct, so its named alias reaches the boundary.
+                        let is_local_newtype = matches!(&resolved_ty, Type::Named(named)
+                        if project
+                            .cm_interface_registry
+                            .local_newtype_base(named.source_interface.as_deref(), &named.name)
+                            .is_some());
+                        let val_type = if is_component_import || is_struct || is_local_newtype {
                             let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
                                 .iter()
                                 .map(|(k, &v)| (k.as_str(), v))
@@ -2643,7 +2652,9 @@ fn generate_cm_imports(
                 // Component imports and record returns route through
                 // `ast_type_to_cm`; other WASI returns use `emit_cm_val_type`.
                 let result_type = func.return_type.as_ref().map(|ty| {
-                    let resolved_ty = project.cm_interface_registry.resolve_type(ty);
+                    let resolved_ty = project
+                        .cm_interface_registry
+                        .resolve_type_preserving_local_newtypes(ty);
                     let is_struct = matches!(&resolved_ty, Type::Named(named)
                     if named.source_interface.as_deref().is_some_and(|s| {
                         project
@@ -2651,7 +2662,12 @@ fn generate_cm_imports(
                             .get_struct_fields_by_source(s, &named.name)
                             .is_some()
                     }));
-                    if is_component_import || is_struct {
+                    let is_local_newtype = matches!(&resolved_ty, Type::Named(named)
+                    if project
+                        .cm_interface_registry
+                        .local_newtype_base(named.source_interface.as_deref(), &named.name)
+                        .is_some());
+                    if is_component_import || is_struct || is_local_newtype {
                         let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
                             .iter()
                             .map(|(k, &v)| (k.as_str(), v))
