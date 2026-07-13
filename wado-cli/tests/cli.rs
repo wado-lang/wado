@@ -254,6 +254,41 @@ fn test_wit_lib_emits_root_world() {
 }
 
 #[test]
+fn test_wit_lib_surfaces_facade_reexported_export() {
+    // A facade entry module re-exports an `export fn` from a submodule via
+    // `pub use`; the library world must still surface it as a CM export. This
+    // is the shape package-marl uses — `lib.wado` re-exports `render` / `format`
+    // from submodules — so a registry consumer sees them across the CM boundary.
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"facade\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src").join("lib.wado"),
+        "pub use { greet } from \"./sub.wado\";\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src").join("sub.wado"),
+        "export fn greet(name: String) -> String { return name; }\n",
+    )
+    .unwrap();
+
+    wado_in(dir)
+        .arg("wit")
+        .arg("--lib")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "export greet: func(name: string) -> string;",
+        ));
+}
+
+#[test]
 fn test_wit_lib_conflicts_with_world() {
     wado()
         .arg("wit")
