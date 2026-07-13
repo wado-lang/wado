@@ -966,7 +966,7 @@ Point { x: 1, y: 2 } == Point { x: 1, y: 2 };  // Eq synthesized here
 to_string(&Point { x: 1, y: 2 });              // Serialize synthesized here
 ```
 
-An empty marker `impl Trait for T;` is a static conformance check (like Java's `implements`): it's a hard compile error if `T` is ineligible. Optional for these traits, but it documents intent and is the way to attach `#[serde(...)]` customization.
+An empty marker `impl Trait for T;` asserts conformance: the compiler checks `T` is eligible and errors if not. Optional for these traits, but it documents intent and is the way to attach `#[serde(...)]` customization.
 
 ```wado
 struct Broken { retries: i32 = 3, name: String }
