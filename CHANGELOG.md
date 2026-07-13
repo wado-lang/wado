@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.0.13](https://github.com/wado-lang/wado/compare/v0.0.12...v0.0.13) - 2026-07-13
+
+- feat(gale): customizable syntax highlighting + faster generation by @gfx in https://github.com/wado-lang/wado/pull/1566
+- refactor(value-copy): decide every copy at lowering and delete the elision passes by @gfx in https://github.com/wado-lang/wado/pull/1563
+- docs: reorganize cheatsheet and fill spec/AGENTS gaps by @gfx in https://github.com/wado-lang/wado/pull/1568
+
 ## [v0.0.12](https://github.com/wado-lang/wado/compare/v0.0.11...v0.0.12) - 2026-07-12
 
 - fix(compiler): sound value copies for variant payloads and immutable-reference mutations by @gfx in https://github.com/wado-lang/wado/pull/1544
