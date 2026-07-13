@@ -611,9 +611,8 @@ let grade = match score {
     _ => "invalid",
 };
 
-// Constant patterns: a name resolving to an immutable global or an
-// associated const matches by value, not a binding (differs from Rust,
-// where a bare lowercase name always binds). TK_FOO/TK_BAR are `global`s.
+// Constant patterns: an immutable global or associated const matches by
+// value, not a binding (unlike Rust). TK_FOO/TK_BAR are `global`s.
 let kind = match token {
     TK_FOO | TK_BAR => "keyword",
     i32::MAX        => "max",
