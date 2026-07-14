@@ -13,15 +13,7 @@ use { args, print, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use { Deserialize } from "core:serde";
 use { parse } from "core:args";
 use { MonotonicClock } from "wasi:clocks";
-use {
-    Preopens,
-    Descriptor,
-    Filesize,
-    PathFlags,
-    OpenFlags,
-    DescriptorFlags,
-    ErrorCode,
-} from "wasi:filesystem";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags, ErrorCode } from "wasi:filesystem";
 
 use wado from "./Wado.g4"
     with {
@@ -88,9 +80,11 @@ export fn run() with Stdout, Stderr, Environment, Preopens, MonotonicClock {
 /// Highlight one source file and write the HTML fragment under `output_dir`,
 /// preserving the input's path (`<output_dir>/<path>.html`). Returns the
 /// parse+highlight duration in nanoseconds, or `null` if the file was skipped.
-fn highlight_file(root: &Descriptor, path: &String, output_dir: &String) -> Option<u64>
-    with Stdout, Stderr, MonotonicClock
-{
+fn highlight_file(
+    root: &Descriptor,
+    path: &String,
+    output_dir: &String,
+) -> Option<u64> with Stdout, Stderr, MonotonicClock {
     let open_result = root.open_at(
         PathFlags::none(),
         *path,
