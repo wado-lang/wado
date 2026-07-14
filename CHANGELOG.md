@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.0.15](https://github.com/wado-lang/wado/compare/v0.0.14...v0.0.15) - 2026-07-14
+
+- feat(compiler): consume a facade library as a CM component (Marl from the registry) by @gfx in https://github.com/wado-lang/wado/pull/1576
+
 ## [v0.0.14](https://github.com/wado-lang/wado/compare/v0.0.13...v0.0.14) - 2026-07-13
 
 - chore(ci): add 60-minute timeout to all workflow jobs by @gfx in https://github.com/wado-lang/wado/pull/1570
