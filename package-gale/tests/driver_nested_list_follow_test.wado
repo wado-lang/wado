@@ -1,0 +1,25 @@
+//! A bracketed comma-list nested inside a bare `X (',' X)*` list must parse:
+//! the inner loop's exit is fixed by the closing `]`, so it must not yield the
+//! comma to the enclosing list's caller-FOLLOW.
+
+use g from "./grammars/nested_list_follow.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/nested_list_follow" },
+    };
+
+test "array as the sole element of a bare list" {
+    let r = g::parse(&"foo<[a, b]>");
+    assert r.ok(), `tree: '{g::to_string_tree(&r)}'`;
+}
+
+test "array followed by another element in a bare list" {
+    let r = g::parse(&"foo<[a, b], c>");
+    assert r.ok(), `tree: '{g::to_string_tree(&r)}'`;
+}
+
+test "the closing bracket still terminates the inner list" {
+    // Rejection case: a missing `]` must fail, not be papered over by the
+    // gate change (the inner loop still ends at `]`, nothing else).
+    let r = g::parse(&"foo<[a, b>");
+    assert !r.ok(), "unterminated array must be rejected";
+}

@@ -4,11 +4,23 @@
 ; Comments, strings, numbers (lexer-rule names)
 (LINE_COMMENT) @comment
 (BLOCK_COMMENT) @comment
+
+; The `__DATA__` data section: raw embedded text, muted like a comment.
+(DATA_SECTION) @comment
 (STRING_LITERAL) @string
-(TEMPLATE_STRING) @string
 (CHAR_LITERAL) @string
 (FLOAT) @number
 (INTEGER) @number
+
+; Template strings: text chunks and backticks are string; a `{ ... }`
+; interpolation holds code (identifiers -> variable). The `:spec` format
+; specifier is muted, listed first so it wins the override for `{x:width}`.
+(TEMPLATE_TEXT) @string
+(BACKTICK) @string
+(formatSpec (IDENTIFIER) @comment)
+(formatSpec (INTEGER) @comment)
+(formatSpec (FLOAT) @comment)
+(interpolation (IDENTIFIER) @variable)
 
 ; Boolean / null constants
 "true" @constant.builtin

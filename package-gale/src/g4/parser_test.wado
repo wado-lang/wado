@@ -85,7 +85,6 @@ obj : '{' pair (',' pair)* '}' ;";
         panic("expected Literal");
     }
     if let Repeat(r) = elems[2] {
-        // group with * repetition
     } else {
         panic("expected Repeat");
     }
@@ -172,8 +171,6 @@ HEX : [0-9a-fA-F] ;";
 }
 
 test "char class with \\u{...} brace escape (astral code point)" {
-    // ANTLR4 lexicon: `\u{XXXXXX}` covers all code points (lexicon.md).
-    // The fixed-4-digit path used to read `{` as a hex digit and panic.
     let input = "grammar Test;
 EMOJI : [\\u{1F600}] ;";
     let g = parse(input).unwrap();
@@ -194,17 +191,14 @@ C : [\\u0041\\b\\f] ;";
     if let CharClass(cc) = body[0].elements[0] {
         assert cc.ranges.len() == 3, `len={cc.ranges.len()}`;
         assert cc.ranges[0].start == 'A', `0={cc.ranges[0].start as i32}`;
-        assert cc.ranges[1].start == '\u0008', `1={cc.ranges[1].start as i32}`;  // backspace
-        assert cc.ranges[2].start == '\u000C', `2={cc.ranges[2].start as i32}`;  // form feed
+        assert cc.ranges[1].start == '\u0008', `1={cc.ranges[1].start as i32}`;
+        assert cc.ranges[2].start == '\u000C', `2={cc.ranges[2].start as i32}`;
     } else {
         panic("expected CharClass");
     }
 }
 
 test "multi-char range endpoint is rejected, not silently truncated" {
-    // ANTLR4 rejects a multi-character range endpoint. The start is already
-    // validated (single char); the end must be too, rather than silently
-    // taking its first char (`'a'..'bc'` -> 'a'..'b') or panicking on empty.
     assert parse("grammar Test;\nR : 'a' .. 'bc' ;") matches { Err(_) }, "multi-char range end should be rejected";
     assert parse("grammar Test;\nR : 'a' .. '' ;") matches { Err(_) }, "empty range end should be rejected, not panic";
 }
@@ -229,7 +223,6 @@ ID : [\\p{L}] ;";
     let body = &g.lexer_rules[0].body;
     if let CharClass(cc) = body[0].elements[0] {
         assert cc.negated == false;
-        // \p{L} should expand to at least A-Z, a-z
         let mut has_upper = false;
         let mut has_lower = false;
         for let r of &cc.ranges {
@@ -345,7 +338,6 @@ ESC : '\\\\' . ;";
     let elems = &g.lexer_rules[0].body[0].elements;
     assert elems.len() == 2;
     if let AnyChar = elems[1] {
-        // ok
     } else {
         panic("expected AnyChar");
     }
@@ -370,7 +362,6 @@ rule : ID ;";
 }
 
 test "grammar with import and alias" {
-    // ANTLR4 supports `import Foo = Bar;` aliasing.
     let input = "grammar Test;
 import Foo = Bar, Baz;
 rule : ID ;";
@@ -387,7 +378,6 @@ rule : ID ;";
 }
 
 test "grammar with scoped named action" {
-    // @parser::header — uses :: scope separator
     let input = "grammar Test;
 @parser::header { /* code */ }
 @lexer::members { /* code */ }
@@ -416,10 +406,6 @@ rule : ID ;";
 }
 
 test "channels block tolerates ANTLR3-style numbered assignments" {
-    // `tokens { NAME = INT }` has long been accepted (see "tokens block
-    // with numbered assignments"); the shared `parse_id_list_block` extends
-    // the same leniency to `channels`. The `= INT` suffix is ignored and
-    // both channel names are still registered.
     let input = "lexer grammar Test;
 channels { CHAN_A = 1, CHAN_B = 2 }
 WS : ' ' -> channel(CHAN_A) ;";
@@ -430,9 +416,6 @@ WS : ' ' -> channel(CHAN_A) ;";
 }
 
 test "lexer rule with undeclared channel name is rejected" {
-    // ANTLR4 errors on a `channel(X)` whose name is neither a predefined
-    // channel nor declared in `channels { }`. The old behavior silently
-    // resolved it to channel 0 (DEFAULT), inverting the author's intent.
     let input = "lexer grammar Test;
 channels { COMMENTS }
 WS : ' ' -> channel(TYPO) ;";
@@ -440,16 +423,12 @@ WS : ' ' -> channel(TYPO) ;";
 }
 
 test "lexer rule with named channel resolves to user channel id" {
-    // ANTLR4 reserves channel 0 (DEFAULT) and 1 (HIDDEN); user channels
-    // declared via `channels { }` start at id 2. The parser should assign
-    // sequential ids based on the declaration order in the prequel.
     let input = "lexer grammar Test;
 channels { COMMENTS, DOCS }
 COMMENT : '//' -> channel(COMMENTS) ;
 DOC : '///' -> channel(DOCS) ;";
     let g = parse(input).unwrap();
     assert g.lexer_rules.len() == 2;
-    // COMMENTS -> 2, DOCS -> 3
     for let r of &g.lexer_rules {
         if r.name == "COMMENT" {
             assert r.channel == 2, `COMMENT channel {r.channel}`;
@@ -466,9 +445,6 @@ tokens { VIRTUAL_A, VIRTUAL_B }
 rule : ID ;";
     let g = parse(input).unwrap();
     assert g.parser_rules.len() == 1;
-    // Both virtual tokens become entries in lexer_rules with empty body and
-    // are flagged with `is_virtual` so generators can distinguish them from
-    // real lexer rules.
     let mut found_a = false;
     let mut found_b = false;
     for let r of &g.lexer_rules {
@@ -487,9 +463,6 @@ rule : ID ;";
 }
 
 test "tokens block does not flag existing lexer rule as virtual" {
-    // If both `tokens { X }` and `X : ... ;` are present, X must NOT be
-    // treated as virtual — the real body wins. ANTLR4 accepts this shape
-    // and uses the explicit rule.
     let input = "lexer grammar Test;
 tokens { ID }
 ID : [a-z]+ ;";
@@ -500,7 +473,6 @@ ID : [a-z]+ ;";
 }
 
 test "grammar with prequel any order" {
-    // ANTLR4 allows multiple prequel blocks in any order.
     let input = "grammar Test;
 options { tokenVocab = TestLexer; }
 import Foo;
@@ -558,7 +530,6 @@ expr[int _p, String name] returns [int v, List<String> ignored] locals [int i] :
     assert r.args[1].type_text == "String" && r.args[1].name == "name", `arg1: {r.args[1].type_text}/{r.args[1].name}`;
     assert r.returns_decls.len() == 2, `returns: {r.returns_decls.len()}`;
     assert r.returns_decls[0].type_text == "int" && r.returns_decls[0].name == "v";
-    // The comma inside List<String> must not split the declaration.
     assert r.returns_decls[1].type_text == "List<String>" && r.returns_decls[1].name == "ignored", `ret1: {r.returns_decls[1].type_text}/{r.returns_decls[1].name}`;
     assert r.locals_decls.len() == 1 && r.locals_decls[0].name == "i";
     assert r.throws.len() == 0;
@@ -572,7 +543,6 @@ r returns [int i = 0, String s = \"x\"] locals [int n = f(1, 2)] : ID ;";
     assert r.returns_decls.len() == 2, `returns: {r.returns_decls.len()}`;
     assert r.returns_decls[0].type_text == "int" && r.returns_decls[0].name == "i", `ret0: {r.returns_decls[0].type_text}/{r.returns_decls[0].name}`;
     assert r.returns_decls[1].type_text == "String" && r.returns_decls[1].name == "s", `ret1: {r.returns_decls[1].type_text}/{r.returns_decls[1].name}`;
-    // The comma inside the initializer f(1, 2) must not split the decl.
     assert r.locals_decls.len() == 1, `locals: {r.locals_decls.len()}`;
     assert r.locals_decls[0].type_text == "int" && r.locals_decls[0].name == "n", `loc0: {r.locals_decls[0].type_text}/{r.locals_decls[0].name}`;
 }
@@ -640,14 +610,11 @@ test "alternative actions retained in sidecar with positions" {
 r : A {act1();} B {p()}? C ;";
     let g = parse(input).unwrap();
     let alt = &g.parser_rules[0].alternatives[0];
-    // Actions live in the sidecar, not in elements: A B C stay three elements.
     assert alt.elements.len() == 3, `elements: {alt.elements.len()}`;
     assert alt.actions.len() == 2, `actions: {alt.actions.len()}`;
-    // `{act1();}` runs after A (before element[1]).
     assert alt.actions[0].kind matches { Action }, "act1 kind";
     assert alt.actions[0].before_index == 1, `act1 pos: {alt.actions[0].before_index}`;
     assert alt.actions[0].source.text == "act1();", `act1 body: '{alt.actions[0].source.text}'`;
-    // `{p()}?` is a predicate gating C (before element[2]).
     assert alt.actions[1].kind matches { Predicate }, "p kind";
     assert alt.actions[1].before_index == 2, `p pos: {alt.actions[1].before_index}`;
 }
@@ -738,7 +705,6 @@ INT locals [int n] : [0-9]+ ;";
 }
 
 test "private rule modifier" {
-    // ANTLR4 supports `public`, `private`, `protected`, `fragment` rule modifiers.
     let input = "grammar Test;
 public expr : ID ;
 private nested : ID ;
@@ -746,28 +712,23 @@ protected helper : ID ;
 plain : ID ;";
     let g = parse(input).unwrap();
     assert g.parser_rules.len() == 4;
-    // Visibility should be preserved on the rule.
     assert g.parser_rules[0].name == "expr";
     if let Public = g.parser_rules[0].visibility {
-        // ok
     } else {
         panic("expected Public visibility on expr");
     }
     assert g.parser_rules[1].name == "nested";
     if let Private = g.parser_rules[1].visibility {
-        // ok
     } else {
         panic("expected Private visibility on nested");
     }
     assert g.parser_rules[2].name == "helper";
     if let Protected = g.parser_rules[2].visibility {
-        // ok
     } else {
         panic("expected Protected visibility on helper");
     }
     assert g.parser_rules[3].name == "plain";
     if let Default = g.parser_rules[3].visibility {
-        // ok
     } else {
         panic("expected Default visibility on plain");
     }
@@ -832,9 +793,6 @@ rule : ID ;";
 }
 
 test "grammar option with action-block value round-trips the body" {
-    // ANTLR4 allows `{ ... }` as an option value for host-language hooks.
-    // Gale does not interpret the body but preserves it verbatim so that
-    // downstream tooling can round-trip it. Spec: `doc/options.md`.
     let input = "grammar Test;
 options { language = {some code;} ; }
 rule : ID ;";
@@ -855,17 +813,14 @@ test "grammar level named actions recorded" {
 rule : ID ;";
     let g = parse(input).unwrap();
     assert g.named_actions.len() == 3, `got {g.named_actions.len()} actions`;
-    // @header has no scope.
     assert g.named_actions[0].name == "header";
     if let Some(_) = g.named_actions[0].scope {
         panic("@header should have no scope");
     }
-    // @members has no scope.
     assert g.named_actions[1].name == "members";
     if let Some(_) = g.named_actions[1].scope {
         panic("@members should have no scope");
     }
-    // @parser::members has scope "parser".
     assert g.named_actions[2].name == "members";
     if let Some(scope) = g.named_actions[2].scope {
         assert scope == "parser";
@@ -881,12 +836,10 @@ private HELPER : [A-Z]+ ;";
     let g = parse(input).unwrap();
     assert g.lexer_rules.len() == 2;
     if let Public = g.lexer_rules[0].visibility {
-        // ok
     } else {
         panic("expected Public visibility on ID");
     }
     if let Private = g.lexer_rules[1].visibility {
-        // ok
     } else {
         panic("expected Private visibility on HELPER");
     }
@@ -911,7 +864,6 @@ any : . ;";
     let elems = &g.parser_rules[0].alternatives[0].elements;
     assert elems.len() == 1;
     if let Wildcard(_) = elems[0] {
-        // ok
     } else {
         panic("expected Wildcard element");
     }
@@ -924,7 +876,6 @@ expr : ~ID ;";
     let elems = &g.parser_rules[0].alternatives[0].elements;
     assert elems.len() == 1;
     if let Not(_) = elems[0] {
-        // ok
     } else {
         panic("expected Not element");
     }
@@ -937,7 +888,6 @@ expr : ~(STRING | NUMBER) ;";
     let elems = &g.parser_rules[0].alternatives[0].elements;
     assert elems.len() == 1;
     if let Not(_) = elems[0] {
-        // ok
     } else {
         panic("expected Not element");
     }
@@ -963,7 +913,6 @@ expr : sub[1, 2]+ ;";
     let elems = &g.parser_rules[0].alternatives[0].elements;
     assert elems.len() == 1;
     if let Repeat(_) = elems[0] {
-        // ok
     } else {
         panic("expected Repeat element");
     }
@@ -977,7 +926,6 @@ expr : ID<assoc=right> ;";
 }
 
 test "parser rule with block options" {
-    // ANTLR4 allows `options{}` inside a parenthesized block.
     let input = "grammar Test;
 expr : ( options { greedy = false; } : ID | NUM ) ;";
     let g = parse(input).unwrap();
@@ -985,7 +933,6 @@ expr : ( options { greedy = false; } : ID | NUM ) ;";
 }
 
 test "parser rule with epsilon alternative" {
-    // Empty alternative — ANTLR4 allows `| /* nothing */`.
     let input = "grammar Test;
 opt : ID | ;";
     let g = parse(input).unwrap();
@@ -1009,21 +956,17 @@ WS : [ \\t\\n\\r]+ -> skip ;";
 }
 
 test "lexer command mode switches current mode" {
-    // `mode(X)` switches the current mode (top of stack), unlike pushMode.
-    // Spec: vendor/antlr4/doc/lexer-rules.md "mode(), pushMode(), popMode, and more".
     let input = "lexer grammar Test;
 LQUOTE : '\"' -> more, mode(STR) ;
 mode STR;
 STRING : '\"' -> mode(DEFAULT_MODE) ;";
     let g = parse(input).unwrap();
     assert g.lexer_rules.len() == 2;
-    // First rule lives in default mode and switches to STR
     assert g.lexer_rules[0].name == "LQUOTE";
     assert g.lexer_rules[0].mode == 0;
     assert g.lexer_rules[0].set_mode != -1;
     assert g.mode_names[g.lexer_rules[0].set_mode as i32] == "STR";
     assert g.lexer_rules[0].more == true;
-    // Second rule lives in STR mode and switches back to DEFAULT_MODE
     assert g.lexer_rules[1].name == "STRING";
     assert g.lexer_rules[1].mode == 1;
     assert g.mode_names[g.lexer_rules[1].mode as i32] == "STR";
@@ -1031,7 +974,6 @@ STRING : '\"' -> mode(DEFAULT_MODE) ;";
 }
 
 test "lexer command channel with integer literal" {
-    // ANTLR4 allows `channel(N)` with an integer literal, e.g. `channel(2)`.
     let input = "lexer grammar Test;
 COMMENT : '#' ~[\\r\\n]* -> channel(2) ;";
     let g = parse(input).unwrap();
@@ -1040,9 +982,6 @@ COMMENT : '#' ~[\\r\\n]* -> channel(2) ;";
 }
 
 test "malformed lexer command is rejected, not panicked" {
-    // `channel HIDDEN` is missing the parens ANTLR4 requires. The parser
-    // must return an Err (it threads Result) rather than trapping on the
-    // internal `expect(LParen).unwrap()`.
     let input = "lexer grammar Test;
 WS : [ \\t]+ -> channel HIDDEN ;";
     let result = parse(input);
@@ -1061,15 +1000,11 @@ test "lexer command channel with HIDDEN" {
 WS : [ \\t]+ -> channel(HIDDEN) ;";
     let g = parse(input).unwrap();
     assert g.lexer_rules.len() == 1;
-    // HIDDEN is the predefined channel id 1. ANTLR4 emits HIDDEN tokens on
-    // a separate channel — they are NOT discarded, so `skip` must remain
-    // false.
     assert g.lexer_rules[0].channel == 1;
     assert g.lexer_rules[0].skip == false;
 }
 
 test "lexer command type override" {
-    // `type(X)` rewrites the emitted token type. Useful for unifying alts.
     let input = "lexer grammar SetType;
 DOUBLE : '\"' .*? '\"' -> type(STRING) ;
 SINGLE : '\\'' .*? '\\'' -> type(STRING) ;";
@@ -1097,7 +1032,6 @@ TEXT : . -> more ;";
 }
 
 test "lexer command combo with mode and more" {
-    // ANTLR4 allows multiple commands separated by commas.
     let input = "lexer grammar Test;
 SPECIAL_OPEN : '<?' -> more, pushMode(PROC) ;
 mode PROC;
@@ -1112,8 +1046,6 @@ INSIDE : 'x' -> more ;";
 }
 
 test "ARG_ACTION supports nested brackets in returns" {
-    // ANTLR4 ARG_ACTION is host-language code; nested `[]` (e.g. Java
-    // array types like `int[]`) must not terminate the action early.
     let input = "grammar Test;
 expr returns [int[] arr] : ID ;";
     let g = parse(input).unwrap();
@@ -1157,8 +1089,6 @@ expr : sub[arr[0], xs[1]] ;";
 }
 
 test "action body with brace inside string literal" {
-    // ANTLR4 actions are host-language code, so a `}` inside a string
-    // literal must NOT terminate the action block.
     let input = "grammar Test;
 @header { String s = \"a } b\"; }
 expr : ID ;";
@@ -1193,9 +1123,6 @@ expr : ID ;";
 }
 
 test "mode declaration is rejected in parser grammar" {
-    // ANTLR4 only allows `mode X;` in lexer grammars (combined or split lexer).
-    // Spec: vendor/antlr4/doc/lexer-rules.md (modes are a lexer-only
-    // construct); confirmed against the published ANTLR4 jar.
     let input = "parser grammar Test;
 mode FOO;
 expr : ID ;";
@@ -1203,12 +1130,21 @@ expr : ID ;";
     assert result matches { Err(_) }, "expected mode in parser grammar to be rejected";
 }
 
+test "mode declaration is accepted in a combined grammar (superset)" {
+    let input = "grammar Test;
+doc  : TEXT* EOF ;
+LT   : '<' -> pushMode(INTAG) ;
+TEXT : ~[<]+ ;
+mode INTAG;
+NAME : [a-zA-Z]+ ;
+GT   : '>' -> popMode ;";
+    let g = parse(input).unwrap();
+    assert g.mode_names.contains(&"INTAG"), "INTAG mode should be registered";
+    let name_rule = g.lexer_rules.iter().find(|r: &LexerRule| r.name == "NAME").unwrap();
+    assert g.mode_names[name_rule.mode as i32] == "INTAG", "NAME should live in INTAG mode";
+}
+
 test "tilde applied to rule reference is rejected" {
-    // ANTLR4 spec: `notSet : NOT setElement | NOT blockSet` where setElement is
-    // TOKEN_REF / STRING_LITERAL (/ charSet / LEXER_CHAR_SET in lexer rules).
-    // A rule reference is not a set element, so `~ruleref` must be rejected.
-    // Spec: vendor/antlr4/doc/parser-rules.md (sets); confirmed against
-    // the published ANTLR4 jar.
     let input = "grammar Test;
 a : ~b ;
 b : 'x' ;";
@@ -1217,7 +1153,6 @@ b : 'x' ;";
 }
 
 test "tilde applied to wildcard is rejected" {
-    // `.` is not a set element either — rejecting `~.` matches ANTLR4.
     let input = "grammar Test;
 a : ~. ;";
     let result = parse(input);
@@ -1225,7 +1160,6 @@ a : ~. ;";
 }
 
 test "tilde applied to block containing rule ref is rejected" {
-    // Block-sets must contain only TOKEN_REF / STRING_LITERAL alternatives.
     let input = "grammar Test;
 a : ~( 'x' | b ) ;
 b : 'y' ;";
@@ -1234,9 +1168,6 @@ b : 'y' ;";
 }
 
 test "unknown lexer command is rejected" {
-    // ANTLR4's lexer-command set is fixed: skip, more, channel, type, pushMode,
-    // popMode, mode. Any other identifier after `->` is a hard error.
-    // Spec: vendor/antlr4/doc/lexer-rules.md §"Lexer Commands".
     let input = "lexer grammar Test;
 FOO : 'x' -> totallymadeup ;";
     let result = parse(input);
@@ -1252,8 +1183,6 @@ X : 'x' -> bogusCommand ;";
 }
 
 test "duplicate parser rule names are rejected" {
-    // ANTLR4 requires each rule name to be unique within its namespace.
-    // Spec: vendor/antlr4/doc/grammars.md.
     let input = "grammar Test;
 foo : ID ;
 foo : NUM ;";
@@ -1270,8 +1199,6 @@ FOO : 'b' ;";
 }
 
 test "duplicate rules across lexer and parser namespaces are allowed" {
-    // Parser rules (lowercase) and lexer rules (uppercase) occupy separate
-    // namespaces — a parser `foo` and a lexer `FOO` never collide.
     let input = "grammar Test;
 foo : FOO ;
 FOO : 'x' ;";
@@ -1281,8 +1208,6 @@ FOO : 'x' ;";
 }
 
 test "unterminated tokens block is rejected" {
-    // ANTLR4 spec (grammars.md §"tokens {} Section"): the block must be
-    // closed with `}`. A file that runs out of input before that is malformed.
     let input = "grammar Test;
 tokens { FOO, BAR
 ";
@@ -1299,8 +1224,6 @@ channels { FOO, BAR
 }
 
 test "tokens block trailing junk is tolerated then closed" {
-    // Permissive recovery: non-identifier junk inside `tokens { }` is
-    // silently skipped (existing behavior) as long as the block is closed.
     let input = "grammar Test;
 tokens { FOO, 42, BAR }
 r : FOO ;";
@@ -1309,9 +1232,6 @@ r : FOO ;";
 }
 
 test "channels block trailing junk is tolerated then closed" {
-    // Permissive recovery: non-identifier junk inside `channels { }` is
-    // silently skipped (mirrors the `tokens { }` behavior) as long as the
-    // block is closed. Without the anti-hang advance this input loops forever.
     let input = "lexer grammar Test;
 channels { COMMENTS ; DOCS }
 WS : ' ' -> channel(COMMENTS) ;";
@@ -1322,9 +1242,6 @@ WS : ' ' -> channel(COMMENTS) ;";
 }
 
 test "parser rule tilde applied to block" {
-    // ANTLR4 allows `~` on a set expressed as a block of alternatives, not
-    // just a single token reference: `~( 'a' | 'b' | 'c' )`.
-    // Spec: vendor/antlr4/doc/parser-rules.md (set complement).
     let input = "grammar Test;
 noise : ~( 'a' | 'b' | 'c' ) ;";
     let g = parse(input).unwrap();
@@ -1343,8 +1260,6 @@ noise : ~( 'a' | 'b' | 'c' ) ;";
 }
 
 test "lexer rule tilde applied to block" {
-    // Same as the parser case, but for lexer rules where `~` may wrap a set
-    // of char classes / literals: `~( 'a' | [0-9] )`.
     let input = "lexer grammar Test;
 NON_AB : ~( 'a' | 'b' ) ;";
     let g = parse(input).unwrap();
@@ -1354,7 +1269,6 @@ NON_AB : ~( 'a' | 'b' ) ;";
     assert elems.len() == 1;
     if let Not(n) = &elems[0] {
         if let Group(_) = &n.element {
-            // ok
         } else {
             panic("expected Group inside LexerElement::Not");
         }
@@ -1364,8 +1278,6 @@ NON_AB : ~( 'a' | 'b' ) ;";
 }
 
 test "lexer rule tilde applied to rule ref is rejected" {
-    // ANTLR4 restricts lexer `~` to a single char, a char set/range, or a
-    // block of those — a fragment/rule reference is not a set element.
     assert parse("lexer grammar Test;\nfragment A : 'a' ;\nB : ~A ;") matches { Err(_) }, "~RuleRef in a lexer rule should be rejected";
 }
 
@@ -1374,8 +1286,6 @@ test "lexer rule tilde applied to wildcard is rejected" {
 }
 
 test "block label single-value" {
-    // ANTLR4 allows labels on blocks, not just single atoms:
-    //   lbl = ( 'a' | 'b' )
     let input = "grammar Test;
 expr : op = ( '+' | '-' ) ;";
     let g = parse(input).unwrap();
@@ -1385,7 +1295,6 @@ expr : op = ( '+' | '-' ) ;";
         assert l.name == "op";
         assert l.list == false;
         if let Group(_) = &l.element {
-            // ok
         } else {
             panic("expected Group inside Label");
         }
@@ -1395,20 +1304,16 @@ expr : op = ( '+' | '-' ) ;";
 }
 
 test "block label list" {
-    // `+=` form of block label: collect each match into an List.
     let input = "grammar Test;
 expr : ops += ( '+' | '-' )* ;";
     let g = parse(input).unwrap();
     let elems = &g.parser_rules[0].alternatives[0].elements;
     assert elems.len() == 1;
-    // The top-level element is a Repeat (because of the `*`) whose inner
-    // element is the Label.
     if let Repeat(r) = &elems[0] {
         if let Label(l) = &r.element {
             assert l.name == "ops";
             assert l.list == true;
             if let Group(_) = &l.element {
-                // ok
             } else {
                 panic("expected Group inside Label");
             }
@@ -1421,9 +1326,6 @@ expr : ops += ( '+' | '-' )* ;";
 }
 
 test "arg action with only whitespace" {
-    // ANTLR4 accepts an empty/whitespace-only ARG_ACTION: `returns [ ]`.
-    // Gale discards the body, but the surrounding structure must still
-    // parse.
     let input = "grammar Test;
 expr returns [ ] : ID ;";
     let g = parse(input).unwrap();
@@ -1432,7 +1334,6 @@ expr returns [ ] : ID ;";
 }
 
 test "empty arg action on rule arguments" {
-    // Same for bare rule arguments: `rule[] : ...`.
     let input = "grammar Test;
 expr [ ] : ID ;";
     let g = parse(input).unwrap();
@@ -1441,18 +1342,11 @@ expr [ ] : ID ;";
 }
 
 test "tokens block with numbered assignments" {
-    // ANTLR3 allowed `tokens { NAME = 1, OTHER = 2 }`. ANTLR4's grammar
-    // rejects the assignment syntax, but real-world `.g4` files that were
-    // ported without cleanup still contain it. Gale's compatibility
-    // principle is lenient — we accept (and ignore) the `= INT` suffix so
-    // the rest of the grammar still parses, rather than erroring out.
     let input = "grammar Test;
 tokens { FOO = 1, BAR = 2 }
 expr : ID ;";
     let g = parse(input).unwrap();
     assert g.parser_rules.len() == 1;
-    // Both virtual tokens must still be registered on the lexer side, with
-    // their original names.
     let mut saw_foo = false;
     let mut saw_bar = false;
     for let r of &g.lexer_rules {
@@ -1468,10 +1362,6 @@ expr : ID ;";
 }
 
 test "alt-prefix angle options attach to the alternative" {
-    // ANTLR4 element options appearing before the first element of an
-    // alternative belong to the alternative, not to any element. The
-    // canonical use is `<assoc=right>` on a left-recursive alt.
-    // Spec: vendor/antlr4/doc/left-recursion.md, vendor/antlr4/doc/options.md.
     let input = "grammar Test;
 r : <assoc=right> A '**' B ;";
     let g = parse(input).unwrap();
@@ -1542,8 +1432,6 @@ r : .<assoc=right> ;";
 }
 
 test "group-level options attach to the group" {
-    // `( options { assoc=right; } : a | b )` attaches the options to the
-    // enclosing group, not to any inner alternative.
     let input = "grammar Test;
 r : (options { assoc=right; } : A | B) ;";
     let g = parse(input).unwrap();
@@ -1575,7 +1463,6 @@ r : A<assoc=right, fail='bad'> ;";
 }
 
 test "options under label attach to the inner atom" {
-    // `x=ID<assoc=right>` — the `<...>` belongs to the ID, not the label.
     let input = "grammar Test;
 r : x=ID<assoc=right> ;";
     let g = parse(input).unwrap();
@@ -1595,7 +1482,6 @@ r : x=ID<assoc=right> ;";
 }
 
 test "options under repeat attach to the inner atom" {
-    // `ID<p=3>*` — the `<...>` attaches to ID; the `*` wraps the whole thing.
     let input = "grammar Test;
 r : ID<p=3>* ;";
     let g = parse(input).unwrap();
@@ -1615,8 +1501,6 @@ r : ID<p=3>* ;";
 }
 
 test "malformed angle block does not panic" {
-    // Best-effort recovery: a broken option list should still let the rest
-    // of the grammar parse.
     let input = "grammar Test;
 r : A<foo=> ;";
     let g = parse(input).unwrap();
@@ -1625,12 +1509,6 @@ r : A<foo=> ;";
 }
 
 test "element options on action block attach to the alternative" {
-    // ANTLR4 attaches `<...>` immediately after `{ ... }` to the action
-    // element. The canonical use is `<p=N>` overriding the precedence of a
-    // left-recursive alt. Gale discards action-body source (host language;
-    // Stage C territory), so the action element has no IR slot of its own,
-    // and we promote the options up to the enclosing `Alternative.options`
-    // — preserving the alt-level metadata that downstream codegen needs.
     let input = "grammar T;
 e : a=e op=('+'|'-') b=e {}<p=3>
   | INT
@@ -1644,10 +1522,6 @@ e : a=e op=('+'|'-') b=e {}<p=3>
 }
 
 test "element options on semantic predicate attach to the alternative" {
-    // `<fail='custom message'>` after `{ ... }?` is the predicate-failure
-    // override documented in `vendor/antlr4/doc/predicates.md`. Gale
-    // discards predicate bodies, so the option is promoted to the
-    // alternative just like the action-block case above.
     let input = "grammar T;
 a : a ID {pred}?<fail='custom message'>
   | ID
@@ -1661,12 +1535,6 @@ a : a ID {pred}?<fail='custom message'>
 }
 
 test "element options on multiple actions and predicates merge into the alternative" {
-    // Real-world LR rule from antlr4 runtime-testsuite:
-    //   LeftRecursion/MultipleActionsPredicatesOptions_1
-    //     e : a=e op=('+'|'-') b=e  {}<p=3>{pred}?<fail='Message'>
-    // Both option blocks must be recognised, and each must be attributed
-    // to the surrounding alternative since the action/predicate elements
-    // are themselves discarded.
     let input = "grammar T;
 e : a=e op=('+'|'-') b=e  {}<p=3>{pred}?<fail='Message'>
   | INT
@@ -1681,10 +1549,6 @@ e : a=e op=('+'|'-') b=e  {}<p=3>{pred}?<fail='Message'>
 }
 
 test "parse_checked rejects undefined parser rule reference" {
-    // ANTLR4 SymbolChecks.checkForUnresolvedRuleRefs: every rule reference
-    // must resolve to a defined rule in the same translation unit
-    // (combined grammar case). `undef_rule` is never declared, so the
-    // semantic pass must reject the grammar.
     let input = "grammar Test;
 root : undef_rule ;
 ID : [a-z]+ ;";
@@ -1693,13 +1557,6 @@ ID : [a-z]+ ;";
 }
 
 test "parse_checked synthesizes a virtual rule for undefined parser-rule token reference" {
-    // ANTLR4 silently treats an uppercase identifier referenced from a
-    // parser rule but defined nowhere as an implicit token type
-    // (vendor/antlr4/doc/lexer-rules.md). `parse_checked` runs
-    // `synthesize_implicit_tokens` before `check_references`, so the
-    // unresolved-token check now sees the synthesized rule and accepts
-    // the grammar. The synthesized rule is marked virtual; the lexer
-    // cannot produce the token on its own.
     let input = "grammar Test;
 root : UNDEFINED_TOK ;
 ID : [a-z]+ ;";
@@ -1715,9 +1572,6 @@ ID : [a-z]+ ;";
 }
 
 test "parse_checked rejects undefined lexer rule reference in lexer grammar" {
-    // Lexer-to-lexer refs are always resolvable locally — lexer rules
-    // cannot cross the lexer/parser grammar boundary, so an unresolved
-    // ref here is always an error.
     let input = "lexer grammar Test;
 FOO : BAR ;";
     let result = parse_checked(input);
@@ -1735,9 +1589,6 @@ FOO : MISSING ;";
 }
 
 test "parse_checked accepts virtual tokens declared in tokens block" {
-    // `tokens { VT }` declares a virtual token that satisfies token-ref
-    // resolution even though there is no matching lexer rule. See
-    // ANTLR4 grammars.md §"tokens {} Section".
     let input = "grammar Test;
 tokens { VT }
 root : VT ;
@@ -1747,8 +1598,6 @@ ID : [a-z]+ ;";
 }
 
 test "parse_checked accepts EOF token reference" {
-    // `EOF` is a built-in token ref that doesn't require a matching
-    // lexer rule. See ANTLR4 parser-rules.md.
     let input = "grammar Test;
 root : ID EOF ;
 ID : [a-z]+ ;";
@@ -1757,9 +1606,6 @@ ID : [a-z]+ ;";
 }
 
 test "parse_checked accepts EOF reference inside a lexer rule" {
-    // `EOF` is also a built-in inside lexer rules (commonly used to
-    // tolerate unterminated comments: `'/*' .*? ('*/' | EOF)`). It has
-    // no defining lexer rule and must not be flagged as undefined.
     let input = "grammar Test;
 root : COMMENT ;
 COMMENT : '/*' .*? ('*/' | EOF) ;";
@@ -1768,10 +1614,6 @@ COMMENT : '/*' .*? ('*/' | EOF) ;";
 }
 
 test "parse_checked accepts parser grammar with only parser-rule refs" {
-    // `parser grammar` files reference tokens from a sibling lexer
-    // grammar — we cannot resolve those locally, so `check_references`
-    // must skip the token-ref bucket. Parser-rule refs within the
-    // grammar are still validated.
     let input = "parser grammar Test;
 root : expr ;
 expr : ID PLUS ID ;";
@@ -1780,8 +1622,6 @@ expr : ID PLUS ID ;";
 }
 
 test "parse_checked rejects undefined parser rule ref in parser grammar" {
-    // Parser-to-parser refs within a `parser grammar` are locally
-    // resolvable and must still be checked.
     let input = "parser grammar Test;
 root : missing_rule ;";
     let result = parse_checked(input);
@@ -1789,10 +1629,6 @@ root : missing_rule ;";
 }
 
 test "bare parse does not run reference checks" {
-    // `parse` keeps the syntactic-only posture (no semantic reference
-    // checks) so upstream consumers can still round-trip partial or minimal
-    // grammars that defer symbol resolution. Semantic checks run only
-    // via `parse_checked` / `check_references`.
     let input = "grammar Test;
 r : undefined ;";
     let result = parse(input);
@@ -1800,11 +1636,6 @@ r : undefined ;";
 }
 
 test "parse rejects <assoc> with non-left/right identifier" {
-    // ANTLR4 options.md: `assoc` accepts only the bare identifiers
-    // `left` and `right`. Anything else is an associativity conflict
-    // that must be rejected at parse time; downstream LR codegen
-    // otherwise silently falls back to left-associative and produces
-    // the wrong precedence tree.
     let input = "grammar Test;
 expr : <assoc=middle> expr '**' expr | INT ;
 INT : [0-9]+ ;";
