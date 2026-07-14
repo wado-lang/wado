@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.0.16](https://github.com/wado-lang/wado/compare/v0.0.15...v0.0.16) - 2026-07-14
+
+- perf(serde): faster by-ref list serialization, fix value-copy for monomorphized builtins by @gfx in https://github.com/wado-lang/wado/pull/1574
+- fix(publish): unblock releasing facade/types-only libraries; export marl escape helpers by @gfx in https://github.com/wado-lang/wado/pull/1579
+
 ## [v0.0.15](https://github.com/wado-lang/wado/compare/v0.0.14...v0.0.15) - 2026-07-14
 
 - feat(compiler): consume a facade library as a CM component (Marl from the registry) by @gfx in https://github.com/wado-lang/wado/pull/1576
