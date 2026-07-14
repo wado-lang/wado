@@ -1745,15 +1745,16 @@ impl CmInterfaceRegistry {
     fn module_index(&self) -> &ModuleSourceIndex {
         self.module_index.get_or_init(|| {
             let mut idx = ModuleSourceIndex::default();
-            let insert = |dst: &mut IndexMap<(String, String), String>,
-                          src: &str,
-                          name: &str,
-                          cm: &str| {
-                dst.insert((interface_stem(src).to_string(), name.to_string()), cm.to_string());
-                if let Some(ms) = self.cm_interface_module_sources.get(src) {
-                    dst.insert((ms.to_string(), name.to_string()), cm.to_string());
-                }
-            };
+            let insert =
+                |dst: &mut IndexMap<(String, String), String>, src: &str, name: &str, cm: &str| {
+                    dst.insert(
+                        (interface_stem(src).to_string(), name.to_string()),
+                        cm.to_string(),
+                    );
+                    if let Some(ms) = self.cm_interface_module_sources.get(src) {
+                        dst.insert((ms.to_string(), name.to_string()), cm.to_string());
+                    }
+                };
             for ((src, name), cm) in &self.resources {
                 insert(&mut idx.resources, src, name, cm);
             }
@@ -1775,11 +1776,7 @@ impl CmInterfaceRegistry {
 
     /// Resource CM name for `name` declared in the interface identified by the
     /// coarse `module_source` string.
-    pub fn get_resource_cm_name_by_module(
-        &self,
-        module_source: &str,
-        name: &str,
-    ) -> Option<&str> {
+    pub fn get_resource_cm_name_by_module(&self, module_source: &str, name: &str) -> Option<&str> {
         lookup_by_module(&self.module_index().resources, module_source, name)
     }
 
@@ -2195,9 +2192,8 @@ impl CmInterfaceRegistry {
     /// Whether a struct named `name` is registered under an interface whose CM
     /// source is exactly `source`. Unlike [`Self::get_struct_fields_by_source`],
     /// this keys on the struct's own module source, so a user record is never
-    /// confused
-    /// with a same-named WASI/dependency struct (which lives under a different
-    /// source). A `--lib` entry record is registered under the package default
+    /// confused with a same-named WASI/dependency struct (which lives under a
+    /// different source). A `--lib` entry record is registered under the package default
     /// interface, whose source [`register_lib_local_decls`] maps to the entry
     /// module; outside `--lib` the user record is registered nowhere, so this is
     /// `false` and the payload has no CM type to lower against.
@@ -4523,9 +4519,10 @@ mod tests {
         // Component dependency: FQ registration key vs. `dep:` ModuleSource
         // share no stem, so only the exact bridge resolves it (drop-leak guard).
         let dep = interner.dependency("../foo/lib.wado");
-        registry
-            .resources
-            .insert(("acme:foo/types@1.0.0".into(), "Widget".into()), "widget".into());
+        registry.resources.insert(
+            ("acme:foo/types@1.0.0".into(), "Widget".into()),
+            "widget".into(),
+        );
         registry
             .cm_interface_module_sources
             .insert("acme:foo/types@1.0.0".into(), dep.clone());
