@@ -4,7 +4,7 @@
 // aliases, `if let` / `while let` let-chains, `task return`, map literals,
 // turbofish associated calls, and effect-handler installation via
 // `with E => h do { ... }` / `resume`). Effect *declarations* (`effect E {
-// ... }`) and world / interface / resource declarations are not yet modeled.
+// ... }`) and world / resource declarations are not yet modeled.
 
 grammar Wado;
 
@@ -35,6 +35,7 @@ pubItem
     | variantDecl
     | flagsDecl
     | traitDecl
+    | interfaceDecl
     ;
 
 globalDecl
@@ -127,7 +128,7 @@ fieldList
     ;
 
 fieldDecl
-    : attribute* 'pub'? IDENTIFIER ':' typeRef
+    : attribute* 'pub'? IDENTIFIER ':' typeRef ('=' expression)?
     ;
 
 enumDecl
@@ -164,6 +165,12 @@ variantCase
 
 traitDecl
     : 'trait' IDENTIFIER genericParams? '{' traitMember* '}'
+    ;
+
+// A WIT-style interface: a named set of function signatures (and associated
+// types), modeled with the same members as a trait.
+interfaceDecl
+    : 'interface' IDENTIFIER genericParams? '{' traitMember* '}'
     ;
 
 traitMember
@@ -345,7 +352,7 @@ expression
     | expression '&' expression
     | expression ('==' | '!=') expression
     | expression ('<' | '<=' | '>' | '>=') expression
-    | expression ('<' '<' | '>' '>') expression
+    | expression ('<<' | '>' '>') expression
     | expression ('+' | '-') expression
     | expression 'as' typeRef
     | expression ('*' | '/' | '%') expression
@@ -353,7 +360,7 @@ expression
     ;
 
 unary
-    : ('-' | '!' | '&' '&'? 'mut'? | '*') unary
+    : ('-' | '!' | '~' | '&' '&'? 'mut'? | '*') unary
     | postfix
     ;
 
@@ -439,7 +446,7 @@ exprNoStruct
     | exprNoStruct '&' exprNoStruct
     | exprNoStruct ('==' | '!=') exprNoStruct
     | exprNoStruct ('<' | '<=' | '>' | '>=') exprNoStruct
-    | exprNoStruct ('<' '<' | '>' '>') exprNoStruct
+    | exprNoStruct ('<<' | '>' '>') exprNoStruct
     | exprNoStruct ('+' | '-') exprNoStruct
     | exprNoStruct 'as' typeRef
     | exprNoStruct ('*' | '/' | '%') exprNoStruct
@@ -447,7 +454,7 @@ exprNoStruct
     ;
 
 unaryNoStruct
-    : ('-' | '!' | '&' '&'? 'mut'? | '*') unaryNoStruct
+    : ('-' | '!' | '~' | '&' '&'? 'mut'? | '*') unaryNoStruct
     | postfixNoStruct
     ;
 
@@ -566,7 +573,7 @@ INTEGER
     ;
 
 STRING_LITERAL
-    : '"' ('\\' . | ~["\\\r\n])* '"'
+    : 'b'? '"' ('\\' . | ~["\\\r\n])* '"'
     ;
 
 // A `{ ... }` interpolation holds Wado code, which may nest braces, strings,
