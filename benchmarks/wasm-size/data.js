@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784035132604,
+  "lastUpdate": 1784065587938,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -40449,6 +40449,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/15a4961521678b4dae8e8160c0afd374db79041f"
         },
         "date": 1784035131862,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16422,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265122,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "05e48b327b006424f22af0e17bbe1169cbf6a876",
+          "message": "Merge pull request #1583 from wado-lang/claude/gale-lexer-literal-command-shadow\n\nfix(gale): don't over-shadow a named single-literal lexer rule",
+          "timestamp": "2026-07-15T06:37:13+09:00",
+          "tree_id": "d46cf48a01864111391c5621919a6c04cfd10a6e",
+          "url": "https://github.com/wado-lang/wado/commit/05e48b327b006424f22af0e17bbe1169cbf6a876"
+        },
+        "date": 1784065587452,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
