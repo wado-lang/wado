@@ -1197,8 +1197,9 @@ impl Point {
 }
 
 #[test]
-fn test_format_normalizes_explicit_self_type() {
-    // Explicit `self: &Self` should be normalized to `&self` shorthand
+fn test_format_rejects_explicit_self_type() {
+    // The receiver carries no type annotation (WEP 2026-05-21): `self: &Self`
+    // is a parse error, not a form to normalize.
     let source = r"
 struct Point {
     x: i32,
@@ -1211,17 +1212,10 @@ impl Point {
     }
 }
 ";
-    let formatted = wado_compiler::format(source).expect("format failed");
     assert!(
-        formatted.contains("fn get_x(&self)"),
-        "explicit self: &Self should be normalized to &self: {formatted}"
+        wado_compiler::format(source).is_err(),
+        "`self: &Self` should be rejected"
     );
-    assert!(
-        !formatted.contains("self: &Self"),
-        "self: &Self should not appear after normalization: {formatted}"
-    );
-    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
-    assert_eq!(formatted, formatted2, "should be idempotent");
 }
 
 #[test]
@@ -1251,8 +1245,8 @@ impl Point {
 }
 
 #[test]
-fn test_format_normalizes_explicit_mut_self_type() {
-    // Explicit `self: &mut Self` should be normalized to `&mut self` shorthand
+fn test_format_rejects_explicit_mut_self_type() {
+    // `self: &mut Self` is a parse error; the receiver is spelled `&mut self`.
     let source = r"
 struct Point {
     x: i32,
@@ -1265,17 +1259,10 @@ impl Point {
     }
 }
 ";
-    let formatted = wado_compiler::format(source).expect("format failed");
     assert!(
-        formatted.contains("fn set_x(&mut self"),
-        "explicit self: &mut Self should be normalized to &mut self: {formatted}"
+        wado_compiler::format(source).is_err(),
+        "`self: &mut Self` should be rejected"
     );
-    assert!(
-        !formatted.contains("self: &mut Self"),
-        "self: &mut Self should not appear after normalization: {formatted}"
-    );
-    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
-    assert_eq!(formatted, formatted2, "should be idempotent");
 }
 
 #[test]
@@ -1951,7 +1938,7 @@ fn test_format_golden_mess() {
 /// Golden test for `no_prelude` constructs: effects, resources, WASI attributes,
 /// and other syntax that requires `#![no_prelude]` or cannot compile.
 ///
-/// `format.fixtures/no_prelude_dirty.wado` has dirty patterns (e.g. `self: &Self`).
+/// `format.fixtures/no_prelude_dirty.wado` has dirty patterns.
 /// `generated/format.fixtures/no_prelude.clean.wado` is the expected canonical output.
 #[test]
 fn test_format_golden_no_prelude() {

@@ -3947,27 +3947,14 @@ pub fn unparse_param_into(param: &Param, output: &mut String) {
     }
 }
 
-/// Returns the shorthand rendering (`&self` / `&mut self`) for a parameter that
-/// represents the receiver, or `None` if it should be rendered as a normal param.
-/// Normalizes both the explicit `SelfKind` and the redundant `self: &Self` form.
+/// Returns the shorthand rendering (`self` / `&self` / `&mut self`) for a
+/// receiver parameter, or `None` for a normal parameter.
 fn self_param_shorthand(param: &Param) -> Option<&'static str> {
     match param.self_kind {
-        SelfKind::Value => return Some("self"),
-        SelfKind::Ref => return Some("&self"),
-        SelfKind::MutRef => return Some("&mut self"),
-        SelfKind::None => {}
-    }
-    if param.name != "self" {
-        return None;
-    }
-    match &param.ty {
-        Type::Reference(inner) if matches!(inner.as_ref(), Type::Named(n) if n.name == "Self") => {
-            Some("&self")
-        }
-        Type::MutReference(inner) if matches!(inner.as_ref(), Type::Named(n) if n.name == "Self") => {
-            Some("&mut self")
-        }
-        _ => None,
+        SelfKind::Value => Some("self"),
+        SelfKind::Ref => Some("&self"),
+        SelfKind::MutRef => Some("&mut self"),
+        SelfKind::None => None,
     }
 }
 

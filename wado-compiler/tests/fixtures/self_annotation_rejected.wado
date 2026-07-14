@@ -1,0 +1,19 @@
+// The receiver never carries a type annotation (WEP 2026-05-21): `self: T`
+// is rejected in favor of `self` / `&self` / `&mut self`.
+
+struct Foo {
+    x: i32,
+}
+
+impl Foo {
+    fn get(self: &Foo) -> i32 {
+        return self.x;
+    }
+}
+
+export fn run() {
+    assert true;
+}
+
+__DATA__
+{"compile_error": "`self` cannot have a type annotation"}

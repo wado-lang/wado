@@ -1846,12 +1846,20 @@ impl Parser {
 
         // Bare `self` is a by-value receiver that transfers ownership. It is
         // legal only on a resource (checked later, semantically); `fn drop(self)`
-        // and consuming `AsyncCall<T>` methods use it. A `self:` type annotation
-        // is a separate spelling still accepted here.
+        // and consuming `AsyncCall<T>` methods use it. The receiver never carries
+        // a type annotation — `self: T` is rejected in favor of `self` / `&self`
+        // / `&mut self`.
         if let TokenKind::Ident(name) = self.peek_kind()
             && name == "self"
-            && !matches!(self.peek_nth(1).kind, TokenKind::Colon)
         {
+            if matches!(self.peek_nth(1).kind, TokenKind::Colon) {
+                return Err(ParseError {
+                    message:
+                        "`self` cannot have a type annotation; write `self`, `&self`, or `&mut self`"
+                            .to_string(),
+                    span: self.peek().span,
+                });
+            }
             let self_span = self.peek().span;
             self.advance();
             let self_type = Type::Named(NamedType {

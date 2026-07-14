@@ -238,11 +238,10 @@ Verified against the tree.
 - [x] Semantic check: a `Value` receiver on a value type is a diagnostic
       (`TypeError::SelfByValueOnNonResource`).
 - [x] Migrate the stdlib's `self: &R` borrows to `&self` (via `wado-from-idl`).
-- [ ] Reject every `self:` annotation in the parser (currently still accepted as
-      a borrow alias). Then migrate the remaining `self: &Self` test fixtures and
-      drop the formatter's `self: &Self` → `&self` normalization.
-- [ ] `syntax.rs` grammar + VS Code grammar + `format.fixtures` for the new
-      receiver forms.
+- [x] Reject every `self:` annotation in the parser; migrate the remaining
+      `self:` test fixtures and drop the formatter's `self: &Self` → `&self`
+      normalization (now a parse error).
+- [ ] `syntax.rs` grammar + VS Code grammar for the new receiver forms.
 
 ### Consuming drop
 
