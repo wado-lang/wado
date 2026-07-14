@@ -177,7 +177,9 @@ pub fn compute_return_conventions(project: &FlatPackage) -> ReturnConventions {
         let func = func.borrow();
         let is_helper = matches!(func.kind, FunctionKind::ValueCopy { .. });
         let is_builtin = func.module_source.is_core_builtin() || func.module_source.is_wasm_asset();
-        if is_helper || (is_builtin && !is_container_alias_read(&func.name, func.monomorph_info.as_ref())) {
+        if is_helper
+            || (is_builtin && !is_container_alias_read(&func.name, func.monomorph_info.as_ref()))
+        {
             owned.insert(func.module_source.clone(), func.name.clone());
         }
     }
