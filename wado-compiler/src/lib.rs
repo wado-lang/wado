@@ -898,6 +898,17 @@ fn compile_after_load<H: CompilerHost>(
         )
         .collect();
 
+    // A data-model library exposes public types with no `export fn`; those types
+    // are its component surface. Submodule type decls are already public-only;
+    // the entry module's are filtered here.
+    let lib_has_public_type = !lib_surface.submodule_type_decls.is_empty()
+        || sem.modules.get(&sem.entry_module_source).is_some_and(|m| {
+            m.items.iter().any(|item| {
+                lib_type_decl_name(item).is_some()
+                    && item.visibility().is_some_and(ast::Visibility::is_public)
+            })
+        });
+
     if options.lib_world.is_some() {
         let all_names: Vec<String> = entry_type_names
             .iter()
@@ -990,12 +1001,13 @@ fn compile_after_load<H: CompilerHost>(
         }
     }
 
-    // A `--lib` build whose world has no exports produces a component that
-    // exposes nothing — almost always a facade that forgot `export`, or a
-    // package with no public API. Reject it rather than emit an empty library.
+    // A `--lib` with neither an `export fn` nor a public type exports nothing —
+    // almost always a facade that forgot `export`. Reject it rather than emit an
+    // empty library. A data-model library (only public types) is valid and kept.
     if options.lib_world.is_some()
         && let Some(world) = lib_world_info.as_ref()
         && world.exports.is_empty()
+        && !lib_has_public_type
     {
         let _ = logger.error(compiler_host::Diagnostic {
             severity: compiler_host::Severity::Error,
