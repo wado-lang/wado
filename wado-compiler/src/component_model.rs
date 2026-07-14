@@ -652,6 +652,29 @@ pub struct CmInterfaceRegistry {
     /// FQs of interfaces imported from a CM component dependency. The plan
     /// classifies these as [`crate::wir::ImportKind::Component`] for composition.
     component_interfaces: IndexSet<String>,
+
+    /// Lazily-built reverse index mapping a type's loader identity
+    /// (`ModuleSource`) to its CM name, for the `_by_module` accessors. Built
+    /// once on first query — safe because the registry is fully populated
+    /// before it is shared (`Arc`) and queried during synthesis.
+    module_index: std::sync::OnceLock<ModuleSourceIndex>,
+}
+
+/// Reverse index for the `ModuleSource`-bridged CM-name lookups. For each type
+/// kind it maps `(module identity, wado name) -> cm name`, under two keys per
+/// registration so a lookup is O(1) from either identity namespace:
+/// - the interface *stem* of the `#[cm(...)]` source (matches the loader's
+///   `wasi:x/y.wado` / `core:...` display for stdlib types), and
+/// - the exact `ModuleSource` display of a `--lib`/component interface (from
+///   `cm_interface_module_sources`), whose FQ shares no stem with its loader
+///   identity.
+#[derive(Debug, Clone, Default)]
+struct ModuleSourceIndex {
+    resources: IndexMap<(String, String), String>,
+    structs: IndexMap<(String, String), String>,
+    variants: IndexMap<(String, String), String>,
+    enums: IndexMap<(String, String), String>,
+    flags: IndexMap<(String, String), String>,
 }
 
 /// Insert into a `(source_interface, name)`-keyed map, panicking on duplicate
@@ -757,19 +780,20 @@ fn interface_stem(source: &str) -> &str {
     source.split_once('@').map_or(source, |(base, _)| base)
 }
 
-/// The exact registration source for `name` in `map`, given a coarse
-/// [`ModuleSource`] string. Matches on interface stem so a `.wado` suffix or
-/// `@version` tag on either side does not defeat the lookup. Returns the key's
-/// source, or `None` when no registered entry shares the stem and name.
-fn source_for_module<'a, V>(
-    map: &'a IndexMap<(String, String), V>,
+/// Look up a `ModuleSourceIndex` kind map by a coarse [`ModuleSource`] display
+/// string. Tries the exact identity first (a `--lib`/component interface,
+/// keyed by its `ModuleSource` display), then the interface stem (stdlib
+/// `wasi:`/`core:` types, whose loader path stems match their registration
+/// source stem). O(1) in both cases.
+fn lookup_by_module<'a>(
+    index: &'a IndexMap<(String, String), String>,
     module_source: &str,
     name: &str,
 ) -> Option<&'a str> {
-    let stem = interface_stem(module_source);
-    map.iter()
-        .find(|((src, n), _)| n == name && interface_stem(src) == stem)
-        .map(|((src, _), _)| src.as_str())
+    index
+        .get(&(module_source.to_string(), name.to_string()))
+        .or_else(|| index.get(&(interface_stem(module_source).to_string(), name.to_string())))
+        .map(String::as_str)
 }
 
 /// Walk a parsed stdlib module and return `name -> source_interface` for
@@ -1734,9 +1758,46 @@ impl CmInterfaceRegistry {
     // A `ResolvedType`'s `module_source` names its declaring interface in the
     // loader's identity namespace (a `.wado` file path, version-agnostic),
     // which differs from the `#[cm(...)]` registration key by a `.wado` suffix
-    // and an `@version` tag. These accessors bridge that gap via
-    // `source_for_module` so codegen can resolve a CM name straight from a
-    // resolved type without reconstructing the versioned source string.
+    // and an `@version` tag (stdlib), or is an entirely separate string (a
+    // `--lib`/component FQ vs. its `dep:`/entry `ModuleSource`). These
+    // accessors bridge both namespaces through a lazily-built O(1) index so
+    // codegen can resolve a CM name straight from a resolved type.
+
+    /// The reverse index, built on first use once the registry is fully
+    /// populated. Each registration contributes an interface-stem key (stdlib)
+    /// and, for `--lib`/component interfaces, an exact `ModuleSource`-display
+    /// key (from `cm_interface_module_sources`), so neither identity namespace
+    /// needs a linear scan at lookup time.
+    fn module_index(&self) -> &ModuleSourceIndex {
+        self.module_index.get_or_init(|| {
+            let mut idx = ModuleSourceIndex::default();
+            let insert = |dst: &mut IndexMap<(String, String), String>,
+                          src: &str,
+                          name: &str,
+                          cm: &str| {
+                dst.insert((interface_stem(src).to_string(), name.to_string()), cm.to_string());
+                if let Some(ms) = self.cm_interface_module_sources.get(src) {
+                    dst.insert((ms.to_string(), name.to_string()), cm.to_string());
+                }
+            };
+            for ((src, name), cm) in &self.resources {
+                insert(&mut idx.resources, src, name, cm);
+            }
+            for ((src, name), (cm, _, _)) in &self.structs {
+                insert(&mut idx.structs, src, name, cm);
+            }
+            for ((src, name), (cm, _)) in &self.variants {
+                insert(&mut idx.variants, src, name, cm);
+            }
+            for ((src, name), (cm, _)) in &self.enums {
+                insert(&mut idx.enums, src, name, cm);
+            }
+            for ((src, name), (cm, _)) in &self.flags {
+                insert(&mut idx.flags, src, name, cm);
+            }
+            idx
+        })
+    }
 
     /// Resource CM name for `name` declared in the interface identified by the
     /// coarse `module_source` string.
@@ -1745,32 +1806,27 @@ impl CmInterfaceRegistry {
         module_source: &str,
         name: &str,
     ) -> Option<&str> {
-        source_for_module(&self.resources, module_source, name)
-            .and_then(|src| self.get_resource_cm_name_by_source(src, name))
+        lookup_by_module(&self.module_index().resources, module_source, name)
     }
 
     /// Struct CM name for `name` declared in `module_source`'s interface.
     pub fn get_struct_cm_name_by_module(&self, module_source: &str, name: &str) -> Option<&str> {
-        source_for_module(&self.structs, module_source, name)
-            .and_then(|src| self.get_struct_cm_name_by_source(src, name))
+        lookup_by_module(&self.module_index().structs, module_source, name)
     }
 
     /// Variant CM name for `name` declared in `module_source`'s interface.
     pub fn get_variant_cm_name_by_module(&self, module_source: &str, name: &str) -> Option<&str> {
-        source_for_module(&self.variants, module_source, name)
-            .and_then(|src| self.get_variant_cm_name_by_source(src, name))
+        lookup_by_module(&self.module_index().variants, module_source, name)
     }
 
     /// Enum CM name for `name` declared in `module_source`'s interface.
     pub fn get_enum_cm_name_by_module(&self, module_source: &str, name: &str) -> Option<&str> {
-        source_for_module(&self.enums, module_source, name)
-            .and_then(|src| self.get_enum_cm_name_by_source(src, name))
+        lookup_by_module(&self.module_index().enums, module_source, name)
     }
 
     /// Flags CM name for `name` declared in `module_source`'s interface.
     pub fn get_flags_cm_name_by_module(&self, module_source: &str, name: &str) -> Option<&str> {
-        source_for_module(&self.flags, module_source, name)
-            .and_then(|src| self.get_flags_cm_name_by_source(src, name))
+        lookup_by_module(&self.module_index().flags, module_source, name)
     }
 
     /// Struct registered at `(interface, name)`; returns the CM kebab name.
@@ -4525,6 +4581,65 @@ mod tests {
                 .is_none()
         );
         assert!(registry.local_newtype_base(None, "Temp").is_none());
+    }
+
+    #[test]
+    fn resource_cm_name_by_module_bridges_loader_identity_to_registration_key() {
+        use crate::module_source::ModuleSourceInterner;
+
+        let mut interner = ModuleSourceInterner::new();
+        let mut registry = CmInterfaceRegistry::new();
+
+        // A stdlib WASI resource: registered under the versioned `#[cm]` key,
+        // but a `ResolvedType` presents the loader path `wasi:http/types.wado`.
+        registry.resources.insert(
+            ("wasi:http/types@0.3.0".into(), "Request".into()),
+            "request".into(),
+        );
+
+        // A component-dependency resource: its registration key is the
+        // interface FQ, while its `ModuleSource` is the dependency path — the
+        // two share no stem, so only the exact `cm_interface_module_sources`
+        // bridge resolves it (regression guard for the resource-drop leak).
+        let dep = interner.dependency("../foo/lib.wado");
+        registry
+            .resources
+            .insert(("acme:foo/types@1.0.0".into(), "Widget".into()), "widget".into());
+        registry
+            .cm_interface_module_sources
+            .insert("acme:foo/types@1.0.0".into(), dep.clone());
+
+        // A dependency path that itself contains `@`: the exact bridge must not
+        // truncate at it (a stem match would).
+        let versioned_dep = interner.dependency("../bar@2.0/lib.wado");
+        registry.resources.insert(
+            ("acme:bar/types@1.0.0".into(), "Gadget".into()),
+            "gadget".into(),
+        );
+        registry
+            .cm_interface_module_sources
+            .insert("acme:bar/types@1.0.0".into(), versioned_dep.clone());
+
+        // WASI: resolved from the loader `.wado` path via the interface stem.
+        assert_eq!(
+            registry.get_resource_cm_name_by_module("wasi:http/types.wado", "Request"),
+            Some("request")
+        );
+        // Component: resolved from the exact dependency `ModuleSource` display.
+        assert_eq!(
+            registry.get_resource_cm_name_by_module(&dep.to_string(), "Widget"),
+            Some("widget")
+        );
+        // `@` in the dependency path does not defeat the exact bridge.
+        assert_eq!(
+            registry.get_resource_cm_name_by_module(&versioned_dep.to_string(), "Gadget"),
+            Some("gadget")
+        );
+        // A name that exists but under a different module resolves to nothing.
+        assert_eq!(
+            registry.get_resource_cm_name_by_module("wasi:http/types.wado", "Widget"),
+            None
+        );
     }
 
     #[test]
