@@ -114,8 +114,8 @@ future work, not a present fact.
 Done: use-after-move of a bare resource local, by-value `self` consumption (a
 bare `self` receiver moves it, via a `consumes_self` dispatch fact — the
 semantic-layer twin of `resource_cleanup`'s `owned_self`), and whole-move of a
-resource-carrying struct / tuple / `Result`. Remaining: the hand-written
-no-move-out-of-borrow rule below.
+resource-carrying struct / tuple / `Result`, and no-move-out-of-borrow (a `&self`
+return rooted in the borrow that carries a resource) — see below.
 
 ### Extraction is a by-value receiver (Rust-aligned)
 
@@ -135,14 +135,23 @@ By-value `self` on a value type is otherwise a diagnostic
 permitted because a generic self-type resolves to a `GenericInstance`, not a
 concrete value type.
 
-### No move out of a borrow (planned)
+### No move out of a borrow
 
-A hand-written `fn f(&self) -> Resource { match *self { … => interior } }` still
-moves a resource out of a borrowed place. Forbidding it is a per-function summary
-("returns a value rooted in a borrowed parameter") reported at call sites whose
-concrete return carries a resource; a `&self` method returning a _freshly
-produced_ resource (`dir.open_at()`) stays legal. This is a completeness rule for
-user code — the stdlib accessors already avoid it by taking `self` by value.
+A hand-written `fn f(&self) -> Resource { return self.f; }` (or `match *self { …
+=> interior }`, or a `let`-bound projection) moves a resource out of a borrowed
+place: the borrow keeps the source owned, so the returned handle aliases it — a
+double-free. `resource_move_check` rejects it. For each function it seeds the
+borrowed parameters (`&self` / `&mut self` / `&T`), tracks bindings projected
+from them (through `let`, field access, deref, and match-arm bindings whose
+scrutinee is borrowed), and flags a `return` whose value is rooted in a borrow
+and whose type carries a resource. A `&self` method returning a _freshly
+produced_ resource (`dir.open_at()`) stays legal (its return roots in a fresh
+allocation, not the borrow).
+
+The gate is the concrete return type carrying a resource, so a generic body
+(`T` abstract) is not flagged at its definition; the stdlib avoids the issue by
+taking `self` by value, and a user-written generic `&self` extractor
+instantiated with a resource is the remaining call-site case (deferred).
 
 ### Authoritative cleanup
 
@@ -236,8 +245,9 @@ Verified against the tree.
 - [x] Resource-carrying aggregates (struct / tuple / `Result`) are move-only,
       kept in step with cleanup's `carries_resource` (variant / `Option` /
       `List` deferred with their destructors); whole-aggregate move only.
-- [ ] No-move-out-of-borrow for hand-written `fn(&self) -> Resource`
-      (the stdlib accessors avoid it by taking `self` by value).
+- [x] No-move-out-of-borrow: a `&self` / `&T`-param return rooted in the borrow
+      whose concrete type carries a resource is rejected (generic-instantiation
+      call sites deferred).
 - [ ] Unify with the value-copy last-use liveness.
 
 ### Cleanup
