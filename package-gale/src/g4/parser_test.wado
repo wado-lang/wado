@@ -1193,9 +1193,6 @@ expr : ID ;";
 }
 
 test "mode declaration is rejected in parser grammar" {
-    // A `parser grammar` has no lexer, so `mode` is meaningless there and both
-    // ANTLR4 and Gale reject it. Spec: vendor/antlr4/doc/lexer-rules.md (modes
-    // are a lexer-only construct); confirmed against the published ANTLR4 jar.
     let input = "parser grammar Test;
 mode FOO;
 expr : ID ;";
@@ -1204,10 +1201,6 @@ expr : ID ;";
 }
 
 test "mode declaration is accepted in a combined grammar (superset)" {
-    // ANTLR4 rejects `mode` in a combined `grammar` (error 120: "lexical modes
-    // are only allowed in lexer grammars"), but a combined grammar bundles a
-    // lexer, so `mode` is uniquely determined. Gale accepts it as a superset —
-    // the token lives in the declared mode, just as in a `lexer grammar`.
     let input = "grammar Test;
 doc  : TEXT* EOF ;
 LT   : '<' -> pushMode(INTAG) ;
