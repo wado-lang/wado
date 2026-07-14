@@ -4,6 +4,9 @@
 ; Comments, strings, numbers (lexer-rule names)
 (LINE_COMMENT) @comment
 (BLOCK_COMMENT) @comment
+
+; The `__DATA__` data section: raw embedded text, rendered as one span.
+(DATA_SECTION) @string
 (STRING_LITERAL) @string
 (TEMPLATE_STRING) @string
 (CHAR_LITERAL) @string

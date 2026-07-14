@@ -557,10 +557,13 @@ SHEBANG
     : '#!' ~[[\r\n] ~[\r\n]* -> channel(HIDDEN)
     ;
 
-// The `__DATA__` marker ends the source; everything after it is an inline
-// data/test section consumed by the compiler, not Wado code.
+// The `__DATA__` marker ends the source code; everything after it is the
+// module's raw data section (spec.md: "Data Sections"), reachable at runtime
+// via the `#data` literal. It is not Wado code, so it is lexed as a single
+// hidden-channel token rather than parsed — hidden (not skipped) so tooling
+// such as the highlighter can still see and render it.
 DATA_SECTION
-    : '__DATA__' .*? EOF -> skip
+    : '__DATA__' .*? EOF -> channel(HIDDEN)
     ;
 
 LINE_COMMENT
