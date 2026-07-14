@@ -19,6 +19,7 @@ env:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     outputs:
       tag: ${{ steps.v.outputs.tag }}
       version: ${{ steps.v.outputs.version }}
@@ -101,6 +102,7 @@ jobs:
             archive: zip
             asset_id: windows-aarch64
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
         with:
@@ -155,6 +157,11 @@ jobs:
   release:
     needs: [validate, build]
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write       # to create / update the GitHub Release
+      id-token: write       # to mint the provenance signing certificate
+      attestations: write   # to record the build provenance attestation
     steps:
       - uses: actions/download-artifact@v8
         with:
@@ -167,6 +174,15 @@ jobs:
           cd dist
           sha256sum wado-* > SHA256SUMS.txt
           cat SHA256SUMS.txt
+
+      # Bind each archive's digest to this workflow run, so a download can be
+      # verified with `gh attestation verify --repo wado-lang/wado <file>`.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/wado-*.tar.gz
+            dist/wado-*.zip
 
       # tagpr creates the release as a draft (see `.tagpr`). The repository
       # has "Immutable releases" enabled, which forbids uploading assets to
@@ -187,6 +203,7 @@ jobs:
   publish:
     needs: [validate, build]
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: read
       packages: write
@@ -223,6 +240,7 @@ jobs:
   deploy-site:
     needs: release
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Generate a token scoped to the site repository
         id: app-token

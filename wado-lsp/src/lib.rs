@@ -282,6 +282,9 @@ impl Engine {
         for error in semantic.purity {
             diagnostics.push(error.into());
         }
+        for error in wado_compiler::check_resource_moves_semantic(&sem) {
+            diagnostics.push(error.into());
+        }
         let snapshot = Rc::new(Snapshot { sem, diagnostics });
         *doc.snapshot.borrow_mut() = Some(snapshot.clone());
         Some(snapshot)

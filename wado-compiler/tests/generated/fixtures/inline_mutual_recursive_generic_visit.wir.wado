@@ -838,13 +838,13 @@ fn "core:prelude/list.wado/List<inline_mutual_recursive_generic_visit.wado/Node>
 }
 
 fn "core:prelude/slice.wado/ArrayRefIter<inline_mutual_recursive_generic_visit.wado/Node>^Iterator::next"(self) {
-    let val: ref "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>";
+    let ref_val: ref "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>";
     if self.index >= self.end {
         return ref.null none;
     }
-    val = struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: ref.as_non_null("inline_mutual_recursive_generic_visit.wado/$value_copy$T28"(builtin::array_get<ref "inline_mutual_recursive_generic_visit.wado//Node">(self.repr, self.index))) };
+    ref_val = struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get<ref "inline_mutual_recursive_generic_visit.wado//Node">(self.repr, self.index) };
     self.index = self.index + 1;
-    return val;
+    return ref_val;
 }
 
 export fn "inline_mutual_recursive_generic_visit.wado/__cm_export__run" as "run"

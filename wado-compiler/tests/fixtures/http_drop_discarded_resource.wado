@@ -1,0 +1,21 @@
+// Regression test: a resource-carrying value produced in statement position
+// but never bound (a bare expression statement, or `let _ = ...`) must still
+// be dropped. The cleanup pass tracked only let-bound / parameter resources,
+// so a discarded `Fields` handle leaked a component resource-table slot.
+
+use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // Produced and discarded — must be dropped, not leaked.
+    Fields::new();
+    let _ = Fields::new();
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"status": 200}}

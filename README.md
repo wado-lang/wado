@@ -1,29 +1,48 @@
 # The Wado Programming Language
 
-A type-safe, high-level WebAssembly.
+Wado is a statically-typed, high-level WebAssembly language and toolchain that targets only the WebAssembly Component Model and WASI 0.3+. The compiler is 100% agentic-coded. The language takes Rust as its base — made garbage-collected, with no lifetimes and no borrow checker — and borrows its surface syntax from TypeScript.
 
-## Why Wado?
-
-Wado was born from a practical need: embedding small Wasm modules in JavaScript projects without the binary size explosion that comes with existing Wasm-targeting languages.
-
-Existing solutions bundle their own memory management runtime into every `.wasm` file, resulting in bloated binaries even for simple tasks. Wado takes a different approach: by leveraging **Wasm GC**, the garbage collector is provided by the Wasm runtime itself (currently wasmtime; browser support pending Wasm Component Model), keeping your binaries minimal.
-
-The timing matters too. With Wasm Component Model and WASI P3 maturing in 2026, Wado is designed from the ground up for this new era — no legacy baggage, no retrofitting.
+See [docs/design-philosophy.md](docs/design-philosophy.md) for the reasoning behind these choices, and [wado-lang.org](https://wado-lang.org) for the docs and blog.
 
 ## Installing
 
 ### Pre-built binary (recommended)
 
-Download the latest release for your platform from
-[GitHub Releases](https://github.com/wado-lang/wado/releases/latest).
-Pre-built binaries are published for:
+Pre-built binaries are published on
+[GitHub Releases](https://github.com/wado-lang/wado/releases/latest) for:
 
 - Linux (`x86_64`, `aarch64`) — `tar.gz`
 - macOS (Apple Silicon) — `tar.gz`
 - Windows (`x86_64`, `aarch64`) — `zip`
 
-Each archive contains the `wado` binary plus `LICENSE` and `README.md`.
-Verify the download against `SHA256SUMS.txt` attached to the same release.
+Each archive contains the `wado` binary plus `LICENSE` and `README.md`. The
+asset name is derived from `uname`, so this block downloads, verifies, and
+installs in one go on macOS (Apple Silicon) and Linux (`x86_64`, `aarch64`) —
+copy the whole thing:
+
+```sh
+BASE=https://github.com/wado-lang/wado/releases/latest/download
+ASSET="wado-$(uname -s | tr A-Z a-z)-$(uname -m).tar.gz"
+
+curl -fsSLO "$BASE/$ASSET"
+
+# Verify the checksum and the build provenance (needs the GitHub CLI).
+if command -v shasum >/dev/null; then
+  curl -fsSL "$BASE/SHA256SUMS.txt" | shasum -a 256 --ignore-missing -c -
+else
+  curl -fsSL "$BASE/SHA256SUMS.txt" | sha256sum --ignore-missing -c -
+fi
+gh attestation verify --repo wado-lang/wado "$ASSET"
+
+tar xzf "$ASSET"
+mkdir -p ~/bin
+install -m 755 "${ASSET%.tar.gz}/wado" ~/bin/wado   # ensure ~/bin is on PATH
+```
+
+Every release archive carries a signed [build provenance attestation](https://docs.github.com/en/actions/security-guides/using-artifact-attestations)
+binding the file to the workflow run that built it; the `gh attestation verify`
+step above checks it. Windows archives (`.zip`) install the same way — download
+the matching `wado-windows-*.zip` and verify it against `SHA256SUMS.txt`.
 
 ### From source
 
@@ -36,9 +55,7 @@ cargo install --git https://github.com/wado-lang/wado wado-cli
 This builds the current `main` branch from source. Re-run the same command
 to update.
 
-## Examples
-
-### Hello World
+## Hello World
 
 ```wado
 #!/usr/bin/env wado run
@@ -50,177 +67,26 @@ export fn run() with Stdout {
 }
 ```
 
-Run it:
-
 ```sh
-wado run example/hello.wado
+wado run example/hello.wado                    # run it directly
+wado compile -o hello.wasm example/hello.wado  # compile to Wasm
+wado compile -o hello.wat  example/hello.wado  # or to WAT
 ```
-
-Compile to WebAssembly:
-
-```sh
-wado compile example/hello.wado # generates example/hello.wasm
-wado compile -o example/hello.wasm example/hello.wado # ditto
-wado compile --format wasm example/hello.wado # ditto
-
-wado compile --format wat example/hello.wado # generates example/hello.wat with WAT format
-wado compile -o example/hello.wat example/hello.wado  # ditto
-```
-
-### FizzBuzz
-
-```wado
-use { println, Stdout } from "core:cli";
-
-variant FizzBuzz {
-    Fizz,
-    Buzz,
-    FizzBuzz,
-    Number(i32),
-}
-
-fn classify(n: i32) -> FizzBuzz {
-    if n % 15 == 0 { return FizzBuzz::FizzBuzz; }
-    if n % 3 == 0 { return FizzBuzz::Fizz; }
-    if n % 5 == 0 { return FizzBuzz::Buzz; }
-    return FizzBuzz::Number(n);
-}
-
-export fn run() with Stdout {
-    for let mut i = 1; i <= 20; i += 1 {
-        println(match classify(i) {
-            Fizz => "Fizz",
-            Buzz => "Buzz",
-            FizzBuzz => "FizzBuzz",
-            Number(n) => `{n}`,
-        });
-    }
-}
-```
-
-```sh
-wado run example/fizzbuzz.wado
-```
-
-## Key Features
-
-### Language Basics
-
-- Static typing with generics — strong type system with generic types, functions, and methods. No `any` escape hatch
-- Rust-like semantics without lifetimes — value semantics, references (`&T`, `&mut T`), and structs with `impl` blocks, but memory is managed by Wasm GC, so no lifetime annotations needed
-- Familiar syntax — borrows from Rust (structs, `impl`, `let`/`let mut`) and JavaScript/TypeScript (template strings with backticks, ES module-style `use {...} from "..."` imports)
-
-### Effect System
-
-Effects map directly to WASI capabilities, making side effects explicit and controllable:
-
-```wado
-use { println, Stdout } from "core:cli";
-use { Url } from "core:url";
-use { Client, Request, Response, ErrorCode, Fields, Scheme, Trailers } from "wasi:http";
-
-fn scheme_of(url: Url) -> Scheme {
-    return match url.scheme {
-        "http" => Scheme::Http,
-        "https" => Scheme::Https,
-        scheme => Scheme::Other(scheme),
-    };
-}
-
-fn send_get(url: Url) -> Response with Client {
-    let headers = Fields::new();
-    let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let [req, _req_future] = Request::new(headers, null, trailers_rx, null);
-    req.set_scheme(Option::Some(scheme_of(url)));
-    req.set_authority(Option::Some(url.authority()));
-    req.set_path_with_query(Option::Some(url.path_with_query()));
-
-    let result = Client::send(req).wait();
-    trailers_tx.write(Result::Ok(null));
-
-    return match result {
-        Ok(resp) => resp,
-        Err(e) => panic(`HTTP request failed: {e}`),
-    };
-}
-
-export fn run() with Stdout, Client {
-    let url = Url::parse("https://httpbin.org/get").unwrap();
-    let resp = send_get(url);
-    println(`Status: {resp.get_status_code() as i32}`);
-}
-```
-
-`Client::send(...).wait()` is colorless async: the `wait()` suspends the task while the
-runtime drives the request, without coloring `send_get` or `run` as `async`. See
-[`example/http_get.wado`](example/http_get.wado) for the full version (request body,
-streaming the response body, scheme handling).
-
-The `with` clause tells you exactly what a function can do. This enables:
-
-- **Security**: Sandbox plugins with only the capabilities you grant
-- **Testability**: Swap real effects with mocks via handlers
-- **Clarity**: No hidden side effects
-
-## Design Principles
-
-### What You See Is What You Get
-
-No macros. The code you read is the code that runs — Wasm in plain sight.
-
-### Readable Without Context Switching
-
-Explicit over implicit. No implicit type conversions, no function overloading, no hidden dependencies. You shouldn't need to jump to other files to understand what a function does.
-
-### Type-Safe by Design
-
-Strong static typing with no escape hatches like `any`. This prevents the defensive programming patterns (excessive `try-catch`, runtime type checks) that tend to creep into dynamically-typed codebases.
-
-### No Exception Unwinding
-
-Errors are handled explicitly with `Result<T, E>` instead of unwinding exceptions. This makes control flow predictable and easier to reason about.
-
-### Minimal Binary Size
-
-By leveraging Wasm GC instead of bundling a runtime, Wado produces compact `.wasm` files. This is the core motivation behind the language.
 
 ## Status
 
-Wado is experimental. The core language — syntax, static typing, generics, closures, modules — is implemented and functional.
-
-However:
-
-- **WASI P3 is not yet finalized**: The spec is at release candidate stage, and runtime support is limited
-- **Wasm Component Model** is not yet supported in browsers
-- **Wasm stack switching** is not yet available in wasmtime
-
-That said, Wado is already usable for its original purpose: embedding lightweight Wasm modules in JS projects where binary size matters.
-
-## Future Directions
-
-### Full WASI P3 Integration
-
-As the spec finalizes and runtime support matures, Wado will leverage async streams, futures, and the full capability model.
-
-## Informed by Agentic Coding
-
-Wado is developed entirely through agentic coding — AI agents write the entire code while the human handles design decisions and project management.
-
-This isn't just a curiosity; it shaped the language itself. After a year of intensive agentic coding experience, certain patterns became clear:
-
-- **Agents excel at volume but struggle with ambiguity.** Implicit behaviors get multiplied across a codebase. Explicit, predictable semantics work better.
-- **Agents tend toward defensive programming.** Without type safety, they pepper code with `hasattr` checks and nested `try-except` blocks. Strong types eliminate this need.
-- **Exceptions break agent reasoning.** Non-local control flow is hard to predict. `Result<T, E>` keeps everything visible.
-
-The result: a language where common agentic coding pitfalls are eliminated by design, not convention.
+Wado is experimental. The core language — static typing, generics, closures, modules, traits, pattern matching, the effect system — is implemented and functional, and already usable for its original purpose: embedding small, type-safe Wasm modules where binary size matters. It waits on the broader ecosystem — the Component Model in browsers, WASI 1.0, and GC across component boundaries — to reach its full shape.
 
 ## Documentation
 
-- [Cheatsheet](docs/cheatsheet.md) - Quick syntax reference
-- [Language Specification](docs/spec.md) - Full language reference
-- [Compiler Implementation](docs/compiler.md) - Compiler internals and feature checklist
-- [Benchmarks](benchmark/README.md) - Performance benchmarks vs C and JavaScript, and so on
-- [Other Documentation](docs) - WEP, research notes, etc.
+- [Design Philosophy](docs/design-philosophy.md) — why Wado is the way it is
+- [Cheatsheet](docs/cheatsheet.md) — quick syntax reference
+- [Language Specification](docs/spec.md) — full language reference
+- [Compiler Implementation](docs/compiler.md) — compiler internals and feature checklist
+- [Benchmarks](benchmark/README.md) — performance vs C, JavaScript, and others
+- [Other Documentation](docs) — WEPs, research notes, and more
+
+These are also published, alongside the blog, at [wado-lang.org](https://wado-lang.org).
 
 ## Development
 
@@ -308,7 +174,7 @@ How it works:
 
 1. Every push to `main` (re)opens a **Release PR** that bumps `[workspace.package].version` in both `Cargo.toml` and `wado.toml` (kept in lockstep so the CLI and the published Wado packages ship one version), regenerates `Cargo.lock`, and updates `CHANGELOG.md` from PRs merged since the previous tag.
 2. Merging the Release PR pushes tag `v<next>`, which triggers `.github/workflows/release.yml` to:
-   - build pre-built binaries for five targets in parallel — Linux (`x86_64`, `aarch64`), macOS (Apple Silicon), Windows (`x86_64`, `aarch64`) — and publish them to a [GitHub Release](https://github.com/wado-lang/wado/releases) with `SHA256SUMS.txt`;
+   - build pre-built binaries for five targets in parallel — Linux (`x86_64`, `aarch64`), macOS (Apple Silicon), Windows (`x86_64`, `aarch64`) — publish them to a [GitHub Release](https://github.com/wado-lang/wado/releases) with `SHA256SUMS.txt`, and attest each archive's build provenance;
    - run `wado publish` to push the workspace's Wado packages to [GHCR](https://github.com/orgs/wado-lang/packages) as OCI artifacts.
 3. Default bump is **patch**. Add a `tagpr:minor` or `tagpr:major` label on the Release PR to override.
 

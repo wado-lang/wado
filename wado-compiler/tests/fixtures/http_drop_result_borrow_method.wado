@@ -1,0 +1,30 @@
+// Regression test: a `&self` method call on a `Result<Fields, E>` must not be
+// treated as consuming the aggregate. `is_ok(&self)` only borrows the Result;
+// it does not extract the inner `Fields`, so that handle still needs a
+// structural `resource.drop` at end of scope.
+//
+// The resource-cleanup heuristic used to consume the receiver on ANY method
+// call on a resource-carrying aggregate (`is_resource_aggregate`), which
+// dropped the structural cleanup of the inner `Fields` — a leak the e2e
+// resource-table check catches.
+
+use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, HeaderError, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let name = "x-probe" as FieldName;
+    let value: List<u8> = [118 as u8];
+    let entries: List<[FieldName, FieldValue]> = [[name, value as FieldValue]];
+    let built = Fields::from_list(entries);
+    // `is_ok` borrows `built`; it does not move the inner `Fields` out.
+    // `built` is never destructured, so its `Fields` must be dropped here.
+    assert built.is_ok();
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"status": 200}}

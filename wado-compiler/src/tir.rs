@@ -2965,8 +2965,10 @@ impl FunctionRef {
             .map(|i| i.generic_name.as_str())?;
 
         match generic_name {
-            "array_get" | "array_set" | "array_new" | "array_len" | "array_copy" | "array_fill"
-            | "array_clone" | "select" | "copy_value" => Some(format!("builtin::{generic_name}")),
+            "array_get" | "array_get_ref" | "array_set" | "array_new" | "array_len"
+            | "array_copy" | "array_fill" | "array_clone" | "select" | "copy_value" => {
+                Some(format!("builtin::{generic_name}"))
+            }
             _ => None,
         }
     }
@@ -3744,6 +3746,14 @@ pub struct MonomorphInfo {
     pub method_type_args: Vec<TypeId>,
     /// Whether this originates from a blanket impl (e.g., `impl<I: Iterator> IntoIterator for I`)
     pub is_blanket: bool,
+}
+
+/// Whether a function identifies as the core builtin `builtin`, matching both
+/// the plain generic form (`name`) and a monomorphized instance whose `name` is
+/// mangled but whose `monomorph_info.generic_name` is the base name. A name
+/// check that only compares `name` silently misses monomorphized builtins.
+pub fn matches_builtin(name: &str, monomorph_info: Option<&MonomorphInfo>, builtin: &str) -> bool {
+    name == builtin || monomorph_info.is_some_and(|m| m.generic_name == builtin)
 }
 
 /// A `#[param]` compile-time parameter declared on a `global`.

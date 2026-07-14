@@ -296,6 +296,14 @@ pub fn cm_type_to_type_id(
                         .and_then(|fq| registry.cm_interface_module_source_of(fq))
                         .and_then(|ms| type_table.find_named_type_by_source(&named.name, ms))
                 })
+                // A lib-local type defined in a submodule: the interface FQ maps
+                // to the entry module, so resolve via the type's own recorded
+                // module instead.
+                .or_else(|| {
+                    registry
+                        .lib_local_type_source(&named.name)
+                        .and_then(|ms| type_table.find_named_type_by_source(&named.name, ms))
+                })
                 .unwrap_or(TypeTable::I32),
         },
         Type::Generic(g) => {

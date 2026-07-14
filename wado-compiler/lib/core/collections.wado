@@ -492,11 +492,12 @@ impl<T: Ord> SequenceLiteralBuilder for TreeSet<T> {
 
 impl<V: Serialize> Serialize for TreeMap<String, V> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
-        let entries = self.entries();
-        let mut m = s.begin_map(entries.len())?;
-        for let [k, v] of entries {
-            m.key(&k)?;
-            m.value(&v)?;
+        let mut m = s.begin_map(self.len())?;
+        for let entry of &self.entries {
+            if !entry.deleted {
+                m.key(&entry.key)?;
+                m.value(&entry.value)?;
+            }
         }
         return m.end();
     }
