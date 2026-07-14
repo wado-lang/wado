@@ -381,9 +381,97 @@ fn emit_unused_diagnostics<H: CompilerHost>(
 // published component's WIT carries a package-specific identity.
 const KILN_GENERATOR_IMPL_FQ: &str = "kiln:generator/generator@0.1.0";
 
+/// Collect `export fn`s defined in the library's non-entry local modules.
+///
+/// A library's entry module is a facade (`lib.wado`) that `pub use`-re-exports
+/// its submodules' API, but `export` stays on the declaration: any `export fn`
+/// in a local module is part of the library's Component Model surface, wherever
+/// it lives. The entry module's own `export fn`s are gathered separately by
+/// [`synthesize_lib_world_info`]; this returns the rest, each carrying
+/// `reexport_origin` so the codegen adapter calls the function in its own
+/// module rather than expecting it in the entry module.
+fn collect_nonentry_lib_exports(
+    entry_source: &ModuleSource,
+    modules: &crate::hashmap::IndexMap<ModuleSource, ast::Module>,
+) -> Vec<world_registry::WorldExportInfo> {
+    use crate::ast::Item;
+    use crate::world_registry::WorldExportInfo;
+
+    let mut out = Vec::new();
+    for (source, module) in modules {
+        if source == entry_source || !source.is_local() {
+            continue;
+        }
+        for item in &module.items {
+            let Item::Function(func) = item else { continue };
+            if !func.is_export {
+                continue;
+            }
+            out.push(WorldExportInfo {
+                name: func.name.clone(),
+                is_async: func.is_async,
+                params: func
+                    .params
+                    .iter()
+                    .map(|p| (p.name.clone(), p.ty.clone()))
+                    .collect(),
+                return_type: func.return_type.clone(),
+                from_interface_fq: None,
+                reexport_origin: Some((source.clone(), func.name.clone())),
+            });
+        }
+    }
+    out
+}
+
+/// Named type decls in the library's non-entry local modules. These reach the
+/// public surface through the facade (an `export fn` names them), so they must
+/// be registered as lib-local CM types alongside the entry module's own.
+fn collect_nonentry_lib_type_decls(
+    entry_source: &ModuleSource,
+    modules: &crate::hashmap::IndexMap<ModuleSource, ast::Module>,
+) -> Vec<(ModuleSource, ast::Item)> {
+    use crate::ast::Item;
+
+    let mut out = Vec::new();
+    for (source, module) in modules {
+        if source == entry_source || !source.is_local() {
+            continue;
+        }
+        for item in &module.items {
+            if matches!(
+                item,
+                Item::Struct(_)
+                    | Item::Enum(_)
+                    | Item::Variant(_)
+                    | Item::Flags(_)
+                    | Item::Newtype(_)
+            ) {
+                out.push((source.clone(), item.clone()));
+            }
+        }
+    }
+    out
+}
+
+/// The declared name of a type-kind item, or `None` for non-type items.
+fn lib_type_decl_name(item: &ast::Item) -> Option<String> {
+    use crate::ast::Item;
+    match item {
+        Item::Struct(d) => Some(d.name.clone()),
+        Item::Enum(d) => Some(d.name.clone()),
+        Item::Variant(d) => Some(d.name.clone()),
+        Item::Flags(d) => Some(d.name.clone()),
+        Item::Newtype(d) => Some(d.name.clone()),
+        _ => None,
+    }
+}
+
 fn synthesize_lib_world_info(
     fq: &str,
     entry_module: Option<&ast::Module>,
+    reexports: &[world_registry::WorldExportInfo],
+    submodule_type_names: &crate::hashmap::IndexSet<String>,
 ) -> world_registry::WorldInfo {
     use crate::ast::Item;
     use crate::world_registry::{WorldExportInfo, WorldInfo};
@@ -404,12 +492,14 @@ fn synthesize_lib_world_info(
                             .collect(),
                         return_type: func.return_type.clone(),
                         from_interface_fq: None,
+                        reexport_origin: None,
                     }),
                     _ => None,
                 })
                 .collect()
         })
         .unwrap_or_default();
+    exports.extend(reexports.iter().cloned());
 
     // A/B grouping (mirrors the WIT producer, `wit_emit`): if any exported
     // signature references a user-defined named type, the exports cannot be
@@ -431,7 +521,7 @@ fn synthesize_lib_world_info(
     // library's default-interface FQ, matching `register_lib_local_decls`, so
     // the lift/lower machinery resolves them like WASI types. Only the module's
     // own declarations — types from other interfaces keep their source.
-    let local_type_names: crate::hashmap::IndexSet<String> = entry_module
+    let mut local_type_names: crate::hashmap::IndexSet<String> = entry_module
         .map(|module| {
             module
                 .items
@@ -447,6 +537,9 @@ fn synthesize_lib_world_info(
                 .collect()
         })
         .unwrap_or_default();
+    // Types defined in submodules but reached through the facade's exported
+    // signatures are lib-local too (registered via `register_lib_local_items`).
+    local_type_names.extend(submodule_type_names.iter().cloned());
     for export in &mut exports {
         for (_, ty) in &mut export.params {
             annotate_lib_local_sources(ty, fq, &local_type_names);
@@ -495,6 +588,38 @@ fn annotate_lib_local_sources(
         }
         Type::Reference(inner) | Type::MutReference(inner) => {
             annotate_lib_local_sources(inner, fq, local_type_names);
+        }
+        _ => {}
+    }
+}
+
+/// Tag the field / payload types of a lib-local type decl with the library's
+/// default-interface FQ, so a nested user type (e.g. `HeadingInfo` inside
+/// `RenderResult.headings: List<HeadingInfo>`) resolves against the same
+/// registration as the fields the CM lift/lower reads. Mirrors
+/// `annotate_lib_local_sources` for export signatures, but reaches inside the
+/// registered type's own fields.
+fn tag_lib_local_decl_fields(
+    item: &mut ast::Item,
+    fq: &str,
+    local_type_names: &crate::hashmap::IndexSet<String>,
+) {
+    use crate::ast::Item;
+    match item {
+        Item::Struct(d) => {
+            for field in &mut d.fields {
+                annotate_lib_local_sources(&mut field.ty, fq, local_type_names);
+            }
+        }
+        Item::Variant(d) => {
+            for case in &mut d.cases {
+                if let Some(payload) = case.payload.as_mut() {
+                    annotate_lib_local_sources(payload, fq, local_type_names);
+                }
+            }
+        }
+        Item::Newtype(d) => {
+            annotate_lib_local_sources(&mut d.ty, fq, local_type_names);
         }
         _ => {}
     }
@@ -758,9 +883,47 @@ fn compile_after_load<H: CompilerHost>(
         .lib_world
         .clone()
         .or_else(|| is_kiln_generator.then(|| KILN_GENERATOR_IMPL_FQ.to_string()));
-    let mut lib_world_info = synth_world_fq
-        .as_ref()
-        .map(|fq| synthesize_lib_world_info(fq, sem.modules.get(&sem.entry_module_source)));
+    // A kiln generator's `generate` lives in the entry module; only a real
+    // `--lib` package spreads its API (and the types it exposes) across
+    // submodules. Captured here (owned) so they outlive the `sem` destructure
+    // below and can be registered into the CM interface registry.
+    let mut lib_submodule_type_decls: Vec<(ModuleSource, ast::Item)> =
+        if options.lib_world.is_some() {
+            collect_nonentry_lib_type_decls(&sem.entry_module_source, &sem.modules)
+        } else {
+            Vec::new()
+        };
+    let lib_submodule_type_names: crate::hashmap::IndexSet<String> = lib_submodule_type_decls
+        .iter()
+        .filter_map(|(_, item)| lib_type_decl_name(item))
+        .collect();
+    // Tag nested user types inside the submodule decls' own fields, so a type
+    // like `HeadingInfo` reached only through `RenderResult.headings` resolves
+    // against the same lib-local registration. The name set spans every
+    // lib-local type (entry module + submodules).
+    if let Some(fq) = synth_world_fq.as_ref() {
+        let mut all_lib_type_names = lib_submodule_type_names.clone();
+        if let Some(entry) = sem.modules.get(&sem.entry_module_source) {
+            for item in &entry.items {
+                if let Some(name) = lib_type_decl_name(item) {
+                    all_lib_type_names.insert(name);
+                }
+            }
+        }
+        for (_, decl) in &mut lib_submodule_type_decls {
+            tag_lib_local_decl_fields(decl, fq, &all_lib_type_names);
+        }
+    }
+
+    let mut lib_world_info = synth_world_fq.as_ref().map(|fq| {
+        let entry = sem.modules.get(&sem.entry_module_source);
+        let nonentry = if options.lib_world.is_some() {
+            collect_nonentry_lib_exports(&sem.entry_module_source, &sem.modules)
+        } else {
+            Vec::new()
+        };
+        synthesize_lib_world_info(fq, entry, &nonentry, &lib_submodule_type_names)
+    });
 
     if is_kiln_generator && let Some(world) = lib_world_info.as_mut() {
         // Only `generate` is the generator world's contract; a helper
@@ -797,6 +960,24 @@ fn compile_after_load<H: CompilerHost>(
             // it — the user writes `fn generate`, not `async fn`.
             export.is_async = true;
         }
+    }
+
+    // A `--lib` build whose world has no exports produces a component that
+    // exposes nothing — almost always a facade that forgot `export`, or a
+    // package with no public API. Reject it rather than emit an empty library.
+    if options.lib_world.is_some()
+        && let Some(world) = lib_world_info.as_ref()
+        && world.exports.is_empty()
+    {
+        let _ = logger.error(compiler_host::Diagnostic {
+            severity: compiler_host::Severity::Error,
+            code: compiler_host::Code::CodegenError,
+            message: "a library (`--lib`) exports nothing; mark at least one \
+                      function `export fn` so the component has a public API"
+                .to_string(),
+            span: None,
+        });
+        return Err(Bail);
     }
 
     // Capture the entry module so its own named types can be registered into
@@ -836,11 +1017,10 @@ fn compile_after_load<H: CompilerHost>(
     // holds a reference — so the shared copy is never mutated; only this
     // compilation's registry gains the local types.
     if let (Some(fq), Some(entry)) = (synth_world_fq.as_ref(), lib_entry_module.as_ref()) {
-        std::sync::Arc::make_mut(&mut tysys.cm_interface_registry).register_lib_local_decls(
-            entry,
-            fq,
-            entry_module_source.clone(),
-        );
+        let registry = std::sync::Arc::make_mut(&mut tysys.cm_interface_registry);
+        registry.register_lib_local_decls(entry, fq, entry_module_source.clone());
+        // Submodule-defined types reachable through the facade's exports.
+        registry.register_lib_local_items(&lib_submodule_type_decls, fq);
     }
 
     debug_assert_eq!(
@@ -1809,7 +1989,12 @@ fn helper(x: u32) -> u32 { return x; }
 export fn id_bool(v: bool) -> bool { return v; }
 "#;
         let module = super::parse(src).ast;
-        let world = synthesize_lib_world_info("wado:mylib/mylib@0.1.0", Some(&module));
+        let world = synthesize_lib_world_info(
+            "wado:mylib/mylib@0.1.0",
+            Some(&module),
+            &[],
+            &Default::default(),
+        );
 
         assert_eq!(world.fq_name, "wado:mylib/mylib@0.1.0");
         assert!(world.imports.is_empty());
@@ -1827,7 +2012,7 @@ export fn id_bool(v: bool) -> bool { return v; }
 
     #[test]
     fn empty_when_no_entry_module() {
-        let world = synthesize_lib_world_info("wado:x/x@0.1.0", None);
+        let world = synthesize_lib_world_info("wado:x/x@0.1.0", None, &[], &Default::default());
         assert!(world.exports.is_empty());
     }
 
@@ -1842,7 +2027,12 @@ export fn id_u32(v: u32) -> u32 { return v; }
 export fn id_points(v: List<Point>) -> List<Point> { return v; }
 "#;
         let module = super::parse(src).ast;
-        let world = synthesize_lib_world_info("wado:geo/geo@0.1.0", Some(&module));
+        let world = synthesize_lib_world_info(
+            "wado:geo/geo@0.1.0",
+            Some(&module),
+            &[],
+            &Default::default(),
+        );
         assert!(
             world
                 .exports
@@ -1861,7 +2051,8 @@ export fn id_list(v: List<u8>) -> List<u8> { return v; }
 export fn id_opt(v: Option<String>) -> Option<String> { return v; }
 "#;
         let module = super::parse(src).ast;
-        let world = synthesize_lib_world_info("wado:c/c@0.1.0", Some(&module));
+        let world =
+            synthesize_lib_world_info("wado:c/c@0.1.0", Some(&module), &[], &Default::default());
         assert!(
             world.exports.iter().all(|e| e.from_interface_fq.is_none()),
             "primitive containers do not force an interface",

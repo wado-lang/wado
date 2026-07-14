@@ -254,41 +254,6 @@ fn test_wit_lib_emits_root_world() {
 }
 
 #[test]
-fn test_wit_lib_surfaces_facade_reexported_export() {
-    // A facade entry module re-exports an `export fn` from a submodule via
-    // `pub use`; the library world must still surface it as a CM export. This
-    // is the shape package-marl uses — `lib.wado` re-exports `render` / `format`
-    // from submodules — so a registry consumer sees them across the CM boundary.
-    let tmp = tempfile::tempdir().unwrap();
-    let dir = tmp.path();
-    std::fs::write(
-        dir.join("wado.toml"),
-        "[package]\nnamespace = \"acme\"\nname = \"facade\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
-    )
-    .unwrap();
-    std::fs::create_dir_all(dir.join("src")).unwrap();
-    std::fs::write(
-        dir.join("src").join("lib.wado"),
-        "pub use { greet } from \"./sub.wado\";\n",
-    )
-    .unwrap();
-    std::fs::write(
-        dir.join("src").join("sub.wado"),
-        "export fn greet(name: String) -> String { return name; }\n",
-    )
-    .unwrap();
-
-    wado_in(dir)
-        .arg("wit")
-        .arg("--lib")
-        .assert()
-        .success()
-        .stdout(predicate::str::contains(
-            "export greet: func(name: string) -> string;",
-        ));
-}
-
-#[test]
 fn test_wit_lib_conflicts_with_world() {
     wado()
         .arg("wit")
@@ -793,4 +758,74 @@ fn test_test_parallel_long_option() {
         .assert()
         .success()
         .stdout(predicate::str::contains("2 passed, 0 failed"));
+}
+
+#[test]
+fn test_lib_facade_submodule_export_with_nested_records() {
+    // A library's public API lives in a submodule as `export fn`, surfaced by a
+    // `pub use` facade in the entry module. The `--lib` build must lower it as a
+    // real CM export — including a return type that nests records inside a list,
+    // which the lift/lower must resolve to the submodule-defined struct rather
+    // than an i32 handle.
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"doc\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src").join("lib.wado"),
+        "pub use { render, Doc, Node } from \"./render.wado\";\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src").join("render.wado"),
+        "pub struct Node { pub level: u8, pub text: String }\n\
+         pub struct Doc { pub html: String, pub nodes: List<Node> }\n\
+         export fn render(s: String) -> Doc { return Doc { html: s, nodes: [Node { level: 1, text: s }] }; }\n",
+    )
+    .unwrap();
+
+    // WIT surfaces the facade export, grouped into the package interface with
+    // both records and the nested `list<node>`.
+    wado_in(dir)
+        .arg("wit")
+        .arg("--lib")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("interface doc {"))
+        .stdout(predicate::str::contains("list<node>"))
+        .stdout(predicate::str::contains("render: func(s: string) -> doc;"));
+
+    // The build must reach codegen: the export adapter calls the submodule
+    // function and lowers the nested list-of-records return without panicking.
+    wado_in(dir).arg("build").arg("--lib").assert().success();
+}
+
+#[test]
+fn test_lib_without_exports_is_rejected() {
+    // A `--lib` whose modules define no `export fn` produces a component that
+    // exposes nothing; reject it rather than emit an empty library.
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"empty\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src").join("lib.wado"),
+        "pub fn helper() -> i32 { return 0; }\n",
+    )
+    .unwrap();
+
+    wado_in(dir)
+        .arg("build")
+        .arg("--lib")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("exports nothing"));
 }
