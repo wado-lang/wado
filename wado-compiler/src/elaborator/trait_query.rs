@@ -1246,6 +1246,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         from_concrete_impl: false,
                         param_defaults,
                         param_names,
+                        consumes_self: super::method_lookup::takes_self_by_value(&method.params),
                     },
                 ));
             }
@@ -1802,6 +1803,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_type_param_ids: vec![],
             impl_module: None,
             from_concrete_impl: false,
+            consumes_self: false,
         };
         let impl_module_source = self.find_struct_module_source(struct_name);
         Some(TraitMethodMatch {

@@ -22,6 +22,14 @@ use super::tysys::TypeSystem;
 
 use super::util::placeholder;
 
+/// A method takes its receiver `self` by value — transferring ownership —
+/// when the first parameter is a bare `self` (`SelfKind::Value`). `&self` /
+/// `&mut self` borrow; a `self: &T` annotation borrows; a static method has no
+/// receiver.
+pub(crate) fn takes_self_by_value(params: &[ast::Param]) -> bool {
+    matches!(params.first(), Some(p) if p.self_kind == ast::SelfKind::Value)
+}
+
 /// Lightweight reference to an impl block, avoiding deep clones. Stores
 /// `(module_source, item_id)` into `loaded_modules`, re-accessed on demand
 /// via `Module::item_by_id` instead of cloning the impl block's fields.
@@ -451,6 +459,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             from_concrete_impl: false,
                             param_defaults: vec![],
                             param_names: vec![],
+                            consumes_self: false,
                         });
                     }
                     if method_name == "zip" {
@@ -490,6 +499,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             from_concrete_impl: false,
                             param_defaults: vec![],
                             param_names: vec![],
+                            consumes_self: false,
                         });
                     }
                     (
@@ -772,6 +782,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     from_concrete_impl,
                     param_defaults,
                     param_names,
+                    consumes_self: takes_self_by_value(&method.params),
                 });
             }
         }
@@ -893,6 +904,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 from_concrete_impl,
                                 param_defaults,
                                 param_names,
+                                consumes_self: takes_self_by_value(&method.params),
                             });
                         }
                     }
@@ -1030,9 +1042,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .find_map(crate::ast::Attribute::cm_identifier);
 
+            // Honor the receiver spelling: bare `self` transfers (`Value`),
+            // `&mut self` mutably borrows, and everything else (`&self`,
+            // `self: &R`) is a shared borrow.
+            let self_kind = match method.params.first().map(|p| p.self_kind) {
+                Some(ast::SelfKind::Value) => ast::SelfKind::Value,
+                Some(ast::SelfKind::MutRef) => ast::SelfKind::MutRef,
+                _ => ast::SelfKind::Ref,
+            };
+
             return Some(MethodInfo {
                 return_type,
-                self_kind: ast::SelfKind::Ref,
+                self_kind,
                 param_types,
                 param_is_mut,
                 inherited_from_base: None,
@@ -1043,6 +1064,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 from_concrete_impl: false,
                 param_defaults,
                 param_names,
+                consumes_self: takes_self_by_value(&method.params),
             });
         }
         None
@@ -1684,15 +1706,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         span,
                     )
                 }
-                ast::SelfKind::None => Self::deref_to_value_static(receiver, span, type_table),
+                ast::SelfKind::None | ast::SelfKind::Value => {
+                    Self::deref_to_value_static(receiver, span, type_table)
+                }
             };
         }
 
         let receiver_type = type_table.borrow().get(receiver.type_id).clone();
 
         match self_kind {
-            ast::SelfKind::None => {
-                // No self parameter (static method context), deref all refs
+            ast::SelfKind::None | ast::SelfKind::Value => {
+                // No auto-ref: static method context, or a by-value `self`
+                // receiver that transfers the resource. Deref all refs.
                 Self::deref_to_value_static(receiver, span, type_table)
             }
             ast::SelfKind::Ref => {
@@ -2427,6 +2452,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     from_concrete_impl: impl_is_concrete,
                     param_defaults,
                     param_names,
+                    consumes_self: takes_self_by_value(&params),
                 },
                 impl_module_source: impl_module_source.clone(),
                 blanket_type_param: blanket_type_param.clone(),
@@ -2551,6 +2577,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 from_concrete_impl: impl_is_concrete,
                                 param_defaults,
                                 param_names,
+                                consumes_self: takes_self_by_value(&default_method.params),
                             },
                             impl_module_source: impl_module_source.clone(),
                             blanket_type_param: blanket_type_param.clone(),
@@ -3399,6 +3426,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             from_concrete_impl: _,
             param_defaults: method_param_defaults,
             param_names: method_param_names,
+            consumes_self: _,
         } = method_info?;
 
         // Only use IndexMut if the method requires &mut self
@@ -3511,6 +3539,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_param_defaults,
             return_type,
             type_args,
+            false,
         );
         self.record_desugar(
             method_call.id,

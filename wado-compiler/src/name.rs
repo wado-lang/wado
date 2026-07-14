@@ -712,6 +712,25 @@ impl LocalMethodName {
         }
     }
 
+    /// A monomorphization-invariant identity built from the base struct / trait
+    /// names and the bare method name, dropping every type argument. A generic
+    /// method (`Result<T, E>::unwrap`) and each of its instantiations
+    /// (`Result<Fields, HeaderError>::unwrap`) share one key, whereas
+    /// [`Self::to_mangled_name`] embeds the type args and so differs per
+    /// instantiation. Used where a property of the method — not the
+    /// instantiation — is being keyed (e.g. whether it takes `self` by value).
+    pub fn base_dispatch_key(&self) -> String {
+        match &self.base_trait_name {
+            Some(trait_name) => {
+                format!(
+                    "{}^{}::{}",
+                    self.base_struct_name, trait_name, self.method_name
+                )
+            }
+            None => format!("{}::{}", self.base_struct_name, self.method_name),
+        }
+    }
+
     /// Returns true if this is a trait method.
     pub fn is_trait_method(&self) -> bool {
         self.trait_name.is_some()

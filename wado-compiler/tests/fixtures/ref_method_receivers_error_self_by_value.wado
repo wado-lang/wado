@@ -1,4 +1,7 @@
-// self by value is not allowed — must use &self or &mut self
+// A by-value `self` receiver is legal on a resource, or on an aggregate that
+// carries one (WEP 2026-05-21). A value type that owns no resource is not
+// move-only, so its methods must borrow with `&self`. `Foo` holds only an
+// `i32`, so `self` is rejected.
 
 struct Foo {
     x: i32,
@@ -16,4 +19,4 @@ export fn run() {
 }
 
 __DATA__
-{"compile_error": "`self` by value is not allowed; use `&self` or `&mut self` instead"}
+{"compile_error": "`self` by value is only allowed on a resource"}

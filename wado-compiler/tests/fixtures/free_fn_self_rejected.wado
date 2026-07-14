@@ -1,0 +1,14 @@
+// A `self` receiver is only meaningful inside a method. A free function that
+// spells `self` is a parse error, not a value receiver on no receiver type
+// (WEP 2026-05-21).
+
+fn helper(self) -> i32 {
+    return 1;
+}
+
+export fn run() {
+    assert true;
+}
+
+__DATA__
+{"compile_error": "`self` is only allowed as the receiver of a method"}

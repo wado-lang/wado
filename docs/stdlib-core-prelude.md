@@ -744,7 +744,7 @@ Returns Some(value) when fulfilled, None if the writer dropped without writing.
 
 Cancel an in-progress read. Blocks until cancellation completes.
 
-#### `fn drop(&self)`
+#### `fn drop(self)`
 
 Drop the readable end of the future.
 
@@ -761,7 +761,7 @@ Fulfill the future with a value.
 
 Cancel an in-progress write. Blocks until cancellation completes.
 
-#### `fn drop(&self)`
+#### `fn drop(self)`
 
 Drop this writable end handle. Traps if no value has been written yet.
 
@@ -786,7 +786,7 @@ Returns an empty array on end-of-stream.
 
 Cancel an in-progress read. Blocks until cancellation completes.
 
-#### `fn drop(&self)`
+#### `fn drop(self)`
 
 Drop the readable end of the stream.
 
@@ -808,7 +808,7 @@ Write raw GC array directly to the stream.
 
 Cancel an in-progress write. Blocks until cancellation completes.
 
-#### `fn drop(&self)`
+#### `fn drop(self)`
 
 Drop the writable end, signaling end-of-stream.
 
@@ -834,7 +834,7 @@ Block until an event occurs. Returns the event details.
 
 Non-blocking poll. Returns Some(event) if ready, None otherwise.
 
-#### `fn drop(&self)`
+#### `fn drop(self)`
 
 Drop the waitable set. Traps if waitables are still joined to this set.
 
@@ -855,7 +855,7 @@ ws.wait();
 subtask.drop(); // removes from ws
 ws.drop(); // safe — no children
 
-#### `fn drop(&self)`
+#### `fn drop(self)`
 
 Drop a completed subtask. Automatically unjoins from its WaitableSet.
 Traps if the subtask has not yet resolved.
@@ -881,7 +881,7 @@ Create a new error context with the given message.
 
 Get the debug message from this error context.
 
-#### `fn drop(&self)`
+#### `fn drop(self)`
 
 Drop the error context.
 

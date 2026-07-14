@@ -692,6 +692,7 @@ fn render_generic_params(params: &[GenericParam]) -> String {
 
 fn render_param(param: &Param) -> String {
     match param.self_kind {
+        SelfKind::Value => "self".to_string(),
         SelfKind::Ref => "&self".to_string(),
         SelfKind::MutRef => "&mut self".to_string(),
         SelfKind::None => {

@@ -1,0 +1,27 @@
+// A struct (or tuple) that transitively carries an affine resource is itself
+// move-only by composition (WEP 2026-05-21): moving the whole aggregate and
+// then using the binding is a compile error, just as for a bare resource.
+
+pub resource Counter {
+    fn bump(&self);
+}
+
+struct Holder {
+    c: Counter,
+}
+
+fn eat(h: Holder) {
+    let _ = h;
+}
+
+fn misuse(h: Holder) {
+    eat(h);
+    let _ = h;
+}
+
+export fn run() {
+    assert true;
+}
+
+__DATA__
+{"compile_error": "resource `h` used after it was moved"}

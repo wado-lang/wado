@@ -10,8 +10,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Wai
 
     // Poll should return None since there are no waitables
     if let Some(_) = event {
-        // Unexpected — should not happen
-        ws.drop();
+        // Unexpected — should not happen. `ws` is dropped once after the `if`.
         let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
         let headers = Fields::new();
         let [response, _tx_future] = Response::new(headers, null, trailers_future);

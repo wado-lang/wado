@@ -1,0 +1,23 @@
+// Extracting a resource out of a `Result<Fields, E>` via `.unwrap()` is a
+// by-value `self` call (WEP 2026-05-21): it consumes the whole `Result`, moving
+// the inner `Fields` to the caller. The extracted handle has a single owner
+// (`headers`), which is transferred into the `Response`, so no resource leaks
+// and none is dropped twice. This replaced the `is_resource_aggregate`
+// extraction heuristic: the by-value receiver now carries the transfer directly.
+
+use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let name = "x-probe" as FieldName;
+    let value: List<u8> = [118 as u8];
+    let entries: List<[FieldName, FieldValue]> = [[name, value as FieldValue]];
+    let headers = Fields::from_list(entries).unwrap();
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"status": 200}}

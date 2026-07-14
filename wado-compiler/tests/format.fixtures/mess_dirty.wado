@@ -126,19 +126,19 @@ fn nested_blocks() {
     /* all done */
 }
 
-// Normalization of self: &Self
+// Borrow receivers
 struct Wrapper {
     val: i32,
 }
 
 impl Wrapper {
-    fn get(self: &Self) -> i32 {
+    fn get(&self) -> i32 {
         return self.val;
     }
-    fn set(self: &mut Self, v: i32) {
+    fn set(&mut self, v: i32) {
         self.val = v;
     }
-    fn clone_it(self: &Self) -> Wrapper {
+    fn clone_it(&self) -> Wrapper {
         return Wrapper { val: self.val };
     }
 }

@@ -55,14 +55,14 @@ interface MyEffect {
 /// Resource: opaque handle without methods
 resource Handle;
 
-/// Resource: pub with methods, self: &Self normalized
+/// Resource: pub with borrow-receiver methods
 pub resource Stream {
     /// Read data from stream
-    fn read(self: &Self, len: u64) -> List<u8>;
+    fn read(&self, len: u64) -> List<u8>;
     /// Write data to stream
-    async fn write(self: &Self, data: List<u8>);
+    async fn write(&self, data: List<u8>);
     /// Close the stream
-    fn close(self: &Self);
+    fn close(&self);
 }
 
 /// Type alias with attribute preserved

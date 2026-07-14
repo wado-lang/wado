@@ -67,9 +67,29 @@ An affine resource is move-only, with no keyword:
 - Using a binding after it is moved is a compile error.
 
 Transfer is implicit at the consumption site — there is no `move` operator, no
-lifetimes, no exclusivity analysis. A by-value `self` receiver is allowed only on
-a resource (on a copyable type it would just deep-copy), which licenses
-`fn drop(self)` and the consuming `AsyncCall<T>` methods.
+lifetimes, no exclusivity analysis.
+
+The receiver has exactly three spellings and never a type annotation:
+
+| Spelling    | Meaning                       | CM handle   |
+| ----------- | ----------------------------- | ----------- |
+| `self`      | by-value move — resource-only | `own<R>`    |
+| `&self`     | shared borrow                 | `borrow<R>` |
+| `&mut self` | mutable borrow                | `borrow<R>` |
+
+`self: T` and `self: &T` are rejected. A copyable type has no use for a value
+receiver (`&self` plus a `*self` deref-copy covers it), and a single borrow
+spelling removes a needless choice. Bare `self` is legal on a resource or an
+aggregate that carries one (its consuming method hands that resource off); on a
+value type that owns no resource it is a diagnostic (`value types are not
+move-only; use &self`) — this is how the value-semantics friction is mitigated,
+not with a keyword. The rule licenses `fn drop(self)` and the consuming
+`AsyncCall<T>` methods.
+
+Because the annotated forms are gone, the receiver kind is carried entirely by
+`SelfKind` (`Value` / `Ref` / `MutRef`); `SelfKind::None` means a genuine
+non-method, and a call consumes its receiver iff the dispatch resolves to
+`SelfKind::Value`.
 
 ### The move check
 
@@ -91,37 +111,63 @@ It is independent of the value-copy client's last-use liveness
 (`lower/plan/value_copy/last_use.rs`, post-mono over TIR); unifying the two is
 future work, not a present fact.
 
-Done: use-after-move of a bare resource local (`Resource` / `GenericResource`).
-Remaining: resource-carrying aggregates (`Result<Fields, E>`, structs / tuples),
-by-value `self` consumption, and the no-move-out-of-borrow rule below.
+Done: use-after-move of a bare resource local, by-value `self` consumption (a
+bare `self` receiver moves it, via a `consumes_self` dispatch fact — the
+semantic-layer twin of `resource_cleanup`'s `owned_self`), and whole-move of a
+resource-carrying struct / tuple / `Result`, and no-move-out-of-borrow (a `&self`
+return rooted in the borrow that carries a resource) — see below.
 
-### No move out of a borrow (planned)
+### Extraction is a by-value receiver (Rust-aligned)
 
-Moving a resource out of a borrowed place (`*self`, a pattern binding from
-`*borrow`) is forbidden — this is what makes `Result::unwrap(&self) -> T` illegal
-for a resource `T`, directing extraction to `if let Ok(r) = …`. Since `unwrap`'s
-body is generic, the check is a per-function summary ("returns a value rooted in
-a borrowed parameter") reported at each call site whose concrete return carries a
-resource, so the error lands on the user's `.unwrap()`. A `&self` method
-returning a freshly produced resource (`dir.open_at()`) stays legal. This rule is
-the prerequisite for retiring the cleanup heuristic below.
+Pulling a resource out of a `Result` / `Option` returns an owned handle, so the
+source must relinquish ownership. `unwrap(&self)` cannot — a borrow keeps the
+receiver owned, so the returned handle would _alias_ the one still inside the
+container: two owners of one move-only resource, hence a double-free. The fix
+mirrors Rust: the consuming accessors (`unwrap` / `expect` / `unwrap_err` /
+`expect_err`) take `self` **by value**, so `res.unwrap()` consumes the whole
+`Result` and moves the interior out with a single owner. For value (copyable)
+types this is the usual value-semantics copy — elided to a move at last use — so
+`.unwrap()` stays ergonomic and no rejection is needed. Inspectors (`is_ok`, …)
+keep `&self`.
+
+By-value `self` on a value type is otherwise a diagnostic
+(`SelfByValueOnNonResource`); the generic `Result<T, E>` / `Option<T>` impls are
+permitted because a generic self-type resolves to a `GenericInstance`, not a
+concrete value type.
+
+### No move out of a borrow
+
+A hand-written `fn f(&self) -> Resource { return self.f; }` (or `match *self { …
+=> interior }`, or a `let`-bound projection) moves a resource out of a borrowed
+place: the borrow keeps the source owned, so the returned handle aliases it — a
+double-free. `resource_move_check` rejects it. For each function it seeds the
+borrowed parameters (`&self` / `&mut self` / `&T`), tracks bindings projected
+from them (through `let`, field access, deref, and match-arm bindings whose
+scrutinee is borrowed), and flags a `return` whose value is rooted in a borrow
+and whose type carries a resource. A `&self` method returning a _freshly
+produced_ resource (`dir.open_at()`) stays legal (its return roots in a fresh
+allocation, not the borrow).
+
+The gate is the concrete return type carrying a resource, so a generic body
+(`T` abstract) is not flagged at its definition; the stdlib avoids the issue by
+taking `self` by value, and a user-written generic `&self` extractor
+instantiated with a resource is the remaining call-site case (deferred).
 
 ### Authoritative cleanup
 
 `resource_cleanup.rs` drops every owned, untransferred resource on each
-fall-through path, structurally for aggregates via a synthesized `match`. Two
-fixes landed:
+fall-through path, structurally for aggregates via a synthesized `match`. A value
+is transferred when passed by value, returned, placed in an aggregate, or used as
+the receiver of a by-value (`self`) method — so extraction (`unwrap`) is just a
+by-value receiver transfer, with no aggregate-shape guessing. Two fixes landed:
 
-- A `&self` method on a `Result<Resource, E>` (`is_ok`, …) is a borrow: the
-  receiver is consumed only when the call result carries a resource (an
-  extracting `unwrap`), so an inspector leaves the structural drop intact (#1569).
+- A `&self` inspector on a `Result<Resource, E>` (`is_ok`, …) is a borrow and
+  leaves the structural drop intact (#1569).
 - A resource value discarded in statement position (`Fields::new();`, `let _ =
   …`) is dropped, not leaked; a tail expression is left for its consumer.
 
-The `is_resource_aggregate` heuristic remains: it is precise for stdlib but
-cannot in general tell extraction-from-self from a fresh return. The
-no-move-out-of-borrow rule retires it, after which cleanup drops "owned and not
-moved at scope exit" with no guessing.
+The `is_resource_aggregate` heuristic is **retired**: cleanup now drops "owned and
+not transferred at scope exit" directly.
 
 ### Deterministic drop
 
@@ -191,40 +237,58 @@ Verified against the tree.
 
 ### Move check
 
-- [x] `resource_move_check.rs` on `Semantics`, wired into batch and LSP.
-- [x] Use-after-move of a bare resource local: forward walker, branch-join
-      union, divergence-aware, loop-carried, reassignment/rebind clears.
-- [x] Covers free / `impl` / `trait` / `test` / function-local bodies.
-- [ ] Aggregates and by-value `self` consumption.
-- [ ] No-move-out-of-borrow (rejects `Result::unwrap` on a resource).
+- [x] `resource_move_check.rs` on `Semantics`, wired into batch and LSP; covers
+      free / `impl` / `trait` / `test` / function-local bodies.
+- [x] Use-after-move of a bare resource local (branch-join, divergence-aware,
+      loop-carried, rebind clears).
+- [x] By-value `self` consumption via the `consumes_self` dispatch fact.
+- [x] Resource-carrying aggregates (struct / tuple / `Result`) are move-only,
+      kept in step with cleanup's `carries_resource` (variant / `Option` /
+      `List` deferred with their destructors); whole-aggregate move only.
+- [x] No-move-out-of-borrow: a `&self` / `&T`-param return rooted in the borrow
+      whose concrete type carries a resource is rejected (generic-instantiation
+      call sites deferred).
 - [ ] Unify with the value-copy last-use liveness.
 
 ### Cleanup
 
 - [x] `&self` aggregate call classified by return type (#1569).
 - [x] Discarded resource value is dropped, not leaked.
-- [ ] Retire `is_resource_aggregate` once no-move-out-of-borrow lands.
+- [x] `is_resource_aggregate` retired: extraction accessors take `self` by
+      value, so the receiver transfer is read directly (no shape guessing).
+
+### Receiver grammar (`self` / `&self` / `&mut self`)
+
+- [x] `SelfKind::Value`; parser accepts bare `self`, `consumes_self` is
+      `self_kind == Value`, and `self` on a free function is a parse error.
+- [x] A `Value` receiver is a diagnostic (`SelfByValueOnNonResource`) only on a
+      value type that provably carries no resource; a resource-carrying aggregate
+      (and any generic self-type) may consume with `self`.
+- [x] stdlib `self: &R` → `&self` (via `wado-from-idl`); every `self:`
+      annotation rejected, fixtures migrated, formatter normalization dropped.
+- [ ] `syntax.rs` grammar + VS Code grammar for the new receiver forms.
 
 ### Consuming drop
 
-- [ ] Migrate `types.wado`'s `drop` methods to `fn drop(self)`. These are
-      `#[cm("…-drop…")]` attributes, so CM-binding synthesis must accept a
-      by-value `self`; double-drop avoidance already holds via cleanup's
-      `owned_self`.
-- [ ] Compositional destructor synthesis for resource-bearing aggregates.
+- [x] `types.wado` drops migrated to `fn drop(self)`; `owned_self` keeps exactly
+      one drop, and a use after `.drop()` is a move error.
+- [x] Compositional destructor for struct / tuple aggregates (field-projected
+      drops; `Result` keeps its `match`); variant / `Option` / `List` deferred.
 
 ### Value-copy client (done)
 
-- [x] `$value_copy$T` inserted only at `copy` sites; read-only-share;
-      recursive-type deep copy; `optimize::escape` / `value_copy_elide` deleted.
+- [x] `$value_copy$T` at `copy` sites only; read-only-share; recursive-type deep
+      copy; `optimize::escape` / `value_copy_elide` deleted.
 - [ ] Pin representative move / copy / share decisions as e2e fixtures.
 
 ## Deferred: the `move` and `unique` keywords
 
 Intentionally not implemented. Move-only semantics need no syntax: transfer is
-implicit and a use-after-move diagnostic replaces a `move` operator's local
-visibility. `unique` as a `struct` modifier only matters for a move-only type
-that carries no resource — a resource-bearing aggregate is already move-only by
+implicit, a use-after-move diagnostic replaces a `move` operator's local
+visibility, and the consuming receiver is spelled bare `self` (scoped to
+resources, so it never contradicts value semantics — see the receiver grammar
+above). `unique` as a `struct` modifier only matters for a move-only type that
+carries no resource — a resource-bearing aggregate is already move-only by
 composition, and no use case has appeared. Current state: `move` is not
 tokenized; `unique` is lexed to `TokenKind::Unique` but never parsed. If revived,
 `unique struct` reuses the same move-check machinery, resources being its first

@@ -167,6 +167,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A by-value `self` receiver on a non-resource type. Only resources are
+    /// move-only (WEP 2026-05-21); value types borrow with `&self`.
+    SelfByValueOnNonResource {
+        type_name: String,
+        span: Span,
+    },
+
     /// `_` inference placeholder used outside a turbofish type argument.
     InferPlaceholderNotAllowed {
         span: Span,
@@ -602,6 +609,13 @@ impl TypeError {
             TypeError::UnknownType { name, span } => {
                 (Code::UnknownType, format!("unknown type '{name}'"), *span)
             }
+            TypeError::SelfByValueOnNonResource { type_name, span } => (
+                Code::TypeMismatch,
+                format!(
+                    "`self` by value is only allowed on a resource; `{type_name}` is a value type — use `&self`"
+                ),
+                *span,
+            ),
             TypeError::InferPlaceholderNotAllowed { span } => (
                 Code::UnknownType,
                 "`_` type placeholder is only allowed as a turbofish type argument".to_string(),
@@ -1076,6 +1090,11 @@ pub(super) struct MethodInfo {
     /// function named per-instantiation (`List<u8>::method`) and called
     /// directly, so the call site emits no `monomorph_info` for it.
     pub(super) from_concrete_impl: bool,
+    /// True when the receiver `self` is taken by value (not `&self` / `&mut
+    /// self` / `self: &T`), so a call transfers ownership of the receiver.
+    /// Mirrors `resource_cleanup`'s `owned_self` at the semantic layer; the
+    /// move check reads it to flag use-after-move through a consuming method.
+    pub(super) consumes_self: bool,
 }
 
 /// Labeled block expression target for tracking break types

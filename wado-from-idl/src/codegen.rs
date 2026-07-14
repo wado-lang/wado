@@ -327,7 +327,16 @@ impl WadoCodeGenerator {
     fn format_params(params: &[WadoParam]) -> String {
         params
             .iter()
-            .map(|p| format!("{}: {}", p.name, Self::format_type(&p.ty)))
+            .map(|p| {
+                if p.name == "self" {
+                    match &p.ty {
+                        WadoType::Borrow(_) => "&self".to_string(),
+                        _ => "self".to_string(),
+                    }
+                } else {
+                    format!("{}: {}", p.name, Self::format_type(&p.ty))
+                }
+            })
             .collect::<Vec<_>>()
             .join(", ")
     }

@@ -1,0 +1,21 @@
+// A by-value `self` receiver (WEP 2026-05-21) consumes the resource: calling
+// such a method transfers ownership, so using the binding afterward is a
+// compile error, exactly like passing it by value to a free function. A
+// `&self` receiver only borrows and leaves the binding live.
+
+pub resource Counter {
+    fn bump(&self);
+    fn consume(self);
+}
+
+fn misuse(c: Counter) {
+    c.consume();
+    c.bump();
+}
+
+export fn run() {
+    assert true;
+}
+
+__DATA__
+{"compile_error": "resource `c` used after it was moved"}

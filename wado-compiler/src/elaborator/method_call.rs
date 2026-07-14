@@ -385,6 +385,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             from_concrete_impl,
             param_defaults,
             param_names,
+            consumes_self,
         } = if let Some(info) = method_info {
             info
         } else {
@@ -409,6 +410,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 from_concrete_impl: false,
                 param_defaults: vec![],
                 param_names: vec![],
+                consumes_self: false,
             }
         };
 
@@ -1011,6 +1013,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_defaults,
                 return_type,
                 method_type_args,
+                consumes_self,
             );
             // The `method_found` gate keeps the error-recovery placeholder
             // from leaking into the returned dispatch.

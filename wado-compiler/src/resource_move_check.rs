@@ -5,28 +5,90 @@ use crate::ast::{
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::semantics::Semantics;
-use crate::tir::ResolvedType;
+use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
 
+/// Whether `type_id` transitively owns an affine resource, making a binding of
+/// that type move-only: a bare resource (`Resource` / `GenericResource`), or a
+/// struct / tuple / `Result` that carries one. A reference stops the walk — a
+/// borrowed place owns nothing. `visited` guards against recursive types.
+///
+/// The aggregate set is kept in step with `resource_cleanup::carries_resource`
+/// (which synthesizes the compositional destructor): a type is treated as
+/// move-only here only if the cleanup pass can also drop it, so the move check
+/// never enforces move-only on an aggregate the runtime would then leak. User
+/// `variant`s and generic containers (`Option` / `List` / …) are out of both
+/// until their destructors land.
+fn type_carries_resource(sem: &Semantics, type_id: TypeId, visited: &mut Vec<TypeId>) -> bool {
+    let base = sem.types.get_ultimate_base_type(type_id);
+    if visited.contains(&base) {
+        return false;
+    }
+    visited.push(base);
+    let children: Vec<TypeId> = match sem.types.get(base) {
+        ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => return true,
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
+        ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } => {
+            let (name, module_source) = (name.clone(), module_source.clone());
+            sem.struct_field_type_ids(&name, &module_source)
+                .unwrap_or_default()
+        }
+        ResolvedType::GenericInstance {
+            name, type_args, ..
+        } if name == "Result" => type_args.clone(),
+        _ => sem.types.as_tuple(base).unwrap_or_default(),
+    };
+    children
+        .into_iter()
+        .any(|t| type_carries_resource(sem, t, visited))
+}
+
 #[derive(Debug, Clone)]
-pub struct ResourceMoveError {
-    pub name: String,
-    pub use_span: Span,
-    pub move_span: Span,
-    pub module: String,
+pub enum ResourceMoveError {
+    /// A resource binding used after a by-value consumption moved it.
+    UseAfterMove {
+        name: String,
+        use_span: Span,
+        move_span: Span,
+        module: String,
+    },
+    /// A resource moved out of a borrowed place (`self.f` on `&self`, a binding
+    /// from `match *self`). The source keeps ownership, so the extracted handle
+    /// would alias it; take `self` by value to consume, or return a fresh
+    /// resource.
+    MoveOutOfBorrow {
+        /// The resource type being extracted.
+        type_name: String,
+        span: Span,
+        module: String,
+    },
 }
 
 impl std::fmt::Display for ResourceMoveError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}:{}: resource `{}` used after it was moved (moved at {}:{})",
-            self.use_span.line,
-            self.use_span.column,
-            self.name,
-            self.move_span.line,
-            self.move_span.column,
-        )
+        match self {
+            ResourceMoveError::UseAfterMove {
+                name,
+                use_span,
+                move_span,
+                ..
+            } => write!(
+                f,
+                "{}:{}: resource `{}` used after it was moved (moved at {}:{})",
+                use_span.line, use_span.column, name, move_span.line, move_span.column,
+            ),
+            ResourceMoveError::MoveOutOfBorrow {
+                type_name, span, ..
+            } => write!(
+                f,
+                "{}:{}: cannot move resource `{type_name}` out of a borrow",
+                span.line, span.column,
+            ),
+        }
     }
 }
 
@@ -35,14 +97,37 @@ impl std::error::Error for ResourceMoveError {}
 impl From<ResourceMoveError> for crate::compiler_host::Diagnostic {
     fn from(e: ResourceMoveError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
+        let (message, span, module) = match e {
+            ResourceMoveError::UseAfterMove {
+                name,
+                use_span,
+                move_span,
+                module,
+            } => (
+                format!(
+                    "resource `{name}` used after it was moved (moved at {}:{})",
+                    move_span.line, move_span.column,
+                ),
+                use_span,
+                module,
+            ),
+            ResourceMoveError::MoveOutOfBorrow {
+                type_name,
+                span,
+                module,
+            } => (
+                format!(
+                    "cannot move resource `{type_name}` out of a borrow; take `self` by value to consume it, or return a freshly created resource"
+                ),
+                span,
+                module,
+            ),
+        };
         crate::compiler_host::Diagnostic {
             severity: Severity::Error,
             code: Code::TypeMismatch,
-            message: format!(
-                "resource `{}` used after it was moved (moved at {}:{})",
-                e.name, e.move_span.line, e.move_span.column,
-            ),
-            span: Some(DiagnosticSpan::from_span(&e.use_span, Some(&e.module))),
+            message,
+            span: Some(DiagnosticSpan::from_span(&span, Some(&module))),
         }
     }
 }
@@ -92,6 +177,223 @@ fn check_function(
 ) {
     if let Some(body) = &func.body {
         check_block(sem, module, body, out);
+        check_borrow_extraction(sem, module, func, out);
+    }
+}
+
+/// Reject moving a resource out of a borrowed place: a `&self` / `&T`-param
+/// method whose returned value is rooted in that borrow and carries a resource
+/// (`fn peek(&self) -> Fields { return self.f; }`). The borrow keeps the source
+/// owned, so the extracted handle would alias it — a double-drop. Extraction
+/// must consume by value (`self`) or return a freshly produced resource.
+fn check_borrow_extraction(
+    sem: &Semantics,
+    module: &ModuleSource,
+    func: &Function,
+    out: &mut Vec<ResourceMoveError>,
+) {
+    let Some(body) = &func.body else {
+        return;
+    };
+    let mut borrowed: Vec<AstId> = Vec::new();
+    for p in &func.params {
+        let is_ref = matches!(p.self_kind, ast::SelfKind::Ref | ast::SelfKind::MutRef)
+            || matches!(&p.ty, ast::Type::Reference(_) | ast::Type::MutReference(_));
+        if is_ref {
+            borrowed.push(p.id);
+        }
+    }
+    if borrowed.is_empty() {
+        return;
+    }
+    let mut checker = BorrowChecker {
+        sem,
+        module,
+        borrowed,
+        out,
+    };
+    checker.walk_block(body);
+}
+
+/// Tracks which bindings are rooted in a borrowed parameter and flags returns
+/// that carry a resource out of one.
+struct BorrowChecker<'a> {
+    sem: &'a Semantics,
+    module: &'a ModuleSource,
+    /// Def `AstId`s rooted in a borrow: borrowed params plus `let` bindings and
+    /// match-arm bindings projected from a borrowed place.
+    borrowed: Vec<AstId>,
+    out: &'a mut Vec<ResourceMoveError>,
+}
+
+impl BorrowChecker<'_> {
+    /// Whether `expr`'s value is rooted in a borrowed place. `extra` holds
+    /// match-arm bindings in scope for the current arm.
+    fn roots_in_borrow(&self, expr: &Expr, extra: &[AstId]) -> bool {
+        match expr {
+            Expr::Ident(x) => self
+                .sem
+                .referenced_symbol(x.id)
+                .is_some_and(|def| self.borrowed.contains(&def) || extra.contains(&def)),
+            Expr::FieldAccess(fa) => self.roots_in_borrow(&fa.expr, extra),
+            Expr::Unary(u) => self.roots_in_borrow(&u.expr, extra),
+            Expr::Cast(c) => self.roots_in_borrow(&c.expr, extra),
+            Expr::Index(ix) => self.roots_in_borrow(&ix.expr, extra),
+            Expr::Block(b) => self
+                .block_tail(b)
+                .is_some_and(|t| self.roots_in_borrow(t, extra)),
+            Expr::LabeledBlock(lb) => self
+                .block_tail(&lb.block)
+                .is_some_and(|t| self.roots_in_borrow(t, extra)),
+            Expr::If(ife) => {
+                self.block_tail(&ife.then_block)
+                    .is_some_and(|t| self.roots_in_borrow(t, extra))
+                    || ife
+                        .else_block
+                        .as_ref()
+                        .and_then(|eb| self.block_tail(eb))
+                        .is_some_and(|t| self.roots_in_borrow(t, extra))
+            }
+            Expr::Match(m) => {
+                let scrut_borrow = self.roots_in_borrow(&m.expr, extra);
+                m.arms.iter().any(|arm| {
+                    let mut arm_extra = extra.to_vec();
+                    if scrut_borrow {
+                        collect_pattern_bindings(&arm.pattern, &mut arm_extra);
+                    }
+                    self.roots_in_borrow(&arm.body, &arm_extra)
+                })
+            }
+            _ => false,
+        }
+    }
+
+    /// The trailing expression a block evaluates to, if its last statement is a
+    /// bare expression.
+    fn block_tail<'b>(&self, block: &'b Block) -> Option<&'b Expr> {
+        match block.stmts.last() {
+            Some(Stmt::Expr(e)) => Some(&e.expr),
+            _ => None,
+        }
+    }
+
+    fn check_return(&mut self, value: &Expr) {
+        if !self.roots_in_borrow(value, &[]) {
+            return;
+        }
+        let Some(type_id) = self.sem.expression_type(value.id()) else {
+            return;
+        };
+        if !type_carries_resource(self.sem, type_id, &mut Vec::new()) {
+            return;
+        }
+        self.out.push(ResourceMoveError::MoveOutOfBorrow {
+            type_name: self.sem.types.type_name(type_id),
+            span: value.span(),
+            module: self.module.source_path(),
+        });
+    }
+
+    fn walk_block(&mut self, block: &Block) {
+        let saved = self.borrowed.len();
+        for stmt in &block.stmts {
+            self.walk_stmt(stmt);
+        }
+        self.borrowed.truncate(saved);
+    }
+
+    fn walk_stmt(&mut self, stmt: &Stmt) {
+        match stmt {
+            Stmt::Let(l) => {
+                if let Some(value) = &l.value {
+                    if self.roots_in_borrow(value, &[]) {
+                        collect_pattern_bindings(&l.pattern, &mut self.borrowed);
+                    }
+                    self.walk_nested(value);
+                }
+            }
+            Stmt::Return(r) => {
+                if let Some(value) = &r.value {
+                    self.check_return(value);
+                    self.walk_nested(value);
+                }
+            }
+            Stmt::TaskReturn(t) => {
+                self.check_return(&t.value);
+                self.walk_nested(&t.value);
+            }
+            Stmt::Break(b) => {
+                if let Some(value) = &b.value {
+                    self.walk_nested(value);
+                }
+            }
+            Stmt::Expr(e) => self.walk_nested(&e.expr),
+            Stmt::If(s) => {
+                self.walk_block(&s.then_block);
+                if let Some(eb) = &s.else_block {
+                    self.walk_block(eb);
+                }
+            }
+            Stmt::While(s) => self.walk_block(&s.body),
+            Stmt::Loop(s) => self.walk_block(&s.body),
+            Stmt::For(s) => {
+                if let Some(init) = &s.init {
+                    self.walk_stmt(init);
+                }
+                self.walk_block(&s.body);
+            }
+            Stmt::ForOf(s) => self.walk_block(&s.body),
+            Stmt::Match(m) => self.walk_match(&m.expr, &m.arms),
+            Stmt::LabeledBlock(lb) => self.walk_block(&lb.block),
+            Stmt::Item(item) => check_item(self.sem, self.module, item, self.out),
+            _ => {}
+        }
+    }
+
+    /// Descend into a control-flow expression to catch `return`s nested in it.
+    fn walk_nested(&mut self, expr: &Expr) {
+        match expr {
+            Expr::Block(b) => self.walk_block(b),
+            Expr::LabeledBlock(lb) => self.walk_block(&lb.block),
+            Expr::If(ife) => {
+                self.walk_block(&ife.then_block);
+                if let Some(eb) = &ife.else_block {
+                    self.walk_block(eb);
+                }
+            }
+            Expr::Match(m) => self.walk_match(&m.expr, &m.arms),
+            Expr::WithHandler(w) => self.walk_block(&w.body),
+            _ => {}
+        }
+    }
+
+    fn walk_match(&mut self, scrutinee: &Expr, arms: &[ast::MatchArm]) {
+        let scrut_borrow = self.roots_in_borrow(scrutinee, &[]);
+        for arm in arms {
+            let saved = self.borrowed.len();
+            if scrut_borrow {
+                collect_pattern_bindings(&arm.pattern, &mut self.borrowed);
+            }
+            self.walk_nested(&arm.body);
+            self.borrowed.truncate(saved);
+        }
+    }
+}
+
+/// Collect the def `AstId`s a pattern binds, matching what `referenced_symbol`
+/// resolves a later use to.
+fn collect_pattern_bindings(pattern: &Pattern, out: &mut Vec<AstId>) {
+    match pattern {
+        Pattern::Ident { id, .. } | Pattern::MutIdent { id, .. } => out.push(*id),
+        Pattern::Tuple(subs, _) => subs.iter().for_each(|s| collect_pattern_bindings(s, out)),
+        Pattern::Variant { bindings, .. } => bindings
+            .iter()
+            .for_each(|s| collect_pattern_bindings(s, out)),
+        Pattern::Struct { fields, .. } => fields
+            .iter()
+            .for_each(|f| collect_pattern_bindings(&f.pattern, out)),
+        Pattern::Or(alts) => alts.iter().for_each(|a| collect_pattern_bindings(a, out)),
+        _ => {}
     }
 }
 
@@ -123,11 +425,7 @@ impl MoveWalker<'_> {
     fn resource_def(&self, use_id: AstId) -> Option<AstId> {
         let def = self.sem.referenced_symbol(use_id)?;
         let type_id = self.sem.expression_type(use_id)?;
-        matches!(
-            self.sem.types.get(type_id),
-            ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. }
-        )
-        .then_some(def)
+        (type_carries_resource(self.sem, type_id, &mut Vec::new())).then_some(def)
     }
 
     fn read(&mut self, ident: &IdentExpr) {
@@ -152,7 +450,7 @@ impl MoveWalker<'_> {
         if self.suppress > 0 {
             return;
         }
-        self.out.push(ResourceMoveError {
+        self.out.push(ResourceMoveError::UseAfterMove {
             name: ident.name.clone(),
             use_span: ident.span,
             move_span,
@@ -178,7 +476,11 @@ impl MoveWalker<'_> {
                 }
             }
             Expr::MethodCall(mc) => {
-                self.visit_expr(&mc.receiver);
+                if self.sem.method_call_consumes_receiver(mc.id) {
+                    self.visit_value(&mc.receiver);
+                } else {
+                    self.visit_expr(&mc.receiver);
+                }
                 for arg in &mc.args {
                     self.visit_value(arg);
                 }

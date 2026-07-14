@@ -705,6 +705,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     (SelfKind::MutRef, Some(self_t)) => {
                         scope.tysys.type_table.borrow_mut().make_mut_ref(self_t)
                     }
+                    // By-value `self` (consuming): the receiver is the resource
+                    // itself, transferred.
+                    (SelfKind::Value, Some(self_t)) => self_t,
                     // No `Self` in scope (effect decls) — drop the
                     // receiver as before; effect operations don't take
                     // receivers and the elaborator should already have
@@ -1787,6 +1790,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut params = Vec::new();
         for param in &func.params {
             let type_id = match param.self_kind {
+                ast::SelfKind::Value => {
+                    // by-value self: the impl type itself, transferred. Legal
+                    // only on a resource; a value type must borrow with `&self`.
+                    let self_ty = scope.resolve_type(impl_type);
+                    let (is_resource, is_concrete_value, type_name) = {
+                        let tt = scope.tysys.type_table.borrow();
+                        use crate::tir::ResolvedType;
+                        let resolved = tt.get(self_ty);
+                        (
+                            matches!(
+                                resolved,
+                                ResolvedType::Resource { .. }
+                                    | ResolvedType::GenericResource { .. }
+                            ),
+                            matches!(
+                                resolved,
+                                ResolvedType::Struct { .. }
+                                    | ResolvedType::Enum { .. }
+                                    | ResolvedType::Variant { .. }
+                            ),
+                            tt.type_name(self_ty),
+                        )
+                    };
+                    // A by-value `self` is legal on a resource, and on a
+                    // concrete aggregate that transitively owns one (its
+                    // consuming method hands that resource off). Generic
+                    // aggregates resolve to `GenericInstance`, not a concrete
+                    // value type, so they are already permitted here.
+                    if is_concrete_value && !is_resource && !scope.tysys.carries_resource(self_ty) {
+                        let _ = scope.logger.error(TypeError::SelfByValueOnNonResource {
+                            type_name,
+                            span: param.span,
+                        });
+                    }
+                    self_ty
+                }
                 ast::SelfKind::Ref => {
                     // &self: wrap impl type in immutable reference
                     let inner_type = scope.resolve_type(impl_type);

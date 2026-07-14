@@ -245,17 +245,17 @@ type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(
 
 type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(49)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(50)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(50)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(51)
+type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(51)
 
-type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(52)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(52)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(53)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(53)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(54)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(54)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(55)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(55)
 
 type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(56)
 
@@ -266,12 +266,12 @@ import fn wasi/wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
 import fn wasi/wasi:http/Response::new from "wasi/wasi:http/Response::new";
 import memory (1) from "mem/memory";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
-import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/future-new from "wasi/future-new";
 import fn wasi/task-return:handle from "wasi/task-return:handle";
 import fn wasi/future-write from "wasi/future-write";
 import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
+import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 
 global mut global:cm_waitable_set_poll.wado::__modules_initialized: bool = 0;
@@ -549,7 +549,6 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
     };
     event = "core:rt/cm_waitable_set_poll"(local.tee ws("wasi/waitable-set-new"()));
     if ref.is_null(event) == 0 {
-        "wasi/waitable-set-drop"(ws);
         rx_320 = builtin::i32_wrap_i64(local.tee packed_319("wasi/future-new"()));
         tx_321 = builtin::i32_wrap_i64(packed_319 >> 32_i64);
         __local_316 = "cm_waitable_set_poll.wado/__cm_binding__Response_new"(local.tee headers_5("cm_waitable_set_poll.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, rx_320);
