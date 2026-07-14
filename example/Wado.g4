@@ -41,7 +41,7 @@ pubItem
     ;
 
 globalDecl
-    : 'global' IDENTIFIER ':' typeRef '=' expression ';'
+    : 'global' 'mut'? IDENTIFIER ':' typeRef '=' expression ';'
     ;
 
 typeAliasDecl
@@ -83,6 +83,7 @@ useDecl
 importGroup
     : '{' importList? '}'
     | IDENTIFIER
+    | '_'
     ;
 
 importList
@@ -98,7 +99,16 @@ functionDecl
     ;
 
 funcSig
-    : IDENTIFIER genericParams? '(' paramList? ')' returnType? withClause? (block | ';')
+    : identifier genericParams? '(' paramList? ')' returnType? withClause? (block | ';')
+    ;
+
+// A binding name: a plain identifier or one of the contextual keywords that
+// may also name a function / field / parameter (`fn from`, `type: T`).
+identifier
+    : IDENTIFIER
+    | 'from' | 'of' | 'type' | 'matches' | 'stores' | 'world'
+    | 'interface' | 'resource' | 'import' | 'export' | 'reactive'
+    | 'unique' | 'forward' | 'trap' | 'effect' | 'flags' | 'variant'
     ;
 
 paramList
@@ -107,7 +117,7 @@ paramList
 
 param
     : selfParam
-    | 'mut'? IDENTIFIER ':' typeRef ('=' expression)?
+    | 'mut'? identifier ':' typeRef ('=' expression)?
     ;
 
 selfParam
@@ -142,7 +152,7 @@ fieldList
     ;
 
 fieldDecl
-    : attribute* 'pub'? IDENTIFIER ':' typeRef ('=' expression)?
+    : attribute* 'pub'? identifier ':' typeRef ('=' expression)?
     ;
 
 enumDecl
@@ -246,7 +256,7 @@ genericParams
     ;
 
 genericParam
-    : 'effect'? IDENTIFIER (':' traitBounds)? ('=' typeRef)?
+    : '..'? 'effect'? IDENTIFIER (':' traitBounds)? ('=' typeRef)?
     ;
 
 traitBounds
@@ -258,7 +268,7 @@ typeRef
     | '!'
     | '_'
     | '(' (typeRef (',' typeRef)*)? ')'
-    | '[' (typeRef (',' typeRef)*)? ']'
+    | '[' ('..' typeRef | (typeRef (',' typeRef)*)?) ']'
     | 'fn' 'mut'? '(' (typeRef (',' typeRef)*)? ')' returnType? fnTypeWithClause?
     | path typeArgs?
     ;
@@ -272,7 +282,13 @@ fnTypeWithClause
     ;
 
 typeArgs
-    : '<' typeRef (',' typeRef)* '>'
+    : '<' typeArg (',' typeArg)* '>'
+    ;
+
+// A type argument, optionally an associated-type binding (`Iterator<Item = T>`).
+typeArg
+    : IDENTIFIER '=' typeRef
+    | typeRef
     ;
 
 path
