@@ -166,7 +166,7 @@ internal resource Future<T> {
 
     /// Drop the readable end of the future.
     #[cm("future-drop-readable")]
-    fn drop(&self);
+    fn drop(self);
 }
 
 /// Writable end of an async value (WASI Component Model future).
@@ -182,7 +182,7 @@ internal resource FutureWritable<T> {
 
     /// Drop this writable end handle. Traps if no value has been written yet.
     #[cm("future-drop-writable")]
-    fn drop(&self);
+    fn drop(self);
 }
 
 /// Readable end of an async sequence (WASI Component Model stream).
@@ -206,7 +206,7 @@ internal resource Stream<T> {
 
     /// Drop the readable end of the stream.
     #[cm("stream-drop-readable")]
-    fn drop(&self);
+    fn drop(self);
 }
 
 /// Writable end of an async sequence (WASI Component Model stream).
@@ -227,7 +227,7 @@ internal resource StreamWritable<T> {
 
     /// Drop the writable end, signaling end-of-stream.
     #[cm("stream-drop-writable")]
-    fn drop(&self);
+    fn drop(self);
 }
 
 /// Opaque token identifying a waitable handle within a WaitableSet.
@@ -271,7 +271,7 @@ internal resource WaitableSet {
 
     /// Drop the waitable set. Traps if waitables are still joined to this set.
     #[cm("waitable-set-drop")]
-    fn drop(&self);
+    fn drop(self);
 }
 
 /// A raw CM subtask handle. Internal — most users should hold `AsyncCall<T>`
@@ -292,7 +292,7 @@ internal resource Subtask {
     /// Drop a completed subtask. Automatically unjoins from its WaitableSet.
     /// Traps if the subtask has not yet resolved.
     #[cm("subtask-drop")]
-    fn drop(&self);
+    fn drop(self);
 
     /// Cancel this in-progress subtask. Blocks until cancellation completes.
     #[cm("subtask-cancel")]
@@ -408,7 +408,7 @@ internal resource ErrorContext {
 
     /// Drop the error context.
     #[cm("error-context-drop")]
-    fn drop(&self);
+    fn drop(self);
 }
 
 /// Backpressure control for the current component instance.
