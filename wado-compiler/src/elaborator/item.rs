@@ -1813,7 +1813,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             tt.type_name(self_ty),
                         )
                     };
-                    if is_concrete_value && !is_resource {
+                    // A by-value `self` is legal on a resource, and on a
+                    // concrete aggregate that transitively owns one (its
+                    // consuming method hands that resource off). Generic
+                    // aggregates resolve to `GenericInstance`, not a concrete
+                    // value type, so they are already permitted here.
+                    if is_concrete_value && !is_resource && !scope.tysys.carries_resource(self_ty) {
                         let _ = scope.logger.error(TypeError::SelfByValueOnNonResource {
                             type_name,
                             span: param.span,

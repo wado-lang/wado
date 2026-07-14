@@ -35,19 +35,15 @@
 //! structurally: a synthesized `match` extracts and drops the resource in the
 //! case(s) that carry one.
 //!
-//! ## Relationship to a future ownership system
+//! ## Relationship to the ownership system
 //!
-//! This pass reconstructs, by dataflow analysis, ownership information that
-//! Wado's surface language does not yet track. Resources are opaque `i32`
-//! handles with value semantics, so `let b = a` and `Result::unwrap(&self)`
-//! silently *alias* a handle rather than *moving* it. The borrow-vs-transfer
-//! classification here is therefore partly heuristic — see
-//! [`is_resource_aggregate`], which conservatively treats any method call on
-//! a resource-carrying aggregate as moving the resource out. Should Wado
-//! later distinguish `Owned<T>` / `Borrow<T>` with a `move` operator, that
-//! distinction becomes explicit in the type system and this pass collapses
-//! to "drop every owned binding that was not moved out", letting most of the
-//! heuristics here be removed.
+//! Ownership transfer is read straight off the surface program: a value is
+//! transferred when it is passed by value, returned, placed in an aggregate,
+//! or used as the receiver of a by-value (`self`) method. Extraction is a
+//! by-value method (`Result::unwrap(self) -> T`), so it needs no special
+//! casing — the receiver is consumed like any other by-value argument. The
+//! pass therefore drops "every owned binding not transferred on this path"
+//! with no aggregate-shape guessing.
 
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
@@ -198,21 +194,6 @@ fn carries_resource_rec(
     children
         .into_iter()
         .any(|t| carries_resource_rec(tt, reg, sfr, t, visited))
-}
-
-/// Whether a method call on a value of `type_id` may move a resource *out* of
-/// it — the extraction heuristic behind `Result::unwrap(&self) -> T`. Scoped to
-/// `Result`: a struct or tuple field cannot be moved out through a borrow
-/// (no-move-out-of-borrow), and its owned resources are released by the
-/// compositional destructor, so treating a struct method call as an extraction
-/// would wrongly suppress that drop and leak the field.
-fn is_resource_aggregate(
-    tt: &TypeTable,
-    reg: &CmInterfaceRegistry,
-    sfr: &StructFieldReg,
-    type_id: TypeId,
-) -> bool {
-    result_args(tt, type_id).is_some() && carries_resource(tt, reg, sfr, type_id)
 }
 
 /// The mangled name identifying a method for the `owned_self` set, or `None`
@@ -665,14 +646,13 @@ fn scan_transfers(expr: &TirExpr, consuming: bool, consumed: &mut Vec<u32>, cx: 
                 } => expr.as_ref(),
                 _ => receiver.as_ref(),
             };
-            let owned_self = func
+            // The receiver is transferred exactly when the method takes `self`
+            // by value. Extraction (`Result::unwrap`) is such a by-value method,
+            // so it is covered here with no aggregate-shape guessing.
+            let receiver_consumed = func
                 .method_info
                 .as_ref()
                 .is_some_and(|info| cx.owned_self.contains(&info.to_mangled_name()));
-            let extracts_from_aggregate =
-                is_resource_aggregate(cx.tt, cx.reg, cx.struct_fields, recv_inner.type_id)
-                    && carries_resource(cx.tt, cx.reg, cx.struct_fields, expr.type_id);
-            let receiver_consumed = owned_self || extracts_from_aggregate;
             scan_transfers(recv_inner, receiver_consumed, consumed, cx);
             for arg in args {
                 scan_transfers(&arg.expr, true, consumed, cx);

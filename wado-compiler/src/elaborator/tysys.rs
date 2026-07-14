@@ -161,6 +161,42 @@ impl TypeSystem {
         Some(info.fields.iter().map(|(_, tid, _)| *tid).collect())
     }
 
+    /// Whether `type_id` is, or transitively carries, an affine resource
+    /// (`Resource` / `GenericResource`, or a struct / tuple / `Result` holding
+    /// one). Mirrors `resource_move_check::type_carries_resource`; used to
+    /// permit a by-value `self` receiver on an aggregate that owns a resource.
+    /// A reference stops the walk — a borrowed place owns nothing.
+    pub(crate) fn carries_resource(&self, type_id: TypeId) -> bool {
+        self.carries_resource_rec(type_id, &mut Vec::new())
+    }
+
+    fn carries_resource_rec(&self, type_id: TypeId, visited: &mut Vec<TypeId>) -> bool {
+        use crate::tir::ResolvedType;
+        let base = self.type_table.borrow().get_ultimate_base_type(type_id);
+        if visited.contains(&base) {
+            return false;
+        }
+        visited.push(base);
+        let children: Vec<TypeId> = match self.type_table.borrow().get(base).clone() {
+            ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => return true,
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } => self
+                .struct_field_type_ids(&name, &module_source)
+                .unwrap_or_default(),
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } if name == "Result" => type_args,
+            _ => self.type_table.borrow().as_tuple(base).unwrap_or_default(),
+        };
+        children
+            .into_iter()
+            .any(|t| self.carries_resource_rec(t, visited))
+    }
+
     /// Whether `name` resolves to a declared type *from the perspective of
     /// `module`* — i.e. a type that module can actually see (its own
     /// declarations, the auto-imported prelude, a primitive, or a type it

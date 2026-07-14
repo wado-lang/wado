@@ -79,10 +79,12 @@ The receiver has exactly three spellings and never a type annotation:
 
 `self: T` and `self: &T` are rejected. A copyable type has no use for a value
 receiver (`&self` plus a `*self` deref-copy covers it), and a single borrow
-spelling removes a needless choice. Bare `self` is legal only on a resource; on
-a value type it is a diagnostic (`value types are not move-only; use &self`) —
-this is how the value-semantics friction is mitigated, not with a keyword. The
-rule licenses `fn drop(self)` and the consuming `AsyncCall<T>` methods.
+spelling removes a needless choice. Bare `self` is legal on a resource or an
+aggregate that carries one (its consuming method hands that resource off); on a
+value type that owns no resource it is a diagnostic (`value types are not
+move-only; use &self`) — this is how the value-semantics friction is mitigated,
+not with a keyword. The rule licenses `fn drop(self)` and the consuming
+`AsyncCall<T>` methods.
 
 Because the annotated forms are gone, the receiver kind is carried entirely by
 `SelfKind` (`Value` / `Ref` / `MutRef`); `SelfKind::None` means a genuine
@@ -112,37 +114,51 @@ future work, not a present fact.
 Done: use-after-move of a bare resource local, by-value `self` consumption (a
 bare `self` receiver moves it, via a `consumes_self` dispatch fact — the
 semantic-layer twin of `resource_cleanup`'s `owned_self`), and whole-move of a
-resource-carrying struct / tuple / `Result`. Remaining: the no-move-out-of-borrow
-rule below.
+resource-carrying struct / tuple / `Result`. Remaining: the hand-written
+no-move-out-of-borrow rule below.
+
+### Extraction is a by-value receiver (Rust-aligned)
+
+Pulling a resource out of a `Result` / `Option` returns an owned handle, so the
+source must relinquish ownership. `unwrap(&self)` cannot — a borrow keeps the
+receiver owned, so the returned handle would _alias_ the one still inside the
+container: two owners of one move-only resource, hence a double-free. The fix
+mirrors Rust: the consuming accessors (`unwrap` / `expect` / `unwrap_err` /
+`expect_err`) take `self` **by value**, so `res.unwrap()` consumes the whole
+`Result` and moves the interior out with a single owner. For value (copyable)
+types this is the usual value-semantics copy — elided to a move at last use — so
+`.unwrap()` stays ergonomic and no rejection is needed. Inspectors (`is_ok`, …)
+keep `&self`.
+
+By-value `self` on a value type is otherwise a diagnostic
+(`SelfByValueOnNonResource`); the generic `Result<T, E>` / `Option<T>` impls are
+permitted because a generic self-type resolves to a `GenericInstance`, not a
+concrete value type.
 
 ### No move out of a borrow (planned)
 
-Moving a resource out of a borrowed place (`*self`, a pattern binding from
-`*borrow`) is forbidden — this is what makes `Result::unwrap(&self) -> T` illegal
-for a resource `T`, directing extraction to `if let Ok(r) = …`. Since `unwrap`'s
-body is generic, the check is a per-function summary ("returns a value rooted in
-a borrowed parameter") reported at each call site whose concrete return carries a
-resource, so the error lands on the user's `.unwrap()`. A `&self` method
-returning a freshly produced resource (`dir.open_at()`) stays legal. This rule is
-the prerequisite for retiring the cleanup heuristic below.
+A hand-written `fn f(&self) -> Resource { match *self { … => interior } }` still
+moves a resource out of a borrowed place. Forbidding it is a per-function summary
+("returns a value rooted in a borrowed parameter") reported at call sites whose
+concrete return carries a resource; a `&self` method returning a _freshly
+produced_ resource (`dir.open_at()`) stays legal. This is a completeness rule for
+user code — the stdlib accessors already avoid it by taking `self` by value.
 
 ### Authoritative cleanup
 
 `resource_cleanup.rs` drops every owned, untransferred resource on each
-fall-through path, structurally for aggregates via a synthesized `match`. Two
-fixes landed:
+fall-through path, structurally for aggregates via a synthesized `match`. A value
+is transferred when passed by value, returned, placed in an aggregate, or used as
+the receiver of a by-value (`self`) method — so extraction (`unwrap`) is just a
+by-value receiver transfer, with no aggregate-shape guessing. Two fixes landed:
 
-- A `&self` method on a `Result<Resource, E>` (`is_ok`, …) is a borrow: the
-  receiver is consumed only when the call result carries a resource (an
-  extracting `unwrap`), so an inspector leaves the structural drop intact (#1569).
+- A `&self` inspector on a `Result<Resource, E>` (`is_ok`, …) is a borrow and
+  leaves the structural drop intact (#1569).
 - A resource value discarded in statement position (`Fields::new();`, `let _ =
   …`) is dropped, not leaked; a tail expression is left for its consumer.
 
-The `is_resource_aggregate` heuristic remains, scoped to `Result` (a struct /
-tuple field cannot be moved out through `&self` and is released by the
-compositional destructor, so the heuristic must not fire on it). The
-no-move-out-of-borrow rule retires it entirely, after which cleanup drops "owned
-and not moved at scope exit" with no guessing.
+The `is_resource_aggregate` heuristic is **retired**: cleanup now drops "owned and
+not transferred at scope exit" directly.
 
 ### Deterministic drop
 
@@ -220,21 +236,24 @@ Verified against the tree.
 - [x] Resource-carrying aggregates (struct / tuple / `Result`) are move-only,
       kept in step with cleanup's `carries_resource` (variant / `Option` /
       `List` deferred with their destructors); whole-aggregate move only.
-- [ ] No-move-out-of-borrow (rejects `Result::unwrap` on a resource).
+- [ ] No-move-out-of-borrow for hand-written `fn(&self) -> Resource`
+      (the stdlib accessors avoid it by taking `self` by value).
 - [ ] Unify with the value-copy last-use liveness.
 
 ### Cleanup
 
 - [x] `&self` aggregate call classified by return type (#1569).
 - [x] Discarded resource value is dropped, not leaked.
-- [ ] Retire `is_resource_aggregate` once no-move-out-of-borrow lands.
+- [x] `is_resource_aggregate` retired: extraction accessors take `self` by
+      value, so the receiver transfer is read directly (no shape guessing).
 
 ### Receiver grammar (`self` / `&self` / `&mut self`)
 
 - [x] `SelfKind::Value`; parser accepts bare `self`, `consumes_self` is
       `self_kind == Value`, and `self` on a free function is a parse error.
-- [x] A `Value` receiver on a value type is a diagnostic
-      (`SelfByValueOnNonResource`).
+- [x] A `Value` receiver is a diagnostic (`SelfByValueOnNonResource`) only on a
+      value type that provably carries no resource; a resource-carrying aggregate
+      (and any generic self-type) may consume with `self`.
 - [x] stdlib `self: &R` → `&self` (via `wado-from-idl`); every `self:`
       annotation rejected, fixtures migrated, formatter normalization dropped.
 - [ ] `syntax.rs` grammar + VS Code grammar for the new receiver forms.
