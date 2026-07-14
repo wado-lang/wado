@@ -694,12 +694,6 @@ fn register_unique<V>(
     map.insert(key, value);
 }
 
-/// Return true if any interface registers `name` in a
-/// `(source_interface, name)`-keyed map.
-fn has_any_in<V>(map: &IndexMap<(String, String), V>, name: &str) -> bool {
-    map.keys().any(|(_, n)| n == name)
-}
-
 /// Return the value for `name` in a `(source_interface, name)`-keyed map when
 /// exactly one interface whose source starts with `prefix` defines it. Returns
 /// `None` for zero or multiple matches under the prefix. No fallback to the
@@ -2127,11 +2121,6 @@ impl CmInterfaceRegistry {
         &self.newtypes
     }
 
-    /// Check if a type name is a registered resource (in any interface).
-    pub fn is_resource(&self, name: &str) -> bool {
-        has_any_in(&self.resources, name)
-    }
-
     /// Get the source interface path for a resource, when unambiguous.
     /// e.g., `TerminalInput` -> `"wasi:cli/terminal-input@0.3.0-rc-2026-01-06"`.
     pub fn get_resource_source_interface(&self, name: &str) -> Option<&str> {
@@ -2144,11 +2133,6 @@ impl CmInterfaceRegistry {
             .iter()
             .find(|((_, _), cm)| cm.as_str() == cm_name)
             .map(|((src, _), _)| src.as_str())
-    }
-
-    /// Check if a type name is a registered enum (in any interface).
-    pub fn is_enum(&self, name: &str) -> bool {
-        has_any_in(&self.enums, name)
     }
 
     /// Get the CM enum variant names scoped to a specific source interface
@@ -2181,16 +2165,6 @@ impl CmInterfaceRegistry {
             .contains_key(&(interface_path.to_string(), name.to_string()))
     }
 
-    /// Check if a type name is a registered flags type (in any interface).
-    pub fn is_flags(&self, name: &str) -> bool {
-        has_any_in(&self.flags, name)
-    }
-
-    /// Check if a type name is a registered variant (in any interface).
-    pub fn is_variant(&self, name: &str) -> bool {
-        has_any_in(&self.variants, name)
-    }
-
     /// Get the variant cases scoped to a specific source interface. Falls back
     /// to the unique WASI cross-package registrant (scoped to `wasi:`) when
     /// the given interface does not define the name.
@@ -2218,14 +2192,10 @@ impl CmInterfaceRegistry {
             .map(|(cm_name, _)| cm_name.as_str())
     }
 
-    /// Check if a type name is a registered struct (WIT record, in any interface).
-    pub fn is_struct(&self, name: &str) -> bool {
-        has_any_in(&self.structs, name)
-    }
-
     /// Whether a struct named `name` is registered under an interface whose CM
-    /// source is exactly `source`. Unlike [`Self::get_struct_fields`], this keys
-    /// on the struct's own module source, so a user record is never confused
+    /// source is exactly `source`. Unlike [`Self::get_struct_fields_by_source`],
+    /// this keys on the struct's own module source, so a user record is never
+    /// confused
     /// with a same-named WASI/dependency struct (which lives under a different
     /// source). A `--lib` entry record is registered under the package default
     /// interface, whose source [`register_lib_local_decls`] maps to the entry
@@ -2235,11 +2205,6 @@ impl CmInterfaceRegistry {
         self.structs.keys().any(|(fq, struct_name)| {
             struct_name == name && self.cm_interface_module_sources.get(fq) == Some(source)
         })
-    }
-
-    /// Get the source interface path for a struct, when unambiguous.
-    pub fn get_struct_source_interface(&self, name: &str) -> Option<&str> {
-        find_unique_source_in(&self.structs, name)
     }
 
     /// Find the interface name (e.g., `"types"`) for a WASI struct given its
