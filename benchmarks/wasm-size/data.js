@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784023484390,
+  "lastUpdate": 1784029767632,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -40273,6 +40273,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a6fd2182a894d14c3554f2b9f78a8e957b358a99"
         },
         "date": 1784023484164,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16422,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1b93a82ae54cf98cca729c98c6041bfb24e5b1b3",
+          "message": "Merge pull request #1579 from wado-lang/claude/wado-hello-blog-post-cotqxs\n\nfix(publish): unblock releasing facade/types-only libraries; export marl escape helpers",
+          "timestamp": "2026-07-14T20:39:58+09:00",
+          "tree_id": "c67bd07d3365f88d8326fa7f6e9fd43aa90cfab4",
+          "url": "https://github.com/wado-lang/wado/commit/1b93a82ae54cf98cca729c98c6041bfb24e5b1b3"
+        },
+        "date": 1784029767251,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
