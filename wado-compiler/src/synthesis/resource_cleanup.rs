@@ -83,9 +83,11 @@ struct Cx<'a> {
     tt: &'a TypeTable,
     reg: &'a CmInterfaceRegistry,
     struct_fields: &'a StructFieldReg,
-    /// Mangled names of instance methods whose `self` is taken by value.
-    /// Calling such a method transfers ownership of the receiver (e.g.
-    /// `Result::unwrap`, which moves the wrapped value out).
+    /// Base dispatch keys (monomorphization-invariant, see
+    /// [`crate::name::LocalMethodName::base_dispatch_key`]) of instance methods
+    /// whose `self` is taken by value. Calling such a method transfers ownership
+    /// of the receiver (e.g. `Result::unwrap`, which moves the wrapped value
+    /// out). A generic method and its instantiations share one key.
     owned_self: &'a IndexSet<String>,
     locals: &'a mut Vec<TirLocal>,
     local_count: &'a mut u32,
@@ -209,7 +211,7 @@ fn instance_method_key(func: &TirFunction) -> Option<String> {
     let info = func.method_info.as_ref()?;
     let first = func.params.first()?;
     if first.name == "self" {
-        Some(info.to_mangled_name())
+        Some(info.base_dispatch_key())
     } else {
         None
     }
@@ -665,7 +667,7 @@ fn scan_transfers(expr: &TirExpr, consuming: bool, consumed: &mut Vec<u32>, cx: 
             let receiver_consumed = func
                 .method_info
                 .as_ref()
-                .is_some_and(|info| cx.owned_self.contains(&info.to_mangled_name()));
+                .is_some_and(|info| cx.owned_self.contains(&info.base_dispatch_key()));
             scan_transfers(recv_inner, receiver_consumed, consumed, cx);
             for arg in args {
                 scan_transfers(&arg.expr, true, consumed, cx);
