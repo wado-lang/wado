@@ -2673,13 +2673,16 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                 .method_info
                 .as_ref()
                 .and_then(|mi| mi.cm_name.as_ref().map(|cm| (mi, cm)));
-            // Scope the borrow: the block below re-borrows `type_table` mutably
-            // (e.g. `make_ref` when a by-value `self` receiver must be wrapped),
-            // so the read borrow must not span it.
-            let resource_inst =
-                extract_resource_instantiation(receiver.type_id, &ctx.type_table.borrow());
+            // Only cm-backed method calls can rewrite to a binding, so resolve
+            // the resource instantiation lazily inside the guard. The inner
+            // block scopes the read borrow: the body below re-borrows
+            // `type_table` mutably (e.g. `make_ref` when a by-value `self`
+            // receiver must be wrapped), so the read borrow must not span it.
             if let Some((_method_info, cm_name)) = mi_cm
-                && let Some((decl_module, base_name, type_args)) = resource_inst
+                && let Some((decl_module, base_name, type_args)) = {
+                    let tt = ctx.type_table.borrow();
+                    extract_resource_instantiation(receiver.type_id, &tt)
+                }
             {
                 let return_type = expr.type_id;
                 // The wrapper's first parameter is the resource receiver

@@ -9,9 +9,16 @@ use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
 
 /// Whether `type_id` transitively owns an affine resource, making a binding of
-/// that type move-only: a bare resource, or a struct / tuple / variant /
-/// `Result` / `Option` / `List` that carries one. A reference stops the walk —
-/// a borrowed place owns nothing. `visited` guards against recursive types.
+/// that type move-only: a bare resource (`Resource` / `GenericResource`), or a
+/// struct / tuple / `Result` that carries one. A reference stops the walk — a
+/// borrowed place owns nothing. `visited` guards against recursive types.
+///
+/// The aggregate set is kept in step with `resource_cleanup::carries_resource`
+/// (which synthesizes the compositional destructor): a type is treated as
+/// move-only here only if the cleanup pass can also drop it, so the move check
+/// never enforces move-only on an aggregate the runtime would then leak. User
+/// `variant`s and generic containers (`Option` / `List` / …) are out of both
+/// until their destructors land.
 fn type_carries_resource(sem: &Semantics, type_id: TypeId, visited: &mut Vec<TypeId>) -> bool {
     let base = sem.types.get_ultimate_base_type(type_id);
     if visited.contains(&base) {
@@ -30,21 +37,10 @@ fn type_carries_resource(sem: &Semantics, type_id: TypeId, visited: &mut Vec<Typ
             sem.struct_field_type_ids(&name, &module_source)
                 .unwrap_or_default()
         }
-        ResolvedType::Variant {
-            name,
-            module_source,
-        } => {
-            let (name, module_source) = (name.clone(), module_source.clone());
-            sem.types
-                .variant_template_cases(&name, &module_source)
-                .map(|cases| cases.iter().map(|(_, _, payload)| *payload).collect())
-                .unwrap_or_default()
-        }
-        _ => sem
-            .types
-            .as_tuple(base)
-            .or_else(|| sem.types.generic_type_args(base))
-            .unwrap_or_default(),
+        ResolvedType::GenericInstance {
+            name, type_args, ..
+        } if name == "Result" => type_args.clone(),
+        _ => sem.types.as_tuple(base).unwrap_or_default(),
     };
     children
         .into_iter()

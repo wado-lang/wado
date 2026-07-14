@@ -1101,7 +1101,7 @@ impl Parser {
         match self.peek_kind() {
             TokenKind::Use => self.parse_use_decl(visibility).map(Item::Use),
             TokenKind::Fn => self
-                .parse_function(visibility, has_export, is_async, attrs)
+                .parse_function(visibility, has_export, is_async, attrs, false)
                 .map(Item::Function),
             TokenKind::Interface => self
                 .parse_interface_decl(visibility, attrs)
@@ -1704,6 +1704,7 @@ impl Parser {
         is_export: bool,
         is_async: bool,
         attrs: Vec<Attribute>,
+        is_method: bool,
     ) -> ParseResult<Function> {
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
@@ -1717,6 +1718,16 @@ impl Parser {
         self.expect(&TokenKind::LParen)?;
         let params = self.parse_param_list()?;
         self.expect(&TokenKind::RParen)?;
+
+        // A `self` receiver is only meaningful inside a method. A free function
+        // spelling `self` is rejected here rather than silently accepted as a
+        // value receiver on no receiver type.
+        if !is_method && let Some(recv) = params.iter().find(|p| p.self_kind != SelfKind::None) {
+            return Err(ParseError {
+                message: "`self` is only allowed as the receiver of a method".to_string(),
+                span: recv.span,
+            });
+        }
 
         let return_type = if self.check(&TokenKind::Arrow) {
             self.advance();
@@ -5518,7 +5529,7 @@ impl Parser {
                         span: const_span.merge(&end),
                     });
                 } else {
-                    methods.push(self.parse_function(member_vis, false, false, attrs)?);
+                    methods.push(self.parse_function(member_vis, false, false, attrs, true)?);
                 }
             }
         }
@@ -5673,7 +5684,13 @@ impl Parser {
                 // Trait methods cannot be exported at the CM boundary.
                 // Attributes (e.g. `#[compiler_item("...")]`) carry through so
                 // the elaborator can register per-method compiler items.
-                methods.push(self.parse_function(Visibility::Private, false, false, attrs)?);
+                methods.push(self.parse_function(
+                    Visibility::Private,
+                    false,
+                    false,
+                    attrs,
+                    true,
+                )?);
             }
         }
 

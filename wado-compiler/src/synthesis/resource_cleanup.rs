@@ -200,19 +200,19 @@ fn carries_resource_rec(
         .any(|t| carries_resource_rec(tt, reg, sfr, t, visited))
 }
 
-/// Whether `type_id` is a resource-carrying *aggregate* (e.g.
-/// `Result<Fields, E>`) rather than a bare resource handle.
+/// Whether a method call on a value of `type_id` may move a resource *out* of
+/// it — the extraction heuristic behind `Result::unwrap(&self) -> T`. Scoped to
+/// `Result`: a struct or tuple field cannot be moved out through a borrow
+/// (no-move-out-of-borrow), and its owned resources are released by the
+/// compositional destructor, so treating a struct method call as an extraction
+/// would wrongly suppress that drop and leak the field.
 fn is_resource_aggregate(
     tt: &TypeTable,
     reg: &CmInterfaceRegistry,
     sfr: &StructFieldReg,
     type_id: TypeId,
 ) -> bool {
-    carries_resource(tt, reg, sfr, type_id)
-        && !matches!(
-            tt.get(tt.get_ultimate_base_type(type_id)),
-            ResolvedType::Resource { .. }
-        )
+    result_args(tt, type_id).is_some() && carries_resource(tt, reg, sfr, type_id)
 }
 
 /// The mangled name identifying a method for the `owned_self` set, or `None`

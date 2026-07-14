@@ -220,10 +220,14 @@ Verified against the tree.
 - [x] Covers free / `impl` / `trait` / `test` / function-local bodies.
 - [x] By-value `self` consumption via the dispatch `consumes_self` fact
       (`Semantics::method_call_consumes_receiver`).
-- [x] Resource-carrying aggregates (`Result<Fields, E>`, struct / tuple /
-      variant) are move-only: `type_carries_resource` walks fields, tuple
-      elements, variant payloads, and generic type args. Whole-aggregate move
-      only — place-level moves out of an aggregate stay open (below).
+- [x] Resource-carrying aggregates (`Result<Fields, E>`, struct / tuple) are
+      move-only: `type_carries_resource` walks struct fields, tuple elements,
+      and `Result` args, deliberately kept in step with
+      `resource_cleanup::carries_resource` so the move check never enforces
+      move-only on an aggregate the destructor would then leak. User `variant`s
+      and generic containers (`Option` / `List`) are out of both until their
+      destructors land. Whole-aggregate move only — place-level moves out of an
+      aggregate stay open (below).
 - [ ] No-move-out-of-borrow (rejects `Result::unwrap` on a resource).
 - [ ] Unify with the value-copy last-use liveness.
 
