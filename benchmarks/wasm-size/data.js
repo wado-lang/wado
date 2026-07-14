@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784019126615,
+  "lastUpdate": 1784023484390,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -40249,6 +40249,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 266286,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a6fd2182a894d14c3554f2b9f78a8e957b358a99",
+          "message": "Merge pull request #1574 from wado-lang/claude/json-catalog-ser-perf-iuv42g\n\nperf(serde): faster by-ref list serialization, fix value-copy for monomorphized builtins",
+          "timestamp": "2026-07-14T18:55:36+09:00",
+          "tree_id": "6805aa4d63aaf40fe5dd62051c3415a6d4f03276",
+          "url": "https://github.com/wado-lang/wado/commit/a6fd2182a894d14c3554f2b9f78a8e957b358a99"
+        },
+        "date": 1784023484164,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16422,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265926,
             "unit": "bytes"
           }
         ]
