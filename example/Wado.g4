@@ -569,8 +569,16 @@ STRING_LITERAL
     : '"' ('\\' . | ~["\\\r\n])* '"'
     ;
 
+// A `{ ... }` interpolation holds Wado code, which may nest braces, strings,
+// and further templates. Matching it recursively lets a template contain a
+// nested template (e.g. a `match` arm inside `{ ... }`). The whole template,
+// interpolations included, is one token (highlighted as one string span).
 TEMPLATE_STRING
-    : '`' ('\\' . | ~[`\\])* '`'
+    : '`' ('\\' . | TEMPLATE_INTERP | ~[`\\{])* '`'
+    ;
+
+fragment TEMPLATE_INTERP
+    : '{' ('\\' . | STRING_LITERAL | CHAR_LITERAL | TEMPLATE_STRING | TEMPLATE_INTERP | ~[{}"'`\\])* '}'
     ;
 
 CHAR_LITERAL

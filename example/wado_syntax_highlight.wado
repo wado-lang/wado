@@ -306,3 +306,7 @@ test "highlight chained tuple index" {
 test "highlight fn-type effect before next param" {
     assert_highlights(&"fn a(f: fn() with Stdout, x: i32) with Stdout { f(); }\n");
 }
+
+test "highlight nested template string" {
+    assert_highlights(&"fn f() -> String { let n = 1; return `outer {`inner {n}`}`; }\n");
+}
