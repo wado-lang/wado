@@ -829,3 +829,73 @@ fn test_lib_without_exports_is_rejected() {
         .failure()
         .stderr(predicate::str::contains("exports nothing"));
 }
+
+#[test]
+fn test_lib_duplicate_export_name_rejected() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"dup\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src").join("lib.wado"),
+        "pub use { f } from \"./a.wado\";\npub use { g } from \"./b.wado\";\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src").join("a.wado"),
+        "export fn f(s: String) -> String { return s; }\nexport fn dup(s: String) -> String { return s; }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src").join("b.wado"),
+        "export fn g(s: String) -> String { return s; }\nexport fn dup(s: String) -> String { return s; }\n",
+    )
+    .unwrap();
+
+    wado_in(dir)
+        .arg("build")
+        .arg("--lib")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("two functions named `dup`"));
+}
+
+#[test]
+fn test_lib_duplicate_type_name_rejected() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"dup\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src").join("lib.wado"),
+        "pub use { f } from \"./a.wado\";\npub use { g } from \"./b.wado\";\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src").join("a.wado"),
+        "pub struct Node { pub v: String }\nexport fn f(s: String) -> Node { return Node { v: s }; }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src").join("b.wado"),
+        "pub struct Node { pub v: String }\nexport fn g(s: String) -> Node { return Node { v: s }; }\n",
+    )
+    .unwrap();
+
+    wado_in(dir)
+        .arg("build")
+        .arg("--lib")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "library type `Node` is defined in more than one module",
+        ));
+}
