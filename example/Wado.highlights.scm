@@ -5,8 +5,8 @@
 (LINE_COMMENT) @comment
 (BLOCK_COMMENT) @comment
 
-; The `__DATA__` data section: raw embedded text, rendered as one span.
-(DATA_SECTION) @string
+; The `__DATA__` data section: raw embedded text, muted like a comment.
+(DATA_SECTION) @comment
 (STRING_LITERAL) @string
 (TEMPLATE_STRING) @string
 (CHAR_LITERAL) @string

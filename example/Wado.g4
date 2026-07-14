@@ -561,7 +561,7 @@ SHEBANG
 // module's raw data section (spec.md: "Data Sections"), reachable at runtime
 // via the `#data` literal. It is not Wado code, so it is lexed as a single
 // hidden-channel token rather than parsed — hidden (not skipped) so tooling
-// such as the highlighter can still see and render it.
+// such as the highlighter can still see it and render it muted, like a comment.
 DATA_SECTION
     : '__DATA__' .*? EOF -> channel(HIDDEN)
     ;

@@ -266,9 +266,9 @@ test "highlight uuid_v7.wado" {
 }
 
 // The `__DATA__` data section is a first-class part of a module (reachable via
-// `#data`), so it must be rendered — as one highlighted span, not dropped.
+// `#data`), so it must be rendered — muted like a comment, not dropped.
 test "highlight __DATA__ section" {
     let src = "fn f() { }\n\n__DATA__\ndata body\n";
     let html = wado::highlight(&src);
-    assert html.contains("<span class=\"string\">__DATA__"), "data section should be highlighted";
+    assert html.contains("<span class=\"comment\">__DATA__"), "data section should be highlighted";
 }
