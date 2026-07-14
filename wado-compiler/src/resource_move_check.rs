@@ -5,8 +5,51 @@ use crate::ast::{
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::semantics::Semantics;
-use crate::tir::ResolvedType;
+use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
+
+/// Whether `type_id` transitively owns an affine resource, making a binding of
+/// that type move-only: a bare resource, or a struct / tuple / variant /
+/// `Result` / `Option` / `List` that carries one. A reference stops the walk —
+/// a borrowed place owns nothing. `visited` guards against recursive types.
+fn type_carries_resource(sem: &Semantics, type_id: TypeId, visited: &mut Vec<TypeId>) -> bool {
+    let base = sem.types.get_ultimate_base_type(type_id);
+    if visited.contains(&base) {
+        return false;
+    }
+    visited.push(base);
+    let children: Vec<TypeId> = match sem.types.get(base) {
+        ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => return true,
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
+        ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } => {
+            let (name, module_source) = (name.clone(), module_source.clone());
+            sem.struct_field_type_ids(&name, &module_source)
+                .unwrap_or_default()
+        }
+        ResolvedType::Variant {
+            name,
+            module_source,
+        } => {
+            let (name, module_source) = (name.clone(), module_source.clone());
+            sem.types
+                .variant_template_cases(&name, &module_source)
+                .map(|cases| cases.iter().map(|(_, _, payload)| *payload).collect())
+                .unwrap_or_default()
+        }
+        _ => sem
+            .types
+            .as_tuple(base)
+            .or_else(|| sem.types.generic_type_args(base))
+            .unwrap_or_default(),
+    };
+    children
+        .into_iter()
+        .any(|t| type_carries_resource(sem, t, visited))
+}
 
 #[derive(Debug, Clone)]
 pub struct ResourceMoveError {
@@ -123,11 +166,7 @@ impl MoveWalker<'_> {
     fn resource_def(&self, use_id: AstId) -> Option<AstId> {
         let def = self.sem.referenced_symbol(use_id)?;
         let type_id = self.sem.expression_type(use_id)?;
-        matches!(
-            self.sem.types.get(type_id),
-            ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. }
-        )
-        .then_some(def)
+        (type_carries_resource(self.sem, type_id, &mut Vec::new())).then_some(def)
     }
 
     fn read(&mut self, ident: &IdentExpr) {

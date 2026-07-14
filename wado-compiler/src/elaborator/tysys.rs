@@ -149,6 +149,18 @@ impl TypeSystem {
         self.known_type_names_cache.contains(name)
     }
 
+    /// The `TypeId` of each field of the struct `(name, module)` in declaration
+    /// order, or `None` if no such struct is registered. Used by the resource
+    /// move check to decide whether an aggregate transitively owns a resource.
+    pub(crate) fn struct_field_type_ids(
+        &self,
+        name: &str,
+        module: &ModuleSource,
+    ) -> Option<Vec<crate::tir::TypeId>> {
+        let info = self.all_struct_fields.get(module)?.get(name)?;
+        Some(info.fields.iter().map(|(_, tid, _)| *tid).collect())
+    }
+
     /// Whether `name` resolves to a declared type *from the perspective of
     /// `module`* — i.e. a type that module can actually see (its own
     /// declarations, the auto-imported prelude, a primitive, or a type it
