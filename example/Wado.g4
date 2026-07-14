@@ -159,7 +159,7 @@ variantCaseList
     ;
 
 variantCase
-    : IDENTIFIER ('(' (typeRef (',' typeRef)*)? ')')?
+    : IDENTIFIER ('(' typeRef (',' typeRef)* ')')?
     ;
 
 traitDecl
@@ -220,7 +220,7 @@ fnTypeWithClause
     ;
 
 typeArgs
-    : '<' (typeRef (',' typeRef)*)? '>'
+    : '<' typeRef (',' typeRef)* '>'
     ;
 
 path
