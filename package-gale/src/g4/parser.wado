@@ -269,10 +269,16 @@ impl G4Parser {
 
         while !self.at_eof() {
             // Check for mode declaration: mode NAME;
-            // ANTLR4 only allows `mode X;` in lexer grammars (combined or
-            // split lexer). Reject it in `parser grammar` form — see
-            // `vendor/antlr4/doc/lexer-rules.md` (modes are a lexer-only
-            // construct); confirmed against the published ANTLR4 jar.
+            // ANTLR4 allows `mode X;` only in a `lexer grammar`; it rejects it
+            // in a combined `grammar` (error 120) and in a `parser grammar`.
+            // Gale is a superset here: a combined grammar bundles a lexer, so
+            // `mode` there is uniquely determined — it desugars to the same
+            // lexer the combined→(lexer + parser) split would produce, and the
+            // lexer engine already runs modes. So Gale accepts `mode` in a
+            // combined grammar and rejects it only in a `parser grammar`
+            // (which has no lexer). Modes are a lexer-only construct — see
+            // `vendor/antlr4/doc/lexer-rules.md`; both verdicts confirmed
+            // against the published ANTLR4 jar.
             if self.is_kind(G4Token::Identifier) && LexerSlice::eq_str(&"mode", &self.peek().text) {
                 if is_parser_grammar {
                     let tok = self.peek();

@@ -16,11 +16,12 @@ Behavioral ANTLR4 compatibility, with a small superset. The goal is not just to
 _accept_ the grammars ANTLR4 accepts, but to _parse like ANTLR4 does_ — same
 precedence, same ambiguity resolution, same parse trees. A `.g4` that the
 upstream `antlr4` tool accepts should parse identically through Gale. Gale also
-accepts a few grammars ANTLR4 _rejects_, but only where precedence climbing
-fixes the meaning with no remaining choice — e.g. a `.`- or `~X`-led
-left-recursive suffix like `e ~';' e`, which ANTLR4 errors on (no operator
-token to climb). Where the meaning is not uniquely determined, Gale rejects
-loudly rather than guessing.
+accepts a few grammars ANTLR4 _rejects_, but only where the meaning is fixed
+with no remaining choice — e.g. a `.`- or `~X`-led left-recursive suffix like
+`e ~';' e`, which ANTLR4 errors on (no operator token to climb); or a lexer
+`mode` inside a combined `grammar`, which ANTLR4 restricts to a `lexer grammar`
+but which is unambiguous since a combined grammar already bundles a lexer. Where
+the meaning is not uniquely determined, Gale rejects loudly rather than guessing.
 
 Self-contained output, no version drift. Gale inlines its entire runtime into
 every generated parser. There is no `gale-runtime` package to keep aligned with

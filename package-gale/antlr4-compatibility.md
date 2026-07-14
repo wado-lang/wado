@@ -27,9 +27,14 @@ suffix (`e ~';' e`, `e .`): ANTLR4 errors (no operator token to climb
 on), but precedence climbing fixes the meaning with no remaining choice,
 so Gale accepts it and lets the runtime ATN simulator decide the loop
 entry (fixtures `tests/grammars/lr_complement_op.g4`,
-`lr_wildcard_postfix.g4`). Where accepting a construct would require
-inventing behavior — the result is ambiguous, or context-defined with no
-single forced answer — Gale rejects loudly instead of guessing. The
+`lr_wildcard_postfix.g4`). A second example is a lexer `mode` inside a
+combined `grammar`: ANTLR4 restricts modes to a `lexer grammar` (error
+120), but a combined grammar already bundles a lexer, so `mode` there
+desugars to exactly the lexer the combined→(lexer + parser) split would
+produce — Gale accepts it (still rejected in a `parser grammar`, which has
+no lexer). Where accepting a construct would require inventing behavior —
+the result is ambiguous, or context-defined with no single forced answer —
+Gale rejects loudly instead of guessing. The
 canonical statement of this rule is the "Compatibility Principle" in
 [`AGENTS.md`](./AGENTS.md).
 

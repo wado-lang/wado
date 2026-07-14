@@ -26,7 +26,7 @@ Files headed `// Do not edit by hand` are generated. To change one, edit its sou
 Gale targets full compatibility with the ANTLR4 `.g4` syntax. The g4 parser must accept any well-formed grammar upstream `antlr4` accepts; a real-world `.g4` that ANTLR4 accepts but Gale rejects is a Gale bug.
 
 - Compatibility is a capability contract, not byte-for-byte output. Parse trees, tokens, and semantics must match; incidental rendering differences that carry no structure may diverge (e.g. the `<EOF>` marker in `toStringTree()`).
-- Gale is a superset: it may accept grammars ANTLR4 rejects only when the meaning is uniquely determined by Gale's language model — never an invented behavior. When accepting would require guessing, reject loudly.
+- Gale is a superset: it may accept grammars ANTLR4 rejects only when the meaning is uniquely determined by Gale's language model — never an invented behavior. When accepting would require guessing, reject loudly. Examples: `.`/`~X`-led left-recursive suffixes, and a lexer `mode` inside a combined `grammar` (ANTLR4 allows modes only in a `lexer grammar`; a combined grammar already bundles a lexer, so it desugars unambiguously — still rejected in a `parser grammar`).
 - The one skip exception is action bodies: `{...}` actions, `{...}?` predicates, `catch`/`finally`, `@init`/`@after`. The parser recognizes them and keeps their presence and position in the IR; only the host-language code inside the braces is discarded (until Stage C runs it — see `action.md`).
 - TDD every g4 change with a unit test in `src/g4/{lexer,parser}_test.wado`. If an existing test encodes a wrong expectation, fix the test — the spec wins; confirm against the published jar as a black-box oracle.
 
