@@ -722,7 +722,10 @@ impl LocalMethodName {
     pub fn base_dispatch_key(&self) -> String {
         match &self.base_trait_name {
             Some(trait_name) => {
-                format!("{}^{}::{}", self.base_struct_name, trait_name, self.method_name)
+                format!(
+                    "{}^{}::{}",
+                    self.base_struct_name, trait_name, self.method_name
+                )
             }
             None => format!("{}::{}", self.base_struct_name, self.method_name),
         }
