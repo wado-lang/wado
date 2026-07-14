@@ -1,10 +1,25 @@
-//! Highlights a Wado source file using a parser Gale generates from
-//! `./Wado.g4` at compile time.
+//! Highlights Wado source files using a parser Gale generates from
+//! `./Wado.g4` at compile time. Each input is highlighted to an HTML fragment
+//! and written under `--output-dir`, mirroring the input's path structure.
 //!
-//!     wado run example/wado_syntax_highlight.wado example/hello.wado
+//!     wado run example/wado_syntax_highlight.wado \
+//!         --output-dir build/highlight example/hello.wado example/json.wado
+//!
+//! writes `build/highlight/example/hello.wado.html` and
+//! `build/highlight/example/json.wado.html`.
 
 use { args, print, eprintln, Stdout, Stderr, Environment } from "core:cli";
-use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use { Deserialize } from "core:serde";
+use { parse } from "core:args";
+use {
+    Preopens,
+    Descriptor,
+    Filesize,
+    PathFlags,
+    OpenFlags,
+    DescriptorFlags,
+    ErrorCode,
+} from "wasi:filesystem";
 
 use wado from "./Wado.g4"
     with {
@@ -15,13 +30,27 @@ use wado from "./Wado.g4"
         },
     };
 
+struct Options {
+    output_dir: String,
+    #[serde(positional)]
+    inputs: List<String> = [],
+}
+impl Deserialize for Options;
+
 export fn run() with Stdout, Stderr, Environment, Preopens {
-    let arguments = args();
-    if arguments.len() < 1 {
-        eprintln("Usage: wado_syntax_highlight <input.wado>");
+    let opts = match parse::<Options>(args()) {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln(`error: {e.message}`);
+            eprintln("Usage: wado_syntax_highlight --output-dir <dir> <input.wado> [input.wado ...]");
+            return;
+        },
+    };
+    if opts.inputs.len() == 0 {
+        eprintln("error: no input files given");
+        eprintln("Usage: wado_syntax_highlight --output-dir <dir> <input.wado> [input.wado ...]");
         return;
     }
-    let path = arguments[0];
 
     let dirs = Preopens::get_directories();
     if dirs.len() == 0 {
@@ -30,26 +59,94 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     }
     let root = dirs[0].0;
 
+    for let path of &opts.inputs {
+        highlight_file(&root, path, &opts.output_dir);
+    }
+}
+
+/// Highlight one source file and write the HTML fragment under `output_dir`,
+/// preserving the input's path (`<output_dir>/<path>.html`).
+fn highlight_file(root: &Descriptor, path: &String, output_dir: &String) with Stdout, Stderr {
     let open_result = root.open_at(
         PathFlags::none(),
-        path,
+        *path,
         OpenFlags::none(),
         DescriptorFlags::Read,
     ).wait();
     if let Err(_) = open_result {
-        eprintln(`error: {path}: cannot open file`);
+        eprintln(`error: {*path}: cannot open file`);
         return;
     }
     let file = open_result.unwrap();
     let input = String::from_utf8_unchecked(read_all(&file));
 
     let result = wado::parse(&input);
-    if result.ok() {
-        eprintln(`{path}: parsed OK`);
-        print(wado::highlight(&input));
-    } else {
-        eprintln(`{path}: parse error: {result.diagnostics[0].message}`);
+    if !result.ok() {
+        eprintln(`{*path}: parse error: {result.diagnostics[0].message}`);
+        return;
     }
+
+    let out_path = `{*output_dir}/{*path}.html`;
+    if !ensure_parent_dirs(root, &out_path) {
+        return;
+    }
+    if write_file(root, &out_path, &wado::highlight(&input)) {
+        eprintln(`{*path} -> {out_path}`);
+    }
+}
+
+/// `mkdir -p` on every directory prefix of `path` (an existing directory is not
+/// an error). Returns `false` on the first unexpected failure.
+fn ensure_parent_dirs(root: &Descriptor, path: &String) -> bool with Stderr {
+    let components: List<String> = path.split("/").collect();
+    let mut prefix = String::new();
+    let mut i = 0;
+    while i < components.len() - 1 {
+        if i > 0 {
+            prefix.push('/');
+        }
+        prefix.push_str(&components[i]);
+        i += 1;
+        if prefix.is_empty() || prefix == "." {
+            continue;
+        }
+        if let Err(e) = root.create_directory_at(prefix).wait() {
+            if e matches { Exist } {
+                continue;
+            }
+            eprintln(`error: {prefix}: cannot create directory`);
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Write `source` to `path`, creating or truncating it. Returns `false` on
+/// failure (already reported).
+fn write_file(root: &Descriptor, path: &String, source: &String) -> bool with Stderr {
+    let open_result = root.open_at(
+        PathFlags::none(),
+        *path,
+        OpenFlags::Create | OpenFlags::Truncate,
+        DescriptorFlags::Read | DescriptorFlags::Write,
+    ).wait();
+    if let Err(_) = open_result {
+        eprintln(`error: {*path}: cannot open for writing`);
+        return false;
+    }
+    let file = open_result.unwrap();
+    let bytes: List<u8> = source.bytes().collect();
+    let [rx, tx] = Stream::<u8>::new();
+    let sub = file.write_via_stream(rx, 0 as Filesize);
+    tx.write(bytes);
+    tx.drop();
+    if let Some(Err(_)) = sub.read() {
+        eprintln(`error: {*path}: write failed`);
+        sub.drop();
+        return false;
+    }
+    sub.drop();
+    return true;
 }
 
 fn read_all(file: &Descriptor) -> List<u8> {
