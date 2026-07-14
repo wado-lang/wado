@@ -598,13 +598,13 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 }
 
 fn "core:prelude/slice.wado/ArrayRefIter<opt_sroa_variant_return_embedded_err_return.wado/Tree>^Iterator::next"(self) {
-    let val: ref "core:prelude/types.wado//Box<opt_sroa_variant_return_embedded_err_return.wado/Tree>";
+    let ref_val: ref "core:prelude/types.wado//Box<opt_sroa_variant_return_embedded_err_return.wado/Tree>";
     if self.index >= self.end {
         return ref.null none;
     }
-    val = struct.new "core:prelude/types.wado//Box<opt_sroa_variant_return_embedded_err_return.wado/Tree>" { value: builtin::array_get<ref "opt_sroa_variant_return_embedded_err_return.wado//Tree">(self.repr, self.index) };
+    ref_val = struct.new "core:prelude/types.wado//Box<opt_sroa_variant_return_embedded_err_return.wado/Tree>" { value: builtin::array_get<ref "opt_sroa_variant_return_embedded_err_return.wado//Tree">(self.repr, self.index) };
     self.index = self.index + 1;
-    return val;
+    return ref_val;
 }
 
 export fn "opt_sroa_variant_return_embedded_err_return.wado/__cm_export__run" as "run"

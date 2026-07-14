@@ -83,7 +83,7 @@ type "functype//spread_deref_ref_closure_param.wado/__test_0_spread_over_a_deref
 
 type "functype//spread_deref_ref_closure_param.wado/__cm_export____test_0_spread_over_a_dereferenced__s_closure_parameter" = fn();  // TypeId(23)
 
-type "functype//spread_deref_ref_closure_param.wado/$value_copy$T49" = fn(ref "spread_deref_ref_closure_param.wado//S") -> ref "spread_deref_ref_closure_param.wado//S";  // TypeId(24)
+type "functype//spread_deref_ref_closure_param.wado/$value_copy$T50" = fn(ref "spread_deref_ref_closure_param.wado//S") -> ref "spread_deref_ref_closure_param.wado//S";  // TypeId(24)
 
 type "functype//spread_deref_ref_closure_param.wado/$value_copy$T27" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(25)
 
@@ -317,7 +317,7 @@ fn "spread_deref_ref_closure_param.wado/__cm_export____test_0_spread_over_a_dere
     "wasi/task-return"(0);
 }
 
-fn "spread_deref_ref_closure_param.wado/$value_copy$T49"(v) {
+fn "spread_deref_ref_closure_param.wado/$value_copy$T50"(v) {
     return struct.new "spread_deref_ref_closure_param.wado//S" { a: v.a, b: v.b, c: v.c };
 }
 
@@ -735,7 +735,7 @@ fn "core:prelude/traits.wado/IterMap<core:prelude/slice.wado/ArrayRefIter<spread
     __match_2 = "core:prelude/slice.wado/ArrayRefIter<spread_deref_ref_closure_param.wado/S>^Iterator::next"(self.inner);
     if ref.is_null(__match_2) == 0 {
         item = ref.as_non_null(__match_2);
-        return ref.as_non_null("spread_deref_ref_closure_param.wado/$value_copy$T49"(block -> ref "spread_deref_ref_closure_param.wado//S" {
+        return ref.as_non_null("spread_deref_ref_closure_param.wado/$value_copy$T50"(block -> ref "spread_deref_ref_closure_param.wado//S" {
             let __indirect_call_0: ref "canonical//CanonicalClosure_0";
             __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(self.f);
             call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env, item);
@@ -746,13 +746,13 @@ fn "core:prelude/traits.wado/IterMap<core:prelude/slice.wado/ArrayRefIter<spread
 }
 
 fn "core:prelude/slice.wado/ArrayRefIter<spread_deref_ref_closure_param.wado/S>^Iterator::next"(self) {
-    let val: ref "spread_deref_ref_closure_param.wado//S";
+    let ref_val: ref "spread_deref_ref_closure_param.wado//S";
     if self.index >= self.end {
         return ref.null none;
     }
-    val = "spread_deref_ref_closure_param.wado/$value_copy$T49"(builtin::array_get<ref "spread_deref_ref_closure_param.wado//S">(self.repr, self.index));
+    ref_val = builtin::array_get<ref "spread_deref_ref_closure_param.wado//S">(self.repr, self.index);
     self.index = self.index + 1;
-    return val;
+    return ref_val;
 }
 
 fn "core:prelude/list.wado/List<spread_deref_ref_closure_param.wado/S>::grow"(self) {

@@ -472,6 +472,36 @@ impl FunctionTranslator<'_, '_> {
                     None
                 }
             }
+            "builtin::array_get_ref" => {
+                let arr = self.translate_operand(args[0].expr);
+                let idx = self.translate_operand(args[1].expr);
+                let wir_type = self
+                    .ctx
+                    .type_id_to_wir_type(self.type_table, self.operand_type_id(args[0].expr));
+                if let WirType::Ref { type_id, .. } = wir_type {
+                    let elem_ty = self.array_element_wir_type(&type_id);
+                    let get = WirInstr::ArrayGet {
+                        type_id,
+                        array: Box::new(arr),
+                        index: Box::new(idx),
+                        result_ty: elem_ty.clone(),
+                    };
+                    let result_wir = self
+                        .ctx
+                        .type_id_to_wir_type(self.type_table, result_type_id);
+                    if super::translate::ref_binding_needs_boxing(&result_wir, Some(&elem_ty))
+                        && let WirType::Ref {
+                            type_id: box_tid, ..
+                        } = result_wir
+                    {
+                        Some(self.struct_new(box_tid, vec![get]))
+                    } else {
+                        Some(get)
+                    }
+                } else {
+                    None
+                }
+            }
             "builtin::array_set" => {
                 let arr = self.translate_operand(args[0].expr);
                 let idx = self.translate_operand(args[1].expr);

@@ -254,8 +254,7 @@ impl<T> Iterator for ArrayRefIter<T> {
         if self.index >= self.end {
             return null;
         }
-        let val = builtin::array_get(self.repr, self.index);
-        let ref_val = &val;
+        let ref_val = builtin::array_get_ref(self.repr, self.index);
         self.index += 1;
         return Option::Some(ref_val);
     }

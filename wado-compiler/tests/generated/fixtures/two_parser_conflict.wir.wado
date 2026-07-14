@@ -852,13 +852,13 @@ fn "core:prelude/format.wado/&./sub/two_parser_b.wado/CstNode^Inspect::inspect"(
 }
 
 fn "core:prelude/slice.wado/ArrayRefIter<./sub/two_parser_b.wado/CstChild>^Iterator::next"(self) {
-    let val: ref "core:prelude/types.wado//Box<./sub/two_parser_b.wado/CstChild>";
+    let ref_val: ref "core:prelude/types.wado//Box<./sub/two_parser_b.wado/CstChild>";
     if self.index >= self.end {
         return ref.null none;
     }
-    val = struct.new "core:prelude/types.wado//Box<./sub/two_parser_b.wado/CstChild>" { value: ref.as_non_null("two_parser_conflict.wado/$value_copy$T34"(builtin::array_get<ref "./sub/two_parser_b.wado//CstChild">(self.repr, self.index))) };
+    ref_val = struct.new "core:prelude/types.wado//Box<./sub/two_parser_b.wado/CstChild>" { value: builtin::array_get<ref "./sub/two_parser_b.wado//CstChild">(self.repr, self.index) };
     self.index = self.index + 1;
-    return val;
+    return ref_val;
 }
 
 fn "core:prelude/list.wado/List<./sub/two_parser_b.wado/CstChild>^Inspect::inspect"(self, f) {

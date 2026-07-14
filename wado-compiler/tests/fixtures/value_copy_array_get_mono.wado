@@ -1,0 +1,70 @@
+// Reading an element must yield an independent copy even when a raw
+// `builtin::array_get<T>` call has monomorphized the intrinsic. A monomorphized
+// `array_get<T>` still aliases its container, so the value-copy analysis must
+// recognize it by its generic name (not the mangled monomorphized name) and
+// copy at the binding; otherwise a mutation to the copy corrupts the source.
+
+struct Cell { v: i32 }
+struct Pair { inner: Cell, tag: i32 }
+
+fn raw_get(seed: i32) -> Cell {
+    let mut arr: Array<Cell> = builtin::array_new(1);
+    builtin::array_set(&mut arr, 0, Cell { v: seed });
+    return builtin::array_get(&arr, 0);
+}
+
+test "direct list index binding copies" {
+    let list: List<Cell> = [Cell { v: 1 }];
+    let mut a = list[0];
+    a.v = 88;
+    assert raw_get(9).v == 9;
+    assert list[0].v == 1;
+    assert a.v == 88;
+}
+
+test "element copy inside a match arm" {
+    let list: List<Cell> = [Cell { v: 3 }];
+    let idx: Option<i32> = Option::Some(0);
+    match idx {
+        Some(i) => {
+            let mut a = list[i];
+            a.v = 88;
+            assert raw_get(9).v == 9;
+            assert list[i].v == 3;
+        },
+        None => unreachable(),
+    }
+}
+
+test "nested struct element field mutation copies" {
+    let list: List<Pair> = [Pair { inner: Cell { v: 5 }, tag: 6 }];
+    let mut p = list[0];
+    p.inner.v = 88;
+    assert raw_get(9).v == 9;
+    assert list[0].inner.v == 5;
+    assert list[0].tag == 6;
+}
+
+test "element pushed into another list is independent" {
+    let src: List<Cell> = [Cell { v: 7 }];
+    let mut dst: List<Cell> = [];
+    dst.push(src[0]);
+    dst[0].v = 88;
+    assert raw_get(9).v == 9;
+    assert src[0].v == 7;
+    assert dst[0].v == 88;
+}
+
+test "copy in a loop body" {
+    let src: List<Cell> = [Cell { v: 1 }, Cell { v: 2 }];
+    let mut sum = 0;
+    for let mut i = 0; i < src.len(); i += 1 {
+        let mut e = src[i];
+        e.v += 100;
+        sum += e.v;
+    }
+    assert raw_get(9).v == 9;
+    assert src[0].v == 1;
+    assert src[1].v == 2;
+    assert sum == 203;
+}
