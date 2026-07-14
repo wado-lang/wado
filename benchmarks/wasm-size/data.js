@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784033843817,
+  "lastUpdate": 1784035132604,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -40425,6 +40425,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 265926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "15a4961521678b4dae8e8160c0afd374db79041f",
+          "message": "Merge pull request #1580 from wado-lang/claude/wado-highlighter-output-dir-7sew53\n\nfeat(example): batch highlighter, full-corpus grammar, and template interpolation",
+          "timestamp": "2026-07-14T22:09:11+09:00",
+          "tree_id": "598043a690f1c5b7fad74715d5433dab79ec675e",
+          "url": "https://github.com/wado-lang/wado/commit/15a4961521678b4dae8e8160c0afd374db79041f"
+        },
+        "date": 1784035131862,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16422,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265122,
             "unit": "bytes"
           }
         ]
