@@ -1338,77 +1338,6 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
     }
     return [lo + 1, pos - line_starts[lo]];
 }
-//! Runtime FOLLOW-continuation gate for tail-greedy loops. Emitted into a
-//! generated parser only when lowering constructed a caller-FOLLOW gate
-//! (`GenContext::emit_follow`); gate-free grammars carry none of this.
-
-/// `follow` is the caller's deterministic K-prefix continuation:
-/// `follow[d]` is the set of token kinds that may appear at input depth
-/// `d` if control belongs to the caller rather than to another iteration
-/// of the loop. An empty `follow` (the common, non-repair case) disables
-/// the gate. The loop yields to the caller — breaking `*`/`+` or skipping
-/// `?` — exactly when EVERY non-empty depth-set matches the upcoming
-/// input, i.e. when the next tokens are unambiguously the caller's
-/// continuation.
-///
-/// Threaded as a defaulted `&EMPTY_FOLLOW` argument through the generated
-/// `parse_*` / `scan_*` functions; repair call sites pass a `FOLLOW_MASK_*`
-/// constant (or forward their own `follow`). This replaces the previous
-/// per-(rule, mask) cloned `__follow_<id>` variants: the mask is data
-/// carried at runtime, not code baked into a specialised function.
-///
-/// `eof_kind` is the token kind reported past the end of the stream, so a
-/// caller continuation ending in EOF gates correctly. `tokens` is the bare
-/// `kinds` array (`&p.kinds` on the parse side, the scan `kinds` array on the
-/// scan side) — gating only reads token kinds, and a flat `&Array<i32>` keeps
-/// scan frames a slot smaller than the `List` wrapper or `&TokenStream`
-/// would, which matters for deeply recursive scan grammars.
-pub global EMPTY_FOLLOW: List<List<i32>> = [];
-
-/// Prepend a static local prefix to an inherited FOLLOW continuation.
-/// Used for the `FollowArg::Combined` case: a callee at the current
-/// rule's tail whose preceding local suffix is nullable, so its
-/// continuation is `prefix` (the optional local elements' per-depth
-/// first sets) followed by the caller's own `follow`. Bounded by
-/// `FOLLOW_MASK_MAX_K` so the result stays small; the only
-/// allocating point on a repaired path (the common Static/Forward
-/// cases pass a reference directly).
-pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
-    let mut combined: List<List<i32>> = [];
-    for let depth of prefix {
-        combined.push(*depth);
-    }
-    for let depth of follow {
-        combined.push(*depth);
-    }
-    return combined;
-}
-
-pub fn follow_yields(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
-    if follow.is_empty() {
-        return false;
-    }
-    for let mut d = 0; d < follow.len(); d += 1 {
-        let set = &follow[d];
-        if set.is_empty() {
-            // No constraint at this depth — a vacuous match, keep going.
-            continue;
-        }
-        let idx = pos + d;
-        let kind = if idx < tokens.len() { tokens[idx] } else { eof_kind };
-        let mut hit = false;
-        for let t of set {
-            if kind == *t {
-                hit = true;
-                break;
-            }
-        }
-        if !hit {
-            return false;
-        }
-    }
-    return true;
-}
 pub enum TokenKind {
     ID,
     WS,
@@ -1833,32 +1762,32 @@ impl Parser {
     }
 }
 
-fn scan_prog(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_prog(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_e(tokens, pos, &FOLLOW_MASK_0, 0);
+    pos = scan_e(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_e_atom(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_e_lr_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_e_lr_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { return -1; }
     pos += 1;
-    pos = scan_e(tokens, pos, follow, 3);
+    pos = scan_e(tokens, pos, 3);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_e_lr_2(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_e_lr_2(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
     pos += 1;
@@ -1866,15 +1795,15 @@ fn scan_e_lr_2(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
         let sp = pos;
         sg_0_done: {
             sg_0: {
-                pos = scan_e(tokens, pos, follow, 0);
+                pos = scan_e(tokens, pos, 0);
                 if pos < 0 { break sg_0; }
-                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                     let sp = pos;
                     sg_1_done: {
                         sg_1: {
                             if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_1; }
                             pos += 1;
-                            pos = scan_e(tokens, pos, follow, 0);
+                            pos = scan_e(tokens, pos, 0);
                             if pos < 0 { break sg_1; }
                             break sg_1_done;
                         }
@@ -1894,8 +1823,8 @@ fn scan_e_lr_2(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
     return pos;
 }
 
-fn scan_e(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_e_atom(tokens, pos, follow);
+fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = scan_e_atom(tokens, pos);
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1903,7 +1832,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
         if suffix_kind == TK_LIT_PLUS {
             if 2 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_1(tokens, pos, follow);
+                pos = scan_e_lr_1(tokens, pos);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -1911,7 +1840,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
         } else if suffix_kind == TK_LIT_LPAREN {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_2(tokens, pos, follow);
+                pos = scan_e_lr_2(tokens, pos);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -1926,25 +1855,25 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
     return pos;
 }
 
-fn _parse_prog__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_prog__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
-    let e = _parse_e(p, &FOLLOW_MASK_0);
+    let e = _parse_e(p);
     let eof = p.expect(TK_EOF, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_prog(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_prog(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_PROG, _start);
-    _parse_prog__inner(p, follow);
+    _parse_prog__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("prog");
     }
 }
 
-fn _parse_e__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
+fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_ID {
@@ -1959,11 +1888,11 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     return;
 }
 
-fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
+fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_E, _start);
-    _parse_e__inner_atom(p, follow, min_prec);
+    _parse_e__inner_atom(p, min_prec);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
@@ -1975,7 +1904,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
                 let plus = p.expect(TK_LIT_PLUS, &EMPTY_SYNC);
-                let e_2 = _parse_e(p, follow, 3);
+                let e_2 = _parse_e(p, 3);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -1988,10 +1917,10 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                 p.b.start_node_at(_cp, RK_E, _start);
                 let lparen = p.expect(TK_LIT_LPAREN, &EMPTY_SYNC);
                 if p.peek_kind() == TK_ID {
-                    let e = _parse_e(p, follow, 0);
-                    while !p.recovering && (p.peek_kind() == TK_LIT_COMMA && !follow_yields(&p.kinds, p.pos, follow, TK_EOF)) {
+                    let e = _parse_e(p, 0);
+                    while !p.recovering && (p.peek_kind() == TK_LIT_COMMA) {
                         let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
-                        let e = _parse_e(p, follow, 0);
+                        let e = _parse_e(p, 0);
                     }
                 }
                 let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
@@ -2006,9 +1935,9 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
     return;
 }
 
-fn _parse_e(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
+fn _parse_e(p: &mut Parser, min_prec: i32 = 0) -> () {
     if p.recovering { return; }
-    _parse_e__inner(p, follow, min_prec);
+    _parse_e__inner(p, min_prec);
     if p.recovering {
         p.push_rule_stack("e");
     }
@@ -2071,6 +2000,4 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-
-global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF]];
 

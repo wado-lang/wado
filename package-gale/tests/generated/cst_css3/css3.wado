@@ -28927,7 +28927,7 @@ fn scan_stylesheet(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
             sg_0: {
                 pos = scan_charset(tokens, pos, &follow_prepend(&FOLLOW_MASK_1, follow), 0);
                 if pos < 0 { break sg_0; }
-                while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                while pos < tokens.len() && _kind_set_0(tokens[pos]) {
                     let sp = pos;
                     let gp_1 = pos;
                     sg_1: {
@@ -28973,7 +28973,7 @@ fn scan_stylesheet(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
             sg_2: {
                 pos = scan_imports(tokens, pos, &follow_prepend(&FOLLOW_MASK_1, follow), 0);
                 if pos < 0 { break sg_2; }
-                while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                while pos < tokens.len() && _kind_set_0(tokens[pos]) {
                     let sp = pos;
                     let gp_3 = pos;
                     sg_3: {
@@ -29019,7 +29019,7 @@ fn scan_stylesheet(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
             sg_4: {
                 pos = scan_namespace_(tokens, pos, &follow_prepend(&FOLLOW_MASK_1, follow), 0);
                 if pos < 0 { break sg_4; }
-                while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                while pos < tokens.len() && _kind_set_0(tokens[pos]) {
                     let sp = pos;
                     let gp_5 = pos;
                     sg_5: {
@@ -29065,7 +29065,7 @@ fn scan_stylesheet(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
             sg_6: {
                 pos = scan_nested_statement(tokens, pos, &follow_prepend(&FOLLOW_MASK_1, follow), 0);
                 if pos < 0 { break sg_6; }
-                while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                while pos < tokens.len() && _kind_set_0(tokens[pos]) {
                     let sp = pos;
                     let gp_7 = pos;
                     sg_7: {
@@ -29623,7 +29623,7 @@ fn scan_page(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break sg_22; }
-                if pos < tokens.len() && _kind_set_8(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && _kind_set_8(tokens[pos]) {
                     let sp = pos;
                     pos = scan_declaration(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
@@ -32139,7 +32139,7 @@ fn scan_font_face_rule(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break sg_61; }
-                if pos < tokens.len() && _kind_set_8(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && _kind_set_8(tokens[pos]) {
                     let sp = pos;
                     pos = scan_font_face_declaration(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
@@ -32492,7 +32492,7 @@ fn scan_feature_value_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
                 pos += 1;
                 pos = scan_ws(tokens, pos, follow, 0);
                 if pos < 0 { break sg_68; }
-                if pos < tokens.len() && _kind_set_4(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && _kind_set_4(tokens[pos]) {
                     let sp = pos;
                     pos = scan_feature_value_definition(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
@@ -32594,7 +32594,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 sg_71: {
                     pos = scan_charset(tokens, pos, &follow_prepend(&FOLLOW_MASK_1, follow), 0);
                     if pos < 0 { break sg_71; }
-                    while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                    while pos < tokens.len() && _kind_set_0(tokens[pos]) {
                         let sp = pos;
                         let gp_72 = pos;
                         sg_72: {
@@ -32638,7 +32638,6 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         let charset = _parse_charset(p, &follow_prepend(&FOLLOW_MASK_1, follow));
         loop {
             if p.recovering { break; }
-            if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
                 let tokens = &p.kinds;
@@ -32688,7 +32687,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 sg_74: {
                     pos = scan_imports(tokens, pos, &follow_prepend(&FOLLOW_MASK_1, follow), 0);
                     if pos < 0 { break sg_74; }
-                    while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                    while pos < tokens.len() && _kind_set_0(tokens[pos]) {
                         let sp = pos;
                         let gp_75 = pos;
                         sg_75: {
@@ -32732,7 +32731,6 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         let imports = _parse_imports(p, &follow_prepend(&FOLLOW_MASK_1, follow));
         loop {
             if p.recovering { break; }
-            if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
                 let tokens = &p.kinds;
@@ -32782,7 +32780,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 sg_77: {
                     pos = scan_namespace_(tokens, pos, &follow_prepend(&FOLLOW_MASK_1, follow), 0);
                     if pos < 0 { break sg_77; }
-                    while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                    while pos < tokens.len() && _kind_set_0(tokens[pos]) {
                         let sp = pos;
                         let gp_78 = pos;
                         sg_78: {
@@ -32826,7 +32824,6 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         let namespace_ = _parse_namespace_(p, &follow_prepend(&FOLLOW_MASK_1, follow));
         loop {
             if p.recovering { break; }
-            if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
                 let tokens = &p.kinds;
@@ -32876,7 +32873,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 sg_80: {
                     pos = scan_nested_statement(tokens, pos, &follow_prepend(&FOLLOW_MASK_1, follow), 0);
                     if pos < 0 { break sg_80; }
-                    while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                    while pos < tokens.len() && _kind_set_0(tokens[pos]) {
                         let sp = pos;
                         let gp_81 = pos;
                         sg_81: {
@@ -32920,7 +32917,6 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         let nested_statement = _parse_nested_statement(p, &follow_prepend(&FOLLOW_MASK_1, follow));
         loop {
             if p.recovering { break; }
-            if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
                 let tokens = &p.kinds;
@@ -33831,7 +33827,7 @@ fn _parse_page__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                     pos += 1;
                     pos = scan_ws(tokens, pos, follow, 0);
                     if pos < 0 { break sg_96; }
-                    if pos < tokens.len() && _kind_set_8(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                    if pos < tokens.len() && _kind_set_8(tokens[pos]) {
                         let sp = pos;
                         pos = scan_declaration(tokens, pos, &EMPTY_FOLLOW, 0);
                         if pos < 0 { pos = sp; }
@@ -33846,7 +33842,7 @@ fn _parse_page__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         if rep_scan_pos < 0 { break; }
         let semicolon = p.expect(TK_LIT_SEMI, &SYNC_0);
         let ws = _parse_ws(p, follow);
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_8(p.peek_kind())) {
+        if _kind_set_8(p.peek_kind()) {
             let declaration = _parse_declaration(p, &EMPTY_FOLLOW);
         }
     }
@@ -36972,7 +36968,7 @@ fn _parse_font_face_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
                     pos += 1;
                     pos = scan_ws(tokens, pos, follow, 0);
                     if pos < 0 { break sg_124; }
-                    if pos < tokens.len() && _kind_set_8(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                    if pos < tokens.len() && _kind_set_8(tokens[pos]) {
                         let sp = pos;
                         pos = scan_font_face_declaration(tokens, pos, &EMPTY_FOLLOW, 0);
                         if pos < 0 { pos = sp; }
@@ -36987,7 +36983,7 @@ fn _parse_font_face_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         if rep_scan_pos < 0 { break; }
         let semicolon = p.expect(TK_LIT_SEMI, &SYNC_0);
         let ws = _parse_ws(p, follow);
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_8(p.peek_kind())) {
+        if _kind_set_8(p.peek_kind()) {
             let font_face_declaration = _parse_font_face_declaration(p, &EMPTY_FOLLOW);
         }
     }
@@ -37473,7 +37469,7 @@ fn _parse_feature_value_block__inner(p: &mut Parser, follow: &List<List<i32>> = 
                     pos += 1;
                     pos = scan_ws(tokens, pos, follow, 0);
                     if pos < 0 { break sg_129; }
-                    if pos < tokens.len() && _kind_set_4(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                    if pos < tokens.len() && _kind_set_4(tokens[pos]) {
                         let sp = pos;
                         pos = scan_feature_value_definition(tokens, pos, &EMPTY_FOLLOW, 0);
                         if pos < 0 { pos = sp; }
@@ -37489,7 +37485,7 @@ fn _parse_feature_value_block__inner(p: &mut Parser, follow: &List<List<i32>> = 
         let ws = _parse_ws(p, &FOLLOW_MASK_3);
         let semicolon = p.expect(TK_LIT_SEMI, &SYNC_0);
         let ws_2 = _parse_ws(p, follow);
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_4(p.peek_kind())) {
+        if _kind_set_4(p.peek_kind()) {
             let feature_value_definition = _parse_feature_value_definition(p, &EMPTY_FOLLOW);
         }
     }
