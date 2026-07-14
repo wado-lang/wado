@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784065587938,
+  "lastUpdate": 1784072036506,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -40493,6 +40493,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/05e48b327b006424f22af0e17bbe1169cbf6a876"
         },
         "date": 1784065587452,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16422,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265122,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "51e9e1bae47332b02d3869e16d530196eb7076a1",
+          "message": "Merge pull request #1585 from wado-lang/claude/wado-hello-blog-post-cotqxs\n\nfix(cli): make dependency-cache write_atomic concurrency-safe",
+          "timestamp": "2026-07-15T08:24:37+09:00",
+          "tree_id": "e1830c905a2a7c55e0929a22eef28ae2cf081c1d",
+          "url": "https://github.com/wado-lang/wado/commit/51e9e1bae47332b02d3869e16d530196eb7076a1"
+        },
+        "date": 1784072036203,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
