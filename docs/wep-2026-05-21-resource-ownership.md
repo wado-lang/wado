@@ -109,14 +109,11 @@ It is independent of the value-copy client's last-use liveness
 (`lower/plan/value_copy/last_use.rs`, post-mono over TIR); unifying the two is
 future work, not a present fact.
 
-Done: use-after-move of a bare resource local (`Resource` / `GenericResource`)
-and by-value `self` consumption — a method call whose receiver is `self: R`
-(not `&self`) moves the receiver, so a later use is reported. The receiver
-convention rides a `consumes_self` fact recorded on the method dispatch (the
-semantic-layer twin of `resource_cleanup`'s `owned_self`), read at the call
-site via `Semantics::method_call_consumes_receiver`.
-Remaining: resource-carrying aggregates (`Result<Fields, E>`, structs / tuples)
-and the no-move-out-of-borrow rule below.
+Done: use-after-move of a bare resource local, by-value `self` consumption (a
+bare `self` receiver moves it, via a `consumes_self` dispatch fact — the
+semantic-layer twin of `resource_cleanup`'s `owned_self`), and whole-move of a
+resource-carrying struct / tuple / `Result`. Remaining: the no-move-out-of-borrow
+rule below.
 
 ### No move out of a borrow (planned)
 
@@ -141,10 +138,11 @@ fixes landed:
 - A resource value discarded in statement position (`Fields::new();`, `let _ =
   …`) is dropped, not leaked; a tail expression is left for its consumer.
 
-The `is_resource_aggregate` heuristic remains: it is precise for stdlib but
-cannot in general tell extraction-from-self from a fresh return. The
-no-move-out-of-borrow rule retires it, after which cleanup drops "owned and not
-moved at scope exit" with no guessing.
+The `is_resource_aggregate` heuristic remains, scoped to `Result` (a struct /
+tuple field cannot be moved out through `&self` and is released by the
+compositional destructor, so the heuristic must not fire on it). The
+no-move-out-of-borrow rule retires it entirely, after which cleanup drops "owned
+and not moved at scope exit" with no guessing.
 
 ### Deterministic drop
 
@@ -214,20 +212,14 @@ Verified against the tree.
 
 ### Move check
 
-- [x] `resource_move_check.rs` on `Semantics`, wired into batch and LSP.
-- [x] Use-after-move of a bare resource local: forward walker, branch-join
-      union, divergence-aware, loop-carried, reassignment/rebind clears.
-- [x] Covers free / `impl` / `trait` / `test` / function-local bodies.
-- [x] By-value `self` consumption via the dispatch `consumes_self` fact
-      (`Semantics::method_call_consumes_receiver`).
-- [x] Resource-carrying aggregates (`Result<Fields, E>`, struct / tuple) are
-      move-only: `type_carries_resource` walks struct fields, tuple elements,
-      and `Result` args, deliberately kept in step with
-      `resource_cleanup::carries_resource` so the move check never enforces
-      move-only on an aggregate the destructor would then leak. User `variant`s
-      and generic containers (`Option` / `List`) are out of both until their
-      destructors land. Whole-aggregate move only — place-level moves out of an
-      aggregate stay open (below).
+- [x] `resource_move_check.rs` on `Semantics`, wired into batch and LSP; covers
+      free / `impl` / `trait` / `test` / function-local bodies.
+- [x] Use-after-move of a bare resource local (branch-join, divergence-aware,
+      loop-carried, rebind clears).
+- [x] By-value `self` consumption via the `consumes_self` dispatch fact.
+- [x] Resource-carrying aggregates (struct / tuple / `Result`) are move-only,
+      kept in step with cleanup's `carries_resource` (variant / `Option` /
+      `List` deferred with their destructors); whole-aggregate move only.
 - [ ] No-move-out-of-borrow (rejects `Result::unwrap` on a resource).
 - [ ] Unify with the value-copy last-use liveness.
 
@@ -239,36 +231,25 @@ Verified against the tree.
 
 ### Receiver grammar (`self` / `&self` / `&mut self`)
 
-- [x] `SelfKind::Value`; the parser accepts bare `self` as a by-value receiver.
-      `consumes_self` is now `self_kind == Value` (no name/type sniffing);
-      `find_resource_method_info` reports the honest receiver kind.
-- [x] Semantic check: a `Value` receiver on a value type is a diagnostic
-      (`TypeError::SelfByValueOnNonResource`).
-- [x] Migrate the stdlib's `self: &R` borrows to `&self` (via `wado-from-idl`).
-- [x] Reject every `self:` annotation in the parser; migrate the remaining
-      `self:` test fixtures and drop the formatter's `self: &Self` → `&self`
-      normalization (now a parse error).
+- [x] `SelfKind::Value`; parser accepts bare `self`, `consumes_self` is
+      `self_kind == Value`, and `self` on a free function is a parse error.
+- [x] A `Value` receiver on a value type is a diagnostic
+      (`SelfByValueOnNonResource`).
+- [x] stdlib `self: &R` → `&self` (via `wado-from-idl`); every `self:`
+      annotation rejected, fixtures migrated, formatter normalization dropped.
 - [ ] `syntax.rs` grammar + VS Code grammar for the new receiver forms.
 
 ### Consuming drop
 
-- [x] Migrate `types.wado`'s `drop` methods to `fn drop(self)`. The
-      `#[cm("…-drop…")]` binding accepts the by-value `self`; cleanup's
-      `owned_self` already suppresses the auto-drop when `.drop()` is explicit,
-      so exactly one drop fires. A use after `.drop()` is now a move error.
-- [x] Compositional destructor synthesis for resource-bearing aggregates.
-      `carries_resource` and `drop_value` recurse into struct fields (via a
-      `StructFieldReg` built from the TIR modules) and tuple elements, dropping
-      each resource-carrying field in declaration order by projecting it with a
-      `FieldAccess`; `Result` keeps its synthesized `match`. User `variant`
-      payloads and generic containers (`Option` / `List`) are not yet emitted,
-      so they stay out of `carries_resource` to keep the predicate and the
-      destructor in step.
+- [x] `types.wado` drops migrated to `fn drop(self)`; `owned_self` keeps exactly
+      one drop, and a use after `.drop()` is a move error.
+- [x] Compositional destructor for struct / tuple aggregates (field-projected
+      drops; `Result` keeps its `match`); variant / `Option` / `List` deferred.
 
 ### Value-copy client (done)
 
-- [x] `$value_copy$T` inserted only at `copy` sites; read-only-share;
-      recursive-type deep copy; `optimize::escape` / `value_copy_elide` deleted.
+- [x] `$value_copy$T` at `copy` sites only; read-only-share; recursive-type deep
+      copy; `optimize::escape` / `value_copy_elide` deleted.
 - [ ] Pin representative move / copy / share decisions as e2e fixtures.
 
 ## Deferred: the `move` and `unique` keywords
