@@ -245,10 +245,10 @@ Verified against the tree.
 
 ### Consuming drop
 
-- [ ] Migrate `types.wado`'s `drop` methods to `fn drop(self)`. These are
-      `#[cm("…-drop…")]` attributes, so CM-binding synthesis must accept a
-      by-value `self`; double-drop avoidance already holds via cleanup's
-      `owned_self`.
+- [x] Migrate `types.wado`'s `drop` methods to `fn drop(self)`. The
+      `#[cm("…-drop…")]` binding accepts the by-value `self`; cleanup's
+      `owned_self` already suppresses the auto-drop when `.drop()` is explicit,
+      so exactly one drop fires. A use after `.drop()` is now a move error.
 - [ ] Compositional destructor synthesis for resource-bearing aggregates.
 
 ### Value-copy client (done)
