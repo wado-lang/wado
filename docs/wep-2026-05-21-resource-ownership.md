@@ -252,7 +252,14 @@ Verified against the tree.
       `#[cm("…-drop…")]` binding accepts the by-value `self`; cleanup's
       `owned_self` already suppresses the auto-drop when `.drop()` is explicit,
       so exactly one drop fires. A use after `.drop()` is now a move error.
-- [ ] Compositional destructor synthesis for resource-bearing aggregates.
+- [x] Compositional destructor synthesis for resource-bearing aggregates.
+      `carries_resource` and `drop_value` recurse into struct fields (via a
+      `StructFieldReg` built from the TIR modules) and tuple elements, dropping
+      each resource-carrying field in declaration order by projecting it with a
+      `FieldAccess`; `Result` keeps its synthesized `match`. User `variant`
+      payloads and generic containers (`Option` / `List`) are not yet emitted,
+      so they stay out of `carries_resource` to keep the predicate and the
+      destructor in step.
 
 ### Value-copy client (done)
 

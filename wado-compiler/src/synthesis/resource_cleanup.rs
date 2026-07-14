@@ -52,6 +52,7 @@
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexSet;
+use crate::module_source::ModuleSource;
 use crate::package::Package;
 use crate::synthesis::common::{
     cm_raw_call, expr_stmt, let_stmt, local_ref, return_stmt, synth_span,
@@ -85,6 +86,7 @@ enum Flow {
 struct Cx<'a> {
     tt: &'a TypeTable,
     reg: &'a CmInterfaceRegistry,
+    struct_fields: &'a StructFieldReg,
     /// Mangled names of instance methods whose `self` is taken by value.
     /// Calling such a method transfers ownership of the receiver (e.g.
     /// `Result::unwrap`, which moves the wrapped value out).
@@ -120,29 +122,93 @@ fn result_args(tt: &TypeTable, type_id: TypeId) -> Option<(TypeId, TypeId)> {
     }
 }
 
-/// Whether `type_id` owns, or structurally carries, a Component Model
-/// resource that this pass knows how to drop.
-///
-/// `GenericResource` (`Future` / `Stream`) is excluded: those handles have
-/// their own explicit drop discipline and must not be touched here.
-fn carries_resource(tt: &TypeTable, reg: &CmInterfaceRegistry, type_id: TypeId) -> bool {
-    let base = tt.get_ultimate_base_type(type_id);
-    match tt.get(base) {
-        ResolvedType::Resource { name, .. } => reg.get_resource_cm_name(name).is_some(),
-        _ => {
-            if let Some((ok, err)) = result_args(tt, type_id) {
-                carries_resource(tt, reg, ok) || carries_resource(tt, reg, err)
-            } else {
-                false
-            }
+/// Fields of each struct `(name, module)`, in declaration order, as
+/// `(index, name, type_id)`. Built once so the drop walk can recurse into
+/// struct fields without holding the `TirModule`s.
+type StructFieldReg = crate::hashmap::IndexMap<(String, ModuleSource), Vec<(u32, String, TypeId)>>;
+
+fn build_struct_field_reg(project: &Package) -> StructFieldReg {
+    let mut reg: StructFieldReg = crate::hashmap::IndexMap::default();
+    for module in project.tir_modules.values() {
+        let structs = module.structs.iter().chain(module.generic_structs.values());
+        for s in structs {
+            reg.entry((s.name.clone(), s.module_source.clone()))
+                .or_insert_with(|| {
+                    s.fields
+                        .iter()
+                        .map(|f| (f.index, f.name.clone(), f.type_id))
+                        .collect()
+                });
         }
     }
+    reg
+}
+
+/// Whether `type_id` owns, or structurally carries, a Component Model
+/// resource that this pass knows how to drop: a bare resource, or a struct /
+/// tuple / variant / `Result` that transitively contains one.
+///
+/// `GenericResource` (`Future` / `Stream`) is excluded: those handles have
+/// their own explicit drop discipline and must not be touched here. A
+/// reference stops the walk — a borrowed place owns nothing.
+fn carries_resource(
+    tt: &TypeTable,
+    reg: &CmInterfaceRegistry,
+    sfr: &StructFieldReg,
+    type_id: TypeId,
+) -> bool {
+    carries_resource_rec(tt, reg, sfr, type_id, &mut Vec::new())
+}
+
+fn carries_resource_rec(
+    tt: &TypeTable,
+    reg: &CmInterfaceRegistry,
+    sfr: &StructFieldReg,
+    type_id: TypeId,
+    visited: &mut Vec<TypeId>,
+) -> bool {
+    let base = tt.get_ultimate_base_type(type_id);
+    if visited.contains(&base) {
+        return false;
+    }
+    visited.push(base);
+    let children: Vec<TypeId> = match tt.get(base).clone() {
+        ResolvedType::Resource { name, .. } => return reg.get_resource_cm_name(&name).is_some(),
+        ResolvedType::GenericResource { .. } | ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
+            return false;
+        }
+        ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } => sfr
+            .get(&(name, module_source))
+            .map(|fields| fields.iter().map(|(_, _, t)| *t).collect())
+            .unwrap_or_default(),
+        _ => {
+            if let Some(elems) = tt.as_tuple(base) {
+                elems
+            } else if let Some((ok, err)) = result_args(tt, base) {
+                vec![ok, err]
+            } else {
+                Vec::new()
+            }
+        }
+    };
+    children
+        .into_iter()
+        .any(|t| carries_resource_rec(tt, reg, sfr, t, visited))
 }
 
 /// Whether `type_id` is a resource-carrying *aggregate* (e.g.
 /// `Result<Fields, E>`) rather than a bare resource handle.
-fn is_resource_aggregate(tt: &TypeTable, reg: &CmInterfaceRegistry, type_id: TypeId) -> bool {
-    carries_resource(tt, reg, type_id)
+fn is_resource_aggregate(
+    tt: &TypeTable,
+    reg: &CmInterfaceRegistry,
+    sfr: &StructFieldReg,
+    type_id: TypeId,
+) -> bool {
+    carries_resource(tt, reg, sfr, type_id)
         && !matches!(
             tt.get(tt.get_ultimate_base_type(type_id)),
             ResolvedType::Resource { .. }
@@ -179,6 +245,7 @@ fn record_owned_self(func: &TirFunction, tt: &TypeTable, out: &mut IndexSet<Stri
 
 /// Entry point: elaborate resource drops for every function in the project.
 pub fn elaborate_resource_drops(project: &mut Package) {
+    let struct_fields = build_struct_field_reg(project);
     let reg = &project.cm_interface_registry;
     let Some(type_table) = project
         .tir_modules
@@ -207,11 +274,17 @@ pub fn elaborate_resource_drops(project: &mut Package) {
 
     for module in project.tir_modules.values_mut() {
         for func_rc in &module.functions {
-            elaborate_function(&mut func_rc.borrow_mut(), &tt, reg, &owned_self);
+            elaborate_function(
+                &mut func_rc.borrow_mut(),
+                &tt,
+                reg,
+                &struct_fields,
+                &owned_self,
+            );
         }
         for imp in &mut module.impls {
             for method in &mut imp.methods {
-                elaborate_function(method, &tt, reg, &owned_self);
+                elaborate_function(method, &tt, reg, &struct_fields, &owned_self);
             }
         }
     }
@@ -222,6 +295,7 @@ fn elaborate_function(
     func: &mut TirFunction,
     tt: &TypeTable,
     reg: &CmInterfaceRegistry,
+    struct_fields: &StructFieldReg,
     owned_self: &IndexSet<String>,
 ) {
     if func.body.is_none() {
@@ -233,7 +307,7 @@ fn elaborate_function(
     // owns it and must drop it unless its body transfers it onward.
     let mut owned: Owned = Vec::new();
     for param in &func.params {
-        if carries_resource(tt, reg, param.type_id) {
+        if carries_resource(tt, reg, struct_fields, param.type_id) {
             owned.push(Some(Live {
                 local: param.local_index,
                 name: param.name.clone(),
@@ -241,7 +315,7 @@ fn elaborate_function(
             }));
         }
     }
-    if owned.is_empty() && !body_has_resource(func.body.as_ref().unwrap(), tt, reg) {
+    if owned.is_empty() && !body_has_resource(func.body.as_ref().unwrap(), tt, reg, struct_fields) {
         return;
     }
 
@@ -255,6 +329,7 @@ fn elaborate_function(
         let mut cx = Cx {
             tt,
             reg,
+            struct_fields,
             owned_self,
             locals,
             local_count,
@@ -270,45 +345,58 @@ fn elaborate_function(
 
 /// Cheap pre-check: does the body bind any resource-carrying `let`? Lets the
 /// pass skip the (vast majority of) functions that touch no resources.
-fn body_has_resource(block: &TirBlock, tt: &TypeTable, reg: &CmInterfaceRegistry) -> bool {
+fn body_has_resource(
+    block: &TirBlock,
+    tt: &TypeTable,
+    reg: &CmInterfaceRegistry,
+    sfr: &StructFieldReg,
+) -> bool {
     block.stmts.iter().any(|stmt| match &stmt.kind {
-        TirStmtKind::Let { type_id, .. } => carries_resource(tt, reg, *type_id),
-        TirStmtKind::LetDestructure { pattern, .. } => pattern_carries_resource(pattern, tt, reg),
+        TirStmtKind::Let { type_id, .. } => carries_resource(tt, reg, sfr, *type_id),
+        TirStmtKind::LetDestructure { pattern, .. } => {
+            pattern_carries_resource(pattern, tt, reg, sfr)
+        }
         TirStmtKind::If {
             then_block,
             else_block,
             ..
         } => {
-            body_has_resource(then_block, tt, reg)
+            body_has_resource(then_block, tt, reg, sfr)
                 || else_block
                     .as_ref()
-                    .is_some_and(|b| body_has_resource(b, tt, reg))
+                    .is_some_and(|b| body_has_resource(b, tt, reg, sfr))
         }
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            body_has_resource(body, tt, reg)
+            body_has_resource(body, tt, reg, sfr)
         }
-        TirStmtKind::Expr(expr) => expr_has_resource(expr, tt, reg),
+        TirStmtKind::Expr(expr) => expr_has_resource(expr, tt, reg, sfr),
         _ => false,
     })
 }
 
-fn expr_has_resource(expr: &TirExpr, tt: &TypeTable, reg: &CmInterfaceRegistry) -> bool {
+fn expr_has_resource(
+    expr: &TirExpr,
+    tt: &TypeTable,
+    reg: &CmInterfaceRegistry,
+    sfr: &StructFieldReg,
+) -> bool {
     match &expr.kind {
         TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            body_has_resource(block, tt, reg)
+            body_has_resource(block, tt, reg, sfr)
         }
         TirExprKind::Match { arms, .. } => arms.iter().any(|arm| {
-            pattern_carries_resource(&arm.pattern, tt, reg) || expr_has_resource(&arm.body, tt, reg)
+            pattern_carries_resource(&arm.pattern, tt, reg, sfr)
+                || expr_has_resource(&arm.body, tt, reg, sfr)
         }),
         TirExprKind::If {
             then_branch,
             else_branch,
             ..
         } => {
-            body_has_resource(then_branch, tt, reg)
+            body_has_resource(then_branch, tt, reg, sfr)
                 || else_branch
                     .as_ref()
-                    .is_some_and(|b| body_has_resource(b, tt, reg))
+                    .is_some_and(|b| body_has_resource(b, tt, reg, sfr))
         }
         _ => false,
     }
@@ -318,18 +406,19 @@ fn pattern_carries_resource(
     pattern: &TirPattern,
     tt: &TypeTable,
     reg: &CmInterfaceRegistry,
+    sfr: &StructFieldReg,
 ) -> bool {
     match pattern {
-        TirPattern::Binding { type_id, .. } => carries_resource(tt, reg, *type_id),
-        TirPattern::Tuple(pats, _) | TirPattern::Or(pats) => {
-            pats.iter().any(|p| pattern_carries_resource(p, tt, reg))
-        }
+        TirPattern::Binding { type_id, .. } => carries_resource(tt, reg, sfr, *type_id),
+        TirPattern::Tuple(pats, _) | TirPattern::Or(pats) => pats
+            .iter()
+            .any(|p| pattern_carries_resource(p, tt, reg, sfr)),
         TirPattern::Variant { bindings, .. } => bindings
             .iter()
-            .any(|p| pattern_carries_resource(p, tt, reg)),
+            .any(|p| pattern_carries_resource(p, tt, reg, sfr)),
         TirPattern::Struct { fields, .. } => fields
             .iter()
-            .any(|f| pattern_carries_resource(&f.pattern, tt, reg)),
+            .any(|f| pattern_carries_resource(&f.pattern, tt, reg, sfr)),
         _ => false,
     }
 }
@@ -352,38 +441,94 @@ fn drop_one(live: &Live, cx: &mut Cx) -> Vec<TirStmt> {
 /// from `scrutinee` (a value of type `type_id`).
 fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> {
     let base = cx.tt.get_ultimate_base_type(type_id);
-    if let ResolvedType::Resource { name, .. } = cx.tt.get(base).clone() {
-        return match cx.reg.get_resource_cm_name(&name) {
+    match cx.tt.get(base).clone() {
+        ResolvedType::Resource { name, .. } => match cx.reg.get_resource_cm_name(&name) {
             Some(cm) => vec![expr_stmt(cm_raw_call(
                 &format!("resource-drop:{cm}"),
                 vec![scrutinee],
                 TypeTable::UNIT,
             ))],
             None => Vec::new(),
-        };
-    }
-
-    if let Some((ok_ty, err_ty)) = result_args(cx.tt, type_id) {
-        let ok_has = carries_resource(cx.tt, cx.reg, ok_ty);
-        let err_has = carries_resource(cx.tt, cx.reg, err_ty);
-        if !ok_has && !err_has {
-            return Vec::new();
+        },
+        ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } => {
+            let fields = cx
+                .struct_fields
+                .get(&(name, module_source))
+                .cloned()
+                .unwrap_or_default();
+            drop_projected(scrutinee, &fields, cx)
         }
-        let span = synth_span();
-        let ok_arm = result_drop_arm(type_id, CompilerItem::ResultOk, ok_ty, ok_has, cx);
-        let err_arm = result_drop_arm(type_id, CompilerItem::ResultErr, err_ty, err_has, cx);
-        let match_expr = TirExpr::new(
-            TirExprKind::Match {
-                expr: Box::new(scrutinee),
-                arms: vec![ok_arm, err_arm],
-            },
-            TypeTable::UNIT,
-            span,
-        );
-        return vec![TirStmt::new(TirStmtKind::Expr(match_expr), span)];
+        _ => {
+            if let Some(elems) = cx.tt.as_tuple(base) {
+                let fields: Vec<(u32, String, TypeId)> = elems
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, ty)| (i as u32, i.to_string(), ty))
+                    .collect();
+                drop_projected(scrutinee, &fields, cx)
+            } else if let Some((ok_ty, err_ty)) = result_args(cx.tt, type_id) {
+                drop_result(scrutinee, type_id, ok_ty, err_ty, cx)
+            } else {
+                Vec::new()
+            }
+        }
     }
+}
 
-    Vec::new()
+/// Drop each resource-carrying field / tuple element of `scrutinee` in
+/// declaration order, projecting it with a `FieldAccess`. `scrutinee` is a
+/// place expression (a local reference), so cloning it per field is cheap.
+fn drop_projected(
+    scrutinee: TirExpr,
+    fields: &[(u32, String, TypeId)],
+    cx: &mut Cx,
+) -> Vec<TirStmt> {
+    let mut stmts = Vec::new();
+    for (index, name, field_ty) in fields {
+        if !carries_resource(cx.tt, cx.reg, cx.struct_fields, *field_ty) {
+            continue;
+        }
+        let field = crate::synthesis::common::field_access(
+            scrutinee.clone(),
+            *index,
+            name.clone(),
+            *field_ty,
+            synth_span(),
+        );
+        stmts.extend(drop_value(field, *field_ty, cx));
+    }
+    stmts
+}
+
+/// Drop a `Result<ok, err>` structurally via a synthesized `match`.
+fn drop_result(
+    scrutinee: TirExpr,
+    result_ty: TypeId,
+    ok_ty: TypeId,
+    err_ty: TypeId,
+    cx: &mut Cx,
+) -> Vec<TirStmt> {
+    let ok_has = carries_resource(cx.tt, cx.reg, cx.struct_fields, ok_ty);
+    let err_has = carries_resource(cx.tt, cx.reg, cx.struct_fields, err_ty);
+    if !ok_has && !err_has {
+        return Vec::new();
+    }
+    let span = synth_span();
+    let ok_arm = result_drop_arm(result_ty, CompilerItem::ResultOk, ok_ty, ok_has, cx);
+    let err_arm = result_drop_arm(result_ty, CompilerItem::ResultErr, err_ty, err_has, cx);
+    let match_expr = TirExpr::new(
+        TirExprKind::Match {
+            expr: Box::new(scrutinee),
+            arms: vec![ok_arm, err_arm],
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    vec![TirStmt::new(TirStmtKind::Expr(match_expr), span)]
 }
 
 /// Build one arm of a `Result` structural-drop `match`. The payload is bound
@@ -458,8 +603,9 @@ fn pattern_extracts_resource(
     pattern: &TirPattern,
     tt: &TypeTable,
     reg: &CmInterfaceRegistry,
+    sfr: &StructFieldReg,
 ) -> bool {
-    pattern_carries_resource(pattern, tt, reg)
+    pattern_carries_resource(pattern, tt, reg, sfr)
 }
 
 /// Collect the local indices of resources transferred (consumed) by `expr`.
@@ -523,8 +669,9 @@ fn scan_transfers(expr: &TirExpr, consuming: bool, consumed: &mut Vec<u32>, cx: 
                 .method_info
                 .as_ref()
                 .is_some_and(|info| cx.owned_self.contains(&info.to_mangled_name()));
-            let extracts_from_aggregate = is_resource_aggregate(cx.tt, cx.reg, recv_inner.type_id)
-                && carries_resource(cx.tt, cx.reg, expr.type_id);
+            let extracts_from_aggregate =
+                is_resource_aggregate(cx.tt, cx.reg, cx.struct_fields, recv_inner.type_id)
+                    && carries_resource(cx.tt, cx.reg, cx.struct_fields, expr.type_id);
             let receiver_consumed = owned_self || extracts_from_aggregate;
             scan_transfers(recv_inner, receiver_consumed, consumed, cx);
             for arg in args {
@@ -586,9 +733,9 @@ fn scan_transfers(expr: &TirExpr, consuming: bool, consumed: &mut Vec<u32>, cx: 
             // The scrutinee is consumed only if some arm destructures a
             // resource out of it; a pure `matches`-style test leaves the
             // scrutinee — and its drop obligation — intact.
-            let extracts = arms
-                .iter()
-                .any(|arm| pattern_extracts_resource(&arm.pattern, cx.tt, cx.reg));
+            let extracts = arms.iter().any(|arm| {
+                pattern_extracts_resource(&arm.pattern, cx.tt, cx.reg, cx.struct_fields)
+            });
             scan_transfers(scrutinee, extracts, consumed, cx);
             for arm in arms {
                 if let Some(guard) = &arm.guard {
@@ -710,7 +857,7 @@ fn collect_pattern_resources(pattern: &TirPattern, cx: &Cx, out: &mut Vec<Live>)
             local_index,
             type_id,
         } => {
-            if carries_resource(cx.tt, cx.reg, *type_id) {
+            if carries_resource(cx.tt, cx.reg, cx.struct_fields, *type_id) {
                 out.push(Live {
                     local: *local_index,
                     name: name.clone(),
@@ -874,7 +1021,7 @@ fn elab_stmt(
             skip_value_copy,
         } => {
             let value = elab_value_expr(value, owned, cx);
-            if carries_resource(cx.tt, cx.reg, type_id) {
+            if carries_resource(cx.tt, cx.reg, cx.struct_fields, type_id) {
                 owned.push(Some(Live {
                     local: local_index,
                     name: name.clone(),
@@ -918,7 +1065,7 @@ fn elab_stmt(
 
         TirStmtKind::Expr(expr) => {
             let elaborated = elab_value_expr(expr, owned, cx);
-            if !is_tail && carries_resource(cx.tt, cx.reg, elaborated.type_id) {
+            if !is_tail && carries_resource(cx.tt, cx.reg, cx.struct_fields, elaborated.type_id) {
                 let ty = elaborated.type_id;
                 out.extend(drop_value(elaborated, ty, cx));
             } else {
@@ -1253,9 +1400,9 @@ fn elab_value_expr(expr: TirExpr, owned: &mut Owned, cx: &mut Cx) -> TirExpr {
             expr: scrutinee,
             arms,
         } => {
-            let extracts = arms
-                .iter()
-                .any(|arm| pattern_extracts_resource(&arm.pattern, cx.tt, cx.reg));
+            let extracts = arms.iter().any(|arm| {
+                pattern_extracts_resource(&arm.pattern, cx.tt, cx.reg, cx.struct_fields)
+            });
             apply_transfers_root(owned, &scrutinee, extracts, cx);
             let base = owned.clone();
             let mut new_arms = Vec::with_capacity(arms.len());
