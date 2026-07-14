@@ -1740,6 +1740,10 @@ pub struct Function {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SelfKind {
     None,
+    /// By-value `self` receiver (`fn drop(self)`) — transfers ownership. Legal
+    /// only on a resource; a use of the binding after such a call is a move
+    /// error (WEP 2026-05-21).
+    Value,
     Ref,
     MutRef,
 }

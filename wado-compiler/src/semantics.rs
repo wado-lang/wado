@@ -419,6 +419,7 @@ impl Semantics {
         let dispatch = self.method_dispatch.get(&id)?;
         let self_kind = match dispatch.self_kind {
             crate::ast::SelfKind::None => "none",
+            crate::ast::SelfKind::Value => "value",
             crate::ast::SelfKind::Ref => "ref",
             crate::ast::SelfKind::MutRef => "mut_ref",
         };

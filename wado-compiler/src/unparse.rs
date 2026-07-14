@@ -3952,6 +3952,7 @@ pub fn unparse_param_into(param: &Param, output: &mut String) {
 /// Normalizes both the explicit `SelfKind` and the redundant `self: &Self` form.
 fn self_param_shorthand(param: &Param) -> Option<&'static str> {
     match param.self_kind {
+        SelfKind::Value => return Some("self"),
         SelfKind::Ref => return Some("&self"),
         SelfKind::MutRef => return Some("&mut self"),
         SelfKind::None => {}

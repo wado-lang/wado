@@ -1844,15 +1844,31 @@ impl Parser {
             });
         }
 
-        // self by value is not allowed — use &self or &mut self instead
+        // Bare `self` is a by-value receiver that transfers ownership. It is
+        // legal only on a resource (checked later, semantically); `fn drop(self)`
+        // and consuming `AsyncCall<T>` methods use it. A `self:` type annotation
+        // is a separate spelling still accepted here.
         if let TokenKind::Ident(name) = self.peek_kind()
             && name == "self"
             && !matches!(self.peek_nth(1).kind, TokenKind::Colon)
         {
-            return Err(ParseError {
-                message: "`self` by value is not allowed; use `&self` or `&mut self` instead"
-                    .to_string(),
-                span: self.peek().span,
+            let self_span = self.peek().span;
+            self.advance();
+            let self_type = Type::Named(NamedType {
+                id: self.alloc_ast_id(),
+                name: "Self".to_string(),
+                span: start_span,
+                source_interface: None,
+            });
+            return Ok(Param {
+                id,
+                name: "self".to_string(),
+                name_span: self_span,
+                ty: self_type,
+                self_kind: SelfKind::Value,
+                is_mut: false,
+                default: None,
+                span: start_span,
             });
         }
 

@@ -232,12 +232,15 @@ Verified against the tree.
 
 ### Receiver grammar (`self` / `&self` / `&mut self`)
 
-- [ ] Add `SelfKind::Value`; parser accepts bare `self`, rejects every `self:`
-      annotation. Fold the `consumes_self` dispatch fact into
-      `self_kind == Value` and drop the name/type sniffing.
-- [ ] Semantic check: a `Value` receiver on a non-resource type is a diagnostic.
-- [ ] Migrate the stdlib's `self: &R` borrows to `&self`. The `wasi/*` modules
-      are generated, so fix the `wado-from-idl` / kiln emit, not the `.wado`.
+- [x] `SelfKind::Value`; the parser accepts bare `self` as a by-value receiver.
+      `consumes_self` is now `self_kind == Value` (no name/type sniffing);
+      `find_resource_method_info` reports the honest receiver kind.
+- [x] Semantic check: a `Value` receiver on a value type is a diagnostic
+      (`TypeError::SelfByValueOnNonResource`).
+- [x] Migrate the stdlib's `self: &R` borrows to `&self` (via `wado-from-idl`).
+- [ ] Reject every `self:` annotation in the parser (currently still accepted as
+      a borrow alias). Then migrate the remaining `self: &Self` test fixtures and
+      drop the formatter's `self: &Self` → `&self` normalization.
 - [ ] `syntax.rs` grammar + VS Code grammar + `format.fixtures` for the new
       receiver forms.
 

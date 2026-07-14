@@ -23,13 +23,11 @@ use super::tysys::TypeSystem;
 use super::util::placeholder;
 
 /// A method takes its receiver `self` by value — transferring ownership —
-/// when the first parameter is named `self` and is not a reference. The
-/// `&self` / `&mut self` shorthand carries an empty parameter name, so it is
-/// excluded, as is a static method (no leading `self`).
+/// when the first parameter is a bare `self` (`SelfKind::Value`). `&self` /
+/// `&mut self` borrow; a `self: &T` annotation borrows; a static method has no
+/// receiver.
 pub(crate) fn takes_self_by_value(params: &[ast::Param]) -> bool {
-    params.first().is_some_and(|p| {
-        p.name == "self" && !matches!(p.ty, Type::Reference(_) | Type::MutReference(_))
-    })
+    matches!(params.first(), Some(p) if p.self_kind == ast::SelfKind::Value)
 }
 
 /// Lightweight reference to an impl block, avoiding deep clones. Stores
@@ -1044,9 +1042,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .find_map(crate::ast::Attribute::cm_identifier);
 
+            // Honor the receiver spelling: bare `self` transfers (`Value`),
+            // `&mut self` mutably borrows, and everything else (`&self`,
+            // `self: &R`) is a shared borrow.
+            let self_kind = match method.params.first().map(|p| p.self_kind) {
+                Some(ast::SelfKind::Value) => ast::SelfKind::Value,
+                Some(ast::SelfKind::MutRef) => ast::SelfKind::MutRef,
+                _ => ast::SelfKind::Ref,
+            };
+
             return Some(MethodInfo {
                 return_type,
-                self_kind: ast::SelfKind::Ref,
+                self_kind,
                 param_types,
                 param_is_mut,
                 inherited_from_base: None,
@@ -1699,15 +1706,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         span,
                     )
                 }
-                ast::SelfKind::None => Self::deref_to_value_static(receiver, span, type_table),
+                ast::SelfKind::None | ast::SelfKind::Value => {
+                    Self::deref_to_value_static(receiver, span, type_table)
+                }
             };
         }
 
         let receiver_type = type_table.borrow().get(receiver.type_id).clone();
 
         match self_kind {
-            ast::SelfKind::None => {
-                // No self parameter (static method context), deref all refs
+            ast::SelfKind::None | ast::SelfKind::Value => {
+                // No auto-ref: static method context, or a by-value `self`
+                // receiver that transfers the resource. Deref all refs.
                 Self::deref_to_value_static(receiver, span, type_table)
             }
             ast::SelfKind::Ref => {
