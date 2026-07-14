@@ -6,11 +6,13 @@
 //!         --output-dir build/highlight example/hello.wado example/json.wado
 //!
 //! writes `build/highlight/example/hello.wado.html` and
-//! `build/highlight/example/json.wado.html`.
+//! `build/highlight/example/json.wado.html`. Each file's parse+highlight time
+//! is logged, and a closing `stats:` line reports min / max / avg in ms.
 
 use { args, print, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use { Deserialize } from "core:serde";
 use { parse } from "core:args";
+use { MonotonicClock } from "wasi:clocks";
 use {
     Preopens,
     Descriptor,
@@ -37,7 +39,7 @@ struct Options {
 }
 impl Deserialize for Options;
 
-export fn run() with Stdout, Stderr, Environment, Preopens {
+export fn run() with Stdout, Stderr, Environment, Preopens, MonotonicClock {
     let opts = match parse::<Options>(args()) {
         Ok(o) => o,
         Err(e) => {
@@ -59,14 +61,46 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     }
     let root = dirs[0].0;
 
+    // Per-file parse+highlight durations (nanoseconds), for the closing stats.
+    let mut timings: List<u64> = [];
     for let path of &opts.inputs {
-        highlight_file(&root, path, &opts.output_dir);
+        if let Some(ns) = highlight_file(&root, path, &opts.output_dir) {
+            timings.push(ns);
+        }
     }
+    report_stats(&timings);
+}
+
+/// Print min / max / avg of the collected per-file durations, in milliseconds.
+fn report_stats(timings: &List<u64>) with Stderr {
+    if timings.is_empty() {
+        return;
+    }
+    let mut min = timings[0];
+    let mut max = timings[0];
+    let mut sum: u64 = 0;
+    for let t of timings {
+        if *t < min {
+            min = *t;
+        }
+        if *t > max {
+            max = *t;
+        }
+        sum += *t;
+    }
+    let n = timings.len();
+    let min_ms = min as f64 / 1000000.0;
+    let max_ms = max as f64 / 1000000.0;
+    let avg_ms = sum as f64 / n as f64 / 1000000.0;
+    eprintln(`stats: {n} files | min {min_ms:.3} ms | max {max_ms:.3} ms | avg {avg_ms:.3} ms`);
 }
 
 /// Highlight one source file and write the HTML fragment under `output_dir`,
-/// preserving the input's path (`<output_dir>/<path>.html`).
-fn highlight_file(root: &Descriptor, path: &String, output_dir: &String) with Stdout, Stderr {
+/// preserving the input's path (`<output_dir>/<path>.html`). Returns the
+/// parse+highlight duration in nanoseconds, or `null` if the file was skipped.
+fn highlight_file(root: &Descriptor, path: &String, output_dir: &String) -> Option<u64>
+    with Stdout, Stderr, MonotonicClock
+{
     let open_result = root.open_at(
         PathFlags::none(),
         *path,
@@ -75,24 +109,31 @@ fn highlight_file(root: &Descriptor, path: &String, output_dir: &String) with St
     ).wait();
     if let Err(_) = open_result {
         eprintln(`error: {*path}: cannot open file`);
-        return;
+        return null;
     }
     let file = open_result.unwrap();
     let input = String::from_utf8_unchecked(read_all(&file));
 
+    // Time the actual work: parse + highlight (file I/O is excluded).
+    let start = MonotonicClock::now();
     let result = wado::parse(&input);
     if !result.ok() {
         eprintln(`{*path}: parse error: {result.diagnostics[0].message}`);
-        return;
+        return null;
     }
+    let html = wado::highlight(&input);
+    let elapsed = MonotonicClock::now() - start;
+    let ms = elapsed as f64 / 1000000.0;
 
     let out_path = `{*output_dir}/{*path}.html`;
     if !ensure_parent_dirs(root, &out_path) {
-        return;
+        return null;
     }
-    if write_file(root, &out_path, &wado::highlight(&input)) {
-        eprintln(`{*path} -> {out_path}`);
+    if !write_file(root, &out_path, &html) {
+        return null;
     }
+    eprintln(`{*path} -> {out_path} ({ms:.3} ms)`);
+    return Option::Some(elapsed as u64);
 }
 
 /// `mkdir -p` on every directory prefix of `path` (an existing directory is not
