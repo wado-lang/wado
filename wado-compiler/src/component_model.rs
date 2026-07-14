@@ -1130,6 +1130,27 @@ fn walk_type(ty: &mut crate::ast::Type, local_names: &IndexMap<String, String>) 
     }
 }
 
+/// `name -> iface_fq` for every top-level type decl in `items`, the input
+/// `walk_type` needs to stamp `source_interface` on lib-local references.
+fn local_type_names<'a>(
+    items: impl Iterator<Item = &'a crate::ast::Item>,
+    iface_fq: &str,
+) -> IndexMap<String, String> {
+    use crate::ast::Item;
+    items
+        .filter_map(|item| match item {
+            Item::Newtype(a) => Some(a.name.clone()),
+            Item::Struct(s) => Some(s.name.clone()),
+            Item::Flags(f) => Some(f.name.clone()),
+            Item::Enum(e) => Some(e.name.clone()),
+            Item::Variant(v) => Some(v.name.clone()),
+            Item::Resource(r) => Some(r.name.clone()),
+            _ => None,
+        })
+        .map(|name| (name, iface_fq.to_string()))
+        .collect()
+}
+
 impl CmInterfaceRegistry {
     /// Create a new empty registry
     pub fn new() -> Self {
@@ -1590,31 +1611,9 @@ impl CmInterfaceRegistry {
         self.cm_interface_module_sources
             .insert(iface_fq.to_string(), entry_source.clone());
 
-        // Populate `source_interface` on stored field/payload/base references,
-        // as `populate_named_type_sources` does for stdlib before registration,
-        // so later CM resolution never needs a bare-name guess.
-        let local_names: IndexMap<String, String> = module
-            .items
-            .iter()
-            .filter_map(|item| match item {
-                Item::Newtype(a) => Some(a.name.clone()),
-                Item::Struct(s) => Some(s.name.clone()),
-                Item::Flags(f) => Some(f.name.clone()),
-                Item::Enum(e) => Some(e.name.clone()),
-                Item::Variant(v) => Some(v.name.clone()),
-                Item::Resource(r) => Some(r.name.clone()),
-                _ => None,
-            })
-            .map(|name| (name, iface_fq.to_string()))
-            .collect();
-        let with_sources = |ty: &Type| {
-            let mut ty = ty.clone();
-            walk_type(&mut ty, &local_names);
-            ty
-        };
-
+        let local_names = local_type_names(module.items.iter(), iface_fq);
         for item in &module.items {
-            self.register_lib_local_item(item, iface_fq, &entry_source);
+            self.register_lib_local_item(item, iface_fq, &entry_source, &local_names);
         }
     }
 
@@ -1629,8 +1628,9 @@ impl CmInterfaceRegistry {
         items: &[(ModuleSource, crate::ast::Item)],
         iface_fq: &str,
     ) {
+        let local_names = local_type_names(items.iter().map(|(_, item)| item), iface_fq);
         for (source, item) in items {
-            self.register_lib_local_item(item, iface_fq, source);
+            self.register_lib_local_item(item, iface_fq, source, &local_names);
         }
     }
 
@@ -1639,6 +1639,7 @@ impl CmInterfaceRegistry {
         item: &crate::ast::Item,
         iface_fq: &str,
         module_source: &ModuleSource,
+        local_names: &IndexMap<String, String>,
     ) {
         use crate::ast::Item;
         if let Some(name) = match item {
@@ -1652,162 +1653,42 @@ impl CmInterfaceRegistry {
             self.lib_local_type_sources
                 .insert(name.clone(), module_source.clone());
         }
+
+        // Populate `source_interface` on stored field/payload/base references,
+        // as `populate_named_type_sources` does for stdlib before registration,
+        // so later CM resolution never needs a bare-name guess.
+        let with_sources = |ty: &Type| {
+            let mut ty = ty.clone();
+            walk_type(&mut ty, local_names);
+            ty
+        };
+
         match item {
             Item::Newtype(alias) => register_unique(
                 &mut self.newtypes,
                 "newtype",
                 iface_fq.to_string(),
                 alias.name.clone(),
-                alias.ty.clone(),
+                with_sources(&alias.ty),
             ),
             Item::Struct(struct_def) => {
                 let fields: Vec<(String, Type)> = struct_def
                     .fields
                     .iter()
-                    .map(|f| (to_kebab(&f.name), f.ty.clone()))
+                    .map(|f| (to_kebab(&f.name), with_sources(&f.ty)))
                     .collect();
                 let wado_fields: Vec<(String, String, Type)> = struct_def
                     .fields
                     .iter()
-                    .map(|f| (f.name.clone(), to_kebab(&f.name), f.ty.clone()))
+                    .map(|f| (f.name.clone(), to_kebab(&f.name), with_sources(&f.ty)))
                     .collect();
                 register_unique(
                     &mut self.structs,
                     "struct",
                     iface_fq.to_string(),
-<<<<<<< HEAD
-                    alias.name.clone(),
-                    with_sources(&alias.ty),
-                ),
-                Item::Struct(struct_def) => {
-                    let fields: Vec<(String, Type)> = struct_def
-                        .fields
-                        .iter()
-                        .map(|f| (to_kebab(&f.name), with_sources(&f.ty)))
-                        .collect();
-                    let wado_fields: Vec<(String, String, Type)> = struct_def
-                        .fields
-                        .iter()
-                        .map(|f| (f.name.clone(), to_kebab(&f.name), with_sources(&f.ty)))
-                        .collect();
-                    register_unique(
-                        &mut self.structs,
-                        "struct",
-                        iface_fq.to_string(),
-                        struct_def.name.clone(),
-                        (to_kebab(&struct_def.name), fields, wado_fields),
-                    );
-                }
-                Item::Flags(flags_def) => {
-                    let members: Vec<String> =
-                        flags_def.flags.iter().map(|m| to_kebab(&m.name)).collect();
-                    register_unique(
-                        &mut self.flags,
-                        "flags",
-                        iface_fq.to_string(),
-                        flags_def.name.clone(),
-                        (to_kebab(&flags_def.name), members),
-                    );
-                }
-                Item::Enum(enum_def) => {
-                    let variants: Vec<String> =
-                        enum_def.cases.iter().map(|c| to_kebab(&c.name)).collect();
-                    register_unique(
-                        &mut self.enums,
-                        "enum",
-                        iface_fq.to_string(),
-                        enum_def.name.clone(),
-                        (to_kebab(&enum_def.name), variants),
-                    );
-                }
-                Item::Variant(variant_def) => {
-                    let cases: Vec<CmVariantCase> = variant_def
-                        .cases
-                        .iter()
-                        .map(|c| CmVariantCase {
-                            cm_name: to_kebab(&c.name),
-                            wado_name: c.name.clone(),
-                            payload: c.payload.as_ref().map(&with_sources),
-                        })
-                        .collect();
-                    register_unique(
-                        &mut self.variants,
-                        "variant",
-                        iface_fq.to_string(),
-                        variant_def.name.clone(),
-                        (to_kebab(&variant_def.name), cases),
-                    );
-                }
-                _ => {}
-||||||| 064929af6
-                    alias.name.clone(),
-                    alias.ty.clone(),
-                ),
-                Item::Struct(struct_def) => {
-                    let fields: Vec<(String, Type)> = struct_def
-                        .fields
-                        .iter()
-                        .map(|f| (to_kebab(&f.name), f.ty.clone()))
-                        .collect();
-                    let wado_fields: Vec<(String, String, Type)> = struct_def
-                        .fields
-                        .iter()
-                        .map(|f| (f.name.clone(), to_kebab(&f.name), f.ty.clone()))
-                        .collect();
-                    register_unique(
-                        &mut self.structs,
-                        "struct",
-                        iface_fq.to_string(),
-                        struct_def.name.clone(),
-                        (to_kebab(&struct_def.name), fields, wado_fields),
-                    );
-                }
-                Item::Flags(flags_def) => {
-                    let members: Vec<String> =
-                        flags_def.flags.iter().map(|m| to_kebab(&m.name)).collect();
-                    register_unique(
-                        &mut self.flags,
-                        "flags",
-                        iface_fq.to_string(),
-                        flags_def.name.clone(),
-                        (to_kebab(&flags_def.name), members),
-                    );
-                }
-                Item::Enum(enum_def) => {
-                    let variants: Vec<String> =
-                        enum_def.cases.iter().map(|c| to_kebab(&c.name)).collect();
-                    register_unique(
-                        &mut self.enums,
-                        "enum",
-                        iface_fq.to_string(),
-                        enum_def.name.clone(),
-                        (to_kebab(&enum_def.name), variants),
-                    );
-                }
-                Item::Variant(variant_def) => {
-                    let cases: Vec<CmVariantCase> = variant_def
-                        .cases
-                        .iter()
-                        .map(|c| CmVariantCase {
-                            cm_name: to_kebab(&c.name),
-                            wado_name: c.name.clone(),
-                            payload: c.payload.clone(),
-                        })
-                        .collect();
-                    register_unique(
-                        &mut self.variants,
-                        "variant",
-                        iface_fq.to_string(),
-                        variant_def.name.clone(),
-                        (to_kebab(&variant_def.name), cases),
-                    );
-                }
-                _ => {}
-=======
                     struct_def.name.clone(),
                     (to_kebab(&struct_def.name), fields, wado_fields),
                 );
->>>>>>> origin/main
             }
             Item::Flags(flags_def) => {
                 let members: Vec<String> =
@@ -1838,7 +1719,7 @@ impl CmInterfaceRegistry {
                     .map(|c| CmVariantCase {
                         cm_name: to_kebab(&c.name),
                         wado_name: c.name.clone(),
-                        payload: c.payload.clone(),
+                        payload: c.payload.as_ref().map(&with_sources),
                     })
                     .collect();
                 register_unique(
