@@ -342,3 +342,39 @@ test "highlight fn-type effect before next param" {
 test "highlight nested template string" {
     assert_highlights(&"fn f() -> String { let n = 1; return `outer {`inner {n}`}`; }\n");
 }
+
+// Stdlib coverage: representative `wado-compiler/lib` modules exercising the
+// WIT-binding and stdlib syntax the grammar grew to accept (resources, worlds,
+// interfaces, `#[cm]` attributes, block expressions, contextual-keyword names,
+// unicode escapes, `for`-let conditions, `global mut`, `stores[self]`, …).
+test "highlight stdlib core/json.wado" {
+    assert_highlights(&#include_str("../wado-compiler/lib/core/json.wado"));
+}
+
+test "highlight stdlib core/serde.wado" {
+    assert_highlights(&#include_str("../wado-compiler/lib/core/serde.wado"));
+}
+
+test "highlight stdlib core/prelude/types.wado" {
+    assert_highlights(&#include_str("../wado-compiler/lib/core/prelude/types.wado"));
+}
+
+test "highlight stdlib core/prelude/string.wado" {
+    assert_highlights(&#include_str("../wado-compiler/lib/core/prelude/string.wado"));
+}
+
+test "highlight stdlib core/allocator.wado" {
+    assert_highlights(&#include_str("../wado-compiler/lib/core/allocator.wado"));
+}
+
+test "highlight stdlib core/kiln/worlds.wado" {
+    assert_highlights(&#include_str("../wado-compiler/lib/core/kiln/worlds.wado"));
+}
+
+test "highlight stdlib wasi/filesystem/types.wado" {
+    assert_highlights(&#include_str("../wado-compiler/lib/wasi/filesystem/types.wado"));
+}
+
+test "highlight stdlib wasi/sockets/types.wado" {
+    assert_highlights(&#include_str("../wado-compiler/lib/wasi/sockets/types.wado"));
+}
