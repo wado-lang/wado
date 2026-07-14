@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784072036506,
+  "lastUpdate": 1784073596835,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -40537,6 +40537,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/51e9e1bae47332b02d3869e16d530196eb7076a1"
         },
         "date": 1784072036203,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16422,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265122,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2cfe097acfa990439c656ca7f9ebcd3a7f083ec7",
+          "message": "Merge pull request #1584 from wado-lang/claude/resource-ownership-move-jzdrme\n\nfeat(compiler): move-only affine resources — move check, consuming receivers, authoritative cleanup",
+          "timestamp": "2026-07-15T08:50:58+09:00",
+          "tree_id": "96d35bb8682dcbb895c3eb4744d32053110faab1",
+          "url": "https://github.com/wado-lang/wado/commit/2cfe097acfa990439c656ca7f9ebcd3a7f083ec7"
+        },
+        "date": 1784073596389,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
