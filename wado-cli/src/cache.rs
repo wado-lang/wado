@@ -185,7 +185,10 @@ mod tests {
                     })
                 })
                 .collect();
-            handles.into_iter().map(|h| h.join().unwrap()).collect::<Vec<_>>()
+            handles
+                .into_iter()
+                .map(|h| h.join().unwrap())
+                .collect::<Vec<_>>()
         });
 
         for r in &results {
