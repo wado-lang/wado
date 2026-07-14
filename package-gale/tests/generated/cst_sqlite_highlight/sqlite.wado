@@ -17662,10 +17662,9 @@ pub fn highlight_mapping() -> HighlightMapping {
     return HighlightMapping { defaults, rule_names, overrides };
 }
 
-pub fn highlight(input: &String) -> String {
+pub fn highlight_result(result: &ParseResult, input: &String) -> String {
     let mapping = highlight_mapping();
     let mut visitor = HighlightVisitor::new(mapping);
-    let result = parse(input);
     if result.diagnostics.is_empty() {
         highlight_walk(&mut visitor, &result.tokens, &result.cst);
     } else {
@@ -17674,6 +17673,11 @@ pub fn highlight(input: &String) -> String {
         }
     }
     return highlight_html(input, &visitor.captures);
+}
+
+pub fn highlight(input: &String) -> String {
+    let result = parse(input);
+    return highlight_result(&result, input);
 }
 
 use { args, print, eprintln, Stdout, Stderr, Environment } from "core:cli";

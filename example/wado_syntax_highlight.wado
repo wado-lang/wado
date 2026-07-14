@@ -61,38 +61,28 @@ export fn run() with Stdout, Stderr, Environment, Preopens, MonotonicClock {
     }
     let root = dirs[0].0;
 
-    // Per-file parse+highlight durations (nanoseconds), for the closing stats.
-    let mut timings: List<u64> = [];
+    let mut count = 0;
+    let mut sum: u64 = 0;
+    let mut min: u64 = 0;
+    let mut max: u64 = 0;
     for let path of &opts.inputs {
         if let Some(ns) = highlight_file(&root, path, &opts.output_dir) {
-            timings.push(ns);
+            if count == 0 || ns < min {
+                min = ns;
+            }
+            if count == 0 || ns > max {
+                max = ns;
+            }
+            sum += ns;
+            count += 1;
         }
     }
-    report_stats(&timings);
-}
-
-/// Print min / max / avg of the collected per-file durations, in milliseconds.
-fn report_stats(timings: &List<u64>) with Stderr {
-    if timings.is_empty() {
-        return;
+    if count > 0 {
+        let min_ms = min as f64 / 1000000.0;
+        let max_ms = max as f64 / 1000000.0;
+        let avg_ms = sum as f64 / count as f64 / 1000000.0;
+        eprintln(`stats: {count} files | min {min_ms:.3} ms | max {max_ms:.3} ms | avg {avg_ms:.3} ms`);
     }
-    let mut min = timings[0];
-    let mut max = timings[0];
-    let mut sum: u64 = 0;
-    for let t of timings {
-        if *t < min {
-            min = *t;
-        }
-        if *t > max {
-            max = *t;
-        }
-        sum += *t;
-    }
-    let n = timings.len();
-    let min_ms = min as f64 / 1000000.0;
-    let max_ms = max as f64 / 1000000.0;
-    let avg_ms = sum as f64 / n as f64 / 1000000.0;
-    eprintln(`stats: {n} files | min {min_ms:.3} ms | max {max_ms:.3} ms | avg {avg_ms:.3} ms`);
 }
 
 /// Highlight one source file and write the HTML fragment under `output_dir`,
@@ -114,14 +104,13 @@ fn highlight_file(root: &Descriptor, path: &String, output_dir: &String) -> Opti
     let file = open_result.unwrap();
     let input = String::from_utf8_unchecked(read_all(&file));
 
-    // Time the actual work: parse + highlight (file I/O is excluded).
     let start = MonotonicClock::now();
     let result = wado::parse(&input);
     if !result.ok() {
         eprintln(`{*path}: parse error: {result.diagnostics[0].message}`);
         return null;
     }
-    let html = wado::highlight(&input);
+    let html = wado::highlight_result(&result, &input);
     let elapsed = MonotonicClock::now() - start;
     let ms = elapsed as f64 / 1000000.0;
 
@@ -136,21 +125,23 @@ fn highlight_file(root: &Descriptor, path: &String, output_dir: &String) -> Opti
     return Option::Some(elapsed as u64);
 }
 
-/// `mkdir -p` on every directory prefix of `path` (an existing directory is not
-/// an error). Returns `false` on the first unexpected failure.
+/// `mkdir -p` on every directory prefix of `path`, joining only non-empty
+/// components so a doubled or trailing slash never yields a malformed prefix.
+/// An already-existing directory is not an error.
 fn ensure_parent_dirs(root: &Descriptor, path: &String) -> bool with Stderr {
     let components: List<String> = path.split("/").collect();
     let mut prefix = String::new();
     let mut i = 0;
     while i < components.len() - 1 {
-        if i > 0 {
-            prefix.push('/');
-        }
-        prefix.push_str(&components[i]);
+        let comp = &components[i];
         i += 1;
-        if prefix.is_empty() || prefix == "." {
+        if comp.is_empty() || *comp == "." {
             continue;
         }
+        if !prefix.is_empty() {
+            prefix.push('/');
+        }
+        prefix.push_str(comp);
         if let Err(e) = root.create_directory_at(prefix).wait() {
             if e matches { Exist } {
                 continue;
