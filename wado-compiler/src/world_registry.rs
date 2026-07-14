@@ -9,6 +9,7 @@
 use crate::hashmap::IndexMap;
 
 use crate::ast::{Type, WorldDecl, WorldExport, WorldExportFn, WorldImport};
+use crate::module_source::ModuleSource;
 
 /// Well-known world name for the test world.
 ///
@@ -40,6 +41,12 @@ pub struct WorldExportInfo {
     /// `"wasi:http/handler@0.3.0"`). `None` for direct
     /// `export fn ...` declarations.
     pub from_interface_fq: Option<String>,
+    /// For an `export use` re-export: the origin module and the origin
+    /// function's own name (which differs from `name` when the re-export is
+    /// aliased). The codegen adapter calls the origin `pub fn` instead of
+    /// expecting an `export fn name` in the entry module. `None` for a direct
+    /// `export fn` in the entry module.
+    pub reexport_origin: Option<(ModuleSource, String)>,
 }
 
 impl WorldExportInfo {
@@ -59,6 +66,7 @@ impl WorldExportInfo {
             params,
             return_type: export.return_type.clone(),
             from_interface_fq: None,
+            reexport_origin: None,
         }
     }
 
@@ -316,6 +324,7 @@ impl WorldRegistry {
                             params: method.params,
                             return_type: method.return_type,
                             from_interface_fq: Some(lookup.cm_interface_fq.clone()),
+                            reexport_origin: None,
                         });
                     }
                 }
@@ -575,6 +584,7 @@ mod tests {
             params: vec![],
             return_type: Some(result_return("Response", "ErrorCode")),
             from_interface_fq: Some("wasi:http/handler@0.3.0".to_string()),
+            reexport_origin: None,
         };
         let mut http_world = world_info("wasi:http/service");
         http_world.exports.push(http_handler);
@@ -594,6 +604,7 @@ mod tests {
             params: vec![],
             return_type: Some(result_return("Widget", "WidgetError")),
             from_interface_fq: Some("acme:widget/handler@1.0.0".to_string()),
+            reexport_origin: None,
         });
         assert!(
             widget_world.exports[0].is_handler_instance_export(),
@@ -620,6 +631,7 @@ mod tests {
             params: vec![],
             return_type: Some(result_return_unit()),
             from_interface_fq: Some("wasi:http/run@1.0.0".to_string()),
+            reexport_origin: None,
         });
         assert!(!unit_export.exports[0].is_handler_instance_export());
         assert!(!unit_export.has_http_handler_export());

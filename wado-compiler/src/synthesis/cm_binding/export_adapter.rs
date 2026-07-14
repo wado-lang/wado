@@ -1361,7 +1361,7 @@ fn build_export_adapter_params(
 pub(super) fn synthesize_result_export_binding(
     export_name: &str,
     user_func: Rc<RefCell<TirFunction>>,
-    entry_source: &ModuleSource,
+    callee_module: &ModuleSource,
     _return_type: &Type,
     flat_return_types: &[cm_abi::CmValType],
     tir_modules: &IndexMap<ModuleSource, TirModule>,
@@ -1476,7 +1476,7 @@ pub(super) fn synthesize_result_export_binding(
         user_func.borrow().params.iter().map(|p| p.is_mut).collect();
     let call_user = TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef::from_resolved(&user_func.borrow(), entry_source.clone()),
+            func: FunctionRef::from_resolved(&user_func.borrow(), callee_module.clone()),
             type_args: vec![],
             args: call_args
                 .into_iter()
@@ -1881,7 +1881,7 @@ pub(super) fn synthesize_variant_lower_to_flat(
 pub(super) fn synthesize_void_export_binding(
     export_name: &str,
     user_func: Rc<RefCell<TirFunction>>,
-    entry_source: &ModuleSource,
+    callee_module: &ModuleSource,
 ) -> Rc<RefCell<TirFunction>> {
     let binding_name = export_binding_func_name(export_name);
     let mut body_stmts: Vec<TirStmt> = Vec::new();
@@ -1889,7 +1889,7 @@ pub(super) fn synthesize_void_export_binding(
     // Call the user's export function
     let call_user = TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef::from_resolved(&user_func.borrow(), entry_source.clone()),
+            func: FunctionRef::from_resolved(&user_func.borrow(), callee_module.clone()),
             type_args: vec![],
             args: vec![],
         },
@@ -1935,7 +1935,7 @@ pub(super) fn synthesize_void_export_binding(
 pub(super) fn synthesize_sync_export_binding(
     export_name: &str,
     user_func: Rc<RefCell<TirFunction>>,
-    entry_source: &ModuleSource,
+    callee_module: &ModuleSource,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
     world_params: &[(String, Type)],
@@ -1971,7 +1971,7 @@ pub(super) fn synthesize_sync_export_binding(
         user_func.borrow().params.iter().map(|p| p.is_mut).collect();
     let call_user = TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef::from_resolved(&user_func.borrow(), entry_source.clone()),
+            func: FunctionRef::from_resolved(&user_func.borrow(), callee_module.clone()),
             type_args: vec![],
             args: call_args
                 .into_iter()
@@ -2119,7 +2119,7 @@ pub(super) fn synthesize_sync_export_binding(
 pub(super) fn synthesize_async_export_binding(
     export_name: &str,
     user_func: Rc<RefCell<TirFunction>>,
-    entry_source: &ModuleSource,
+    callee_module: &ModuleSource,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
     world_params: &[(String, Type)],
@@ -2223,7 +2223,7 @@ pub(super) fn synthesize_async_export_binding(
         user_func.borrow().params.iter().map(|p| p.is_mut).collect();
     let call_user = TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef::from_resolved(&user_func.borrow(), entry_source.clone()),
+            func: FunctionRef::from_resolved(&user_func.borrow(), callee_module.clone()),
             type_args: vec![],
             args: call_args
                 .into_iter()
