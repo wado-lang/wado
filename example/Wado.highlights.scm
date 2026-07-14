@@ -8,10 +8,21 @@
 ; The `__DATA__` data section: raw embedded text, muted like a comment.
 (DATA_SECTION) @comment
 (STRING_LITERAL) @string
-(TEMPLATE_STRING) @string
 (CHAR_LITERAL) @string
 (FLOAT) @number
 (INTEGER) @number
+
+; Template strings: the literal chunks and the backtick delimiters are string;
+; a `{ ... }` interpolation holds real code. Its identifiers read as variables,
+; while keywords / numbers / nested strings keep their own colors. The trailing
+; `:spec` format specifier is muted (listed before the interpolation rule so it
+; wins over the identifier override for a spec like `{x:width}`).
+(TEMPLATE_TEXT) @string
+(BACKTICK) @string
+(formatSpec (IDENTIFIER) @comment)
+(formatSpec (INTEGER) @comment)
+(formatSpec (FLOAT) @comment)
+(interpolation (IDENTIFIER) @variable)
 
 ; Boolean / null constants
 "true" @constant.builtin

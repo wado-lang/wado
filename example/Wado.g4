@@ -3,8 +3,8 @@
 // expressions, patterns, generics, attributes, traits/impls, globals, type
 // aliases, `if let` / `while let` let-chains, `task return`, map literals,
 // turbofish associated calls, and effect-handler installation via
-// `with E => h do { ... }` / `resume`). Effect *declarations* (`effect E {
-// ... }`) and world / resource declarations are not yet modeled.
+// `with E => h do { ... }` / `resume`, and template strings with interpolation.
+// Effect *declarations* (`effect E { ... }`) are not yet modeled.
 
 grammar Wado;
 
@@ -82,7 +82,7 @@ useDecl
     ;
 
 importGroup
-    : '{' importList? '}'
+    : OPEN_BRACE importList? CLOSE_BRACE
     | IDENTIFIER
     | '_'
     ;
@@ -145,7 +145,7 @@ storesItem
     ;
 
 structDecl
-    : 'struct' IDENTIFIER genericParams? '{' fieldList? '}'
+    : 'struct' IDENTIFIER genericParams? OPEN_BRACE fieldList? CLOSE_BRACE
     ;
 
 fieldList
@@ -157,7 +157,7 @@ fieldDecl
     ;
 
 enumDecl
-    : 'enum' IDENTIFIER '{' enumCaseList? '}'
+    : 'enum' IDENTIFIER OPEN_BRACE enumCaseList? CLOSE_BRACE
     ;
 
 enumCaseList
@@ -169,7 +169,7 @@ enumCase
     ;
 
 flagsDecl
-    : 'flags' IDENTIFIER '{' flagsCaseList? '}'
+    : 'flags' IDENTIFIER OPEN_BRACE flagsCaseList? CLOSE_BRACE
     ;
 
 flagsCaseList
@@ -181,7 +181,7 @@ flagsCase
     ;
 
 variantDecl
-    : 'variant' IDENTIFIER genericParams? '{' variantCaseList? '}'
+    : 'variant' IDENTIFIER genericParams? OPEN_BRACE variantCaseList? CLOSE_BRACE
     ;
 
 variantCaseList
@@ -193,18 +193,18 @@ variantCase
     ;
 
 traitDecl
-    : 'trait' IDENTIFIER genericParams? '{' traitMember* '}'
+    : 'trait' IDENTIFIER genericParams? OPEN_BRACE traitMember* CLOSE_BRACE
     ;
 
 // A WIT-style interface: a named set of function signatures (and associated
 // types), modeled with the same members as a trait.
 interfaceDecl
-    : 'interface' IDENTIFIER genericParams? '{' traitMember* '}'
+    : 'interface' IDENTIFIER genericParams? OPEN_BRACE traitMember* CLOSE_BRACE
     ;
 
 // A WIT-style world: a set of `import` / `export` items naming interfaces.
 worldDecl
-    : 'world' IDENTIFIER '{' worldItem* '}'
+    : 'world' IDENTIFIER OPEN_BRACE worldItem* CLOSE_BRACE
     ;
 
 worldItem
@@ -214,7 +214,7 @@ worldItem
 // A WIT-style resource: an opaque handle with method / static-function
 // signatures (or a bodyless unit resource `resource X;`).
 resourceDecl
-    : 'resource' IDENTIFIER genericParams? ('{' resourceMember* '}' | ';')
+    : 'resource' IDENTIFIER genericParams? (OPEN_BRACE resourceMember* CLOSE_BRACE | ';')
     ;
 
 resourceMember
@@ -231,7 +231,7 @@ traitMemberBody
     ;
 
 implBlock
-    : 'impl' genericParams? typeRef ('for' typeRef)? ('{' implMember* '}' | ';')
+    : 'impl' genericParams? typeRef ('for' typeRef)? (OPEN_BRACE implMember* CLOSE_BRACE | ';')
     ;
 
 implMember
@@ -310,7 +310,7 @@ memberName
 
 // Optional trailing expression with no `;` is the block's value (`{ 1 }`).
 block
-    : '{' statement* expression? '}'
+    : OPEN_BRACE statement* expression? CLOSE_BRACE
     ;
 
 statement
@@ -460,7 +460,7 @@ postfixOp
     | '::' typeArgs '(' argumentList? ')'
     | '.' (memberName ('::' typeArgs)? ('(' argumentList? ')')? | INTEGER | FLOAT)
     | '[' expression ']'
-    | 'matches' '{' pattern ('&&' expression)? '}'
+    | 'matches' OPEN_BRACE pattern ('&&' expression)? CLOSE_BRACE
     | '?'
     ;
 
@@ -501,7 +501,7 @@ withBinding
 // `TreeMap<String, V>` by context. Excluded from `primaryNoStruct` because a
 // `{` after an `if`/`while`/`for` header opens the body.
 mapLiteral
-    : '{' (mapEntry (',' mapEntry)* ','?)? '}'
+    : OPEN_BRACE (mapEntry (',' mapEntry)* ','?)? CLOSE_BRACE
     ;
 
 mapEntry
@@ -563,7 +563,7 @@ primaryNoStruct
     ;
 
 structLiteral
-    : path '{' fieldInitList? '}'
+    : path OPEN_BRACE fieldInitList? CLOSE_BRACE
     ;
 
 fieldInitList
@@ -601,7 +601,7 @@ ifExpr
     ;
 
 matchExpr
-    : 'match' exprNoStruct '{' (matchArm (',' matchArm)* ','?)? '}'
+    : 'match' exprNoStruct OPEN_BRACE (matchArm (',' matchArm)* ','?)? CLOSE_BRACE
     ;
 
 matchArm
@@ -619,7 +619,7 @@ patternPrimary
     | literal
     | '-' INTEGER
     | path ('(' (pattern (',' pattern)*)? ')')?
-    | 'mut'? path? '{' patternFieldList? '}'
+    | 'mut'? path? OPEN_BRACE patternFieldList? CLOSE_BRACE
     | '(' (pattern (',' pattern)*)? ')'
     | '[' patternElements? ']'
     ;
@@ -641,11 +641,41 @@ literal
     : INTEGER
     | FLOAT
     | STRING_LITERAL
-    | TEMPLATE_STRING
+    | templateString
     | CHAR_LITERAL
     | 'true'
     | 'false'
     | 'null'
+    ;
+
+// A template string is lexed into pieces (see the TEMPLATE lexer mode): literal
+// TEMPLATE_TEXT chunks and `{ ... }` interpolations. Each interpolation holds a
+// real expression (its tokens are lexed in the default mode, so keywords,
+// numbers, and nested strings/templates highlight), followed by an optional
+// `:spec` format specifier.
+templateString
+    : BACKTICK templatePart* BACKTICK
+    ;
+
+templatePart
+    : TEMPLATE_TEXT
+    | interpolation
+    ;
+
+interpolation
+    : OPEN_BRACE expression (':' formatSpec)? CLOSE_BRACE
+    ;
+
+// A format specifier follows Rust's mini-language
+// (`[[fill]align][sign][#][0][width][.precision][type]`). Its pieces are lexed
+// as ordinary tokens; the highlight query mutes them.
+formatSpec
+    : formatSpecAtom*
+    ;
+
+formatSpecAtom
+    : IDENTIFIER | INTEGER | FLOAT
+    | '.' | '<' | '>' | '^' | '+' | '-' | '#' | '?' | '_' | '*'
     ;
 
 FLOAT
@@ -664,16 +694,22 @@ STRING_LITERAL
     : 'b'? '"' ('\\' . | ~["\\])* '"'
     ;
 
-// A `{ ... }` interpolation holds Wado code, which may nest braces, strings,
-// and further templates. Matching it recursively lets a template contain a
-// nested template (e.g. a `match` arm inside `{ ... }`). The whole template,
-// interpolations included, is one token (highlighted as one string span).
-TEMPLATE_STRING
-    : '`' ('\\' . | TEMPLATE_INTERP | ~[`\\{])* '`'
+// Braces are named tokens (not inline literals) so they can drive the lexer
+// mode stack: every `{` pushes and every `}` pops, which balances the nested
+// braces inside a template interpolation without host-language actions. For
+// brace-balanced input the stack returns to its start, so the token stream is
+// unchanged for code that uses no templates.
+OPEN_BRACE
+    : '{' -> pushMode(DEFAULT_MODE)
     ;
 
-fragment TEMPLATE_INTERP
-    : '{' ('\\' . | STRING_LITERAL | CHAR_LITERAL | TEMPLATE_STRING | TEMPLATE_INTERP | ~[{}"'`\\])* '}'
+CLOSE_BRACE
+    : '}' -> popMode
+    ;
+
+// A backtick opens a template string, switching to the TEMPLATE mode.
+BACKTICK
+    : '`' -> pushMode(TEMPLATE)
     ;
 
 CHAR_LITERAL
@@ -713,4 +749,21 @@ BLOCK_COMMENT
 
 WS
     : [ \t\r\n]+ -> skip
+    ;
+
+// Template-string body. `{` opens an interpolation (lexed back in the default
+// mode via the brace mode stack); a backtick closes the template. Whitespace
+// is significant here, so this mode skips nothing.
+mode TEMPLATE;
+
+TEMPLATE_TEXT
+    : ('\\' . | ~[`{\\])+
+    ;
+
+TEMPLATE_INTERP_OPEN
+    : '{' -> type(OPEN_BRACE), pushMode(DEFAULT_MODE)
+    ;
+
+TEMPLATE_END
+    : '`' -> type(BACKTICK), popMode
     ;
