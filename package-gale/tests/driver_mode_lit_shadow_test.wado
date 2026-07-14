@@ -1,0 +1,13 @@
+//! A `{` rule in a non-default lexer mode must not be shadowed by an inline
+//! `{` literal used in a parser rule — inline literals are only matched in the
+//! default mode, so the mode would otherwise lose its `{` matcher.
+
+use g from "./grammars/mode_lit_shadow.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/mode_lit_shadow" },
+    };
+
+test "a non-default-mode literal rule keeps its matcher" {
+    let r = g::parse(&"{} `{x}`");
+    assert r.ok(), `tree: '{g::to_string_tree(&r)}'`;
+}

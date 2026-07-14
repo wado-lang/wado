@@ -82,7 +82,7 @@ useDecl
     ;
 
 importGroup
-    : OPEN_BRACE importList? CLOSE_BRACE
+    : '{' importList? '}'
     | IDENTIFIER
     | '_'
     ;
@@ -145,7 +145,7 @@ storesItem
     ;
 
 structDecl
-    : 'struct' IDENTIFIER genericParams? OPEN_BRACE fieldList? CLOSE_BRACE
+    : 'struct' IDENTIFIER genericParams? '{' fieldList? '}'
     ;
 
 fieldList
@@ -157,7 +157,7 @@ fieldDecl
     ;
 
 enumDecl
-    : 'enum' IDENTIFIER OPEN_BRACE enumCaseList? CLOSE_BRACE
+    : 'enum' IDENTIFIER '{' enumCaseList? '}'
     ;
 
 enumCaseList
@@ -169,7 +169,7 @@ enumCase
     ;
 
 flagsDecl
-    : 'flags' IDENTIFIER OPEN_BRACE flagsCaseList? CLOSE_BRACE
+    : 'flags' IDENTIFIER '{' flagsCaseList? '}'
     ;
 
 flagsCaseList
@@ -181,7 +181,7 @@ flagsCase
     ;
 
 variantDecl
-    : 'variant' IDENTIFIER genericParams? OPEN_BRACE variantCaseList? CLOSE_BRACE
+    : 'variant' IDENTIFIER genericParams? '{' variantCaseList? '}'
     ;
 
 variantCaseList
@@ -193,18 +193,18 @@ variantCase
     ;
 
 traitDecl
-    : 'trait' IDENTIFIER genericParams? OPEN_BRACE traitMember* CLOSE_BRACE
+    : 'trait' IDENTIFIER genericParams? '{' traitMember* '}'
     ;
 
 // A WIT-style interface: a named set of function signatures (and associated
 // types), modeled with the same members as a trait.
 interfaceDecl
-    : 'interface' IDENTIFIER genericParams? OPEN_BRACE traitMember* CLOSE_BRACE
+    : 'interface' IDENTIFIER genericParams? '{' traitMember* '}'
     ;
 
 // A WIT-style world: a set of `import` / `export` items naming interfaces.
 worldDecl
-    : 'world' IDENTIFIER OPEN_BRACE worldItem* CLOSE_BRACE
+    : 'world' IDENTIFIER '{' worldItem* '}'
     ;
 
 worldItem
@@ -214,7 +214,7 @@ worldItem
 // A WIT-style resource: an opaque handle with method / static-function
 // signatures (or a bodyless unit resource `resource X;`).
 resourceDecl
-    : 'resource' IDENTIFIER genericParams? (OPEN_BRACE resourceMember* CLOSE_BRACE | ';')
+    : 'resource' IDENTIFIER genericParams? ('{' resourceMember* '}' | ';')
     ;
 
 resourceMember
@@ -231,7 +231,7 @@ traitMemberBody
     ;
 
 implBlock
-    : 'impl' genericParams? typeRef ('for' typeRef)? (OPEN_BRACE implMember* CLOSE_BRACE | ';')
+    : 'impl' genericParams? typeRef ('for' typeRef)? ('{' implMember* '}' | ';')
     ;
 
 implMember
@@ -310,7 +310,7 @@ memberName
 
 // Optional trailing expression with no `;` is the block's value (`{ 1 }`).
 block
-    : OPEN_BRACE statement* expression? CLOSE_BRACE
+    : '{' statement* expression? '}'
     ;
 
 statement
@@ -460,7 +460,7 @@ postfixOp
     | '::' typeArgs '(' argumentList? ')'
     | '.' (memberName ('::' typeArgs)? ('(' argumentList? ')')? | INTEGER | FLOAT)
     | '[' expression ']'
-    | 'matches' OPEN_BRACE pattern ('&&' expression)? CLOSE_BRACE
+    | 'matches' '{' pattern ('&&' expression)? '}'
     | '?'
     ;
 
@@ -501,7 +501,7 @@ withBinding
 // `TreeMap<String, V>` by context. Excluded from `primaryNoStruct` because a
 // `{` after an `if`/`while`/`for` header opens the body.
 mapLiteral
-    : OPEN_BRACE (mapEntry (',' mapEntry)* ','?)? CLOSE_BRACE
+    : '{' (mapEntry (',' mapEntry)* ','?)? '}'
     ;
 
 mapEntry
@@ -563,7 +563,7 @@ primaryNoStruct
     ;
 
 structLiteral
-    : path OPEN_BRACE fieldInitList? CLOSE_BRACE
+    : path '{' fieldInitList? '}'
     ;
 
 fieldInitList
@@ -601,7 +601,7 @@ ifExpr
     ;
 
 matchExpr
-    : 'match' exprNoStruct OPEN_BRACE (matchArm (',' matchArm)* ','?)? CLOSE_BRACE
+    : 'match' exprNoStruct '{' (matchArm (',' matchArm)* ','?)? '}'
     ;
 
 matchArm
@@ -619,7 +619,7 @@ patternPrimary
     | literal
     | '-' INTEGER
     | path ('(' (pattern (',' pattern)*)? ')')?
-    | 'mut'? path? OPEN_BRACE patternFieldList? CLOSE_BRACE
+    | 'mut'? path? '{' patternFieldList? '}'
     | '(' (pattern (',' pattern)*)? ')'
     | '[' patternElements? ']'
     ;
@@ -661,7 +661,7 @@ templatePart
     ;
 
 interpolation
-    : OPEN_BRACE expression (':' formatSpec)? CLOSE_BRACE
+    : INTERP_OPEN expression (':' formatSpec)? '}'
     ;
 
 // A format specifier follows Rust's mini-language; its pieces are lexed as
@@ -691,14 +691,13 @@ STRING_LITERAL
     : 'b'? '"' ('\\' . | ~["\\])* '"'
     ;
 
-// Named (not inline) so they can carry the mode commands that balance a
-// template interpolation's nested braces: `{` pushes, `}` pops. The stack
-// returns to its start for balanced input, so non-template code is unaffected.
-OPEN_BRACE
+// Brace tokens carry the mode commands that inline `'{'` / `'}'` inherit, so a
+// template interpolation's nested braces balance via the mode stack.
+LBRACE
     : '{' -> pushMode(DEFAULT_MODE)
     ;
 
-CLOSE_BRACE
+RBRACE
     : '}' -> popMode
     ;
 
@@ -752,8 +751,8 @@ TEMPLATE_TEXT
     : ('\\' . | ~[`{\\])+
     ;
 
-TEMPLATE_INTERP_OPEN
-    : '{' -> type(OPEN_BRACE), pushMode(DEFAULT_MODE)
+INTERP_OPEN
+    : '{' -> pushMode(DEFAULT_MODE)
     ;
 
 TEMPLATE_END
