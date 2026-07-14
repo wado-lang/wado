@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784031926443,
+  "lastUpdate": 1784033843817,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -40361,6 +40361,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/55bf0829cdf87310f502f42f9186c6e27fe6e35e"
         },
         "date": 1784031925748,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16422,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "50c8913d0ee22df3222d96177bec3eebc419ae0c",
+          "message": "Merge pull request #1581 from wado-lang/claude/newtype-method-dispatch-jo8opy\n\nfix(compiler): resolve newtypes correctly at the Component Model boundary",
+          "timestamp": "2026-07-14T21:48:08+09:00",
+          "tree_id": "95d5b6c83d540f551c30ed879a547a8f5a3b624e",
+          "url": "https://github.com/wado-lang/wado/commit/50c8913d0ee22df3222d96177bec3eebc419ae0c"
+        },
+        "date": 1784033843374,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
