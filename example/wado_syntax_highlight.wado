@@ -272,3 +272,25 @@ test "highlight __DATA__ section" {
     let html = wado::highlight(&src);
     assert html.contains("<span class=\"comment\">__DATA__"), "data section should be highlighted";
 }
+
+// Grammar-gap coverage: constructs used across the E2E fixtures that the
+// example grammar did not accept until each was modeled.
+test "highlight flags declaration" {
+    assert_highlights(&"pub flags Perms { Read, Write }\n");
+}
+
+test "highlight unit value and type" {
+    assert_highlights(&"struct S { u: () }\nfn f() -> () { let t = [1, ()]; return (); }\n");
+}
+
+test "highlight labeled block" {
+    assert_highlights(&"fn f() { scope: { break scope; } let r = outer: { break outer: 5; }; }\n");
+}
+
+test "highlight mut struct destructuring" {
+    assert_highlights(&"struct P { x: i32, y: i32 }\nfn f(p: P) { let mut { x: mx, y: my } = p; mx += 1; }\n");
+}
+
+test "highlight turbofish wildcard type" {
+    assert_highlights(&"fn f() { let x = pick::<_, bool>(1, true); }\n");
+}

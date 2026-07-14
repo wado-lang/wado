@@ -4,8 +4,7 @@
 // aliases, `if let` / `while let` let-chains, `task return`, map literals,
 // turbofish associated calls, and effect-handler installation via
 // `with E => h do { ... }` / `resume`). Effect *declarations* (`effect E {
-// ... }`) and world / interface / resource / flags declarations are not yet
-// modeled.
+// ... }`) and world / interface / resource declarations are not yet modeled.
 
 grammar Wado;
 
@@ -34,6 +33,7 @@ pubItem
     | structDecl
     | enumDecl
     | variantDecl
+    | flagsDecl
     | traitDecl
     ;
 
@@ -138,6 +138,18 @@ enumCaseList
     : IDENTIFIER (',' IDENTIFIER)* ','?
     ;
 
+flagsDecl
+    : 'flags' IDENTIFIER '{' flagsCaseList? '}'
+    ;
+
+flagsCaseList
+    : flagsCase (',' flagsCase)* ','?
+    ;
+
+flagsCase
+    : attribute* IDENTIFIER
+    ;
+
 variantDecl
     : 'variant' IDENTIFIER genericParams? '{' variantCaseList? '}'
     ;
@@ -192,6 +204,7 @@ traitBounds
 typeRef
     : '&' 'mut'? typeRef
     | '!'
+    | '_'
     | '(' (typeRef (',' typeRef)*)? ')'
     | '[' (typeRef (',' typeRef)*)? ']'
     | 'fn' 'mut'? '(' (typeRef (',' typeRef)*)? ')' returnType? withClause?
@@ -236,7 +249,14 @@ statement
     | continueStatement
     | assertStatement
     | matchStatement
+    | labeledBlock
     | exprStatement
+    ;
+
+// A labeled block `label: { ... }`, exited with `break label` (optionally
+// yielding a value: `break label: expr`). Also usable in expression position.
+labeledBlock
+    : IDENTIFIER ':' block
     ;
 
 letStatement
@@ -291,7 +311,7 @@ loopStatement
     ;
 
 breakStatement
-    : 'break' ';'
+    : 'break' (IDENTIFIER (':' expression)?)? ';'
     ;
 
 continueStatement
@@ -358,7 +378,8 @@ primary
     | ifExpr
     | matchExpr
     | withExpr
-    | '(' expression ')'
+    | labeledBlock
+    | '(' expression? ')'
     ;
 
 // Effect-handler installation: `with Effect => handler do { ... }` (one or
@@ -435,7 +456,7 @@ primaryNoStruct
     | closure
     | ifExpr
     | matchExpr
-    | '(' expression ')'
+    | '(' expression? ')'
     ;
 
 structLiteral
@@ -495,7 +516,7 @@ patternPrimary
     | literal
     | '-' INTEGER
     | path ('(' (pattern (',' pattern)*)? ')')?
-    | path? '{' patternFieldList? '}'
+    | 'mut'? path? '{' patternFieldList? '}'
     | '(' (pattern (',' pattern)*)? ')'
     | '[' patternElements? ']'
     ;
