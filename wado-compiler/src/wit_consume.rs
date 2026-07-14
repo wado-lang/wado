@@ -549,10 +549,10 @@ mod tests {
             other => panic!("expected Named Point, got {other:?}"),
         }
 
-        // Records/enums/variants/flags are preserved as named types; the
-        // `meters = f64` newtype is transparent at the CM boundary, so the
-        // compiled component inlines it (id_newtype is f64 -> f64).
-        for t in ["Point", "Color", "Shape", "Perms", "Mixed"] {
+        // Records/enums/variants/flags and the `meters = f64` newtype are all
+        // preserved as named types at the CM boundary, so the importer sees the
+        // newtype rather than an inlined `f64` (issue #1456).
+        for t in ["Point", "Color", "Shape", "Perms", "Mixed", "Meters"] {
             assert!(type_names.contains(&t.to_string()), "missing type {t}");
         }
         let id_newtype = iface
@@ -560,6 +560,15 @@ mod tests {
             .iter()
             .find(|m| m.name == "id_newtype")
             .unwrap();
-        assert!(matches!(&id_newtype.params[0].ty, Type::Named(n) if n.name == "f64"));
+        match &id_newtype.params[0].ty {
+            Type::Named(n) => {
+                assert_eq!(n.name, "Meters");
+                assert_eq!(
+                    n.source_interface.as_deref(),
+                    Some("wado-lang:cm-catalog/cm-catalog@0.1.0")
+                );
+            }
+            other => panic!("expected Named Meters, got {other:?}"),
+        }
     }
 }

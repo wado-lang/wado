@@ -158,6 +158,15 @@ export fn id_flags(v: Perms) -> Perms {
 export fn id_newtype(v: Meters) -> Meters {
     return v;
 }
+// A newtype inside `option` / `result`: the export adapter must lift and lower
+// the payload through the newtype's base representation (`f64`), including the
+// `result` join that widens the `f64`/`u32` arms to a shared 64-bit slot.
+export fn id_option_newtype(v: Option<Meters>) -> Option<Meters> {
+    return v;
+}
+export fn id_result_newtype(v: Result<Meters, u32>) -> Result<Meters, u32> {
+    return v;
+}
 export fn id_mixed(v: Mixed) -> Mixed {
     return v;
 }

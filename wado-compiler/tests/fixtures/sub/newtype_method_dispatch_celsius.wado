@@ -1,0 +1,21 @@
+// Module A: newtype `Temp` over `Celsius`, whose inherent method `reading`
+// returns the raw degree. Same newtype name as module B, different base.
+struct Celsius {
+    deg: i32,
+}
+
+impl Celsius {
+    fn reading(&self) -> i32 {
+        return self.deg;
+    }
+}
+
+pub type Temp = Celsius;
+
+pub fn make_temp(deg: i32) -> Temp {
+    return Celsius { deg: deg } as Temp;
+}
+
+pub fn reading_of(t: Temp) -> i32 {
+    return t.reading();
+}

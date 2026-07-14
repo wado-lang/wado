@@ -1,4 +1,4 @@
-use { CmCatalog, Color, Point, Shape, Perms, Mixed } from "./sub/cm-catalog.wasm" with { type: "wasm" };
+use { CmCatalog, Color, Point, Shape, Perms, Mixed, Meters } from "./sub/cm-catalog.wasm" with { type: "wasm" };
 
 test "primitives round-trip" {
     assert CmCatalog::id_bool(true) == true;
@@ -28,7 +28,12 @@ test "enum round-trip" {
 }
 
 test "newtype round-trip" {
-    assert CmCatalog::id_newtype(2.5) == 2.5;
+    // `Meters` is imported as a real newtype: `wado compile --lib` preserves
+    // `type meters = f64` in the component's structural type, so `wit_consume`
+    // reconstructs it here rather than seeing a bare `f64` (issue #1456).
+    let m: Meters = 2.5 as Meters;
+    assert CmCatalog::id_newtype(m) == m;
+    assert CmCatalog::id_newtype(m) as f64 == 2.5;
 }
 
 test "list round-trip" {

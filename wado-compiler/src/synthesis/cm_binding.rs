@@ -1091,12 +1091,25 @@ mod tests {
     #[test]
     fn flatten_param_newtype_u64() {
         let (reg, _) = CmInterfaceRegistry::build_from_stdlib();
+        // A newtype reference reaching CM flattening carries its declaring
+        // interface (as bootstrap and lib registration populate it).
+        let wasi_newtype = |name: &str| {
+            let source = reg
+                .find_wasi_newtype_source(name)
+                .expect("wasi newtype source");
+            Type::Named(NamedType {
+                id: crate::ast::AstId::fresh(),
+                name: name.to_string(),
+                span: synth_span(),
+                source_interface: Some(source.to_string()),
+            })
+        };
         assert_eq!(
-            flatten_param_type(&named_type("Duration"), &reg, &CmStdlibNames::for_tests()),
+            flatten_param_type(&wasi_newtype("Duration"), &reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I64]
         );
         assert_eq!(
-            flatten_param_type(&named_type("Mark"), &reg, &CmStdlibNames::for_tests()),
+            flatten_param_type(&wasi_newtype("Mark"), &reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I64]
         );
     }

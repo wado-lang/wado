@@ -693,6 +693,40 @@ pub(super) fn synthesize_lift_from_flat_params(
             let lifted = internal_call("memory_to_gc_string", vec![ptr, len], target_type_id);
             (lifted, 2)
         }
+        Type::Named(_)
+            if matches!(
+                type_table_cell.borrow().get(target_type_id),
+                ResolvedType::Newtype { .. }
+            ) =>
+        {
+            // A newtype shares its base's flat representation, so lift through
+            // the base (the lower path peels symmetrically). Otherwise it hits
+            // the i32 default below and reads its slot at the wrong core type
+            // (`expected f64, found i32` for `Option<Meters>`).
+            let (base_type_id, base_ast) = {
+                let tt = type_table_cell.borrow();
+                let ResolvedType::Newtype { base_type, .. } = tt.get(target_type_id) else {
+                    unreachable!("guarded by the match arm above")
+                };
+                let base_type = *base_type;
+                (
+                    base_type,
+                    type_id_to_ast_type(base_type, &tt, lift_ctx.cm_interface_registry),
+                )
+            };
+            synthesize_lift_from_flat_params(
+                &base_ast,
+                flat_param_locals,
+                flat_types,
+                base_type_id,
+                next_local,
+                stmts,
+                locals,
+                tir_modules,
+                type_table_cell,
+                lift_ctx,
+            )
+        }
         Type::Named(named) => match named.name.as_str() {
             "i32" | "u32" => (local_ref(flat_param_locals[0], "__p", TypeTable::I32), 1),
             "i64" | "u64" => (local_ref(flat_param_locals[0], "__p", TypeTable::I64), 1),

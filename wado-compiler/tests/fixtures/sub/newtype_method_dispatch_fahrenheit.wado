@@ -1,0 +1,22 @@
+// Module B: newtype `Temp` over `Fahrenheit`, whose inherent method `reading`
+// doubles the raw degree. Same newtype name as module A, different base — the
+// newtype->base snapshot must not collide across the two modules.
+struct Fahrenheit {
+    deg: i32,
+}
+
+impl Fahrenheit {
+    fn reading(&self) -> i32 {
+        return self.deg * 2;
+    }
+}
+
+pub type Temp = Fahrenheit;
+
+pub fn make_temp(deg: i32) -> Temp {
+    return Fahrenheit { deg: deg } as Temp;
+}
+
+pub fn reading_of(t: Temp) -> i32 {
+    return t.reading();
+}

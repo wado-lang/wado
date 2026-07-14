@@ -128,7 +128,12 @@ fn result_args(tt: &TypeTable, type_id: TypeId) -> Option<(TypeId, TypeId)> {
 fn carries_resource(tt: &TypeTable, reg: &CmInterfaceRegistry, type_id: TypeId) -> bool {
     let base = tt.get_ultimate_base_type(type_id);
     match tt.get(base) {
-        ResolvedType::Resource { name, .. } => reg.get_resource_cm_name(name).is_some(),
+        ResolvedType::Resource {
+            name,
+            module_source,
+        } => reg
+            .get_resource_cm_name_by_module(&module_source.to_string(), name)
+            .is_some(),
         _ => {
             if let Some((ok, err)) = result_args(tt, type_id) {
                 carries_resource(tt, reg, ok) || carries_resource(tt, reg, err)
@@ -352,8 +357,15 @@ fn drop_one(live: &Live, cx: &mut Cx) -> Vec<TirStmt> {
 /// from `scrutinee` (a value of type `type_id`).
 fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> {
     let base = cx.tt.get_ultimate_base_type(type_id);
-    if let ResolvedType::Resource { name, .. } = cx.tt.get(base).clone() {
-        return match cx.reg.get_resource_cm_name(&name) {
+    if let ResolvedType::Resource {
+        name,
+        module_source,
+    } = cx.tt.get(base).clone()
+    {
+        return match cx
+            .reg
+            .get_resource_cm_name_by_module(&module_source.to_string(), &name)
+        {
             Some(cm) => vec![expr_stmt(cm_raw_call(
                 &format!("resource-drop:{cm}"),
                 vec![scrutinee],
