@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1783981934194,
+  "lastUpdate": 1784016261077,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -40141,6 +40141,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4b49bf5f8a361e07b3f357524b02bc79158313ae"
         },
         "date": 1783981933569,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16422,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 266286,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ecadb651adc70485b66fab56607783c7cef88717",
+          "message": "Merge pull request #1576 from wado-lang/claude/wado-hello-blog-post-cotqxs\n\nfeat(compiler): consume a facade library as a CM component (Marl from the registry)",
+          "timestamp": "2026-07-14T16:56:42+09:00",
+          "tree_id": "1c8a0b4ba3e1a73e514160e6409277be6ae0d53a",
+          "url": "https://github.com/wado-lang/wado/commit/ecadb651adc70485b66fab56607783c7cef88717"
+        },
+        "date": 1784016260521,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
