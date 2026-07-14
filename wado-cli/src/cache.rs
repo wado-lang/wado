@@ -135,12 +135,21 @@ fn relative_under_root(
 /// leave a stray temp file, never a half-written `component.wasm` that the
 /// `is_file()` cache check would then trust forever.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    // The pid keeps concurrent writers (different processes) from clobbering one
-    // another's temp file; the rename is the single atomic publish step.
-    let tmp = path.with_extension(format!("tmp-{}", std::process::id()));
+    // A per-write temp sibling, unique across processes (pid) and across threads
+    // within one process (the counter): a parallel compile fetches the same
+    // component from several files at once, so two writers must never share — and
+    // rename away — each other's temp file. The rename is the atomic publish step.
+    let tmp = path.with_extension(format!(
+        "tmp-{}-{}",
+        std::process::id(),
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
     std::fs::write(&tmp, bytes)?;
     match std::fs::rename(&tmp, path) {
         Ok(()) => Ok(()),
@@ -154,6 +163,39 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use std::path::Path;
+
+    #[test]
+    fn write_atomic_is_concurrency_safe_for_the_same_path() {
+        // A parallel compile fetches the same registry component from several
+        // files at once, so `write_atomic` runs concurrently on one path. Every
+        // writer must succeed and leave the full bytes — no writer may rename
+        // another's temp file out from under it.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("ghcr.io/ns/pkg/0.1.0/component.wasm");
+        let bytes: Vec<u8> = (0..4096).map(|i| (i % 251) as u8).collect();
+
+        const THREADS: usize = 32;
+        let barrier = std::sync::Barrier::new(THREADS);
+        let results = std::thread::scope(|s| {
+            let handles: Vec<_> = (0..THREADS)
+                .map(|_| {
+                    s.spawn(|| {
+                        barrier.wait();
+                        super::write_atomic(&path, &bytes)
+                    })
+                })
+                .collect();
+            handles
+                .into_iter()
+                .map(|h| h.join().unwrap())
+                .collect::<Vec<_>>()
+        });
+
+        for r in &results {
+            assert!(r.is_ok(), "a concurrent write_atomic failed: {r:?}");
+        }
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+    }
 
     #[test]
     fn config_root_value_reads_the_root_string() {
