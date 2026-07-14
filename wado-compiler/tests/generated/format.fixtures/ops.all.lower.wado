@@ -316,10 +316,6 @@ pub struct "Box<f32>" {
     value: f32,
 }
 
-pub struct "Box<core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/IntErrorKind>>" {
-    value: Result<i32, IntErrorKind>,
-}
-
 pub struct "Box<bool>" {
     value: bool,
 }
@@ -4640,7 +4636,7 @@ pub fn u128::from_str_radix_range(s: &String, start: i32, end: i32, radix: u32) 
         },
         _ => (),
     };
-    let digit_start: i32 = Box<core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/IntErrorKind>> { value: prefix }."Result<i32,core:prelude/intparse.wado/IntErrorKind>::unwrap"();
+    let digit_start: i32 = prefix."Result<i32,core:prelude/intparse.wado/IntErrorKind>::unwrap"();
     return match "core::prelude/intparse.wado::parse_u128_digits"(s, digit_start, end, radix) {
         Ok(v) => Result<u128, ParseIntError>::Ok(v),
         Err(k) => Result<u128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k)),
@@ -14652,7 +14648,7 @@ fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newline: 
     } else {
         core::rt::cm_stream_write_raw_u8(&tx as i32, message.String::internal_raw_bytes(), len);
     }
-    cm_raw_call stream-drop-writable(&tx as i32);
+    cm_raw_call stream-drop-writable(tx as i32);
 }
 
 fn wait_for_subtask(packed: i32) with WaitableSet, Subtask {
@@ -14667,13 +14663,13 @@ fn wait_for_subtask(packed: i32) with WaitableSet, Subtask {
                 break;
             }
         }
-        cm_raw_call subtask-drop(&subtask as i32);
-        cm_raw_call waitable-set-drop(&ws as i32);
+        cm_raw_call subtask-drop(subtask as i32);
+        cm_raw_call waitable-set-drop(ws as i32);
     }
 }
 
 fn drop_cli_write_future(future: Future<Result<(), ErrorCode>>) {
-    cm_raw_call future-drop-readable:transmission-cli(&future as i32);
+    cm_raw_call future-drop-readable:transmission-cli(future as i32);
 }
 
 pub fn log_stdout(message: String) {
@@ -17628,7 +17624,7 @@ pub fn "StrCharIter^Iterator::map<char>"(self: &StrCharIter, f: fn mut(char) -> 
 pub fn "String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>>"(iter: IterMap<core:prelude/string.wado/StrCharIter,char>) -> String {
     let mut s: String = "core::prelude/string.wado::String::with_capacity"(8);
     __for_of_2: {
-        let mut __iter_2: IterMap<core:prelude/string.wado/StrCharIter,char> = "ops.all_dirty.wado::$value_copy$T697"(iter."IterMap<core:prelude/string.wado/StrCharIter,char>^IntoIterator::into_iter"());
+        let mut __iter_2: IterMap<core:prelude/string.wado/StrCharIter,char> = "ops.all_dirty.wado::$value_copy$T696"(iter."IterMap<core:prelude/string.wado/StrCharIter,char>^IntoIterator::into_iter"());
         loop {
             let __match_4: Option<char> = __iter_2."IterMap<core:prelude/string.wado/StrCharIter,char>^Iterator::next"();
             match __match_4 {
@@ -17736,8 +17732,8 @@ fn "Array<u8>^IndexValue<i32>::index_value"(self: &Array<u8>, index: i32) -> u8 
     return core::builtin::array_get::<u8>(self, index);
 }
 
-pub fn "Result<i32,core:prelude/intparse.wado/IntErrorKind>::unwrap"(self: Box<core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/IntErrorKind>>) -> i32 {
-    return match self.value {
+pub fn "Result<i32,core:prelude/intparse.wado/IntErrorKind>::unwrap"(self: Result<i32, IntErrorKind>) -> i32 {
+    return match self {
         Ok(v) => v,
         Err(e) => "core::prelude/types.wado::core/prelude/types.wado/unwrap_failed<core:prelude/intparse.wado/IntErrorKind>"(String { repr: packed"called Result::unwrap() on an Err value", used: 39 }, e),
     };
@@ -18188,11 +18184,11 @@ fn "$value_copy$T112"(v: List<u64>) -> List<u64> {
     return List<u64> { repr: core::builtin::array_clone::<u64>(&v.repr), used: v.used };
 }
 
-fn "$value_copy$T711"(v: ArraySlice<u8>) -> ArraySlice<u8> {
+fn "$value_copy$T710"(v: ArraySlice<u8>) -> ArraySlice<u8> {
     return ArraySlice<u8> { repr: v.repr, start: v.start, end: v.end };
 }
 
-fn "$value_copy$T488"(v: [Stream<u8>, StreamWritable<u8>]) -> [Stream<u8>, StreamWritable<u8>] {
+fn "$value_copy$T486"(v: [Stream<u8>, StreamWritable<u8>]) -> [Stream<u8>, StreamWritable<u8>] {
     return [Stream<u8>,StreamWritable<u8>] { 0: v.0, 1: v.1 };
 }
 
@@ -18208,7 +18204,7 @@ fn "$value_copy$T191"(v: [i32, char]) -> [i32, char] {
     return [i32,char] { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$T455"(v: List<[i32, char]>) -> List<[i32, char]> {
+fn "$value_copy$T454"(v: List<[i32, char]>) -> List<[i32, char]> {
     return List<[i32,char]> { repr: core::builtin::array_clone::<[i32, char]>(&v.repr), used: v.used };
 }
 
@@ -18228,11 +18224,11 @@ fn "$value_copy$T66"(v: StrSplitIter) -> StrSplitIter {
     return StrSplitIter { repr: v.repr, used: v.used, pos: v.pos, sep_repr: core::builtin::array_clone::<u8>(&v.sep_repr), sep_len: v.sep_len, finished: v.finished };
 }
 
-fn "$value_copy$T412"(v: List<String>) -> List<String> {
+fn "$value_copy$T411"(v: List<String>) -> List<String> {
     return List<core:prelude/string.wado/String> { repr: core::builtin::array_clone::<String>(&v.repr), used: v.used };
 }
 
-fn "$value_copy$T697"(v: IterMap<core:prelude/string.wado/StrCharIter,char>) -> IterMap<core:prelude/string.wado/StrCharIter,char> {
+fn "$value_copy$T696"(v: IterMap<core:prelude/string.wado/StrCharIter,char>) -> IterMap<core:prelude/string.wado/StrCharIter,char> {
     return IterMap<core:prelude/string.wado/StrCharIter,char> { inner: "ops.all_dirty.wado::$value_copy$T65"(v.inner), f: v.f };
 }
 

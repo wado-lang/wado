@@ -170,7 +170,7 @@ A descriptor is a reference to a filesystem object, which may be a file,
 directory, named pipe, special file, or other object on which filesystem
 calls may be made.
 
-##### `fn read_via_stream(self: &Descriptor, offset: Filesize) -> [Stream<u8>, Future<Result<(), ErrorCode>>]`
+##### `fn read_via_stream(&self, offset: Filesize) -> [Stream<u8>, Future<Result<(), ErrorCode>>]`
 
 Return a stream for reading from a file.
 
@@ -189,7 +189,7 @@ resolves to `err` with an `error-code`.
 
 Note: This is similar to `pread` in POSIX.
 
-##### `fn write_via_stream(self: &Descriptor, data: Stream<u8>, offset: Filesize) -> Future<Result<(), ErrorCode>>`
+##### `fn write_via_stream(&self, data: Stream<u8>, offset: Filesize) -> Future<Result<(), ErrorCode>>`
 
 Return a stream for writing to a file, if available.
 
@@ -204,7 +204,7 @@ written or an error is encountered.
 
 Note: This is similar to `pwrite` in POSIX.
 
-##### `fn append_via_stream(self: &Descriptor, data: Stream<u8>) -> Future<Result<(), ErrorCode>>`
+##### `fn append_via_stream(&self, data: Stream<u8>) -> Future<Result<(), ErrorCode>>`
 
 Return a stream for appending to a file, if available.
 
@@ -215,13 +215,13 @@ written or an error is encountered.
 
 Note: This is similar to `write` with `O_APPEND` in POSIX.
 
-##### `async fn advise(self: &Descriptor, offset: Filesize, length: Filesize, advice: Advice) -> AsyncCall<Result<(), ErrorCode>>`
+##### `async fn advise(&self, offset: Filesize, length: Filesize, advice: Advice) -> AsyncCall<Result<(), ErrorCode>>`
 
 Provide file advisory information on a descriptor.
 
 This is similar to `posix_fadvise` in POSIX.
 
-##### `async fn sync_data(self: &Descriptor) -> AsyncCall<Result<(), ErrorCode>>`
+##### `async fn sync_data(&self) -> AsyncCall<Result<(), ErrorCode>>`
 
 Synchronize the data of a file to disk.
 
@@ -230,7 +230,7 @@ opened for writing.
 
 Note: This is similar to `fdatasync` in POSIX.
 
-##### `async fn get_flags(self: &Descriptor) -> AsyncCall<Result<DescriptorFlags, ErrorCode>>`
+##### `async fn get_flags(&self) -> AsyncCall<Result<DescriptorFlags, ErrorCode>>`
 
 Get flags associated with a descriptor.
 
@@ -239,7 +239,7 @@ Note: This returns similar flags to `fcntl(fd, F_GETFL)` in POSIX.
 Note: This returns the value that was the `fs_flags` value returned
 from `fdstat_get` in earlier versions of WASI.
 
-##### `async fn get_type(self: &Descriptor) -> AsyncCall<Result<DescriptorType, ErrorCode>>`
+##### `async fn get_type(&self) -> AsyncCall<Result<DescriptorType, ErrorCode>>`
 
 Get the dynamic type of a descriptor.
 
@@ -252,14 +252,14 @@ by `fstat` in POSIX.
 Note: This returns the value that was the `fs_filetype` value returned
 from `fdstat_get` in earlier versions of WASI.
 
-##### `async fn set_size(self: &Descriptor, size: Filesize) -> AsyncCall<Result<(), ErrorCode>>`
+##### `async fn set_size(&self, size: Filesize) -> AsyncCall<Result<(), ErrorCode>>`
 
 Adjust the size of an open file. If this increases the file's size, the
 extra bytes are filled with zeros.
 
 Note: This was called `fd_filestat_set_size` in earlier versions of WASI.
 
-##### `async fn set_times(self: &Descriptor, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> AsyncCall<Result<(), ErrorCode>>`
+##### `async fn set_times(&self, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> AsyncCall<Result<(), ErrorCode>>`
 
 Adjust the timestamps of an open file or directory.
 
@@ -267,7 +267,7 @@ Note: This is similar to `futimens` in POSIX.
 
 Note: This was called `fd_filestat_set_times` in earlier versions of WASI.
 
-##### `fn read_directory(self: &Descriptor) -> [Stream<DirectoryEntry>, Future<Result<(), ErrorCode>>]`
+##### `fn read_directory(&self) -> [Stream<DirectoryEntry>, Future<Result<(), ErrorCode>>]`
 
 Read directory entries from a directory.
 
@@ -282,7 +282,7 @@ do not interfere with each other.
 This function returns a future, which will resolve to an error code if
 reading full contents of the directory fails.
 
-##### `async fn sync(self: &Descriptor) -> AsyncCall<Result<(), ErrorCode>>`
+##### `async fn sync(&self) -> AsyncCall<Result<(), ErrorCode>>`
 
 Synchronize the data and metadata of a file to disk.
 
@@ -291,13 +291,13 @@ opened for writing.
 
 Note: This is similar to `fsync` in POSIX.
 
-##### `async fn create_directory_at(self: &Descriptor, path: String) -> AsyncCall<Result<(), ErrorCode>>`
+##### `async fn create_directory_at(&self, path: String) -> AsyncCall<Result<(), ErrorCode>>`
 
 Create a directory.
 
 Note: This is similar to `mkdirat` in POSIX.
 
-##### `async fn stat(self: &Descriptor) -> AsyncCall<Result<DescriptorStat, ErrorCode>>`
+##### `async fn stat(&self) -> AsyncCall<Result<DescriptorStat, ErrorCode>>`
 
 Return the attributes of an open file or directory.
 
@@ -309,7 +309,7 @@ modified, use `metadata-hash`.
 
 Note: This was called `fd_filestat_get` in earlier versions of WASI.
 
-##### `async fn stat_at(self: &Descriptor, path_flags: PathFlags, path: String) -> AsyncCall<Result<DescriptorStat, ErrorCode>>`
+##### `async fn stat_at(&self, path_flags: PathFlags, path: String) -> AsyncCall<Result<DescriptorStat, ErrorCode>>`
 
 Return the attributes of a file or directory.
 
@@ -319,7 +319,7 @@ discussion of alternatives.
 
 Note: This was called `path_filestat_get` in earlier versions of WASI.
 
-##### `async fn set_times_at(self: &Descriptor, path_flags: PathFlags, path: String, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> AsyncCall<Result<(), ErrorCode>>`
+##### `async fn set_times_at(&self, path_flags: PathFlags, path: String, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> AsyncCall<Result<(), ErrorCode>>`
 
 Adjust the timestamps of a file or directory.
 
@@ -328,7 +328,7 @@ Note: This is similar to `utimensat` in POSIX.
 Note: This was called `path_filestat_set_times` in earlier versions of
 WASI.
 
-##### `async fn link_at(self: &Descriptor, old_path_flags: PathFlags, old_path: String, new_descriptor: &Descriptor, new_path: String) -> AsyncCall<Result<(), ErrorCode>>`
+##### `async fn link_at(&self, old_path_flags: PathFlags, old_path: String, new_descriptor: &Descriptor, new_path: String) -> AsyncCall<Result<(), ErrorCode>>`
 
 Create a hard link.
 
@@ -338,7 +338,7 @@ with `error-code::exist` if the new path already exists, and
 
 Note: This is similar to `linkat` in POSIX.
 
-##### `async fn open_at(self: &Descriptor, path_flags: PathFlags, path: String, open_flags: OpenFlags, flags: DescriptorFlags) -> AsyncCall<Result<Descriptor, ErrorCode>>`
+##### `async fn open_at(&self, path_flags: PathFlags, path: String, open_flags: OpenFlags, flags: DescriptorFlags) -> AsyncCall<Result<Descriptor, ErrorCode>>`
 
 Open a file or directory.
 
@@ -353,7 +353,7 @@ contains `truncate` or `create`, and the base descriptor doesn't have
 
 Note: This is similar to `openat` in POSIX.
 
-##### `async fn readlink_at(self: &Descriptor, path: String) -> AsyncCall<Result<String, ErrorCode>>`
+##### `async fn readlink_at(&self, path: String) -> AsyncCall<Result<String, ErrorCode>>`
 
 Read the contents of a symbolic link.
 
@@ -362,7 +362,7 @@ filesystem, this function fails with `error-code::not-permitted`.
 
 Note: This is similar to `readlinkat` in POSIX.
 
-##### `async fn remove_directory_at(self: &Descriptor, path: String) -> AsyncCall<Result<(), ErrorCode>>`
+##### `async fn remove_directory_at(&self, path: String) -> AsyncCall<Result<(), ErrorCode>>`
 
 Remove a directory.
 
@@ -370,13 +370,13 @@ Return `error-code::not-empty` if the directory is not empty.
 
 Note: This is similar to `unlinkat(fd, path, AT_REMOVEDIR)` in POSIX.
 
-##### `async fn rename_at(self: &Descriptor, old_path: String, new_descriptor: &Descriptor, new_path: String) -> AsyncCall<Result<(), ErrorCode>>`
+##### `async fn rename_at(&self, old_path: String, new_descriptor: &Descriptor, new_path: String) -> AsyncCall<Result<(), ErrorCode>>`
 
 Rename a filesystem object.
 
 Note: This is similar to `renameat` in POSIX.
 
-##### `async fn symlink_at(self: &Descriptor, old_path: String, new_path: String) -> AsyncCall<Result<(), ErrorCode>>`
+##### `async fn symlink_at(&self, old_path: String, new_path: String) -> AsyncCall<Result<(), ErrorCode>>`
 
 Create a symbolic link (also known as a "symlink").
 
@@ -385,7 +385,7 @@ If `old-path` starts with `/`, the function fails with
 
 Note: This is similar to `symlinkat` in POSIX.
 
-##### `async fn unlink_file_at(self: &Descriptor, path: String) -> AsyncCall<Result<(), ErrorCode>>`
+##### `async fn unlink_file_at(&self, path: String) -> AsyncCall<Result<(), ErrorCode>>`
 
 Unlink a filesystem object that is not a directory.
 
@@ -397,7 +397,7 @@ If the filesystem object is a directory, `error-code::access` or
 `error-code::is-directory` may be returned instead of the
 POSIX-specified `error-code::not-permitted`.
 
-##### `async fn is_same_object(self: &Descriptor, other: &Descriptor) -> AsyncCall<bool>`
+##### `async fn is_same_object(&self, other: &Descriptor) -> AsyncCall<bool>`
 
 Test whether two descriptors refer to the same filesystem object.
 
@@ -406,7 +406,7 @@ same device (`st_dev`) and inode (`st_ino` or `d_ino`) numbers.
 wasi-filesystem does not expose device and inode numbers, so this function
 may be used instead.
 
-##### `async fn metadata_hash(self: &Descriptor) -> AsyncCall<Result<MetadataHashValue, ErrorCode>>`
+##### `async fn metadata_hash(&self) -> AsyncCall<Result<MetadataHashValue, ErrorCode>>`
 
 Return a hash of the metadata associated with a filesystem object referred
 to by a descriptor.
@@ -428,7 +428,7 @@ Implementations are encouraged to provide the following properties:
 
 However, none of these is required.
 
-##### `async fn metadata_hash_at(self: &Descriptor, path_flags: PathFlags, path: String) -> AsyncCall<Result<MetadataHashValue, ErrorCode>>`
+##### `async fn metadata_hash_at(&self, path_flags: PathFlags, path: String) -> AsyncCall<Result<MetadataHashValue, ErrorCode>>`
 
 Return a hash of the metadata associated with a filesystem object referred
 to by a directory descriptor and a relative path.
@@ -931,19 +931,19 @@ An error result will be returned if any header or value was
 syntactically invalid, if a header was forbidden, or if the
 entries would exceed an implementation size limit.
 
-##### `fn get(self: &Fields, name: FieldName) -> List<FieldValue>`
+##### `fn get(&self, name: FieldName) -> List<FieldValue>`
 
 Get all of the values corresponding to a name. If the name is not present
 in this `fields`, an empty list is returned. However, if the name is
 present but empty, this is represented by a list with one or more
 empty field-values present.
 
-##### `fn has(self: &Fields, name: FieldName) -> bool`
+##### `fn has(&self, name: FieldName) -> bool`
 
 Returns `true` when the name is present in this `fields`. If the name is
 syntactically invalid, `false` is returned.
 
-##### `fn set(self: &Fields, name: FieldName, value: List<FieldValue>) -> Result<(), HeaderError>`
+##### `fn set(&self, name: FieldName, value: List<FieldValue>) -> Result<(), HeaderError>`
 
 Set all of the values for a name. Clears any existing values for that
 name, if they have been set.
@@ -953,14 +953,14 @@ Fails with `header-error.immutable` if the `fields` are immutable.
 Fails with `header-error.size-exceeded` if the name or values would
 exceed an implementation-defined size limit.
 
-##### `fn delete(self: &Fields, name: FieldName) -> Result<(), HeaderError>`
+##### `fn delete(&self, name: FieldName) -> Result<(), HeaderError>`
 
 Delete all values for a name. Does nothing if no values for the name
 exist.
 
 Fails with `header-error.immutable` if the `fields` are immutable.
 
-##### `fn get_and_delete(self: &Fields, name: FieldName) -> Result<List<FieldValue>, HeaderError>`
+##### `fn get_and_delete(&self, name: FieldName) -> Result<List<FieldValue>, HeaderError>`
 
 Delete all values for a name. Does nothing if no values for the name
 exist.
@@ -969,7 +969,7 @@ Returns all values previously corresponding to the name, if any.
 
 Fails with `header-error.immutable` if the `fields` are immutable.
 
-##### `fn append(self: &Fields, name: FieldName, value: FieldValue) -> Result<(), HeaderError>`
+##### `fn append(&self, name: FieldName, value: FieldValue) -> Result<(), HeaderError>`
 
 Append a value for a name. Does not change or delete any existing
 values for that name.
@@ -979,7 +979,7 @@ Fails with `header-error.immutable` if the `fields` are immutable.
 Fails with `header-error.size-exceeded` if the value would exceed
 an implementation-defined size limit.
 
-##### `fn copy_all(self: &Fields) -> List<[FieldName, FieldValue]>`
+##### `fn copy_all(&self) -> List<[FieldName, FieldValue]>`
 
 Retrieve the full set of names and values in the Fields. Like the
 constructor, the list represents each name-value pair.
@@ -991,7 +991,7 @@ list with the same name.
 The names and values are always returned in the original casing and in
 the order in which they will be serialized for transport.
 
-##### `fn clone(self: &Fields) -> Fields`
+##### `fn clone(&self) -> Fields`
 
 Make a deep copy of the Fields. Equivalent in behavior to calling the
 `fields` constructor on the return value of `copy-all`. The resulting
@@ -1025,51 +1025,51 @@ to reject invalid constructions of `request`.
 
 The returned future resolves to result of transmission of this request.
 
-##### `fn get_method(self: &Request) -> Method`
+##### `fn get_method(&self) -> Method`
 
 Get the Method for the Request.
 
-##### `fn set_method(self: &Request, method: Method) -> Result<(), ()>`
+##### `fn set_method(&self, method: Method) -> Result<(), ()>`
 
 Set the Method for the Request. Fails if the string present in a
 `method.other` argument is not a syntactically valid method.
 
-##### `fn get_path_with_query(self: &Request) -> Option<String>`
+##### `fn get_path_with_query(&self) -> Option<String>`
 
 Get the combination of the HTTP Path and Query for the Request. When
 `none`, this represents an empty Path and empty Query.
 
-##### `fn set_path_with_query(self: &Request, path_with_query: Option<String>) -> Result<(), ()>`
+##### `fn set_path_with_query(&self, path_with_query: Option<String>) -> Result<(), ()>`
 
 Set the combination of the HTTP Path and Query for the Request. When
 `none`, this represents an empty Path and empty Query. Fails is the
 string given is not a syntactically valid path and query uri component.
 
-##### `fn get_scheme(self: &Request) -> Option<Scheme>`
+##### `fn get_scheme(&self) -> Option<Scheme>`
 
 Get the HTTP Related Scheme for the Request. When `none`, the
 implementation may choose an appropriate default scheme.
 
-##### `fn set_scheme(self: &Request, scheme: Option<Scheme>) -> Result<(), ()>`
+##### `fn set_scheme(&self, scheme: Option<Scheme>) -> Result<(), ()>`
 
 Set the HTTP Related Scheme for the Request. When `none`, the
 implementation may choose an appropriate default scheme. Fails if the
 string given is not a syntactically valid uri scheme.
 
-##### `fn get_authority(self: &Request) -> Option<String>`
+##### `fn get_authority(&self) -> Option<String>`
 
 Get the authority of the Request's target URI. A value of `none` may be used
 with Related Schemes which do not require an authority. The HTTP and
 HTTPS schemes always require an authority.
 
-##### `fn set_authority(self: &Request, authority: Option<String>) -> Result<(), ()>`
+##### `fn set_authority(&self, authority: Option<String>) -> Result<(), ()>`
 
 Set the authority of the Request's target URI. A value of `none` may be used
 with Related Schemes which do not require an authority. The HTTP and
 HTTPS schemes always require an authority. Fails if the string given is
 not a syntactically valid URI authority.
 
-##### `fn get_options(self: &Request) -> Option<RequestOptions>`
+##### `fn get_options(&self) -> Option<RequestOptions>`
 
 Get the `request-options` to be associated with this request
 
@@ -1080,7 +1080,7 @@ This `request-options` resource is a child: it must be dropped before
 the parent `request` is dropped, or its ownership is transferred to
 another component by e.g. `handler.handle`.
 
-##### `fn get_headers(self: &Request) -> Headers`
+##### `fn get_headers(&self) -> Headers`
 
 Get the headers associated with the Request.
 
@@ -1115,38 +1115,38 @@ asynchronous call.
 
 Construct a default `request-options` value.
 
-##### `fn get_connect_timeout(self: &RequestOptions) -> Option<Duration>`
+##### `fn get_connect_timeout(&self) -> Option<Duration>`
 
 The timeout for the initial connect to the HTTP Server.
 
-##### `fn set_connect_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>`
+##### `fn set_connect_timeout(&self, duration: Option<Duration>) -> Result<(), RequestOptionsError>`
 
 Set the timeout for the initial connect to the HTTP Server. An error
 return value indicates that this timeout is not supported or that this
 handle is immutable.
 
-##### `fn get_first_byte_timeout(self: &RequestOptions) -> Option<Duration>`
+##### `fn get_first_byte_timeout(&self) -> Option<Duration>`
 
 The timeout for receiving the first byte of the Response body.
 
-##### `fn set_first_byte_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>`
+##### `fn set_first_byte_timeout(&self, duration: Option<Duration>) -> Result<(), RequestOptionsError>`
 
 Set the timeout for receiving the first byte of the Response body. An
 error return value indicates that this timeout is not supported or that
 this handle is immutable.
 
-##### `fn get_between_bytes_timeout(self: &RequestOptions) -> Option<Duration>`
+##### `fn get_between_bytes_timeout(&self) -> Option<Duration>`
 
 The timeout for receiving subsequent chunks of bytes in the Response
 body stream.
 
-##### `fn set_between_bytes_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>`
+##### `fn set_between_bytes_timeout(&self, duration: Option<Duration>) -> Result<(), RequestOptionsError>`
 
 Set the timeout for receiving subsequent chunks of bytes in the Response
 body stream. An error return value indicates that this timeout is not
 supported or that this handle is immutable.
 
-##### `fn clone(self: &RequestOptions) -> RequestOptions`
+##### `fn clone(&self) -> RequestOptions`
 
 Make a deep copy of the `request-options`.
 The resulting `request-options` is mutable.
@@ -1171,16 +1171,16 @@ will be closed immediately.
 
 The returned future resolves to result of transmission of this response.
 
-##### `fn get_status_code(self: &Response) -> StatusCode`
+##### `fn get_status_code(&self) -> StatusCode`
 
 Get the HTTP Status Code for the Response.
 
-##### `fn set_status_code(self: &Response, status_code: StatusCode) -> Result<(), ()>`
+##### `fn set_status_code(&self, status_code: StatusCode) -> Result<(), ()>`
 
 Set the HTTP Status Code for the Response. Fails if the status-code
 given is not a valid http status code.
 
-##### `fn get_headers(self: &Response) -> Headers`
+##### `fn get_headers(&self) -> Headers`
 
 Get the headers associated with the Response.
 
@@ -1755,7 +1755,7 @@ async support.
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasocketw>
 - <https://man.freebsd.org/cgi/man.cgi?query=socket&sektion=2>
 
-##### `fn bind(self: &TcpSocket, local_address: IpSocketAddress) -> Result<(), ErrorCode>`
+##### `fn bind(&self, local_address: IpSocketAddress) -> Result<(), ErrorCode>`
 
 Bind the socket to the provided IP address and port.
 
@@ -1794,7 +1794,7 @@ behavior and SO_REUSEADDR performs something different.
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-bind>
 - <https://man.freebsd.org/cgi/man.cgi?query=bind&sektion=2&format=html>
 
-##### `async fn connect(self: &TcpSocket, remote_address: IpSocketAddress) -> AsyncCall<Result<(), ErrorCode>>`
+##### `async fn connect(&self, remote_address: IpSocketAddress) -> AsyncCall<Result<(), ErrorCode>>`
 
 Connect to a remote endpoint.
 
@@ -1833,7 +1833,7 @@ socket can not be used to connect more than once.
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
 - <https://man.freebsd.org/cgi/man.cgi?connect>
 
-##### `fn listen(self: &TcpSocket) -> Result<Stream<TcpSocket>, ErrorCode>`
+##### `fn listen(&self) -> Result<Stream<TcpSocket>, ErrorCode>`
 
 Start listening and return a stream of new inbound connections.
 
@@ -1911,7 +1911,7 @@ the bind itself if the guest hasn't already done so.
 - <https://man.freebsd.org/cgi/man.cgi?query=listen&sektion=2>
 - <https://man.freebsd.org/cgi/man.cgi?query=accept&sektion=2>
 
-##### `fn send(self: &TcpSocket, data: Stream<u8>) -> Future<Result<(), ErrorCode>>`
+##### `fn send(&self, data: Stream<u8>) -> Future<Result<(), ErrorCode>>`
 
 Transmit data to peer.
 
@@ -1938,7 +1938,7 @@ contents of the stream are transmitted or an error is encountered.
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-send>
 - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
 
-##### `fn receive(self: &TcpSocket) -> [Stream<u8>, Future<Result<(), ErrorCode>>]`
+##### `fn receive(&self) -> [Stream<u8>, Future<Result<(), ErrorCode>>]`
 
 Read data from peer.
 
@@ -1971,7 +1971,7 @@ in POSIX.
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recv>
 - <https://man.freebsd.org/cgi/man.cgi?query=recv&sektion=2>
 
-##### `fn get_local_address(self: &TcpSocket) -> Result<IpSocketAddress, ErrorCode>`
+##### `fn get_local_address(&self) -> Result<IpSocketAddress, ErrorCode>`
 
 Get the bound local address.
 
@@ -1994,7 +1994,7 @@ WASI is stricter and requires `get-local-address` to return
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getsockname>
 - <https://man.freebsd.org/cgi/man.cgi?getsockname>
 
-##### `fn get_remote_address(self: &TcpSocket) -> Result<IpSocketAddress, ErrorCode>`
+##### `fn get_remote_address(&self) -> Result<IpSocketAddress, ErrorCode>`
 
 Get the remote address.
 
@@ -2009,13 +2009,13 @@ Get the remote address.
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getpeername>
 - <https://man.freebsd.org/cgi/man.cgi?query=getpeername&sektion=2&n=1>
 
-##### `fn get_is_listening(self: &TcpSocket) -> bool`
+##### `fn get_is_listening(&self) -> bool`
 
 Whether the socket is in the `listening` state.
 
 Equivalent to the SO_ACCEPTCONN socket option.
 
-##### `fn get_address_family(self: &TcpSocket) -> IpAddressFamily`
+##### `fn get_address_family(&self) -> IpAddressFamily`
 
 Whether this is a IPv4 or IPv6 socket.
 
@@ -2023,7 +2023,7 @@ This is the value passed to the constructor.
 
 Equivalent to the SO_DOMAIN socket option.
 
-##### `fn set_listen_backlog_size(self: &TcpSocket, value: u64) -> Result<(), ErrorCode>`
+##### `fn set_listen_backlog_size(&self, value: u64) -> Result<(), ErrorCode>`
 
 Hints the desired listen queue size. Implementations are free to
 ignore this.
@@ -2038,7 +2038,7 @@ clamped and/or rounded.
 - `invalid-argument`: (set) The provided value was 0.
 - `invalid-state`: (set) The socket is in the `connecting` or `connected` state.
 
-##### `fn get_keep_alive_enabled(self: &TcpSocket) -> Result<bool, ErrorCode>`
+##### `fn get_keep_alive_enabled(&self) -> Result<bool, ErrorCode>`
 
 Enables or disables keepalive.
 
@@ -2052,9 +2052,9 @@ The keepalive behavior can be adjusted using:
 
 Equivalent to the SO_KEEPALIVE socket option.
 
-##### `fn set_keep_alive_enabled(self: &TcpSocket, value: bool) -> Result<(), ErrorCode>`
+##### `fn set_keep_alive_enabled(&self, value: bool) -> Result<(), ErrorCode>`
 
-##### `fn get_keep_alive_idle_time(self: &TcpSocket) -> Result<Duration, ErrorCode>`
+##### `fn get_keep_alive_idle_time(&self) -> Result<Duration, ErrorCode>`
 
 Amount of time the connection has to be idle before TCP starts
 sending keepalive packets.
@@ -2070,9 +2070,9 @@ Equivalent to the TCP_KEEPIDLE socket option. (TCP_KEEPALIVE on MacOS)
 
 - `invalid-argument`: (set) The provided value was 0.
 
-##### `fn set_keep_alive_idle_time(self: &TcpSocket, value: Duration) -> Result<(), ErrorCode>`
+##### `fn set_keep_alive_idle_time(&self, value: Duration) -> Result<(), ErrorCode>`
 
-##### `fn get_keep_alive_interval(self: &TcpSocket) -> Result<Duration, ErrorCode>`
+##### `fn get_keep_alive_interval(&self) -> Result<Duration, ErrorCode>`
 
 The time between keepalive packets.
 
@@ -2087,9 +2087,9 @@ Equivalent to the TCP_KEEPINTVL socket option.
 
 - `invalid-argument`: (set) The provided value was 0.
 
-##### `fn set_keep_alive_interval(self: &TcpSocket, value: Duration) -> Result<(), ErrorCode>`
+##### `fn set_keep_alive_interval(&self, value: Duration) -> Result<(), ErrorCode>`
 
-##### `fn get_keep_alive_count(self: &TcpSocket) -> Result<u32, ErrorCode>`
+##### `fn get_keep_alive_count(&self) -> Result<u32, ErrorCode>`
 
 The maximum amount of keepalive packets TCP should send before
 aborting the connection.
@@ -2105,9 +2105,9 @@ Equivalent to the TCP_KEEPCNT socket option.
 
 - `invalid-argument`: (set) The provided value was 0.
 
-##### `fn set_keep_alive_count(self: &TcpSocket, value: u32) -> Result<(), ErrorCode>`
+##### `fn set_keep_alive_count(&self, value: u32) -> Result<(), ErrorCode>`
 
-##### `fn get_hop_limit(self: &TcpSocket) -> Result<u8, ErrorCode>`
+##### `fn get_hop_limit(&self) -> Result<u8, ErrorCode>`
 
 Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
 
@@ -2117,9 +2117,9 @@ If the provided value is 0, an `invalid-argument` error is returned.
 
 - `invalid-argument`: (set) The TTL value must be 1 or higher.
 
-##### `fn set_hop_limit(self: &TcpSocket, value: u8) -> Result<(), ErrorCode>`
+##### `fn set_hop_limit(&self, value: u8) -> Result<(), ErrorCode>`
 
-##### `fn get_receive_buffer_size(self: &TcpSocket) -> Result<u64, ErrorCode>`
+##### `fn get_receive_buffer_size(&self) -> Result<u64, ErrorCode>`
 
 Kernel buffer space reserved for sending/receiving on this socket.
 Implementations usually treat this as a cap the buffer can grow to,
@@ -2144,11 +2144,11 @@ Equivalent to the SO_RCVBUF and SO_SNDBUF socket options.
 
 - `invalid-argument`: (set) The provided value was 0.
 
-##### `fn set_receive_buffer_size(self: &TcpSocket, value: u64) -> Result<(), ErrorCode>`
+##### `fn set_receive_buffer_size(&self, value: u64) -> Result<(), ErrorCode>`
 
-##### `fn get_send_buffer_size(self: &TcpSocket) -> Result<u64, ErrorCode>`
+##### `fn get_send_buffer_size(&self) -> Result<u64, ErrorCode>`
 
-##### `fn set_send_buffer_size(self: &TcpSocket, value: u64) -> Result<(), ErrorCode>`
+##### `fn set_send_buffer_size(&self, value: u64) -> Result<(), ErrorCode>`
 
 #### `pub resource UdpSocket`
 
@@ -2173,7 +2173,7 @@ async support.
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasocketw>
 - <https://man.freebsd.org/cgi/man.cgi?query=socket&sektion=2>
 
-##### `fn bind(self: &UdpSocket, local_address: IpSocketAddress) -> Result<(), ErrorCode>`
+##### `fn bind(&self, local_address: IpSocketAddress) -> Result<(), ErrorCode>`
 
 Bind the socket to the provided IP address and port.
 
@@ -2197,7 +2197,7 @@ free port.
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-bind>
 - <https://man.freebsd.org/cgi/man.cgi?query=bind&sektion=2&format=html>
 
-##### `fn connect(self: &UdpSocket, remote_address: IpSocketAddress) -> Result<(), ErrorCode>`
+##### `fn connect(&self, remote_address: IpSocketAddress) -> Result<(), ErrorCode>`
 
 Associate this socket with a specific peer address.
 
@@ -2240,7 +2240,7 @@ require a disconnect before connecting to a different peer address.
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
 - <https://man.freebsd.org/cgi/man.cgi?connect>
 
-##### `fn disconnect(self: &UdpSocket) -> Result<(), ErrorCode>`
+##### `fn disconnect(&self) -> Result<(), ErrorCode>`
 
 Dissociate this socket from its peer address.
 
@@ -2260,7 +2260,7 @@ The POSIX equivalent of this is calling `connect` with an `AF_UNSPEC` address.
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
 - <https://man.freebsd.org/cgi/man.cgi?connect>
 
-##### `async fn send(self: &UdpSocket, data: List<u8>, remote_address: Option<IpSocketAddress>) -> AsyncCall<Result<(), ErrorCode>>`
+##### `async fn send(&self, data: List<u8>, remote_address: Option<IpSocketAddress>) -> AsyncCall<Result<(), ErrorCode>>`
 
 Send a message on the socket to a particular peer.
 
@@ -2308,7 +2308,7 @@ already done so.
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasendmsg>
 - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
 
-##### `async fn receive(self: &UdpSocket) -> AsyncCall<Result<[List<u8>, IpSocketAddress], ErrorCode>>`
+##### `async fn receive(&self) -> AsyncCall<Result<[List<u8>, IpSocketAddress], ErrorCode>>`
 
 Receive a message on the socket.
 
@@ -2336,7 +2336,7 @@ match the remote address passed to `connect`.
 - <https://learn.microsoft.com/en-us/windows/win32/api/mswsock/nc-mswsock-lpfn_wsarecvmsg>
 - <https://man.freebsd.org/cgi/man.cgi?query=recv&sektion=2>
 
-##### `fn get_local_address(self: &UdpSocket) -> Result<IpSocketAddress, ErrorCode>`
+##### `fn get_local_address(&self) -> Result<IpSocketAddress, ErrorCode>`
 
 Get the current bound address.
 
@@ -2359,7 +2359,7 @@ WASI is stricter and requires `get-local-address` to return
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getsockname>
 - <https://man.freebsd.org/cgi/man.cgi?getsockname>
 
-##### `fn get_remote_address(self: &UdpSocket) -> Result<IpSocketAddress, ErrorCode>`
+##### `fn get_remote_address(&self) -> Result<IpSocketAddress, ErrorCode>`
 
 Get the address the socket is currently "connected" to.
 
@@ -2374,7 +2374,7 @@ Get the address the socket is currently "connected" to.
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getpeername>
 - <https://man.freebsd.org/cgi/man.cgi?query=getpeername&sektion=2&n=1>
 
-##### `fn get_address_family(self: &UdpSocket) -> IpAddressFamily`
+##### `fn get_address_family(&self) -> IpAddressFamily`
 
 Whether this is a IPv4 or IPv6 socket.
 
@@ -2382,7 +2382,7 @@ This is the value passed to the constructor.
 
 Equivalent to the SO_DOMAIN socket option.
 
-##### `fn get_unicast_hop_limit(self: &UdpSocket) -> Result<u8, ErrorCode>`
+##### `fn get_unicast_hop_limit(&self) -> Result<u8, ErrorCode>`
 
 Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
 
@@ -2392,9 +2392,9 @@ If the provided value is 0, an `invalid-argument` error is returned.
 
 - `invalid-argument`: (set) The TTL value must be 1 or higher.
 
-##### `fn set_unicast_hop_limit(self: &UdpSocket, value: u8) -> Result<(), ErrorCode>`
+##### `fn set_unicast_hop_limit(&self, value: u8) -> Result<(), ErrorCode>`
 
-##### `fn get_receive_buffer_size(self: &UdpSocket) -> Result<u64, ErrorCode>`
+##### `fn get_receive_buffer_size(&self) -> Result<u64, ErrorCode>`
 
 Kernel buffer space reserved for sending/receiving on this socket.
 Implementations usually treat this as a cap the buffer can grow to,
@@ -2411,11 +2411,11 @@ Equivalent to the SO_RCVBUF and SO_SNDBUF socket options.
 
 - `invalid-argument`: (set) The provided value was 0.
 
-##### `fn set_receive_buffer_size(self: &UdpSocket, value: u64) -> Result<(), ErrorCode>`
+##### `fn set_receive_buffer_size(&self, value: u64) -> Result<(), ErrorCode>`
 
-##### `fn get_send_buffer_size(self: &UdpSocket) -> Result<u64, ErrorCode>`
+##### `fn get_send_buffer_size(&self) -> Result<u64, ErrorCode>`
 
-##### `fn set_send_buffer_size(self: &UdpSocket, value: u64) -> Result<(), ErrorCode>`
+##### `fn set_send_buffer_size(&self, value: u64) -> Result<(), ErrorCode>`
 
 ### Types
 
@@ -2630,20 +2630,20 @@ Similar to `AF_INET6` in POSIX.
 
 #### `pub resource Error`
 
-##### `fn to_debug_string(self: &Error) -> String`
+##### `fn to_debug_string(&self) -> String`
 
 #### `pub resource Connector`
 
 ##### `fn new() -> Connector`
 
-##### `fn send(self: &Connector, cleartext: Stream<u8>) -> [Stream<u8>, Future<Result<(), Error>>]`
+##### `fn send(&self, cleartext: Stream<u8>) -> [Stream<u8>, Future<Result<(), Error>>]`
 
 Set up the encryption stream transform.
 This takes an unprotected `cleartext` application data stream and
 returns an encrypted data stream, ready to be sent out over the network.
 Closing the `cleartext` stream will cause a `close_notify` packet to be emitted on the returned output stream.
 
-##### `fn receive(self: &Connector, ciphertext: Stream<u8>) -> [Stream<u8>, Future<Result<(), Error>>]`
+##### `fn receive(&self, ciphertext: Stream<u8>) -> [Stream<u8>, Future<Result<(), Error>>]`
 
 Set up the decryption stream transform.
 This takes an encrypted data stream, as received via e.g. the network,

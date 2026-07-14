@@ -9,53 +9,49 @@ struct core:prelude/string.wado//String {  // TypeId(1)
     mut used: i32,
 }
 
-struct effect_propagation_indirect.wado//__Closure_2 {  // TypeId(2)}
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(2)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(3)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(3)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(4)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(4)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(5)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(5)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(6)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(6)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(7)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
+type "functype//effect_propagation_indirect.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(10)
 
-type "functype//effect_propagation_indirect.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(11)
+type "functype//effect_propagation_indirect.wado/__cm_export__run" = fn();  // TypeId(11)
 
-type "functype//effect_propagation_indirect.wado/__cm_export__run" = fn();  // TypeId(12)
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(12)
 
-type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(13)
+type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(13)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(14)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(14)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(15)
+type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(15)
 
-type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(16)
+type "functype//core:rt/wait_for_blocked" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//core:rt/wait_for_blocked" = fn(i32) -> i32;  // TypeId(17)
+type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(17)
 
-type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(18)
+type "functype//core:rt/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(18)
 
-type "functype//core:rt/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(19)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(19)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(20)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
 
-type "functype//effect_propagation_indirect.wado/__Closure_2::__call" = fn(ref "effect_propagation_indirect.wado//__Closure_2");  // TypeId(21)
+type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(21)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(22)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(24)
-
-type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(25)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(23)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -66,10 +62,10 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
-import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
+import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
+import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:effect_propagation_indirect.wado::__modules_initialized: bool = 0;
 
@@ -78,7 +74,9 @@ fn "effect_propagation_indirect.wado/__cm_binding__Stdout_write_via_stream"(data
 }
 
 fn "effect_propagation_indirect.wado/__cm_export__run"() {
-    let c: ref "effect_propagation_indirect.wado//__Closure_2";
+    let packed: i64;
+    let rx: i32;
+    let tx: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:effect_propagation_indirect.wado::__modules_initialized);
         cold_path;
@@ -91,8 +89,10 @@ fn "effect_propagation_indirect.wado/__cm_export__run"() {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:effect_propagation_indirect.wado::__modules_initialized = 1;
     };
-    c = struct.new "effect_propagation_indirect.wado//__Closure_2" {  };
-    "effect_propagation_indirect.wado/__Closure_2::__call"(c);
+    rx = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx = builtin::i32_wrap_i64(packed >> 32_i64);
+    "wasi/stream-drop-readable"(rx);
+    "wasi/stream-drop-writable"(tx);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
     "wasi/task-return"(0);
 }
@@ -191,16 +191,6 @@ fn "core:rt/cm_stream_write_raw_u8"(handle, data, len) {
 }
 
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
-}
-
-fn "effect_propagation_indirect.wado/__Closure_2::__call"(self) {
-    let packed: i64;
-    let rx_5: i32;
-    let tx_6: i32;
-    rx_5 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_6 = builtin::i32_wrap_i64(packed >> 32_i64);
-    "wasi/stream-drop-readable"(rx_5);
-    "wasi/stream-drop-writable"(tx_6);
 }
 
 export fn "effect_propagation_indirect.wado/__cm_export__run" as "run"
