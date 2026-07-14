@@ -45,7 +45,8 @@ globalDecl
     ;
 
 typeAliasDecl
-    : 'type' IDENTIFIER genericParams? '=' typeRef ';'
+    : 'type' IDENTIFIER genericParams? ('=' typeRef)? ';'
+    | 'type' '[' '..' IDENTIFIER ']' ';'
     ;
 
 // `test` is a contextual keyword; modeled as a literal here for simplicity.
@@ -77,7 +78,7 @@ attrValue
     ;
 
 useDecl
-    : 'use' importGroup 'from' STRING_LITERAL ';'
+    : 'use' importGroup 'from' STRING_LITERAL ('with' mapLiteral)? ';'
     ;
 
 importGroup
@@ -213,7 +214,7 @@ worldItem
 // A WIT-style resource: an opaque handle with method / static-function
 // signatures (or a bodyless unit resource `resource X;`).
 resourceDecl
-    : 'resource' IDENTIFIER ('{' resourceMember* '}' | ';')
+    : 'resource' IDENTIFIER genericParams? ('{' resourceMember* '}' | ';')
     ;
 
 resourceMember
@@ -388,12 +389,19 @@ condition
     ;
 
 forStatement
-    : 'for' 'let' pattern forTail block
+    : 'for' forHead block
+    ;
+
+// `for let x of expr`, or a C-style `for [init]; [cond]; [step]` whose init
+// (`let ...`), condition, and step are each optional (`for ; cond; step`).
+forHead
+    : 'let' pattern forTail
+    | ';' condition? ';' exprNoStruct?
     ;
 
 forTail
     : 'of' exprNoStruct
-    | (':' typeRef)? '=' expression ';' expression? ';' exprNoStruct?
+    | (':' typeRef)? '=' expression ';' condition? ';' exprNoStruct?
     ;
 
 whileStatement
@@ -466,6 +474,7 @@ primary
     | compileTimeExpr
     | structLiteral
     | mapLiteral
+    | block
     | exprPath
     | tupleOrArrayLiteral
     | closure
@@ -496,7 +505,7 @@ mapLiteral
     ;
 
 mapEntry
-    : (IDENTIFIER | STRING_LITERAL) ':' expression
+    : (identifier | STRING_LITERAL) ':' expression
     ;
 
 // Expression-position path, supporting interspersed turbofish segments:
@@ -505,7 +514,7 @@ mapEntry
 // keyword method name resolves there, e.g. `Instant::from(x)` — mirroring how
 // `.from` is already accepted after `.`.
 exprPath
-    : IDENTIFIER ('::' (typeArgs | memberName))*
+    : identifier ('::' (typeArgs | memberName))*
     ;
 
 // Compile-time literals and macros: `#file`, `#include_str("...")`.
@@ -562,7 +571,7 @@ fieldInitList
     ;
 
 fieldInit
-    : IDENTIFIER (':' expression)?
+    : identifier (':' expression)?
     | '..' expression
     ;
 
@@ -596,7 +605,7 @@ matchExpr
     ;
 
 matchArm
-    : pattern ('&&' expression)? '=>' (block | expression)
+    : pattern ('&&' expression)? '=>' (block | ifStatement | expression)
     ;
 
 // Or-patterns: `A | B | C`, as used in `match` arms and `matches { ... }`.
@@ -606,7 +615,7 @@ pattern
 
 patternPrimary
     : '_'
-    | 'mut'? IDENTIFIER
+    | 'mut'? identifier
     | literal
     | '-' INTEGER
     | path ('(' (pattern (',' pattern)*)? ')')?
@@ -625,7 +634,7 @@ patternFieldList
     ;
 
 patternField
-    : IDENTIFIER (':' pattern)?
+    : identifier (':' pattern)?
     ;
 
 literal
@@ -668,7 +677,12 @@ fragment TEMPLATE_INTERP
     ;
 
 CHAR_LITERAL
-    : '\'' ('\\' . | ~['\\\r\n]) '\''
+    : '\'' (UNICODE_ESCAPE | '\\' . | ~['\\\r\n]) '\''
+    ;
+
+fragment UNICODE_ESCAPE
+    : '\\' 'u' '{' [0-9a-fA-F]+ '}'
+    | '\\' 'u' [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F]
     ;
 
 IDENTIFIER
