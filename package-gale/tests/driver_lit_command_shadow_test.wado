@@ -1,0 +1,12 @@
+//! A lexer command on a named single-literal rule must survive even when the
+//! same literal is written inline in a parser rule (ANTLR unifies the two).
+
+use g from "./grammars/lit_command_shadow.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/lit_command_shadow" },
+    };
+
+test "inline literal keeps its named rule's lexer command" {
+    let r = g::parse(&"{abc");
+    assert r.ok(), `tree: '{g::to_string_tree(&r)}'`;
+}

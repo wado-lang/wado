@@ -1843,6 +1843,7 @@ fn lower_scan_element(
             &g,
             ctx,
             outer_follow,
+            gate_caller_follow,
         ),
     };
 }
@@ -1852,7 +1853,12 @@ fn lower_scan_element(
 /// dispatch step: single-alt groups have no dispatch (one body run
 /// unconditionally / wrapped in a one-alt `ScanGroupElement`), while
 /// multi-alt token-only groups dispatch on token kind.
-fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &List<String>) -> ScanElement {
+fn lower_scan_group(
+    g: &GroupElement,
+    ctx: &mut GenContext,
+    outer_follow: &List<String>,
+    enclosing_at_tail: bool = true,
+) -> ScanElement {
     let alts = &g.alternatives;
     match classify_group(alts) {
         Transparent => {
@@ -1868,7 +1874,7 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &List<
             let alt = &alts[0];
             let mut elements: List<ScanElement> = [];
             for let mut i = 0; i < alt.elements.len(); i += 1 {
-                elements.push(lower_alt_scan_element(&alt.elements, i, ctx));
+                elements.push(lower_alt_scan_element(&alt.elements, i, ctx, enclosing_at_tail));
             }
             let mut visiting: List<String> = [];
             let alt_first = ctx.first_of_alt(alt, &mut visiting);
@@ -1908,12 +1914,17 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &List<
             return lower_simple_cst_scan_group(alts, ctx, outer_follow);
         },
         General => {
-            return lower_general_scan_group(alts, ctx, outer_follow);
+            return lower_general_scan_group(alts, ctx, outer_follow, enclosing_at_tail);
         },
     }
 }
 
-fn lower_general_scan_group(alts: &List<Alternative>, ctx: &mut GenContext, outer_follow: &List<String>) -> ScanElement {
+fn lower_general_scan_group(
+    alts: &List<Alternative>,
+    ctx: &mut GenContext,
+    outer_follow: &List<String>,
+    enclosing_at_tail: bool = true,
+) -> ScanElement {
     let mut bodies: List<ScanBody> = [];
     let mut first_sets: List<List<String>> = [];
     let mut all_indices: List<i32> = [];
@@ -1925,6 +1936,7 @@ fn lower_general_scan_group(alts: &List<Alternative>, ctx: &mut GenContext, oute
                 &alt.elements,
                 i,
                 ctx,
+                enclosing_at_tail,
             ));
         }
         bodies.push(ScanBody { elements });
@@ -2003,7 +2015,7 @@ fn lower_scan_repeat(
         ctx,
         &iter_follow,
         FollowArg::NoFollow,
-        false,
+        gate_caller_follow,
     );
     let effective_gate = gate_caller_follow && !rep.non_greedy;
     if effective_gate {
@@ -2049,14 +2061,19 @@ fn rebind_scan_repeat_caller_follow(se: ScanElement, caller_follow_first: List<S
 /// that emit parse-side ops alongside scan elements (`lower_single_alt_group`,
 /// `lower_general_group`) inline the post-pass so they can share
 /// `basic_follow` with the parse-side rebind.
-fn lower_alt_scan_element(alt_elements: &List<Element>, i: i32, ctx: &mut GenContext) -> ScanElement {
+fn lower_alt_scan_element(
+    alt_elements: &List<Element>,
+    i: i32,
+    ctx: &mut GenContext,
+    enclosing_at_tail: bool = true,
+) -> ScanElement {
     let elem_follow = ctx.compute_call_site_follow(alt_elements, i);
     // Mirror the parse side: the per-position `FollowArg` and the tail
     // Repeat's `gate_caller_follow` flag keep the scan tournament in
     // lockstep with the gated parse body, so the scan side doesn't
     // over-count a tail iteration the caller's continuation claims.
     let elem_follow_arg = compute_follow_arg(ctx, alt_elements, i);
-    let elem_gate = compute_gate_caller_follow(ctx, alt_elements, i);
+    let elem_gate = compute_gate_caller_follow(ctx, alt_elements, i) && enclosing_at_tail;
     let mut se = lower_scan_element(
         &alt_elements[i],
         ctx,
@@ -2478,6 +2495,7 @@ fn lower_op(
             ctx,
             group_counter,
             outer_follow,
+            gate_caller_follow,
         ),
         Label(lab) => lower_label_op(
             &lab,
@@ -2518,6 +2536,7 @@ fn lower_group_op(
     ctx: &mut GenContext,
     group_counter: &mut i32,
     outer_follow: &List<String>,
+    enclosing_at_tail: bool = true,
 ) -> Op {
     let alts = &g.alternatives;
     match classify_group(alts) {
@@ -2538,6 +2557,7 @@ fn lower_group_op(
                 rule_name,
                 ctx,
                 group_counter,
+                enclosing_at_tail,
             );
         },
         TokenOnly => {
@@ -2553,6 +2573,7 @@ fn lower_group_op(
                 rule_name,
                 ctx,
                 group_counter,
+                enclosing_at_tail,
             );
         },
     }
@@ -2637,6 +2658,7 @@ fn lower_single_alt_group(
     rule_name: &String,
     ctx: &mut GenContext,
     group_counter: &mut i32,
+    enclosing_at_tail: bool = true,
 ) -> Op {
     // Nested elements are allowed: `(a (b c))` / `(a*)` /
     // `(name=a b)`. Each elem is lowered through the standard
@@ -2670,7 +2692,7 @@ fn lower_single_alt_group(
         // Each inner position gets its own `FollowArg` / gate computed
         // from the inner alt's suffix.
         let elem_follow_arg = compute_follow_arg(ctx, &alt.elements, i);
-        let elem_gate = compute_gate_caller_follow(ctx, &alt.elements, i);
+        let elem_gate = compute_gate_caller_follow(ctx, &alt.elements, i) && enclosing_at_tail;
         let mut op = lower_op(
             elem,
             &mut inner_counts,
@@ -2978,6 +3000,7 @@ fn lower_general_group(
     rule_name: &String,
     ctx: &mut GenContext,
     group_counter: &mut i32,
+    enclosing_at_tail: bool = true,
 ) -> Op {
     let group_index = *group_counter;
     *group_counter += 1;
@@ -3014,7 +3037,7 @@ fn lower_general_group(
             // Each inner position gets its own `FollowArg` / gate from
             // the inner alt's suffix.
             let elem_follow_arg = compute_follow_arg(ctx, &alt.elements, ei);
-            let elem_gate = compute_gate_caller_follow(ctx, &alt.elements, ei);
+            let elem_gate = compute_gate_caller_follow(ctx, &alt.elements, ei) && enclosing_at_tail;
             let mut op = lower_op(
                 elem,
                 &mut inner_counts,
@@ -3198,7 +3221,7 @@ fn lower_repeat_op(
                 group_counter,
                 &iter_follow,
                 FollowArg::NoFollow,
-                false,
+                gate_caller_follow,
             );
         } else {
             panic("repeat_inner_is_list_label returned true for non-Label");
@@ -3212,7 +3235,7 @@ fn lower_repeat_op(
             group_counter,
             &iter_follow,
             FollowArg::NoFollow,
-            false,
+            gate_caller_follow,
         );
     };
     let mut body_visiting: List<String> = [];
@@ -3229,7 +3252,7 @@ fn lower_repeat_op(
         ctx,
         &iter_follow,
         FollowArg::NoFollow,
-        false,
+        gate_caller_follow,
     );
     let body_is_single_alt_group = if let Group(g) = &rep.element {
         g.alternatives.len() == 1;

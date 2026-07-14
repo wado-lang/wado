@@ -101,7 +101,7 @@ pub(super) fn synthesize_record_stream_reads(project: &mut Package) {
             crate::component_model::cm_align_with_registry(&ast_type, cm_interface_registry) as i32;
 
         let cm_record_name = cm_interface_registry
-            .get_struct_cm_name(elem_name)
+            .get_struct_cm_name_by_source(&source, elem_name)
             .unwrap_or(elem_name)
             .to_string();
         let _ = fields;
@@ -2000,7 +2000,20 @@ fn parameterize_stream_cm_name(
             if let Some(payload) = crate::component_model::cm_payload_type_from_type_id(tt, elem) {
                 return format!("{cm_name}:val-{}", payload.name_suffix());
             }
-            let cm_elem = registered_cm_name(&elem_name, cm_interface_registry)
+            // The element's declaring interface keys the CM-name lookup. Its
+            // `module_source` is the loader identity (a `.wado` path); the
+            // registry bridges it to the versioned `#[cm(...)]` key.
+            let elem_source = match tt.get(tt.get_ultimate_base_type(elem)) {
+                ResolvedType::Struct { module_source, .. }
+                | ResolvedType::Variant { module_source, .. }
+                | ResolvedType::Enum { module_source, .. }
+                | ResolvedType::Flags { module_source, .. }
+                | ResolvedType::Resource { module_source, .. } => Some(module_source.to_string()),
+                _ => None,
+            };
+            let cm_elem = elem_source
+                .as_deref()
+                .and_then(|source| registered_cm_name(&elem_name, source, cm_interface_registry))
                 .unwrap_or_else(|| pascal_to_kebab(&elem_name));
             return format!("{cm_name}:{cm_elem}");
         }
@@ -2008,17 +2021,21 @@ fn parameterize_stream_cm_name(
     cm_name.to_string()
 }
 
-/// Look up the canonical `#[cm("…")]` CM name for a Wado type name across
-/// the registry's stream-eligible categories (struct, resource, variant,
-/// enum, flags). Returns `None` for ambiguous lookups or unregistered
-/// names.
-fn registered_cm_name(name: &str, registry: &CmInterfaceRegistry) -> Option<String> {
+/// Look up the canonical `#[cm("…")]` CM name for a Wado type declared in the
+/// interface identified by the coarse `module_source` string, across the
+/// registry's stream-eligible categories (struct, resource, variant, enum,
+/// flags). Returns `None` for an unregistered name.
+fn registered_cm_name(
+    name: &str,
+    module_source: &str,
+    registry: &CmInterfaceRegistry,
+) -> Option<String> {
     registry
-        .get_struct_cm_name(name)
-        .or_else(|| registry.get_resource_cm_name(name))
-        .or_else(|| registry.get_variant_cm_name(name))
-        .or_else(|| registry.get_enum_cm_name(name))
-        .or_else(|| registry.get_flags_cm_name(name))
+        .get_struct_cm_name_by_module(module_source, name)
+        .or_else(|| registry.get_resource_cm_name_by_module(module_source, name))
+        .or_else(|| registry.get_variant_cm_name_by_module(module_source, name))
+        .or_else(|| registry.get_enum_cm_name_by_module(module_source, name))
+        .or_else(|| registry.get_flags_cm_name_by_module(module_source, name))
         .map(str::to_string)
 }
 

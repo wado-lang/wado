@@ -19,14 +19,14 @@ pub fn gen_highlight(
     ctx: &mut GenContext,
 ) {
     gen_highlight_mapping(w, &grammar.lexer_rules, &grammar.parser_rules, lit_tokens, query, ctx);
-    let mut f = FnSpec::new("highlight", Vis::Pub);
-    f.add_param(&"input", &"&String");
-    f.set_return_type(&"String");
-    f.emit_begin(w);
-    w.line(&"let mapping = highlight_mapping();");
-    w.line(&"let mut visitor = HighlightVisitor::new(mapping);");
     if grammar.parser_rules.len() > 0 {
-        w.line(&"let result = parse(input);");
+        let mut fr = FnSpec::new("highlight_result", Vis::Pub);
+        fr.add_param(&"result", &"&ParseResult");
+        fr.add_param(&"input", &"&String");
+        fr.set_return_type(&"String");
+        fr.emit_begin(w);
+        w.line(&"let mapping = highlight_mapping();");
+        w.line(&"let mut visitor = HighlightVisitor::new(mapping);");
         // A clean parse walks the tree (rule-context overrides apply); a broken
         // parse leaves a partial tree that need not cover every token, so fall
         // back to a flat token pass (default classes only).
@@ -37,15 +37,32 @@ pub fn gen_highlight(
         w.line(&"visitor.hl_visit_token(&result.tokens, _i);");
         w.end();
         w.end();
+        w.line(&"return highlight_html(input, &visitor.captures);");
+        w.end();
+        w.blank();
+
+        let mut f = FnSpec::new("highlight", Vis::Pub);
+        f.add_param(&"input", &"&String");
+        f.set_return_type(&"String");
+        f.emit_begin(w);
+        w.line(&"let result = parse(input);");
+        w.line(&"return highlight_result(&result, input);");
+        w.end();
     } else {
         // Lexer-only grammar: no `parse` / tree, so highlight the raw stream.
+        let mut f = FnSpec::new("highlight", Vis::Pub);
+        f.add_param(&"input", &"&String");
+        f.set_return_type(&"String");
+        f.emit_begin(w);
+        w.line(&"let mapping = highlight_mapping();");
+        w.line(&"let mut visitor = HighlightVisitor::new(mapping);");
         w.line(&"let tokens = tokenize(input);");
         w.begin(&"for let mut _i = 0; _i < tokens.len(); _i += 1");
         w.line(&"visitor.hl_visit_token(&tokens, _i);");
         w.end();
+        w.line(&"return highlight_html(input, &visitor.captures);");
+        w.end();
     }
-    w.line(&"return highlight_html(input, &visitor.captures);");
-    w.end();
     w.blank();
     gen_highlight_run(w);
 }

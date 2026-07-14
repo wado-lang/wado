@@ -1925,7 +1925,7 @@ fn scan_braced(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
             sg_2: {
                 pos = scan_arm(tokens, pos, follow, 0);
                 if pos < 0 { break sg_2; }
-                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                     let sp = pos;
                     sg_3_done: {
                         sg_3: {
@@ -1940,7 +1940,7 @@ fn scan_braced(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                if pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                     let sp = pos;
                     if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { pos = -1; } else { pos += 1; }
                     if pos < 0 { pos = sp; }
@@ -2112,7 +2112,7 @@ fn _parse_braced__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         let mut pos: i32 = p.pos;
         pos = scan_arm(tokens, pos, follow, 0);
         if pos < 0 { break opt_scan; }
-        while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+        while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
             let sp = pos;
             sg_6_done: {
                 sg_6: {
@@ -2127,7 +2127,7 @@ fn _parse_braced__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
             if pos < 0 { pos = sp; break; }
             if pos == sp { break; }
         }
-        if pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+        if pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
             let sp = pos;
             if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { pos = -1; } else { pos += 1; }
             if pos < 0 { pos = sp; }
@@ -2138,7 +2138,6 @@ fn _parse_braced__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         let arm = _parse_arm(p, follow);
         loop {
             if p.recovering { break; }
-            if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
                 let tokens = &p.kinds;
@@ -2160,7 +2159,7 @@ fn _parse_braced__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
             let comma = p.expect(TK_LIT_COMMA, &SYNC_0);
             let arm = _parse_arm(p, follow);
         }
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_COMMA) {
+        if p.peek_kind() == TK_LIT_COMMA {
             let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
         }
     }

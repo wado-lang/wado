@@ -465,41 +465,71 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
             let binding_cm_package = world_info.package().to_string();
 
             for export in &world_info.exports {
-                // Find the user's export function and check for missing `export` keyword
-                let mut found_exported = None;
-                let mut found_without_export = false;
-                for f in &entry_module.functions {
-                    let func = f.borrow();
-                    if func.name == export.name {
-                        if func.is_export {
-                            found_exported = Some(f.clone());
-                        } else {
-                            found_without_export = true;
+                // A library spreads its `export fn`s across submodules; an
+                // export defined outside the entry module carries its origin
+                // module, and the adapter calls it there. The callee's module
+                // is the `tir_modules` key (a function's own `module_source` is
+                // not set until link, which runs after this synthesis).
+                let callee_module = export
+                    .reexport_origin
+                    .as_ref()
+                    .map(|(m, _)| m.clone())
+                    .unwrap_or_else(|| entry_source.clone());
+                let user_func_rc = if let Some((origin_module, origin_name)) =
+                    &export.reexport_origin
+                {
+                    let origin = project.tir_modules.get(origin_module).and_then(|m| {
+                        m.functions
+                            .iter()
+                            .find(|f| f.borrow().name == *origin_name)
+                            .cloned()
+                    });
+                    match origin {
+                        Some(f) => f,
+                        None => {
+                            return Err(format!(
+                                "re-exported function `{}` (origin `{}`) is not defined",
+                                export.name, origin_name
+                            ));
                         }
                     }
-                }
+                } else {
+                    // Find the user's export function and check for missing `export` keyword
+                    let mut found_exported = None;
+                    let mut found_without_export = false;
+                    for f in &entry_module.functions {
+                        let func = f.borrow();
+                        if func.name == export.name {
+                            if func.is_export {
+                                found_exported = Some(f.clone());
+                            } else {
+                                found_without_export = true;
+                            }
+                        }
+                    }
 
-                if found_exported.is_none() && found_without_export {
-                    return Err(format!(
-                        "function `{}` exists but is not marked with `export` keyword. \
-                         Add `export` to make it a world entry point: `export fn {}(...)`",
-                        export.name, export.name
-                    ));
-                }
+                    if found_exported.is_none() && found_without_export {
+                        return Err(format!(
+                            "function `{}` exists but is not marked with `export` keyword. \
+                             Add `export` to make it a world entry point: `export fn {}(...)`",
+                            export.name, export.name
+                        ));
+                    }
 
-                // A world export with no function at all is a missing entry
-                // point. The test world handles `test` blocks separately and
-                // never reaches this loop, so in CLI / HTTP / other worlds the
-                // entry must be defined — never silently stubbed.
-                if found_exported.is_none() {
-                    return Err(format!(
-                        "function `{}` is required as a world entry point but is not defined. \
-                         Define it with: `export fn {}(...)`",
-                        export.name, export.name
-                    ));
-                }
+                    // A world export with no function at all is a missing entry
+                    // point. The test world handles `test` blocks separately and
+                    // never reaches this loop, so in CLI / HTTP / other worlds the
+                    // entry must be defined — never silently stubbed.
+                    if found_exported.is_none() {
+                        return Err(format!(
+                            "function `{}` is required as a world entry point but is not defined. \
+                             Define it with: `export fn {}(...)`",
+                            export.name, export.name
+                        ));
+                    }
 
-                let user_func_rc = found_exported.expect("required export presence verified above");
+                    found_exported.expect("required export presence verified above")
+                };
                 let binding_name = export_binding_func_name(&export.name);
                 let adapter = {
                     // Validate parameter count matches world declaration
@@ -622,7 +652,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                         synthesize_async_export_binding(
                             &export.name,
                             user_func_rc,
-                            &entry_source,
+                            &callee_module,
                             &project.tir_modules,
                             &entry_type_table,
                             &export.params,
@@ -637,7 +667,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                         synthesize_sync_export_binding(
                             &export.name,
                             user_func_rc,
-                            &entry_source,
+                            &callee_module,
                             &project.tir_modules,
                             &entry_type_table,
                             &export.params,
@@ -673,7 +703,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                             synthesize_result_export_binding(
                                 &export.name,
                                 user_func_rc,
-                                &entry_source,
+                                &callee_module,
                                 export.return_type.as_ref().unwrap(),
                                 &flat_types,
                                 &project.tir_modules,
@@ -697,7 +727,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                 synthesize_void_export_binding(
                                     &export.name,
                                     user_func_rc,
-                                    &entry_source,
+                                    &callee_module,
                                 )
                             } else {
                                 // Sync export returning a plain value (not a
@@ -713,7 +743,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                 synthesize_sync_export_binding(
                                     &export.name,
                                     user_func_rc,
-                                    &entry_source,
+                                    &callee_module,
                                     &project.tir_modules,
                                     &entry_type_table,
                                     &export.params,
@@ -1061,12 +1091,25 @@ mod tests {
     #[test]
     fn flatten_param_newtype_u64() {
         let (reg, _) = CmInterfaceRegistry::build_from_stdlib();
+        // A newtype reference reaching CM flattening carries its declaring
+        // interface (as bootstrap and lib registration populate it).
+        let wasi_newtype = |name: &str| {
+            let source = reg
+                .find_wasi_newtype_source(name)
+                .expect("wasi newtype source");
+            Type::Named(NamedType {
+                id: crate::ast::AstId::fresh(),
+                name: name.to_string(),
+                span: synth_span(),
+                source_interface: Some(source.to_string()),
+            })
+        };
         assert_eq!(
-            flatten_param_type(&named_type("Duration"), &reg, &CmStdlibNames::for_tests()),
+            flatten_param_type(&wasi_newtype("Duration"), &reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I64]
         );
         assert_eq!(
-            flatten_param_type(&named_type("Mark"), &reg, &CmStdlibNames::for_tests()),
+            flatten_param_type(&wasi_newtype("Mark"), &reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I64]
         );
     }

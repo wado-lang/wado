@@ -117,7 +117,7 @@ impl TirRefVisitor for Collector<'_> {
 fn copy_value_type_arg(expr: &TirExpr) -> Option<TypeId> {
     if let TirExprKind::Call { func, .. } = &expr.kind
         && func.module_source.is_core_builtin()
-        && func.name == "copy_value"
+        && crate::tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "copy_value")
     {
         func.monomorph_info
             .as_ref()
@@ -130,7 +130,7 @@ fn copy_value_type_arg(expr: &TirExpr) -> Option<TypeId> {
 fn array_clone_element_type_arg(expr: &TirExpr) -> Option<TypeId> {
     if let TirExprKind::Call { func, .. } = &expr.kind
         && func.module_source.is_core_builtin()
-        && func.name == "array_clone"
+        && crate::tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "array_clone")
     {
         func.monomorph_info
             .as_ref()

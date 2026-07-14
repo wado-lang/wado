@@ -1338,77 +1338,6 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
     }
     return [lo + 1, pos - line_starts[lo]];
 }
-//! Runtime FOLLOW-continuation gate for tail-greedy loops. Emitted into a
-//! generated parser only when lowering constructed a caller-FOLLOW gate
-//! (`GenContext::emit_follow`); gate-free grammars carry none of this.
-
-/// `follow` is the caller's deterministic K-prefix continuation:
-/// `follow[d]` is the set of token kinds that may appear at input depth
-/// `d` if control belongs to the caller rather than to another iteration
-/// of the loop. An empty `follow` (the common, non-repair case) disables
-/// the gate. The loop yields to the caller — breaking `*`/`+` or skipping
-/// `?` — exactly when EVERY non-empty depth-set matches the upcoming
-/// input, i.e. when the next tokens are unambiguously the caller's
-/// continuation.
-///
-/// Threaded as a defaulted `&EMPTY_FOLLOW` argument through the generated
-/// `parse_*` / `scan_*` functions; repair call sites pass a `FOLLOW_MASK_*`
-/// constant (or forward their own `follow`). This replaces the previous
-/// per-(rule, mask) cloned `__follow_<id>` variants: the mask is data
-/// carried at runtime, not code baked into a specialised function.
-///
-/// `eof_kind` is the token kind reported past the end of the stream, so a
-/// caller continuation ending in EOF gates correctly. `tokens` is the bare
-/// `kinds` array (`&p.kinds` on the parse side, the scan `kinds` array on the
-/// scan side) — gating only reads token kinds, and a flat `&Array<i32>` keeps
-/// scan frames a slot smaller than the `List` wrapper or `&TokenStream`
-/// would, which matters for deeply recursive scan grammars.
-pub global EMPTY_FOLLOW: List<List<i32>> = [];
-
-/// Prepend a static local prefix to an inherited FOLLOW continuation.
-/// Used for the `FollowArg::Combined` case: a callee at the current
-/// rule's tail whose preceding local suffix is nullable, so its
-/// continuation is `prefix` (the optional local elements' per-depth
-/// first sets) followed by the caller's own `follow`. Bounded by
-/// `FOLLOW_MASK_MAX_K` so the result stays small; the only
-/// allocating point on a repaired path (the common Static/Forward
-/// cases pass a reference directly).
-pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
-    let mut combined: List<List<i32>> = [];
-    for let depth of prefix {
-        combined.push(*depth);
-    }
-    for let depth of follow {
-        combined.push(*depth);
-    }
-    return combined;
-}
-
-pub fn follow_yields(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
-    if follow.is_empty() {
-        return false;
-    }
-    for let mut d = 0; d < follow.len(); d += 1 {
-        let set = &follow[d];
-        if set.is_empty() {
-            // No constraint at this depth — a vacuous match, keep going.
-            continue;
-        }
-        let idx = pos + d;
-        let kind = if idx < tokens.len() { tokens[idx] } else { eof_kind };
-        let mut hit = false;
-        for let t of set {
-            if kind == *t {
-                hit = true;
-                break;
-            }
-        }
-        if !hit {
-            return false;
-        }
-    }
-    return true;
-}
 //! Runtime ATN simulator (hybrid ALL(*)) — full-context SLL prediction.
 //!
 //! Emitted into a generated parser only when lowering saw a construct that
@@ -3008,10 +2937,10 @@ impl Parser {
     }
 }
 
-fn scan_prog(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_prog(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     SCAN_STACK.push(8);
-    pos = scan_expr(tokens, pos, &FOLLOW_MASK_0, 0);
+    pos = scan_expr(tokens, pos, 0);
     SCAN_STACK.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
@@ -3019,7 +2948,7 @@ fn scan_prog(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
     return pos;
 }
 
-fn scan_expr_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_expr_atom(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -3038,13 +2967,13 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_BETWEEN { break try_1; }
                 pos += 1;
                 SCAN_STACK.push(20);
-                pos = scan_expr(tokens, pos, &FOLLOW_MASK_1, 0);
+                pos = scan_expr(tokens, pos, 0);
                 SCAN_STACK.pop();
                 if pos < 0 { break try_1; }
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_AND { break try_1; }
                 pos += 1;
                 SCAN_STACK.push(24);
-                pos = scan_expr(tokens, pos, follow, 0);
+                pos = scan_expr(tokens, pos, 0);
                 SCAN_STACK.pop();
                 if pos < 0 { break try_1; }
                 break scan_alts;
@@ -3057,29 +2986,29 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
     return pos;
 }
 
-fn scan_expr_lr_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_expr_lr_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_AND { return -1; }
     pos += 1;
     SCAN_STACK.push(32);
-    pos = scan_expr(tokens, pos, follow, 4);
+    pos = scan_expr(tokens, pos, 4);
     SCAN_STACK.pop();
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expr_lr_2(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_expr_lr_2(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_OR { return -1; }
     pos += 1;
     SCAN_STACK.push(37);
-    pos = scan_expr(tokens, pos, follow, 3);
+    pos = scan_expr(tokens, pos, 3);
     SCAN_STACK.pop();
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expr_lr_4(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_expr_lr_4(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
     pos += 1;
@@ -3088,17 +3017,17 @@ fn scan_expr_lr_4(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
         sg_0_done: {
             sg_0: {
                 SCAN_STACK.push(47);
-                pos = scan_expr(tokens, pos, follow, 0);
+                pos = scan_expr(tokens, pos, 0);
                 SCAN_STACK.pop();
                 if pos < 0 { break sg_0; }
-                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                     let sp = pos;
                     sg_1_done: {
                         sg_1: {
                             if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_1; }
                             pos += 1;
                             SCAN_STACK.push(56);
-                            pos = scan_expr(tokens, pos, follow, 0);
+                            pos = scan_expr(tokens, pos, 0);
                             SCAN_STACK.pop();
                             if pos < 0 { break sg_1; }
                             break sg_1_done;
@@ -3119,20 +3048,20 @@ fn scan_expr_lr_4(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
     return pos;
 }
 
-fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_expr_atom(tokens, pos, follow);
+fn scan_expr(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = scan_expr_atom(tokens, pos);
     if pos < 0 { return -1; }
     loop {
         let _atn_alt = atn_lr_loop_decision(&ATN_SIM, &SCAN_STACK, 1, tokens, pos, TK_EOF, min_prec);
         let _lr_pos0 = pos;
         if _atn_alt == 0 {
-            pos = scan_expr_lr_1(tokens, pos, follow);
+            pos = scan_expr_lr_1(tokens, pos);
             if pos < 0 { return -1; }
         } else if _atn_alt == 1 {
-            pos = scan_expr_lr_2(tokens, pos, follow);
+            pos = scan_expr_lr_2(tokens, pos);
             if pos < 0 { return -1; }
         } else if _atn_alt == 2 {
-            pos = scan_expr_lr_4(tokens, pos, follow);
+            pos = scan_expr_lr_4(tokens, pos);
             if pos < 0 { return -1; }
         } else {
             break;
@@ -3144,22 +3073,22 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
     return pos;
 }
 
-fn _parse_prog__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_prog__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     p.atn_ret_pending = 8;
-    let expr = _parse_expr(p, &FOLLOW_MASK_0);
+    let expr = _parse_expr(p);
     let eof = p.expect(TK_EOF, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_prog(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_prog(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
     p.atn_stack.push(_atn_ret);
     let _start = p.peek_start();
     p.b.start_node(RK_PROG, _start);
-    _parse_prog__inner(p, follow);
+    _parse_prog__inner(p);
     p.b.finish_node(p.last_end());
     p.atn_stack.pop();
     if p.recovering {
@@ -3167,7 +3096,7 @@ fn _parse_prog(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     }
 }
 
-fn _parse_expr__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
+fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_INT {
@@ -3177,10 +3106,10 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     if kind == TK_LIT_BETWEEN {
         let lit_between = p.expect(TK_LIT_BETWEEN, &SYNC_0);
         p.atn_ret_pending = 20;
-        let expr = _parse_expr(p, &FOLLOW_MASK_1);
+        let expr = _parse_expr(p);
         let lit_and = p.expect(TK_LIT_AND, &SYNC_0);
         p.atn_ret_pending = 24;
-        let expr_2 = _parse_expr(p, follow, 2);
+        let expr_2 = _parse_expr(p, 2);
         return;
     }
     p.no_viable(
@@ -3191,11 +3120,11 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     return;
 }
 
-fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
+fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_EXPR, _start);
-    _parse_expr__inner_atom(p, follow, min_prec);
+    _parse_expr__inner_atom(p, min_prec);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
@@ -3205,24 +3134,24 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
             p.b.start_node_at(_cp, RK_EXPR, _start);
             let lit_and = p.expect(TK_LIT_AND, &EMPTY_SYNC);
             p.atn_ret_pending = 32;
-            let expr_2 = _parse_expr(p, follow, 4);
+            let expr_2 = _parse_expr(p, 4);
             p.b.finish_node(p.last_end());
         } else if _atn_alt == 1 {
             p.b.start_node_at(_cp, RK_EXPR, _start);
             let lit_or = p.expect(TK_LIT_OR, &EMPTY_SYNC);
             p.atn_ret_pending = 37;
-            let expr_2 = _parse_expr(p, follow, 3);
+            let expr_2 = _parse_expr(p, 3);
             p.b.finish_node(p.last_end());
         } else if _atn_alt == 2 {
             p.b.start_node_at(_cp, RK_EXPR, _start);
             let lparen = p.expect(TK_LIT_LPAREN, &EMPTY_SYNC);
             if _kind_set_0(p.peek_kind()) {
                 p.atn_ret_pending = 47;
-                let expr = _parse_expr(p, follow, 0);
-                while !p.recovering && (p.peek_kind() == TK_LIT_COMMA && !follow_yields(&p.kinds, p.pos, follow, TK_EOF)) {
+                let expr = _parse_expr(p, 0);
+                while !p.recovering && (p.peek_kind() == TK_LIT_COMMA) {
                     let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
                     p.atn_ret_pending = 56;
-                    let expr = _parse_expr(p, follow, 0);
+                    let expr = _parse_expr(p, 0);
                 }
             }
             let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
@@ -3237,12 +3166,12 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
     return;
 }
 
-fn _parse_expr(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
+fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> () {
     if p.recovering { return; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
     p.atn_stack.push(_atn_ret);
-    _parse_expr__inner(p, follow, min_prec);
+    _parse_expr__inner(p, min_prec);
     p.atn_stack.pop();
     if p.recovering {
         p.push_rule_stack("expr");
@@ -3311,9 +3240,6 @@ fn _kind_set_0(k: i32) -> bool {
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_INT, TK_LIT_BETWEEN];
-
-global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF]];
-global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_AND]];
 
 global ATN_SIM: AtnSim = atn_decode(&b"\x02\x00\x04\x00\x3c\x00\x00\x00\x02\x00\x0b\x00\x19\x00\x29\x00\x30\x00\x02\x03\x02\x03\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x06\x09\x07\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x04\x05\x01\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x01\x07\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x04\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x00\x01\x00\x04\x00\x01\x00\x04\x00\x05\x05\x05\x00\x00\x00\x00\x01\x00\x04\x00\x00\x01\x00\x04\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x01\x00\x04\x00\x00\x01\x00\x05\x00\x0c\x00\x07\x00\x02\x00\x08\x00\x03\x00\x0a\x00\x0b\x00\x06\x00\x0e\x00\x11\x00\x1a\x00\x0f\x00\x10\x00\x0d\x00\x12\x00\x13\x00\x14\x00\x03\x00\x16\x00\x17\x00\x18\x00\x03\x00\x0d\x00\x1d\x00\x22\x00\x27\x00\x1b\x00\x04\x00\x1a\x00\x1e\x00\x1f\x00\x20\x00\x03\x00\x1c\x00\x23\x00\x24\x00\x25\x00\x03\x00\x1c\x00\x28\x00\x29\x00\x2a\x00\x2c\x00\x2b\x00\x3b\x00\x2e\x00\x2b\x00\x2f\x00\x03\x00\x31\x00\x33\x00\x32\x00\x2d\x00\x35\x00\x3a\x00\x36\x00\x37\x00\x38\x00\x03\x00\x34\x00\x31\x00\x3c\x00\x1c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x15\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x19\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x21\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x26\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x39\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x02\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", true);
 global SCAN_STACK: List<i32> = [];

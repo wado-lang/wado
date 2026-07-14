@@ -1799,7 +1799,7 @@ fn scan_r(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
             sg_0_0: {
                 pos = scan_a(tokens, pos, &follow_prepend(&FOLLOW_MASK_0, follow), 0);
                 if pos < 0 { break sg_0_0; }
-                if pos < tokens.len() && tokens[pos] == TK_Y && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && tokens[pos] == TK_Y {
                     let sp = pos;
                     pos = scan_b(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
@@ -1851,7 +1851,7 @@ fn _parse_r__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
                 let mut pos: i32 = p.pos;
                 pos = scan_a(tokens, pos, &follow_prepend(&FOLLOW_MASK_0, follow), 0);
                 if pos < 0 { break gd_scan; }
-                if pos < tokens.len() && tokens[pos] == TK_Y && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && tokens[pos] == TK_Y {
                     let sp = pos;
                     pos = scan_b(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
@@ -1862,7 +1862,7 @@ fn _parse_r__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
         }
         if gd_winner == 0 {
             let a = _parse_a(p, &follow_prepend(&FOLLOW_MASK_0, follow));
-            if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Y) {
+            if p.peek_kind() == TK_Y {
                 let b = _parse_b(p, &EMPTY_FOLLOW);
             }
         } else {

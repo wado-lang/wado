@@ -227,6 +227,13 @@ fn cases() -> Vec<Case> {
             Val::Flags(vec!["read".into(), "execute".into()]),
         ),
         case("id-newtype", Val::Float64(100.0)),
+        // Newtype inside option/result: the payload round-trips through the
+        // newtype's `f64` base, including the result join that widens the
+        // `f64`/`u32` arms to a shared 64-bit slot.
+        case("id-option-newtype", Val::Option(b(Val::Float64(2.5)))),
+        case("id-option-newtype", Val::Option(None)),
+        case("id-result-newtype", Val::Result(Ok(b(Val::Float64(1.5))))),
+        case("id-result-newtype", Val::Result(Err(b(Val::U32(42))))),
         // Mixed-core-class variant: the `as-float` arm's f32 payload shares a
         // slot the join widened to i32, so it must be bit-reinterpreted.
         case(

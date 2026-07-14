@@ -1309,12 +1309,7 @@ impl FunctionTranslator<'_, '_> {
         source: WirInstr,
         instrs: &mut Vec<WirInstr>,
     ) {
-        let needs_boxing = match (binding_wir, source_wir) {
-            (WirType::Ref { type_id: bt, .. }, Some(WirType::Ref { type_id: st, .. })) => bt != st,
-            (WirType::Ref { .. }, Some(WirType::AbstractRef { .. })) => false,
-            (WirType::Ref { .. }, Some(_)) => true,
-            _ => false,
-        };
+        let needs_boxing = super::translate::ref_binding_needs_boxing(binding_wir, source_wir);
         let value = if needs_boxing {
             if let WirType::Ref {
                 type_id: box_tid, ..

@@ -1,0 +1,56 @@
+// `for x of &list` yields references via `array_get_ref`, and dereferencing one
+// to an owned value copies. Monomorphizing `array_get_ref<T>` (which returns a
+// reference, never a copied value) must not disturb the element copies that a
+// generic `array_get` still performs for `list[i]`.
+
+struct Cell { v: i32 }
+
+fn raw_get_ref_v(seed: i32) -> i32 {
+    let mut arr: Array<Cell> = builtin::array_new(1);
+    builtin::array_set(&mut arr, 0, Cell { v: seed });
+    let r = builtin::array_get_ref(&arr, 0);
+    return r.v;
+}
+
+test "for-of by-ref deref collects independent copies" {
+    let src: List<Cell> = [Cell { v: 1 }, Cell { v: 2 }];
+    let mut collected: List<Cell> = [];
+    for let x of &src {
+        collected.push(*x);
+    }
+    collected[0].v = 88;
+    collected[1].v = 99;
+    assert src[0].v == 1;
+    assert src[1].v == 2;
+    assert collected[0].v == 88;
+    assert collected[1].v == 99;
+}
+
+test "list index still copies when array_get_ref is monomorphized" {
+    let list: List<Cell> = [Cell { v: 5 }];
+    let mut a = list[0];
+    a.v = 88;
+    assert raw_get_ref_v(9) == 9;
+    assert list[0].v == 5;
+    assert a.v == 88;
+}
+
+test "deref of array_get_ref copies to an owned value" {
+    let mut arr: Array<Cell> = builtin::array_new(1);
+    builtin::array_set(&mut arr, 0, Cell { v: 1 });
+    let mut owned = *builtin::array_get_ref(&arr, 0);
+    owned.v = 99;
+    assert builtin::array_get(&arr, 0).v == 1;
+    assert owned.v == 99;
+}
+
+test "for-of by-ref read-only sums without aliasing" {
+    let src: List<Cell> = [Cell { v: 10 }, Cell { v: 20 }];
+    let mut total = 0;
+    for let x of &src {
+        total += x.v;
+    }
+    assert src[0].v == 10;
+    assert src[1].v == 20;
+    assert total == 30;
+}

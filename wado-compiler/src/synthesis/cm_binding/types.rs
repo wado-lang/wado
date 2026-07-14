@@ -296,6 +296,14 @@ pub fn cm_type_to_type_id(
                         .and_then(|fq| registry.cm_interface_module_source_of(fq))
                         .and_then(|ms| type_table.find_named_type_by_source(&named.name, ms))
                 })
+                // A lib-local type defined in a submodule: the interface FQ maps
+                // to the entry module, so resolve via the type's own recorded
+                // module instead.
+                .or_else(|| {
+                    registry
+                        .lib_local_type_source(&named.name)
+                        .and_then(|ms| type_table.find_named_type_by_source(&named.name, ms))
+                })
                 .unwrap_or(TypeTable::I32),
         },
         Type::Generic(g) => {
@@ -911,6 +919,10 @@ pub(super) fn flatten_export_type(
                     flatten_variant_type(&variant_decl, out, tir_modules, type_table);
                 } else if let Some(struct_decl) = find_struct_decl(&named.name, tir_modules) {
                     flatten_struct_type(&struct_decl, out, tir_modules, type_table);
+                } else if let Some(nt_type_id) = find_newtype_type_id(&named.name, tir_modules) {
+                    // A newtype flattens as its base, not the i32 fallback below,
+                    // so the flat signature matches the canonical ABI.
+                    flat_types_from_type_id_into(nt_type_id, out, tir_modules, type_table);
                 } else {
                     // Resource handles, enums, unknown → i32
                     out.push(cm_abi::CmValType::I32);
@@ -1119,6 +1131,21 @@ pub(super) fn find_struct_decl(
     None
 }
 
+/// Find the `TypeId` of a newtype declaration by name across all TIR modules.
+pub(super) fn find_newtype_type_id(
+    name: &str,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+) -> Option<TypeId> {
+    for module in tir_modules.values() {
+        for nt in &module.newtypes {
+            if nt.name == name {
+                return Some(nt.type_id);
+            }
+        }
+    }
+    None
+}
+
 /// Create a `VariantTag` TIR expression (extracts i32 discriminant).
 pub(super) fn variant_tag(expr: TirExpr) -> TirExpr {
     let _ = expr.type_id;
@@ -1315,6 +1342,11 @@ pub(super) fn type_id_to_ast_type(
                 span,
             })
         }
+        ResolvedType::Newtype {
+            name,
+            module_source,
+            ..
+        } => cm_named(name, module_source),
         ResolvedType::Ref(inner) => Type::Reference(Box::new(type_id_to_ast_type(
             *inner,
             type_table,

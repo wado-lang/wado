@@ -3994,7 +3994,7 @@ fn scan_compound_select_stmt(tokens: &Array<i32>, pos: i32, follow: &List<List<i
                     sg_15_0: {
                         if pos >= tokens.len() || tokens[pos] != TK_K_UNION { break sg_15_0; }
                         pos += 1;
-                        if pos < tokens.len() && tokens[pos] == TK_K_ALL && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                        if pos < tokens.len() && tokens[pos] == TK_K_ALL {
                             let sp = pos;
                             if pos >= tokens.len() || tokens[pos] != TK_K_ALL { pos = -1; } else { pos += 1; }
                             if pos < 0 { pos = sp; }
@@ -4034,7 +4034,7 @@ fn scan_compound_select_stmt(tokens: &Array<i32>, pos: i32, follow: &List<List<i
                         sg_17_0: {
                             if pos >= tokens.len() || tokens[pos] != TK_K_UNION { break sg_17_0; }
                             pos += 1;
-                            if pos < tokens.len() && tokens[pos] == TK_K_ALL && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                            if pos < tokens.len() && tokens[pos] == TK_K_ALL {
                                 let sp = pos;
                                 if pos >= tokens.len() || tokens[pos] != TK_K_ALL { pos = -1; } else { pos += 1; }
                                 if pos < 0 { pos = sp; }
@@ -4453,7 +4453,7 @@ fn scan_create_trigger_stmt(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
             sg_38_2: {
                 if pos >= tokens.len() || tokens[pos] != TK_K_UPDATE { break sg_38_2; }
                 pos += 1;
-                if pos < tokens.len() && tokens[pos] == TK_K_OF && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && tokens[pos] == TK_K_OF {
                     let sp = pos;
                     sg_39_done: {
                         sg_39: {
@@ -4461,7 +4461,7 @@ fn scan_create_trigger_stmt(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
                             pos += 1;
                             pos = scan_column_name(tokens, pos, follow, 0);
                             if pos < 0 { break sg_39; }
-                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                 let sp = pos;
                                 sg_40_done: {
                                     sg_40: {
@@ -4843,7 +4843,7 @@ fn scan_delete_stmt_limited(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
                             pos += 1;
                             pos = scan_ordering_term(tokens, pos, follow, 0);
                             if pos < 0 { break sg_58; }
-                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                 let sp = pos;
                                 sg_59_done: {
                                     sg_59: {
@@ -6166,7 +6166,7 @@ fn scan_update_stmt_limited(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
                             pos += 1;
                             pos = scan_ordering_term(tokens, pos, follow, 0);
                             if pos < 0 { break sg_123; }
-                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                 let sp = pos;
                                 sg_124_done: {
                                     sg_124: {
@@ -6538,7 +6538,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
                             }
                             pos = scan_expr(tokens, pos, follow, 0);
                             if pos < 0 { break sg_134_0; }
-                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                 let sp = pos;
                                 sg_135_done: {
                                     sg_135: {
@@ -6625,7 +6625,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
                             }
                             pos = scan_expr(tokens, pos, follow, 0);
                             if pos < 0 { break sg_138_0; }
-                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                 let sp = pos;
                                 sg_139_done: {
                                     sg_139: {
@@ -6764,7 +6764,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
                             }
                             pos = scan_expr(tokens, pos, follow, 0);
                             if pos < 0 { break sg_145_0; }
-                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                 let sp = pos;
                                 sg_146_done: {
                                     sg_146: {
@@ -6859,7 +6859,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
                             }
                             pos = scan_expr(tokens, pos, follow, 0);
                             if pos < 0 { break sg_149_0; }
-                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                 let sp = pos;
                                 sg_150_done: {
                                     sg_150: {
@@ -6961,7 +6961,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
                             }
                             pos = scan_expr(tokens, pos, follow, 0);
                             if pos < 0 { break sg_155_0; }
-                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                 let sp = pos;
                                 sg_156_done: {
                                     sg_156: {
@@ -7063,7 +7063,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
                             }
                             pos = scan_expr(tokens, pos, follow, 0);
                             if pos < 0 { break sg_161_0; }
-                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                 let sp = pos;
                                 sg_162_done: {
                                     sg_162: {
@@ -7156,7 +7156,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
                             }
                             pos = scan_expr(tokens, pos, follow, 0);
                             if pos < 0 { break sg_165_0; }
-                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                 let sp = pos;
                                 sg_166_done: {
                                     sg_166: {
@@ -7268,7 +7268,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
                             }
                             pos = scan_expr(tokens, pos, follow, 0);
                             if pos < 0 { break sg_171_0; }
-                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                 let sp = pos;
                                 sg_172_done: {
                                     sg_172: {
@@ -7542,7 +7542,7 @@ fn scan_expr_lr_10(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
                         sg_181_1: {
                             pos = scan_expr(tokens, pos, follow, 0);
                             if pos < 0 { break sg_181_1; }
-                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                 let sp = pos;
                                 sg_182_done: {
                                     sg_182: {
@@ -8662,7 +8662,7 @@ fn scan_table_or_subquery(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
                         sg_219: {
                             pos = scan_expr(tokens, pos, follow, 0);
                             if pos < 0 { break sg_219; }
-                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                 let sp = pos;
                                 sg_220_done: {
                                     sg_220: {
@@ -8799,7 +8799,7 @@ fn scan_table_or_subquery(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
                         sg_229_0: {
                             pos = scan_table_or_subquery(tokens, pos, follow, 0);
                             if pos < 0 { break sg_229_0; }
-                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                 let sp = pos;
                                 sg_230_done: {
                                     sg_230: {
@@ -8856,7 +8856,7 @@ fn scan_table_or_subquery(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
                         sg_232: {
                             pos = scan_expr(tokens, pos, follow, 0);
                             if pos < 0 { break sg_232; }
-                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                 let sp = pos;
                                 sg_233_done: {
                                     sg_233: {
@@ -9015,7 +9015,7 @@ fn scan_join_operator(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
                         sg_241_0: {
                             if pos >= tokens.len() || tokens[pos] != TK_K_LEFT { break sg_241_0; }
                             pos += 1;
-                            if pos < tokens.len() && tokens[pos] == TK_K_OUTER && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                            if pos < tokens.len() && tokens[pos] == TK_K_OUTER {
                                 let sp = pos;
                                 if pos >= tokens.len() || tokens[pos] != TK_K_OUTER { pos = -1; } else { pos += 1; }
                                 if pos < 0 { pos = sp; }
@@ -9849,7 +9849,7 @@ fn _parse_sql_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
     let start = p.peek_start();
     if p.peek_kind() == TK_K_EXPLAIN {
         let k_explain = p.expect(TK_K_EXPLAIN, &SYNC_0);
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_QUERY && p.peek_at(1) == TK_K_PLAN) {
+        if p.peek_kind() == TK_K_QUERY && p.peek_at(1) == TK_K_PLAN {
             let k_query = p.expect(TK_K_QUERY, &SYNC_1);
             let k_plan = p.expect(TK_K_PLAN, &EMPTY_SYNC);
         }
@@ -10323,7 +10323,7 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser, follow: &List<List<i32>> =
                                 sg_262_0: {
                                     if pos >= tokens.len() || tokens[pos] != TK_K_UNION { break sg_262_0; }
                                     pos += 1;
-                                    if pos < tokens.len() && tokens[pos] == TK_K_ALL && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                                    if pos < tokens.len() && tokens[pos] == TK_K_ALL {
                                         let sp = pos;
                                         if pos >= tokens.len() || tokens[pos] != TK_K_ALL { pos = -1; } else { pos += 1; }
                                         if pos < 0 { pos = sp; }
@@ -10360,7 +10360,7 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser, follow: &List<List<i32>> =
         let grp_kind = p.peek_kind();
         if grp_kind == TK_K_UNION {
             let k_union = p.expect(TK_K_UNION, &SYNC_7);
-            if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ALL) {
+            if p.peek_kind() == TK_K_ALL {
                 let k_all = p.expect(TK_K_ALL, &EMPTY_SYNC);
             }
         } else if grp_kind == TK_K_INTERSECT {
@@ -10717,12 +10717,11 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = 
         let k_insert = p.expect(TK_K_INSERT, &EMPTY_SYNC);
     } else if grp_kind == TK_K_UPDATE {
         let k_update = p.expect(TK_K_UPDATE, &SYNC_19);
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_OF) {
+        if p.peek_kind() == TK_K_OF {
             let k_of = p.expect(TK_K_OF, &SYNC_3);
             let column_name = _parse_column_name(p, follow);
             loop {
                 if p.recovering { break; }
-                if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
                 let mut rep_scan_pos: i32 = -1;
                 rep_scan: {
                     let tokens = &p.kinds;
@@ -11069,7 +11068,7 @@ fn _parse_delete_stmt_limited__inner(p: &mut Parser, follow: &List<List<i32>> = 
                     pos += 1;
                     pos = scan_ordering_term(tokens, pos, follow, 0);
                     if pos < 0 { break sg_275; }
-                    while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                    while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                         let sp = pos;
                         sg_276_done: {
                             sg_276: {
@@ -11131,7 +11130,6 @@ fn _parse_delete_stmt_limited__inner(p: &mut Parser, follow: &List<List<i32>> = 
             let ordering_term = _parse_ordering_term(p, follow);
             loop {
                 if p.recovering { break; }
-                if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
                 let mut rep_scan_pos: i32 = -1;
                 rep_scan: {
                     let tokens = &p.kinds;
@@ -12857,7 +12855,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: &List<List<i32>> = 
                     pos += 1;
                     pos = scan_ordering_term(tokens, pos, follow, 0);
                     if pos < 0 { break sg_313; }
-                    while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                    while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                         let sp = pos;
                         sg_314_done: {
                             sg_314: {
@@ -12919,7 +12917,6 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: &List<List<i32>> = 
             let ordering_term = _parse_ordering_term(p, follow);
             loop {
                 if p.recovering { break; }
-                if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
                 let mut rep_scan_pos: i32 = -1;
                 rep_scan: {
                     let tokens = &p.kinds;
@@ -13500,7 +13497,7 @@ fn _parse_expr__inner_alt_13(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                 }
                 pos = scan_expr(tokens, pos, follow, 0);
                 if pos < 0 { break sg_327_0; }
-                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                     let sp = pos;
                     sg_328_done: {
                         sg_328: {
@@ -13535,7 +13532,6 @@ fn _parse_expr__inner_alt_13(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             let expr = _parse_expr(p, follow);
             loop {
                 if p.recovering { break; }
-                if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
                 let mut rep_scan_pos: i32 = -1;
                 rep_scan: {
                     let tokens = &p.kinds;
@@ -13584,7 +13580,7 @@ fn _parse_expr__inner_scan_13(tokens: &Array<i32>, pos: i32, follow: &List<List<
                 }
                 pos = scan_expr(tokens, pos, follow, 0);
                 if pos < 0 { break sg_330_0; }
-                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                     let sp = pos;
                     sg_331_done: {
                         sg_331: {
@@ -14069,7 +14065,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                                     sg_334_1: {
                                         pos = scan_expr(tokens, pos, follow, 0);
                                         if pos < 0 { break sg_334_1; }
-                                        while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                                        while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                             let sp = pos;
                                             sg_335_done: {
                                                 sg_335: {
@@ -14115,7 +14111,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                                 let select_stmt = _parse_select_stmt(p, follow);
                             } else {
                                 let expr = _parse_expr(p, follow, 0);
-                                while !p.recovering && (p.peek_kind() == TK_LIT_COMMA && !follow_yields(&p.kinds, p.pos, follow, TK_EOF)) {
+                                while !p.recovering && (p.peek_kind() == TK_LIT_COMMA) {
                                     let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
                                     let expr = _parse_expr(p, follow, 0);
                                 }
@@ -14301,7 +14297,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                                         sg_336_1: {
                                             pos = scan_expr(tokens, pos, follow, 0);
                                             if pos < 0 { break sg_336_1; }
-                                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                                 let sp = pos;
                                                 sg_337_done: {
                                                     sg_337: {
@@ -14347,7 +14343,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                                     let select_stmt = _parse_select_stmt(p, follow);
                                 } else {
                                     let expr = _parse_expr(p, follow, 0);
-                                    while !p.recovering && (p.peek_kind() == TK_LIT_COMMA && !follow_yields(&p.kinds, p.pos, follow, TK_EOF)) {
+                                    while !p.recovering && (p.peek_kind() == TK_LIT_COMMA) {
                                         let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
                                         let expr = _parse_expr(p, follow, 0);
                                     }
@@ -15410,7 +15406,6 @@ fn _parse_table_or_subquery__inner_alt_2(p: &mut Parser, follow: &List<List<i32>
             let table_or_subquery = _parse_table_or_subquery(p, follow);
             loop {
                 if p.recovering { break; }
-                if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
                 let mut rep_scan_pos: i32 = -1;
                 rep_scan: {
                     let tokens = &p.kinds;
@@ -15451,7 +15446,7 @@ fn _parse_table_or_subquery__inner_scan_2(tokens: &Array<i32>, pos: i32, follow:
             sg_356_0: {
                 pos = scan_table_or_subquery(tokens, pos, follow, 0);
                 if pos < 0 { break sg_356_0; }
-                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                     let sp = pos;
                     sg_357_done: {
                         sg_357: {
@@ -15507,7 +15502,7 @@ fn _parse_table_or_subquery__inner_alt_1(p: &mut Parser, follow: &List<List<i32>
         let mut pos: i32 = p.pos;
         pos = scan_expr(tokens, pos, follow, 0);
         if pos < 0 { break opt_scan_2; }
-        while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+        while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
             let sp = pos;
             sg_358_done: {
                 sg_358: {
@@ -15528,7 +15523,6 @@ fn _parse_table_or_subquery__inner_alt_1(p: &mut Parser, follow: &List<List<i32>
         let expr = _parse_expr(p, follow);
         loop {
             if p.recovering { break; }
-            if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
                 let tokens = &p.kinds;
@@ -15589,7 +15583,7 @@ fn _parse_table_or_subquery__inner_scan_1(tokens: &Array<i32>, pos: i32, follow:
             sg_361: {
                 pos = scan_expr(tokens, pos, follow, 0);
                 if pos < 0 { break sg_361; }
-                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                     let sp = pos;
                     sg_362_done: {
                         sg_362: {
@@ -15903,7 +15897,7 @@ fn _parse_join_operator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
                 sg_371_0: {
                     if pos >= tokens.len() || tokens[pos] != TK_K_LEFT { break sg_371_0; }
                     pos += 1;
-                    if pos < tokens.len() && tokens[pos] == TK_K_OUTER && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                    if pos < tokens.len() && tokens[pos] == TK_K_OUTER {
                         let sp = pos;
                         if pos >= tokens.len() || tokens[pos] != TK_K_OUTER { pos = -1; } else { pos += 1; }
                         if pos < 0 { pos = sp; }
@@ -15929,7 +15923,7 @@ fn _parse_join_operator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         if opt_scan_pos >= 0 {
             if p.peek_kind() == TK_K_LEFT {
                 let k_left = p.expect(TK_K_LEFT, &SYNC_62);
-                if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_OUTER) {
+                if p.peek_kind() == TK_K_OUTER {
                     let k_outer = p.expect(TK_K_OUTER, &EMPTY_SYNC);
                 }
             } else if p.peek_kind() == TK_K_INNER {
@@ -17668,10 +17662,9 @@ pub fn highlight_mapping() -> HighlightMapping {
     return HighlightMapping { defaults, rule_names, overrides };
 }
 
-pub fn highlight(input: &String) -> String {
+pub fn highlight_result(result: &ParseResult, input: &String) -> String {
     let mapping = highlight_mapping();
     let mut visitor = HighlightVisitor::new(mapping);
-    let result = parse(input);
     if result.diagnostics.is_empty() {
         highlight_walk(&mut visitor, &result.tokens, &result.cst);
     } else {
@@ -17680,6 +17673,11 @@ pub fn highlight(input: &String) -> String {
         }
     }
     return highlight_html(input, &visitor.captures);
+}
+
+pub fn highlight(input: &String) -> String {
+    let result = parse(input);
+    return highlight_result(&result, input);
 }
 
 use { args, print, eprintln, Stdout, Stderr, Environment } from "core:cli";

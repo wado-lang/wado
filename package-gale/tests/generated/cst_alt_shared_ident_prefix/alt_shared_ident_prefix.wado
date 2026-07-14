@@ -1939,7 +1939,7 @@ fn scan_match_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
             sg_0: {
                 pos = scan_arm(tokens, pos, follow, 0);
                 if pos < 0 { break sg_0; }
-                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                     let sp = pos;
                     sg_1_done: {
                         sg_1: {
@@ -1954,7 +1954,7 @@ fn scan_match_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                if pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                     let sp = pos;
                     if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { pos = -1; } else { pos += 1; }
                     if pos < 0 { pos = sp; }
@@ -2036,7 +2036,7 @@ fn scan_pattern(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
                                     sg_3: {
                                         pos = scan_pattern(tokens, pos, follow, 0);
                                         if pos < 0 { break sg_3; }
-                                        while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                                        while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                             let sp = pos;
                                             sg_4_done: {
                                                 sg_4: {
@@ -2080,7 +2080,7 @@ fn scan_pattern(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
                         sg_5: {
                             pos = scan_pattern(tokens, pos, follow, 0);
                             if pos < 0 { break sg_5; }
-                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                 let sp = pos;
                                 sg_6_done: {
                                     sg_6: {
@@ -2164,7 +2164,7 @@ fn _parse_match_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         let mut pos: i32 = p.pos;
         pos = scan_arm(tokens, pos, follow, 0);
         if pos < 0 { break opt_scan; }
-        while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+        while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
             let sp = pos;
             sg_8_done: {
                 sg_8: {
@@ -2179,7 +2179,7 @@ fn _parse_match_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             if pos < 0 { pos = sp; break; }
             if pos == sp { break; }
         }
-        if pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+        if pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
             let sp = pos;
             if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { pos = -1; } else { pos += 1; }
             if pos < 0 { pos = sp; }
@@ -2190,7 +2190,6 @@ fn _parse_match_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         let arm = _parse_arm(p, follow);
         loop {
             if p.recovering { break; }
-            if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
                 let tokens = &p.kinds;
@@ -2212,7 +2211,7 @@ fn _parse_match_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             let comma = p.expect(TK_LIT_COMMA, &SYNC_3);
             let arm = _parse_arm(p, follow);
         }
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_COMMA) {
+        if p.peek_kind() == TK_LIT_COMMA {
             let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
         }
     }
@@ -2282,7 +2281,7 @@ fn _parse_pattern__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             let mut pos: i32 = p.pos;
             pos = scan_pattern(tokens, pos, follow, 0);
             if pos < 0 { break opt_scan; }
-            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                 let sp = pos;
                 sg_10_done: {
                     sg_10: {
@@ -2303,7 +2302,6 @@ fn _parse_pattern__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             let pattern = _parse_pattern(p, follow);
             loop {
                 if p.recovering { break; }
-                if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
                 let mut rep_scan_pos: i32 = -1;
                 rep_scan: {
                     let tokens = &p.kinds;
@@ -2347,7 +2345,7 @@ fn _parse_pattern__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: &List<Lis
                         sg_13: {
                             pos = scan_pattern(tokens, pos, follow, 0);
                             if pos < 0 { break sg_13; }
-                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                 let sp = pos;
                                 sg_14_done: {
                                     sg_14: {
@@ -2421,7 +2419,7 @@ fn _parse_pattern__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
             let mut pos: i32 = p.pos;
             pos = scan_pattern(tokens, pos, follow, 0);
             if pos < 0 { break opt_scan; }
-            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                 let sp = pos;
                 sg_15_done: {
                     sg_15: {
@@ -2442,7 +2440,6 @@ fn _parse_pattern__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
             let pattern = _parse_pattern(p, follow);
             loop {
                 if p.recovering { break; }
-                if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
                 let mut rep_scan_pos: i32 = -1;
                 rep_scan: {
                     let tokens = &p.kinds;

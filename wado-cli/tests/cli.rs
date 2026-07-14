@@ -759,3 +759,211 @@ fn test_test_parallel_long_option() {
         .success()
         .stdout(predicate::str::contains("2 passed, 0 failed"));
 }
+
+#[test]
+fn test_lib_facade_submodule_export_with_nested_records() {
+    // A library's public API lives in a submodule as `export fn`, surfaced by a
+    // `pub use` facade in the entry module. The `--lib` build must lower it as a
+    // real CM export — including a return type that nests records inside a list,
+    // which the lift/lower must resolve to the submodule-defined struct rather
+    // than an i32 handle.
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"doc\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src").join("lib.wado"),
+        "pub use { render, Doc, Node } from \"./render.wado\";\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src").join("render.wado"),
+        "pub struct Node { pub level: u8, pub text: String }\n\
+         pub struct Doc { pub html: String, pub nodes: List<Node> }\n\
+         export fn render(s: String) -> Doc { return Doc { html: s, nodes: [Node { level: 1, text: s }] }; }\n",
+    )
+    .unwrap();
+
+    // WIT surfaces the facade export, grouped into the package interface with
+    // both records and the nested `list<node>`.
+    wado_in(dir)
+        .arg("wit")
+        .arg("--lib")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("interface doc {"))
+        .stdout(predicate::str::contains("list<node>"))
+        .stdout(predicate::str::contains("render: func(s: string) -> doc;"));
+
+    // The build must reach codegen: the export adapter calls the submodule
+    // function and lowers the nested list-of-records return without panicking.
+    wado_in(dir).arg("build").arg("--lib").assert().success();
+}
+
+#[test]
+fn test_lib_without_exports_is_rejected() {
+    // A `--lib` with neither an `export fn` nor a public type exports nothing;
+    // reject it rather than emit an empty library.
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"empty\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src").join("lib.wado"),
+        "pub fn helper() -> i32 { return 0; }\n",
+    )
+    .unwrap();
+
+    wado_in(dir)
+        .arg("build")
+        .arg("--lib")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("exports nothing"));
+}
+
+#[test]
+fn test_lib_with_only_public_types_is_accepted() {
+    // A data-model library (like `jade`) exposes only public types and no
+    // `export fn`. Its component surface is those types, so `--lib` must build
+    // it, not reject it as empty.
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"model\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src").join("lib.wado"),
+        "pub struct Point { pub x: i32, pub y: i32 }\n",
+    )
+    .unwrap();
+
+    wado_in(dir).arg("build").arg("--lib").assert().success();
+}
+
+const PUBLISHABLE_HEADER: &str = "[package]\nnamespace = \"acme\"\nname = \"pkg\"\nversion = \"0.1.0\"\ndescription = \"d\"\nrepository = \"https://x/y\"\nlicense = \"MIT\"\nauthors = [\"A\"]\nlib = \"src/lib.wado\"\n\n[registries]\ndefault = \"oci://ghcr.io\"\n";
+
+#[test]
+fn test_publish_dry_run_builds_without_pushing() {
+    // `--dry-run` builds each world (proving it still compiles into a component)
+    // but skips the OCI push, so it succeeds without wkg or credentials.
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(dir.join("wado.toml"), PUBLISHABLE_HEADER).unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src").join("lib.wado"),
+        "export fn ping() -> i32 { return 1; }\n",
+    )
+    .unwrap();
+
+    wado_in(dir)
+        .arg("publish")
+        .arg("--dry-run")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("dry-run"));
+}
+
+#[test]
+fn test_publish_dry_run_catches_unpublishable_component() {
+    // The dry run builds, so a `--lib` that exports nothing fails it — the
+    // release-time failure the CI check is meant to surface at PR time.
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(dir.join("wado.toml"), PUBLISHABLE_HEADER).unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src").join("lib.wado"),
+        "pub fn helper() -> i32 { return 0; }\n",
+    )
+    .unwrap();
+
+    wado_in(dir)
+        .arg("publish")
+        .arg("--dry-run")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("exports nothing"));
+}
+
+#[test]
+fn test_lib_duplicate_export_name_rejected() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"dup\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src").join("lib.wado"),
+        "pub use { f } from \"./a.wado\";\npub use { g } from \"./b.wado\";\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src").join("a.wado"),
+        "export fn f(s: String) -> String { return s; }\nexport fn dup(s: String) -> String { return s; }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src").join("b.wado"),
+        "export fn g(s: String) -> String { return s; }\nexport fn dup(s: String) -> String { return s; }\n",
+    )
+    .unwrap();
+
+    wado_in(dir)
+        .arg("build")
+        .arg("--lib")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("two functions named `dup`"));
+}
+
+#[test]
+fn test_lib_duplicate_type_name_rejected() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"dup\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src").join("lib.wado"),
+        "pub use { f } from \"./a.wado\";\npub use { g } from \"./b.wado\";\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src").join("a.wado"),
+        "pub struct Node { pub v: String }\nexport fn f(s: String) -> Node { return Node { v: s }; }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src").join("b.wado"),
+        "pub struct Node { pub v: String }\nexport fn g(s: String) -> Node { return Node { v: s }; }\n",
+    )
+    .unwrap();
+
+    wado_in(dir)
+        .arg("build")
+        .arg("--lib")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "library type `Node` is defined in more than one module",
+        ));
+}

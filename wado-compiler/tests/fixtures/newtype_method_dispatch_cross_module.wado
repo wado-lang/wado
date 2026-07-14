@@ -1,0 +1,17 @@
+// Newtype-method dispatch across modules: two modules each declare a newtype
+// `Temp` over a *different* base struct, each base carrying a same-named method
+// `reading`. Dispatch must resolve to each module's own base implementation.
+
+use { make_temp as make_c, reading_of as reading_c } from "./sub/newtype_method_dispatch_celsius.wado";
+use { make_temp as make_f, reading_of as reading_f } from "./sub/newtype_method_dispatch_fahrenheit.wado";
+
+test "cross-module same-name newtype method dispatch" {
+    let c = make_c(100);
+    let f = make_f(100);
+
+    // `reading` is inherited through each module's `Temp` newtype and must
+    // dispatch to that module's own base struct: Celsius::reading returns the
+    // degree as-is, Fahrenheit::reading doubles it.
+    assert reading_c(c) == 100;
+    assert reading_f(f) == 200;
+}

@@ -196,6 +196,11 @@ jobs:
 
       - run: mise run test-wado
 
+      # Reuses the `wado` build from the step above; `--dry-run` builds every
+      # publishable world (catching a package that no longer compiles into a
+      # component) without pushing, so no wkg or credentials are needed.
+      - run: cargo run --locked -p wado-cli -- publish --dry-run
+
   test-gale-o1:
     name: Test (Gale O1)
     needs: changes

@@ -47,44 +47,16 @@ use { scan_balanced, is_id_continue_char } from "./scan.wado";
 
 pub struct G4Parser {
     tokens: List<Token>,
-    /// Snapshot of the source as a char array. Used by `scan_balanced` to
-    /// re-scan host-language regions (ARG_ACTION, action bodies) that the
-    /// byte-level lexer cannot delimit on its own — those need bracket
-    /// balance plus string-/comment-awareness, which only matters in
-    /// host-language code.
     chars: List<char>,
     pos: i32,
-    /// User-defined channel names collected from `channels { }` blocks.
-    /// Lexer command `channel(X)` with an identifier argument is resolved
-    /// against this list; matching names map to id `index + 2` (0=DEFAULT,
-    /// 1=HIDDEN are predefined).
     channels: List<String>,
-    /// Grammar-level options collected from the grammar prequel
-    /// `options { ... }` blocks. Later blocks append to earlier ones.
     options: List<GrammarOption>,
-    /// Grammar-level `@name { ... }` named actions collected from the
-    /// prequel. Action bodies are discarded; only the name/scope is kept.
     named_actions: List<NamedAction>,
-    /// Rule / token references encountered while parsing rule bodies.
-    /// Each entry carries a `RefKind` tag so the post-parse validator
-    /// (`check_references` in `ir.wado`) can resolve it against the right
-    /// rule table. Emitted straight onto `Grammar.pending_refs` when
-    /// `parse_grammar` returns, so a `merge_grammars` over split grammars
-    /// can concatenate cross-file refs into a single validatable table.
     pending_refs: List<PendingRef>,
-    /// Name of the rule currently being parsed. Used to tag pending refs
-    /// so validator error messages can say where the bad reference came
-    /// from. Empty outside of a rule body.
     current_rule: String,
-    /// Grammar kind latched from the translation unit's header
-    /// (`lexer grammar`, `parser grammar`, or bare `grammar`). Surfaced
-    /// on the returned `Grammar` so `check_references` can gate which
-    /// `RefKind`s are resolvable locally vs. deferred to merge time.
     kind: GrammarKind,
 }
 
-/// Accumulator for lexer commands parsed from `-> cmd, cmd, ...`.
-/// See ANTLR4 lexer-rules.md for the canonical command set.
 struct LexerCommands {
     skip: bool,
     more: bool,
@@ -121,11 +93,6 @@ fn is_lexer_rule_name(name: &String) -> bool {
     return false;
 }
 
-/// ANTLR4 restricts `~` in parser rules to a token reference, string
-/// literal, or a parenthesised block whose alternatives are themselves
-/// set elements. Rule references, wildcards, and EBNF-suffixed elements
-/// are rejected. Spec: `vendor/antlr4/doc/parser-rules.md` (sets),
-/// confirmed against the published ANTLR4 jar as a black-box oracle.
 fn is_valid_not_set_element(elem: &Element) -> bool {
     if let TokenRef(_) = elem {
         return true;
@@ -151,11 +118,6 @@ fn is_valid_not_set_element(elem: &Element) -> bool {
     return false;
 }
 
-/// ANTLR4 restricts `~` in *lexer* rules to a single-character literal, a
-/// char range / char class, or a parenthesised block whose alternatives are
-/// themselves such set elements. A rule reference, the wildcard (`~.`), a
-/// multi-character literal, or an EBNF-suffixed element is rejected. Spec:
-/// `vendor/antlr4/doc/lexer-rules.md` (set complement).
 fn is_valid_lexer_not_element(elem: &LexerElement) -> bool {
     if let Literal(s) = elem {
         return s.chars().count() == 1;
@@ -230,10 +192,6 @@ impl G4Parser {
     }
 
     pub fn parse_grammar(&mut self) -> Result<Grammar, ParseError> {
-        // Detect lexer/parser grammar prefix. Persist on `self.kind` and
-        // on the returned `Grammar` so `check_references` can decide
-        // which pending refs are resolvable locally and which have been
-        // deferred to a sibling grammar (split-grammar merge).
         let mut is_lexer_grammar = false;
         let mut is_parser_grammar = false;
         if self.is_kind(G4Token::Identifier) {
@@ -268,11 +226,6 @@ impl G4Parser {
         let mut current_mode: i32 = DEFAULT_MODE;
 
         while !self.at_eof() {
-            // Check for mode declaration: mode NAME;
-            // ANTLR4 only allows `mode X;` in lexer grammars (combined or
-            // split lexer). Reject it in `parser grammar` form — see
-            // `vendor/antlr4/doc/lexer-rules.md` (modes are a lexer-only
-            // construct); confirmed against the published ANTLR4 jar.
             if self.is_kind(G4Token::Identifier) && LexerSlice::eq_str(&"mode", &self.peek().text) {
                 if is_parser_grammar {
                     let tok = self.peek();
@@ -292,10 +245,6 @@ impl G4Parser {
                 continue;
             }
 
-            // Optional rule modifiers: `public`, `private`, `protected`, `fragment`.
-            // ANTLR4 allows multiple visibility modifiers before `fragment`;
-            // Gale records the last visibility seen and whether `fragment` was
-            // present (only meaningful for the lexer-rule branch).
             let mut is_frag = false;
             let mut visibility = Visibility::Default;
             loop {
@@ -330,9 +279,6 @@ impl G4Parser {
             let rule_name_span = rule_name_tok.span;
 
             if is_lexer_grammar || is_frag || is_lexer_rule_name(&rule_name) {
-                // ANTLR4 rejects duplicate lexer rule names within a grammar.
-                // Spec: vendor/antlr4/doc/grammars.md — each rule name is
-                // unique in its namespace (lexer / parser).
                 for let existing of &lexer_rules {
                     if existing.name == rule_name {
                         return Result::<Grammar, ParseError>::Err(
@@ -346,8 +292,6 @@ impl G4Parser {
                 }
                 let mut rule = self.parse_lexer_rule(rule_name, is_frag, current_mode, &mut mode_names)?;
                 rule.visibility = visibility;
-                // ANTLR4 accepts catch/finally syntax on lexer rules too; the
-                // clauses have no lexer meaning, so consume and drop them.
                 let _ = self.parse_exception_group();
                 lexer_rules.push(rule);
             } else {
@@ -364,7 +308,6 @@ impl G4Parser {
                 }
                 let mut rule = self.parse_parser_rule(rule_name)?;
                 rule.visibility = visibility;
-                // Optional exception group: catch* finally? — attach to the rule.
                 let exc = self.parse_exception_group();
                 rule.catches = exc.catches;
                 rule.finally_action = exc.finally_action;
@@ -372,7 +315,6 @@ impl G4Parser {
             }
         }
 
-        // Add virtual tokens from `tokens { }` blocks that don't have real lexer rules
         for let vt of virtual_tokens {
             let mut found = false;
             for let rule of &lexer_rules {
@@ -385,14 +327,6 @@ impl G4Parser {
             }
         }
 
-        // Semantic rule-reference resolution runs as a separate phase
-        // (`check_references` in `ir.wado`), mirroring ANTLR4's split
-        // between syntactic parsing and a later semantic-analysis pass.
-        // `parse_grammar`
-        // publishes the raw `pending_refs` onto the returned `Grammar`
-        // so callers can either validate immediately (`parse_checked`)
-        // or first merge split-grammar halves with `merge_grammars` and
-        // then validate the combined result.
 
         let channels = self.channels;
         let options = self.options;
@@ -419,12 +353,6 @@ impl G4Parser {
     }
 
     fn skip_prequel_blocks(&mut self, virtual_tokens: &mut List<String>) -> Result<(), ParseError> {
-        // ANTLR4 grammar prequel constructs (any order, repeatable):
-        //   optionsSpec      : 'options'  '{' ... '}'
-        //   delegateGrammars : 'import' id ('=' id)? (',' id ('=' id)?)* ';'
-        //   tokensSpec       : 'tokens'   '{' id (',' id)* '}'
-        //   channelsSpec     : 'channels' '{' id (',' id)* '}'
-        //   action           : '@' (id '::')? id '{' ... '}'
         loop {
             if self.is_kind(G4Token::Identifier) {
                 let text = &self.peek().text;
@@ -462,13 +390,6 @@ impl G4Parser {
         return Result::<(), ParseError>::Ok(());
     }
 
-    /// Parse a `{ NAME (, NAME)* }` block — the shape shared by the
-    /// `tokens` and `channels` prequels — and return the names in
-    /// declaration order. ANTLR3-style `NAME = INT` assignments are
-    /// tolerated (the integer is discarded; Gale assigns ids by order).
-    /// Unknown tokens are skipped so malformed input cannot hang the loop.
-    /// `kw` names the keyword for the diagnostics. Unclosed blocks (EOF
-    /// before `}`) are rejected.
     fn parse_id_list_block(&mut self, kw: &String) -> Result<List<String>, ParseError> {
         let mut names: List<String> = [];
         if !self.is_kind(G4Token::LBrace) {
@@ -482,12 +403,11 @@ impl G4Parser {
             );
         }
         let brace_span = self.peek().span;
-        self.advance();  // skip '{'
+        self.advance();
         while !self.at_eof() && !self.is_kind(G4Token::RBrace) {
             if self.is_kind(G4Token::Identifier) {
                 names.push(self.peek().text.to_string());
                 self.advance();
-                // Tolerate ANTLR3-style `= INT` assignments.
                 if self.is_kind(G4Token::Assign) {
                     self.advance();
                     if self.is_kind(G4Token::IntLit) {
@@ -495,9 +415,6 @@ impl G4Parser {
                     }
                 }
             } else {
-                // Unknown token — advance to avoid an infinite loop on
-                // malformed input. Block bodies are not semantically
-                // meaningful to Gale beyond the names.
                 self.advance();
             }
             if self.is_kind(G4Token::Comma) {
@@ -517,10 +434,6 @@ impl G4Parser {
         return Result::<List<String>, ParseError>::Ok(names);
     }
 
-    /// Parse `channels { NAME, NAME, ... }` and collect channel names into
-    /// `self.channels`. Duplicate declarations collapse silently — ANTLR4
-    /// also tolerates repeated channels blocks; the name list is the union.
-    /// Unclosed blocks (EOF before `}`) are rejected.
     fn parse_channels_block(&mut self) -> Result<(), ParseError> {
         let names = self.parse_id_list_block(&"channels")?;
         for let name of names {
@@ -537,8 +450,6 @@ impl G4Parser {
         return Result::<(), ParseError>::Ok(());
     }
 
-    /// Parse `import id ('=' id)? (',' id ('=' id)?)* ';'`. We discard the
-    /// imports — the IR has no representation for delegate grammars yet.
     fn parse_delegate_grammars(&mut self) {
         loop {
             if !self.is_kind(G4Token::Identifier) {
@@ -562,28 +473,20 @@ impl G4Parser {
         }
     }
 
-    /// Parse `options { name = value ; ... }` and return the entries.
-    /// Each value is categorised into a typed `OptionValue` variant so
-    /// downstream stages don't need to re-parse the raw text; see
-    /// `parse_option_value` for the supported shapes. Malformed entries
-    /// are silently tolerated to match the rest of the parser's recovery
-    /// posture.
     fn parse_options_block(&mut self) -> List<GrammarOption> {
         let mut out: List<GrammarOption> = [];
         if !self.is_kind(G4Token::LBrace) {
             return out;
         }
-        self.advance();  // '{'
+        self.advance();
         while !self.at_eof() && !self.is_kind(G4Token::RBrace) {
             if !self.is_kind(G4Token::Identifier) {
-                // Resync: skip unexpected tokens until `;` or `}`.
                 self.advance();
                 continue;
             }
             let name = self.peek().text.to_string();
             self.advance();
             if !self.is_kind(G4Token::Assign) {
-                // No `=`; best-effort recover by swallowing until `;`/`}`.
                 while !self.at_eof() && !self.is_kind(G4Token::Semicolon) && !self.is_kind(G4Token::RBrace) {
                     self.advance();
                 }
@@ -592,7 +495,7 @@ impl G4Parser {
                 }
                 continue;
             }
-            self.advance();  // '='
+            self.advance();
             let value = self.parse_option_value();
             out.push(GrammarOption { name, value });
             if self.is_kind(G4Token::Semicolon) {
@@ -605,13 +508,6 @@ impl G4Parser {
         return out;
     }
 
-    /// Parse a single ANTLR4 option value into its typed form:
-    /// - `'...'`                  → `Str(<body without quotes>)`
-    /// - `42`                     → `Int(42)`
-    /// - `{ ... }`                → `Action(<body without braces>)`
-    /// - `id`                     → `Ident("id")`
-    /// - `pkg.sub.Name`           → `Qualified(["pkg", "sub", "Name"])`
-    /// - anything else            → `Ident("")` (permissive recovery)
     fn parse_option_value(&mut self) -> OptionValue {
         if self.is_kind(G4Token::StringLit) {
             let body = self.peek().text.to_string();
@@ -644,9 +540,6 @@ impl G4Parser {
         return OptionValue::Ident("");
     }
 
-    /// Parse `@ id ('::' id)? '{' ... '}'`. The action body is retained on
-    /// the returned `NamedAction` (as an `ActionSource`) for the action
-    /// pipeline; callers that don't need it simply ignore `body`.
     fn parse_named_action(&mut self) -> NamedAction {
         self.expect(G4Token::At).unwrap();
         let mut scope: Option<String> = null;
@@ -657,7 +550,6 @@ impl G4Parser {
         }
         if self.is_kind(G4Token::ColonColon) {
             self.advance();
-            // The previously-parsed id was the scope; read the real name.
             scope = Option::<String>::Some(name);
             name = String::with_capacity(8);
             if self.is_kind(G4Token::Identifier) {
@@ -672,12 +564,6 @@ impl G4Parser {
         return NamedAction { scope, name, body };
     }
 
-    /// Parse `tokens { NAME, NAME, ... }` and collect token names.
-    ///
-    /// Accepts ANTLR3-style numbered assignments `NAME = INT` too for
-    /// permissive parsing of legacy `.g4` files ported without cleanup.
-    /// The assigned integer is discarded — Gale assigns token ids based on
-    /// declaration order internally.
     fn parse_tokens_block(&mut self, virtual_tokens: &mut List<String>) -> Result<(), ParseError> {
         let names = self.parse_id_list_block(&"tokens")?;
         for let name of names {
@@ -686,10 +572,6 @@ impl G4Parser {
         return Result::<(), ParseError>::Ok(());
     }
 
-    /// Capture a `{ ... }` / `[ ... ]` block as an `ActionSource`: `text` is
-    /// the source strictly between the delimiters,
-    /// `span` covers the whole block including them. Used to retain action /
-    /// predicate / arg-action bodies. `open`/`close` are `{`/`}` or `[`/`]`.
     fn extract_action(&mut self, open: char, close: char) -> ActionSource {
         let tok = self.peek();
         let start = tok.span.start;
@@ -698,8 +580,6 @@ impl G4Parser {
         while !self.at_eof() && self.tokens[self.pos].span.start < end {
             self.pos += 1;
         }
-        // `end` is just after the closing delimiter; body excludes the
-        // opening delimiter at `start` and the closing one at `end - 1`.
         let body_start = start + 1;
         let body_end = if end > start + 1 { end - 1 } else { start + 1 };
         let mut body = String::with_capacity(body_end - body_start);
@@ -715,11 +595,6 @@ impl G4Parser {
         };
     }
 
-    /// Skip a `<...>` angle-bracket block without interpreting its contents.
-    ///
-    /// Only retained for the lexer-alternative call site, where ANTLR4 does
-    /// not define element options. Parser-side element options are parsed by
-    /// `parse_angle_options()` and stored on the IR.
     fn skip_angle_block(&mut self) {
         self.expect(G4Token::LAngle).unwrap();
         let mut depth = 1;
@@ -733,13 +608,6 @@ impl G4Parser {
         }
     }
 
-    /// Parse an ANTLR4 element-option angle block:
-    /// `< id '=' value (',' id '=' value)* >`. Returns the parsed options, or
-    /// an empty array if malformed. Value parsing reuses `parse_option_value`
-    /// so identifiers, qualified ids, integers, strings, and action-block
-    /// placeholders round-trip through the same code path as `options { ... }`.
-    /// Malformed entries are tolerated (best-effort resync to the closing `>`)
-    /// to match the rest of the parser's recovery posture.
     fn parse_angle_options(&mut self) -> Result<List<GrammarOption>, ParseError> {
         let mut out: List<GrammarOption> = [];
         if !self.is_kind(G4Token::LAngle) {
@@ -777,13 +645,6 @@ impl G4Parser {
             self.advance();
             let value_span = self.peek().span;
             let value = self.parse_option_value();
-            // ANTLR4 options spec (`vendor/antlr4/doc/options.md`): `assoc`
-            // is an alt-prefix / token option whose only accepted values are
-            // the bare identifiers `left` and `right`. Anything else (a
-            // different identifier, a string, an integer, or an action
-            // block) is a left-recursion / associativity conflict and must
-            // be rejected at parse time — otherwise downstream LR codegen
-            // silently falls back to left-associative.
             if name == "assoc" {
                 let mut valid = false;
                 if let Ident(v) = &value {
@@ -826,19 +687,10 @@ impl G4Parser {
         return Result::<ParserRule, ParseError>::Ok(rule);
     }
 
-    /// Consume the optional rule prequel:
-    ///   ARG_ACTION? ('returns' ARG_ACTION)? ('throws' qid (',' qid)*)?
-    ///   ('locals' ARG_ACTION)? rulePrequel*
-    /// where rulePrequel is `optionsSpec` or `'@' id ACTION` (e.g. `@init`,
-    /// `@after`). ANTLR4 fixes the order of args/returns/throws/locals before
-    /// the repeated `options{}`/`@id{}` block, but we accept any order here
-    /// for resilience. Retains everything as a `RulePrequel` for the action
-    /// pipeline (see `action.md`).
     fn parse_rule_prequel(&mut self) -> RulePrequel {
         let mut p = RulePrequel {};
         loop {
             if self.is_kind(G4Token::CharClass) {
-                // Bare ARG_ACTION right after the rule name → rule arguments.
                 let act = self.extract_action('[', ']');
                 for let d of parse_attr_decls(&act.text, act.span) {
                     p.args.push(d);
@@ -880,9 +732,6 @@ impl G4Parser {
                 }
             }
             if self.is_kind(G4Token::At) {
-                // Rule-level prequel actions: `@init` / `@after` bind to the
-                // rule; any other `@name` here is retained only as its body
-                // being consumed (ANTLR rejects it — we tolerate and drop).
                 let act = self.parse_named_action();
                 if act.name == "init" {
                     p.init_action = Option::<ActionSource>::Some(act.body);
@@ -896,8 +745,6 @@ impl G4Parser {
         return p;
     }
 
-    /// Parse `qid (',' qid)*` (dotted qualified ids) and return each as a
-    /// dotted string. Used for a rule's `throws` list.
     fn parse_qualified_id_list(&mut self) -> List<String> {
         let mut out: List<String> = [];
         loop {
@@ -906,7 +753,6 @@ impl G4Parser {
             }
             let mut qid = self.peek().text.to_string();
             self.advance();
-            // Allow dotted qualified ids: `foo.bar.Baz`
             while self.is_kind(G4Token::Dot) && self.peek_kind_at(1) == G4Token::Identifier as i32 {
                 self.advance();
                 qid.push('.');
@@ -923,9 +769,6 @@ impl G4Parser {
         return out;
     }
 
-    /// Consume `(catch ARG_ACTION ACTION)* (finally ACTION)?` and retain the
-    /// clauses. Execution under Gale's resilient-parse model is a separate
-    /// decision (see `action.md`); the IR just carries them.
     fn parse_exception_group(&mut self) -> ExceptionGroup {
         let mut g = ExceptionGroup {};
         loop {
@@ -971,11 +814,6 @@ impl G4Parser {
         return Result::<List<Alternative>, ParseError>::Ok(alts);
     }
 
-    /// Capture a `{ ... }` action or `{ ... }?` predicate at the current
-    /// `{` as an `AltAction` positioned before `before_index` elements,
-    /// consuming the trailing `?` for a predicate. Shared by parser-rule
-    /// and lexer-rule alternatives so the two capture paths cannot drift;
-    /// any `<...>` element options that follow are handled by the caller.
     fn capture_alt_action(&mut self, before_index: i32) -> AltAction {
         let source = self.extract_action('{', '}');
         let mut kind = ActionKind::Action;
@@ -1000,18 +838,8 @@ impl G4Parser {
                 || self.is_kind(G4Token::Hash) {
                 break;
             }
-            // Action block `{ ... }` or semantic predicate `{ ... }?` —
-            // retained in the `actions` sidecar, positioned before the next
-            // element. The body stays out of `elements`, so the element
-            // sequence and every index-based analysis over it are unchanged.
             if self.is_kind(G4Token::LBrace) {
                 actions.push(self.capture_alt_action(elements.len()));
-                // ANTLR4 attaches element options to action blocks and
-                // semantic predicates: `{ ... }<p=3>` and `{ ... }?<fail='…'>`.
-                // Promote them to the enclosing alternative — that is where
-                // ANTLR4's left-recursion rewriter reads them from (`<p=N>`
-                // overriding alt precedence, `<fail='…'>` a custom failure
-                // message).
                 if self.is_kind(G4Token::LAngle) {
                     let opts = self.parse_angle_options()?;
                     for let o of opts {
@@ -1020,12 +848,6 @@ impl G4Parser {
                 }
                 continue;
             }
-            // Element options `<key=value, ...>` appearing before any element
-            // of the alternative attach to the alternative as a whole
-            // (e.g. `<assoc=right>` on a left-recursive alt). Any `<...>`
-            // encountered later in the loop can only be a post-atom suffix
-            // that `parse_atom` already consumed, so it is safe to treat every
-            // in-alt angle block at this position as alt-prefix.
             if self.is_kind(G4Token::LAngle) && elements.is_empty() {
                 let mut opts = self.parse_angle_options()?;
                 for let o of opts {
@@ -1065,20 +887,14 @@ impl G4Parser {
                     Element::Label(LabelElement::new(name, list, inner)),
                 );
             }
-            // Optional rule arguments: `ruleref[arg, arg]`. The CharClass
-            // token at this position is an ARG_ACTION; retained as raw text
-            // on the RuleRef (args apply to parser-rule refs only).
             let mut arg_action: Option<ActionSource> = null;
             if self.is_kind(G4Token::CharClass) {
                 arg_action = Option::<ActionSource>::Some(self.extract_action('[', ']'));
             }
-            // Optional element options: `ID<assoc=right>`.
             let mut options: List<GrammarOption> = [];
             if self.is_kind(G4Token::LAngle) {
                 options = self.parse_angle_options()?;
             }
-            // `EOF` is upper-case-led, so `is_lexer_rule_name` already
-            // classifies it as a token reference.
             if is_lexer_rule_name(&name) {
                 self.pending_refs.push(PendingRef {
                     kind: RefKind::TokenRef,
@@ -1103,7 +919,6 @@ impl G4Parser {
         if self.is_kind(G4Token::StringLit) {
             let tok = self.advance();
             let text = tok.text.to_string();
-            // Optional element options: `'foo'<p=3>`.
             let mut options: List<GrammarOption> = [];
             if self.is_kind(G4Token::LAngle) {
                 options = self.parse_angle_options()?;
@@ -1114,12 +929,6 @@ impl G4Parser {
         }
         if self.is_kind(G4Token::LParen) {
             self.advance();
-            // Optional block-level prequel:
-            //   ( options { ... } : alt | alt )
-            //   ( @init { ... } : alt | alt )
-            // Option bodies are parsed onto the GroupElement; action bodies
-            // (`@id { ... }`) are still discarded — they are host-language
-            // code Gale cannot transpile.
             let options = self.parse_block_prequel();
             let alternatives = self.parse_alternatives()?;
             self.expect(G4Token::RParen)?;
@@ -1129,7 +938,6 @@ impl G4Parser {
         }
         if self.is_kind(G4Token::Dot) {
             self.advance();
-            // Optional element options on wildcard: `.<...>`
             let mut options: List<GrammarOption> = [];
             if self.is_kind(G4Token::LAngle) {
                 options = self.parse_angle_options()?;
@@ -1163,11 +971,6 @@ impl G4Parser {
         );
     }
 
-    /// Inside a `( ... )` group, ANTLR4 allows an optional `options { ... }`
-    /// block followed by `:`, or `@id { ... }` actions, before the actual
-    /// alternative list. Returns the accumulated block-level options (empty
-    /// if none appeared). Action bodies are still discarded — they are
-    /// host-language code Gale cannot transpile.
     fn parse_block_prequel(&mut self) -> List<GrammarOption> {
         let mut options: List<GrammarOption> = [];
         let mut consumed = false;
@@ -1188,19 +991,12 @@ impl G4Parser {
             }
             break;
         }
-        // After block prequel, ANTLR4 requires a `:` separator before the
-        // alt list. Consume it if present.
         if consumed && self.is_kind(G4Token::Colon) {
             self.advance();
         }
         return options;
     }
 
-    /// Recognize a trailing EBNF repetition operator (`*`, `+`, `?`) plus
-    /// an optional non-greedy `?`. Returns `[kind, non_greedy]`, or `None`
-    /// when the next token is not a repetition operator. Shared by the
-    /// parser-side and lexer-side postfix parsers, which differ only in the
-    /// element type they wrap.
     fn parse_repeat_op(&mut self) -> Option<[RepeatKind, bool]> {
         let kind = if self.is_kind(G4Token::Star) {
             RepeatKind::Star;
@@ -1237,9 +1033,6 @@ impl G4Parser {
         mode: i32,
         mode_names: &mut List<String>,
     ) -> Result<LexerRule, ParseError> {
-        // Lexer rules in ANTLR4 also accept the rule prequel (rare but legal,
-        // most commonly `locals [int n]`). Only options flow onto a lexer
-        // rule today; other prequel parts are consumed and dropped.
         let options = self.parse_rule_prequel().options;
         self.expect(G4Token::Colon)?;
         self.current_rule = name;
@@ -1296,34 +1089,22 @@ impl G4Parser {
                     actions.pop_mode = true;
                 },
                 "mode" => {
-                    // `mode(X)` switches the current mode (top of stack), unlike pushMode.
                     self.expect(G4Token::LParen)?;
                     let mode_name = self.advance();
                     self.expect(G4Token::RParen)?;
                     actions.set_mode = intern_mode(mode_names, &mode_name.text.to_string());
                 },
                 "channel" => {
-                    // `channel(X)` accepts an integer literal, the predefined name
-                    // HIDDEN, or a user-defined channel name from `channels { }`.
                     self.expect(G4Token::LParen)?;
                     let arg = self.advance();
                     self.expect(G4Token::RParen)?;
                     if LexerSlice::eq_str(&"DEFAULT_TOKEN_CHANNEL", &arg.text) {
-                        // ANTLR4's predefined name for channel 0.
                         actions.channel = DEFAULT_CHANNEL;
                     } else if LexerSlice::eq_str(&"HIDDEN", &arg.text) {
-                        // HIDDEN is the predefined hidden channel (id 1).
-                        // ANTLR4 emits HIDDEN tokens on a separate channel —
-                        // they are NOT discarded.
                         actions.channel = HIDDEN_CHANNEL;
                     } else if arg.kind == G4Token::IntLit as i32 {
                         actions.channel = parse_int_literal(&arg.text.to_string());
                     } else {
-                        // User-defined channel name: look up in the grammar's
-                        // channels { } block (declared in the prequel, before
-                        // rules). ANTLR4 errors on an undeclared name; resolving
-                        // it to 0 (DEFAULT) would silently invert the author's
-                        // intent to route the token off the default channel.
                         let name = arg.text.to_string();
                         let mut resolved = -1;
                         for let mut i = 0; i < self.channels.len(); i += 1 {
@@ -1354,9 +1135,6 @@ impl G4Parser {
                     actions.more = true;
                 },
                 _ => {
-                    // Unknown lexer command. ANTLR4's command set is fixed:
-                    // skip, more, channel(X), type(X), pushMode(X), popMode, mode(X).
-                    // Spec: vendor/antlr4/doc/lexer-rules.md §"Lexer Commands".
                     return Result::<(), ParseError>::Err(
                         ParseError::new(
                             `unknown lexer command "{action_name}" — expected one of: skip, more, channel, type, pushMode, popMode, mode`,
@@ -1398,13 +1176,10 @@ impl G4Parser {
                 || self.is_kind(G4Token::Arrow) {
                 break;
             }
-            // Action block `{ ... }` / predicate `{ ... }?` — retained in the
-            // sidecar, positioned before the next element (see `AltAction`).
             if self.is_kind(G4Token::LBrace) {
                 actions.push(self.capture_alt_action(elements.len()));
                 continue;
             }
-            // Skip element options <...>
             if self.is_kind(G4Token::LAngle) {
                 self.skip_angle_block();
                 continue;
@@ -1439,9 +1214,6 @@ impl G4Parser {
                 self.advance();
                 let end_tok = self.expect(G4Token::StringLit)?;
                 let end_text = end_tok.text.to_string();
-                // ANTLR4 requires a single-char endpoint. The start is
-                // guarded above; validate the end too rather than silently
-                // truncating (`'a'..'bc'`) or panicking on empty (`'a'..''`).
                 if end_text.chars().count() != 1 {
                     let expected: List<String> = ["single-char string literal"];
                     return Result::<LexerElement, ParseError>::Err(
@@ -1545,8 +1317,8 @@ fn resolve_char(chars: &List<char>, pos: &mut i32) -> char {
         'n' => '\n',
         'r' => '\r',
         't' => '\t',
-        'b' => '\u0008',  // backspace (ANTLR4 lexicon.md)
-        'f' => '\u000C',  // form feed
+        'b' => '\u0008',
+        'f' => '\u000C',
         '\\' => '\\',
         ']' => ']',
         '-' => '-',
@@ -1568,16 +1340,15 @@ fn parse_char_class(text: &String) -> Result<CharClass, ParseError> {
     }
 
     while pos < end {
-        // Detect \p{PropertyName} Unicode property escape
         if pos + 2 < end && chars[pos] == '\\' && chars[pos + 1] == 'p' && chars[pos + 2] == '{' {
-            pos += 3;  // skip \p{
+            pos += 3;
             let mut prop = String::with_capacity(16);
             while pos < end && chars[pos] != '}' {
                 prop.push(chars[pos]);
                 pos += 1;
             }
             if pos < end {
-                pos += 1;  // skip }
+                pos += 1;
             }
             expand_unicode_property(&prop, &mut ranges);
             continue;
@@ -1596,49 +1367,31 @@ fn parse_char_class(text: &String) -> Result<CharClass, ParseError> {
     return Result::<CharClass, ParseError>::Ok(CharClass { ranges, negated });
 }
 
-/// Expand a Unicode general category property into character ranges.
-/// This is an incomplete approximation covering ASCII and common Unicode blocks.
 fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) {
     match *name {
         "L" | "Letter" => {
-            // Basic Latin
             ranges.push(CharRange::range('A', 'Z'));
             ranges.push(CharRange::range('a', 'z'));
-            // Latin-1 Supplement
             ranges.push(CharRange::range('\u00C0', '\u00D6'));
             ranges.push(CharRange::range('\u00D8', '\u00F6'));
             ranges.push(CharRange::range('\u00F8', '\u00FF'));
-            // Latin Extended-A/B
             ranges.push(CharRange::range('\u0100', '\u024F'));
-            // Greek and Coptic
             ranges.push(CharRange::range('\u0370', '\u03FF'));
-            // Cyrillic
             ranges.push(CharRange::range('\u0400', '\u04FF'));
-            // Arabic
             ranges.push(CharRange::range('\u0600', '\u06FF'));
-            // Devanagari
             ranges.push(CharRange::range('\u0900', '\u097F'));
-            // CJK Unified Ideographs
             ranges.push(CharRange::range('\u4E00', '\u9FFF'));
-            // Hiragana
             ranges.push(CharRange::range('\u3040', '\u309F'));
-            // Katakana
             ranges.push(CharRange::range('\u30A0', '\u30FF'));
-            // Hangul Syllables
             ranges.push(CharRange::range('\uAC00', '\uD7AF'));
         },
         "Nl" | "Letter_Number" => {
-            // Roman Numerals
             ranges.push(CharRange::range('\u2160', '\u2188'));
-            // Runic
             ranges.push(CharRange::range('\u16EE', '\u16F0'));
         },
         "Mn" | "Nonspacing_Mark" => {
-            // Combining Diacritical Marks
             ranges.push(CharRange::range('\u0300', '\u036F'));
-            // Combining Diacritical Marks Extended
             ranges.push(CharRange::range('\u1AB0', '\u1AFF'));
-            // Devanagari combining marks
             ranges.push(CharRange::range('\u0901', '\u0902'));
             ranges.push(CharRange::single('\u093C'));
             ranges.push(CharRange::range('\u0941', '\u0948'));
@@ -1651,10 +1404,8 @@ fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) {
         },
         "Nd" | "Decimal_Number" => {
             ranges.push(CharRange::range('0', '9'));
-            // Arabic-Indic
             ranges.push(CharRange::range('\u0660', '\u0669'));
             ranges.push(CharRange::range('\u06F0', '\u06F9'));
-            // Devanagari
             ranges.push(CharRange::range('\u0966', '\u096F'));
         },
         "Pc" | "Connector_Punctuation" => {
@@ -1674,7 +1425,6 @@ fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) {
             ranges.push(CharRange::single('\u205F'));
             ranges.push(CharRange::single('\u3000'));
         },
-        // Unknown properties are silently ignored (empty expansion).
         _ => {
         },
     }
@@ -1690,18 +1440,9 @@ fn intern_mode(mode_names: &mut List<String>, name: &String) -> i32 {
     return mode_names.len() - 1;
 }
 
-/// `scan_balanced` with the parser's unterminated convention: a region
-/// that never closes is consumed to end-of-input, so the caller advances
-/// past every remaining token of the malformed action body.
-/// Map a grammar-level `options { language = X }` to `ActionLanguage`.
-/// Absent → `Java` (ANTLR4's default target and the corpus's language).
 fn action_language_from_options(options: &List<GrammarOption>) -> ActionLanguage {
     for let opt of options {
         if opt.name == "language" {
-            // The value is a bare identifier conventionally (`language = Java`)
-            // but ANTLR4's optionValue also admits a string literal
-            // (`language = "Java"`); accept both. Match case-insensitively so
-            // `java` / `JAVA` classify as Java, not Other.
             let name = match &opt.value {
                 Ident(v) => Option::<String>::Some(*v),
                 Str(v) => Option::<String>::Some(*v),
@@ -1723,14 +1464,11 @@ fn action_language_from_options(options: &List<GrammarOption>) -> ActionLanguage
     return ActionLanguage::Java;
 }
 
-/// Captured `catch` / `finally` clauses following a rule body.
 struct ExceptionGroup {
     catches: List<CatchClause> = [],
     finally_action: Option<ActionSource> = null,
 }
 
-/// Everything captured from a rule prequel, retained on the `ParserRule`.
-/// All fields defaulted so `RulePrequel {}` is a valid empty starting point.
 struct RulePrequel {
     options: List<GrammarOption> = [],
     args: List<AttrDecl> = [],
@@ -1741,14 +1479,6 @@ struct RulePrequel {
     after_action: Option<ActionSource> = null,
 }
 
-/// Split an attribute-list body (the text between `[` and `]` of an
-/// `[...]` / `returns [...]` / `locals [...]`) into `AttrDecl`s. Commas at
-/// nesting depth 0 separate declarations; `<>`, `[]`, `()` nest so a comma
-/// inside `Map<K, V>` or `int[]` does not split. Within a declaration, the
-/// last identifier run is the attribute name and everything before it
-/// (trimmed) is the type text. All decls share `list_span` (the enclosing
-/// arg-action span) — per-decl spans are a later refinement. This is ANTLR
-/// attribute-definition syntax, not host-language parsing.
 fn parse_attr_decls(body: &String, list_span: Span) -> List<AttrDecl> {
     let chars: List<char> = body.chars().collect();
     let n = chars.len();
@@ -1757,8 +1487,6 @@ fn parse_attr_decls(body: &String, list_span: Span) -> List<AttrDecl> {
     let mut seg = String::with_capacity(16);
     let mut i = 0;
     while i <= n {
-        // A trailing `,` at `i == n` flushes the final declaration. Nesting
-        // (`<>` / `[]` / `()`) shields an inner comma (e.g. `Map<K, V>`).
         let c = if i == n { ',' } else { chars[i] };
         match c {
             '<' | '[' | '(' => {
@@ -1784,15 +1512,9 @@ fn parse_attr_decls(body: &String, list_span: Span) -> List<AttrDecl> {
     return out;
 }
 
-/// Split one declaration segment ("int v", "List<String> ignored",
-/// "int i = 0") into (type_text, name). `null` when the segment is blank.
-/// An initializer (`= expr`, legal in ANTLR4 `returns`/`locals`/args) is
-/// dropped: the declaration is everything before the first assignment `=`.
 fn split_attr_decl(seg: &String, span: Span) -> Option<AttrDecl> {
     let chars: List<char> = seg.chars().collect();
     let full = chars.len();
-    // Cut at the first assignment `=` (not `==` / `<=` / `>=` / `!=`), so
-    // "int i = 0" declares `i`, not the initializer's trailing token.
     let mut n = full;
     for let mut k = 0; k < full; k += 1 {
         if chars[k] == '=' {
@@ -1805,7 +1527,6 @@ fn split_attr_decl(seg: &String, span: Span) -> Option<AttrDecl> {
             }
         }
     }
-    // Trim trailing whitespace, then take the trailing identifier run as name.
     let mut end = n;
     while end > 0 && chars[end - 1].is_ascii_whitespace() {
         end -= 1;
@@ -1843,8 +1564,6 @@ fn scan_balanced_or_end(chars: &List<char>, start: i32, open: char, close: char)
     };
 }
 
-/// Parse a decimal integer literal token (e.g. "42", "0", "9999"). The lexer
-/// guarantees the text is non-empty and contains only ASCII digits.
 fn parse_int_literal(text: &String) -> i32 {
     let mut value: i32 = 0;
     for let c of text.chars() {
@@ -1854,73 +1573,16 @@ fn parse_int_literal(text: &String) -> i32 {
     return value;
 }
 
-/// Syntactic parse only. Turns a `.g4` source string into a `Grammar` IR
-/// without running the semantic rule-reference resolution pass — mirrors
-/// ANTLR4 accepting any syntactically well-formed grammar and leaving
-/// symbol resolution to a later phase.
-///
-/// The parser still rejects mistakes that can be caught locally during a
-/// single pass: duplicate rule names (B1), a `mode X;` declaration inside
-/// a `parser grammar`, `~` applied to something that isn't a set (B5),
-/// unknown lexer commands (B7), and `<assoc=…>` values other than `left`
-/// / `right` (B6). These are structural / lexical errors, not
-/// cross-rule symbol lookups.
-///
-/// Use `parse` when the translation unit deliberately defers symbols to
-/// a sibling grammar:
-///   - a `parser grammar` that pulls tokens from its matching `lexer
-///     grammar` (they're merged by `merge_grammars` before codegen).
-///   - a combined grammar that uses `tokenVocab` / `import` to bring in
-///     rules from elsewhere.
-///   - minimal test fixtures that intentionally leave references
-///     dangling.
-///
-/// If you want the full ANTLR4-tool contract — including rejection of
-/// references to undefined rules / tokens — call `parse_checked`
-/// instead, or follow `parse` with `check_references` (from `ir.wado`)
-/// on the merged grammar.
 pub fn parse(input: String) -> Result<Grammar, ParseError> {
-    // Collect the source once and share it between the lexer and the parser.
-    // Tokens own their text, so the buffer can be handed off to the parser
-    // (which retains it for `scan_balanced`) after tokenization.
     let chars: List<char> = input.chars().collect();
     let tokens = tokenize_chars(&chars);
     let mut parser = G4Parser::new(tokens, chars);
     return parser.parse_grammar();
 }
 
-/// Parse + semantic rule-reference resolution, in one call. Equivalent
-/// to `parse` followed by `ir::check_references`, and mirrors ANTLR4's
-/// full tool-level contract (a syntactic parse plus the
-/// unresolved-rule-reference check).
-///
-/// Rejects grammars that `parse` would accept but where a parser-rule
-/// ref, token ref, or lexer-rule ref does not resolve against the rule
-/// table of the current translation unit. The check is
-/// grammar-kind-aware:
-///   - combined grammar: parser refs, token refs, and lexer-to-lexer
-///     refs are all resolvable locally and all validated.
-///   - `lexer grammar`: only lexer-to-lexer refs can be resolved
-///     locally; there are no parser / token refs to check.
-///   - `parser grammar`: only parser-rule refs can be resolved
-///     locally; token refs come from the matching lexer grammar at
-///     merge time and are skipped.
-///
-/// Prefer this over bare `parse` whenever the input is a complete,
-/// self-contained grammar translation unit. Split-grammar halves that
-/// rely on a sibling translation unit should still go through `parse`
-/// and call `check_references` after `merge_grammars`.
-///
-/// NOTE: currently exercised only by tests. Gale's CLI and Kiln generator
-/// always take the split-grammar path (`parse` + `merge_grammars` +
-/// `check_references`), so this single-call convenience has no production
-/// caller yet; whether Gale exposes a library API is still undecided.
-/// `#[allow(dead_code)]` keeps it as a documented public entry without a
-/// "never used" warning until that decision is made.
 #[allow(dead_code)]
 pub fn parse_checked(input: String) -> Result<Grammar, ParseError> {
     let mut grammar = parse(input)?;
-    // Must run before `check_references`. See `ir.wado` for rationale.
     synthesize_implicit_tokens(&mut grammar);
     check_references(&grammar)?;
     return Result::<Grammar, ParseError>::Ok(grammar);
@@ -1945,7 +1607,6 @@ pub fn assemble_grammar(inputs: &List<[String, String]>) -> Result<Grammar, Asse
         }
     }
     let mut merged = merge_grammars(grammars);
-    // Must run before `check_references`. See `ir.wado` for rationale.
     synthesize_implicit_tokens(&mut merged);
     match check_references(&merged) {
         Ok(_) => {

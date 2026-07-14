@@ -1626,7 +1626,7 @@ impl FunctionTranslator<'_, '_> {
         args: &[CallArg],
     ) -> ExprKind {
         if func.module_source.is_core_builtin()
-            && func.name == "copy_value"
+            && crate::tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "copy_value")
             && args.len() == 1
             && let Some(type_id) = func
                 .monomorph_info

@@ -118,6 +118,7 @@ fn result_args(tt: &TypeTable, type_id: TypeId) -> Option<(TypeId, TypeId)> {
     }
 }
 
+<<<<<<< HEAD
 /// Fields of each struct `(name, module)`, in declaration order, as
 /// `(index, name, type_id)`. Built once so the drop walk can recurse into
 /// struct fields without holding the `TirModule`s.
@@ -135,6 +136,44 @@ fn build_struct_field_reg(project: &Package) -> StructFieldReg {
                         .map(|f| (f.index, f.name.clone(), f.type_id))
                         .collect()
                 });
+||||||| c25e7dc01
+/// Whether `type_id` owns, or structurally carries, a Component Model
+/// resource that this pass knows how to drop.
+///
+/// `GenericResource` (`Future` / `Stream`) is excluded: those handles have
+/// their own explicit drop discipline and must not be touched here.
+fn carries_resource(tt: &TypeTable, reg: &CmInterfaceRegistry, type_id: TypeId) -> bool {
+    let base = tt.get_ultimate_base_type(type_id);
+    match tt.get(base) {
+        ResolvedType::Resource { name, .. } => reg.get_resource_cm_name(name).is_some(),
+        _ => {
+            if let Some((ok, err)) = result_args(tt, type_id) {
+                carries_resource(tt, reg, ok) || carries_resource(tt, reg, err)
+            } else {
+                false
+            }
+=======
+/// Whether `type_id` owns, or structurally carries, a Component Model
+/// resource that this pass knows how to drop.
+///
+/// `GenericResource` (`Future` / `Stream`) is excluded: those handles have
+/// their own explicit drop discipline and must not be touched here.
+fn carries_resource(tt: &TypeTable, reg: &CmInterfaceRegistry, type_id: TypeId) -> bool {
+    let base = tt.get_ultimate_base_type(type_id);
+    match tt.get(base) {
+        ResolvedType::Resource {
+            name,
+            module_source,
+        } => reg
+            .get_resource_cm_name_by_module(&module_source.to_string(), name)
+            .is_some(),
+        _ => {
+            if let Some((ok, err)) = result_args(tt, type_id) {
+                carries_resource(tt, reg, ok) || carries_resource(tt, reg, err)
+            } else {
+                false
+            }
+>>>>>>> origin/main
         }
     }
     reg
@@ -422,8 +461,23 @@ fn drop_one(live: &Live, cx: &mut Cx) -> Vec<TirStmt> {
 /// from `scrutinee` (a value of type `type_id`).
 fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> {
     let base = cx.tt.get_ultimate_base_type(type_id);
+<<<<<<< HEAD
     match cx.tt.get(base).clone() {
         ResolvedType::Resource { name, .. } => match cx.reg.get_resource_cm_name(&name) {
+||||||| c25e7dc01
+    if let ResolvedType::Resource { name, .. } = cx.tt.get(base).clone() {
+        return match cx.reg.get_resource_cm_name(&name) {
+=======
+    if let ResolvedType::Resource {
+        name,
+        module_source,
+    } = cx.tt.get(base).clone()
+    {
+        return match cx
+            .reg
+            .get_resource_cm_name_by_module(&module_source.to_string(), &name)
+        {
+>>>>>>> origin/main
             Some(cm) => vec![expr_stmt(cm_raw_call(
                 &format!("resource-drop:{cm}"),
                 vec![scrutinee],

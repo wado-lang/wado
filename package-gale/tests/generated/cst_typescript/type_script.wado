@@ -5998,7 +5998,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_lit_lbrace(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_LBRACE; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
             end = try_lit_rbrace(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_RBRACE; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_LIT_RBRACE; best_push_mode = -1; best_pop_mode = true; best_channel = 0; }
             end = try_lit_eqgt(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_EQGT; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
             end = try_lit_new(&lexer.chars, start);
@@ -12116,7 +12116,7 @@ fn scan_object_literal(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
             sg_81: {
                 pos = scan_property_assignment(tokens, pos, follow, 0);
                 if pos < 0 { break sg_81; }
-                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                     let sp = pos;
                     sg_82_done: {
                         sg_82: {
@@ -12131,7 +12131,7 @@ fn scan_object_literal(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                if pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                     let sp = pos;
                     if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { pos = -1; } else { pos += 1; }
                     if pos < 0 { pos = sp; }
@@ -19018,7 +19018,7 @@ fn _parse_import_module_items__inner(p: &mut Parser, follow: &List<List<i32>> = 
     if _kind_set_24(p.peek_kind()) && p.peek_at(1) == TK_LIT_COMMA {
         p.atn_ret_pending = 1451;
         let import_alias_name = _parse_import_alias_name(p, &follow_prepend(&FOLLOW_MASK_16, follow));
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_COMMA) {
+        if p.peek_kind() == TK_LIT_COMMA {
             let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
         }
     } else if _kind_set_24(p.peek_kind()) {
@@ -19457,7 +19457,7 @@ fn _parse_export_module_items__inner(p: &mut Parser, follow: &List<List<i32>> = 
     if _kind_set_24(p.peek_kind()) && p.peek_at(1) == TK_LIT_COMMA {
         p.atn_ret_pending = 1606;
         let export_alias_name = _parse_export_alias_name(p, &follow_prepend(&FOLLOW_MASK_16, follow));
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_COMMA) {
+        if p.peek_kind() == TK_LIT_COMMA {
             let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
         }
     } else if _kind_set_24(p.peek_kind()) {
@@ -20609,7 +20609,7 @@ fn _parse_case_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     if p.peek_kind() == TK_Default && p.peek_at(1) == TK_Case {
         p.atn_ret_pending = 2053;
         let default_clause = _parse_default_clause(p, follow);
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Case) {
+        if p.peek_kind() == TK_Case {
             p.atn_ret_pending = 2057;
             let case_clauses = _parse_case_clauses(p, &EMPTY_FOLLOW);
         }
@@ -20957,7 +20957,7 @@ fn _parse_class_declaration__inner(p: &mut Parser, follow: &List<List<i32>> = &E
     }
     if p.peek_kind() == TK_Export {
         let export_ = p.expect(TK_Export, &SYNC_32);
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Default) {
+        if p.peek_kind() == TK_Default {
             let default = p.expect(TK_Default, &EMPTY_SYNC);
         }
     }
@@ -22426,7 +22426,7 @@ fn _parse_object_literal__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         let mut pos: i32 = p.pos;
         pos = scan_property_assignment(tokens, pos, follow, 0);
         if pos < 0 { break opt_scan; }
-        while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+        while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
             let sp = pos;
             sg_133_done: {
                 sg_133: {
@@ -22441,7 +22441,7 @@ fn _parse_object_literal__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             if pos < 0 { pos = sp; break; }
             if pos == sp { break; }
         }
-        if pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+        if pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
             let sp = pos;
             if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { pos = -1; } else { pos += 1; }
             if pos < 0 { pos = sp; }
@@ -22453,7 +22453,6 @@ fn _parse_object_literal__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         let property_assignment = _parse_property_assignment(p, follow);
         loop {
             if p.recovering { break; }
-            if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
                 let tokens = &p.kinds;
@@ -22476,7 +22475,7 @@ fn _parse_object_literal__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             p.atn_ret_pending = 2699;
             let property_assignment = _parse_property_assignment(p, follow);
         }
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_COMMA) {
+        if p.peek_kind() == TK_LIT_COMMA {
             let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
         }
     }
@@ -22962,7 +22961,7 @@ fn _parse_arguments__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     if _kind_set_32(p.peek_kind()) && p.peek_at(1) == TK_LIT_COMMA {
         p.atn_ret_pending = 2822;
         let argument_list = _parse_argument_list(p, &follow_prepend(&FOLLOW_MASK_16, follow));
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_COMMA) {
+        if p.peek_kind() == TK_LIT_COMMA {
             let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
         }
     } else if _kind_set_32(p.peek_kind()) {
