@@ -17,17 +17,17 @@ item
     ;
 
 itemKind
-    : useDecl
-    | implBlock
+    : implBlock
     | testDecl
-    | 'export' 'async'? 'fn' funcSig
-    | 'pub'? pubItem
+    | functionDecl
+    | ('pub' | 'internal')? pubItem
     ;
 
-// Item kinds that take an optional `pub` (plus plain `fn`). The leading
-// `pub` is left-factored into `itemKind` so the dispatch is token-led.
+// Item kinds that take an optional `pub` / `internal` (plus plain `fn`). The
+// leading modifier is left-factored into `itemKind` so the dispatch is
+// token-led. `use` lives here so `pub use` re-exports parse.
 pubItem
-    : 'fn' funcSig
+    : useDecl
     | globalDecl
     | typeAliasDecl
     | structDecl
@@ -36,6 +36,8 @@ pubItem
     | flagsDecl
     | traitDecl
     | interfaceDecl
+    | worldDecl
+    | resourceDecl
     ;
 
 globalDecl
@@ -64,8 +66,14 @@ attrArgs
     ;
 
 attrArg
-    : IDENTIFIER ('=' literal)?
-    | literal
+    : IDENTIFIER ('=' attrValue)?
+    | attrValue
+    ;
+
+attrValue
+    : literal
+    | IDENTIFIER
+    | '[' (attrValue (',' attrValue)*)? ']'
     ;
 
 useDecl
@@ -86,7 +94,7 @@ importItem
     ;
 
 functionDecl
-    : ('pub' | 'export' 'async'?)? 'fn' funcSig
+    : ('pub' | 'internal' | 'export')? 'async'? 'fn' funcSig
     ;
 
 funcSig
@@ -104,6 +112,7 @@ param
 
 selfParam
     : '&' 'mut'? 'self'
+    | 'self' (':' typeRef)?
     ;
 
 returnType
@@ -116,7 +125,12 @@ withClause
 
 withItem
     : IDENTIFIER
-    | 'stores' '[' (IDENTIFIER (',' IDENTIFIER)*)? ']'
+    | 'stores' '[' (storesItem (',' storesItem)*)? ']'
+    ;
+
+storesItem
+    : IDENTIFIER
+    | 'self'
     ;
 
 structDecl
@@ -136,7 +150,11 @@ enumDecl
     ;
 
 enumCaseList
-    : IDENTIFIER (',' IDENTIFIER)* ','?
+    : enumCase (',' enumCase)* ','?
+    ;
+
+enumCase
+    : attribute* IDENTIFIER ('=' expression)?
     ;
 
 flagsDecl
@@ -160,7 +178,7 @@ variantCaseList
     ;
 
 variantCase
-    : IDENTIFIER ('(' typeRef (',' typeRef)* ')')?
+    : attribute* IDENTIFIER ('(' typeRef (',' typeRef)* ')')?
     ;
 
 traitDecl
@@ -173,7 +191,30 @@ interfaceDecl
     : 'interface' IDENTIFIER genericParams? '{' traitMember* '}'
     ;
 
+// A WIT-style world: a set of `import` / `export` items naming interfaces.
+worldDecl
+    : 'world' IDENTIFIER '{' worldItem* '}'
+    ;
+
+worldItem
+    : ('import' | 'export') IDENTIFIER ';'
+    ;
+
+// A WIT-style resource: an opaque handle with method / static-function
+// signatures (or a bodyless unit resource `resource X;`).
+resourceDecl
+    : 'resource' IDENTIFIER ('{' resourceMember* '}' | ';')
+    ;
+
+resourceMember
+    : attribute* functionDecl
+    ;
+
 traitMember
+    : attribute* traitMemberBody
+    ;
+
+traitMemberBody
     : 'type' IDENTIFIER (':' traitBounds)? ';'
     | functionDecl
     ;
@@ -183,10 +224,14 @@ implBlock
     ;
 
 implMember
+    : attribute* implMemberBody
+    ;
+
+implMemberBody
     : 'type' IDENTIFIER '=' typeRef ';'
     | '..' ('trap' | 'forward')
     | 'export' 'async'? 'fn' funcSig
-    | 'pub'? implPubMember
+    | ('pub' | 'internal')? implPubMember
     ;
 
 // `const` / `fn` members share an optional `pub`, left-factored here so the
@@ -265,7 +310,25 @@ statement
     | assertStatement
     | matchStatement
     | labeledBlock
+    | localItem
     | exprStatement
+    ;
+
+// Item declarations nested in a block (e.g. a helper `struct` / `fn` inside a
+// `test` block or function body).
+localItem
+    : attribute* localItemKind
+    ;
+
+localItemKind
+    : structDecl
+    | enumDecl
+    | variantDecl
+    | flagsDecl
+    | traitDecl
+    | implBlock
+    | typeAliasDecl
+    | 'fn' funcSig
     ;
 
 // A labeled block `label: { ... }`, exited with `break label` (optionally
@@ -573,7 +636,7 @@ INTEGER
     ;
 
 STRING_LITERAL
-    : 'b'? '"' ('\\' . | ~["\\\r\n])* '"'
+    : 'b'? '"' ('\\' . | ~["\\])* '"'
     ;
 
 // A `{ ... }` interpolation holds Wado code, which may nest braces, strings,
