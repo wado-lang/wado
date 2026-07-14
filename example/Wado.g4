@@ -648,11 +648,9 @@ literal
     | 'null'
     ;
 
-// A template string is lexed into pieces (see the TEMPLATE lexer mode): literal
-// TEMPLATE_TEXT chunks and `{ ... }` interpolations. Each interpolation holds a
-// real expression (its tokens are lexed in the default mode, so keywords,
-// numbers, and nested strings/templates highlight), followed by an optional
-// `:spec` format specifier.
+// A template string alternates literal text with `{ ... }` interpolations. An
+// interpolation's expression is lexed in the default mode (see mode TEMPLATE),
+// so it highlights as real code, not string text.
 templateString
     : BACKTICK templatePart* BACKTICK
     ;
@@ -666,9 +664,8 @@ interpolation
     : OPEN_BRACE expression (':' formatSpec)? CLOSE_BRACE
     ;
 
-// A format specifier follows Rust's mini-language
-// (`[[fill]align][sign][#][0][width][.precision][type]`). Its pieces are lexed
-// as ordinary tokens; the highlight query mutes them.
+// A format specifier follows Rust's mini-language; its pieces are lexed as
+// ordinary tokens and muted by the highlight query.
 formatSpec
     : formatSpecAtom*
     ;
@@ -694,11 +691,9 @@ STRING_LITERAL
     : 'b'? '"' ('\\' . | ~["\\])* '"'
     ;
 
-// Braces are named tokens (not inline literals) so they can drive the lexer
-// mode stack: every `{` pushes and every `}` pops, which balances the nested
-// braces inside a template interpolation without host-language actions. For
-// brace-balanced input the stack returns to its start, so the token stream is
-// unchanged for code that uses no templates.
+// Named (not inline) so they can carry the mode commands that balance a
+// template interpolation's nested braces: `{` pushes, `}` pops. The stack
+// returns to its start for balanced input, so non-template code is unaffected.
 OPEN_BRACE
     : '{' -> pushMode(DEFAULT_MODE)
     ;
@@ -707,7 +702,6 @@ CLOSE_BRACE
     : '}' -> popMode
     ;
 
-// A backtick opens a template string, switching to the TEMPLATE mode.
 BACKTICK
     : '`' -> pushMode(TEMPLATE)
     ;
@@ -751,9 +745,7 @@ WS
     : [ \t\r\n]+ -> skip
     ;
 
-// Template-string body. `{` opens an interpolation (lexed back in the default
-// mode via the brace mode stack); a backtick closes the template. Whitespace
-// is significant here, so this mode skips nothing.
+// Template-string body; whitespace is significant, so this mode skips nothing.
 mode TEMPLATE;
 
 TEMPLATE_TEXT

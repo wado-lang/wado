@@ -12,11 +12,9 @@
 (FLOAT) @number
 (INTEGER) @number
 
-; Template strings: the literal chunks and the backtick delimiters are string;
-; a `{ ... }` interpolation holds real code. Its identifiers read as variables,
-; while keywords / numbers / nested strings keep their own colors. The trailing
-; `:spec` format specifier is muted (listed before the interpolation rule so it
-; wins over the identifier override for a spec like `{x:width}`).
+; Template strings: text chunks and backticks are string; a `{ ... }`
+; interpolation holds code (identifiers -> variable). The `:spec` format
+; specifier is muted, listed first so it wins the override for `{x:width}`.
 (TEMPLATE_TEXT) @string
 (BACKTICK) @string
 (formatSpec (IDENTIFIER) @comment)
