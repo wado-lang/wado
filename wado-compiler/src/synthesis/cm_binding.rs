@@ -1062,8 +1062,7 @@ mod tests {
     fn flatten_param_newtype_u64() {
         let (reg, _) = CmInterfaceRegistry::build_from_stdlib();
         // A newtype reference reaching CM flattening carries its declaring
-        // interface, exactly as stdlib bootstrap and lib registration populate
-        // it; a bare-name reference is never resolvable here.
+        // interface (as bootstrap and lib registration populate it).
         let wasi_newtype = |name: &str| {
             let source = reg
                 .find_wasi_newtype_source(name)

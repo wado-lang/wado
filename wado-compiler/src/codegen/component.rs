@@ -2607,8 +2607,8 @@ fn generate_cm_imports(
                                 .get_struct_fields_by_source(s, &named.name)
                                 .is_some()
                         }));
-                        // A preserved local newtype routes through the type gen
-                        // like a struct, so its named alias reaches the boundary.
+                        // A local newtype routes through `ast_type_to_cm` like a
+                        // struct so its named alias reaches the boundary.
                         let is_local_newtype = matches!(&resolved_ty, Type::Named(named)
                         if project
                             .cm_interface_registry

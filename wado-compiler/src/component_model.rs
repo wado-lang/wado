@@ -653,21 +653,16 @@ pub struct CmInterfaceRegistry {
     /// classifies these as [`crate::wir::ImportKind::Component`] for composition.
     component_interfaces: IndexSet<String>,
 
-    /// Lazily-built reverse index mapping a type's loader identity
-    /// (`ModuleSource`) to its CM name, for the `_by_module` accessors. Built
-    /// once on first query — safe because the registry is fully populated
-    /// before it is shared (`Arc`) and queried during synthesis.
+    /// Reverse index for the `_by_module` accessors (see [`ModuleSourceIndex`]).
     module_index: std::sync::OnceLock<ModuleSourceIndex>,
 }
 
-/// Reverse index for the `ModuleSource`-bridged CM-name lookups. For each type
-/// kind it maps `(module identity, wado name) -> cm name`, under two keys per
-/// registration so a lookup is O(1) from either identity namespace:
-/// - the interface *stem* of the `#[cm(...)]` source (matches the loader's
-///   `wasi:x/y.wado` / `core:...` display for stdlib types), and
-/// - the exact `ModuleSource` display of a `--lib`/component interface (from
-///   `cm_interface_module_sources`), whose FQ shares no stem with its loader
-///   identity.
+/// Reverse index for the `ModuleSource`-bridged CM-name lookups: per type kind,
+/// `(module identity, wado name) -> cm name`. Each registration is indexed
+/// under two keys so a lookup is O(1) from either identity namespace — the
+/// interface stem of the `#[cm(...)]` source (stdlib), and the exact
+/// `ModuleSource` display of a `--lib`/component interface (whose FQ shares no
+/// stem with its loader identity).
 #[derive(Debug, Clone, Default)]
 struct ModuleSourceIndex {
     resources: IndexMap<(String, String), String>,
@@ -770,11 +765,9 @@ fn find_unique_source_in<'a, V>(
     found
 }
 
-/// The interface "stem" of a source string: its path without a trailing
-/// `.wado` file suffix or an `@version` tag. Bridges the loader's
-/// [`ModuleSource`] identity (e.g. `wasi:http/types.wado`) to the CM
-/// registration key (e.g. `wasi:http/types@0.3.0`), which name the same
-/// interface but differ in exactly those two decorations.
+/// A source string without a trailing `.wado` suffix or `@version` tag, so a
+/// loader identity (`wasi:http/types.wado`) and its CM registration key
+/// (`wasi:http/types@0.3.0`) reduce to the same stem.
 fn interface_stem(source: &str) -> &str {
     let source = source.strip_suffix(".wado").unwrap_or(source);
     source.split_once('@').map_or(source, |(base, _)| base)
@@ -796,13 +789,9 @@ fn lookup_by_module<'a>(
         .map(String::as_str)
 }
 
-/// Walk a parsed stdlib module and return `name -> source_interface` for
-/// every top-level declaration that carries a `#[cm("...")]` attribute.
-///
-/// Resolve a `Type::Named` reference through the newtype-alias map by the
-/// reference's declaring interface (`source_interface`). A reference without a
-/// source, or one that names no newtype, is returned unchanged. Other type
-/// shapes are returned as-is.
+/// Resolve a `Type::Named` reference through the newtype-alias map by its
+/// declaring interface (`source_interface`). A source-less reference, or one
+/// naming no newtype, is returned unchanged, as are other type shapes.
 fn resolve_type(ty: &Type, aliases: &IndexMap<(String, String), Type>) -> Type {
     match ty {
         Type::Named(named) => named
@@ -1603,11 +1592,9 @@ impl CmInterfaceRegistry {
         self.cm_interface_module_sources
             .insert(iface_fq.to_string(), entry_source);
 
-        // Every locally-declared type resolves to this library's default
-        // interface FQ. Stdlib modules get this from `populate_named_type_sources`
-        // before registration; the `--lib` path must do the same so a stored
-        // field / payload / newtype-base reference carries an exact
-        // `source_interface` (a bare-name reference cannot be resolved later).
+        // Populate `source_interface` on stored field/payload/base references,
+        // as `populate_named_type_sources` does for stdlib before registration,
+        // so later CM resolution never needs a bare-name guess.
         let local_names: IndexMap<String, String> = module
             .items
             .iter()
@@ -1755,19 +1742,12 @@ impl CmInterfaceRegistry {
 
     // -- `ModuleSource`-bridged lookups ------------------------------------
     //
-    // A `ResolvedType`'s `module_source` names its declaring interface in the
-    // loader's identity namespace (a `.wado` file path, version-agnostic),
-    // which differs from the `#[cm(...)]` registration key by a `.wado` suffix
-    // and an `@version` tag (stdlib), or is an entirely separate string (a
-    // `--lib`/component FQ vs. its `dep:`/entry `ModuleSource`). These
-    // accessors bridge both namespaces through a lazily-built O(1) index so
-    // codegen can resolve a CM name straight from a resolved type.
+    // A `ResolvedType`'s `module_source` names its interface in the loader's
+    // identity namespace, which differs from the `#[cm(...)]` registration key.
+    // These accessors bridge both namespaces through a lazily-built O(1) index.
 
     /// The reverse index, built on first use once the registry is fully
-    /// populated. Each registration contributes an interface-stem key (stdlib)
-    /// and, for `--lib`/component interfaces, an exact `ModuleSource`-display
-    /// key (from `cm_interface_module_sources`), so neither identity namespace
-    /// needs a linear scan at lookup time.
+    /// populated (before it is shared and queried during synthesis).
     fn module_index(&self) -> &ModuleSourceIndex {
         self.module_index.get_or_init(|| {
             let mut idx = ModuleSourceIndex::default();
@@ -2117,33 +2097,21 @@ impl CmInterfaceRegistry {
             .or_else(|| find_unique_source_with_prefix(&self.flags, namespace_prefix, &named.name))
     }
 
-    // -- Legacy unscoped lookups -------------------------------------------
-
     /// Resolve a newtype *reference* to its aliased base type by its declaring
     /// interface (`NamedType::source_interface`), so two modules that declare a
     /// same-named newtype resolve to their own base — never a bare-name guess.
-    /// A reference that reaches CM emission carries a resolved source; one
-    /// without a source is not a known newtype here.
+    /// A source-less reference is not a known newtype here.
     fn resolve_newtype_ref(&self, named: &crate::ast::NamedType) -> Option<&Type> {
         let source = named.source_interface.as_deref()?;
         self.get_newtype_by_source(source, &named.name)
     }
 
-    /// The base type of a *local* newtype `name` — one declared in the compiled
-    /// package rather than imported from a CM interface (`wasi:*`, kiln, or a
-    /// registered component interface). Returns `None` for CM-imported newtypes
-    /// and non-newtype names. The CM codegen emits a local newtype as a named
-    /// type alias at the boundary (issue #1456) instead of erasing it to its
-    /// base, so the compiled component's structural type matches `wado wit`.
-    ///
-    /// Returns the newtype's registration source and its base type. `source`
-    /// is the reference's declaring interface (`NamedType::source_interface`);
-    /// it keys the lookup exactly, so two modules that each declare a same-named
-    /// local newtype over different base types never collide (the `(name,
-    /// source)` discipline the rest of the registry uses). A reference without a
-    /// source, or one naming a CM-imported newtype, is not a *local* newtype
-    /// here. The returned source is echoed back so callers key the emitted alias
-    /// by it and never double-emit the same boundary type.
+    /// The registration source and base type of a *local* newtype — one
+    /// declared in the compiled package, not imported from a CM interface.
+    /// `None` for CM-imported or source-less references. The CM codegen emits a
+    /// local newtype as a named alias at the boundary (issue #1456) rather than
+    /// erasing it to its base; the returned source keys that alias so references
+    /// to one newtype never double-emit.
     pub fn local_newtype_base(&self, source: Option<&str>, name: &str) -> Option<(&str, &Type)> {
         let source = source?;
         if self.is_cm_source(source) {
@@ -3280,30 +3248,23 @@ impl CmTypeGen {
                 "f64" => ComponentValType::Primitive(PrimitiveValType::F64),
                 "char" => ComponentValType::Primitive(PrimitiveValType::Char),
                 name => {
-                    // A local newtype (declared in the compiled package, not
-                    // imported from a CM interface) is preserved as a named CM
-                    // alias (`type meters = f64`) so the compiled component's
-                    // structural type matches `wado wit`, rather than erasing to
-                    // its base (issue #1456).
+                    // Preserve a local newtype as a named CM alias
+                    // (`type meters = f64`) so the structural type matches
+                    // `wado wit` instead of erasing to its base (issue #1456).
                     let source = named.source_interface.as_deref();
                     if let Some((canonical_source, base)) = cm_interface_registry
                         .local_newtype_base(source, name)
                         .map(|(s, ty)| (s.to_string(), ty.clone()))
                     {
-                        // Key the cache by the newtype's *canonical* source so
-                        // same-named local newtypes from different modules stay
-                        // distinct, and every reference to one newtype (whether
-                        // or not it carries a source) dedups to a single alias.
+                        // Canonical source keys the cache so same-named locals
+                        // stay distinct and every reference dedups to one alias.
                         let cache_key = format!("newtype:{canonical_source}:{name}");
                         if let Some(&idx) = self.cache.get(&cache_key) {
                             return ComponentValType::Type(idx);
                         }
-                        // Resolve the base through the registry first: a base that
-                        // is itself an imported (WASI) newtype peels to its
-                        // primitive, while a local-newtype base is kept and
-                        // recursed into as a nested alias. Passing the raw base
-                        // would reach the unsupported-name panic below for an
-                        // imported-newtype base.
+                        // Peel the base first: an imported-newtype base resolves
+                        // to its primitive, avoiding the unsupported-name panic
+                        // below; a local-newtype base recurses as a nested alias.
                         let base =
                             cm_interface_registry.resolve_type_preserving_local_newtypes(&base);
                         let base_val = self.ast_type_to_cm(
@@ -3312,9 +3273,6 @@ impl CmTypeGen {
                             cm_interface_registry,
                             resource_exports,
                         );
-                        // A primitive base has no defined-type index to alias, so
-                        // define one; an aggregate base already has an index we
-                        // name directly (`type meters = point`).
                         let base_idx = match base_val {
                             ComponentValType::Primitive(prim) => {
                                 sink.define(CmDefined::Primitive(prim))
@@ -4590,17 +4548,15 @@ mod tests {
         let mut interner = ModuleSourceInterner::new();
         let mut registry = CmInterfaceRegistry::new();
 
-        // A stdlib WASI resource: registered under the versioned `#[cm]` key,
-        // but a `ResolvedType` presents the loader path `wasi:http/types.wado`.
+        // WASI: registered under the versioned `#[cm]` key; a `ResolvedType`
+        // presents the loader path `wasi:http/types.wado`.
         registry.resources.insert(
             ("wasi:http/types@0.3.0".into(), "Request".into()),
             "request".into(),
         );
 
-        // A component-dependency resource: its registration key is the
-        // interface FQ, while its `ModuleSource` is the dependency path — the
-        // two share no stem, so only the exact `cm_interface_module_sources`
-        // bridge resolves it (regression guard for the resource-drop leak).
+        // Component dependency: FQ registration key vs. `dep:` ModuleSource
+        // share no stem, so only the exact bridge resolves it (drop-leak guard).
         let dep = interner.dependency("../foo/lib.wado");
         registry
             .resources

@@ -912,10 +912,8 @@ pub(super) fn flatten_export_type(
                 } else if let Some(struct_decl) = find_struct_decl(&named.name, tir_modules) {
                     flatten_struct_type(&struct_decl, out, tir_modules, type_table);
                 } else if let Some(nt_type_id) = find_newtype_type_id(&named.name, tir_modules) {
-                    // A newtype flattens as its base representation (the type
-                    // table resolves the chain), so `Meters` flattens to `f64`
-                    // rather than the i32 fallback below — otherwise the export
-                    // adapter's flat signature disagrees with the canonical ABI.
+                    // A newtype flattens as its base, not the i32 fallback below,
+                    // so the flat signature matches the canonical ABI.
                     flat_types_from_type_id_into(nt_type_id, out, tir_modules, type_table);
                 } else {
                     // Resource handles, enums, unknown → i32

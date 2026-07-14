@@ -699,11 +699,10 @@ pub(super) fn synthesize_lift_from_flat_params(
                 ResolvedType::Newtype { .. }
             ) =>
         {
-            // A newtype shares its base type's flat representation; lift through
-            // the base (the lower path does the symmetric peel at
-            // `lower_to_flat_inner`). Without this a newtype falls through to the
-            // i32 passthrough default below and reads its flat slot at the wrong
-            // core type (`expected f64, found i32` for `Option<Meters>`).
+            // A newtype shares its base's flat representation, so lift through
+            // the base (the lower path peels symmetrically). Otherwise it hits
+            // the i32 default below and reads its slot at the wrong core type
+            // (`expected f64, found i32` for `Option<Meters>`).
             let (base_type_id, base_ast) = {
                 let tt = type_table_cell.borrow();
                 let ResolvedType::Newtype { base_type, .. } = tt.get(target_type_id) else {
