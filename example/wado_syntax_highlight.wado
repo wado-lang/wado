@@ -294,3 +294,15 @@ test "highlight mut struct destructuring" {
 test "highlight turbofish wildcard type" {
     assert_highlights(&"fn f() { let x = pick::<_, bool>(1, true); }\n");
 }
+
+test "highlight array type in variant payload" {
+    assert_highlights(&"variant V { Rect([f64, f64]), Pt }\ntype T = Foo<[i32, i32], bool>;\n");
+}
+
+test "highlight chained tuple index" {
+    assert_highlights(&"fn f() { let t = [[1, 2], [3, 4]]; assert t.0.0 == 1; }\n");
+}
+
+test "highlight fn-type effect before next param" {
+    assert_highlights(&"fn a(f: fn() with Stdout, x: i32) with Stdout { f(); }\n");
+}

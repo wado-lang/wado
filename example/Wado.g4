@@ -159,7 +159,7 @@ variantCaseList
     ;
 
 variantCase
-    : IDENTIFIER ('(' typeRef (',' typeRef)* ')')?
+    : IDENTIFIER ('(' (typeRef (',' typeRef)*)? ')')?
     ;
 
 traitDecl
@@ -207,12 +207,20 @@ typeRef
     | '_'
     | '(' (typeRef (',' typeRef)*)? ')'
     | '[' (typeRef (',' typeRef)*)? ']'
-    | 'fn' 'mut'? '(' (typeRef (',' typeRef)*)? ')' returnType? withClause?
+    | 'fn' 'mut'? '(' (typeRef (',' typeRef)*)? ')' returnType? fnTypeWithClause?
     | path typeArgs?
     ;
 
+// A fn-*type*'s effect clause takes a single effect: a comma there would be
+// ambiguous with an enclosing list (e.g. the next parameter), and real fn
+// types never carry a comma-separated effect row (those appear only on
+// function *declarations*, where a trailing block/`;` disambiguates).
+fnTypeWithClause
+    : 'with' withItem
+    ;
+
 typeArgs
-    : '<' typeRef (',' typeRef)* '>'
+    : '<' (typeRef (',' typeRef)*)? '>'
     ;
 
 path
@@ -356,7 +364,7 @@ postfix
 postfixOp
     : '(' argumentList? ')'
     | '::' typeArgs '(' argumentList? ')'
-    | '.' (memberName ('::' typeArgs)? ('(' argumentList? ')')? | INTEGER)
+    | '.' (memberName ('::' typeArgs)? ('(' argumentList? ')')? | INTEGER | FLOAT)
     | '[' expression ']'
     | 'matches' '{' pattern ('&&' expression)? '}'
     | '?'
