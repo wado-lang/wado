@@ -219,7 +219,10 @@ fn cases() -> Vec<Case> {
         case("id-record", point()),
         // A record that flattens to a single core value is returned flat, not
         // via an outptr.
-        case("id-record-flat", Val::Record(vec![("value".into(), Val::U64(42))])),
+        case(
+            "id-record-flat",
+            Val::Record(vec![("value".into(), Val::U64(42))]),
+        ),
         case("id-enum", Val::Enum("green".into())),
         case(
             "id-variant",

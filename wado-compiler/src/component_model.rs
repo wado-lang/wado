@@ -4666,7 +4666,11 @@ mod tests {
         let iface = "pkg:app/app@1";
         registry.structs.insert(
             (iface.into(), "Single".into()),
-            ("single".into(), vec![("n".into(), named("u64", None))], vec![]),
+            (
+                "single".into(),
+                vec![("n".into(), named("u64", None))],
+                vec![],
+            ),
         );
         registry.structs.insert(
             (iface.into(), "Point".into()),
@@ -4681,7 +4685,11 @@ mod tests {
         );
         registry.structs.insert(
             (iface.into(), "Wrap".into()),
-            ("wrap".into(), vec![("s".into(), named("String", None))], vec![]),
+            (
+                "wrap".into(),
+                vec![("s".into(), named("String", None))],
+                vec![],
+            ),
         );
 
         assert!(

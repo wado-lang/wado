@@ -221,8 +221,7 @@ fn plan_excludes_type_alias_only_clock_types() {
 /// against the filesystem and return `(plan, actual)`: the type-level import
 /// plan and the composed binary's real imports.
 fn component_plan_and_actual(source: &str) -> (BTreeSet<String>, BTreeSet<String>) {
-    let base =
-        std::path::PathBuf::from(format!("{}/tests/fixtures", env!("CARGO_MANIFEST_DIR")));
+    let base = std::path::PathBuf::from(format!("{}/tests/fixtures", env!("CARGO_MANIFEST_DIR")));
 
     let plan: BTreeSet<String> = {
         let host = common::FilesystemHost::new(base.clone());
@@ -251,8 +250,13 @@ fn component_plan_and_actual(source: &str) -> (BTreeSet<String>, BTreeSet<String
 
     let actual: BTreeSet<String> = {
         let host = common::FilesystemHost::new(base);
-        let result = block_on(compile_with_host(source, &host, Some("entry.wado"), OptLevel::O2))
-            .expect("compile succeeds");
+        let result = block_on(compile_with_host(
+            source,
+            &host,
+            Some("entry.wado"),
+            OptLevel::O2,
+        ))
+        .expect("compile succeeds");
         let mut wat = String::new();
         wasmprinter::Config::new()
             .print(&result.wasm, &mut wasmprinter::PrintFmtWrite(&mut wat))

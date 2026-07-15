@@ -116,7 +116,11 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
     } else {
         vec![InnerAttribute {
             name: CM_HOST_IMPORTS_ATTR.to_string(),
-            args: host_leaf_imports.iter().cloned().map(AttrArg::Str).collect(),
+            args: host_leaf_imports
+                .iter()
+                .cloned()
+                .map(AttrArg::Str)
+                .collect(),
             span: syn(),
         }]
     };
@@ -574,7 +578,10 @@ mod tests {
         // `wasi:cli/types`, the shared error-code the future/stream results of
         // its async exports carry — a genuine capability of the async surface,
         // not an ambient effect.
-        assert_eq!(b.host_leaf_imports, vec!["wasi:cli/types@0.3.0".to_string()]);
+        assert_eq!(
+            b.host_leaf_imports,
+            vec!["wasi:cli/types@0.3.0".to_string()]
+        );
 
         let mut iface = None;
         let mut type_names = Vec::new();
@@ -595,7 +602,10 @@ mod tests {
         // A primitive identity and a named-type identity, with cm metadata.
         let id_u32 = iface.methods.iter().find(|m| m.name == "id_u32").unwrap();
         let cm = id_u32.attrs[0].as_cm_import().unwrap();
-        assert_eq!(cm.interface_path(), "wado-lang:cm-catalog/cm-catalog@0.0.16");
+        assert_eq!(
+            cm.interface_path(),
+            "wado-lang:cm-catalog/cm-catalog@0.0.16"
+        );
         assert_eq!(cm.function.as_deref(), Some("id-u32"));
 
         let id_record = iface

@@ -1641,13 +1641,13 @@ pub(super) fn synthesize_adapter(
         // reconstruction below.
         let is_flat_struct = return_flat.len() == 1
             && matches!(&resolved, Type::Named(n)
-                if cm_interface_registry
-                    .resolve_cm_source_for(n, Some(func_info.package.as_str()))
-                    .is_some_and(|s| {
-                        cm_interface_registry
-                            .get_struct_fields_by_source(s, &n.name)
-                            .is_some()
-                    }));
+            if cm_interface_registry
+                .resolve_cm_source_for(n, Some(func_info.package.as_str()))
+                .is_some_and(|s| {
+                    cm_interface_registry
+                        .get_struct_fields_by_source(s, &n.name)
+                        .is_some()
+                }));
         if needs_flat_result_lifting(&resolved) {
             // Flat return with complex type (e.g., Result<(), ()>): the raw call returns
             // an i32 discriminant on the stack, but the binding needs to return a GC struct.
