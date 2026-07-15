@@ -109,6 +109,11 @@ functions) is simply not effectful — it never appears in a `with` clause, and
 users `use` its types directly. No new syntax is needed. An interface with
 functions is conservatively treated as effectful by the call site.
 
+For an imported `.wasm` component this conservative rule is revisited by
+[Effect Reconstruction from CM Component Imports](./wep-2026-07-15-cm-import-effect-reconstruction.md),
+which derives the caller's effects from the component's actual host-leaf imports
+instead of treating its exported interface as an opaque effect.
+
 ## Migration Plan
 
 The migration runs on a single feature branch and lands as one merge:
@@ -872,3 +877,4 @@ a separate item.
 - [WebAssembly Module Import Support](./wep-2026-01-10-wasm-import.md)
 - [Target WASI P3 Only](./wep-2026-01-11-wasi-p3-only.md)
 - [WebIDL Binding Generator (`wado-from-idl`)](./wep-2026-04-01-tide.md)
+- [Effect Reconstruction from CM Component Imports](./wep-2026-07-15-cm-import-effect-reconstruction.md)

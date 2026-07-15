@@ -202,7 +202,7 @@ fn reset_and_print() with counter, Stdout {
 
 This design follows Koka's approach where state effects are tracked, but uses simpler syntax. The `with counter` declaration is sufficient; no separate get/set functions are generated internally.
 
-See also: [WIT and Wado Mapping](./wep-2026-01-29-wit-wado-mapping.md) for how effects relate to WIT interfaces.
+See also: [WIT and Wado Mapping](./wep-2026-01-29-wit-wado-mapping.md) for how effects relate to WIT interfaces, and [Effect Reconstruction from CM Component Imports](./wep-2026-07-15-cm-import-effect-reconstruction.md) for deriving a caller's effects from an imported component's host-leaf imports rather than from its exported interface.
 
 ### Resource Types as Effects
 
