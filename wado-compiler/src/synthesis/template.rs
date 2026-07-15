@@ -987,6 +987,29 @@ fn deref_to_inner(expr: TirExpr, target_type: TypeId, span: Span) -> TirExpr {
 ///
 /// Emits a trait method call, delegating to the Wado-level trait implementation
 /// (including blanket impls).
+/// Peel a newtype receiver to its base type so a format call targets the
+/// inherited impl — a newtype renders its underlying value for every format
+/// trait except `Inspect` / `InspectAlt` (which it overrides with the ` as Name`
+/// tag). A manual `impl <Trait>` on the newtype stops the peel.
+fn peel_transparent_newtype(type_id: TypeId, trait_name: &str, ctx: &TemplateCtx) -> TypeId {
+    if trait_name == ctx.names.inspect || trait_name == ctx.names.inspect_alt {
+        return type_id;
+    }
+    let mut tid = type_id;
+    loop {
+        let base = {
+            let tt = ctx.tt.borrow();
+            match tt.get(tid) {
+                ResolvedType::Newtype {
+                    name, base_type, ..
+                } if !ctx.trait_env.has_any_methodful_impl(name, trait_name) => *base_type,
+                _ => return tid,
+            }
+        };
+        tid = base;
+    }
+}
+
 fn trait_fmt_call(
     type_id: TypeId,
     val: TirExpr,
@@ -996,6 +1019,24 @@ fn trait_fmt_call(
     span: Span,
     ctx: &TemplateCtx,
 ) -> Vec<TirStmt> {
+    let target = peel_transparent_newtype(type_id, trait_name, ctx);
+    let (val, type_id) = if target == type_id {
+        (val, type_id)
+    } else {
+        // Strip any refs the interpolation carried, then cast to the base — a
+        // no-op on the transparent GC representation.
+        let normalized = deref_to_inner(val, type_id, span);
+        let cast = TirExpr::new(
+            TirExprKind::Cast {
+                expr: Box::new(normalized),
+                target_type: target,
+            },
+            target,
+            span,
+        );
+        (cast, target)
+    };
+
     let MethodCallInfo {
         local_name,
         monomorph_info,

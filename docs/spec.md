@@ -1627,7 +1627,7 @@ let hex = `{255:x}`;              // "ff"
 let p = Point { x: 10, y: 20 };
 let debug = `{p:?}`;             // "Point { x: 10, y: 20 }"
 let pretty = `{p:#?}`;           // pretty-print: "Point {\n  x: 10,\n  y: 20,\n}"
-let fallback = `{p}`;            // same as :? — falls back to inspect when no Display impl
+// `{p}` (Display) needs an `impl Display` for `Point`; use `{p:?}` for debug output.
 
 // Escaped braces — literal { and } without interpolation
 let json = `\{"key": "{name}"\}`;  // {"key": "Alice"}
@@ -3078,7 +3078,7 @@ match c {
 }
 ```
 
-Enums auto-derive `Display` (case name) unconditionally. `Eq` (discriminant equality) and `Ord` (declaration order) derive the same on-demand way as for structs — see [Auto-derived Traits](#structs) above.
+Enums auto-derive `Display` as the bare case name (`Red`), distinct from `Inspect`'s `Color::Red`. `Eq` (discriminant equality) and `Ord` (declaration order) derive the same on-demand way as for structs — see [Auto-derived Traits](#structs) above.
 
 Enums can have `impl` blocks:
 
@@ -3269,7 +3269,7 @@ Wado provides a format-agnostic serialization framework via `core:serde` and a J
 
 ### Compiler-Synthesized `impl`
 
-The syntax `impl Trait for Type;` (semicolon instead of block) signals that the compiler generates the method body. Supported traits: `From`, `Serialize`, `Deserialize`, `Eq`, `Ord`, `Default`, and the format family (`Inspect`, `InspectAlt`, `Display`, `DisplayAlt`). For the structurally-checkable traits (`Eq` / `Ord` / `Default` / serde) the marker is also a conformance check — a compile error at its own span if `Type` is ineligible. A format-trait marker always validates, since every type is formattable.
+The syntax `impl Trait for Type;` (semicolon instead of block) signals that the compiler generates the method body. Supported traits: `From`, `Serialize`, `Deserialize`, `Eq`, `Ord`, `Default`, and the debug/alternate format traits (`Inspect`, `InspectAlt`, `DisplayAlt`). For the structurally-checkable traits (`Eq` / `Ord` / `Default` / serde) the marker is also a conformance check — a compile error at its own span if `Type` is ineligible. An `Inspect` / `InspectAlt` / `DisplayAlt` marker always validates. A `Display` marker (`impl Display for Type;`) is **rejected** — `Display` is not derivable for an arbitrary type; write a real `impl Display { fn fmt … }`, or rely on the automatic enum / newtype `Display`.
 
 ```wado
 use { Serialize, Deserialize } from "core:serde";
@@ -3327,14 +3327,15 @@ impl Eq for Handler;
 // compile error: cannot derive `Eq` for `Handler`: not every field/case implements `Eq`
 ```
 
-### Format Traits Are Total
+### Format Traits
 
-The format traits — `Inspect` / `InspectAlt` / `Display` / `DisplayAlt` — hold for **every** type: any value can be debug-formatted (`{x:?}`) or displayed (`{x}`). A `T: Inspect` or `T: Display` bound therefore always holds, so a generic function can format its type parameter with no written bound, and `impl Inspect for T;` markers always validate. Their bodies are generated eagerly for every type, unlike the on-demand `Eq` / `Ord` / `Default` / serde.
+`{x:?}` / `{x:#?}` (`Inspect` / `InspectAlt`) work for every type — no bound needed.
+
+`{x}` (`Display`) uses the type's `impl Display`. Primitives, `String`, plain enums (bare case name), and newtypes (inherited from the base type) have one; a struct, variant, or generic container needs a hand-written `impl Display`, otherwise `{x}` is a compile error and `{x:?}` gives its debug form. So `T: Display` certifies a real string representation — e.g. `String::push_display` takes any `Display`. `{x:#}` (`DisplayAlt`) follows `Display`.
 
 ```wado
-fn describe<T>(v: &T) -> String {
-    return `{v:?}`;   // no `T: Inspect` bound needed
-}
+fn describe<T>(v: &T) -> String { return `{v:?}`; }         // any type
+fn label<T: Display>(v: &T) -> String { return `{v}`; }     // requires a `Display`
 ```
 
 See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).

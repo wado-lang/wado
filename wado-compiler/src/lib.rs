@@ -103,9 +103,15 @@ pub use token::Span;
 
 /// Build the diagnostic message for an unresolved `Type^Trait::method` call —
 /// `Type` does not implement `Trait` (see the WIR-build trait-bound check).
-fn trait_bound_violation_message(call_name: &str) -> String {
+fn trait_bound_violation_message(call_name: &str, display_trait_name: &str) -> String {
     if let Some((ty, trait_name)) = name::split_trait_method_receiver(call_name) {
-        format!("type `{ty}` does not implement trait `{trait_name}`")
+        let mut msg = format!("type `{ty}` does not implement trait `{trait_name}`");
+        // `Display` has a ready `{x:?}` alternative; `display_trait_name` comes
+        // from the registry, not a literal.
+        if trait_name == display_trait_name {
+            msg.push_str("; use `{x:?}` for debug output, or add an `impl Display`");
+        }
+        msg
     } else {
         format!("unresolved generic call `{call_name}`")
     }
@@ -1295,6 +1301,12 @@ fn compile_after_load<H: CompilerHost>(
     // escaped the front end; report cleanly and bail instead of trapping. Empty
     // for well-formed programs.
     if !wir_package.trait_bound_violations.is_empty() {
+        let display_trait_name = nir
+            .type_table
+            .borrow()
+            .compiler_items()
+            .trait_name(compiler_item::CompilerItem::Display)
+            .to_string();
         // Dedup by (call, site) so distinct sites each report their own location.
         let mut seen = crate::hashmap::IndexSet::default();
         for v in &wir_package.trait_bound_violations {
@@ -1302,7 +1314,7 @@ fn compile_after_load<H: CompilerHost>(
                 let _ = logger.error(compiler_host::Diagnostic {
                     severity: compiler_host::Severity::Error,
                     code: compiler_host::Code::TypeMismatch,
-                    message: trait_bound_violation_message(&v.call_name),
+                    message: trait_bound_violation_message(&v.call_name, &display_trait_name),
                     span: Some(compiler_host::DiagnosticSpan::from_span(
                         &v.span,
                         Some(&entry_filename),

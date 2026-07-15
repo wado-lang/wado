@@ -5,7 +5,8 @@
 //! - `EnumName^Ord::cmp(&self, &Self) -> Ordering` - discriminant ordering
 //! - `VariantName^Eq::eq(&self, &Self) -> bool` - case-discriminated payload equality
 //! - `TypeName^Inspect::inspect(&self, &mut Formatter)` - debug formatting
-//! - `TypeName^Display::fmt(&self, &mut Formatter)` - display fallback (delegates to Inspect)
+//! - `EnumName^Display::fmt(&self, &mut Formatter)` - bare case name
+//! - `TypeName^DisplayAlt::fmt_alt(&self, &mut Formatter)` - delegates to `Display`
 //!
 //! Pipeline position: runs as part of the synthesis phase, before monomorphize.
 
@@ -117,14 +118,6 @@ struct TraitPair {
 }
 
 impl TraitPair {
-    fn display(names: &TraitsStdlibNames) -> Self {
-        Self {
-            target_trait: names.display.clone(),
-            target_method: names.display_method.clone(),
-            delegate_trait: names.inspect.clone(),
-            delegate_method: names.inspect_method.clone(),
-        }
-    }
     fn display_alt(names: &TraitsStdlibNames) -> Self {
         // `DisplayAlt` delegates to `Display` (which in turn delegates to
         // `Inspect`), not to `InspectAlt`: the alternate *display* of a value
@@ -374,10 +367,11 @@ pub fn synthesize_traits(project: Package) -> Package {
         generate_variant_eq_impls(module, &mut ctx);
         generate_inspect_impls(module, &mut ctx);
         generate_inspect_alt_impls(module, &mut ctx);
-        // Order is load-bearing: `DisplayAlt` delegates to `Display`, so the
-        // Display pass must run first and record each type's Display impl in
-        // `ctx.pending` for the DisplayAlt pass's `needs_fallback` check.
-        generate_display_fallback_impls(module, &mut ctx);
+        // `Display` is auto-derived only for plain `enum`s (the bare case name).
+        // A newtype inherits its base's `Display` at the format call site
+        // (`peel_transparent_newtype`), not here. Runs before the `DisplayAlt`
+        // pass, whose `needs_fallback` reads the recorded `Display` impl.
+        generate_enum_display_impls(module, &mut ctx);
         generate_display_alt_fallback_impls(module, &mut ctx);
     }
     project
@@ -1452,6 +1446,138 @@ fn generate_enum_inspect_fn(
         let then_block = TirBlock::new(
             vec![write_str_stmt(
                 format!("{enum_name}::{case_name}"),
+                fmt(),
+                string_type,
+                ref_string_type,
+                span,
+                formatter_name,
+            )],
+            span,
+        );
+        let cond = TirExpr::new(
+            TirExprKind::Binary {
+                left: Box::new(deref_self()),
+                op: TirBinaryOp::Eq,
+                right: Box::new(TirExpr::new(
+                    TirExprKind::IntLiteral {
+                        value: u64::from(*case_index),
+                        repr: case_index.to_string(),
+                    },
+                    enum_type,
+                    span,
+                )),
+            },
+            TypeTable::BOOL,
+            span,
+        );
+        let if_expr = TirExpr::new(
+            TirExprKind::If {
+                condition: Box::new(cond),
+                then_branch: then_block,
+                else_branch: chain
+                    .map(|e| TirBlock::new(vec![TirStmt::new(TirStmtKind::Expr(e), span)], span)),
+            },
+            TypeTable::UNIT,
+            span,
+        );
+        chain = Some(if_expr);
+    }
+
+    let stmts = chain.map_or_else(Vec::new, |e| vec![TirStmt::new(TirStmtKind::Expr(e), span)]);
+    let body = TirBlock::new(stmts, span);
+
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        inspect_params(ref_enum_type, fmt_type, span),
+        TypeTable::UNIT,
+        body,
+        inspect_locals(ref_enum_type, fmt_type),
+    )
+}
+
+/// Auto-derive `EnumName^Display::fmt` writing the bare case name (`Red`),
+/// distinct from `Inspect`'s type-qualified `Color::Red`. Skips enums with a
+/// user-written `Display` impl.
+fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
+    if module.enums.is_empty() {
+        return;
+    }
+
+    let module_source = module.module_source.clone();
+    let display_name = ctx.names.display.clone();
+    let display_method = ctx.names.display_method.clone();
+    let formatter_name = ctx.names.formatter.clone();
+
+    let enum_infos: Vec<_> = module
+        .enums
+        .iter()
+        .map(|e| {
+            let cases: Vec<_> = e.cases.iter().map(|c| (c.name.clone(), c.index)).collect();
+            (e.name.clone(), cases, e.span)
+        })
+        .collect();
+
+    let mut tt = module.type_table.borrow_mut();
+    let formatter_type = tt.make_struct(formatter_name.clone(), ModuleSource::format());
+    let fmt_type = tt.make_mut_ref(formatter_type);
+    let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
+    let ref_string_type = tt.make_ref(string_type);
+
+    let mut generated = Vec::new();
+    for (name, cases, espan) in &enum_infos {
+        if ctx.has_methodful_impl_anywhere(name, &display_name) {
+            continue;
+        }
+        let enum_type = tt.make_enum(name.clone(), module_source.clone());
+        let ref_type = tt.make_ref(enum_type);
+        generated.push(Rc::new(RefCell::new(generate_enum_display_fn(
+            name,
+            cases,
+            enum_type,
+            ref_type,
+            fmt_type,
+            string_type,
+            ref_string_type,
+            *espan,
+            &display_name,
+            &display_method,
+            &formatter_name,
+        ))));
+        ctx.record_impl(name, &display_name);
+    }
+
+    drop(tt);
+    module.functions.extend(generated);
+}
+
+/// Generate `EnumName^Display::fmt(&self, &mut Formatter)` writing the bare case
+/// name. Mirrors [`generate_enum_inspect_fn`] but omits the `EnumName::` prefix.
+#[allow(clippy::too_many_arguments)]
+fn generate_enum_display_fn(
+    enum_name: &str,
+    cases: &[(String, u32)],
+    enum_type: TypeId,
+    ref_enum_type: TypeId,
+    fmt_type: TypeId,
+    string_type: TypeId,
+    ref_string_type: TypeId,
+    span: Span,
+    display_trait: &str,
+    display_method: &str,
+    formatter_name: &str,
+) -> TirFunction {
+    let method_info = trait_method_info(enum_name, display_trait, display_method);
+    let qualified_name = method_info.to_mangled_name();
+
+    let deref_self = || deref_local(0, "self", ref_enum_type, enum_type, span);
+    let fmt = || local_expr(1, "f", fmt_type, span);
+
+    let mut chain: Option<TirExpr> = None;
+    for (case_name, case_index) in cases.iter().rev() {
+        let then_block = TirBlock::new(
+            vec![write_str_stmt(
+                case_name.clone(),
                 fmt(),
                 string_type,
                 ref_string_type,
@@ -2968,22 +3094,12 @@ fn formatter_call(
     TirStmt::new(TirStmtKind::Expr(call), span)
 }
 
-/// Generate `Display::fmt` fallback implementations for types without a user-provided
-/// Display impl. The fallback delegates to `Inspect::inspect`:
+/// Generate a delegating format-trait fallback function whose body is a single
+/// `self.<delegate_method>(f)` call (used by the `DisplayAlt` → `Display`
+/// fallback, and the newtype `Display`/`DisplayAlt` transparent delegation).
 ///
-/// ```text
-/// fn fmt(&self, f: &mut Formatter) { self.inspect(f); }
-/// ```
-fn generate_display_fallback_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
-    let pair = TraitPair::display(ctx.names);
-    generate_fallback_impls(module, ctx, &pair);
-}
-
-/// Generate a `Display::fmt` function that delegates to `self.inspect(f)`.
-///
-/// Used for all type categories (enums, structs, tuples, function types).
-/// The `display_info` and `inspect_info` `LocalMethodName`s determine the exact mangled names.
-/// `impl_type_params` is non-empty for generic structs.
+/// The `display_info` and `inspect_info` `LocalMethodName`s determine the exact
+/// mangled names. `impl_type_params` is non-empty for generic structs.
 fn generate_display_fallback(
     display_info: LocalMethodName,
     inspect_info: LocalMethodName,

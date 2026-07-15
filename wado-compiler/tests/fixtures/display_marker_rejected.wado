@@ -1,0 +1,16 @@
+// `impl Display for Type;` (marker form) is rejected: `Display` is never
+// auto-derived for a struct. Write a real `impl Display { fn fmt ... }` instead.
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Display for Point;
+
+test "display marker is rejected" {
+    let p = Point { x: 1, y: 2 };
+    assert `{p:?}` == "Point { x: 1, y: 2 }";
+}
+
+__DATA__
+{"test": {}, "compile_error": "`Display` is never auto-derived"}

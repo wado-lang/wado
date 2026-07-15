@@ -1,0 +1,14 @@
+// `Display` is not auto-derived: a struct with no `impl Display` cannot be
+// formatted with the default `{x}` specifier. Debug output uses `{x:?}`.
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+test "struct is not displayable without a manual impl" {
+    let p = Point { x: 1, y: 2 };
+    assert `{p}` == "Point { x: 1, y: 2 }";
+}
+
+__DATA__
+{"test": {}, "compile_error": "type `Point` does not implement trait `Display`"}

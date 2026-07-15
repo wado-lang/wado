@@ -1,0 +1,18 @@
+// `{v}` on an unbounded type parameter emits `T^Display::fmt`; when `T` is
+// monomorphized to a non-Display type the trait-bound check rejects it. (Add a
+// `T: Display` bound, or use `{v:?}` for debug output — Inspect is total.)
+struct Point {
+    x: i32,
+}
+
+fn show_display<T>(v: &T) -> String {
+    return `{v}`;
+}
+
+test "unbounded display rejected for a non-Display instantiation" {
+    let p = Point { x: 1 };
+    assert show_display(&p) == "1";
+}
+
+__DATA__
+{"test": {}, "compile_error": "does not implement trait `Display`"}

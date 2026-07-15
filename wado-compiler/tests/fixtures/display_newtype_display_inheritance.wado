@@ -1,0 +1,44 @@
+// A newtype transparently inherits its base type's `Display`, even when that
+// `Display` is compiler-synthesized rather than a real impl: a base enum from
+// another module, and a newtype chain. Regression guard — the eligibility gate
+// must mirror `type_implements_trait`'s base recursion, not a same-module-only
+// `has_impl` on the base name.
+use { DepColor } from "./sub/display_enum_dep.wado";
+
+// Newtype over a plain enum defined in a *different* module.
+type C = DepColor;
+
+// Newtype chain: A -> Meters -> f64 (all in this module, declared out of order).
+type A = Meters;
+type Meters = f64;
+
+// Newtype over a same-module enum, for contrast.
+enum Local {
+    On,
+    Off,
+}
+type L = Local;
+
+test "newtype over a cross-module enum inherits its bare-name Display" {
+    let c = DepColor::Green as C;
+    assert `{c}` == "Green";
+    // `{c:#}` (DisplayAlt) inherits the enum's DisplayAlt (enums have one).
+    assert `{c:#}` == "Green";
+    // Inspect keeps the `as Name` tag; Display is transparent.
+    assert `{c:?}` == "DepColor::Green as C";
+}
+
+test "newtype chain inherits the base primitive Display" {
+    let a = (3.14 as Meters) as A;
+    assert `{a}` == "3.14";
+    // `{a:#}` would inherit `f64`'s (absent) DisplayAlt — a compile error, like
+    // `{3.14:#}` — so it is intentionally not asserted here.
+}
+
+test "newtype over a same-module enum inherits Display" {
+    let l = Local::Off as L;
+    assert `{l}` == "Off";
+}
+
+__DATA__
+{"test": {}}

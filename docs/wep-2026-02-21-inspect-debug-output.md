@@ -2,7 +2,9 @@
 
 ## Context
 
-Wado's type stringification system (WEP: Type Stringification) specifies that `builtin::inspect()` converts any value to its debug string representation. Template strings use it for `{expr:?}` (always inspect) and as the fallback for `{expr}` when no `Display` trait is implemented.
+Wado's type stringification system (WEP: Type Stringification) specifies that `builtin::inspect()` converts any value to its debug string representation. Template strings use it for `{expr:?}` (always inspect).
+
+> Note (2026-07-15): `{expr}` no longer falls back to `Inspect`. `Display` is not auto-derived for arbitrary types, so `{expr}` on a type with no `Display` impl is a compile error — use `{expr:?}` for debug output. See [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md). The historical fallback design below is retained for context.
 
 This WEP defines the output format, the user-facing name, and the compiler implementation strategy.
 
@@ -339,40 +341,40 @@ println(`{arr:#?}`);
 
 The core `synthesize_inspect` phase and the full pipeline integration are implemented. The following table tracks coverage by type:
 
-| Type                       | Status | Notes                                                                                                                                         |
-| -------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `i32`, `i64`, etc.         | Done   | Delegates to `Display::fmt`                                                                                                                   |
-| `u8`, `u16`, etc.          | Done   | Delegates to `Display::fmt`                                                                                                                   |
-| `f32`, `f64`               | Done   | Includes special values (`inf`, `-inf`, `0.0`, `-0.0`)                                                                                        |
-| `bool`                     | Done   | Delegates to `Display::fmt`                                                                                                                   |
-| `char`                     | Done   | Wrapped in single quotes                                                                                                                      |
-| `String`                   | Done   | Escaped, quoted                                                                                                                               |
-| `()` (unit)                | Done   | Outputs `()`                                                                                                                                  |
-| Struct                     | Done   | Fields in declaration order                                                                                                                   |
-| Struct (generic)           | Done   | Type args substituted for field types; type args omitted in name                                                                              |
-| Struct (`#[secret]` field) | Done   | Secret fields skipped with `..` hint; `is_secret` propagated through TIR                                                                      |
-| Tuple                      | Done   |                                                                                                                                               |
-| `List<T>`                  | Done   | Loop-based with comma separation                                                                                                              |
-| `Option::Some(v)`          | Done   | Renders as `Some(inspect(v))`                                                                                                                 |
-| `Option::None` / `null`    | Done   | Renders as `null`                                                                                                                             |
-| Enum                       | Done   | `TypeName::CaseName`                                                                                                                          |
-| Variant (no payload)       | Done   |                                                                                                                                               |
-| Variant (with payload)     | Done   |                                                                                                                                               |
-| Flags                      | Done   | Bitwise decomposition with `\|` join                                                                                                          |
-| Newtype                    | Done   | `value as TypeName`                                                                                                                           |
-| Resource (opaque handle)   | Done   | `TypeName#0xHH` using `LowerHex::fmt`                                                                                                         |
-| `&T`                       | Done   | `&inspect(inner)`                                                                                                                             |
-| `&mut T`                   | Done   | `&mut inspect(inner)`                                                                                                                         |
-| Closure (default)          | Done   | Signature only; dispatched via canonical closure vtable                                                                                       |
-| Closure (`#` alternate)    | Done   | TIR unparsed source; works for indirect calls (param/field/global)                                                                            |
-| Display fallback           | Done   | `{expr}` falls back to inspect when no `Display` impl exists                                                                                  |
-| Nested structs/arrays      | Done   | Recursive inspect for composite fields                                                                                                        |
-| `TreeMap<K, V>`            | Done   | Custom `Inspect`/`InspectAlt`: `{key: value, ...}` format                                                                                     |
-| `TreeSet<T>`               | Done   | Custom `Inspect`/`InspectAlt`: `{elem, ...}` format                                                                                           |
-| `Value` (json\_value)      | Done   | Custom `Inspect`/`InspectAlt`: JSON-like format                                                                                               |
-| Pretty-print (`:#?`)       | Done   | `InspectAlt` trait with `Formatter` indent tracking                                                                                           |
-| `never` (`!`)              | Done   | `impl Inspect for !` with an unreachable body — uninhabited, so no value ever reaches it; makes `Inspect` total (e.g. `Result<T, !>::unwrap`) |
-| `List<List<T>>`            | Done   | Recursive inspect (nested-array codegen bug resolved)                                                                                         |
+| Type                       | Status  | Notes                                                                                                                                                              |
+| -------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `i32`, `i64`, etc.         | Done    | Delegates to `Display::fmt`                                                                                                                                        |
+| `u8`, `u16`, etc.          | Done    | Delegates to `Display::fmt`                                                                                                                                        |
+| `f32`, `f64`               | Done    | Includes special values (`inf`, `-inf`, `0.0`, `-0.0`)                                                                                                             |
+| `bool`                     | Done    | Delegates to `Display::fmt`                                                                                                                                        |
+| `char`                     | Done    | Wrapped in single quotes                                                                                                                                           |
+| `String`                   | Done    | Escaped, quoted                                                                                                                                                    |
+| `()` (unit)                | Done    | Outputs `()`                                                                                                                                                       |
+| Struct                     | Done    | Fields in declaration order                                                                                                                                        |
+| Struct (generic)           | Done    | Type args substituted for field types; type args omitted in name                                                                                                   |
+| Struct (`#[secret]` field) | Done    | Secret fields skipped with `..` hint; `is_secret` propagated through TIR                                                                                           |
+| Tuple                      | Done    |                                                                                                                                                                    |
+| `List<T>`                  | Done    | Loop-based with comma separation                                                                                                                                   |
+| `Option::Some(v)`          | Done    | Renders as `Some(inspect(v))`                                                                                                                                      |
+| `Option::None` / `null`    | Done    | Renders as `null`                                                                                                                                                  |
+| Enum                       | Done    | `TypeName::CaseName`                                                                                                                                               |
+| Variant (no payload)       | Done    |                                                                                                                                                                    |
+| Variant (with payload)     | Done    |                                                                                                                                                                    |
+| Flags                      | Done    | Bitwise decomposition with `\|` join                                                                                                                               |
+| Newtype                    | Done    | `value as TypeName`                                                                                                                                                |
+| Resource (opaque handle)   | Done    | `TypeName#0xHH` using `LowerHex::fmt`                                                                                                                              |
+| `&T`                       | Done    | `&inspect(inner)`                                                                                                                                                  |
+| `&mut T`                   | Done    | `&mut inspect(inner)`                                                                                                                                              |
+| Closure (default)          | Done    | Signature only; dispatched via canonical closure vtable                                                                                                            |
+| Closure (`#` alternate)    | Done    | TIR unparsed source; works for indirect calls (param/field/global)                                                                                                 |
+| Display fallback           | Removed | `{expr}` no longer falls back to inspect (2026-07-15); a missing `Display` is a compile error. See [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md) |
+| Nested structs/arrays      | Done    | Recursive inspect for composite fields                                                                                                                             |
+| `TreeMap<K, V>`            | Done    | Custom `Inspect`/`InspectAlt`: `{key: value, ...}` format                                                                                                          |
+| `TreeSet<T>`               | Done    | Custom `Inspect`/`InspectAlt`: `{elem, ...}` format                                                                                                                |
+| `Value` (json\_value)      | Done    | Custom `Inspect`/`InspectAlt`: JSON-like format                                                                                                                    |
+| Pretty-print (`:#?`)       | Done    | `InspectAlt` trait with `Formatter` indent tracking                                                                                                                |
+| `never` (`!`)              | Done    | `impl Inspect for !` with an unreachable body — uninhabited, so no value ever reaches it; makes `Inspect` total (e.g. `Result<T, !>::unwrap`)                      |
+| `List<List<T>>`            | Done    | Recursive inspect (nested-array codegen bug resolved)                                                                                                              |
 
 ### Additional Fixes
 

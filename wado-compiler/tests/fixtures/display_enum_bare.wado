@@ -1,0 +1,34 @@
+// Plain enums auto-derive `Display` as the *bare* case name (`Red`), distinct
+// from `Inspect`'s type-qualified `Color::Red`. `DisplayAlt` (`{x:#}`) delegates
+// to `Display`, and `push_display` accepts an enum.
+use { PushDisplay } from "core:prelude/format.wado";
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+fn show_display<T: Display>(v: &T) -> String {
+    return `{v}`;
+}
+
+test "enum Display is the bare case name" {
+    let c = Color::Green;
+    assert `{c}` == "Green";
+    assert `{c:?}` == "Color::Green";
+    assert `{c:#}` == "Green";
+}
+
+test "enum satisfies a T: Display bound" {
+    assert show_display(&Color::Blue) == "Blue";
+}
+
+test "push_display accepts an enum" {
+    let mut s = "";
+    s.push_display(&Color::Red);
+    assert s == "Red";
+}
+
+__DATA__
+{"test": {}}

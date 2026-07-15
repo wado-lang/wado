@@ -254,7 +254,7 @@ let hex_alt = `{255:#x}`;                // "0xff" (via alternate flag)
 // Inspect — auto-derived debug outputs (see docs/wep-2026-02-21-inspect-debug-output.md)
 println(`{point:?}`);                    // "Point { x: 10, y: 20 }"
 println(`{point:#?}`);                   // pretty-print with indentation (see below)
-println(`{point}`);                      // falls back to inspect when no Display impl
+// `{point}` (Display) needs an `impl Display for Point`; use `{point:?}` for debug.
 
 // Pretty-print (:#?) — multi-line indented output for composite types
 let arr: List<i32> = [1, 2, 3];
@@ -980,7 +980,7 @@ struct Broken { retries: i32 = 3, name: String }
 impl Default for Broken;   // ERROR: `name` has no default expression
 ```
 
-The format traits (`Inspect` / `InspectAlt` / `Display` / `DisplayAlt`) are always available for every type. Unimplemented ones delegate `InspectAlt → Inspect`, `Display → Inspect`, `DisplayAlt → Display` — so `{x:#}` defaults to plain display while `{x:#?}` pretty-prints. A newtype renders transparently under `Display`; only `Inspect` adds the `as Name` annotation.
+`{x:?}` / `{x:#?}` (`Inspect` / `InspectAlt`) work for every type. `{x}` (`Display`) uses the type's `impl Display`: primitives, `String`, plain enums (bare case name, e.g. `Red`), and newtypes (inherited from the base) have one; other types need a hand-written impl, else `{x}` is a compile error and `{x:?}` gives the debug form. `{x:#}` (`DisplayAlt`) follows `Display`.
 
 A hand-written `impl Trait for T { … }` always wins. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
@@ -1297,7 +1297,7 @@ Each parameter resolves highest priority first: `-D NAME=value` (alias `--define
 
 struct Foo {
     #[secret]
-    password: String,      // won't be shown in Display / Inspect
+    password: String,      // omitted from Inspect (`{x:?}`)
 }
 
 #[inline]                  // hint: prefer inlining
