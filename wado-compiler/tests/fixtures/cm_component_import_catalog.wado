@@ -1,4 +1,4 @@
-use { CmCatalog, Color, Point, Shape, Perms, Mixed, Meters } from "./sub/cm-catalog.wasm" with { type: "wasm" };
+use { CmCatalog, Color, Point, Single, Shape, Perms, Mixed, Meters } from "./sub/cm-catalog.wasm" with { type: "wasm" };
 
 test "primitives round-trip" {
     assert CmCatalog::id_bool(true) == true;
@@ -58,6 +58,13 @@ test "result round-trip" {
 
 test "record round-trip" {
     assert CmCatalog::id_record(Point { x: 1.5, y: 2.5 }) == Point { x: 1.5, y: 2.5 };
+}
+
+test "flat-result record round-trip" {
+    // `Single` flattens to a single core value, so the component returns it
+    // flat (not via an outptr); the import binding must reconstruct the struct.
+    assert CmCatalog::id_record_flat(Single { value: 42 }) == Single { value: 42 };
+    assert CmCatalog::id_record_flat(Single { value: 0 }) == Single { value: 0 };
 }
 
 test "variant round-trip" {

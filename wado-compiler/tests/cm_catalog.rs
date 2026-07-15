@@ -142,7 +142,7 @@ where
 
 /// FQ of the synthesized library world. Mirrors `lib_world_fq` in
 /// `wado-cli`: `namespace:name/name@version`.
-const LIB_WORLD_FQ: &str = "wado-lang:cm-catalog/cm-catalog@0.1.0";
+const LIB_WORLD_FQ: &str = "wado-lang:cm-catalog/cm-catalog@0.0.16";
 
 const FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -217,6 +217,9 @@ fn cases() -> Vec<Case> {
         case("id-result-unit", Val::Result(Ok(None))),
         // Named value types.
         case("id-record", point()),
+        // A record that flattens to a single core value is returned flat, not
+        // via an outptr.
+        case("id-record-flat", Val::Record(vec![("value".into(), Val::U64(42))])),
         case("id-enum", Val::Enum("green".into())),
         case(
             "id-variant",

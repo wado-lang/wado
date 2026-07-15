@@ -40,7 +40,7 @@ use super::lower::{
 };
 use super::types::{
     LiftContext, binary_add, cm_param_align, cm_param_size, cm_param_store_plan,
-    cm_type_to_type_id, flatten_param_type, needs_flat_result_lifting,
+    cm_type_to_type_id, cm_val_type_to_type_id, flatten_param_type, needs_flat_result_lifting,
 };
 
 /// Build the binding function name for a WASI import.
@@ -267,17 +267,14 @@ fn wasi_return_type_id(
             // Outptr: raw call returns void; result is read from outptr
             TypeTable::UNIT
         } else if let Some(ty) = &func_info.return_type {
-            // Flat return: use the core type
-            match ty {
-                Type::Named(n) => match n.name.as_str() {
-                    "i32" | "u32" => TypeTable::I32,
-                    "i64" | "u64" => TypeTable::I64,
-                    "f32" => TypeTable::F32,
-                    "f64" => TypeTable::F64,
-                    "bool" => TypeTable::I32, // CM returns bool as i32
-                    _ => TypeTable::I32,
-                },
-                _ => TypeTable::I32,
+            // Flat return: the raw call yields the type's single flat core
+            // value. `needs_outptr` is false, so `cm_flatten` produces at most
+            // one value — a record/variant that flattens to a single core value
+            // (`{ n: u64 }` -> `[i64]`) resolves to that value's core type, not
+            // a blanket `i32`.
+            match cm_interface_registry.cm_flatten(ty).first().copied() {
+                Some(vt) => cm_val_type_to_type_id(vt),
+                None => TypeTable::UNIT,
             }
         } else {
             TypeTable::UNIT
@@ -1637,6 +1634,20 @@ pub(super) fn synthesize_adapter(
         adapter_return_type = lifted_type_id; // real type, fixed up at call site if needed
     } else if let Some(return_type) = &func_info.return_type {
         let resolved = cm_interface_registry.resolve_type(return_type);
+        let return_flat = cm_interface_registry.cm_flatten(&resolved);
+        // A record flattening to a single core value returns flat, yet the
+        // binding must rebuild the GC struct. Enums/newtypes flatten to their
+        // scalar representation and pass through as-is; only a struct needs the
+        // reconstruction below.
+        let is_flat_struct = return_flat.len() == 1
+            && matches!(&resolved, Type::Named(n)
+                if cm_interface_registry
+                    .resolve_cm_source_for(n, Some(func_info.package.as_str()))
+                    .is_some_and(|s| {
+                        cm_interface_registry
+                            .get_struct_fields_by_source(s, &n.name)
+                            .is_some()
+                    }));
         if needs_flat_result_lifting(&resolved) {
             // Flat return with complex type (e.g., Result<(), ()>): the raw call returns
             // an i32 discriminant on the stack, but the binding needs to return a GC struct.
@@ -1687,6 +1698,82 @@ pub(super) fn synthesize_adapter(
                 &mut locals,
                 &lift_ctx,
             );
+            let lifted_type_id = lifted.type_id;
+            body_stmts.push(return_stmt(Some(lifted)));
+            adapter_return_type = lifted_type_id;
+        } else if is_flat_struct {
+            // Spill the single flat core value into a scratch buffer sized to
+            // that value, then reuse the registry-aware memory lift. The sole
+            // non-unit leaf field sits at offset 0 (every other field is
+            // zero-sized), so the buffer is the canonical memory image the lift
+            // reads through.
+            let (store_op, byte_width) = match return_flat[0] {
+                crate::cm_abi::CmValType::I32 => ("i32_store", 4),
+                crate::cm_abi::CmValType::I64 => ("i64_store", 8),
+                crate::cm_abi::CmValType::F32 => ("f32_store", 4),
+                crate::cm_abi::CmValType::F64 => ("f64_store", 8),
+            };
+            let flat_local = alloc_local(&mut next_local, &mut locals, raw_call_return_type);
+            body_stmts.push(let_stmt(
+                "__flat",
+                flat_local,
+                raw_call_return_type,
+                raw_call_expr,
+            ));
+
+            let buf_local = alloc_local(&mut next_local, &mut locals, TypeTable::I32);
+            body_stmts.push(let_stmt(
+                "__flat_buf",
+                buf_local,
+                TypeTable::I32,
+                builtin_call(
+                    "realloc",
+                    vec![
+                        i32_const(0),
+                        i32_const(0),
+                        i32_const(byte_width),
+                        i32_const(byte_width),
+                    ],
+                    TypeTable::I32,
+                ),
+            ));
+            body_stmts.push(expr_stmt(builtin_call(
+                store_op,
+                vec![
+                    local_ref(buf_local, "__flat_buf", TypeTable::I32),
+                    local_ref(flat_local, "__flat", raw_call_return_type),
+                ],
+                TypeTable::UNIT,
+            )));
+
+            let lift_ctx = LiftContext {
+                cm_interface_registry,
+                type_table,
+                cm_package: &func_info.package,
+                interner,
+            };
+            let lifted = synthesize_lift(
+                &resolved,
+                local_ref(buf_local, "__flat_buf", TypeTable::I32),
+                &mut next_local,
+                &mut body_stmts,
+                &mut locals,
+                &lift_ctx,
+            );
+            let lifted =
+                materialize_if_needed(lifted, &mut next_local, &mut body_stmts, &mut locals);
+
+            body_stmts.push(expr_stmt(builtin_call(
+                "realloc",
+                vec![
+                    local_ref(buf_local, "__flat_buf", TypeTable::I32),
+                    i32_const(byte_width),
+                    i32_const(byte_width),
+                    i32_const(0),
+                ],
+                TypeTable::I32,
+            )));
+
             let lifted_type_id = lifted.type_id;
             body_stmts.push(return_stmt(Some(lifted)));
             adapter_return_type = lifted_type_id;

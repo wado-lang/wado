@@ -3864,31 +3864,15 @@ pub fn is_cm_function_supported(func: &CmFunctionInfo) -> bool {
 pub const MAX_FLAT_RESULTS: usize = 1;
 
 /// Whether a return type must be returned via an outptr rather than as flat
-/// core results. Single source of truth shared by the import-binding synthesizer
-/// and the core functype builder, so the two never disagree on a signature.
+/// core results. The canonical ABI returns a result flat when it flattens to at
+/// most `MAX_FLAT_RESULTS` core values and via an outptr otherwise, regardless
+/// of whether the type is a record, variant, or primitive. `cm_flatten`
+/// recurses into records and variants, so the flat count is the single rule —
+/// a single-field record (`{ n: u64 }` -> `[i64]`) returns flat, a multi-value
+/// record returns via the outptr. Shared by the import-binding synthesizer and
+/// the core functype builder so the two never disagree on a signature.
 pub fn cm_return_needs_outptr(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
     registry.cm_flatten(ty).len() > MAX_FLAT_RESULTS
-        || cm_named_type_return_needs_outptr(ty, registry)
-}
-
-/// Whether a named CM type is a record or payload-bearing variant (returned via
-/// an outptr). Resolves the source through the registry so WASI, `--lib`, and
-/// component-imported types are all recognised.
-pub fn cm_named_type_return_needs_outptr(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
-    if let Type::Named(named) = ty
-        && let Some(source) = registry.resolve_cm_source_for(named, None)
-    {
-        if let Some(cases) = registry.get_variant_cases_by_source(source, &named.name) {
-            return cases.iter().any(|case| case.payload.is_some());
-        }
-        if registry
-            .get_struct_fields_by_source(source, &named.name)
-            .is_some()
-        {
-            return true;
-        }
-    }
-    false
 }
 
 /// Registry-aware CM canonical ABI size for a type.
@@ -4646,5 +4630,48 @@ mod tests {
             registry.resolve_type_preserving_local_newtypes(&temp),
             Type::Named(n) if n.name == "u64"
         ));
+    }
+
+    #[test]
+    fn single_flat_value_record_returns_flat_not_outptr() {
+        // A record flattening to a single core value (`Single { n: u64 }` ->
+        // [i64]) is returned flat per the canonical ABI (MAX_FLAT_RESULTS = 1),
+        // not via an outptr. A multi-value record (`Point { x, y }` ->
+        // [f64, f64]) uses the outptr, and so does a single-field record whose
+        // field itself spans >1 core value (`Wrap { s: String }` -> [i32, i32]).
+        let mut registry = CmInterfaceRegistry::new();
+        let iface = "pkg:app/app@1";
+        registry.structs.insert(
+            (iface.into(), "Single".into()),
+            ("single".into(), vec![("n".into(), named("u64", None))], vec![]),
+        );
+        registry.structs.insert(
+            (iface.into(), "Point".into()),
+            (
+                "point".into(),
+                vec![
+                    ("x".into(), named("f64", None)),
+                    ("y".into(), named("f64", None)),
+                ],
+                vec![],
+            ),
+        );
+        registry.structs.insert(
+            (iface.into(), "Wrap".into()),
+            ("wrap".into(), vec![("s".into(), named("String", None))], vec![]),
+        );
+
+        assert!(
+            !cm_return_needs_outptr(&named("Single", Some(iface)), &registry),
+            "single core-value record must return flat"
+        );
+        assert!(
+            cm_return_needs_outptr(&named("Point", Some(iface)), &registry),
+            "multi core-value record must use outptr"
+        );
+        assert!(
+            cm_return_needs_outptr(&named("Wrap", Some(iface)), &registry),
+            "record spanning >1 core value must use outptr"
+        );
     }
 }

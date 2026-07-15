@@ -508,7 +508,7 @@ mod tests {
         let b = build_bindings(&resolve, world).expect("build bindings");
         assert_eq!(
             b.interface_fqs,
-            vec!["wado-lang:cm-catalog/cm-catalog@0.1.0"]
+            vec!["wado-lang:cm-catalog/cm-catalog@0.0.16"]
         );
 
         let mut iface = None;
@@ -530,7 +530,7 @@ mod tests {
         // A primitive identity and a named-type identity, with cm metadata.
         let id_u32 = iface.methods.iter().find(|m| m.name == "id_u32").unwrap();
         let cm = id_u32.attrs[0].as_cm_import().unwrap();
-        assert_eq!(cm.interface_path(), "wado-lang:cm-catalog/cm-catalog@0.1.0");
+        assert_eq!(cm.interface_path(), "wado-lang:cm-catalog/cm-catalog@0.0.16");
         assert_eq!(cm.function.as_deref(), Some("id-u32"));
 
         let id_record = iface
@@ -543,7 +543,7 @@ mod tests {
                 assert_eq!(n.name, "Point");
                 assert_eq!(
                     n.source_interface.as_deref(),
-                    Some("wado-lang:cm-catalog/cm-catalog@0.1.0")
+                    Some("wado-lang:cm-catalog/cm-catalog@0.0.16")
                 );
             }
             other => panic!("expected Named Point, got {other:?}"),
@@ -565,7 +565,7 @@ mod tests {
                 assert_eq!(n.name, "Meters");
                 assert_eq!(
                     n.source_interface.as_deref(),
-                    Some("wado-lang:cm-catalog/cm-catalog@0.1.0")
+                    Some("wado-lang:cm-catalog/cm-catalog@0.0.16")
                 );
             }
             other => panic!("expected Named Meters, got {other:?}"),
