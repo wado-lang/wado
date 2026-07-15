@@ -2732,7 +2732,18 @@ impl TypeTable {
             ResolvedType::MutRef(inner) => {
                 format!("&mut {}", self.mangle_type_arg_for_generic(*inner))
             }
-            // Primitives / arrays / functions delegate to `mangle_type_name`.
+            // A raw GC array must carry its element's *qualified* mangle.
+            // Delegating to `mangle_type_name` (the `_` arm) mangles the
+            // element unqualified, so `Array<Foo>` built from two modules'
+            // same-named structs collapses to one mangle — merging their
+            // otherwise-distinct `$value_copy$` helpers into a single helper
+            // whose one concrete signature then mismatches the other array's
+            // ref type (invalid Wasm). Structs / variants / generic instances
+            // are already module-qualified above; arrays must match.
+            ResolvedType::BuiltinArray(elem) => {
+                crate::name::mangle_builtin_array_type(&self.mangle_type_arg_for_generic(*elem))
+            }
+            // Primitives / functions delegate to `mangle_type_name`.
             _ => self.mangle_type_name(id),
         }
     }

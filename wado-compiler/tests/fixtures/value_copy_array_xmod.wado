@@ -1,0 +1,29 @@
+// A bare `Array<Foo>` value-copies through a synthesized `$value_copy$` helper.
+// Two modules each declaring a struct named `Foo` mangle their array helpers by
+// the element's name; if that name is not module-qualified, `Array<FooA>` and
+// `Array<FooB>` collapse onto one helper whose single concrete signature then
+// mismatches the other array's ref type (invalid Wasm). The two arrays must
+// keep distinct helpers and detach independently on copy.
+use { Foo as FooA } from "./sub/value_copy_array_xmod_a.wado";
+use { Foo as FooB } from "./sub/value_copy_array_xmod_b.wado";
+
+test "bare Array of same-named cross-module structs keeps distinct copy helpers" {
+    let mut arr_a: Array<FooA> = builtin::array_new(1);
+    arr_a[0] = FooA { a: [1] };
+    let mut arr_b: Array<FooB> = builtin::array_new(1);
+    arr_b[0] = FooB { b: [2], c: [3] };
+
+    let mut a2 = arr_a;
+    let mut b2 = arr_b;
+
+    a2[0].a.push(9);
+    b2[0].b.push(9);
+
+    assert arr_a[0].a.len() == 1;
+    assert arr_b[0].b.len() == 1;
+    assert a2[0].a.len() == 2;
+    assert b2[0].b.len() == 2;
+}
+
+__DATA__
+{"test": {}}
