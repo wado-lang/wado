@@ -271,24 +271,65 @@ fn extend_reachable_for_optimizer_passes(
     // same type, so a raw-id map would miss the shared helper and DCE would
     // drop it, panicking codegen with "references a value-copy helper ... that
     // was not synthesized".
-    let type_table = project.type_table.borrow();
-    let helpers_by_mangle: IndexMap<String, FunctionId> = project
-        .functions
-        .iter()
-        .filter_map(|func_rc| {
-            let func = func_rc.borrow();
-            if let crate::nir::FunctionKind::ValueCopy { type_id } = func.kind
-                && type_table.get_pruned(type_id).is_some()
-            {
-                Some((
-                    type_table.mangle_type_arg_for_generic(type_id),
-                    function_id_for(&func),
-                ))
-            } else {
-                None
-            }
-        })
-        .collect();
+    // Precompute — while the type table is borrowed — the helper map and,
+    // per function, the canonical mangles of every `array_clone::<T>`
+    // element it names. Both the helper mangles and the per-site mangles
+    // are intern-order-stable, so each is canonicalized exactly once here
+    // rather than re-derived on every fixpoint round; the borrow is then
+    // released before the loop, so `compute_reachable` never runs under a
+    // live `TypeTable` borrow.
+    let (helpers_by_mangle, candidates): (
+        IndexMap<String, FunctionId>,
+        Vec<(FunctionId, Vec<String>)>,
+    ) = {
+        let type_table = project.type_table.borrow();
+        let helpers = project
+            .functions
+            .iter()
+            .filter_map(|func_rc| {
+                let func = func_rc.borrow();
+                if let crate::nir::FunctionKind::ValueCopy { type_id } = func.kind
+                    && type_table.get_pruned(type_id).is_some()
+                {
+                    Some((
+                        type_table.mangle_type_arg_for_generic(type_id),
+                        function_id_for(&func),
+                    ))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let candidates = project
+            .functions
+            .iter()
+            .map(|func_rc| {
+                let func = func_rc.borrow();
+                let func_id = function_id_for(&func);
+                let mut mangles = Vec::new();
+                if let Some(body) = func.body.as_ref() {
+                    let mut needed: IndexSet<crate::tir::TypeId> = IndexSet::default();
+                    collect_array_clone_element_types(body, descriptors, &mut needed);
+                    for type_id in needed {
+                        // A stale `array_clone::<T>` can name a type already
+                        // pruned from the table; it has no helper, so skip it
+                        // rather than canonicalize an absent id (the mangle
+                        // recursion resolves ids through `TypeTable::get`,
+                        // which panics on a missing slot). Guarding only the
+                        // top-level id is sufficient: DCE's `retain` keeps the
+                        // transitive closure over exactly the edges the mangle
+                        // recurses through, so a surviving top-level type never
+                        // has a pruned mangle-reachable component.
+                        if type_table.get_pruned(type_id).is_some() {
+                            mangles.push(type_table.mangle_type_arg_for_generic(type_id));
+                        }
+                    }
+                }
+                (func_id, mangles)
+            })
+            .collect();
+        (helpers, candidates)
+    };
     // Iterate to a fixpoint: a helper newly marked reachable may itself
     // call `array_clone::<T'>` for some `T'` whose helper isn't reachable
     // yet, and `compute_reachable` only follows direct call-graph edges
@@ -297,29 +338,16 @@ fn extend_reachable_for_optimizer_passes(
     // codegen with `WirInstr::ArrayClone references unknown helper ...`.
     loop {
         let mut added_this_round = false;
-        for func_rc in &project.functions {
-            let func = func_rc.borrow();
-            let func_id = function_id_for(&func);
-            if !reachable.contains(&func_id) {
+        for (func_id, mangles) in &candidates {
+            if !reachable.contains(func_id) {
                 continue;
             }
-            if let Some(body) = func.body.as_ref() {
-                let mut needed: IndexSet<crate::tir::TypeId> = IndexSet::default();
-                collect_array_clone_element_types(body, descriptors, &mut needed);
-                for type_id in needed {
-                    // A stale `array_clone::<T>` can name a type already pruned
-                    // from the table; it has no helper, so skip it rather than
-                    // panic in the mangle's `TypeTable::get`.
-                    if type_table.get_pruned(type_id).is_none() {
-                        continue;
-                    }
-                    if let Some(helper_id) =
-                        helpers_by_mangle.get(&type_table.mangle_type_arg_for_generic(type_id))
-                        && !reachable.contains(helper_id)
-                    {
-                        reachable.extend(compute_reachable(call_graph, helper_id));
-                        added_this_round = true;
-                    }
+            for mangle in mangles {
+                if let Some(helper_id) = helpers_by_mangle.get(mangle)
+                    && !reachable.contains(helper_id)
+                {
+                    reachable.extend(compute_reachable(call_graph, helper_id));
+                    added_this_round = true;
                 }
             }
         }

@@ -162,8 +162,9 @@ fn generate_copy_function(
     let resolved = type_table.borrow().get(type_id).clone();
     let module_source = helper_module.clone();
     let span = dummy_span();
-    let name =
-        crate::name::value_copy_helper_name(&type_table.borrow().mangle_type_arg_for_generic(type_id));
+    let name = crate::name::value_copy_helper_name(
+        &type_table.borrow().mangle_type_arg_for_generic(type_id),
+    );
 
     let v_local = TirExpr::new(
         TirExprKind::Local {

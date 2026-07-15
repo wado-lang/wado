@@ -49,6 +49,10 @@ struct WirEmitter<'a> {
     func_index_offset: u32,
     /// Map from `WirFuncId` index → Wasm function index.
     func_index_map: IndexMap<u32, u32>,
+    /// Map from a `$value_copy$` helper's `value_copy_mangle` metadata to
+    /// its Wasm function index. Built once so `ArrayClone` emission resolves
+    /// its per-element helper in O(1) instead of scanning `wir.functions`.
+    value_copy_wasm_index: IndexMap<String, u32>,
     /// Map from global fq name to Wasm global index.
     global_name_map: IndexMap<String, u32>,
     /// Local name map for current function.
@@ -91,6 +95,7 @@ impl<'a> WirEmitter<'a> {
             struct_field_map: IndexMap::default(),
             func_index_offset: 0,
             func_index_map: IndexMap::default(),
+            value_copy_wasm_index: IndexMap::default(),
             global_name_map: IndexMap::default(),
             current_locals: IndexMap::default(),
             ref_locals: IndexSet::default(),
@@ -647,11 +652,19 @@ impl<'a> WirEmitter<'a> {
         }
         // Defined functions use DEFINED_FUNC_BASE + list_position as WirFuncId,
         // mapped to actual Wasm indices starting after imports.
-        for (wasm_idx, (i, _func)) in
+        for (wasm_idx, (i, func)) in
             (self.func_index_offset..).zip(self.wir.functions.iter().enumerate())
         {
             let wir_func_idx = DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
             self.func_index_map.insert(wir_func_idx, wasm_idx);
+            // First-wins mirrors the previous linear scan (which returned the
+            // first matching helper); after synthesis dedup each mangle is
+            // unique among helpers anyway.
+            if let Some(mangle) = &func.value_copy_mangle {
+                self.value_copy_wasm_index
+                    .entry(mangle.clone())
+                    .or_insert(wasm_idx);
+            }
         }
     }
 
@@ -2914,13 +2927,7 @@ impl<'a> WirEmitter<'a> {
     /// between `array.get` and `array.set`. Resolution is by the helper's
     /// `value_copy_mangle` metadata, not by parsing its name.
     fn resolve_function_index_by_value_copy_mangle(&self, copy_mangle: &str) -> Option<u32> {
-        for (i, func) in self.wir.functions.iter().enumerate() {
-            if func.value_copy_mangle.as_deref() == Some(copy_mangle) {
-                let wir_func_idx = crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).ok()?;
-                return self.func_index_map.get(&wir_func_idx).copied();
-            }
-        }
-        None
+        self.value_copy_wasm_index.get(copy_mangle).copied()
     }
 
     fn get_func_type(&self, wir_type_idx: u32) -> Option<&WirFuncType> {
