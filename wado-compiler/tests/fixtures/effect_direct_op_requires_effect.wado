@@ -1,0 +1,11 @@
+// A direct interface-operation call requires the interface's effect: a bare
+// `MonotonicClock::now()` outside any `with MonotonicClock` is a missing-effect
+// error (effect operations are no longer an unchecked escape hatch).
+use { MonotonicClock } from "wasi:clocks";
+
+export fn run() {
+    let _t = MonotonicClock::now();
+}
+
+__DATA__
+{"compile_error": "missing effect 'MonotonicClock'"}

@@ -239,19 +239,29 @@ fn collect_export_interface_fqs(
     }
 }
 
-/// The flat sorted FQ list, for the WIT producer's world import refs.
+/// The flat sorted FQ list of interfaces the *composed* artifact imports, for
+/// the WIT producer's world import refs and the import-plan faithfulness check.
 ///
-/// `ImportKind::Component` is excluded: the dependency is composed in, so the
-/// final artifact does not import its interface.
+/// An `ImportKind::Component` entry's interface is composed away, so it is
+/// substituted with the dependency's own host-leaf import FQs (empty for a pure
+/// dependency); the list then mirrors the composed binary, not the
+/// pre-composition core.
 #[must_use]
-pub fn import_plan_fqs(plan: &[ImportEntry]) -> Vec<String> {
-    let mut out: Vec<String> = plan
-        .iter()
-        .filter(|e| e.kind != ImportKind::Component)
-        .map(|e| e.fq.clone())
-        .collect();
-    out.sort();
-    out
+pub fn imported_cm_interface_fqs(project: &NirPackage, plan: &[ImportEntry]) -> Vec<String> {
+    let registry = &project.cm_interface_registry;
+    let mut out: IndexSet<String> = IndexSet::default();
+    for entry in plan {
+        if entry.kind == ImportKind::Component {
+            for fq in registry.host_leaf_imports_for(&entry.fq) {
+                out.insert(fq.clone());
+            }
+        } else {
+            out.insert(entry.fq.clone());
+        }
+    }
+    let mut list: Vec<String> = out.into_iter().collect();
+    list.sort();
+    list
 }
 
 /// Whether the component needs the canonical `wasi:cli/types#error-code`.

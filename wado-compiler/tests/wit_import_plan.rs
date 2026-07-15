@@ -216,3 +216,81 @@ fn plan_excludes_type_alias_only_clock_types() {
         "{imports:?}"
     );
 }
+
+/// Compile `source` (which imports a CM component from `tests/fixtures/sub/`)
+/// against the filesystem and return `(plan, actual)`: the type-level import
+/// plan and the composed binary's real imports.
+fn component_plan_and_actual(source: &str) -> (BTreeSet<String>, BTreeSet<String>) {
+    let base = std::path::PathBuf::from(format!("{}/tests/fixtures", env!("CARGO_MANIFEST_DIR")));
+
+    let plan: BTreeSet<String> = {
+        let host = common::FilesystemHost::new(base.clone());
+        let dump = block_on(dump_with_host_and_world(
+            source,
+            &host,
+            Some("entry.wado"),
+            OptLevel::O2,
+            None,
+            None,
+            None,
+            None,
+            &[],
+            &wado_compiler::hashmap::IndexMap::default(),
+            wado_compiler::param_resolution::ParamPolicy::default(),
+            wado_compiler::kiln::InvocationIndex::default(),
+        ))
+        .expect("dump succeeds");
+        dump.wir_package
+            .expect("wir package present after dump")
+            .imported_cm_interfaces
+            .iter()
+            .cloned()
+            .collect()
+    };
+
+    let actual: BTreeSet<String> = {
+        let host = common::FilesystemHost::new(base);
+        let result = block_on(compile_with_host(
+            source,
+            &host,
+            Some("entry.wado"),
+            OptLevel::O2,
+        ))
+        .expect("compile succeeds");
+        let mut wat = String::new();
+        wasmprinter::Config::new()
+            .print(&result.wasm, &mut wasmprinter::PrintFmtWrite(&mut wat))
+            .expect("print wat");
+        wat.split("(import \"")
+            .skip(1)
+            .filter_map(|frag| frag.split('"').next())
+            .filter(|n| {
+                (n.starts_with("wasi:") || n.starts_with("core:"))
+                    && n.contains('/')
+                    && n.contains('@')
+            })
+            .map(str::to_string)
+            .collect()
+    };
+    (plan, actual)
+}
+
+#[test]
+fn plan_reconstructs_a_composed_dependency_host_leaf() {
+    // A consumer that only calls a cm-catalog function imports nothing of its
+    // own, yet the composed binary imports `wasi:cli/types` — the shared error
+    // code cm-catalog's async exports carry. Effect reconstruction substitutes
+    // the composed-away `CmCatalog` component with that host-leaf, so the plan
+    // mirrors the binary instead of reporting an empty import set.
+    let source = "use { CmCatalog } from \"./sub/cm-catalog.wasm\" with { type: \"wasm\" };\n\
+                  export fn run() {\n    let _ = CmCatalog::id_u32(42);\n}";
+    let (plan, actual) = component_plan_and_actual(source);
+    assert_eq!(
+        plan, actual,
+        "import plan diverges from the composed component\nplan:   {plan:?}\nactual: {actual:?}"
+    );
+    assert!(
+        plan.iter().any(|i| i.contains("cli/types")),
+        "reconstructed host-leaf import missing from plan: {plan:?}"
+    );
+}

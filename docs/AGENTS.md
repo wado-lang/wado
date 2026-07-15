@@ -142,3 +142,4 @@ It may include TODOs on WIP.
 - [Struct Walkability — Field Walks over `Reflect` and `#[secret]` Fields](./wep-2026-07-10-struct-walkability.md)
 - [Elaborator God-Object Dismantlement — Decl Signatures, Scope, and the Body Walker](./wep-2026-07-10-elaborator-god-object-dismantlement.md)
 - [Gale Highlight Query — Customizable Syntax Highlighting](./wep-2026-07-12-gale-highlight-query.md)
+- [Effect Reconstruction from CM Component Imports](./wep-2026-07-15-cm-import-effect-reconstruction.md)

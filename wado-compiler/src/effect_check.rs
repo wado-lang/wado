@@ -356,6 +356,8 @@ struct OwnedEffectData {
     variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>>,
     closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
     effect_by_name: IndexMap<String, EffectRef>,
+    interface_meta: IndexMap<String, (ModuleSource, Option<String>)>,
+    effect_by_cm_fq: IndexMap<String, EffectRef>,
 }
 
 impl OwnedEffectData {
@@ -440,6 +442,39 @@ impl OwnedEffectData {
             }
         }
 
+        // `interface_meta` resolves a `Local(E)` callee to (declaring module,
+        // `#[cm]` FQ); `effect_by_cm_fq` maps a CM FQ back to the effect it
+        // declares, restricted to closure keys so a host-leaf import resolves to
+        // an effect while a type-only interface (`wasi:cli/types`) resolves to
+        // nothing.
+        let mut interface_meta: IndexMap<String, (ModuleSource, Option<String>)> =
+            IndexMap::default();
+        let mut effect_by_cm_fq: IndexMap<String, EffectRef> = IndexMap::default();
+        for (src, module) in &sem.modules {
+            for item in &module.items {
+                let Item::Interface(decl) = item else {
+                    continue;
+                };
+                let cm_fq = decl
+                    .attrs
+                    .iter()
+                    .find_map(|a| a.as_cm_import())
+                    .map(crate::ast::CmImport::interface_path);
+                interface_meta
+                    .entry(decl.name.clone())
+                    .or_insert_with(|| (src.clone(), cm_fq.clone()));
+                let key = EffectRef::Concrete {
+                    name: decl.name.clone(),
+                    module_source: src.clone(),
+                };
+                if closure.contains_key(&key)
+                    && let Some(fq) = cm_fq
+                {
+                    effect_by_cm_fq.entry(fq).or_insert(key);
+                }
+            }
+        }
+
         Self {
             fn_effects,
             fn_params,
@@ -450,6 +485,8 @@ impl OwnedEffectData {
             variant_payloads,
             closure,
             effect_by_name,
+            interface_meta,
+            effect_by_cm_fq,
         }
     }
 
@@ -464,6 +501,8 @@ impl OwnedEffectData {
             variant_payloads: &self.variant_payloads,
             closure: &self.closure,
             effect_by_name: &self.effect_by_name,
+            interface_meta: &self.interface_meta,
+            effect_by_cm_fq: &self.effect_by_cm_fq,
         }
     }
 }
@@ -488,6 +527,12 @@ struct EffectIndex<'a> {
     closure: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
     /// Declared effect / resource name → resolved `EffectRef` (`#[benign]`).
     effect_by_name: &'a IndexMap<String, EffectRef>,
+    /// Declared interface name → (declaring module, its `#[cm]` FQ), for
+    /// resolving a direct `E::op()` callee to its effect and FQ.
+    interface_meta: &'a IndexMap<String, (ModuleSource, Option<String>)>,
+    /// CM interface FQ → the effect it declares, for reconstructing a
+    /// component's host-leaf imports into effects.
+    effect_by_cm_fq: &'a IndexMap<String, EffectRef>,
 }
 
 fn check_function_effects_sem(
@@ -838,6 +883,49 @@ impl SemEffectWalker<'_> {
         self.index.method_effects(func_ref)
     }
 
+    /// The effects a direct `E::op()` call requires. A bare interface-operation
+    /// call resolves to a `ModuleSource::Local(E)` free-call `func_ref` that
+    /// carries no declared effects, so without this it would slip through the
+    /// checker unflagged. For a host/WASI effect the requirement is the effect
+    /// itself; for a CM-component-imported interface it is the reconstructed
+    /// host-leaf effect set — empty for a purely-computational component, so its
+    /// operations need no `with`. Returns empty for a non-effect-op callee.
+    fn effect_op_requirement(&self, func_ref: &FunctionRef) -> Vec<EffectRef> {
+        if func_ref.method_info.is_some() {
+            return Vec::new();
+        }
+        if !matches!(func_ref.module_source, ModuleSource::Local { .. }) {
+            return Vec::new();
+        }
+        let interface = func_ref.module_source.to_string();
+        let Some((decl_module, cm_fq)) = self.index.interface_meta.get(&interface) else {
+            return Vec::new();
+        };
+        // Only a host-backed effect (`#[cm]`) is a capability the caller must
+        // hold. A user-defined effect is resolved by the handler machinery, so
+        // its operations — including a handler's self-delegation — are not a
+        // direct-op requirement.
+        let Some(fq) = cm_fq else {
+            return Vec::new();
+        };
+        if let Some(registry) = self.sem.cm_interface_registry()
+            && registry.is_component_interface(fq)
+        {
+            // Composition-relative: the imported interface is composed away, so
+            // its operations demand the dependency's own host-leaf capabilities
+            // (empty for a purely-computational component).
+            return registry
+                .host_leaf_imports_for(fq)
+                .iter()
+                .filter_map(|leaf| self.index.effect_by_cm_fq.get(leaf).cloned())
+                .collect();
+        }
+        vec![EffectRef::Concrete {
+            name: interface,
+            module_source: decl_module.clone(),
+        }]
+    }
+
     fn binding_granted_effects(
         &self,
         binding: &crate::ast::EffectHandlerBinding,
@@ -1038,7 +1126,8 @@ impl AstVisitor for SemEffectWalker<'_> {
                     .and_then(|ann| ann.static_method_dispatch.get(&call.id))
                     .map(|dispatch| dispatch.function_ref.clone())
                 {
-                    let effects = self.method_effects(&func_ref);
+                    let mut effects = self.method_effects(&func_ref);
+                    effects.extend(self.effect_op_requirement(&func_ref));
                     let params = self.method_param_types(&func_ref);
                     let is_method = func_ref.method_info.is_some();
                     let resolved =
@@ -1059,7 +1148,8 @@ impl AstVisitor for SemEffectWalker<'_> {
                 let call_key = method_call.id;
                 if let Some(dispatch) = self.sem.method_dispatch.get(&call_key) {
                     let func_ref = dispatch.function_ref.clone();
-                    let effects = self.method_effects(&func_ref);
+                    let mut effects = self.method_effects(&func_ref);
+                    effects.extend(self.effect_op_requirement(&func_ref));
                     let params = self.method_param_types(&func_ref);
                     let resolved =
                         self.resolve_effect_params(&effects, &params, true, &method_call.args);
@@ -1073,7 +1163,8 @@ impl AstVisitor for SemEffectWalker<'_> {
                     .and_then(|ann| ann.static_method_dispatch.get(&call_key))
                     .map(|dispatch| dispatch.function_ref.clone())
                 {
-                    let effects = self.method_effects(&func_ref);
+                    let mut effects = self.method_effects(&func_ref);
+                    effects.extend(self.effect_op_requirement(&func_ref));
                     let params = self.method_param_types(&func_ref);
                     let is_method = func_ref.method_info.is_some();
                     let resolved =

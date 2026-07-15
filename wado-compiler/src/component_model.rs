@@ -659,6 +659,13 @@ pub struct CmInterfaceRegistry {
     /// classifies these as [`crate::wir::ImportKind::Component`] for composition.
     component_interfaces: IndexSet<String>,
 
+    /// Per component-dependency interface FQ, the host-leaf import FQs the
+    /// dependency component itself declares (its WASI capabilities). Effect
+    /// reconstruction unions these into the consumer when the interface is used;
+    /// a purely-computational component maps to an empty set. Every exported
+    /// interface of one component shares the same set (v1 component-level union).
+    component_host_leaf_imports: IndexMap<String, Vec<String>>,
+
     /// Reverse index for the `_by_module` accessors (see [`ModuleSourceIndex`]).
     module_index: std::sync::OnceLock<ModuleSourceIndex>,
 }
@@ -1606,6 +1613,7 @@ impl CmInterfaceRegistry {
         &mut self,
         module: &crate::ast::Module,
         interface_fqs: &[String],
+        host_leaf_imports: &[String],
         module_source: &ModuleSource,
     ) {
         self.register_module_decls(module);
@@ -1613,6 +1621,10 @@ impl CmInterfaceRegistry {
             self.component_interfaces.insert(fq.clone());
             self.cm_interface_module_sources
                 .insert(fq.clone(), module_source.clone());
+            if !host_leaf_imports.is_empty() {
+                self.component_host_leaf_imports
+                    .insert(fq.clone(), host_leaf_imports.to_vec());
+            }
         }
     }
 
@@ -1620,6 +1632,17 @@ impl CmInterfaceRegistry {
     #[must_use]
     pub fn is_component_interface(&self, fq: &str) -> bool {
         self.component_interfaces.contains(fq)
+    }
+
+    /// The host-leaf import FQs the component owning `fq` declares — the raw
+    /// capabilities effect reconstruction unions into a consumer that uses this
+    /// interface. Empty for a purely-computational component or a non-component
+    /// interface. Ambient filtering is the consumer's responsibility.
+    #[must_use]
+    pub fn host_leaf_imports_for(&self, fq: &str) -> &[String] {
+        self.component_host_leaf_imports
+            .get(fq)
+            .map_or(&[], Vec::as_slice)
     }
 
     /// Register a `--lib` entry module's own named types under the synthesized
@@ -3896,32 +3919,13 @@ pub fn is_cm_function_supported(func: &CmFunctionInfo) -> bool {
 /// Canonical ABI maximum flat results before a return must use an outptr.
 pub const MAX_FLAT_RESULTS: usize = 1;
 
-/// Whether a return type must be returned via an outptr rather than as flat
-/// core results. Single source of truth shared by the import-binding synthesizer
-/// and the core functype builder, so the two never disagree on a signature.
+/// Whether a return type must use an outptr rather than flat core results. The
+/// flat count is the single rule: a type returns via the outptr iff it flattens
+/// to more than `MAX_FLAT_RESULTS` core values, so a single-field record
+/// (`{ n: u64 }` -> `[i64]`) returns flat. Shared by the import-binding
+/// synthesizer and the core functype builder so the two never disagree.
 pub fn cm_return_needs_outptr(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
     registry.cm_flatten(ty).len() > MAX_FLAT_RESULTS
-        || cm_named_type_return_needs_outptr(ty, registry)
-}
-
-/// Whether a named CM type is a record or payload-bearing variant (returned via
-/// an outptr). Resolves the source through the registry so WASI, `--lib`, and
-/// component-imported types are all recognised.
-pub fn cm_named_type_return_needs_outptr(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
-    if let Type::Named(named) = ty
-        && let Some(source) = registry.resolve_cm_source_for(named, None)
-    {
-        if let Some(cases) = registry.get_variant_cases_by_source(source, &named.name) {
-            return cases.iter().any(|case| case.payload.is_some());
-        }
-        if registry
-            .get_struct_fields_by_source(source, &named.name)
-            .is_some()
-        {
-            return true;
-        }
-    }
-    false
 }
 
 /// Registry-aware CM canonical ABI size for a type.
@@ -4679,5 +4683,51 @@ mod tests {
             registry.resolve_type_preserving_local_newtypes(&temp),
             Type::Named(n) if n.name == "u64"
         ));
+    }
+
+    #[test]
+    fn single_flat_value_record_returns_flat_not_outptr() {
+        let mut registry = CmInterfaceRegistry::new();
+        let iface = "pkg:app/app@1";
+        registry.structs.insert(
+            (iface.into(), "Single".into()),
+            (
+                "single".into(),
+                vec![("n".into(), named("u64", None))],
+                vec![],
+            ),
+        );
+        registry.structs.insert(
+            (iface.into(), "Point".into()),
+            (
+                "point".into(),
+                vec![
+                    ("x".into(), named("f64", None)),
+                    ("y".into(), named("f64", None)),
+                ],
+                vec![],
+            ),
+        );
+        registry.structs.insert(
+            (iface.into(), "Wrap".into()),
+            (
+                "wrap".into(),
+                vec![("s".into(), named("String", None))],
+                vec![],
+            ),
+        );
+
+        assert!(
+            !cm_return_needs_outptr(&named("Single", Some(iface)), &registry),
+            "single core-value record must return flat"
+        );
+        assert!(
+            cm_return_needs_outptr(&named("Point", Some(iface)), &registry),
+            "multi core-value record must use outptr"
+        );
+        assert!(
+            cm_return_needs_outptr(&named("Wrap", Some(iface)), &registry),
+            "record spanning >1 core value must use outptr"
+        );
     }
 }
