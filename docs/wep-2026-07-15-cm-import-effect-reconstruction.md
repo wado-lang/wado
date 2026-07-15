@@ -194,6 +194,30 @@ dishonest.
   binary actually has, dovetailing with `resolve_import_plan`'s faithfulness
   guarantee.
 
+## Supersedes
+
+This is a design decision; implementation is pending (Status: Draft), so the
+supersessions below apply to the design, not yet the shipped behavior. Each is
+scoped — host-satisfied (WASI) interfaces and host-provided resources are
+unchanged.
+
+- [WIT Interoperability](./wep-2026-05-02-wit-interoperability.md) §"Pure
+  interfaces": "an interface with functions is conservatively treated as
+  effectful by the call site" — superseded for imported `.wasm` components; a
+  fused component's interface is effectful only insofar as its own host-leaf
+  imports are.
+- [Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md)
+  Decision: "map the imported interface faithfully to a Wado `interface`
+  (effectful)" — the unconditional `(effectful)` is superseded; effectfulness is
+  reconstructed from the component's host-leaf imports.
+- [Effect System Design](./wep-2026-01-27-effect-system-design.md) "Resource
+  Types as Effects": "every operation on a resource is a host call … therefore
+  resource types are effects" — subsumed and generalized, not dropped. A
+  host-provided resource still bottoms out at the host (stays an effect); the
+  "every resource op is a host call" premise no longer holds for a
+  guest-implemented resource imported through fusion, which reconstructs like any
+  other interface.
+
 ## References
 
 - [Effect System Design](./wep-2026-01-27-effect-system-design.md)

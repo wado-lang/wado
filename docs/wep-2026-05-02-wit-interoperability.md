@@ -109,10 +109,12 @@ functions) is simply not effectful — it never appears in a `with` clause, and
 users `use` its types directly. No new syntax is needed. An interface with
 functions is conservatively treated as effectful by the call site.
 
-For an imported `.wasm` component this conservative rule is revisited by
-[Effect Reconstruction from CM Component Imports](./wep-2026-07-15-cm-import-effect-reconstruction.md),
-which derives the caller's effects from the component's actual host-leaf imports
-instead of treating its exported interface as an opaque effect.
+Superseded for imported `.wasm` components by
+[Effect Reconstruction from CM Component Imports](./wep-2026-07-15-cm-import-effect-reconstruction.md)
+(design decision; implementation pending). A fused component's interface is
+effectful only insofar as the component's own host-leaf imports are — a
+purely-computational import needs no `with`. The conservative rule stands
+unchanged for host-satisfied (WASI) interfaces.
 
 ## Migration Plan
 
