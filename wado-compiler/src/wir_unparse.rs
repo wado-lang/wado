@@ -1514,13 +1514,11 @@ impl<'a> WirUnparser<'a> {
             WirInstr::ArrayClone {
                 type_id,
                 src,
-                element_copy_func,
+                element_copy_mangle,
             } => {
                 let elem = self.array_elem_type_str(type_id);
-                if let Some(func) = element_copy_func {
-                    self.write(&format!(
-                        "builtin::array_clone_deep<{elem}>(/*via {func}*/ "
-                    ));
+                if element_copy_mangle.is_some() {
+                    self.write(&format!("builtin::array_clone_deep<{elem}>("));
                 } else {
                     self.write(&format!("builtin::array_clone<{elem}>("));
                 }

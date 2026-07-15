@@ -104,9 +104,9 @@ type "functype//treemap_literal_cast.wado/__cm_binding__Stdout_write_via_stream"
 
 type "functype//treemap_literal_cast.wado/__cm_export__run" = fn();  // TypeId(27)
 
-type "functype//treemap_literal_cast.wado/$value_copy$T74" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(28)
+type "functype//treemap_literal_cast.wado/$value_copy$core:prelude/string.wado/StrCharIter" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(28)
 
-type "functype//treemap_literal_cast.wado/$value_copy$T38" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(29)
+type "functype//treemap_literal_cast.wado/$value_copy$core:prelude/string.wado/String" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(29)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(30)
 
@@ -291,11 +291,11 @@ fn "treemap_literal_cast.wado/__cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "treemap_literal_cast.wado/$value_copy$T74"(v) {
+fn "treemap_literal_cast.wado/$value_copy$core:prelude/string.wado/StrCharIter"(v) {
     return struct.new "core:prelude/string.wado//StrCharIter" { repr: v.repr, used: v.used, byte_index: v.byte_index };
 }
 
-fn "treemap_literal_cast.wado/$value_copy$T38"(v) {
+fn "treemap_literal_cast.wado/$value_copy$core:prelude/string.wado/String"(v) {
     return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = v.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: v.used };
 }
 
@@ -867,7 +867,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
     count = 0;
     truncated = 0;
-    __iter_5 = "treemap_literal_cast.wado/$value_copy$T74"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
+    __iter_5 = "treemap_literal_cast.wado/$value_copy$core:prelude/string.wado/StrCharIter"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
     _licm_arith_52 = limit >= 0;
     b72: block {
         l73: loop {
@@ -934,7 +934,7 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,i32>^IndexValue<K>:
     let __v1: i32;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    index_2 = "core:collections/TreeMap<core:prelude/string.wado/String,i32>::find_index"(self, "treemap_literal_cast.wado/$value_copy$T38"(key));
+    index_2 = "core:collections/TreeMap<core:prelude/string.wado/String,i32>::find_index"(self, "treemap_literal_cast.wado/$value_copy$core:prelude/string.wado/String"(key));
     if @unlikely(index_2 < 0) {
         "core:rt/panic"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(31), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_3, global:core:collections::__const_obj_18); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/format.wado/String^Inspect::inspect"(key, __local_4); __local_3);
         unreachable;
@@ -1028,7 +1028,7 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert"(self,
     let __v1: i32;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    existing_index = "core:collections/TreeMap<core:prelude/string.wado/String,i32>::find_index"(self, "treemap_literal_cast.wado/$value_copy$T38"(key));
+    existing_index = "core:collections/TreeMap<core:prelude/string.wado/String,i32>::find_index"(self, "treemap_literal_cast.wado/$value_copy$core:prelude/string.wado/String"(key));
     if existing_index >= 0 {
         __v1 = self.entries.used; if @unlikely(existing_index >= __v1) {
             cold_path;
@@ -1038,7 +1038,7 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert"(self,
         return;
     }
     new_index = self.entries.used;
-    entry = struct.new "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>" { key: ref.as_non_null("treemap_literal_cast.wado/$value_copy$T38"(key)), value: value, deleted: 0 };
+    entry = struct.new "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>" { key: ref.as_non_null("treemap_literal_cast.wado/$value_copy$core:prelude/string.wado/String"(key)), value: value, deleted: 0 };
     "core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>::push"(self.entries, entry);
     self.root = ref.as_non_null("core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert_node"(self, self.root, key, new_index));
     self.size = self.size + 1;

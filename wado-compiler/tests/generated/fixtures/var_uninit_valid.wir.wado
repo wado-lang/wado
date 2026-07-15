@@ -93,7 +93,7 @@ type "functype//var_uninit_valid.wado/__cm_export____test_8_string_uninit_then_a
 
 type "functype//var_uninit_valid.wado/__cm_export____test_9_string_uninit_assigned_in_if_else" = fn();  // TypeId(31)
 
-type "functype//var_uninit_valid.wado/$value_copy$T27" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(32)
+type "functype//var_uninit_valid.wado/$value_copy$core:prelude/string.wado/String" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(32)
 
 type "functype//core:prelude/fpfmt.wado/unpack64" = fn(f64) -> [u64, i32];  // TypeId(33)
 
@@ -451,7 +451,7 @@ condition: greeting.len() == 3
     "wasi/task-return"(0);
 }
 
-fn "var_uninit_valid.wado/$value_copy$T27"(v) {
+fn "var_uninit_valid.wado/$value_copy$core:prelude/string.wado/String"(v) {
     return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = v.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: v.used };
 }
 
@@ -1444,7 +1444,7 @@ fn "core:prelude/primitive.wado/i32^Display::fmt"(self, f) {
 }
 
 fn "core:prelude/primitive.wado/bool^Inspect::inspect"(self, f) {
-    "core:prelude/format.wado/Formatter::pad"(f, "var_uninit_valid.wado/$value_copy$T27"((if self.value -> ref "core:prelude/string.wado//String" {
+    "core:prelude/format.wado/Formatter::pad"(f, "var_uninit_valid.wado/$value_copy$core:prelude/string.wado/String"((if self.value -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };

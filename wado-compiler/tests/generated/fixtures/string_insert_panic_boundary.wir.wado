@@ -48,7 +48,7 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//string_insert_panic_boundary.wado/__cm_export__run" = fn();  // TypeId(14)
 
-type "functype//string_insert_panic_boundary.wado/$value_copy$T27" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(15)
+type "functype//string_insert_panic_boundary.wado/$value_copy$core:prelude/string.wado/String" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(15)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(16)
 
@@ -144,7 +144,7 @@ fn "string_insert_panic_boundary.wado/__cm_export__run"() {
     __v0 = "core:prelude/string.wado/String::is_char_boundary"(s, 1);
     if @unlikely(__v0 == 0) {
         cold_path;
-        "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(189); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("String::insert"), used: 14 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado"), used: 24 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 1046 }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("insert index not on UTF-8 character boundary"), used: 44 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(189); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("String::insert"), used: 14 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado"), used: 24 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 1055 }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("insert index not on UTF-8 character boundary"), used: 44 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: self.is_char_boundary(byte_index)
 "), used: 46 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("self.is_char_boundary(byte_index): "), used: 35 }); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/bool^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<bool>" { value: __v0 }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); __local_5);
         unreachable;
@@ -153,7 +153,7 @@ condition: self.is_char_boundary(byte_index)
     "wasi/task-return"(0);
 }
 
-fn "string_insert_panic_boundary.wado/$value_copy$T27"(v) {
+fn "string_insert_panic_boundary.wado/$value_copy$core:prelude/string.wado/String"(v) {
     return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = v.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: v.used };
 }
 
@@ -327,7 +327,7 @@ fn "core:prelude/primitive.wado/i32^Display::fmt"(self, f) {
 }
 
 fn "core:prelude/primitive.wado/bool^Inspect::inspect"(self, f) {
-    "core:prelude/format.wado/Formatter::pad"(f, "string_insert_panic_boundary.wado/$value_copy$T27"((if self.value -> ref "core:prelude/string.wado//String" {
+    "core:prelude/format.wado/Formatter::pad"(f, "string_insert_panic_boundary.wado/$value_copy$core:prelude/string.wado/String"((if self.value -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };

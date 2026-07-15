@@ -187,15 +187,15 @@ type "functype//serde_json_large_int.wado/__cm_export____test_7_i128_large_value
 
 type "functype//serde_json_large_int.wado/__cm_export____test_8_u128_large_value_as_string" = fn();  // TypeId(53)
 
-type "functype//serde_json_large_int.wado/$value_copy$T59" = fn(ref "core:serde//DeserializeError") -> ref "core:serde//DeserializeError";  // TypeId(54)
+type "functype//serde_json_large_int.wado/$value_copy$core:prelude/slice.wado/ArraySlice<u8>" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref "core:prelude/slice.wado//ArraySlice<u8>";  // TypeId(54)
 
-type "functype//serde_json_large_int.wado/$value_copy$T25" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref "core:prelude/slice.wado//ArraySlice<u8>";  // TypeId(55)
+type "functype//serde_json_large_int.wado/$value_copy$core:serde/DeserializeError" = fn(ref "core:serde//DeserializeError") -> ref "core:serde//DeserializeError";  // TypeId(55)
 
-type "functype//serde_json_large_int.wado/$value_copy$T87" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(56)
+type "functype//serde_json_large_int.wado/$value_copy$core:prelude/string.wado/StrCharIter" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(56)
 
-type "functype//serde_json_large_int.wado/$value_copy$T131" = fn(ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(57)
+type "functype//serde_json_large_int.wado/$value_copy$core:prelude/int128.wado/u128" = fn(ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(57)
 
-type "functype//serde_json_large_int.wado/$value_copy$T27" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(58)
+type "functype//serde_json_large_int.wado/$value_copy$core:prelude/string.wado/String" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(58)
 
 type "functype//core:prelude/fpfmt.wado/pow10_coarse" = fn(i32) -> [u64, u64];  // TypeId(59)
 
@@ -832,24 +832,24 @@ fn "serde_json_large_int.wado/__cm_export____test_8_u128_large_value_as_string"(
     "wasi/task-return"(0);
 }
 
-fn "serde_json_large_int.wado/$value_copy$T59"(v) {
+fn "serde_json_large_int.wado/$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(v) {
+    return struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: v.repr, start: v.start, end: v.end };
+}
+
+fn "serde_json_large_int.wado/$value_copy$core:serde/DeserializeError"(v) {
     let v_1: ref "core:prelude/string.wado//String";
     return struct.new "core:serde//DeserializeError" { kind: v.kind, message: ref.as_non_null(v_1 = v.message; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_8: ref Array<u8>; __array_clone_src_8 = v_1.repr; let __array_clone_len_8: i32; __array_clone_len_8 = builtin::array_len(__array_clone_src_8); let __array_clone_dst_8: ref Array<u8>; __array_clone_dst_8 = builtin::array_new<u8>(__array_clone_len_8); builtin::array_copy<u8>(__array_clone_dst_8, 0, __array_clone_src_8, 0, __array_clone_len_8); __array_clone_dst_8), used: v_1.used }), offset: v.offset };
 }
 
-fn "serde_json_large_int.wado/$value_copy$T25"(v) {
-    return struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: v.repr, start: v.start, end: v.end };
-}
-
-fn "serde_json_large_int.wado/$value_copy$T87"(v) {
+fn "serde_json_large_int.wado/$value_copy$core:prelude/string.wado/StrCharIter"(v) {
     return struct.new "core:prelude/string.wado//StrCharIter" { repr: v.repr, used: v.used, byte_index: v.byte_index };
 }
 
-fn "serde_json_large_int.wado/$value_copy$T131"(v) {
+fn "serde_json_large_int.wado/$value_copy$core:prelude/int128.wado/u128"(v) {
     return struct.new "core:prelude/int128.wado//u128" { low: v.low, high: v.high };
 }
 
-fn "serde_json_large_int.wado/$value_copy$T27"(v) {
+fn "serde_json_large_int.wado/$value_copy$core:prelude/string.wado/String"(v) {
     return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_8: ref Array<u8>; __array_clone_src_8 = v.repr; let __array_clone_len_8: i32; __array_clone_len_8 = builtin::array_len(__array_clone_src_8); let __array_clone_dst_8: ref Array<u8>; __array_clone_dst_8 = builtin::array_new<u8>(__array_clone_len_8); builtin::array_copy<u8>(__array_clone_dst_8, 0, __array_clone_src_8, 0, __array_clone_len_8); __array_clone_dst_8), used: v.used };
 }
 
@@ -2294,7 +2294,7 @@ fn "core:json/core/json/to_string<core:prelude/int128.wado/u128>"(value) {
         cold_path;
         return 1, ref.null none, __qm_e;
     }
-    return 0, ref.as_non_null("serde_json_large_int.wado/$value_copy$T27"(buf)), ref.null none;
+    return 0, ref.as_non_null("serde_json_large_int.wado/$value_copy$core:prelude/string.wado/String"(buf)), ref.null none;
 }
 
 fn "core:json/core/json/to_string<core:prelude/int128.wado/i128>"(value) {
@@ -2309,7 +2309,7 @@ fn "core:json/core/json/to_string<core:prelude/int128.wado/i128>"(value) {
         cold_path;
         return 1, ref.null none, __qm_e;
     }
-    return 0, ref.as_non_null("serde_json_large_int.wado/$value_copy$T27"(buf)), ref.null none;
+    return 0, ref.as_non_null("serde_json_large_int.wado/$value_copy$core:prelude/string.wado/String"(buf)), ref.null none;
 }
 
 fn "core:json/core/json/to_string<u64>"(value) {
@@ -2324,7 +2324,7 @@ fn "core:json/core/json/to_string<u64>"(value) {
         cold_path;
         return 1, ref.null none, __qm_e;
     }
-    return 0, ref.as_non_null("serde_json_large_int.wado/$value_copy$T27"(buf)), ref.null none;
+    return 0, ref.as_non_null("serde_json_large_int.wado/$value_copy$core:prelude/string.wado/String"(buf)), ref.null none;
 }
 
 fn "core:json/core/json/to_string<i64>"(value) {
@@ -2339,7 +2339,7 @@ fn "core:json/core/json/to_string<i64>"(value) {
         cold_path;
         return 1, ref.null none, __qm_e;
     }
-    return 0, ref.as_non_null("serde_json_large_int.wado/$value_copy$T27"(buf)), ref.null none;
+    return 0, ref.as_non_null("serde_json_large_int.wado/$value_copy$core:prelude/string.wado/String"(buf)), ref.null none;
 }
 
 fn "core:json/core/json/from_bytes<i64,core:prelude/string.wado/String>"(input) {
@@ -2357,7 +2357,7 @@ fn "core:json/core/json/from_bytes<i64,core:prelude/string.wado/String>"(input) 
     } else {
         __qm_e = ref.as_non_null(__sroa___match_scrut_0_case1_payload_0);
         cold_path;
-        return 1, 0_i64, ref.as_non_null("serde_json_large_int.wado/$value_copy$T59"(__qm_e));
+        return 1, 0_i64, ref.as_non_null("serde_json_large_int.wado/$value_copy$core:serde/DeserializeError"(__qm_e));
     });
     "core:json/JsonDeserializer::skip_whitespace"(de);
     if @unlikely(de.pos < (de.input.end - de.input.start)) {
@@ -2382,7 +2382,7 @@ fn "core:json/core/json/from_bytes<u64,core:prelude/string.wado/String>"(input) 
     } else {
         __qm_e = ref.as_non_null(__sroa___match_scrut_0_case1_payload_0);
         cold_path;
-        return 1, 0_i64, ref.as_non_null("serde_json_large_int.wado/$value_copy$T59"(__qm_e));
+        return 1, 0_i64, ref.as_non_null("serde_json_large_int.wado/$value_copy$core:serde/DeserializeError"(__qm_e));
     });
     "core:json/JsonDeserializer::skip_whitespace"(de);
     if @unlikely(de.pos < (de.input.end - de.input.start)) {
@@ -2412,7 +2412,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
         unreachable;
     }
     if "core:prelude/int128.wado/u128^Ord::cmp"(self, divisor) == 0 {
-        return struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }, ref.as_non_null("serde_json_large_int.wado/$value_copy$T131"(self));
+        return struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }, ref.as_non_null("serde_json_large_int.wado/$value_copy$core:prelude/int128.wado/u128"(self));
     }
     if (if self.low == divisor.low -> i32 {
         self.high == divisor.high;
@@ -2427,7 +2427,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
     b298: block {
         l299: loop {
             break_if b298 i < 0;
-            remainder = "serde_json_large_int.wado/$value_copy$T131"("core:prelude/int128.wado/u128^Shl::shl"(remainder, 1));
+            remainder = "serde_json_large_int.wado/$value_copy$core:prelude/int128.wado/u128"("core:prelude/int128.wado/u128^Shl::shl"(remainder, 1));
             bit = "core:prelude/int128.wado/u128::get_bit"(self, i);
             if bit {
                 remainder = struct.new "core:prelude/int128.wado//u128" { low: remainder.low | 1_i64, high: remainder.high | 0_i64 };
@@ -2494,7 +2494,7 @@ fn "core:prelude/int128.wado/u128::fmt_decimal_magnitude"(self, f, is_neg) {
     }
     ten = struct.new "core:prelude/int128.wado//u128" { low: 10_i64, high: 0_i64 };
     digit_count = 0;
-    temp_7 = "serde_json_large_int.wado/$value_copy$T131"(self);
+    temp_7 = "serde_json_large_int.wado/$value_copy$core:prelude/int128.wado/u128"(self);
     b306: block {
         l307: loop {
             break_if b306 "core:prelude/int128.wado/u128^Ord::cmp"(temp_7, global:core:prelude/int128.wado::__const_obj_52) != 2;
@@ -2511,7 +2511,7 @@ fn "core:prelude/int128.wado/u128::fmt_decimal_magnitude"(self, f, is_neg) {
     self_27 = f.buf;
     arr_9 = self_27.repr;
     pos = offset_8 + digit_count;
-    temp_11 = "serde_json_large_int.wado/$value_copy$T131"(self);
+    temp_11 = "serde_json_large_int.wado/$value_copy$core:prelude/int128.wado/u128"(self);
     b308: block {
         l309: loop {
             break_if b308 "core:prelude/int128.wado/u128^Ord::cmp"(temp_11, global:core:prelude/int128.wado::__const_obj_52) != 2;
@@ -2970,7 +2970,7 @@ fn "core:prelude/string.wado/String::is_valid_utf8"(bytes) {
             let scalar_mv_code: u32;
             let scalar_mv_advance: i32;
             let scalar_mv_valid: bool;
-            multivalue_bind [scalar_mv_code, scalar_mv_advance, scalar_mv_valid] = "core:prelude/string.wado/decode_utf8_scalar"("serde_json_large_int.wado/$value_copy$T25"(bytes), i, len);
+            multivalue_bind [scalar_mv_code, scalar_mv_advance, scalar_mv_valid] = "core:prelude/string.wado/decode_utf8_scalar"("serde_json_large_int.wado/$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(bytes), i, len);
             if @unlikely(scalar_mv_valid == 0) {
                 cold_path;
                 return 0;
@@ -3095,7 +3095,7 @@ fn "core:json/JsonDeserializer::append_scanned_run"(self, dst, start, end, all_a
     let slice: ref "core:prelude/slice.wado//ArraySlice<u8>";
     slice = "core:prelude/slice.wado/ArraySlice<u8>::slice"(self.input, start, end);
     if (if all_ascii == 0 -> i32 {
-        "core:prelude/string.wado/String::is_valid_utf8"("serde_json_large_int.wado/$value_copy$T25"(slice)) == 0;
+        "core:prelude/string.wado/String::is_valid_utf8"("serde_json_large_int.wado/$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(slice)) == 0;
     } else {
         0;
     }) {
@@ -3204,7 +3204,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
             } else {
                 __qm_e_13 = ref.as_non_null(__match_20);
                 cold_path;
-                __hfs_call_25 = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null("serde_json_large_int.wado/$value_copy$T59"(__qm_e_13)) };
+                __hfs_call_25 = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null("serde_json_large_int.wado/$value_copy$core:serde/DeserializeError"(__qm_e_13)) };
                 self.pos = __hfs_pos_24;
                 return __hfs_call_25;
             }
@@ -3217,7 +3217,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
             b = "core:prelude/slice.wado/ArraySlice<u8>::get_unchecked"(self.input, __hfs_pos_24);
             if b == 34 {
                 __hfs_pos_24 = __hfs_pos_24 + 1;
-                __hfs_call_25 = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: ref.as_non_null("serde_json_large_int.wado/$value_copy$T27"(result_9)) };
+                __hfs_call_25 = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: ref.as_non_null("serde_json_large_int.wado/$value_copy$core:prelude/string.wado/String"(result_9)) };
                 self.pos = __hfs_pos_24;
                 return __hfs_call_25;
             }
@@ -3252,7 +3252,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
                 } else {
                     __qm_e_17 = ref.cast "core:prelude/types.wado//Result<char,core:serde/DeserializeError>::Err"(__match_scrut_4).payload_0;
                     cold_path;
-                    return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null("serde_json_large_int.wado/$value_copy$T59"(__qm_e_17)) };
+                    return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null("serde_json_large_int.wado/$value_copy$core:serde/DeserializeError"(__qm_e_17)) };
                 }));
                 continue l388: __hfs_pos_24 = self.pos;
             } else {
@@ -3914,7 +3914,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
     count = 0;
     truncated = 0;
-    __iter_5 = "serde_json_large_int.wado/$value_copy$T87"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
+    __iter_5 = "serde_json_large_int.wado/$value_copy$core:prelude/string.wado/StrCharIter"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
     _licm_arith_52 = limit >= 0;
     b501: block {
         l502: loop {

@@ -279,9 +279,9 @@ type "functype//http_base64_decode.wado/__cm_binding__Response_new" = fn(i32, re
 
 type "functype//http_base64_decode.wado/__cm_export__handle" = fn(i32);  // TypeId(55)
 
-type "functype//http_base64_decode.wado/$value_copy$T33" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref "core:prelude/slice.wado//ArraySlice<u8>";  // TypeId(56)
+type "functype//http_base64_decode.wado/$value_copy$core:prelude/slice.wado/ArraySlice<u8>" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref "core:prelude/slice.wado//ArraySlice<u8>";  // TypeId(56)
 
-type "functype//http_base64_decode.wado/$value_copy$T31" = fn(ref "core:prelude//List<u8>") -> ref "core:prelude//List<u8>";  // TypeId(57)
+type "functype//http_base64_decode.wado/$value_copy$core:prelude/list.wado/List<u8>" = fn(ref "core:prelude//List<u8>") -> ref "core:prelude//List<u8>";  // TypeId(57)
 
 type "functype//core:base64/build_decode_table" = fn() -> ref "core:prelude//List<u8>";  // TypeId(58)
 
@@ -943,11 +943,11 @@ fn "http_base64_decode.wado/__cm_export__handle"(request) {
     "http_base64_decode.wado/handle"(request);
 }
 
-fn "http_base64_decode.wado/$value_copy$T33"(v) {
+fn "http_base64_decode.wado/$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(v) {
     return struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: v.repr, start: v.start, end: v.end };
 }
 
-fn "http_base64_decode.wado/$value_copy$T31"(v) {
+fn "http_base64_decode.wado/$value_copy$core:prelude/list.wado/List<u8>"(v) {
     return struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v.used };
 }
 
@@ -1279,7 +1279,7 @@ fn "core:base64/decode_impl"(input) {
         "core:prelude/list.wado/List<u8>::push"(out, ((v0_14 << 2) | (v1_15 >> 4)) & 255);
         "core:prelude/list.wado/List<u8>::push"(out, (((v1_15 & 15) << 4) | (v2_16 >> 2)) & 255);
     }
-    return ref.as_non_null("http_base64_decode.wado/$value_copy$T31"(out));
+    return ref.as_non_null("http_base64_decode.wado/$value_copy$core:prelude/list.wado/List<u8>"(out));
 }
 
 fn "core:prelude/primitive.wado/count_digits_i64"(val) {
@@ -1712,7 +1712,7 @@ fn "core:prelude/string.wado/String::is_valid_utf8"(bytes) {
             let scalar_mv_code: u32;
             let scalar_mv_advance: i32;
             let scalar_mv_valid: bool;
-            multivalue_bind [scalar_mv_code, scalar_mv_advance, scalar_mv_valid] = "core:prelude/string.wado/decode_utf8_scalar"("http_base64_decode.wado/$value_copy$T33"(bytes), i, len);
+            multivalue_bind [scalar_mv_code, scalar_mv_advance, scalar_mv_valid] = "core:prelude/string.wado/decode_utf8_scalar"("http_base64_decode.wado/$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(bytes), i, len);
             if @unlikely(scalar_mv_valid == 0) {
                 cold_path;
                 return 0;
@@ -1835,8 +1835,8 @@ fn "core:prelude/string.wado/String::from_utf8_lossy<core:prelude/bytes.wado/Byt
     collected = "core:prelude/slice.wado/ArrayIter<u8>::collect"(struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: bytes.repr, index: 0, end: bytes.used });
     slice = struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: collected.repr, start: 0, end: collected.used };
     __fused___inline_String__from_utf8_slice_2: block {
-        bytes_11 = "http_base64_decode.wado/$value_copy$T33"(slice);
-        break_if __fused___inline_String__from_utf8_slice_2 @unlikely("core:prelude/string.wado/String::is_valid_utf8"("http_base64_decode.wado/$value_copy$T33"(bytes_11)) == 0);
+        bytes_11 = "http_base64_decode.wado/$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(slice);
+        break_if __fused___inline_String__from_utf8_slice_2 @unlikely("core:prelude/string.wado/String::is_valid_utf8"("http_base64_decode.wado/$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(bytes_11)) == 0);
         bytes_13 = "core:prelude/slice.wado/ArraySlice<u8>::to_array"(bytes_11);
         __fused_payload_3 = struct.new "core:prelude/string.wado//String" { repr: bytes_13, used: bytes_11.end - bytes_11.start };
         return __fused_payload_3;
@@ -1850,7 +1850,7 @@ fn "core:prelude/string.wado/String::from_utf8_lossy<core:prelude/bytes.wado/Byt
             let scalar_mv_code: u32;
             let scalar_mv_advance: i32;
             let scalar_mv_valid: bool;
-            multivalue_bind [scalar_mv_code, scalar_mv_advance, scalar_mv_valid] = "core:prelude/string.wado/decode_utf8_scalar"("http_base64_decode.wado/$value_copy$T33"(slice), i, len_4);
+            multivalue_bind [scalar_mv_code, scalar_mv_advance, scalar_mv_valid] = "core:prelude/string.wado/decode_utf8_scalar"("http_base64_decode.wado/$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(slice), i, len_4);
             if scalar_mv_valid {
                 "core:prelude/string.wado/String::push"(builder, "core:prelude/primitive.wado/char::from_u32_unchecked"(scalar_mv_code));
             } else {

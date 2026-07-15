@@ -113,7 +113,7 @@ type "functype//cm_stream_read_record_in_branch.wado/__cm_export__run" = fn();  
 
 type "functype//cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry" = fn(i32, i32) -> ref "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>";  // TypeId(32)
 
-type "functype//cm_stream_read_record_in_branch.wado/$value_copy$T62" = fn(ref "wasi:filesystem/types.wado//DirectoryEntry") -> ref "wasi:filesystem/types.wado//DirectoryEntry";  // TypeId(33)
+type "functype//cm_stream_read_record_in_branch.wado/$value_copy$wasi:filesystem/types.wado/DirectoryEntry" = fn(ref "wasi:filesystem/types.wado//DirectoryEntry") -> ref "wasi:filesystem/types.wado//DirectoryEntry";  // TypeId(33)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(34)
 
@@ -261,7 +261,7 @@ fn "cm_stream_read_record_in_branch.wado/run"() with Stdout, Stderr, Preopens {
     } else {
         "cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry"(dir_stream, 0);
     });
-    __sroa_entries_repr = builtin::array_clone_deep<ref "wasi:filesystem/types.wado//DirectoryEntry">(/*via $value_copy$T62*/ v.repr);
+    __sroa_entries_repr = builtin::array_clone_deep<ref "wasi:filesystem/types.wado//DirectoryEntry">(v.repr);
     __sroa_entries_used = v.used;
     found_hello = 0;
     __iter_6 = struct.new "core:prelude/slice.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>" { repr: __sroa_entries_repr, index: 0, end: __sroa_entries_used };
@@ -433,7 +433,7 @@ fn "cm_stream_read_record_in_branch.wado/__cm_stream_read_DirectoryEntry"(handle
     return arr_6;
 }
 
-fn "cm_stream_read_record_in_branch.wado/$value_copy$T62"(v) {
+fn "cm_stream_read_record_in_branch.wado/$value_copy$wasi:filesystem/types.wado/DirectoryEntry"(v) {
     let v_1: ref "wasi:filesystem/types.wado//DescriptorType";
     let __vc_payload_7: ref null "core:prelude/string.wado//String";
     let v_3: ref "core:prelude/string.wado//String";
@@ -894,7 +894,7 @@ fn "core:prelude/slice.wado/ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>
     if self.index >= self.end {
         return ref.null none;
     }
-    item = "cm_stream_read_record_in_branch.wado/$value_copy$T62"(builtin::array_get<ref "wasi:filesystem/types.wado//DirectoryEntry">(self.repr, self.index));
+    item = "cm_stream_read_record_in_branch.wado/$value_copy$wasi:filesystem/types.wado/DirectoryEntry"(builtin::array_get<ref "wasi:filesystem/types.wado//DirectoryEntry">(self.repr, self.index));
     self.index = self.index + 1;
     return item;
 }

@@ -150,7 +150,7 @@ type "functype//two_parser_conflict.wado/count_b" = fn(ref "./sub/two_parser_b.w
 
 type "functype//two_parser_conflict.wado/__cm_export____test_0_two_parsers_with_same_named_types_coexist" = fn();  // TypeId(34)
 
-type "functype//two_parser_conflict.wado/$value_copy$T34" = fn(ref "./sub/two_parser_b.wado//CstChild") -> ref "./sub/two_parser_b.wado//CstChild";  // TypeId(35)
+type "functype//two_parser_conflict.wado/$value_copy$./sub/two_parser_b.wado/CstChild" = fn(ref "./sub/two_parser_b.wado//CstChild") -> ref "./sub/two_parser_b.wado//CstChild";  // TypeId(35)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(36)
 
@@ -286,7 +286,7 @@ fn "two_parser_conflict.wado/count_b"(node) {
                     struct.new "./sub/two_parser_b.wado//CstChild::Skipped" { discriminant: 2, payload_0: __vc_payload_2 };
                 } else {
                     __vc_payload_3 = ref.cast "./sub/two_parser_b.wado//CstChild::Node"(v_12).payload_0;
-                    struct.new "./sub/two_parser_b.wado//CstChild::Node" { discriminant: 3, payload_0: struct.new "./sub/two_parser_b.wado//CstNode" { kind: __vc_payload_3.kind, span: ref.as_non_null(v_18 = __vc_payload_3.span; struct.new "./sub/two_parser_b.wado//Span" { start: v_18.start, end: v_18.end }), children: ref.as_non_null(v_19 = __vc_payload_3.children; struct.new "core:prelude//List<./sub/two_parser_b.wado/CstChild>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "./sub/two_parser_b.wado//CstChild">(/*via $value_copy$T34*/ v_19.repr)), used: v_19.used }), flags: __vc_payload_3.flags, alt: __vc_payload_3.alt } };
+                    struct.new "./sub/two_parser_b.wado//CstChild::Node" { discriminant: 3, payload_0: struct.new "./sub/two_parser_b.wado//CstNode" { kind: __vc_payload_3.kind, span: ref.as_non_null(v_18 = __vc_payload_3.span; struct.new "./sub/two_parser_b.wado//Span" { start: v_18.start, end: v_18.end }), children: ref.as_non_null(v_19 = __vc_payload_3.children; struct.new "core:prelude//List<./sub/two_parser_b.wado/CstChild>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "./sub/two_parser_b.wado//CstChild">(v_19.repr)), used: v_19.used }), flags: __vc_payload_3.flags, alt: __vc_payload_3.alt } };
                 });
                 if ref.test "./sub/two_parser_b.wado//CstChild::Node"(__local_6) {
                     c = ref.cast "./sub/two_parser_b.wado//CstChild::Node"(__local_6).payload_0;
@@ -329,7 +329,7 @@ condition: count_b(&b::root()) == 0
     "wasi/task-return"(0);
 }
 
-fn "two_parser_conflict.wado/$value_copy$T34"(v) {
+fn "two_parser_conflict.wado/$value_copy$./sub/two_parser_b.wado/CstChild"(v) {
     let __vc_payload_0: i32;
     let __vc_payload_1: i32;
     let __vc_payload_2: i32;
@@ -347,7 +347,7 @@ fn "two_parser_conflict.wado/$value_copy$T34"(v) {
         struct.new "./sub/two_parser_b.wado//CstChild::Skipped" { discriminant: 2, payload_0: __vc_payload_2 };
     } else {
         __vc_payload_3 = ref.cast "./sub/two_parser_b.wado//CstChild::Node"(v).payload_0;
-        struct.new "./sub/two_parser_b.wado//CstChild::Node" { discriminant: 3, payload_0: struct.new "./sub/two_parser_b.wado//CstNode" { kind: __vc_payload_3.kind, span: ref.as_non_null(v_6 = __vc_payload_3.span; struct.new "./sub/two_parser_b.wado//Span" { start: v_6.start, end: v_6.end }), children: ref.as_non_null(v_7 = __vc_payload_3.children; struct.new "core:prelude//List<./sub/two_parser_b.wado/CstChild>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "./sub/two_parser_b.wado//CstChild">(/*via $value_copy$T34*/ v_7.repr)), used: v_7.used }), flags: __vc_payload_3.flags, alt: __vc_payload_3.alt } };
+        struct.new "./sub/two_parser_b.wado//CstChild::Node" { discriminant: 3, payload_0: struct.new "./sub/two_parser_b.wado//CstNode" { kind: __vc_payload_3.kind, span: ref.as_non_null(v_6 = __vc_payload_3.span; struct.new "./sub/two_parser_b.wado//Span" { start: v_6.start, end: v_6.end }), children: ref.as_non_null(v_7 = __vc_payload_3.children; struct.new "core:prelude//List<./sub/two_parser_b.wado/CstChild>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "./sub/two_parser_b.wado//CstChild">(v_7.repr)), used: v_7.used }), flags: __vc_payload_3.flags, alt: __vc_payload_3.alt } };
     });
 }
 
@@ -619,7 +619,7 @@ fn "./sub/two_parser_b.wado/CstChild^Inspect::inspect"(self, f) {
     let s_30: ref "core:prelude/string.wado//String";
     let s_32: ref "core:prelude/string.wado//String";
     let s_34: ref "core:prelude/string.wado//String";
-    __match_6 = "two_parser_conflict.wado/$value_copy$T34"(self.value);
+    __match_6 = "two_parser_conflict.wado/$value_copy$./sub/two_parser_b.wado/CstChild"(self.value);
     if ref.test "./sub/two_parser_b.wado//CstChild::Token"(__match_6) {
         __inspect_Token_2 = ref.cast "./sub/two_parser_b.wado//CstChild::Token"(__match_6).payload_0;
         s_8 = global:./sub/two_parser_b.wado::__const_obj_24;

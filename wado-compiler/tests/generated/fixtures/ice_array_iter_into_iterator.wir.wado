@@ -69,7 +69,7 @@ type "functype//ice_array_iter_into_iterator.wado/__cm_binding__Stdout_write_via
 
 type "functype//ice_array_iter_into_iterator.wado/__cm_export__run" = fn();  // TypeId(19)
 
-type "functype//ice_array_iter_into_iterator.wado/$value_copy$T25" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref "core:prelude/slice.wado//ArraySlice<u8>";  // TypeId(20)
+type "functype//ice_array_iter_into_iterator.wado/$value_copy$core:prelude/slice.wado/ArraySlice<u8>" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref "core:prelude/slice.wado//ArraySlice<u8>";  // TypeId(20)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(21)
 
@@ -167,7 +167,7 @@ fn "ice_array_iter_into_iterator.wado/__cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "ice_array_iter_into_iterator.wado/$value_copy$T25"(v) {
+fn "ice_array_iter_into_iterator.wado/$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(v) {
     return struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: v.repr, start: v.start, end: v.end };
 }
 
@@ -409,7 +409,7 @@ fn "core:prelude/string.wado/String::is_valid_utf8"(bytes) {
             let scalar_mv_code: u32;
             let scalar_mv_advance: i32;
             let scalar_mv_valid: bool;
-            multivalue_bind [scalar_mv_code, scalar_mv_advance, scalar_mv_valid] = "core:prelude/string.wado/decode_utf8_scalar"("ice_array_iter_into_iterator.wado/$value_copy$T25"(bytes), i, len);
+            multivalue_bind [scalar_mv_code, scalar_mv_advance, scalar_mv_valid] = "core:prelude/string.wado/decode_utf8_scalar"("ice_array_iter_into_iterator.wado/$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(bytes), i, len);
             if @unlikely(scalar_mv_valid == 0) {
                 cold_path;
                 return 0;

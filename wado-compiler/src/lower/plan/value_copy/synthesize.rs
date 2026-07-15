@@ -1,4 +1,4 @@
-//! Generate `$value_copy$T<id>` helper functions for every type that the
+//! Generate `$value_copy$` helper functions for every type that the
 //! fold needs at a wrap site, plus the transitive closure of nested
 //! value-typed fields. The seed comes from [`super::analyze::collect_seed_types`];
 //! the loop in [`synthesize_helpers`] iterates until no new types appear
@@ -60,6 +60,13 @@ pub fn synthesize_helpers(
     // also need. Iterate until no new types appear.
     let mut seen: IndexSet<TypeId> = initial.iter().copied().collect();
     let mut worklist: Vec<TypeId> = initial.into_iter().collect();
+    // The type table can intern the same structural type under more than one
+    // `TypeId`, which would otherwise mint two identically-named helpers and
+    // collide in the function registry. Helpers are identified by their
+    // canonical mangle, so a second `TypeId` for an already-generated type
+    // maps onto the same helper (recorded in `name_for_type`) instead of
+    // producing a duplicate.
+    let mut generated_names: IndexSet<String> = IndexSet::default();
     while let Some(type_id) = worklist.pop() {
         let func = generate_copy_function(type_id, project, &type_table_rc, &helper_module);
         if let Some(ref body) = func.body {
@@ -76,7 +83,9 @@ pub fn synthesize_helpers(
             }
         }
         name_for_type.insert(type_id, (func.module_source.clone(), func.name.clone()));
-        new_funcs.push(Rc::new(RefCell::new(func)));
+        if generated_names.insert(func.name.clone()) {
+            new_funcs.push(Rc::new(RefCell::new(func)));
+        }
     }
 
     project.functions.extend(new_funcs);
@@ -100,7 +109,7 @@ impl TirRefVisitor for Collector<'_> {
         }
         // `array_clone::<T>(arr)` lowers to a `WirInstr::ArrayClone`.
         // When `T` is a value-typed struct, codegen emits a per-element
-        // `$value_copy$T<id>` call inside the clone loop so each
+        // `$value_copy$` call inside the clone loop so each
         // destination element is a fresh struct rather than an aliased
         // ref. The helper has to actually exist by then, so collect
         // such element types into the worklist alongside direct
@@ -153,7 +162,8 @@ fn generate_copy_function(
     let resolved = type_table.borrow().get(type_id).clone();
     let module_source = helper_module.clone();
     let span = dummy_span();
-    let name = format!("$value_copy$T{}", type_id.0);
+    let name =
+        crate::name::value_copy_helper_name(&type_table.borrow().mangle_type_arg_for_generic(type_id));
 
     let v_local = TirExpr::new(
         TirExprKind::Local {
@@ -682,7 +692,7 @@ fn build_struct_copy(
 }
 
 /// Wrap `expr` in `builtin::copy_value::<type_id>(expr)`. The wrapper
-/// gets resolved to the `$value_copy$T<id>` helper by
+/// gets resolved to the `$value_copy$` helper by
 /// [`crate::lower::translate`] when the TIR is folded into NIR.
 fn wrap_copy_value(expr: TirExpr, type_id: TypeId, span: Span) -> TirExpr {
     let func = FunctionRef {

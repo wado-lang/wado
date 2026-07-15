@@ -92,6 +92,17 @@ pub fn strip_local_item_id(name: &str) -> &str {
     name.split(LOCAL_ITEM_ID_SEP).next().unwrap_or(name)
 }
 
+/// The name of the synthesized deep-copy helper for a value type, identified
+/// by its module-qualified structural mangle
+/// (`TypeTable::mangle_type_arg_for_generic`). The mangle is a stable,
+/// path-independent identity — unlike an intern-order `TypeId` index — so the
+/// same helper carries the same name in the WIR dump, the codegen output, and
+/// the wasm name section, and identical types that were interned more than
+/// once collapse onto one helper.
+pub fn value_copy_helper_name(mangled_type: &str) -> String {
+    format!("$value_copy${mangled_type}")
+}
+
 /// Convert a Wado identifier (`snake_case` / `PascalCase` / `camelCase`) to
 /// Component Model kebab-case (`my-api`, `http-server`, `error-code`).
 ///

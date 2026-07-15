@@ -5,7 +5,8 @@ use crate::wir::{WirExportDesc, WirInstr, WirPackage};
 
 /// Collect all `func_ids` that must NOT be SROA'd or otherwise transformed
 /// (exports, element tables, `RefFunc` references, and helpers referenced
-/// only by name from `WirInstr::ArrayClone::element_copy_func`).
+/// by type from `WirInstr::ArrayClone::element_copy_type`, resolved through
+/// each helper's `value_copy_type` metadata).
 pub(super) fn collect_pinned_func_ids(module: &WirPackage) -> IndexSet<u32> {
     let mut pinned = IndexSet::default();
 
@@ -35,39 +36,30 @@ pub(super) fn collect_pinned_func_ids(module: &WirPackage) -> IndexSet<u32> {
         collect_ref_funcs_instr(&global.init, &mut pinned);
     }
 
-    // `WirInstr::ArrayClone::element_copy_func` references its helper by
-    // *name* — codegen looks the name up at emit time and emits a plain
-    // `Call(func_idx)`. SROA-style return rewrites would change the
-    // helper's signature without touching that emit path, leaving the
-    // call expecting a single (ref T) while the rewritten helper now
-    // returns multi-value. Pin every helper that any ArrayClone refers
-    // to so the rewrites skip them.
+    // `WirInstr::ArrayClone` references its helper by the element's type
+    // (`element_copy_type`) — codegen resolves it via `value_copy_type`
+    // metadata at emit time and emits a plain `Call(func_idx)`. SROA-style
+    // return rewrites would change the helper's signature without touching
+    // that emit path, leaving the call expecting a single (ref T) while the
+    // rewritten helper now returns multi-value. Pin every helper that any
+    // ArrayClone refers to so the rewrites skip them.
     //
-    // Build the suffix → id map once: helper names always have the
-    // form `<module-prefix>/$value_copy$T<id>` and `element_copy_func`
-    // carries the trailing portion (`$value_copy$T<id>`), so the
-    // last `/`-segment of `fq` is the lookup key. Linear-scanning
-    // `name_to_idx` per `ArrayClone` site would otherwise be O(N²).
-    let helper_suffix_to_idx: IndexMap<String, u32> = module
+    // Build the copied-type-mangle → id map once from each helper's metadata.
+    // Linear-scanning per `ArrayClone` site would otherwise be O(N²).
+    let helper_mangle_to_idx: IndexMap<&str, u32> = module
         .functions
         .iter()
         .enumerate()
         .filter_map(|(i, func)| {
-            let suffix = func
-                .name
-                .fq
-                .rsplit('/')
-                .next()
-                .filter(|s| s.starts_with("$value_copy$"))?;
             Some((
-                suffix.to_string(),
+                func.value_copy_mangle.as_deref()?,
                 u32::try_from(i).expect("func index fits u32") + module.defined_func_base,
             ))
         })
         .collect();
     for func in &module.functions {
         if let Some(body) = &func.body {
-            collect_array_clone_helpers(body, &helper_suffix_to_idx, &mut pinned);
+            collect_array_clone_helpers(body, &helper_mangle_to_idx, &mut pinned);
         }
     }
 
@@ -76,29 +68,29 @@ pub(super) fn collect_pinned_func_ids(module: &WirPackage) -> IndexSet<u32> {
 
 fn collect_array_clone_helpers(
     instrs: &[WirInstr],
-    helper_suffix_to_idx: &IndexMap<String, u32>,
+    helper_mangle_to_idx: &IndexMap<&str, u32>,
     pinned: &mut IndexSet<u32>,
 ) {
     for instr in instrs {
-        collect_array_clone_helpers_instr(instr, helper_suffix_to_idx, pinned);
+        collect_array_clone_helpers_instr(instr, helper_mangle_to_idx, pinned);
     }
 }
 
 fn collect_array_clone_helpers_instr(
     instr: &WirInstr,
-    helper_suffix_to_idx: &IndexMap<String, u32>,
+    helper_mangle_to_idx: &IndexMap<&str, u32>,
     pinned: &mut IndexSet<u32>,
 ) {
     if let WirInstr::ArrayClone {
-        element_copy_func: Some(name_suffix),
+        element_copy_mangle: Some(copy_mangle),
         ..
     } = instr
-        && let Some(idx) = helper_suffix_to_idx.get(name_suffix.as_str())
+        && let Some(idx) = helper_mangle_to_idx.get(copy_mangle.as_str())
     {
         pinned.insert(*idx);
     }
     instr.for_each_child(&mut |child| {
-        collect_array_clone_helpers_instr(child, helper_suffix_to_idx, pinned);
+        collect_array_clone_helpers_instr(child, helper_mangle_to_idx, pinned);
     });
 }
 

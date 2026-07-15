@@ -70,9 +70,9 @@ type "functype//deref_assign_rhs_copy.wado/__cm_export____test_0_deref_assign_de
 
 type "functype//deref_assign_rhs_copy.wado/__cm_export____test_1_deref_assign_deep_copies_a_reference_element_list" = fn();  // TypeId(21)
 
-type "functype//deref_assign_rhs_copy.wado/$value_copy$T65" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(22)
+type "functype//deref_assign_rhs_copy.wado/$value_copy$core:prelude/string.wado/StrCharIter" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(22)
 
-type "functype//deref_assign_rhs_copy.wado/$value_copy$T27" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(23)
+type "functype//deref_assign_rhs_copy.wado/$value_copy$core:prelude/string.wado/String" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(23)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(24)
 
@@ -252,7 +252,7 @@ fn "deref_assign_rhs_copy.wado/__test_1_deref_assign_deep_copies_a_reference_ele
     let __sroa___deref_val_14_repr: ref "Array<core:prelude/string.wado/String>";
     __b_0 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 };
     __b_2 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 }), used: 2 };
-    __sroa___deref_val_14_repr = builtin::array_clone_deep<ref "core:prelude/string.wado//String">(/*via $value_copy$T27*/ __b_2.repr);
+    __sroa___deref_val_14_repr = builtin::array_clone_deep<ref "core:prelude/string.wado//String">(__b_2.repr);
     __b_0.repr = __sroa___deref_val_14_repr;
     __b_0.used = 2;
     value_46 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mutated"), used: 7 };
@@ -313,11 +313,11 @@ fn "deref_assign_rhs_copy.wado/__cm_export____test_1_deref_assign_deep_copies_a_
     "wasi/task-return"(0);
 }
 
-fn "deref_assign_rhs_copy.wado/$value_copy$T65"(v) {
+fn "deref_assign_rhs_copy.wado/$value_copy$core:prelude/string.wado/StrCharIter"(v) {
     return struct.new "core:prelude/string.wado//StrCharIter" { repr: v.repr, used: v.used, byte_index: v.byte_index };
 }
 
-fn "deref_assign_rhs_copy.wado/$value_copy$T27"(v) {
+fn "deref_assign_rhs_copy.wado/$value_copy$core:prelude/string.wado/String"(v) {
     return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = v.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: v.used };
 }
 
@@ -823,7 +823,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
     count = 0;
     truncated = 0;
-    __iter_5 = "deref_assign_rhs_copy.wado/$value_copy$T65"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
+    __iter_5 = "deref_assign_rhs_copy.wado/$value_copy$core:prelude/string.wado/StrCharIter"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
     _licm_arith_52 = limit >= 0;
     b72: block {
         l73: loop {

@@ -142,11 +142,11 @@ type "functype//variadic_1.wado/__cm_export____test_13_nested_call_single" = fn(
 
 type "functype//variadic_1.wado/variadic_1.wado/collect_for_of<[i32,core:prelude/string.wado/String,bool]>" = fn(ref "tuple//[i32, core:prelude/string.wado/String, bool]");  // TypeId(46)
 
-type "functype//variadic_1.wado/$value_copy$T65" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(47)
+type "functype//variadic_1.wado/$value_copy$core:prelude/string.wado/StrCharIter" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(47)
 
-type "functype//variadic_1.wado/$value_copy$T27" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(48)
+type "functype//variadic_1.wado/$value_copy$core:prelude/string.wado/String" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(48)
 
-type "functype//variadic_1.wado/$value_copy$T27$shallow" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(49)
+type "functype//variadic_1.wado/$value_copy$core:prelude/string.wado/String$shallow" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(49)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(50)
 
@@ -948,15 +948,15 @@ fn "variadic_1.wado/variadic_1.wado/collect_for_of<[i32,core:prelude/string.wado
     return;
 }
 
-fn "variadic_1.wado/$value_copy$T65"(v) {
+fn "variadic_1.wado/$value_copy$core:prelude/string.wado/StrCharIter"(v) {
     return struct.new "core:prelude/string.wado//StrCharIter" { repr: v.repr, used: v.used, byte_index: v.byte_index };
 }
 
-fn "variadic_1.wado/$value_copy$T27"(v) {
+fn "variadic_1.wado/$value_copy$core:prelude/string.wado/String"(v) {
     return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_4: ref Array<u8>; __array_clone_src_4 = v.repr; let __array_clone_len_4: i32; __array_clone_len_4 = builtin::array_len(__array_clone_src_4); let __array_clone_dst_4: ref Array<u8>; __array_clone_dst_4 = builtin::array_new<u8>(__array_clone_len_4); builtin::array_copy<u8>(__array_clone_dst_4, 0, __array_clone_src_4, 0, __array_clone_len_4); __array_clone_dst_4), used: v.used };
 }
 
-fn "variadic_1.wado/$value_copy$T27$shallow"(v) {
+fn "variadic_1.wado/$value_copy$core:prelude/string.wado/String$shallow"(v) {
     return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_4: ref Array<u8>; __array_clone_src_4 = v.repr; let __array_clone_len_4: i32; __array_clone_len_4 = builtin::array_len(__array_clone_src_4); let __array_clone_dst_4: ref Array<u8>; __array_clone_dst_4 = builtin::array_new<u8>(__array_clone_len_4); builtin::array_copy<u8>(__array_clone_dst_4, 0, __array_clone_src_4, 0, __array_clone_len_4); __array_clone_dst_4), used: v.used };
 }
 
@@ -1202,7 +1202,7 @@ fn "core:prelude/primitive.wado/i32^Display::fmt"(self, f) {
 }
 
 fn "core:prelude/primitive.wado/bool^Inspect::inspect"(self, f) {
-    "core:prelude/format.wado/Formatter::pad"(f, "variadic_1.wado/$value_copy$T27"((if self.value -> ref "core:prelude/string.wado//String" {
+    "core:prelude/format.wado/Formatter::pad"(f, "variadic_1.wado/$value_copy$core:prelude/string.wado/String"((if self.value -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -1519,7 +1519,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 fn "core:prelude/format.wado/String^Display::fmt"(self, f) {
     let capped: ref "core:prelude/string.wado//String";
     if f.precision >= 0 {
-        capped = "variadic_1.wado/$value_copy$T27$shallow"(self);
+        capped = "variadic_1.wado/$value_copy$core:prelude/string.wado/String$shallow"(self);
         "core:prelude/string.wado/String::truncate_chars"(capped, f.precision);
         "core:prelude/format.wado/Formatter::pad"(f, capped);
     } else {
@@ -1547,7 +1547,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
     count = 0;
     truncated = 0;
-    __iter_5 = "variadic_1.wado/$value_copy$T65"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
+    __iter_5 = "variadic_1.wado/$value_copy$core:prelude/string.wado/StrCharIter"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
     _licm_arith_52 = limit >= 0;
     b121: block {
         l122: loop {

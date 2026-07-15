@@ -25,7 +25,7 @@ use crate::module_source::ModuleSource;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use funcset::{FuncKeyMap, FuncKeySet};
 
-/// `TypeId` → `(ModuleSource, $value_copy$T<id>)` for every helper
+/// `TypeId` → `(ModuleSource, $value_copy$)` for every helper
 /// `synthesize_helpers` registered in [`FlatPackage::functions`], plus the
 /// interprocedural return-convention set the fold consults to decide whether a
 /// call result is owned (a move) or borrowed (a copy).

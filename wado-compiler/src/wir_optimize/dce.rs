@@ -27,10 +27,11 @@ fn collect_func_refs_from_body(body: &[WirInstr], out: &mut IndexSet<u32>) {
 }
 
 /// Walk `body` and, for every `WirInstr::ArrayClone` carrying an
-/// `element_copy_func` name suffix, resolve it through `resolve` and
-/// insert the resulting array-index into `out`. Used by
-/// [`mark_unreachable_defined_functions`] to root the per-element
-/// `$value_copy$T<id>` helper that codegen reaches via name lookup.
+/// `element_copy_type`, resolve the type to its synthesized `$value_copy$`
+/// helper's array-index through `resolve` and insert it into `out`. Used by
+/// [`mark_unreachable_defined_functions`] to root the per-element helper,
+/// whose edge is a type reference rather than a `Call` the generic walker
+/// would see.
 fn collect_array_clone_helper_refs<F>(body: &[WirInstr], resolve: &F, out: &mut IndexSet<u32>)
 where
     F: Fn(&str) -> Option<u32>,
@@ -48,10 +49,10 @@ fn collect_array_clone_helper_refs_recursive<F>(
     F: Fn(&str) -> Option<u32>,
 {
     if let WirInstr::ArrayClone {
-        element_copy_func: Some(name),
+        element_copy_mangle: Some(copy_mangle),
         ..
     } = instr
-        && let Some(idx) = resolve(name)
+        && let Some(idx) = resolve(copy_mangle)
     {
         out.insert(idx);
     }
@@ -155,36 +156,22 @@ pub fn mark_unreachable_defined_functions(module: &mut WirPackage) {
     let to_array_idx =
         |abs_idx: u32| -> Option<u32> { abs_idx.checked_sub(base).filter(|i| *i < num_funcs) };
 
-    // `WirInstr::ArrayClone` references its per-element copy helper by
-    // *name* (the `$value_copy$T<id>` synthesized by
-    // `lower::plan::value_copy::synthesize`), not by `WirFuncId`, so the
-    // generic body walker that follows `WirInstr::Call` / `RefFunc`
-    // can't see the edge. Pre-build a `name-suffix → array index` map
-    // so the per-instruction collector below can resolve those edges
-    // and fold them into each function's callee set; without this the
-    // helper is dropped by DCE, then the codegen call site can't
-    // resolve it and panics.
-    // Build the suffix → array-index map once. Helper names always have
-    // the form `<module-prefix>/$value_copy$T<id>` and
-    // `element_copy_func` carries the bare `$value_copy$T<id>` (the
-    // last `/`-segment of `fq`), so an `O(1)` lookup is straightforward
-    // — the previous `ends_with` linear scan was `O(#ArrayClone × #funcs)`.
-    let helper_suffix_to_idx: IndexMap<String, u32> = module
+    // `WirInstr::ArrayClone` references its per-element copy helper by the
+    // element type's canonical mangle (`element_copy_mangle`), not by a
+    // `WirFuncId` the generic body walker following `WirInstr::Call` /
+    // `RefFunc` could see. Pre-build a `mangle → array index` map from each
+    // helper's `value_copy_mangle` metadata so the per-instruction collector
+    // below can resolve those edges and fold them into each function's callee
+    // set; without this the helper is dropped by DCE, then the codegen call
+    // site can't resolve it and panics.
+    let helper_mangle_to_idx: IndexMap<&str, u32> = module
         .functions
         .iter()
         .enumerate()
-        .filter_map(|(i, func)| {
-            let suffix = func
-                .name
-                .fq
-                .rsplit('/')
-                .next()
-                .filter(|s| s.starts_with("$value_copy$"))?;
-            Some((suffix.to_string(), u32::try_from(i).ok()?))
-        })
+        .filter_map(|(i, func)| Some((func.value_copy_mangle.as_deref()?, u32::try_from(i).ok()?)))
         .collect();
     let resolve_helper_name =
-        |name_suffix: &str| -> Option<u32> { helper_suffix_to_idx.get(name_suffix).copied() };
+        |copy_mangle: &str| -> Option<u32> { helper_mangle_to_idx.get(copy_mangle).copied() };
 
     let mut callees_of: Vec<IndexSet<u32>> = Vec::with_capacity(module.functions.len());
     for func in &module.functions {

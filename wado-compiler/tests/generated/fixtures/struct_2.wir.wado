@@ -104,7 +104,7 @@ type "functype//struct_2.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -
 
 type "functype//struct_2.wado/__cm_export__run" = fn();  // TypeId(31)
 
-type "functype//struct_2.wado/$value_copy$T26" = fn(ref "struct_2.wado//SDPoint") -> ref "struct_2.wado//SDPoint";  // TypeId(32)
+type "functype//struct_2.wado/$value_copy$struct_2.wado/SDPoint" = fn(ref "struct_2.wado//SDPoint") -> ref "struct_2.wado//SDPoint";  // TypeId(32)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(33)
 
@@ -566,7 +566,7 @@ fn "struct_2.wado/__cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "struct_2.wado/$value_copy$T26"(v) {
+fn "struct_2.wado/$value_copy$struct_2.wado/SDPoint"(v) {
     return struct.new "struct_2.wado//SDPoint" { x: v.x, y: v.y };
 }
 
@@ -903,7 +903,7 @@ fn "core:prelude/slice.wado/ArrayIter<struct_2.wado/SDPoint>^Iterator::next"(sel
     if self.index >= self.end {
         return ref.null none;
     }
-    item = "struct_2.wado/$value_copy$T26"(builtin::array_get<ref "struct_2.wado//SDPoint">(self.repr, self.index));
+    item = "struct_2.wado/$value_copy$struct_2.wado/SDPoint"(builtin::array_get<ref "struct_2.wado//SDPoint">(self.repr, self.index));
     self.index = self.index + 1;
     return item;
 }

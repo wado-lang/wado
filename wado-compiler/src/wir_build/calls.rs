@@ -129,10 +129,10 @@ impl FunctionTranslator<'_, '_> {
     /// For `builtin::array_clone::<T>(arr)` whose `arr` is typed as
     /// `BuiltinArray(elem)`, return the helper-name suffix to invoke on
     /// every element when `elem` is itself a value-typed struct (i.e.
-    /// has a `$value_copy$T<id>` synthesized for it). Returns `None`
+    /// has a `$value_copy$` synthesized for it). Returns `None`
     /// for primitive elements where Wasm GC's plain `array.set` is
     /// already a deep copy.
-    fn array_element_copy_func(&self, src_type_id: TypeId) -> Option<String> {
+    fn array_element_copy_mangle(&self, src_type_id: TypeId) -> Option<String> {
         use crate::tir::ResolvedType;
         let mut ty = src_type_id;
         while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = self.type_table.get(ty) {
@@ -145,7 +145,7 @@ impl FunctionTranslator<'_, '_> {
         if !crate::lower::plan::value_copy::needs_value_copy(elem, self.type_table) {
             return None;
         }
-        Some(format!("$value_copy$T{}", elem.0))
+        Some(self.type_table.mangle_type_arg_for_generic(elem))
     }
 
     fn translate_array_ref_operand(
@@ -517,11 +517,11 @@ impl FunctionTranslator<'_, '_> {
             }
             "builtin::array_clone" => {
                 let (type_id, src, src_type_id) = self.translate_array_ref_operand(args)?;
-                match self.array_element_copy_func(src_type_id) {
-                    Some(element_copy_func) => Some(WirInstr::ArrayClone {
+                match self.array_element_copy_mangle(src_type_id) {
+                    Some(element_copy_mangle) => Some(WirInstr::ArrayClone {
                         type_id,
                         src: Box::new(src),
-                        element_copy_func: Some(element_copy_func),
+                        element_copy_mangle: Some(element_copy_mangle),
                     }),
                     None => Some(self.build_bulk_array_clone(type_id, src)),
                 }

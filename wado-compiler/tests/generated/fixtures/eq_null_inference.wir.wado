@@ -72,7 +72,7 @@ type "functype//eq_null_inference.wado/__cm_export____test_1_null_on_lhs_of____i
 
 type "functype//eq_null_inference.wado/__cm_export____test_2_null_compared_against_a_struct_field_of_option_type" = fn();  // TypeId(22)
 
-type "functype//eq_null_inference.wado/$value_copy$T28" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(23)
+type "functype//eq_null_inference.wado/$value_copy$core:prelude/string.wado/String" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(23)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(24)
 
@@ -442,7 +442,7 @@ fn "eq_null_inference.wado/__cm_export____test_2_null_compared_against_a_struct_
     "wasi/task-return"(0);
 }
 
-fn "eq_null_inference.wado/$value_copy$T28"(v) {
+fn "eq_null_inference.wado/$value_copy$core:prelude/string.wado/String"(v) {
     return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = v.repr; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: v.used };
 }
 
@@ -603,7 +603,7 @@ fn "core:prelude/primitive.wado/i32^Display::fmt"(self, f) {
 }
 
 fn "core:prelude/primitive.wado/bool^Inspect::inspect"(self, f) {
-    "core:prelude/format.wado/Formatter::pad"(f, "eq_null_inference.wado/$value_copy$T28"((if self.value -> ref "core:prelude/string.wado//String" {
+    "core:prelude/format.wado/Formatter::pad"(f, "eq_null_inference.wado/$value_copy$core:prelude/string.wado/String"((if self.value -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };

@@ -183,11 +183,11 @@ type "functype//value_copy_nested_array_helper_chain.wado/run" = fn();  // TypeI
 
 type "functype//value_copy_nested_array_helper_chain.wado/__cm_export__run" = fn();  // TypeId(43)
 
-type "functype//value_copy_nested_array_helper_chain.wado/$value_copy$T66" = fn(ref "core:serde//DeserializeError") -> ref "core:serde//DeserializeError";  // TypeId(44)
+type "functype//value_copy_nested_array_helper_chain.wado/$value_copy$core:prelude/slice.wado/ArraySlice<u8>" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref "core:prelude/slice.wado//ArraySlice<u8>";  // TypeId(44)
 
-type "functype//value_copy_nested_array_helper_chain.wado/$value_copy$T25" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref "core:prelude/slice.wado//ArraySlice<u8>";  // TypeId(45)
+type "functype//value_copy_nested_array_helper_chain.wado/$value_copy$core:serde/DeserializeError" = fn(ref "core:serde//DeserializeError") -> ref "core:serde//DeserializeError";  // TypeId(45)
 
-type "functype//value_copy_nested_array_helper_chain.wado/$value_copy$T29" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(46)
+type "functype//value_copy_nested_array_helper_chain.wado/$value_copy$core:prelude/string.wado/String" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(46)
 
 type "functype//core:prelude/fpfmt.wado/pow10_coarse" = fn(i32) -> [u64, u64];  // TypeId(47)
 
@@ -450,16 +450,16 @@ fn "value_copy_nested_array_helper_chain.wado/__cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "value_copy_nested_array_helper_chain.wado/$value_copy$T66"(v) {
+fn "value_copy_nested_array_helper_chain.wado/$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(v) {
+    return struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: v.repr, start: v.start, end: v.end };
+}
+
+fn "value_copy_nested_array_helper_chain.wado/$value_copy$core:serde/DeserializeError"(v) {
     let v_1: ref "core:prelude/string.wado//String";
     return struct.new "core:serde//DeserializeError" { kind: v.kind, message: ref.as_non_null(v_1 = v.message; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_7: ref Array<u8>; __array_clone_src_7 = v_1.repr; let __array_clone_len_7: i32; __array_clone_len_7 = builtin::array_len(__array_clone_src_7); let __array_clone_dst_7: ref Array<u8>; __array_clone_dst_7 = builtin::array_new<u8>(__array_clone_len_7); builtin::array_copy<u8>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7); __array_clone_dst_7), used: v_1.used }), offset: v.offset };
 }
 
-fn "value_copy_nested_array_helper_chain.wado/$value_copy$T25"(v) {
-    return struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: v.repr, start: v.start, end: v.end };
-}
-
-fn "value_copy_nested_array_helper_chain.wado/$value_copy$T29"(v) {
+fn "value_copy_nested_array_helper_chain.wado/$value_copy$core:prelude/string.wado/String"(v) {
     return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_7: ref Array<u8>; __array_clone_src_7 = v.repr; let __array_clone_len_7: i32; __array_clone_len_7 = builtin::array_len(__array_clone_src_7); let __array_clone_dst_7: ref Array<u8>; __array_clone_dst_7 = builtin::array_new<u8>(__array_clone_len_7); builtin::array_copy<u8>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7); __array_clone_dst_7), used: v.used };
 }
 
@@ -1293,7 +1293,7 @@ fn "core:prelude/string.wado/String::is_valid_utf8"(bytes) {
             let scalar_mv_code: u32;
             let scalar_mv_advance: i32;
             let scalar_mv_valid: bool;
-            multivalue_bind [scalar_mv_code, scalar_mv_advance, scalar_mv_valid] = "core:prelude/string.wado/decode_utf8_scalar"("value_copy_nested_array_helper_chain.wado/$value_copy$T25"(bytes), i, len);
+            multivalue_bind [scalar_mv_code, scalar_mv_advance, scalar_mv_valid] = "core:prelude/string.wado/decode_utf8_scalar"("value_copy_nested_array_helper_chain.wado/$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(bytes), i, len);
             if @unlikely(scalar_mv_valid == 0) {
                 cold_path;
                 return 0;
@@ -1542,7 +1542,7 @@ fn "core:json/JsonDeserializer::append_scanned_run"(self, dst, start, end, all_a
     let slice: ref "core:prelude/slice.wado//ArraySlice<u8>";
     slice = "core:prelude/slice.wado/ArraySlice<u8>::slice"(self.input, start, end);
     if (if all_ascii == 0 -> i32 {
-        "core:prelude/string.wado/String::is_valid_utf8"("value_copy_nested_array_helper_chain.wado/$value_copy$T25"(slice)) == 0;
+        "core:prelude/string.wado/String::is_valid_utf8"("value_copy_nested_array_helper_chain.wado/$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(slice)) == 0;
     } else {
         0;
     }) {
@@ -1651,7 +1651,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
             } else {
                 __qm_e_13 = ref.as_non_null(__match_20);
                 cold_path;
-                __hfs_call_25 = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null("value_copy_nested_array_helper_chain.wado/$value_copy$T66"(__qm_e_13)) };
+                __hfs_call_25 = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null("value_copy_nested_array_helper_chain.wado/$value_copy$core:serde/DeserializeError"(__qm_e_13)) };
                 self.pos = __hfs_pos_24;
                 return __hfs_call_25;
             }
@@ -1664,7 +1664,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
             b = "core:prelude/slice.wado/ArraySlice<u8>::get_unchecked"(self.input, __hfs_pos_24);
             if b == 34 {
                 __hfs_pos_24 = __hfs_pos_24 + 1;
-                __hfs_call_25 = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: ref.as_non_null("value_copy_nested_array_helper_chain.wado/$value_copy$T29"(result_9)) };
+                __hfs_call_25 = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: ref.as_non_null("value_copy_nested_array_helper_chain.wado/$value_copy$core:prelude/string.wado/String"(result_9)) };
                 self.pos = __hfs_pos_24;
                 return __hfs_call_25;
             }
@@ -1699,7 +1699,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
                 } else {
                     __qm_e_17 = ref.cast "core:prelude/types.wado//Result<char,core:serde/DeserializeError>::Err"(__match_scrut_4).payload_0;
                     cold_path;
-                    return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null("value_copy_nested_array_helper_chain.wado/$value_copy$T66"(__qm_e_17)) };
+                    return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null("value_copy_nested_array_helper_chain.wado/$value_copy$core:serde/DeserializeError"(__qm_e_17)) };
                 }));
                 continue l194: __hfs_pos_24 = self.pos;
             } else {
@@ -2886,7 +2886,7 @@ fn "core:serde/List<value_copy_nested_array_helper_chain.wado/Item>^Deserialize:
         } else {
             __qm_e_8 = ref.as_non_null(__local_19);
             cold_path;
-            return 1, ref.null none, ref.as_non_null("value_copy_nested_array_helper_chain.wado/$value_copy$T66"(__qm_e_8));
+            return 1, ref.null none, ref.as_non_null("value_copy_nested_array_helper_chain.wado/$value_copy$core:serde/DeserializeError"(__qm_e_8));
         }
         return 0, ref.as_non_null(__b = struct.new "core:prelude//List<value_copy_nested_array_helper_chain.wado/Item>" { repr: builtin::array_new<ref "value_copy_nested_array_helper_chain.wado//Item">(0), used: 0 }; __b), ref.null none;
     }
@@ -3417,7 +3417,7 @@ fn "core:serde/List<core:prelude/list.wado/List<core:prelude/list.wado/List<f64>
         } else {
             __qm_e_8 = ref.as_non_null(__local_19);
             cold_path;
-            return 1, ref.null none, ref.as_non_null("value_copy_nested_array_helper_chain.wado/$value_copy$T66"(__qm_e_8));
+            return 1, ref.null none, ref.as_non_null("value_copy_nested_array_helper_chain.wado/$value_copy$core:serde/DeserializeError"(__qm_e_8));
         }
         return 0, ref.as_non_null(__b = struct.new "core:prelude//List<core:prelude/list.wado/List<core:prelude/list.wado/List<f64>>>" { repr: builtin::array_new<ref "core:prelude//List<core:prelude/list.wado/List<f64>>">(0), used: 0 }; __b), ref.null none;
     }
@@ -3548,7 +3548,7 @@ fn "core:serde/List<core:prelude/list.wado/List<f64>>^Deserialize::deserialize<&
         } else {
             __qm_e_8 = ref.as_non_null(__local_19);
             cold_path;
-            return 1, ref.null none, ref.as_non_null("value_copy_nested_array_helper_chain.wado/$value_copy$T66"(__qm_e_8));
+            return 1, ref.null none, ref.as_non_null("value_copy_nested_array_helper_chain.wado/$value_copy$core:serde/DeserializeError"(__qm_e_8));
         }
         return 0, ref.as_non_null(__b = struct.new "core:prelude//List<core:prelude/list.wado/List<f64>>" { repr: builtin::array_new<ref "core:prelude//List<f64>">(0), used: 0 }; __b), ref.null none;
     }
@@ -3688,7 +3688,7 @@ fn "core:serde/List<f64>^Deserialize::deserialize<&mut core:json/JsonDeserialize
         } else {
             __qm_e_8 = ref.as_non_null(__local_19);
             cold_path;
-            return 1, ref.null none, ref.as_non_null("value_copy_nested_array_helper_chain.wado/$value_copy$T66"(__qm_e_8));
+            return 1, ref.null none, ref.as_non_null("value_copy_nested_array_helper_chain.wado/$value_copy$core:serde/DeserializeError"(__qm_e_8));
         }
         return 0, ref.as_non_null(__b = struct.new "core:prelude//List<f64>" { repr: builtin::array_new<f64>(0), used: 0 }; __b), ref.null none;
     }

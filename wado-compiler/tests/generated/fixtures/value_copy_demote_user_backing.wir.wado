@@ -57,7 +57,7 @@ type "functype//value_copy_demote_user_backing.wado/__test_0_user_array_backed_s
 
 type "functype//value_copy_demote_user_backing.wado/__cm_export____test_0_user_array_backed_struct_copy_detaches_variant_payloads" = fn();  // TypeId(18)
 
-type "functype//value_copy_demote_user_backing.wado/$value_copy$T27" = fn(ref null "core:prelude//List<i32>") -> ref null "core:prelude//List<i32>";  // TypeId(19)
+type "functype//value_copy_demote_user_backing.wado/$value_copy$core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>" = fn(ref null "core:prelude//List<i32>") -> ref null "core:prelude//List<i32>";  // TypeId(19)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(20)
 
@@ -166,7 +166,7 @@ fn "value_copy_demote_user_backing.wado/__test_0_user_array_backed_struct_copy_d
     let a_mv_repr: ref "Array<core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>>";
     let a_mv_used: i32;
     multivalue_bind [a_mv_repr, a_mv_used] = "value_copy_demote_user_backing.wado/make"();
-    __sroa_b_repr = builtin::array_clone_deep<ref null "core:prelude//List<i32>">(/*via $value_copy$T27*/ a_mv_repr);
+    __sroa_b_repr = builtin::array_clone_deep<ref null "core:prelude//List<i32>">(a_mv_repr);
     __sroa___match_13_value = builtin::array_get<ref null "core:prelude//List<i32>">(__sroa_b_repr, 0);
     if ref.is_null(__sroa___match_13_value) == 0 {
         v_2 = ref.as_non_null(__sroa___match_13_value);
@@ -220,7 +220,7 @@ fn "value_copy_demote_user_backing.wado/__cm_export____test_0_user_array_backed_
     "wasi/task-return"(0);
 }
 
-fn "value_copy_demote_user_backing.wado/$value_copy$T27"(v) {
+fn "value_copy_demote_user_backing.wado/$value_copy$core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>"(v) {
     let __vc_payload_0: ref "core:prelude//List<i32>";
     return (if ref.is_null(v) == 0 -> ref null "core:prelude//List<i32>" {
         __vc_payload_0 = ref.as_non_null(v);
