@@ -400,16 +400,13 @@ fn resolve_imports(
             || f.name.starts_with("builtin::")
     };
 
-    // Also mark the ambient stdio functions as used when the `log_stderr` /
-    // `log_stdout` (panic / assert-diagnostic) builtins are reachable — but only
-    // in a world that provides the matching stdio sink (`wasi:cli/command`,
-    // `wasi:http/service`, test). Each stream is gated on its own interface so a
-    // world importing only one of them does not ride the other. In the `--lib`
-    // and kiln worlds the ambient path forces no import: the builtin lowers to
-    // `unreachable` unless the guest otherwise imports the sink through a real
-    // `eprintln` / `println`, so a purely-computational component stays
-    // import-free. The WIR lowering in `calls.rs` keys off `func_map`, which
-    // this populates, so the two gates stay in agreement per stream.
+    // Mark an ambient stdio function used when its `log_*` (panic /
+    // assert-diagnostic) builtin is reachable and the world provides that
+    // stream's sink — each stream gated on its own interface. In a sink-less
+    // world (`--lib`, kiln) the builtin lowers to `unreachable` in `calls.rs`,
+    // which keys off the `func_map` this populates, so the two stay in
+    // agreement per stream and a purely-computational component stays
+    // import-free.
     if project.provides_ambient_stdio_sink("Stdout")
         && reachable.iter().any(|func_id| {
             matches!(func_id, FunctionId::Free(f) if is_builtin_func(f) && {

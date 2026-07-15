@@ -242,12 +242,10 @@ fn collect_export_interface_fqs(
 /// The flat sorted FQ list of interfaces the *composed* artifact imports, for
 /// the WIT producer's world import refs and the import-plan faithfulness check.
 ///
-/// An `ImportKind::Component` entry names a dependency whose interface is
-/// composed away (`wasm-compose`), so the final artifact does not import that
-/// interface — it imports the dependency's own host-leaf capabilities instead.
-/// Effect reconstruction substitutes each such entry with the dependency's
-/// host-leaf import FQs (empty for a purely-computational dependency), so the
-/// list mirrors the composed binary rather than the pre-composition core.
+/// An `ImportKind::Component` entry's interface is composed away, so it is
+/// substituted with the dependency's own host-leaf import FQs (empty for a pure
+/// dependency); the list then mirrors the composed binary, not the
+/// pre-composition core.
 #[must_use]
 pub fn imported_cm_interface_fqs(project: &NirPackage, plan: &[ImportEntry]) -> Vec<String> {
     let registry = &project.cm_interface_registry;

@@ -210,7 +210,7 @@ See also: [WIT and Wado Mapping](./wep-2026-01-29-wit-wado-mapping.md) for how e
 
 Resource types (`resource`) are capabilities. Every operation on a resource (constructors, methods, statics) is a host call that requires the host to provide the implementation. Therefore, resource types are effects: using any operation on a resource type requires that the resource is available in the current effect scope.
 
-The "every resource operation is a host call" premise is generalized by [Effect Reconstruction from CM Component Imports](./wep-2026-07-15-cm-import-effect-reconstruction.md) (design decision; implementation pending): it holds for host-provided resources (all of today's), which stay effects, but a guest-implemented resource imported from a fused component is guest-to-guest and reconstructs to the exporter's own host-leaf imports.
+The "every resource operation is a host call" premise is generalized by [Effect Reconstruction from CM Component Imports](./wep-2026-07-15-cm-import-effect-reconstruction.md): it holds for host-provided resources (all of today's), which stay effects, but a guest-implemented resource imported from a fused component is guest-to-guest and reconstructs to the exporter's own host-leaf imports.
 
 ```wado
 // TcpSocket is a resource — using it requires the TcpSocket effect

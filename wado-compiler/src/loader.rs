@@ -1043,9 +1043,9 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     /// `pending_implicit_wasm_imports`, but from the resolved source directly.
     pending_component_imports: Vec<(ModuleSource, WasmAssetKind)>,
     /// WASI stdlib packages a decoded CM component transitively imports (its
-    /// host-leaf capabilities). Loaded alongside the implicit modules so effect
-    /// reconstruction sees the effects behind the component and can require them
-    /// — otherwise an impure dependency's capability would go unrequested.
+    /// host-leaf capabilities). Loaded once every component import is seen, so
+    /// effect reconstruction can require the effects behind the component;
+    /// otherwise an impure dependency's capability would go unrequested.
     pending_host_leaf_wasi: IndexSet<ModuleSource>,
     /// The entry module source (for dedup when sub-modules import back to entry)
     entry_module_source: Option<ModuleSource>,
@@ -1264,11 +1264,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             self.handle_wasm_source(source, kind).await?;
         }
 
-        // Every component import (file-path above and registry-coordinate just
-        // now) has been seen, so load the WASI packages behind their host-leaf
-        // capabilities. This runs after the coordinate drain — which happens
-        // after `load_implicit_modules` — so effect reconstruction sees the
-        // effects behind a registry dependency, not just a file-path one.
+        // Now that every component import (file-path and registry-coordinate)
+        // has been seen, load the WASI packages behind their host-leaf imports.
         self.load_pending_host_leaf_wasi();
         let queued = std::mem::take(&mut self.pending_implicit_wasm_imports);
         for (from_ms, kind, use_decl) in queued {

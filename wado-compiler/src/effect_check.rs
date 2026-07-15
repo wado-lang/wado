@@ -442,15 +442,11 @@ impl OwnedEffectData {
             }
         }
 
-        // Two indexes for reconstructing a direct `E::op()` requirement:
-        //  - `interface_meta`: every declared interface's name → (declaring
-        //    module, its `#[cm]` FQ). Resolves the `Local(E)` callee to the
-        //    effect to require and its FQ, whether or not `E` has operations
-        //    (a component interface may carry none in the consumer).
-        //  - `effect_by_cm_fq`: CM FQ → the effect it declares, restricted to
-        //    real effects (closure keys), so a component's host-leaf import maps
-        //    back to an effect and a type-only interface like `wasi:cli/types`
-        //    maps to nothing.
+        // `interface_meta` resolves a `Local(E)` callee to (declaring module,
+        // `#[cm]` FQ); `effect_by_cm_fq` maps a CM FQ back to the effect it
+        // declares, restricted to closure keys so a host-leaf import resolves to
+        // an effect while a type-only interface (`wasi:cli/types`) resolves to
+        // nothing.
         let mut interface_meta: IndexMap<String, (ModuleSource, Option<String>)> =
             IndexMap::default();
         let mut effect_by_cm_fq: IndexMap<String, EffectRef> = IndexMap::default();
@@ -905,11 +901,10 @@ impl SemEffectWalker<'_> {
         let Some((decl_module, cm_fq)) = self.index.interface_meta.get(&interface) else {
             return Vec::new();
         };
-        // Only a host-backed effect (`#[cm]`: WASI or a CM component) bottoms out
-        // as a capability the caller must hold. A user-defined effect with no CM
-        // boundary is resolved by the handler machinery (`with H => … do`), so
-        // its operations — including a handler method's self-delegation — are not
-        // a direct-op requirement.
+        // Only a host-backed effect (`#[cm]`) is a capability the caller must
+        // hold. A user-defined effect is resolved by the handler machinery, so
+        // its operations — including a handler's self-delegation — are not a
+        // direct-op requirement.
         let Some(fq) = cm_fq else {
             return Vec::new();
         };

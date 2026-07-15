@@ -3886,14 +3886,11 @@ pub fn is_cm_function_supported(func: &CmFunctionInfo) -> bool {
 /// Canonical ABI maximum flat results before a return must use an outptr.
 pub const MAX_FLAT_RESULTS: usize = 1;
 
-/// Whether a return type must be returned via an outptr rather than as flat
-/// core results. The canonical ABI returns a result flat when it flattens to at
-/// most `MAX_FLAT_RESULTS` core values and via an outptr otherwise, regardless
-/// of whether the type is a record, variant, or primitive. `cm_flatten`
-/// recurses into records and variants, so the flat count is the single rule —
-/// a single-field record (`{ n: u64 }` -> `[i64]`) returns flat, a multi-value
-/// record returns via the outptr. Shared by the import-binding synthesizer and
-/// the core functype builder so the two never disagree on a signature.
+/// Whether a return type must use an outptr rather than flat core results. The
+/// flat count is the single rule: a type returns via the outptr iff it flattens
+/// to more than `MAX_FLAT_RESULTS` core values, so a single-field record
+/// (`{ n: u64 }` -> `[i64]`) returns flat. Shared by the import-binding
+/// synthesizer and the core functype builder so the two never disagree.
 pub fn cm_return_needs_outptr(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
     registry.cm_flatten(ty).len() > MAX_FLAT_RESULTS
 }
@@ -4657,11 +4654,6 @@ mod tests {
 
     #[test]
     fn single_flat_value_record_returns_flat_not_outptr() {
-        // A record flattening to a single core value (`Single { n: u64 }` ->
-        // [i64]) is returned flat per the canonical ABI (MAX_FLAT_RESULTS = 1),
-        // not via an outptr. A multi-value record (`Point { x, y }` ->
-        // [f64, f64]) uses the outptr, and so does a single-field record whose
-        // field itself spans >1 core value (`Wrap { s: String }` -> [i32, i32]).
         let mut registry = CmInterfaceRegistry::new();
         let iface = "pkg:app/app@1";
         registry.structs.insert(

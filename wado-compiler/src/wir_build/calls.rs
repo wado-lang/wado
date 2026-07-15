@@ -638,16 +638,12 @@ impl FunctionTranslator<'_, '_> {
 
             "builtin::call_indirect_stdout_write_via_stream"
             | "builtin::call_indirect_stderr_write_via_stream" => {
-                // The ambient `log_stderr` / `log_stdout` (panic / assert-
-                // diagnostic) path never forces its own import: it rides an
-                // existing stdio import and otherwise traps silently. DCE
-                // registers `Std{out,err}::write_via_stream` as used only in a
-                // world with a stdio sink (or when a real `eprintln` / `println`
-                // already uses it), so `func_map` holds the entry exactly when we
-                // should ride it. A miss — the `--lib` / kiln worlds with no real
-                // stdio use — lowers to `unreachable` (stack-polymorphic, so it
-                // satisfies the builtin's declared i32 result), keeping a
-                // purely-computational component free of `wasi:cli/stderr`.
+                // The ambient panic / assert-diagnostic path never forces its
+                // own import. DCE registers `Std{out,err}::write_via_stream` in
+                // `func_map` exactly when the world provides the sink (or a real
+                // `eprintln` / `println` already uses it); a miss lowers to
+                // `unreachable`, keeping a purely-computational component free of
+                // `wasi:cli/stderr`.
                 let is_stderr = builtin_name.contains("stderr");
                 let wasi_func_name = if is_stderr {
                     "wasi:cli/Stderr::write_via_stream"
@@ -656,8 +652,6 @@ impl FunctionTranslator<'_, '_> {
                 };
                 let key = format!("wasi/{wasi_func_name}");
                 match self.ctx.func_map.get(&key).cloned() {
-                    // Wado uses stackful async: canon lower without async flag,
-                    // so sync lower returns the result directly.
                     Some(func_id) => {
                         let call_args: Vec<WirInstr> = args
                             .iter()
@@ -672,8 +666,6 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
 
-            // Not an instruction-builtin; fall through to function call resolution
-            // Not an instruction-builtin; fall through to function call resolution
             _ => None,
         }
     }

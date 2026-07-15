@@ -214,16 +214,11 @@ impl NirPackage {
     }
 
     /// Whether the target world provides an ambient sink for the given stdio
-    /// interface (`Stdout` / `Stderr`) used by the `log_stdout` / `log_stderr`
-    /// (panic / assert-diagnostic) path. True for the test world and any world
-    /// that imports the interface — the runnable worlds `wasi:cli/command` and
-    /// `wasi:http/service` import both; the `--lib` library world and the kiln
-    /// generator world import neither. In a sink-less world the ambient path
-    /// never forces the import: it rides an existing `eprintln` / `println`
-    /// import if one is present and otherwise traps silently, so a
-    /// purely-computational component stays import-free. Each stream is gated on
-    /// its own interface so a world importing only one is not mis-gated by the
-    /// other.
+    /// interface (`Stdout` / `Stderr`) used by the `log_*` (panic /
+    /// assert-diagnostic) path. True for the test world and any world importing
+    /// the interface; false for `--lib` and kiln, where the ambient path traps
+    /// silently instead of forcing the import. Each stream is gated on its own
+    /// interface so a world importing only one is not mis-gated by the other.
     pub fn provides_ambient_stdio_sink(&self, interface_name: &str) -> bool {
         self.is_test_world() || self.world_imports_interface(interface_name)
     }

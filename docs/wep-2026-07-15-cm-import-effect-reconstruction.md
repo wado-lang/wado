@@ -215,10 +215,8 @@ dishonest.
 
 ## Supersedes
 
-This is a design decision; implementation is pending (Status: Draft), so the
-supersessions below apply to the design, not yet the shipped behavior. Each is
-scoped — host-satisfied (WASI) interfaces and host-provided resources are
-unchanged.
+Each supersession is scoped — host-satisfied (WASI) interfaces and
+host-provided resources are unchanged.
 
 - [WIT Interoperability](./wep-2026-05-02-wit-interoperability.md) §"Pure
   interfaces": "an interface with functions is conservatively treated as
