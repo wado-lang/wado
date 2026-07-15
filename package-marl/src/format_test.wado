@@ -22,3 +22,23 @@ test "format keeps a bare url in parentheses intact" {
 test "format preserves an angle-bracketed autolink" {
     assert format("<https://example.com>\n") == "<https://example.com>\n";
 }
+
+test "format keeps an all-same ordered list numbering" {
+    assert format("1. a\n1. b\n1. c\n") == "1. a\n1. b\n1. c\n";
+}
+
+test "format renumbers an incrementing ordered list sequentially" {
+    assert format("1. a\n2. b\n3. c\n") == "1. a\n2. b\n3. c\n";
+}
+
+test "format renumbers sequentially from a non-one start when items differ" {
+    assert format("3. a\n1. b\n1. c\n") == "3. a\n4. b\n5. c\n";
+}
+
+test "format keeps a code span that wraps a soft line break intact" {
+    // A tag-like `<n>` at the start of the code span's second line must not
+    // split the paragraph; the code span is joined with its newline as a
+    // single space and its internal spacing preserved.
+    let src = "x `<r> <u>/s   (<m> ms,\n<n> it)` y\n";
+    assert format(src) == "x `<r> <u>/s   (<m> ms, <n> it)` y\n";
+}

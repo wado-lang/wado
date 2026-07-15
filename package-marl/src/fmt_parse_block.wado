@@ -191,7 +191,7 @@ fn parse_blocks(lines: &List<String>, start: i32, end: i32, refs: &RefTable) -> 
             continue;
         }
         let chars = chars_of(line);
-        if is_html_block_start(&chars) {
+        if is_html_block_start(&chars) && (para.is_empty() || html_block_interrupts_paragraph(&chars)) {
             flush_paragraph(&mut out, &mut para, refs);
             let block_end = html_block_bounds(lines, i, end);
             out.push(Node::Html(lines_slice(lines, i, block_end).join("\n").trim_end()));
@@ -288,6 +288,16 @@ fn is_html_block_start(chars: &List<char>) -> bool {
         p += 1;
     }
     return p >= len || chars[p] matches { ' ' | '\t' | '>' | '/' };
+}
+
+/// Whether an HTML block starting on this line may interrupt an open
+/// paragraph. Only a comment, processing instruction, or declaration
+/// (`<!--`, `<?`, `<!`) does; a bare tag is a CommonMark type-7 block, which
+/// cannot interrupt a paragraph and so continues it as inline content.
+fn html_block_interrupts_paragraph(chars: &List<char>) -> bool {
+    let len = chars.len();
+    let p = skip_indent(chars, len);
+    return p + 1 < len && chars[p] == '<' && chars[p + 1] matches { '!' | '?' };
 }
 
 /// A raw HTML block ends at the next blank line (or the end of the current
@@ -586,6 +596,7 @@ fn parse_list(lines: &List<String>, start: i32, end: i32, refs: &RefTable, out: 
     }
 
     let mut items: List<MdItem> = [];
+    let mut second_number = start_number;
     let mut k = start;
     while k < end {
         let mut item_start = k;
@@ -600,6 +611,9 @@ fn parse_list(lines: &List<String>, start: i32, end: i32, refs: &RefTable, out: 
             Some(m) => {
                 if m.indent == base_indent && m.ordered == ordered && m.delim == base_delim {
                     content_col = m.content_col;
+                    if items.len() == 1 {
+                        second_number = m.number;
+                    }
                 }
             },
             None => {
@@ -657,7 +671,8 @@ fn parse_list(lines: &List<String>, start: i32, end: i32, refs: &RefTable, out: 
         k = j;
     }
 
-    out.push(Node::List(MdList { ordered, start: start_number, items }));
+    let same_number = items.len() >= 2 && second_number == start_number;
+    out.push(Node::List(MdList { ordered, start: start_number, same_number, items }));
     return k;
 }
 

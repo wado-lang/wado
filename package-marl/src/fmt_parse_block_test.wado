@@ -304,6 +304,29 @@ test "parse_document does not treat a standalone autolink line as an HTML block"
     assert children.get(0) matches { Some(Node::Paragraph(_)) };
 }
 
+test "parse_document keeps a bare tag on a continuation line in the paragraph" {
+    // A CommonMark type-7 HTML block (a complete tag alone on a line) cannot
+    // interrupt an open paragraph, so this stays a single paragraph.
+    let source = "text line\n<n> more text";
+    let children = doc_children(&source);
+    assert children.len() == 1;
+    assert children.get(0) matches { Some(Node::Paragraph(_)) };
+}
+
+test "parse_document still starts a raw HTML block at the top of a block" {
+    let source = "<div>\ntext\n</div>";
+    let children = doc_children(&source);
+    assert children.get(0) matches { Some(Node::Html(_)) };
+}
+
+test "parse_document lets an HTML comment interrupt an open paragraph" {
+    let source = "text line\n<!-- c -->";
+    let children = doc_children(&source);
+    assert children.len() == 2;
+    assert children.get(0) matches { Some(Node::Paragraph(_)) };
+    assert children.get(1) matches { Some(Node::Html(_)) };
+}
+
 test "parse_document resolves a forward-referenced link reference definition" {
     let source = "See [the WEP][cli-wep] for details.\n\n[cli-wep]: ./wep.md";
     let children = doc_children(&source);
