@@ -1,0 +1,11 @@
+// A purely-computational CM component's operations require no effect: cm-catalog
+// performs no I/O, so calling one of its functions from a non-test function
+// needs no `with` — effect reconstruction yields an empty capability set.
+use { CmCatalog } from "./sub/cm-catalog.wasm" with { type: "wasm" };
+
+export fn run() {
+    let _ = CmCatalog::id_u32(42);
+}
+
+__DATA__
+{"stdout": ""}

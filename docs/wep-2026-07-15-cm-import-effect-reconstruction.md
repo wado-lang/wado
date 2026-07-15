@@ -1,6 +1,15 @@
 # WEP: Effect Reconstruction from CM Component Imports
 
-Status: Draft
+Status: Implemented (v1)
+
+The synchronous value-type surface is implemented: the loader collects each
+imported component's host-leaf imports, the import plan mirrors the composed
+binary, and the effect checker requires a direct `E::op()` call's reconstructed
+effects. Enforcement is scoped to host-backed effects — an effect with a `#[cm]`
+boundary (WASI or a CM component). A user-defined effect with no CM boundary is
+resolved by the handler machinery, so its operations (including a handler
+method's self-delegation) are not a direct-op requirement. The async import
+surface (`stream`/`future`) remains out of scope (see below).
 
 ## Context
 
@@ -86,16 +95,26 @@ the existing Wado effect via `CmInterfaceRegistry`; a non-WASI interface is
 synthesized from decoded WIT, reusing the export-side synthesis already in
 [Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md).
 
-The ambient panic path (`wasi:cli/stderr`, `exit`) must be subtracted from the
-reconstructed set, or every pure component would drag `Stderr`.
+The ambient panic path needs no subtraction here, because it no longer imports:
+`log_stderr` / `log_stdout` rides an existing stdio import or lowers to
+`unreachable`, gated on whether the target world provides a sink
+(`NirPackage::provides_ambient_stdio_sink` — true for `wasi:cli/command`,
+`wasi:http/service`, and the test world; false for `--lib` and kiln). So a
+purely-computational component's decoded imports are already empty of the panic
+path; what remains is exactly its real capabilities (plus type-only shared
+interfaces such as `wasi:cli/types`, which carry no effect).
 
 ### Granularity
 
-- [ ] v1 — component-level union. Every export of the component requires the
+- [x] v1 — component-level union. Every export of the component requires the
       union of the component's imports. Needs only the decoded component _type_
       (no call-graph analysis), is sound, and is exact for well-factored pure
       packages (marl's union is empty). Over-approximation bites only when one
       component mixes pure and impure exports — arguably a packaging smell.
+      Implemented: the loader records the union
+      (`CmInterfaceRegistry::host_leaf_imports_for`); the import plan and the
+      effect checker both consume it, and the loader auto-loads the WASI packages
+      behind the union so their effects are in scope.
 - [ ] v2 — per-export reachability. A core-wasm call-graph analysis inside the
       imported component attributes each import to the exports that can reach it.
       More precise, but conservative on `call_indirect` / funcref / GC vtable /

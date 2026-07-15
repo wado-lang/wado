@@ -1042,6 +1042,11 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     /// [`ModuleSource::Wasm`] via the dependency index. Drained like
     /// `pending_implicit_wasm_imports`, but from the resolved source directly.
     pending_component_imports: Vec<(ModuleSource, WasmAssetKind)>,
+    /// WASI stdlib packages a decoded CM component transitively imports (its
+    /// host-leaf capabilities). Loaded alongside the implicit modules so effect
+    /// reconstruction sees the effects behind the component and can require them
+    /// — otherwise an impure dependency's capability would go unrequested.
+    pending_host_leaf_wasi: IndexSet<ModuleSource>,
     /// The entry module source (for dedup when sub-modules import back to entry)
     entry_module_source: Option<ModuleSource>,
     /// Canonical name of the entry module (e.g., "./`cross_module_type_identity.wado`")
@@ -1073,6 +1078,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             loaded_wasm_namespaces: IndexSet::default(),
             pending_implicit_wasm_imports: Vec::new(),
             pending_component_imports: Vec::new(),
+            pending_host_leaf_wasi: IndexSet::default(),
             entry_module_source: None,
             entry_canonical_name: None,
             entry_dir: String::new(),
@@ -1433,6 +1439,17 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         self.logger.span_end(&span);
         let bindings = built?;
 
+        // Queue the WASI packages behind this component's host-leaf imports so
+        // effect reconstruction sees the effects it transitively needs (a
+        // `wasi:clocks/monotonic-clock@…` import loads the `clocks` package).
+        for fq in &bindings.host_leaf_imports {
+            if let Some(rest) = fq.strip_prefix("wasi:") {
+                let package = rest.split('/').next().unwrap_or(rest);
+                let ms = self.interner.wasi(package);
+                self.pending_host_leaf_wasi.insert(ms);
+            }
+        }
+
         self.bind_module(&bindings.module, source)?;
         self.loaded.insert(source.clone(), bindings.module);
         self.loaded_wasm_namespaces.insert(namespace.to_string());
@@ -1487,13 +1504,16 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
     /// Load implicit modules required by the compiler
     fn load_implicit_modules(&mut self) -> Result<(), LoadError> {
-        let implicit_module_sources = [
+        let mut implicit_module_sources = vec![
             ModuleSource::builtin(),
             ModuleSource::string(),
             ModuleSource::prelude(),
             ModuleSource::rt(),
             ModuleSource::allocator(),
         ];
+        // WASI packages behind imported components' host-leaf capabilities,
+        // loaded here so their effects are in scope for reconstruction.
+        implicit_module_sources.extend(std::mem::take(&mut self.pending_host_leaf_wasi));
 
         for module_source in implicit_module_sources {
             if self.loaded.contains_key(&module_source) {
