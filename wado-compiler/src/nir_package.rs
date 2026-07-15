@@ -213,16 +213,19 @@ impl NirPackage {
         self.target_world == world_registry::TEST_WORLD
     }
 
-    /// Whether the target world provides an ambient stdio sink for the
-    /// `log_stderr` / `log_stdout` (panic / assert-diagnostic) path. True for the
-    /// runnable worlds — `wasi:cli/command`, `wasi:http/service`, and the test
-    /// world — and false for the `--lib` library world and the kiln generator
-    /// world. In a sink-less world the ambient path never forces the import: it
-    /// rides an existing `eprintln` / `println` import if one is present and
-    /// otherwise traps silently, so a purely-computational component stays
-    /// import-free.
-    pub fn provides_ambient_stdio_sink(&self) -> bool {
-        self.is_test_world() || self.world_imports_interface("Stderr")
+    /// Whether the target world provides an ambient sink for the given stdio
+    /// interface (`Stdout` / `Stderr`) used by the `log_stdout` / `log_stderr`
+    /// (panic / assert-diagnostic) path. True for the test world and any world
+    /// that imports the interface — the runnable worlds `wasi:cli/command` and
+    /// `wasi:http/service` import both; the `--lib` library world and the kiln
+    /// generator world import neither. In a sink-less world the ambient path
+    /// never forces the import: it rides an existing `eprintln` / `println`
+    /// import if one is present and otherwise traps silently, so a
+    /// purely-computational component stays import-free. Each stream is gated on
+    /// its own interface so a world importing only one is not mis-gated by the
+    /// other.
+    pub fn provides_ambient_stdio_sink(&self, interface_name: &str) -> bool {
+        self.is_test_world() || self.world_imports_interface(interface_name)
     }
 
     /// Build the lookup of synthesized value-copy helpers, keyed by

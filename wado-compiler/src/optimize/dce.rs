@@ -402,29 +402,33 @@ fn resolve_imports(
 
     // Also mark the ambient stdio functions as used when the `log_stderr` /
     // `log_stdout` (panic / assert-diagnostic) builtins are reachable — but only
-    // in a world that provides a stdio sink (`wasi:cli/command`,
-    // `wasi:http/service`, test). In the `--lib` and kiln worlds the ambient
-    // path forces no import: the builtin lowers to `unreachable` unless the guest
-    // otherwise imports the sink through a real `eprintln` / `println`, so a
-    // purely-computational component stays import-free. Both gates
-    // (here and the WIR lowering in `calls.rs`) key off the same predicate.
-    if project.provides_ambient_stdio_sink() {
-        if reachable.iter().any(|func_id| {
+    // in a world that provides the matching stdio sink (`wasi:cli/command`,
+    // `wasi:http/service`, test). Each stream is gated on its own interface so a
+    // world importing only one of them does not ride the other. In the `--lib`
+    // and kiln worlds the ambient path forces no import: the builtin lowers to
+    // `unreachable` unless the guest otherwise imports the sink through a real
+    // `eprintln` / `println`, so a purely-computational component stays
+    // import-free. The WIR lowering in `calls.rs` keys off `func_map`, which
+    // this populates, so the two gates stay in agreement per stream.
+    if project.provides_ambient_stdio_sink("Stdout")
+        && reachable.iter().any(|func_id| {
             matches!(func_id, FunctionId::Free(f) if is_builtin_func(f) && {
                 let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
                 name.starts_with("call_indirect_stdout")
             })
-        }) {
-            used_wasi_functions.insert("Stdout::write_via_stream".to_string());
-        }
-        if reachable.iter().any(|func_id| {
+        })
+    {
+        used_wasi_functions.insert("Stdout::write_via_stream".to_string());
+    }
+    if project.provides_ambient_stdio_sink("Stderr")
+        && reachable.iter().any(|func_id| {
             matches!(func_id, FunctionId::Free(f) if is_builtin_func(f) && {
                 let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
                 name.starts_with("call_indirect_stderr")
             })
-        }) {
-            used_wasi_functions.insert("Stderr::write_via_stream".to_string());
-        }
+        })
+    {
+        used_wasi_functions.insert("Stderr::write_via_stream".to_string());
     }
 
     // Collect imports using registry lookup instead of hard-coded match

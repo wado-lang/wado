@@ -1264,6 +1264,17 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             self.handle_wasm_source(source, kind).await?;
         }
 
+        // Every component import (file-path above and registry-coordinate just
+        // now) has been seen, so load the WASI packages behind their host-leaf
+        // capabilities. This runs after the coordinate drain — which happens
+        // after `load_implicit_modules` — so effect reconstruction sees the
+        // effects behind a registry dependency, not just a file-path one.
+        self.load_pending_host_leaf_wasi();
+        let queued = std::mem::take(&mut self.pending_implicit_wasm_imports);
+        for (from_ms, kind, use_decl) in queued {
+            self.handle_wasm_import(&from_ms, kind, &use_decl).await?;
+        }
+
         // Collect and load files referenced by #include_str / #include_bytes
         let included_files = {
             let _span = self.logger.span("load/included_files");
@@ -1504,18 +1515,35 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
     /// Load implicit modules required by the compiler
     fn load_implicit_modules(&mut self) -> Result<(), LoadError> {
-        let mut implicit_module_sources = vec![
+        self.load_stdlib_sources(vec![
             ModuleSource::builtin(),
             ModuleSource::string(),
             ModuleSource::prelude(),
             ModuleSource::rt(),
             ModuleSource::allocator(),
-        ];
-        // WASI packages behind imported components' host-leaf capabilities,
-        // loaded here so their effects are in scope for reconstruction.
-        implicit_module_sources.extend(std::mem::take(&mut self.pending_host_leaf_wasi));
+        ]);
+        Ok(())
+    }
 
-        for module_source in implicit_module_sources {
+    /// Load the WASI stdlib packages behind imported components' host-leaf
+    /// capabilities so their effects are in scope for reconstruction. Runs
+    /// after every component import — file-path (`with { type: "wasm" }`) and
+    /// registry-coordinate — has been processed, since a coordinate dependency
+    /// is drained after `load_implicit_modules` yet still contributes host-leaf
+    /// imports; loading here catches both paths in one place.
+    fn load_pending_host_leaf_wasi(&mut self) {
+        let sources: Vec<ModuleSource> = std::mem::take(&mut self.pending_host_leaf_wasi)
+            .into_iter()
+            .collect();
+        self.load_stdlib_sources(sources);
+    }
+
+    /// Load each stdlib `module_source` (and its transitive stdlib deps) from
+    /// the bundled cache, recording them as implicit modules. Already-loaded or
+    /// non-stdlib sources are skipped; wasm-asset imports they surface are
+    /// queued in `pending_implicit_wasm_imports` for the caller to drain.
+    fn load_stdlib_sources(&mut self, sources: Vec<ModuleSource>) {
+        for module_source in sources {
             if self.loaded.contains_key(&module_source) {
                 continue;
             }
@@ -1564,8 +1592,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 }
             }
         }
-
-        Ok(())
     }
 
     /// Emit a `Code::KilnMissingWith` diagnostic for a bare `use ... from

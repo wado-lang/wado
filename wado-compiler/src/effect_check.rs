@@ -461,8 +461,8 @@ impl OwnedEffectData {
                 };
                 let cm_fq = decl
                     .attrs
-                    .first()
-                    .and_then(|a| a.as_cm_import())
+                    .iter()
+                    .find_map(|a| a.as_cm_import())
                     .map(crate::ast::CmImport::interface_path);
                 interface_meta
                     .entry(decl.name.clone())
