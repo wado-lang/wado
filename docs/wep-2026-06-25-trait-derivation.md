@@ -68,12 +68,12 @@ instantiated for a given `T`.
 
 ### A per-trait derivation policy
 
-| Policy              | A `T: Trait` obligation is satisfied by …                                   | Generation | Examples                                           |
-| ------------------- | --------------------------------------------------------------------------- | ---------- | -------------------------------------------------- |
-| `on_bound` (demand) | structural synthesis, on demand when a reference requires it                | on demand  | `Eq`, `Ord`, `Default`, `Serialize`, `Deserialize` |
-| `on_bound` (total)  | always — the trait is total over all types                                  | eager      | `Inspect`, `InspectAlt`                            |
-| `display`           | a real `impl Display`, a plain `enum` (bare case name), or a `Display` base | eager      | `Display`, `DisplayAlt`                            |
-| `explicit`          | only a written `impl Trait for T;` (or full manual impl)                    | on demand  | default for user traits                            |
+| Policy              | A `T: Trait` obligation is satisfied by …                                   | Generation                                        | Examples                                           |
+| ------------------- | --------------------------------------------------------------------------- | ------------------------------------------------- | -------------------------------------------------- |
+| `on_bound` (demand) | structural synthesis, on demand when a reference requires it                | on demand                                         | `Eq`, `Ord`, `Default`, `Serialize`, `Deserialize` |
+| `on_bound` (total)  | always — the trait is total over all types                                  | eager                                             | `Inspect`, `InspectAlt`                            |
+| `display`           | a real `impl Display`, a plain `enum` (bare case name), or a `Display` base | enum: eager body; newtype: inherited at call site | `Display`, `DisplayAlt`                            |
+| `explicit`          | only a written `impl Trait for T;` (or full manual impl)                    | on demand                                         | default for user traits                            |
 
 There is no longer an `automatic` policy: its members split by totality.
 `Default` joined the demand `on_bound` traits (`Eq` / `Ord` / serde) — it is
@@ -107,8 +107,14 @@ compiler derives it eagerly:
   `Inspect`'s type-qualified `Color::Red`, so `Display` is not a redundant
   debug echo;
 - a newtype **inherits its base type's `Display`** transparently (`Meters =
-  f64` renders `3.14`, with no `as Name` tag — that tag is `Inspect`'s),
-  mirroring `type_implements_trait`'s base-type fallback for every other trait.
+  f64` renders `3.14`, with no `as Name` tag — that tag is `Inspect`'s). This is
+  genuine inheritance, not a synthesized body: the format call site peels the
+  newtype to its base (`peel_transparent_newtype`) exactly as a bare
+  `value.fmt(f)` method call resolves through newtype method inheritance, and it
+  covers every transparent format trait (`Display`, `DisplayAlt`, `Binary`, hex,
+  exp, …). `Inspect` / `InspectAlt` are the sole exception — a newtype overrides
+  them with its own `as Name` body. A manual `impl` on the newtype stops the
+  peel.
 
 `DisplayAlt` derives a fallback delegating to `Display` only where a `Display`
 impl exists (manual, enum-synthesized, or newtype-inherited), so the alternate

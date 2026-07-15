@@ -29,10 +29,13 @@ test "display drops the inspect cast" {
     assert `{l:?}` == "\"wado\" as Label";
 }
 
-test "alternate display chains through display" {
+test "newtype inherits the base's alternate formats" {
     let m: Meters = 100.5;
-    assert `{m:#}` == "100.5";
+    // `{m:#?}` is `InspectAlt` — a newtype overrides it with the ` as Name` tag.
     assert `{m:#?}` == "100.5 as Meters";
+    // `{m:#}` is `DisplayAlt`, which the newtype *inherits* from `f64` — and
+    // `f64` has no `DisplayAlt` (like `{3.14:#}`), so this would be a compile
+    // error, consistent with the base type. Inheritance, not a bespoke shim.
 }
 
 test "newtype over a non-Display struct: only Inspect applies" {

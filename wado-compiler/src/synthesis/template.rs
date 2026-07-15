@@ -987,6 +987,33 @@ fn deref_to_inner(expr: TirExpr, target_type: TypeId, span: Span) -> TirExpr {
 ///
 /// Emits a trait method call, delegating to the Wado-level trait implementation
 /// (including blanket impls).
+/// A newtype is transparent, so for every format trait except `Inspect` /
+/// `InspectAlt` it *inherits* its base type's impl — `Display`, `DisplayAlt`,
+/// `Binary`, hex, exp, … all render the underlying value. Peel to the base type
+/// so the format call targets the inherited impl, exactly as a bare
+/// `value.fmt(f)` method call resolves through newtype method inheritance rather
+/// than requiring a synthesized forwarding body. `Inspect` / `InspectAlt` are
+/// never peeled (a newtype overrides them with its own ` as Name` body), and a
+/// manual `impl <Trait> for <newtype>` also stops the peel.
+fn peel_transparent_newtype(type_id: TypeId, trait_name: &str, ctx: &TemplateCtx) -> TypeId {
+    if trait_name == ctx.names.inspect || trait_name == ctx.names.inspect_alt {
+        return type_id;
+    }
+    let mut tid = type_id;
+    loop {
+        let base = {
+            let tt = ctx.tt.borrow();
+            match tt.get(tid) {
+                ResolvedType::Newtype {
+                    name, base_type, ..
+                } if !ctx.trait_env.has_any_methodful_impl(name, trait_name) => *base_type,
+                _ => return tid,
+            }
+        };
+        tid = base;
+    }
+}
+
 fn trait_fmt_call(
     type_id: TypeId,
     val: TirExpr,
@@ -996,6 +1023,27 @@ fn trait_fmt_call(
     span: Span,
     ctx: &TemplateCtx,
 ) -> Vec<TirStmt> {
+    // Inherit the base type's transparent format traits for a newtype receiver.
+    let target = peel_transparent_newtype(type_id, trait_name, ctx);
+    let (val, type_id) = if target == type_id {
+        (val, type_id)
+    } else {
+        // Peeling fired: `type_id` is a transparent newtype. Normalize `val` to
+        // that newtype (stripping any refs the interpolation carried), then cast
+        // to the inherited base type — a no-op on the transparent GC
+        // representation that gives the call its expected receiver type.
+        let normalized = deref_to_inner(val, type_id, span);
+        let cast = TirExpr::new(
+            TirExprKind::Cast {
+                expr: Box::new(normalized),
+                target_type: target,
+            },
+            target,
+            span,
+        );
+        (cast, target)
+    };
+
     let MethodCallInfo {
         local_name,
         monomorph_info,

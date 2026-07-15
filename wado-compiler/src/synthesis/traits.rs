@@ -370,18 +370,16 @@ pub fn synthesize_traits(project: Package) -> Package {
         generate_inspect_alt_impls(module, &mut ctx);
         // `Display` is auto-derived only for plain `enum`s — the one type whose
         // canonical string form is unambiguous (the bare case name). Every other
-        // type is displayable only if someone wrote `impl Display`. The enum body
-        // must run before the `DisplayAlt` pass, whose `needs_fallback` check
-        // reads the recorded `Display` impl to decide whether to emit `fmt_alt`.
+        // type is displayable only if someone wrote `impl Display`. A newtype is
+        // not derived here: it *inherits* its base type's `Display` transparently,
+        // resolved at the format call site (see `peel_transparent_newtype` in
+        // `synthesis::template`), the same way a bare `value.fmt(f)` method call
+        // inherits. The enum body must run before the `DisplayAlt` pass, whose
+        // `needs_fallback` check reads the recorded `Display` impl.
         generate_enum_display_impls(module, &mut ctx);
-        // A newtype is transparent, so it inherits its base type's `Display`
-        // (rendering as the base value, no `as Name` tag). Runs after the enum
-        // pass so a newtype over an enum sees the enum's recorded `Display`.
-        generate_newtype_display_impls(module, &mut ctx);
-        // `DisplayAlt` (`{x:#}`) auto-derives a fallback delegating to `Display`,
-        // but only where a real (or enum-synthesized) `Display` impl exists — so
-        // an alternate-display of a `Display`-less type has no body and fails at
-        // method resolution.
+        // `DisplayAlt` (`{x:#}`) auto-derives a fallback delegating to `Display`
+        // only where a real (or enum-synthesized) `Display` impl exists; a newtype
+        // likewise inherits its base's `DisplayAlt` at the call site.
         generate_display_alt_fallback_impls(module, &mut ctx);
     }
     project
@@ -1644,70 +1642,6 @@ fn generate_enum_display_fn(
         body,
         inspect_locals(ref_enum_type, fmt_type),
     )
-}
-
-/// Auto-derive `Display` for a newtype over a `Display` base. A Wado newtype is
-/// transparent, so it inherits the base type's `Display`, rendering as the base
-/// value (`3.14`) with no `as Name` tag — that tag belongs to `Inspect`, for
-/// debug. A newtype over a non-`Display` base (e.g. a plain struct) stays
-/// `Display`-less, matching `type_implements_trait`'s base-type fallback.
-fn generate_newtype_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
-    if module.newtypes.is_empty() {
-        return;
-    }
-
-    let module_source = module.module_source.clone();
-    let display_name = ctx.names.display.clone();
-    let display_method = ctx.names.display_method.clone();
-    let formatter_name = ctx.names.formatter.clone();
-
-    let mut tt = module.type_table.borrow_mut();
-    let formatter_type = tt.make_struct(formatter_name, ModuleSource::format());
-    let fmt_type = tt.make_mut_ref(formatter_type);
-    let span = synth_span();
-
-    let newtype_infos: Vec<(String, TypeId, TypeId)> = module
-        .newtypes
-        .iter()
-        .filter(|nt| !module.flags.iter().any(|f| f.type_id == nt.type_id))
-        .filter_map(|nt| {
-            let ResolvedType::Newtype { base_type, .. } = tt.get(nt.type_id) else {
-                return None;
-            };
-            Some((nt.name.clone(), nt.type_id, *base_type))
-        })
-        .collect();
-
-    let mut generated = Vec::new();
-    for (name, nt_type, base_type) in &newtype_infos {
-        if ctx.has_methodful_impl_anywhere(name, &display_name) {
-            continue;
-        }
-        // Inherit `Display` only when the base actually has one.
-        let base_name = tt.type_name(*base_type);
-        if !ctx.has_impl(&base_name, &display_name) {
-            continue;
-        }
-        let ref_type = tt.make_ref(*nt_type);
-        generated.push(Rc::new(RefCell::new(generate_newtype_fmt_fn(
-            name,
-            *nt_type,
-            *base_type,
-            ref_type,
-            fmt_type,
-            ctx.trait_env,
-            &module_source,
-            &mut tt,
-            span,
-            &display_name,
-            &display_method,
-            None,
-        ))));
-        ctx.record_impl(name, &display_name);
-    }
-
-    drop(tt);
-    module.functions.extend(generated);
 }
 
 /// Generate `StructName^Inspect::inspect(&self, &mut Formatter)`.
@@ -3176,12 +3110,6 @@ fn formatter_call(
     TirStmt::new(TirStmtKind::Expr(call), span)
 }
 
-/// Generate `Display::fmt` fallback implementations for types without a user-provided
-/// Display impl. The fallback delegates to `Inspect::inspect`:
-///
-/// ```text
-/// fn fmt(&self, f: &mut Formatter) { self.inspect(f); }
-/// ```
 /// Generate a delegating format-trait fallback function whose body is a single
 /// `self.<delegate_method>(f)` call (used by the `DisplayAlt` → `Display`
 /// fallback, and the newtype `Display`/`DisplayAlt` transparent delegation).
