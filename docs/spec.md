@@ -1627,7 +1627,7 @@ let hex = `{255:x}`;              // "ff"
 let p = Point { x: 10, y: 20 };
 let debug = `{p:?}`;             // "Point { x: 10, y: 20 }"
 let pretty = `{p:#?}`;           // pretty-print: "Point {\n  x: 10,\n  y: 20,\n}"
-// `{p}` (Display) is a compile error — Display is not auto-derived. Use `{p:?}`.
+// `{p}` (Display) needs an `impl Display` for `Point`; use `{p:?}` for debug output.
 
 // Escaped braces — literal { and } without interpolation
 let json = `\{"key": "{name}"\}`;  // {"key": "Alice"}
@@ -3327,15 +3327,15 @@ impl Eq for Handler;
 // compile error: cannot derive `Eq` for `Handler`: not every field/case implements `Eq`
 ```
 
-### Debug Traits Are Total; Display Is Not
+### Format Traits
 
-`Inspect` / `InspectAlt` hold for **every** type: `{x:?}` / `{x:#?}` always work, `T: Inspect` needs no written bound, and their bodies are generated eagerly.
+`{x:?}` / `{x:#?}` (`Inspect` / `InspectAlt`) work for every type — no bound needed.
 
-`Display` / `DisplayAlt` are **not** auto-derived. `{x}` (or a `T: Display` bound) on a struct, variant, or generic container without a hand-written `impl Display` is a compile error — use `{x:?}`. Only two kinds get `Display` for free: a plain `enum` (bare case name) and a newtype (inherits its base type's `Display`). This keeps `T: Display` meaningful — it certifies a real string representation, so `String::push_display` rejects debug-only types.
+`{x}` (`Display`) uses the type's `impl Display`. Primitives, `String`, plain enums (bare case name), and newtypes (inherited from the base type) have one; a struct, variant, or generic container needs a hand-written `impl Display`, otherwise `{x}` is a compile error and `{x:?}` gives its debug form. So `T: Display` certifies a real string representation — e.g. `String::push_display` takes any `Display`. `{x:#}` (`DisplayAlt`) follows `Display`.
 
 ```wado
-fn describe<T>(v: &T) -> String { return `{v:?}`; }          // no bound needed (Inspect is total)
-fn label<T: Display>(v: &T) -> String { return `{v}`; }     // `{v}` on unbounded `T` is an error
+fn describe<T>(v: &T) -> String { return `{v:?}`; }         // any type
+fn label<T: Display>(v: &T) -> String { return `{v}`; }     // requires a `Display`
 ```
 
 See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).

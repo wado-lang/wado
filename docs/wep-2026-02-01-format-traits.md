@@ -105,14 +105,13 @@ trait InspectAlt {
 
 ### Display Derivation
 
-Unlike `Inspect`, `Display` is **not** auto-synthesized for arbitrary types: a
-human-facing string form has no canonical structural shape the compiler could
-invent, so `{x}` on a type with no `Display` impl is a compile error (use
-`{x:?}`). The compiler derives `Display` only for the two type kinds whose
-string form is unambiguous: a plain `enum` displays its bare case name (`Red`,
-vs `Inspect`'s `Color::Red`), and a newtype inherits its base type's `Display`
-transparently (`Meters = f64` renders `3.14`). `DisplayAlt` (`{x:#}`) auto-derives
-a fallback delegating to `Display` wherever a `Display` impl exists. See
+`Display` comes from the type's own `impl Display`. The compiler provides one
+for the two type kinds whose string form is unambiguous: a plain `enum` displays
+its bare case name (`Red`, vs `Inspect`'s `Color::Red`), and a newtype inherits
+its base type's `Display` transparently (`Meters = f64` renders `3.14`). Any
+other type — a struct, variant, or generic container — needs a hand-written
+`impl Display`; `{x}` on a type without one is a compile error (use `{x:?}`).
+`DisplayAlt` (`{x:#}`) follows `Display`. See
 [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
 ### Alternate (Alt) Trait Variants

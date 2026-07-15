@@ -254,7 +254,7 @@ let hex_alt = `{255:#x}`;                // "0xff" (via alternate flag)
 // Inspect — auto-derived debug outputs (see docs/wep-2026-02-21-inspect-debug-output.md)
 println(`{point:?}`);                    // "Point { x: 10, y: 20 }"
 println(`{point:#?}`);                   // pretty-print with indentation (see below)
-// `{point}` (Display) is a compile error — Display is not auto-derived. Use `{point:?}`.
+// `{point}` (Display) needs an `impl Display for Point`; use `{point:?}` for debug.
 
 // Pretty-print (:#?) — multi-line indented output for composite types
 let arr: List<i32> = [1, 2, 3];
@@ -980,7 +980,7 @@ struct Broken { retries: i32 = 3, name: String }
 impl Default for Broken;   // ERROR: `name` has no default expression
 ```
 
-`Inspect` / `InspectAlt` are available for _every_ type (`{x:?}` / `{x:#?}`). `Display` is **not** auto-derived: `{x}` on a struct/variant/container without `impl Display` is a compile error — use `{x:?}`. Exceptions: a plain `enum` shows its bare case name (`Red`), and a newtype inherits its base type's `Display`. `DisplayAlt` (`{x:#}`) delegates to `Display` where one exists.
+`{x:?}` / `{x:#?}` (`Inspect` / `InspectAlt`) work for every type. `{x}` (`Display`) uses the type's `impl Display`: primitives, `String`, plain enums (bare case name, e.g. `Red`), and newtypes (inherited from the base) have one; other types need a hand-written impl, else `{x}` is a compile error and `{x:?}` gives the debug form. `{x:#}` (`DisplayAlt`) follows `Display`.
 
 A hand-written `impl Trait for T { … }` always wins. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
