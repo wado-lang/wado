@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784073596835,
+  "lastUpdate": 1784117146898,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -40581,6 +40581,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2cfe097acfa990439c656ca7f9ebcd3a7f083ec7"
         },
         "date": 1784073596389,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16422,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265122,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f1b688fa08f9b3ec104bf123e5cbb98849c8e4a3",
+          "message": "Merge pull request #1586 from wado-lang/claude/wit-interface-effect-model-kofwne\n\nfeat(compiler): reconstruct host-leaf effects from CM component imports",
+          "timestamp": "2026-07-15T20:53:13+09:00",
+          "tree_id": "cc1500846f4aaf89245c7b7e905be32ca6985fdd",
+          "url": "https://github.com/wado-lang/wado/commit/f1b688fa08f9b3ec104bf123e5cbb98849c8e4a3"
+        },
+        "date": 1784117146422,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
