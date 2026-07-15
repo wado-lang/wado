@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.0.17](https://github.com/wado-lang/wado/compare/v0.0.16...v0.0.17) - 2026-07-15
+
+- fix(compiler): resolve newtypes correctly at the Component Model boundary by @gfx in https://github.com/wado-lang/wado/pull/1581
+- feat(example): batch highlighter, full-corpus grammar, and template interpolation by @gfx in https://github.com/wado-lang/wado/pull/1580
+- fix(gale): don't over-shadow a named single-literal lexer rule by @gfx in https://github.com/wado-lang/wado/pull/1583
+- fix(cli): make dependency-cache write_atomic concurrency-safe by @gfx in https://github.com/wado-lang/wado/pull/1585
+- feat(compiler): move-only affine resources — move check, consuming receivers, authoritative cleanup by @gfx in https://github.com/wado-lang/wado/pull/1584
+- feat(compiler): reconstruct host-leaf effects from CM component imports by @gfx in https://github.com/wado-lang/wado/pull/1586
+- feat(compiler)!: stop auto-deriving Display (enums and newtypes excepted) by @gfx in https://github.com/wado-lang/wado/pull/1587
+
 ## [v0.0.16](https://github.com/wado-lang/wado/compare/v0.0.15...v0.0.16) - 2026-07-14
 
 - perf(serde): faster by-ref list serialization, fix value-copy for monomorphized builtins by @gfx in https://github.com/wado-lang/wado/pull/1574
