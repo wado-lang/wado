@@ -400,17 +400,15 @@ fn resolve_imports(
             || f.name.starts_with("builtin::")
     };
 
-    // Also mark WASI functions as used if indirect calls are present
-    // (for ambient logging). The kiln generator world forbids every
-    // WASI interface (WEP 2026-04-12 §"Design principles" #1), so the
-    // `call_indirect_{stdout,stderr}_*` builtins are rewritten to
-    // `unreachable` at the WIR level and never need the matching WASI
-    // function registered as "used" — skip the usage registration so
-    // the component doesn't transitively import `wasi:cli/stderr` or
-    // `wasi:cli/stdout`. Gate on `import KilnHost` so the rule fires
-    // for any kiln-generator-shaped world, not just the canonical
-    // `core:kiln/generator`.
-    if !project.world_imports_interface("KilnHost") {
+    // Also mark the ambient stdio functions as used when the `log_stderr` /
+    // `log_stdout` (panic / assert-diagnostic) builtins are reachable — but only
+    // in a world that provides a stdio sink (`wasi:cli/command`,
+    // `wasi:http/service`, test). In the `--lib` and kiln worlds the ambient
+    // path forces no import: the builtin lowers to `unreachable` unless the guest
+    // otherwise imports the sink through a real `eprintln` / `println`, so a
+    // purely-computational component stays import-free. Both gates
+    // (here and the WIR lowering in `calls.rs`) key off the same predicate.
+    if project.provides_ambient_stdio_sink() {
         if reachable.iter().any(|func_id| {
             matches!(func_id, FunctionId::Free(f) if is_builtin_func(f) && {
                 let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);

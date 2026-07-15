@@ -568,18 +568,13 @@ mod tests {
             b.interface_fqs,
             vec!["wado-lang:cm-catalog/cm-catalog@0.0.16"]
         );
-        // cm-catalog is purely computational, so its only host-leaf imports are
-        // the ambient panic path (`wasi:cli/stderr` + the shared `wasi:cli/types`
-        // error code) every Wado component declares. Effect reconstruction
-        // subtracts these ambient interfaces, so the effect set is still empty;
-        // the raw collection here keeps them faithfully for the import plan.
-        assert_eq!(
-            b.host_leaf_imports,
-            vec![
-                "wasi:cli/types@0.3.0".to_string(),
-                "wasi:cli/stderr@0.3.0".to_string(),
-            ]
-        );
+        // cm-catalog performs no I/O, so the ambient panic path imports nothing
+        // (`log_stderr` rides an existing stderr import or traps — see
+        // `provides_ambient_stdio_sink`). Its one host-leaf import is
+        // `wasi:cli/types`, the shared error-code the future/stream results of
+        // its async exports carry — a genuine capability of the async surface,
+        // not an ambient effect.
+        assert_eq!(b.host_leaf_imports, vec!["wasi:cli/types@0.3.0".to_string()]);
 
         let mut iface = None;
         let mut type_names = Vec::new();

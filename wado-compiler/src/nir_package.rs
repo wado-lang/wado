@@ -213,6 +213,18 @@ impl NirPackage {
         self.target_world == world_registry::TEST_WORLD
     }
 
+    /// Whether the target world provides an ambient stdio sink for the
+    /// `log_stderr` / `log_stdout` (panic / assert-diagnostic) path. True for the
+    /// runnable worlds — `wasi:cli/command`, `wasi:http/service`, and the test
+    /// world — and false for the `--lib` library world and the kiln generator
+    /// world. In a sink-less world the ambient path never forces the import: it
+    /// rides an existing `eprintln` / `println` import if one is present and
+    /// otherwise traps silently, so a purely-computational component stays
+    /// import-free.
+    pub fn provides_ambient_stdio_sink(&self) -> bool {
+        self.is_test_world() || self.world_imports_interface("Stderr")
+    }
+
     /// Build the lookup of synthesized value-copy helpers, keyed by
     /// `(module_source, name)` → the type each helper deep-copies. Used by the
     /// `remarks` collector, which reports the copied type.
