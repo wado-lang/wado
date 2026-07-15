@@ -1627,8 +1627,7 @@ let hex = `{255:x}`;              // "ff"
 let p = Point { x: 10, y: 20 };
 let debug = `{p:?}`;             // "Point { x: 10, y: 20 }"
 let pretty = `{p:#?}`;           // pretty-print: "Point {\n  x: 10,\n  y: 20,\n}"
-// `{p}` (Display) is a compile error unless `Point` has an `impl Display` —
-// Display is not auto-derived. Use `{p:?}` for debug output.
+// `{p}` (Display) is a compile error — Display is not auto-derived. Use `{p:?}`.
 
 // Escaped braces — literal { and } without interpolation
 let json = `\{"key": "{name}"\}`;  // {"key": "Alice"}
@@ -3079,7 +3078,7 @@ match c {
 }
 ```
 
-Enums auto-derive `Display` unconditionally as the **bare case name** (`Red`), distinct from `Inspect`'s type-qualified `Color::Red`. A plain enum is the one nominal type whose canonical string form is unambiguous, so it is the only struct/enum/variant kind that gets `Display` without a manual impl (a newtype separately inherits its base type's `Display`). `Eq` (discriminant equality) and `Ord` (declaration order) derive the same on-demand way as for structs — see [Auto-derived Traits](#structs) above.
+Enums auto-derive `Display` as the bare case name (`Red`), distinct from `Inspect`'s `Color::Red`. `Eq` (discriminant equality) and `Ord` (declaration order) derive the same on-demand way as for structs — see [Auto-derived Traits](#structs) above.
 
 Enums can have `impl` blocks:
 
@@ -3330,20 +3329,13 @@ impl Eq for Handler;
 
 ### Debug Traits Are Total; Display Is Not
 
-The debug format traits — `Inspect` / `InspectAlt` — hold for **every** type: any value can be debug-formatted (`{x:?}` / `{x:#?}`). A `T: Inspect` bound therefore always holds, so a generic function can debug-format its type parameter with no written bound, and `impl Inspect for T;` markers always validate. Their bodies are generated eagerly for every type, unlike the on-demand `Eq` / `Ord` / `Default` / serde.
+`Inspect` / `InspectAlt` hold for **every** type: `{x:?}` / `{x:#?}` always work, `T: Inspect` needs no written bound, and their bodies are generated eagerly.
+
+`Display` / `DisplayAlt` are **not** auto-derived. `{x}` (or a `T: Display` bound) on a struct, variant, or generic container without a hand-written `impl Display` is a compile error — use `{x:?}`. Only two kinds get `Display` for free: a plain `enum` (bare case name) and a newtype (inherits its base type's `Display`). This keeps `T: Display` meaningful — it certifies a real string representation, so `String::push_display` rejects debug-only types.
 
 ```wado
-fn describe<T>(v: &T) -> String {
-    return `{v:?}`;   // no `T: Inspect` bound needed
-}
-```
-
-`Display` / `DisplayAlt` are **not** total. `Display` is auto-derived only for a plain `enum` (bare case name) and a newtype over a `Display` base (transparent); a struct, variant, or generic container needs a hand-written `impl Display`. `{x}` (or a `T: Display` bound) on a type without `Display` is a compile error — use `{x:?}` for debug output. This keeps `T: Display` meaningful: it certifies a real string representation, so an API like `String::push_display` rejects debug-only types.
-
-```wado
-fn label<T: Display>(v: &T) -> String {
-    return `{v}`;     // requires a real Display — `{v}` on unbounded `T` is an error
-}
+fn describe<T>(v: &T) -> String { return `{v:?}`; }          // no bound needed (Inspect is total)
+fn label<T: Display>(v: &T) -> String { return `{v}`; }     // `{v}` on unbounded `T` is an error
 ```
 
 See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
