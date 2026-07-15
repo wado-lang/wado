@@ -79,14 +79,14 @@ The elaborator covers trait selection, generic inference, method dispatch, coerc
 
 `synthesis::synthesize` (`synthesis.rs`) generates synthetic TIR that the user does not write:
 
-| Sub-pass           | File                           | Output                                                                                                                |
-| ------------------ | ------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| Trait auto-derives | `synthesis/traits.rs`          | `Eq` / `Ord` / `Default` for bound-driven requests (below); `Display` / `Inspect` (and `Alt`) unconditionally (total) |
-| `From` adapters    | `synthesis/from_synth.rs`      | `From` impls from `impl From<T> for U;` declarations                                                                  |
-| Serde              | `synthesis/serde_synth.rs`     | `Serialize` / `Deserialize` for bound-driven requests (below; body-less markers record there too)                     |
-| Template strings   | `synthesis/template.rs`        | Expands template strings into `Display::fmt` / `Inspect::inspect` calls                                               |
-| Effect dispatch    | `synthesis/effect_dispatch.rs` | Per-effect dispatch infrastructure for handler resolution                                                             |
-| CM bindings        | `synthesis/cm_binding/`        | Component Model boundary adapters (lift / lower / async export)                                                       |
+| Sub-pass           | File                           | Output                                                                                                                                                                                                                             |
+| ------------------ | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Trait auto-derives | `synthesis/traits.rs`          | `Eq` / `Ord` / `Default` for bound-driven requests (below); `Inspect` / `InspectAlt` unconditionally (total); `Display` only for plain enums (bare case name) and `Display`-based newtypes; `DisplayAlt` wherever `Display` exists |
+| `From` adapters    | `synthesis/from_synth.rs`      | `From` impls from `impl From<T> for U;` declarations                                                                                                                                                                               |
+| Serde              | `synthesis/serde_synth.rs`     | `Serialize` / `Deserialize` for bound-driven requests (below; body-less markers record there too)                                                                                                                                  |
+| Template strings   | `synthesis/template.rs`        | Expands template strings into `Display::fmt` / `Inspect::inspect` calls                                                                                                                                                            |
+| Effect dispatch    | `synthesis/effect_dispatch.rs` | Per-effect dispatch infrastructure for handler resolution                                                                                                                                                                          |
+| CM bindings        | `synthesis/cm_binding/`        | Component Model boundary adapters (lift / lower / async export)                                                                                                                                                                    |
 
 Synthesized impls are recorded back into the shared `TraitEnv` so subsequent phases query a single source of truth.
 

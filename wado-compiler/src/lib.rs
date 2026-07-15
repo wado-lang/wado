@@ -105,7 +105,13 @@ pub use token::Span;
 /// `Type` does not implement `Trait` (see the WIR-build trait-bound check).
 fn trait_bound_violation_message(call_name: &str) -> String {
     if let Some((ty, trait_name)) = name::split_trait_method_receiver(call_name) {
-        format!("type `{ty}` does not implement trait `{trait_name}`")
+        let mut msg = format!("type `{ty}` does not implement trait `{trait_name}`");
+        // `Display` is never auto-derived; the `{x}` interpolation that emitted
+        // this call has a ready alternative in `{x:?}` (Inspect is total).
+        if trait_name == "Display" {
+            msg.push_str("; use `{x:?}` for debug output, or add an `impl Display`");
+        }
+        msg
     } else {
         format!("unresolved generic call `{call_name}`")
     }

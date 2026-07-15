@@ -1,6 +1,7 @@
-// Test: `impl Inspect for T;` / `impl Display for T;` (and Alt siblings)
-// markers are accepted as conformance checks (WEP: Trait Derivation Policy).
-// Formatting still works through them.
+// Test: `impl Inspect for T;` / `impl InspectAlt for T;` markers are accepted as
+// conformance checks (WEP: Trait Derivation Policy). `Display` is never derived,
+// so a struct is formatted via a manual `impl Display`; `impl DisplayAlt for T;`
+// then derives the alternate form by delegating to that `Display`.
 struct Point {
     x: i32,
     y: i32,
@@ -8,13 +9,10 @@ struct Point {
 
 impl Inspect for Point;
 impl InspectAlt for Point;
-impl Display for Point;
-impl DisplayAlt for Point;
 
-test "format-trait markers validate and formatting works" {
+test "inspect markers validate and debug formatting works" {
     let p = Point { x: 1, y: 2 };
     assert `{p:?}` == "Point { x: 1, y: 2 }";
-    assert `{p}` == "Point { x: 1, y: 2 }";
 }
 
 struct Custom {
@@ -27,9 +25,12 @@ impl Display for Custom {
     }
 }
 
-test "manual Display impl wins over the fallback" {
+impl DisplayAlt for Custom;
+
+test "manual Display drives {x} and {x:#}; Inspect drives {x:?}" {
     let c = Custom { v: 1 };
     assert `{c}` == "custom!";
+    assert `{c:#}` == "custom!";
     assert `{c:?}` == "Custom { v: 1 }";
 }
 

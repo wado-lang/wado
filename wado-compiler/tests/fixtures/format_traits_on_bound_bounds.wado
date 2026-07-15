@@ -1,7 +1,10 @@
-// Test: `T: Inspect` / `T: Display` (and their Alt siblings) bounds are
-// satisfied structurally for plain aggregate types (WEP: Trait Derivation
-// Policy — on_bound format traits). Previously these bounds required a
-// manual impl even though `{v}` / `{v:?}` always worked.
+// Test: which `T: <format>` bounds hold under the Display-derivation policy.
+// - `Inspect` / `InspectAlt` are total: any type satisfies them (`{v:?}` /
+//   `{v:#?}` always work).
+// - `Display` is NOT total: only plain enums (bare case name) and primitives
+//   satisfy it. A struct/variant needs a manual `impl Display` (see
+//   display_no_autoderive_pushdisplay.wado for the rejection).
+// - `DisplayAlt` delegates to `Display`, so it holds wherever `Display` does.
 struct P {
     x: i32,
     y: i32,
@@ -33,25 +36,24 @@ fn show_display_alt<T: DisplayAlt>(v: &T) -> String {
     return `{v:#}`;
 }
 
-test "Inspect bound on struct/enum/variant" {
+test "Inspect bound holds for every type kind" {
     let p = P { x: 1, y: 2 };
     assert show_inspect(&p) == "P { x: 1, y: 2 }";
     assert show_inspect(&Color::Red) == "Color::Red";
     assert show_inspect(&Shape::Circle(1.5)) == "Shape::Circle(1.5)";
 }
 
-test "Display bound falls back to Inspect" {
-    let p = P { x: 3, y: 4 };
-    assert show_display(&p) == "P { x: 3, y: 4 }";
-    assert show_display(&Color::Green) == "Color::Green";
+test "Display bound holds for enums (bare) and primitives" {
+    assert show_display(&Color::Green) == "Green";
+    assert show_display(&42) == "42";
 }
 
 test "alt bounds" {
     let p = P { x: 5, y: 6 };
-    // `DisplayAlt` defaults to `Display` (compact), not `InspectAlt` (pretty).
-    assert show_display_alt(&p) == show_display(&p);
-    // `InspectAlt` still pretty-prints, so it differs from the display side.
-    assert show_inspect_alt(&p) != show_display_alt(&p);
+    // `InspectAlt` is total and pretty-prints any type.
+    assert show_inspect_alt(&p) == "P {\n  x: 5,\n  y: 6,\n}";
+    // `DisplayAlt` tracks `Display`: an enum's alternate display is its bare name.
+    assert show_display_alt(&Color::Red) == "Red";
 }
 
 __DATA__

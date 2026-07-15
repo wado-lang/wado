@@ -1,4 +1,4 @@
-// Test: Enum Display fallback in template strings and match expressions
+// Test: Enum Display (bare case name) in template strings and match expressions
 use { println, Stdout } from "core:cli";
 
 enum Fruit {
@@ -16,7 +16,7 @@ fn describe(f: Fruit) -> String {
 }
 
 export fn run() with Stdout {
-    // Template string interpolation (no Display impl → inspect fallback)
+    // Template string interpolation (enum Display → bare case name)
     let f = Fruit::Apple;
     println(`fruit: {f}`);
 
@@ -27,4 +27,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"stdout": "fruit: Fruit::Apple\nI like Fruit::Apple\nFruit::Banana is yellow\nFruit::Cherry is small\n"}
+{"stdout": "fruit: Apple\nI like Apple\nBanana is yellow\nCherry is small\n"}

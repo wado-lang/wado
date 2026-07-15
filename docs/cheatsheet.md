@@ -254,7 +254,9 @@ let hex_alt = `{255:#x}`;                // "0xff" (via alternate flag)
 // Inspect — auto-derived debug outputs (see docs/wep-2026-02-21-inspect-debug-output.md)
 println(`{point:?}`);                    // "Point { x: 10, y: 20 }"
 println(`{point:#?}`);                   // pretty-print with indentation (see below)
-println(`{point}`);                      // falls back to inspect when no Display impl
+// `{point}` (Display) is a compile error: Display is not auto-derived for a
+// struct. Use `{point:?}`, or write `impl Display for Point`. (A plain enum
+// displays its bare case name; a newtype inherits its base type's Display.)
 
 // Pretty-print (:#?) — multi-line indented output for composite types
 let arr: List<i32> = [1, 2, 3];
@@ -980,7 +982,7 @@ struct Broken { retries: i32 = 3, name: String }
 impl Default for Broken;   // ERROR: `name` has no default expression
 ```
 
-The format traits (`Inspect` / `InspectAlt` / `Display` / `DisplayAlt`) are always available for every type. Unimplemented ones delegate `InspectAlt → Inspect`, `Display → Inspect`, `DisplayAlt → Display` — so `{x:#}` defaults to plain display while `{x:#?}` pretty-prints. A newtype renders transparently under `Display`; only `Inspect` adds the `as Name` annotation.
+The debug traits `Inspect` / `InspectAlt` are available for _every_ type (`{x:?}` / `{x:#?}` always work; `InspectAlt` delegates to `Inspect` when unimplemented). `Display` / `DisplayAlt` are **not** auto-derived: `{x}` on a struct, variant, or generic container with no `impl Display` is a compile error — use `{x:?}`, or write `impl Display`. The two exceptions are types with a canonical string form: a plain `enum` displays its bare case name (`Red`, vs `Inspect`'s `Color::Red`), and a newtype inherits its base type's `Display` transparently (only `Inspect` adds the `as Name` annotation). `DisplayAlt` (`{x:#}`) delegates to `Display` wherever a `Display` exists.
 
 A hand-written `impl Trait for T { … }` always wins. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
@@ -1297,7 +1299,7 @@ Each parameter resolves highest priority first: `-D NAME=value` (alias `--define
 
 struct Foo {
     #[secret]
-    password: String,      // won't be shown in Display / Inspect
+    password: String,      // won't be shown in Inspect (`{x:?}`) or a Display impl
 }
 
 #[inline]                  // hint: prefer inlining

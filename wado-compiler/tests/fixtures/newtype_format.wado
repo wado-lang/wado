@@ -1,6 +1,8 @@
-// Newtype formatting: `Display`/`DisplayAlt` render transparently like the base
-// value, while `Inspect`/`InspectAlt` add the ` as Name` debug annotation.
-// `DisplayAlt` reaches the base display by chaining `DisplayAlt → Display`.
+// Newtype formatting: a newtype inherits its base type's `Display`, rendering
+// transparently like the base value, while `Inspect`/`InspectAlt` add the
+// ` as Name` debug annotation. `DisplayAlt` reaches the base display by chaining
+// `DisplayAlt → Display`. A newtype over a non-`Display` base (a plain struct)
+// is not displayable — only `Inspect` (`{x:?}`) applies.
 
 type Meters = f64;
 type Seconds = i32;
@@ -33,10 +35,10 @@ test "alternate display chains through display" {
     assert `{m:#?}` == "100.5 as Meters";
 }
 
-test "newtype over struct stays transparent for display" {
+test "newtype over a non-Display struct: only Inspect applies" {
     let p: FmtPointAlias = FmtPoint { x: 1, y: 2 } as FmtPointAlias;
-    assert `{p}` == "FmtPoint { x: 1, y: 2 }";
-    assert `{p:#}` == "FmtPoint { x: 1, y: 2 }";
+    // `FmtPoint` has no `Display`, so `FmtPointAlias` inherits none — `{p}`
+    // would be a compile error. Debug output still works via Inspect.
     assert `{p:?}` == "FmtPoint { x: 1, y: 2 } as FmtPointAlias";
 }
 

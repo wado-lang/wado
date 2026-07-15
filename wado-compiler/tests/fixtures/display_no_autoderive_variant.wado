@@ -1,0 +1,14 @@
+// A `variant` (sum type with payloads) has no canonical string form, so it is
+// not auto-Display'd — only plain enums are. Use `{x:?}` for debug output.
+variant Shape {
+    Circle(f64),
+    Dot,
+}
+
+test "variant is not displayable without a manual impl" {
+    let s = Shape::Dot;
+    assert `{s}` == "Shape::Dot";
+}
+
+__DATA__
+{"test": {}, "compile_error": "does not implement trait `Display`"}

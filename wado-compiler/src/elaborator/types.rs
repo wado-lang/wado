@@ -849,13 +849,20 @@ impl TypeError {
                 trait_name,
                 type_name,
                 span,
-            } => (
-                Code::TypeMismatch,
-                format!(
-                    "cannot synthesize trait `{trait_name}` for `{type_name}`: only `From`, `Serialize`, `Deserialize`, `Eq`, and `Ord` support `impl Trait for Type;`"
-                ),
-                *span,
-            ),
+            } => {
+                let hint = if trait_name == "Display" {
+                    " `Display` is never auto-derived (plain enums display their bare case name automatically); write a manual `impl Display`, or use `{x:?}` for debug output"
+                } else {
+                    ""
+                };
+                (
+                    Code::TypeMismatch,
+                    format!(
+                        "cannot synthesize trait `{trait_name}` for `{type_name}`: `impl Trait for Type;` is supported for `From`, `Serialize`, `Deserialize`, `Eq`, `Ord`, `Default`, `Inspect`, `InspectAlt`, and `DisplayAlt`.{hint}"
+                    ),
+                    *span,
+                )
+            }
             TypeError::DefaultInTraitImpl {
                 method,
                 param,

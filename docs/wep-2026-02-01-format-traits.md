@@ -103,6 +103,18 @@ trait InspectAlt {
 }
 ```
 
+### Display Derivation
+
+Unlike `Inspect`, `Display` is **not** auto-synthesized for arbitrary types: a
+human-facing string form has no canonical structural shape the compiler could
+invent, so `{x}` on a type with no `Display` impl is a compile error (use
+`{x:?}`). The compiler derives `Display` only for the two type kinds whose
+string form is unambiguous: a plain `enum` displays its bare case name (`Red`,
+vs `Inspect`'s `Color::Red`), and a newtype inherits its base type's `Display`
+transparently (`Meters = f64` renders `3.14`). `DisplayAlt` (`{x:#}`) auto-derives
+a fallback delegating to `Display` wherever a `Display` impl exists. See
+[Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
+
 ### Alternate (Alt) Trait Variants
 
 Each format trait has an alternate variant activated by the `#` flag. For Inspect, `InspectAlt` produces pretty-printed output. For numeric traits, Alt variants add prefixes (`0x`, `0b`, `0o`).
@@ -118,18 +130,18 @@ Each format trait has an alternate variant activated by the `#` flag. For Inspec
 
 ### Format Resolution
 
-| Specifier | Resolution                           |
-| --------- | ------------------------------------ |
-| (none)    | `Display::fmt` or `Inspect::inspect` |
-| `?`       | `Inspect::inspect`                   |
-| `#`       | `DisplayAlt::fmt_alt`                |
-| `#?`      | `InspectAlt::inspect_alt`            |
-| `b`       | `Binary::fmt`                        |
-| `o`       | `Octal::fmt`                         |
-| `x`       | `LowerHex::fmt`                      |
-| `X`       | `UpperHex::fmt`                      |
-| `e`       | `LowerExp::fmt`                      |
-| `E`       | `UpperExp::fmt`                      |
+| Specifier | Resolution                                             |
+| --------- | ------------------------------------------------------ |
+| (none)    | `Display::fmt` (compile error if `T` has no `Display`) |
+| `?`       | `Inspect::inspect`                                     |
+| `#`       | `DisplayAlt::fmt_alt`                                  |
+| `#?`      | `InspectAlt::inspect_alt`                              |
+| `b`       | `Binary::fmt`                                          |
+| `o`       | `Octal::fmt`                                           |
+| `x`       | `LowerHex::fmt`                                        |
+| `X`       | `UpperHex::fmt`                                        |
+| `e`       | `LowerExp::fmt`                                        |
+| `E`       | `UpperExp::fmt`                                        |
 
 ### Primitive Implementations
 

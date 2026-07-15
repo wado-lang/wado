@@ -25,7 +25,6 @@ pub(super) enum OnBoundTrait {
     Default,
     Inspect,
     InspectAlt,
-    Display,
     DisplayAlt,
 }
 
@@ -34,11 +33,20 @@ impl OnBoundTrait {
         matches!(self, Self::Serialize | Self::Deserialize)
     }
 
+    /// Traits that are _total_ over every type: a `T: Trait` obligation always
+    /// holds and the compiler generates the body eagerly. `Inspect` /
+    /// `InspectAlt` cover every type (universal debug output). `DisplayAlt`
+    /// stays here because its fallback is synthesized after `annotate`, so the
+    /// bound must be satisfiable by fiat before the body exists; its generation
+    /// is nonetheless gated on the type actually having a `Display` impl, so an
+    /// alternate-display of a `Display`-less type fails at method resolution.
+    ///
+    /// `Display` is deliberately absent: it is never auto-derived (a type has a
+    /// human-facing string representation only if someone wrote `impl Display`),
+    /// so every `Display` impl is a real impl present at `annotate` and a
+    /// `T: Display` bound is checked against it rather than short-circuited.
     pub(super) fn is_format(self) -> bool {
-        matches!(
-            self,
-            Self::Inspect | Self::InspectAlt | Self::Display | Self::DisplayAlt
-        )
+        matches!(self, Self::Inspect | Self::InspectAlt | Self::DisplayAlt)
     }
 
     pub(super) fn is_field_recursive(self) -> bool {
@@ -518,8 +526,6 @@ impl TypeSystem {
                 of(CompilerItem::Inspect, OnBoundTrait::Inspect)
             } else if trait_name == items.trait_name(CompilerItem::InspectAlt) {
                 of(CompilerItem::InspectAlt, OnBoundTrait::InspectAlt)
-            } else if trait_name == items.trait_name(CompilerItem::Display) {
-                of(CompilerItem::Display, OnBoundTrait::Display)
             } else if trait_name == items.trait_name(CompilerItem::DisplayAlt) {
                 of(CompilerItem::DisplayAlt, OnBoundTrait::DisplayAlt)
             } else {
@@ -529,6 +535,28 @@ impl TypeSystem {
         match self.scoped_trait_decl_module(scope, trait_name) {
             Some(module) => (*module == compiler_module).then_some(on_bound),
             None => Some(on_bound),
+        }
+    }
+
+    /// `true` when `trait_name` resolves to the compiler's prelude `Display`
+    /// trait in this scope (not a same-name user trait). `Display` is not an
+    /// [`OnBoundTrait`] — it is never auto-derived except for plain enums — so
+    /// its identity is checked here rather than through `classify_on_bound_trait`.
+    fn is_display_trait(&self, scope: &TypeLookup, trait_name: &str) -> bool {
+        let compiler_module = {
+            let tt = self.type_table.borrow();
+            let items = tt.compiler_items();
+            if trait_name != items.trait_name(CompilerItem::Display) {
+                return false;
+            }
+            let Some(module) = items.trait_module(CompilerItem::Display) else {
+                return false;
+            };
+            module.clone()
+        };
+        match self.scoped_trait_decl_module(scope, trait_name) {
+            Some(module) => *module == compiler_module,
+            None => true,
         }
     }
 
@@ -692,6 +720,15 @@ impl TypeSystem {
         let on_bound = self.classify_on_bound_trait(scope, trait_name);
 
         if on_bound.is_some_and(OnBoundTrait::is_format) {
+            return true;
+        }
+
+        // Plain `enum`s are the sole type kind that auto-derives `Display` (the
+        // bare case name), so a `T: Display` bound on an enum holds structurally
+        // — before `synthesize_traits` emits the body. No other type kind is
+        // displayable without a real `impl Display`.
+        if matches!(resolved, ResolvedType::Enum { .. }) && self.is_display_trait(scope, trait_name)
+        {
             return true;
         }
 
