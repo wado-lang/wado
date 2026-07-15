@@ -106,10 +106,8 @@ pub use token::Span;
 fn trait_bound_violation_message(call_name: &str, display_trait_name: &str) -> String {
     if let Some((ty, trait_name)) = name::split_trait_method_receiver(call_name) {
         let mut msg = format!("type `{ty}` does not implement trait `{trait_name}`");
-        // `Display` is never auto-derived; the `{x}` interpolation that emitted
-        // this call has a ready alternative in `{x:?}` (Inspect is total). The
-        // trait name comes from the `#[compiler_item("display")]` registry, not
-        // a hard-coded literal.
+        // `Display` has a ready `{x:?}` alternative; `display_trait_name` comes
+        // from the registry, not a literal.
         if trait_name == display_trait_name {
             msg.push_str("; use `{x:?}` for debug output, or add an `impl Display`");
         }

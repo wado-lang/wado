@@ -33,18 +33,11 @@ impl OnBoundTrait {
         matches!(self, Self::Serialize | Self::Deserialize)
     }
 
-    /// Traits that are _total_ over every type: a `T: Trait` obligation always
-    /// holds and the compiler generates the body eagerly. `Inspect` /
-    /// `InspectAlt` cover every type (universal debug output). `DisplayAlt`
-    /// stays here because its fallback is synthesized after `annotate`, so the
-    /// bound must be satisfiable by fiat before the body exists; its generation
-    /// is nonetheless gated on the type actually having a `Display` impl, so an
-    /// alternate-display of a `Display`-less type fails at method resolution.
-    ///
-    /// `Display` is deliberately absent: it is never auto-derived (a type has a
-    /// human-facing string representation only if someone wrote `impl Display`),
-    /// so every `Display` impl is a real impl present at `annotate` and a
-    /// `T: Display` bound is checked against it rather than short-circuited.
+    /// Traits total over every type: the bound always holds and the body is
+    /// generated eagerly. `DisplayAlt` is included so its bound holds before its
+    /// fallback is synthesized (generation is separately gated on a `Display`
+    /// existing). `Display` is excluded — a `T: Display` bound is checked against
+    /// a real impl.
     pub(super) fn is_format(self) -> bool {
         matches!(self, Self::Inspect | Self::InspectAlt | Self::DisplayAlt)
     }
@@ -723,10 +716,8 @@ impl TypeSystem {
             return true;
         }
 
-        // Plain `enum`s are the sole type kind that auto-derives `Display` (the
-        // bare case name), so a `T: Display` bound on an enum holds structurally
-        // — before `synthesize_traits` emits the body. No other type kind is
-        // displayable without a real `impl Display`.
+        // A plain `enum` auto-derives `Display` (the bare case name), so its
+        // bound holds before `synthesize_traits` emits the body.
         if matches!(resolved, ResolvedType::Enum { .. }) && self.is_display_trait(scope, trait_name)
         {
             return true;

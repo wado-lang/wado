@@ -5,9 +5,8 @@
 //! - `EnumName^Ord::cmp(&self, &Self) -> Ordering` - discriminant ordering
 //! - `VariantName^Eq::eq(&self, &Self) -> bool` - case-discriminated payload equality
 //! - `TypeName^Inspect::inspect(&self, &mut Formatter)` - debug formatting
-//! - `TypeName^DisplayAlt::fmt_alt(&self, &mut Formatter)` - alternate-display
-//!   fallback (delegates to `Display`), emitted only where a real `Display` impl
-//!   exists. `Display` itself is never auto-derived.
+//! - `EnumName^Display::fmt(&self, &mut Formatter)` - bare case name
+//! - `TypeName^DisplayAlt::fmt_alt(&self, &mut Formatter)` - delegates to `Display`
 //!
 //! Pipeline position: runs as part of the synthesis phase, before monomorphize.
 
@@ -368,18 +367,11 @@ pub fn synthesize_traits(project: Package) -> Package {
         generate_variant_eq_impls(module, &mut ctx);
         generate_inspect_impls(module, &mut ctx);
         generate_inspect_alt_impls(module, &mut ctx);
-        // `Display` is auto-derived only for plain `enum`s — the one type whose
-        // canonical string form is unambiguous (the bare case name). Every other
-        // type is displayable only if someone wrote `impl Display`. A newtype is
-        // not derived here: it *inherits* its base type's `Display` transparently,
-        // resolved at the format call site (see `peel_transparent_newtype` in
-        // `synthesis::template`), the same way a bare `value.fmt(f)` method call
-        // inherits. The enum body must run before the `DisplayAlt` pass, whose
-        // `needs_fallback` check reads the recorded `Display` impl.
+        // `Display` is auto-derived only for plain `enum`s (the bare case name).
+        // A newtype inherits its base's `Display` at the format call site
+        // (`peel_transparent_newtype`), not here. Runs before the `DisplayAlt`
+        // pass, whose `needs_fallback` reads the recorded `Display` impl.
         generate_enum_display_impls(module, &mut ctx);
-        // `DisplayAlt` (`{x:#}`) auto-derives a fallback delegating to `Display`
-        // only where a real (or enum-synthesized) `Display` impl exists; a newtype
-        // likewise inherits its base's `DisplayAlt` at the call site.
         generate_display_alt_fallback_impls(module, &mut ctx);
     }
     project
@@ -1504,17 +1496,9 @@ fn generate_enum_inspect_fn(
     )
 }
 
-/// Auto-derive `Display` for plain `enum`s only — the one type whose canonical
-/// string form is unambiguous. Emits `EnumName^Display::fmt(&self, &mut
-/// Formatter)` writing the **bare** case name (`Red`), distinct from `Inspect`'s
-/// type-qualified `Color::Red`. Structs, variants, and every other type stay
-/// `Display`-less: they must provide a manual `impl Display` or be formatted
-/// with `{x:?}`.
-///
-/// Skips any enum with a user-written `Display` impl. `type_implements_trait`
-/// recognises plain enums as satisfying `Display` structurally, so a `T:
-/// Display` bound on an enum already holds at `annotate`, before this pass emits
-/// the body.
+/// Auto-derive `EnumName^Display::fmt` writing the bare case name (`Red`),
+/// distinct from `Inspect`'s type-qualified `Color::Red`. Skips enums with a
+/// user-written `Display` impl.
 fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     if module.enums.is_empty() {
         return;
