@@ -542,7 +542,7 @@ impl TypeSystem {
     /// trait in this scope (not a same-name user trait). `Display` is not an
     /// [`OnBoundTrait`] — it is never auto-derived except for plain enums — so
     /// its identity is checked here rather than through `classify_on_bound_trait`.
-    fn is_display_trait(&self, scope: &TypeLookup, trait_name: &str) -> bool {
+    pub(super) fn is_display_trait(&self, scope: &TypeLookup, trait_name: &str) -> bool {
         let compiler_module = {
             let tt = self.type_table.borrow();
             let items = tt.compiler_items();

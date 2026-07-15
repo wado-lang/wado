@@ -386,6 +386,10 @@ pub enum TypeError {
     UnsupportedSynthesisTrait {
         trait_name: String,
         type_name: String,
+        /// `true` when `trait_name` is the compiler's prelude `Display` (resolved
+        /// scope-aware at the marker site, so a same-name user trait does not
+        /// match) — gates the `Display`-specific "use `{x:?}`" hint.
+        is_display: bool,
         span: Span,
     },
 
@@ -848,9 +852,10 @@ impl TypeError {
             TypeError::UnsupportedSynthesisTrait {
                 trait_name,
                 type_name,
+                is_display,
                 span,
             } => {
-                let hint = if trait_name == "Display" {
+                let hint = if *is_display {
                     " `Display` is never auto-derived (plain enums display their bare case name automatically); write a manual `impl Display`, or use `{x:?}` for debug output"
                 } else {
                     ""
