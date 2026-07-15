@@ -25,7 +25,6 @@ use { escape_text_ref, escape_attr_ref } from "./html.wado";
 use { RefTable, ref_table_get } from "./fmt_links.wado";
 use { parse } from "./fmt_parse_block.wado";
 use { is_ascii_punct } from "./fmt_parse_inline.wado";
-use { chars_of } from "./str_cursor.wado";
 use { slugify, Slugger } from "./fmt_slug.wado";
 
 /// The HTML plus the heading outline collected while rendering; walk
@@ -305,7 +304,7 @@ fn text_to_html(s: &String) -> String {
 }
 
 fn unescape_backslashes(s: &String) -> String {
-    let chars = chars_of(s);
+    let chars = s.to_chars();
     let len = chars.len();
     let mut out = String::with_capacity(s.len());
     let mut i = 0;

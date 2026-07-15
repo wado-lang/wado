@@ -25,7 +25,7 @@ use {
 } from "./fmt_ast.wado";
 use { RefTable, new_ref_table, ref_table_insert, parse_dest_and_title } from "./fmt_links.wado";
 use { parse_inline } from "./fmt_parse_inline.wado";
-use { chars_of, slice_chars } from "./str_cursor.wado";
+use { slice_chars } from "./str_cursor.wado";
 
 /// A parsed document together with its link reference definition table. The
 /// HTML backend (`fmt_html.wado`) needs the table to resolve reference-style
@@ -78,7 +78,7 @@ fn collect_ref_defs(lines: &List<String>) -> RefTable {
             }
             continue;
         }
-        let chars = chars_of(line);
+        let chars = line.to_chars();
         if let Some([ch, flen, _info]) = fence_marker(&chars) {
             in_fence = true;
             fence_ch = ch;
@@ -96,7 +96,7 @@ fn collect_ref_defs(lines: &List<String>) -> RefTable {
 /// definitions in this codebase's Markdown are always single-line (see
 /// `docs/wep-2026-07-05-marl.md`, "One parser, two backends").
 fn try_ref_def_line(line: &String) -> Option<LinkReferenceDef> {
-    let chars = chars_of(line);
+    let chars = line.to_chars();
     let len = chars.len();
     let mut p = skip_indent(&chars, len);
     if p >= len || chars[p] != '[' {
@@ -190,7 +190,7 @@ fn parse_blocks(lines: &List<String>, start: i32, end: i32, refs: &RefTable) -> 
             i += 1;
             continue;
         }
-        let chars = chars_of(line);
+        let chars = line.to_chars();
         if is_html_block_start(&chars) && (para.is_empty() || html_block_interrupts_paragraph(&chars)) {
             flush_paragraph(&mut out, &mut para, refs);
             let block_end = html_block_bounds(lines, i, end);
@@ -389,7 +389,7 @@ fn fence_marker(chars: &List<char>) -> Option<[char, i32, String]> {
 }
 
 fn is_code_fence_close(line: &String, ch: char, fence_len: i32) -> bool {
-    let chars = chars_of(line);
+    let chars = line.to_chars();
     let len = chars.len();
     let mut p = skip_indent(&chars, len);
     let mut run = 0;
@@ -443,7 +443,7 @@ fn heading_content(chars: &List<char>, level: i32) -> String {
 }
 
 fn strip_atx_closing(s: &String) -> String {
-    let chars = chars_of(s);
+    let chars = s.to_chars();
     let len = chars.len();
     let mut e = len;
     while e > 0 && chars[e - 1] == '#' {
@@ -497,7 +497,7 @@ fn is_blockquote(chars: &List<char>) -> bool {
 }
 
 fn strip_blockquote_marker(line: &String) -> String {
-    let chars = chars_of(line);
+    let chars = line.to_chars();
     let len = chars.len();
     let mut p = skip_indent(&chars, len);
     if p < len && chars[p] == '>' {
@@ -512,7 +512,7 @@ fn strip_blockquote_marker(line: &String) -> String {
 fn parse_blockquote(lines: &List<String>, start: i32, end: i32, refs: &RefTable, out: &mut List<Node>) -> i32 {
     let mut inner: List<String> = [];
     let mut k = start;
-    while k < end && is_blockquote(&chars_of(&lines[k])) {
+    while k < end && is_blockquote(&lines[k].to_chars()) {
         inner.push(strip_blockquote_marker(&lines[k]));
         k += 1;
     }
@@ -583,7 +583,7 @@ fn parse_list(lines: &List<String>, start: i32, end: i32, refs: &RefTable, out: 
     let mut ordered = false;
     let mut base_delim = '-';
     let mut start_number = 1;
-    match parse_list_marker(&chars_of(&lines[start])) {
+    match parse_list_marker(&lines[start].to_chars()) {
         Some(m) => {
             base_indent = m.indent;
             ordered = m.ordered;
@@ -607,7 +607,7 @@ fn parse_list(lines: &List<String>, start: i32, end: i32, refs: &RefTable, out: 
             break;
         }
         let mut content_col = -1;
-        match parse_list_marker(&chars_of(&lines[item_start])) {
+        match parse_list_marker(&lines[item_start].to_chars()) {
             Some(m) => {
                 if m.indent == base_indent && m.ordered == ordered && m.delim == base_delim {
                     content_col = m.content_col;
@@ -636,7 +636,7 @@ fn parse_list(lines: &List<String>, start: i32, end: i32, refs: &RefTable, out: 
                 let continues = j + 1 < end
                     && !is_blank(&lines[j + 1])
                     && line_indent(&lines[j + 1]) >= content_col
-                    && parse_list_marker(&chars_of(&lines[j + 1])) matches { None };
+                    && parse_list_marker(&lines[j + 1].to_chars()) matches { None };
                 if continues {
                     inner.push("");
                     j += 1;
@@ -677,7 +677,7 @@ fn parse_list(lines: &List<String>, start: i32, end: i32, refs: &RefTable, out: 
 }
 
 fn strip_task_marker(line: &String) -> [Option<TaskMarker>, String] {
-    let chars = chars_of(line);
+    let chars = line.to_chars();
     let len = chars.len();
     if len >= 3 && chars[0] == '[' && chars[2] == ']' && chars[1] matches { ' ' | 'x' | 'X' } {
         let checked = chars[1] matches { 'x' | 'X' };
@@ -694,12 +694,12 @@ fn strip_task_marker(line: &String) -> [Option<TaskMarker>, String] {
 }
 
 fn cut_prefix(line: &String, n: i32) -> String {
-    let chars = chars_of(line);
+    let chars = line.to_chars();
     return slice_chars(&chars, n, chars.len());
 }
 
 fn dedent(line: &String, n: i32) -> String {
-    let chars = chars_of(line);
+    let chars = line.to_chars();
     let len = chars.len();
     let mut p = 0;
     while p < len && p < n && is_indent(chars[p]) {
@@ -713,7 +713,7 @@ fn dedent(line: &String, n: i32) -> String {
 /// through to plain paragraph text, reused here to decide whether an
 /// under-indented list-item line is a lazy continuation or the item's end.
 fn interrupts_paragraph(line: &String) -> bool {
-    let chars = chars_of(line);
+    let chars = line.to_chars();
     if is_html_block_start(&chars) {
         return true;
     }
@@ -774,7 +774,7 @@ fn is_delimiter_row(line: &String) -> bool {
 }
 
 fn is_delim_cell(cell: &String) -> bool {
-    let chars = chars_of(cell);
+    let chars = cell.to_chars();
     let len = chars.len();
     if len == 0 {
         return false;
@@ -809,7 +809,7 @@ fn column_alignment(cell: &String) -> ColumnAlign {
 }
 
 fn split_row(line: &String) -> List<String> {
-    let chars = chars_of(line);
+    let chars = line.to_chars();
     let len = chars.len();
     let mut s = 0;
     let mut e = len;

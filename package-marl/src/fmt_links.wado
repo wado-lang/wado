@@ -4,7 +4,7 @@
 
 use { TreeMap } from "core:collections";
 use { LinkReferenceDef } from "./fmt_ast.wado";
-use { StrCursor, chars_of, slice_chars } from "./str_cursor.wado";
+use { StrCursor, slice_chars } from "./str_cursor.wado";
 
 internal struct RefTable {
     internal defs: TreeMap<String, LinkReferenceDef>,
@@ -46,7 +46,7 @@ pub fn normalize_label(raw: &String) -> String {
 /// string after it.
 pub fn parse_dest_and_title(raw: &String) -> [String, String] {
     let trimmed = raw.trim();
-    let chars = chars_of(&trimmed);
+    let chars = trimmed.to_chars();
     let len = chars.len();
     let mut dest = String::new();
     let mut p = 0;

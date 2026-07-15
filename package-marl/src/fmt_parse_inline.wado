@@ -18,7 +18,7 @@ use {
     AutoLinkNode,
 } from "./fmt_ast.wado";
 use { RefTable, ref_table_get, parse_dest_and_title } from "./fmt_links.wado";
-use { StrCursor, chars_of } from "./str_cursor.wado";
+use { StrCursor } from "./str_cursor.wado";
 
 internal variant InlineTok {
     TextRun(String),
@@ -51,7 +51,7 @@ internal struct Frame {
 }
 
 pub fn parse_inline(text: &String, refs: &RefTable) -> List<Node> {
-    let chars = chars_of(text);
+    let chars = text.to_chars();
     return parse_inline_chars(StrCursor::over(&chars), refs);
 }
 
@@ -486,7 +486,7 @@ fn try_html_span(cur: &StrCursor, i: i32) -> Option<[Node, i32]> {
 
 fn try_html_to_close(cur: &StrCursor, i: i32, closer: String) -> Option<[Node, i32]> {
     let end = cur.end();
-    let closer_len = chars_of(&closer).len();
+    let closer_len = closer.to_chars().len();
     let mut j = i;
     while j < end {
         if starts_with_at(cur, j, closer) {
