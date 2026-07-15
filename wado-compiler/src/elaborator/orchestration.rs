@@ -3421,7 +3421,13 @@ pub(crate) fn fold_component_interfaces(
         }
         let interface_fqs = component_interface_fqs(module);
         if !interface_fqs.is_empty() {
-            Arc::make_mut(registry).register_component_decls(module, &interface_fqs, ms);
+            let host_leaf_imports = crate::wit_consume::module_host_leaf_imports(module);
+            Arc::make_mut(registry).register_component_decls(
+                module,
+                &interface_fqs,
+                &host_leaf_imports,
+                ms,
+            );
         }
     }
 }

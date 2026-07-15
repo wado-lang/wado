@@ -659,6 +659,13 @@ pub struct CmInterfaceRegistry {
     /// classifies these as [`crate::wir::ImportKind::Component`] for composition.
     component_interfaces: IndexSet<String>,
 
+    /// Per component-dependency interface FQ, the host-leaf import FQs the
+    /// dependency component itself declares (its WASI capabilities). Effect
+    /// reconstruction unions these into the consumer when the interface is used;
+    /// a purely-computational component maps to an empty set. Every exported
+    /// interface of one component shares the same set (v1 component-level union).
+    component_host_leaf_imports: IndexMap<String, Vec<String>>,
+
     /// Reverse index for the `_by_module` accessors (see [`ModuleSourceIndex`]).
     module_index: std::sync::OnceLock<ModuleSourceIndex>,
 }
@@ -1573,6 +1580,7 @@ impl CmInterfaceRegistry {
         &mut self,
         module: &crate::ast::Module,
         interface_fqs: &[String],
+        host_leaf_imports: &[String],
         module_source: &ModuleSource,
     ) {
         self.register_module_decls(module);
@@ -1580,6 +1588,10 @@ impl CmInterfaceRegistry {
             self.component_interfaces.insert(fq.clone());
             self.cm_interface_module_sources
                 .insert(fq.clone(), module_source.clone());
+            if !host_leaf_imports.is_empty() {
+                self.component_host_leaf_imports
+                    .insert(fq.clone(), host_leaf_imports.to_vec());
+            }
         }
     }
 
@@ -1587,6 +1599,17 @@ impl CmInterfaceRegistry {
     #[must_use]
     pub fn is_component_interface(&self, fq: &str) -> bool {
         self.component_interfaces.contains(fq)
+    }
+
+    /// The host-leaf import FQs the component owning `fq` declares — the raw
+    /// capabilities effect reconstruction unions into a consumer that uses this
+    /// interface. Empty for a purely-computational component or a non-component
+    /// interface. Ambient filtering is the consumer's responsibility.
+    #[must_use]
+    pub fn host_leaf_imports_for(&self, fq: &str) -> &[String] {
+        self.component_host_leaf_imports
+            .get(fq)
+            .map_or(&[], Vec::as_slice)
     }
 
     /// Register a `--lib` entry module's own named types under the synthesized
