@@ -267,6 +267,15 @@ pub fn translate_lexer_predicate(body: &String) -> Result<String, String> {
     return Result::Ok(splice_attrs(body, &refs, &replacements));
 }
 
+/// Translate a lexer `{ ... }` action body (identity translator). Same
+/// resolution as `translate_lexer_predicate` — `$text` maps to the matched
+/// slice over the apply-fn's `chars` / `start` / `pos`, the rest passes through
+/// verbatim (already Wado, calling the `lx` action-context API). A body that
+/// references an unresolved `$`-attribute is a loud error.
+pub fn translate_lexer_action(body: &String) -> Result<String, String> {
+    return translate_lexer_predicate(body);
+}
+
 /// The match-fn expression a lexer `$`-attribute becomes. `$text` is the slice
 /// matched so far (`chars[start..pos]`); other lexer attributes await their own
 /// resolution.

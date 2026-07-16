@@ -1,0 +1,22 @@
+//! Regression: a lexer action rule that matches shorter than a following
+//! non-action rule in the same dispatch group must not leave `best_act`
+//! pointing at itself. `SHORT : 'a' { setType(RETYPED) }` and `LONG : 'ab'`
+//! share a first char; on "ab" LONG wins, so the token must be LONG — not
+//! SHORT's retyped RETYPED.
+
+use s from "./grammars/wado_lex_action_stale.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/action_lex_stale" },
+    };
+
+test "a longer non-action match does not replay the shorter action rule" {
+    // "ab" -> LONG wins (no action); best_act must be reset, so no retype.
+    let r = s::parse(&"ab");
+    assert r.ok(), `clean parse: {r.diagnostics.len()} diagnostics`;
+    assert r.output == "L", `output: '{r.output}' (SHORT's set_type must not run on the LONG token)`;
+
+    // "a" alone -> SHORT wins, its action retypes to RETYPED.
+    let r2 = s::parse(&"a");
+    assert r2.ok(), "clean parse of 'a'";
+    assert r2.output == "R", `output: '{r2.output}'`;
+}

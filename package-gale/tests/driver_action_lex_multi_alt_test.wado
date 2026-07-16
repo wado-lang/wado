@@ -1,0 +1,21 @@
+//! Stage C multi-alt lexer action: a lexer rule with a per-alternative action
+//! runs only the *winning* alternative's action. `T : 'a' { setType(AA) } | 'b'
+//! { setType(BB) }` retypes 'a' to AA and 'b' to BB; the replay re-derives the
+//! matched alternative via `winning_alt_T`, so the emitted token proves which
+//! branch ran.
+
+use m from "./grammars/wado_lex_multi_alt_action.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/action_lex_multi_alt" },
+    };
+
+test "a multi-alt lexer rule runs the winning alternative's action" {
+    // 'a' -> T alt 0 -> retype AA; 'b' -> T alt 1 -> retype BB.
+    let r = m::parse(&"a b a");
+    assert r.ok(), `clean parse: {r.diagnostics.len()} diagnostics`;
+    assert r.output == "ABA", `output: '{r.output}'`;
+
+    let r2 = m::parse(&"b b");
+    assert r2.ok(), "two b's";
+    assert r2.output == "BB", `output: '{r2.output}'`;
+}

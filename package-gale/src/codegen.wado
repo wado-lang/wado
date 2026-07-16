@@ -14,7 +14,13 @@ use {
 use { build as build_follow_env } from "./follow_env.wado";
 use { TokenKinds, resolve_kind_ids } from "./token_kinds.wado";
 use { rule_type_name, all_alts_are_single_token } from "./gen_util.wado";
-use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
+use {
+    collect_literal_tokens,
+    gen_token_constants,
+    gen_lexer,
+    lexer_rule_executes_actions,
+    collect_unhandled_lexer_alt_action_ids,
+} from "./lexer_gen.wado";
 use {
     gen_parser,
     gen_kind_set_helpers,
@@ -35,6 +41,7 @@ use { TreeMap } from "core:collections";
 use {
     LoweredGrammar,
     Diagnostic,
+    DiagnosticKind,
     Rule,
     SimpleRule,
     MultiAltRule,
@@ -195,6 +202,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     gen_node_kinds(&mut w, &lowered.parser_rules);
     gen_alt_enums(&mut w, grammar);
     gen_parser(&mut w, grammar, &lowered, &mut ctx);
+    warn_unhandled_lexer_actions(grammar, &mut ctx);
     gen_string_tree_helper(&mut w, grammar, &lit_tokens);
     if let Some(query) = &options.highlight_query {
         gen_highlight(&mut w, grammar, &lit_tokens, query, &mut ctx);
@@ -226,6 +234,36 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     };
 }
 
+/// Loud safety net for lexer `{ ... }` actions codegen does not execute:
+/// nested-in-group / mid-element actions, multi-alt-rule actions, actions in
+/// a `mode` grammar, and fragment actions. Predicates never warn (they run at
+/// every position). Without this a dropped lexer action vanished with no
+/// diagnostic — silent, against the "loud, never silent" contract. Gated on
+/// `emit_actions`, so a `language = Java` grammar warns nothing. Lives here
+/// rather than in `lexer_gen` to keep that module free of a `GenContext`
+/// dependency (which would cycle through `gen_context`'s `LitToken` import).
+fn warn_unhandled_lexer_actions(grammar: &Grammar, ctx: &mut GenContext) {
+    if !ctx.emit_actions() {
+        return;
+    }
+    for let rule of &grammar.lexer_rules {
+        let executes = lexer_rule_executes_actions(grammar, rule);
+        for let mut ai = 0; ai < rule.body.len(); ai += 1 {
+            // Every alt's top-level actions run for an executing rule (the
+            // winning alt is picked at replay); only in-element actions warn.
+            let top_executes = executes;
+            let mut ids: List<i32> = [];
+            collect_unhandled_lexer_alt_action_ids(&rule.body[ai], top_executes, &mut ids);
+            for let id of &ids {
+                ctx.warn(
+                    &`lexer action {*id}`,
+                    DiagnosticKind::UnsupportedAction,
+                    `action {*id} in lexer rule '{rule.name}' is not yet executed (nested inside an element; only top-level rule/alt actions and predicates run today)`,
+                );
+            }
+        }
+    }
+}
 
 fn install_rule_follow(grammar: &Grammar, ctx: &mut GenContext) {
     if grammar.parser_rules.is_empty() {

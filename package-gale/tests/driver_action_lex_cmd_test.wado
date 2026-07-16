@@ -1,0 +1,32 @@
+//! Stage C lexer command-style actions: `lx.skip()`, `lx.set_channel(n)`, and
+//! `lx.more()` run at the tournament commit for the winning rule and route the
+//! token to trivia / a hidden channel / the next token's span — the Wado
+//! analogs of ANTLR's lexer `skip` / `channel` / `more` written as actions.
+
+use sk from "./grammars/wado_lex_skip_action.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/action_lex_skip" },
+    };
+use mo from "./grammars/wado_lex_more_action.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/action_lex_more" },
+    };
+
+test "lx.skip() and lx.set_channel() hide the token from the parser" {
+    // 'a' is skipped, 'c' goes to a hidden channel; only 'b' (B) is visible,
+    // so `s : B` parses cleanly.
+    let r = sk::parse(&"acb");
+    assert r.ok(), `parse of 'acb' should be clean: skip/channel hide a and c`;
+    assert r.output == "B", `output: '{r.output}'`;
+
+    let r2 = sk::parse(&"b");
+    assert r2.ok(), "plain 'b'";
+    assert r2.output == "B", `output: '{r2.output}'`;
+}
+
+test "lx.more() folds the matched text into the next token" {
+    // 'a' matches A with more(); 'b' matches B; the emitted B token spans "ab".
+    let r = mo::parse(&"ab");
+    assert r.ok(), "clean parse of 'ab'";
+    assert r.output == "ab", `output: '{r.output}'`;
+}
