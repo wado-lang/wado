@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784156203877,
+  "lastUpdate": 1784167138225,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -40733,6 +40733,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 265122,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "aced94f6a449b4e696cc563b12e0c1879681f269",
+          "message": "Merge pull request #1589 from wado-lang/claude/markdown-dprint-to-marl-c7byha\n\nrefactor(compiler): identify value-copy helpers by canonical type mangle",
+          "timestamp": "2026-07-16T10:49:36+09:00",
+          "tree_id": "74e4564ff5480d0bd6563d0b0d1e1bef8121d374",
+          "url": "https://github.com/wado-lang/wado/commit/aced94f6a449b4e696cc563b12e0c1879681f269"
+        },
+        "date": 1784167137653,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16422,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265171,
             "unit": "bytes"
           }
         ]
