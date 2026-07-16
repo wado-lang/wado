@@ -311,7 +311,15 @@ pub fn gen_lexer(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitTok
     gen_lexer_match_fns(w, &grammar.lexer_rules, &keywords, lit_tokens, &grammar.options, atn_class, ea);
     gen_literal_match_fns(w, lit_tokens, grammar_ci);
     gen_keyword_classifier_fn(w, &keywords);
-    gen_tokenize_fn(w, &grammar.lexer_rules, lit_tokens, &grammar.mode_names, &keywords, &grammar.options, &act_rule_names);
+    gen_tokenize_fn(
+        w,
+        &grammar.lexer_rules,
+        lit_tokens,
+        &grammar.mode_names,
+        &keywords,
+        &grammar.options,
+        &act_rule_names,
+    );
     gen_token_kind_name_fn(w, &grammar.lexer_rules, lit_tokens);
 }
 
@@ -533,9 +541,7 @@ pub fn lexer_grammar_executes_actions(grammar: &Grammar) -> bool {
 /// into the keyword classifier does not set `best_act`, so its action does not
 /// run — see the known limitations in `action.md`.)
 pub fn lexer_rule_executes_actions(grammar: &Grammar, rule: &LexerRule) -> bool {
-    return lexer_grammar_executes_actions(grammar)
-        && !rule.is_fragment
-        && !rule.is_virtual;
+    return lexer_grammar_executes_actions(grammar) && !rule.is_fragment && !rule.is_virtual;
 }
 
 /// The action ids codegen runs for `rule`: the top-level `{ ... }` (non-
@@ -731,7 +737,7 @@ fn lexer_alt_has_action(alt: &LexerAlternative) -> bool {
 /// Emit an alt's top-level actions (identity-translated) as statements.
 fn gen_lexer_alt_action_stmts(w: &mut CodeWriter, alt: &LexerAlternative) {
     for let a of &alt.actions {
-        if !(a.kind matches { Action }) {
+        if !a.kind matches { Action } {
             continue;
         }
         let body = match translate_lexer_action(&a.source.text) {
@@ -787,12 +793,7 @@ fn apply_fn_name(rule_name: &String) -> String {
 /// run its `apply_<rule>_actions` into a fresh `LexerActions`, then fold the
 /// collected effects into the tournament outcome. Only reached with
 /// `best_act >= 0`, i.e. the winner runs actions.
-fn gen_lexer_action_replay(
-    w: &mut CodeWriter,
-    act_rule_names: &List<String>,
-    use_modes: bool,
-    has_set_mode_rules: bool,
-) {
+fn gen_lexer_action_replay(w: &mut CodeWriter, act_rule_names: &List<String>, use_modes: bool, has_set_mode_rules: bool) {
     w.begin(&"if best_act >= 0");
     w.line(&"let mut lx = LexerActions::new();");
     for let mut i = 0; i < act_rule_names.len(); i += 1 {
@@ -2293,7 +2294,13 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
     return groups;
 }
 
-fn gen_dispatch_groups(w: &mut CodeWriter, calls: &List<TryCall>, groups: &List<DispatchGroup>, needs_extras: bool, has_actions: bool) {
+fn gen_dispatch_groups(
+    w: &mut CodeWriter,
+    calls: &List<TryCall>,
+    groups: &List<DispatchGroup>,
+    needs_extras: bool,
+    has_actions: bool,
+) {
     // If only a wildcard group exists, emit calls directly without dispatch
     if groups.len() == 1 && groups[0].guard == "true" {
         gen_group_calls(w, calls, &groups[0].calls, needs_extras, has_actions);
@@ -2321,7 +2328,13 @@ fn gen_dispatch_groups(w: &mut CodeWriter, calls: &List<TryCall>, groups: &List<
     }
 }
 
-fn gen_group_calls(w: &mut CodeWriter, calls: &List<TryCall>, indices: &List<i32>, needs_extras: bool, has_actions: bool) {
+fn gen_group_calls(
+    w: &mut CodeWriter,
+    calls: &List<TryCall>,
+    indices: &List<i32>,
+    needs_extras: bool,
+    has_actions: bool,
+) {
     // Uniform `try_*` call per candidate (keep the longest match). Single-char
     // literals are not hand-inlined — the wado compiler folds the tiny bodies.
     for let call_idx of indices {
@@ -2367,7 +2380,7 @@ fn gen_tokenize_fn(
     // / `best_set_mode` commit machinery even when no rule carries the matching
     // `-> more` / `-> channel` / `-> mode` command. `set_mode` only applies in
     // a `mode` grammar, so its machinery is forced only under `use_modes`.
-    let has_set_mode_rules = has_set_mode(lexer_rules) || (has_actions && use_modes);
+    let has_set_mode_rules = has_set_mode(lexer_rules) || has_actions && use_modes;
     let has_more_rules = has_more(lexer_rules) || has_actions;
     let has_channel_rules = has_channel(lexer_rules) || has_actions;
     let empty_opts: List<GrammarOption> = [];
@@ -2489,7 +2502,11 @@ fn gen_tokenize_fn(
                     // `best_act` (the replay index, or -1) so a longer non-action
                     // match cannot inherit an earlier action rule's index — see
                     // the modeless dispatch (`gen_group_calls`).
-                    let act = if has_actions { ` best_act = {index_of_name(act_rule_names, &rule.name)};` } else { String::new() };
+                    let act = if has_actions {
+                        ` best_act = {index_of_name(act_rule_names, &rule.name)};`;
+                    } else {
+                        String::new();
+                    };
                     w.line(&`if end > best_end \{ best_end = end; best_kind = {emit_kind};{extra}{act} \}`);
                 }
             }
