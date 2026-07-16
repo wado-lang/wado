@@ -173,13 +173,11 @@ Parse 81 SQL statements (13366 bytes). Two parsers are generated from the same
 | **Wado** (Gale)     | 5.54 MB/s  | 2.410 ms   | 1.43x   |
 | Java (ANTLR4)       | 0.06 MB/s  | 212.926 ms | 126.36x |
 
-ANTLR4 (Java) is the head-to-head for Gale's generated parser — the same grammar
-turned into a parser by the reference tool — on the JVM. The harness warms the
-JIT and ANTLR's DFA cache to steady state first (the most Java-favourable
-condition): the per-parse time flattens after ~50 warmup parses, so this gap is
-algorithmic, not a warmup artifact. The cost is full-context LL prediction —
-this grammar's ambiguities defeat the two-stage SLL fast path (SLL bails). Needs
-`java` and is skipped if it is absent.
+ANTLR4 (Java) is the head-to-head for Gale's generated parser, on the JVM and
+JIT-warmed to steady state (per-parse time flattens after ~50 parses, so the gap
+is algorithmic, not a warmup artifact). The cost is full-context LL — this
+grammar's ambiguities defeat the two-stage SLL fast path. Needs `java`; skipped
+if absent.
 
 ### Syntax Highlight
 

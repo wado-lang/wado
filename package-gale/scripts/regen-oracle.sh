@@ -1,25 +1,13 @@
 #!/usr/bin/env bash
-# Regenerate tests/driver_cst_<key>_oracle_test.wado for a real grammar,
-# pinning Gale's parse trees against the published ANTLR4 jar (Stage B',
-# extended from the descriptor corpus to real-world grammars).
+# Regenerate tests/driver_cst_<key>_oracle_test.wado for a real grammar, pinning
+# Gale's parse trees against the published ANTLR4 jar (Stage B'). For each input
+# in tests/oracle/<key>/cases.* it runs the ANTLR4 oracle and Gale's parser and
+# emits the test pinning the ORACLE tree; a case Gale parses differently becomes
+# #[TODO]. Java runs only here; the trees are committed, so CI needs none.
 #
-# For each input in tests/oracle/<key>/cases.* this runs the ANTLR4 oracle
-# (scripts/antlr4-oracle.sh, the published jar as a black box) to get the
-# reference tree and Gale's generated parser to get its current tree, then
-# emits the test pinning the ORACLE tree; a case Gale currently parses
-# differently becomes #[TODO] (resolving it = the divergence closed). Java runs
-# only here, at regen time — the trees are committed, so CI needs none.
-#
-# Adding a grammar is config + a cases file — BUT only for a clean, single
-# combined grammar whose whitespace is skipped (`WS -> skip`). Not covered:
-#   - split lexer/parser grammars (antlr4-oracle.sh takes one .g4);
-#   - grammars with `options { superClass = ... }` (RustParser, TypeScriptParser)
-#     — the generated Java references a hand-written base class outside the .g4,
-#     so the oracle's `javac` fails, and Gale itself needs predicate support;
-#   - grammars that emit whitespace as tree tokens (css3's `ws`) — its trees are
-#     whitespace-sensitive and render childless rules differently, so css3 is
-#     pinned by parse-success (driver_cst_css3_test), not tree equality.
-# See "Stage B' for real-world grammars" in antlr4-compatibility.md.
+# Only clean single combined `WS -> skip` grammars qualify; see "Stage B' for
+# real-world grammars" in antlr4-compatibility.md for why Rust/TypeScript
+# (superClass) and css3 (whitespace tokens) are out of scope.
 #
 # Usage: scripts/regen-oracle.sh [sqlite|json|all]   (default: all)
 # Needs java+javac and a built `wado` (WADO env, default ../target/release/wado).
@@ -29,11 +17,10 @@ cd "$(dirname "$0")/.."
 export ANTLR4_VERSION="${ANTLR4_VERSION:-4.13.2}"
 WADO="${WADO:-../target/release/wado}"
 
-# Strip ANTLR4's <EOF> (cosmetic; Gale omits it) and collapse structural
-# whitespace. Safe only when no tree token carries a significant inner space
-# (true for WS-skipping grammars).
+# Strip ANTLR4's <EOF> (Gale omits it) and collapse whitespace — safe only for
+# WS-skipping grammars, where no tree token carries a significant space.
 norm() { sed 's/ *<EOF> *//g' | tr '\t\r\n' '   ' | tr -s ' ' | sed 's/^ *//; s/ *$//'; }
-# Escape a value for a Wado "..." string literal (backslash first, then quote).
+# Escape for a Wado "..." literal (backslash first, then quote).
 esc() { sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
 regen_one() {

@@ -1,15 +1,8 @@
-// gale-gen benchmark: run the Gale generator over the Rust grammar.
-//
-// Measures the throughput of `gale gen` (grammar assembly + code generation)
-// on the RustLexer.g4 + RustParser.g4 pair — a large, real-world grammar —
-// as a byte rate over the input grammar size (grammar bytes/s). This is the
-// series recorded on the CI dashboard. The ANTLR4 reference (`antlr4_gen.mjs`),
-// which generates from the same `.g4`, is a separate local-only step in the
-// mise task.
-//
-// The grammar sources are embedded at compile time with `#include_str`, so the
-// benchmark performs no runtime file I/O — every measured iteration is the
-// generator itself.
+// gale-gen benchmark: `gale gen` throughput (grammar assembly + codegen) over
+// the Rust grammar, as a byte rate over the input `.g4` size — the series on
+// the CI dashboard. Sources are embedded with `#include_str`, so no measured
+// iteration touches the filesystem. The ANTLR4 reference over the same `.g4`
+// (`antlr4_gen.mjs`) is a separate mise step.
 
 use { Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";

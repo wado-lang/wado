@@ -1,11 +1,7 @@
-// Build and run the ANTLR4 Java SQLite parser benchmark.
-//
-// Generates a Java parser from the SAME SQLite.g4 the Gale row uses, compiles it
-// with Antlr4SqliteBench.java against the ANTLR4 runtime (bundled in the
-// complete jar), and runs the bench over queries.sql. The jar is cached under
-// ~/.cache/gale (shared with package-gale's oracle and the gale-gen reference)
-// and fetched on first use. Skips gracefully when java/javac are missing or the
-// jar cannot be obtained.
+// Build and run the ANTLR4 Java SQLite parser benchmark: generate a Java parser
+// from the same SQLite.g4 the Gale row uses, compile it with Antlr4SqliteBench
+// against the jar's bundled runtime, and run it over queries.sql. The jar is
+// cached under ~/.cache/gale and fetched on first use; skips without java/javac.
 
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, copyFileSync, rmSync, existsSync, mkdirSync } from 'node:fs';

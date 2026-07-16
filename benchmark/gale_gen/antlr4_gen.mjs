@@ -1,15 +1,7 @@
-// ANTLR4 generate benchmark: time the reference `antlr4` tool over the SAME
-// Rust grammar gale-gen uses (RustLexer.g4 + RustParser.g4).
-//
-// This is the apples-to-apples comparison for `gale gen`: Gale is an
-// ANTLR4-compatible generator, so both consume the identical `.g4` and emit a
-// parser. Throughput is over the shared `.g4` size, so the number is directly
-// comparable to the Wado row. ANTLR4 emits Java here (its default target); the
-// timed cost is JVM startup + ATN construction + code generation.
-//
-// Requires `java` on PATH. The antlr jar is cached under ~/.cache/gale (shared
-// with package-gale's oracle); it is fetched on first use. Skips gracefully
-// when java is missing or the jar cannot be obtained.
+// ANTLR4 `generate` timed over the same Rust grammar gale-gen uses — the
+// apples-to-apples reference (Gale is ANTLR4-compatible; identical `.g4`).
+// Throughput is over the shared `.g4` size. Needs `java`; the jar is cached
+// under ~/.cache/gale and fetched on first use, else the row skips.
 
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, copyFileSync, rmSync, statSync, existsSync, mkdirSync } from 'node:fs';
@@ -23,7 +15,7 @@ const G4 = ['RustLexer.g4', 'RustParser.g4'];
 const ANTLR_VERSION = '4.13.2';
 const JAR = join(homedir(), '.cache', 'gale', `antlr-${ANTLR_VERSION}-complete.jar`);
 const JAR_URL = `https://www.antlr.org/download/antlr-${ANTLR_VERSION}-complete.jar`;
-const ITERS = 3; // keep the fastest; generation is deterministic
+const ITERS = 3;
 
 function has(cmd, args) {
   try {

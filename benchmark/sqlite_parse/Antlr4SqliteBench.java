@@ -1,19 +1,9 @@
-// ANTLR4 Java SQLite parser benchmark: reference for the Gale-generated parser.
-//
-// Parses the same queries.sql the Wado (Gale) row does, using a parser ANTLR4
-// generated from the same SQLite.g4. This is the head-to-head for "Gale's
-// generated parser vs ANTLR4's own", on identical grammar and input — on the
-// JVM (JIT-warmed) rather than Wasm/native.
-//
-// SQLiteLexer/SQLiteParser are generated at build time from SQLite.g4 (see
-// antlr4_java_bench.mjs); they are not vendored. Reports parse throughput
-// (MB/s) with the iteration count auto-calibrated to run for about a second,
-// matching the other benchmark harnesses.
-//
-// Prediction: the default (full-context LL). The two-stage SLL fast path is not
-// used because SLL cannot resolve this grammar's ambiguities on this input (it
-// bails and would always fall back to LL), so LL-only is ANTLR4's best-case
-// configuration here.
+// ANTLR4 Java SQLite parser benchmark: the runtime reference for Gale's
+// generated parser — same SQLite.g4, same queries.sql, on the JVM.
+// SQLiteLexer/SQLiteParser are generated at build time (see antlr4_java_bench.mjs),
+// not vendored. Throughput auto-calibrates to ~1s like the other harnesses.
+// Runs default full-context LL: SLL bails on this grammar, so LL is ANTLR4's
+// best case here.
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
@@ -37,11 +27,8 @@ public class Antlr4SqliteBench {
         String sql = new String(Files.readAllBytes(Paths.get(args[0])), "UTF-8");
         int size = sql.getBytes("UTF-8").length;
 
-        // Warm the JIT (C2) and ANTLR's static DFA cache to steady state before
-        // measuring — the most Java-favourable condition. On this grammar the
-        // per-iteration time flattens by ~40-50 parses (the cold first parse is
-        // ~3x the steady cost); warm past that knee on any machine by requiring
-        // both a time and an iteration floor.
+        // Warm the JIT and ANTLR's DFA cache to steady state (per-parse time
+        // flattens after ~50 parses); a time and iteration floor covers any machine.
         long warmUntil = System.nanoTime() + 8_000_000_000L;
         long warmIters = 0;
         while (System.nanoTime() < warmUntil || warmIters < 60) {
