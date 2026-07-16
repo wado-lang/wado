@@ -84,6 +84,7 @@ for (const opt of OPT_LEVELS) {
   push(`json/catalog/de (${label})`, catalog, 'de');
   push(`sqlite_parse (${label})`, runBench('sqlite_parse/sqlite_parse.wado', opt));
   push(`syntax_highlight (${label})`, runBench('syntax_highlight/syntax_highlight.wado', opt));
+  push(`gale_gen (${label})`, runBench('gale_gen/gale_gen.wado', opt));
 }
 
 process.stdout.write(JSON.stringify(benchmarks, null, 2) + '\n');

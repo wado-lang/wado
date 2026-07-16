@@ -163,12 +163,21 @@ Decompress:
 
 ### SQL Parse
 
-Parse 81 SQL statements (13366 bytes). Gale-generated parser vs sqlparser-rs.
+Parse 81 SQL statements (13366 bytes). Two parsers are generated from the same
+`SQLite.g4` — the Gale one and ANTLR4's own (Java) — alongside the hand-written
+`sqlparser-rs`.
 
-| Implementation      | Throughput | ms/iter  | vs best |
-| ------------------- | ---------- | -------- | ------- |
-| Rust (sqlparser-rs) | 6.80 MB/s  | 1.965 ms | 1.00x   |
-| **Wado** (Gale)     | 3.92 MB/s  | 3.405 ms | 1.73x   |
+| Implementation      | Throughput | ms/iter    | vs best |
+| ------------------- | ---------- | ---------- | ------- |
+| Rust (sqlparser-rs) | 7.93 MB/s  | 1.685 ms   | 1.00x   |
+| **Wado** (Gale)     | 5.54 MB/s  | 2.410 ms   | 1.43x   |
+| Java (ANTLR4)       | 0.06 MB/s  | 212.926 ms | 126.36x |
+
+ANTLR4 (Java) is the head-to-head for Gale's generated parser, on the JVM and
+JIT-warmed to steady state (per-parse time flattens after ~50 parses, so the gap
+is algorithmic, not a warmup artifact). The cost is full-context LL — this
+grammar's ambiguities defeat the two-stage SLL fast path. Needs `java`; skipped
+if absent.
 
 ### Syntax Highlight
 
@@ -192,6 +201,26 @@ reference SQL highlighters:
 | Rust (tree-sitter)           | 2.24 MB/s   | 5.972 ms  | 3.00x   |
 | JavaScript (web-tree-sitter) | 1.34 MB/s   | 9.944 ms  | 5.01x   |
 | JavaScript (Shiki)           | 573.18 KB/s | 23.319 ms | 12.01x  |
+
+### Grammar Generation
+
+Generate a Rust parser from an ANTLR4 `.g4` grammar. Gale is an
+ANTLR4-compatible generator, so the head-to-head comparison is against
+[ANTLR4](https://www.antlr.org/) itself over the **identical grammar** —
+`RustLexer.g4` + `RustParser.g4` (34390 bytes), same input, same ALL(\*)
+algorithm family, both emitting a parser. Throughput is grammar bytes processed
+per second (higher is better).
+
+| Implementation  | Throughput  | ms/iter    | vs best |
+| --------------- | ----------- | ---------- | ------- |
+| **Wado** (Gale) | 137.46 KB/s | 250.179 ms | 1.00x   |
+| Java (ANTLR4)   | 34.52 KB/s  | 996.200 ms | 3.98x   |
+
+Gale is measured in-process (grammar assembly + code generation) and emits a
+Wado recursive-descent parser; ANTLR4 runs its reference jar
+(`java -jar antlr-4.13.2-complete.jar -Dlanguage=Java`, ~0.14 s of which is JVM
+startup) over the same two files and emits Java. The ANTLR4 row needs `java` and
+is skipped if it is absent.
 
 ## Application Server
 
@@ -236,13 +265,16 @@ mise run benchmark-zlib             # compression
 # parsing
 mise run benchmark-sqlite-parse     # SQL parsing
 mise run benchmark-syntax-highlight # syntax highlighting
+mise run benchmark-gale-gen         # Gale generator over the Rust grammar
 
 # application server
 mise run benchmark-http-routing     # HTTP routing (wado serve vs Hono vs Axum)
 ```
 
 Prerequisites: `cc` and `cargo` (system); `node` and `bun` (managed by
-`mise install`).
+`mise install`). The ANTLR4 reference rows (gale-gen, sqlite-parse) need `java`
+(sqlite-parse also `javac`); the jar is fetched to `~/.cache/gale`. Those rows
+are skipped if the tool is absent.
 
 ## Profiling
 

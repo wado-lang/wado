@@ -1,0 +1,73 @@
+#![generated(by = "package-gale/scripts/regen-oracle.sh")]
+// Do not edit by hand — re-run scripts/regen-oracle.sh json to regenerate.
+// Generated against ANTLR4 4.13.2 (the published jar, run as a black box).
+//
+// Stage B' for a real grammar: Gale's JSON.g4 parse trees pinned
+// against ANTLR4's over tests/oracle/json/cases.json. The expected tree is ANTLR4's; a case
+// Gale parses differently is #[TODO] (resolving it = the divergence closed).
+
+use json from "./grammars/JSON.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_json" },
+    };
+use { normalize_tree } from "./grammars/JSON.g4";
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = json::parse(input);
+    let actual = json::to_string_tree(&result);
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+test "oracle: {a: 1}" {
+    assert_tree(&"{\"a\": 1}", &"(json (value (obj { (pair \"a\" : (value 1)) })))");
+}
+
+test "oracle: [1, 2, 3]" {
+    assert_tree(&"[1, 2, 3]", &"(json (value (arr [ (value 1) , (value 2) , (value 3) ])))");
+}
+
+test "oracle: {x: {y: [true, false, null]}}" {
+    assert_tree(
+        &"{\"x\": {\"y\": [true, false, null]}}",
+        &"(json (value (obj { (pair \"x\" : (value (obj { (pair \"y\" : (value (arr [ (value true) , (value false) , (value null) ]))) }))) })))",
+    );
+}
+
+test "oracle: hello" {
+    assert_tree(&"\"hello\"", &"(json (value \"hello\"))");
+}
+
+test "oracle: 42" {
+    assert_tree(&"42", &"(json (value 42))");
+}
+
+test "oracle: -3.14" {
+    assert_tree(&"-3.14", &"(json (value -3.14))");
+}
+
+test "oracle: {emptyArr: [], emptyObj: {}}" {
+    assert_tree(
+        &"{\"emptyArr\": [], \"emptyObj\": {}}",
+        &"(json (value (obj { (pair \"emptyArr\" : (value (arr [ ]))) , (pair \"emptyObj\" : (value (obj { }))) })))",
+    );
+}
+
+test "oracle: [{k: v}]" {
+    assert_tree(&"[{\"k\": \"v\"}]", &"(json (value (arr [ (value (obj { (pair \"k\" : (value \"v\")) })) ])))");
+}
+
+test "oracle: true" {
+    assert_tree(&"true", &"(json (value true))");
+}
+
+test "oracle: null" {
+    assert_tree(&"null", &"(json (value null))");
+}
+
+test "oracle: {nested: [1, [2, [3]]]}" {
+    assert_tree(
+        &"{\"nested\": [1, [2, [3]]]}",
+        &"(json (value (obj { (pair \"nested\" : (value (arr [ (value 1) , (value (arr [ (value 2) , (value (arr [ (value 3) ])) ])) ]))) })))",
+    );
+}
