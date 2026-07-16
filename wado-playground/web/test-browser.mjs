@@ -95,6 +95,47 @@ try {
     console.log(`${pass ? "✅" : "❌"} ${c.name}: ${JSON.stringify(r.ok ? { stdout: r.stdout, stderr: r.stderr } : r.error)}`);
     if (!pass) failed++;
   }
+
+  // The same pipeline via runner-worker.js: streamed messages, then done.
+  const w = await page.evaluate(async (source) => {
+    const worker = new Worker("./runner-worker.js", { type: "module" });
+    const events = [];
+    const result = await new Promise((resolve, reject) => {
+      setTimeout(() => reject(new Error("timeout: runner worker")), 120000);
+      worker.onmessage = (e) => {
+        events.push(e.data);
+        if (e.data.type === "done" || e.data.type === "error") resolve(e.data);
+      };
+      worker.postMessage({ type: "run", source });
+    }).finally(() => worker.terminate());
+    return { events, result };
+  }, CASES[2].src);
+  const stdout = w.events.filter((e) => e.type === "stdout").map((e) => e.text).join("");
+  const stderr = w.events.filter((e) => e.type === "stderr").map((e) => e.text).join("");
+  const phases = w.events.filter((e) => e.type === "status").map((e) => e.phase);
+  const workerPass =
+    w.result.type === "done" &&
+    stdout.includes(CASES[2].expect) &&
+    stderr.includes(CASES[2].expectStderr) &&
+    !stdout.includes(CASES[2].expectStderr) &&
+    ["compiling", "transpiling", "running"].every((p) => phases.includes(p));
+  console.log(`${workerPass ? "✅" : "❌"} runner-worker: ${JSON.stringify({ phases, stdout, stderr, result: w.result })}`);
+  if (!workerPass) failed++;
+
+  // Every playground example (examples.json) must compile and run cleanly.
+  const examples = JSON.parse(await readFile(join(WEB, "examples.json"), "utf8"));
+  for (const ex of examples) {
+    const r = await page.evaluate(async (source) => {
+      try {
+        return { ok: true, ...(await globalThis.__wadoRun(source)) };
+      } catch (e) {
+        return { ok: false, error: String(e?.message ?? e) };
+      }
+    }, ex.source);
+    const pass = r.ok;
+    console.log(`${pass ? "✅" : "❌"} example ${ex.name}: ${pass ? `${r.stdout.length}B stdout` : r.error}`);
+    if (!pass) failed++;
+  }
 } finally {
   await browser.close();
   server.close();

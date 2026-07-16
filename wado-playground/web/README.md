@@ -34,6 +34,21 @@ is the UI.
   released-jco P3 gaps (future-end classes, stdout write hook) are re-injected by
   the same post-process as the Node pipeline.
 
+## Language server
+
+`wado-lsp.wasm` — the same `wasm32-wasip1` stdio binary the VS Code extension
+bundles — runs in a Web Worker behind a minimal WASI preview1 shim
+(`lsp-worker.js`). stdin's `fd_read` is a `WebAssembly.Suspending` import, so
+JSPI suspends the server's blocking read loop until the page posts the next
+message; no SharedArrayBuffer (GitHub Pages cannot set COOP/COEP) and no
+Asyncify build. The stdlib is embedded in the compiler, so the shim needs no
+filesystem — `path_open` returns `ENOENT`.
+
+`lsp-client.js` is the main-thread API: JSON-RPC over the worker port with
+`initialize()` / `didOpen` / `didChange` / `request()` /
+`onNotification()`. Editor bindings (Monaco providers) belong to the
+consuming page (the official site's `playground/`).
+
 ## Requirements
 
 - A **JSPI-capable browser**: Chromium/Chrome **137+** (stable JSPI). Both the
@@ -46,7 +61,15 @@ is the UI.
 mise run playground-web-build      # compiles the wasm, bundles jco, stages assets
 ```
 
-This produces the git-ignored artifacts (`wado-playground.wasm`, `vendor/*`).
+This produces the git-ignored artifacts (`wado-playground.wasm`,
+`wado-lsp.wasm`, `vendor/*`, `examples.json`).
+
+`examples.json` (built by `build-examples.mjs`) collects the `example/*.wado`
+programs the playground can load: single-file, with an exported `run`, and
+importing only what the browser can satisfy — `core:*` (embedded in the
+compiler) plus the shimmed `wasi:clocks` / `wasi:random`. `test-browser.mjs`
+compiles and runs every entry, so a listed example is guaranteed to work in
+the browser.
 
 ## Run
 
