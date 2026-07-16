@@ -270,16 +270,11 @@ only at regeneration time — the trees are committed, so CI needs none.
 Pinned so far:
 
 - **`sqlite`** — 14 cases, 0 `#[TODO]`. Inputs omit the trailing `;` so
-  the `sql_stmt_list` trailing-separator shape stays out of scope. The
-  original 8 `#[TODO]`s exposed two divergence classes the hand-written
-  test had locked in as "correct", both fixed since: a scan-length tie
-  in the group tournament committed to the sort's front-runner instead
-  of the first grammar alternative (a single-table `FROM` wrapped in
-  `join_clause` where ANTLR4 uses a bare `table_or_subquery`), and a
-  childless rule node rendered as `(conflict_clause)` where ANTLR4's
-  `toStringTree` renders the bare name.
+  the `sql_stmt_list` trailing-separator shape stays out of scope.
 - **`json`** — 11 cases, 0 `#[TODO]`: Gale's JSON parser matches ANTLR4
-  exactly, so this is a pure lock-in against regressions.
+  exactly.
+
+Both are pure lock-ins against regressions.
 
 Adding a grammar is config + a cases file, but only for a **clean single
 combined grammar with `WS -> skip`**. Out of scope, with reasons recorded

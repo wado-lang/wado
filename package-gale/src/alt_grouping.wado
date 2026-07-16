@@ -194,10 +194,10 @@ pub fn sort_group_by_specificity(group: &mut List<i32>, first_sets: &List<List<S
 // `BareRuleRef` (3) is the catch-all rank: a single-RuleRef alt
 // whose body can match complex internal patterns (`join_clause`,
 // `expr`). Ordered before `MultiRuleRefLed` so the scan cascade
-// tries the catch-all early; the runtime tournament decides the
-// winner by scan length, with ties resolved to the first grammar
-// alt (ANTLR4's ambiguity resolution), so this order no longer
-// decides correctness.
+// tries the catch-all early; this is a tie-break for emission order
+// only — the runtime tournament decides the winner by scan length,
+// with ties resolved to the first grammar alt (ANTLR4's ambiguity
+// resolution), so the band ordering does not decide correctness.
 //
 // `MultiRuleRefLed` (2) is a multi-element alt whose first non-
 // nullable element is itself a RuleRef. Less specific than
