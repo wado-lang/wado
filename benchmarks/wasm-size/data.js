@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784198512550,
+  "lastUpdate": 1784204429819,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -40801,6 +40801,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/481ebc782d4d92e1a2c009accb8f036e3ea790aa"
         },
         "date": 1784198512220,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16422,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265171,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "550f7454b92d8445df526cdc33896f74d87b3593",
+          "message": "Merge pull request #1592 from wado-lang/claude/great-pasteur-fwva7y\n\nfeat(gale): execute lexer actions in generated parsers",
+          "timestamp": "2026-07-16T21:10:43+09:00",
+          "tree_id": "037197c6bcd6aff8bf59a1193e9c5ce241677482",
+          "url": "https://github.com/wado-lang/wado/commit/550f7454b92d8445df526cdc33896f74d87b3593"
+        },
+        "date": 1784204429371,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
