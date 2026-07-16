@@ -189,21 +189,15 @@ pub(super) fn synthesize_future_reads(project: &mut Package) {
     }
 }
 
-/// Generate the per-payload `FutureWritable<T>::write()` binding functions for
-/// every written payload, mirroring [`synthesize_future_reads`].
+/// Generate the per-payload `FutureWritable<T>::write()` binding functions,
+/// mirroring [`synthesize_future_reads`].
 ///
-/// For each distinct payload `T` written, synthesizes
-/// `__cm_future_write_<mangle(T)>(handle: i32, value: T)` which allocates a CM
-/// buffer (sized via `cm_abi`), lowers `value` into it with the shared
-/// `synthesize_lower_wasi_type_to_memory`, and calls the payload-parameterized
-/// `future-write` canonical. The BLOCKED strategy is payload-dependent (see
-/// [`synthesize_future_write_func`]): scalar / aggregate value payloads leave
-/// the buffer alive and return so the async executor resumes a same-instance
-/// reader, while transmission shapes (write-completion, trailers) await the host
-/// reader via `future_await_blocked` and then free the buffer.
+/// On BLOCKED, transmission shapes (write-completion, trailers) await the host
+/// reader and free the buffer, but value payloads leave the buffer alive and
+/// return: their reader is another task in the same instance, so busy-waiting
+/// would deadlock the async executor.
 pub(super) fn synthesize_future_writes(project: &mut Package) {
     let cm_interface_registry = &project.cm_interface_registry;
-    // payload mangle -> payload_type_id
     let mut needed: IndexMap<String, TypeId> = IndexMap::default();
     for module in project.tir_modules.values() {
         let tt = module.type_table.borrow();
@@ -247,11 +241,7 @@ pub(super) fn synthesize_future_writes(project: &mut Package) {
 }
 
 /// The payload type of a `future-write` method call, or `None` if the
-/// expression is not a future-write. Covers every payload shape — scalar,
-/// aggregate value, and transmission (`Result<(), E>`,
-/// `Result<Option<resource>, E>`) — all of which route through the synthesized
-/// `__cm_future_write_<T>` helper. The helper's wait/free strategy is chosen per
-/// payload classification in [`synthesize_future_write_func`].
+/// expression is not a future-write.
 fn future_write_payload(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
     let (func, receiver) = match &expr.kind {
         TirExprKind::MethodCall { func, receiver, .. } => (func, receiver),
@@ -741,10 +731,6 @@ impl TirRefVisitor for FutureWriteFinder<'_> {
     }
 }
 
-/// `if <status> == -1 { <status> = future_await_blocked(handle) }` — resolve a
-/// BLOCKED (`-1`) canonical future result by awaiting the counterpart, storing
-/// the completion code back into the mutable `status` local. Shared by the
-/// future read and (transmission) future write synthesizers.
 fn await_if_blocked(status_idx: u32, status_name: &str, handle_idx: u32) -> TirStmt {
     if_stmt(
         binary(
@@ -768,9 +754,6 @@ fn await_if_blocked(status_idx: u32, status_name: &str, handle_idx: u32) -> TirS
     )
 }
 
-/// `realloc(ptr, size, align, 0)` — free a CM buffer, binding the ignored
-/// result to a fresh local. Shared by the future read and (transmission) future
-/// write synthesizers.
 fn free_cm_buffer(
     ptr_idx: u32,
     size: i32,
@@ -820,12 +803,6 @@ fn synthesize_future_write_func(
             cm_interface_registry,
             Some(&cm_package),
         ) as i32;
-        // Transmission shapes (write-completion `Result<(), E>`, trailers
-        // `Result<Option<resource>, E>`) are delivered to the host, which reads
-        // concurrently: block on BLOCKED via `future_await_blocked` and free the
-        // buffer once the write completes. Value payloads (scalar / aggregate)
-        // are read by another task in the same instance, so busy-waiting would
-        // deadlock the async executor — those leave the buffer alive and return.
         let awaits_reader = matches!(
             payload,
             CmFuturePayload::Trailers | CmFuturePayload::Transmission(_)
@@ -886,10 +863,6 @@ fn synthesize_future_write_func(
         type_table,
     ));
 
-    // __written = future-write:<payload>(handle, ptr). Value payloads leave the
-    // buffer alive and return: BLOCKED is resolved by the async executor when a
-    // same-instance reader posts its read, so busy-waiting would deadlock it.
-    // Transmission shapes are read by the host, so they await and free.
     let written_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, awaits_reader);
     let write_binding = if awaits_reader { let_mut_stmt } else { let_stmt };
     stmts.push(write_binding(
@@ -1794,8 +1767,6 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             rewrite_cm_new(expr, self.tt, cm_name == "future-new");
             return;
         }
-        // Every future write (scalar, aggregate value, and transmission shapes
-        // alike) calls a generated per-payload binding function.
         if cm_name == "future-write"
             && let Some(payload_type_id) = future_write_payload(self.tt, expr)
         {
