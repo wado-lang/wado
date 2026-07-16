@@ -844,12 +844,8 @@ fn compile_after_load<H: CompilerHost>(
     // through the host without bailing: a malformed descriptor does not
     // fail the whole compile, so the driver's provisional fallback still
     // produces a valid cache key.
-    // A kiln generator is any target world that imports `KilnHost` — the same
-    // structural signal cm_binding and codegen use, so all three agree (a
-    // string match on `core:kiln/generator` would miss a future generator
-    // world with a different FQ).
     let is_kiln_generator = match (options.target_world.as_deref(), sem.world_registry()) {
-        (Some(tw), Some(reg)) => reg.world_imports_interface(tw, "KilnHost"),
+        (Some(tw), Some(reg)) => reg.is_generator_world(tw),
         _ => false,
     };
 

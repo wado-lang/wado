@@ -19,6 +19,12 @@ use crate::module_source::ModuleSource;
 /// dynamically from the entry module's `TirTest` declarations).
 pub const TEST_WORLD: &str = "test";
 
+/// The interface whose import marks a world as a kiln generator world.
+/// The one place the name is spelled; generator-world checks go through
+/// [`WorldRegistry::is_generator_world`] (or the package-level
+/// `is_generator_world` helpers), never a scattered string literal.
+pub const GENERATOR_HOST_INTERFACE: &str = "KilnHost";
+
 /// Information about a world export function.
 ///
 /// World exports take two AST shapes (`export Foo;` interface form and
@@ -377,12 +383,19 @@ impl WorldRegistry {
     }
 
     /// Whether `world` is registered and imports `interface_name`. The single
-    /// predicate behind kiln-generator detection (`imports_interface("KilnHost")`),
+    /// predicate behind kiln-generator detection (see [`GENERATOR_HOST_INTERFACE`]),
     /// so the frontend, `cm_binding`, and codegen all agree on what counts as a
     /// generator world instead of some string-matching `core:kiln/generator`.
     pub fn world_imports_interface(&self, world: &str, interface_name: &str) -> bool {
         self.get(world)
             .is_some_and(|w| w.imports_interface(interface_name))
+    }
+
+    /// Whether `world` is a kiln generator world. Structural: any world that
+    /// imports [`GENERATOR_HOST_INTERFACE`] qualifies, so a future generator
+    /// world with a different FQ is detected without new branches.
+    pub fn is_generator_world(&self, world: &str) -> bool {
+        self.world_imports_interface(world, GENERATOR_HOST_INTERFACE)
     }
 
     /// Get the number of registered worlds

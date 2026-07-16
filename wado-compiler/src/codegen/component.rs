@@ -47,9 +47,8 @@ pub fn build_component(
     }
 
     // Emit the shared `core:kiln/types` instance before the canon and export
-    // passes, which reference its `input-file`/`response`/`error` types. Any
-    // world importing `KilnHost` is a generator world.
-    if project.world_imports_interface("KilnHost") {
+    // passes, which reference its `input-file`/`response`/`error` types.
+    if project.is_generator_world() {
         emit_kiln_world_types(&mut builder, &mut ctx);
     }
 
