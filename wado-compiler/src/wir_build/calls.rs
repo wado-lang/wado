@@ -68,6 +68,56 @@ macro_rules! replace_lane {
 }
 
 impl FunctionTranslator<'_, '_> {
+    /// Wrap a multi-value [i64, i64] instruction in a tuple struct.
+    /// The Wasm instruction pushes two i64s on the stack; we capture them
+    /// into freshly declared locals via `MultiValueLocalBind`, then build
+    /// a `StructNew` reading the locals back as the struct fields.
+    /// Subsequent destructure patterns at the call site are collapsed by
+    /// `wir_optimize::elide_struct::elide_multi_field_struct_locals`,
+    /// which recognises `LocalSet temp = StructNew { fields: [LocalGet, LocalGet] }`
+    /// followed by `StructGet × N` and substitutes each field access
+    /// directly — eliminating the heap allocation.
+    fn wrap_multivalue_i64(&mut self, instr: WirInstr, result_type_id: TypeId) -> WirInstr {
+        let wir_type = self
+            .ctx
+            .type_id_to_wir_type(self.type_table, result_type_id);
+        let WirType::Ref { type_id, .. } = wir_type else {
+            // Fallback: just emit the instruction (shouldn't happen).
+            return instr;
+        };
+        self.local_counter += 1;
+        let n = self.local_counter;
+        let lo = format!("__mv_lo_{n}");
+        let hi = format!("__mv_hi_{n}");
+        WirInstr::Seq(vec![
+            WirInstr::DeclareLocal {
+                name: lo.clone(),
+                ty: WirType::I64,
+            },
+            WirInstr::DeclareLocal {
+                name: hi.clone(),
+                ty: WirType::I64,
+            },
+            WirInstr::MultiValueLocalBind {
+                instr: Box::new(instr),
+                locals: vec![Some(lo.clone()), Some(hi.clone())],
+            },
+            WirInstr::StructNew {
+                type_id,
+                fields: vec![
+                    WirInstr::LocalGet {
+                        name: lo,
+                        result_ty: WirType::I64,
+                    },
+                    WirInstr::LocalGet {
+                        name: hi,
+                        result_ty: WirType::I64,
+                    },
+                ],
+            },
+        ])
+    }
+
     /// Resolve a TIR `FunctionRef` to a `WirFuncId`.
     pub(super) fn resolve_function_ref(
         &self,

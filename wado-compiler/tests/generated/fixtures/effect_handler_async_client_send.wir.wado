@@ -262,186 +262,215 @@ struct core:prelude/types.wado//Option<Stream<u8>>::Some {  // TypeId(44)
     payload_0: i32,
 }
 
-variant core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions> {  // TypeId(45)
+variant core:prelude/types.wado//Option<wasi:http/types.wado/Fields> {  // TypeId(45)
     Some(i32),
     None,
 }
 
-struct core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>::Some {  // TypeId(46)
+struct core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some {  // TypeId(46)
     discriminant: i32,
     payload_0: i32,
 }
 
-variant core:prelude/types.wado//Result<(),()> {  // TypeId(47)
+variant core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions> {  // TypeId(47)
+    Some(i32),
+    None,
+}
+
+struct core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>::Some {  // TypeId(48)
+    discriminant: i32,
+    payload_0: i32,
+}
+
+variant core:prelude/types.wado//Result<(),()> {  // TypeId(49)
     Ok,
     Err,
 }
 
-struct core:prelude//List<u8> {  // TypeId(48)
+variant core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode> {  // TypeId(50)
+    Ok(ref "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>"),
+    Err(ref "wasi:http/types.wado//ErrorCode"),
+}
+
+struct core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok {  // TypeId(51)
+    discriminant: i32,
+    payload_0: ref "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>",
+}
+
+struct core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Err {  // TypeId(52)
+    discriminant: i32,
+    payload_0: ref "wasi:http/types.wado//ErrorCode",
+}
+
+struct core:prelude//List<u8> {  // TypeId(53)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(49)
+enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(54)
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(50)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(55)
 
-struct canonical//CanonicalClosure_0 {  // TypeId(51)
+struct canonical//CanonicalClosure_0 {  // TypeId(56)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_0",
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(52)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(57)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(53)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(58)
 
-type "functype//wasi/task-return" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(54)
+type "functype//wasi/task-return" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(59)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(55)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(60)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(56)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(61)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(57)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(62)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(58)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(63)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(59)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(64)
 
-type "functype//wasi/wasi:http/Client::send" = fn(i32, i32) -> i32;  // TypeId(60)
+type "functype//wasi/wasi:http/Client::send" = fn(i32, i32) -> i32;  // TypeId(65)
 
-type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(61)
+type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(66)
 
-type "functype//wasi/wasi:http/Request::new" = fn(i32, i32, i32, i32, i32, i32, i32);  // TypeId(62)
+type "functype//wasi/wasi:http/Request::new" = fn(i32, i32, i32, i32, i32, i32, i32);  // TypeId(67)
 
-type "functype//wasi/wasi:http/Request::get_path_with_query" = fn(i32, i32);  // TypeId(63)
+type "functype//wasi/wasi:http/Request::get_path_with_query" = fn(i32, i32);  // TypeId(68)
 
-type "functype//wasi/wasi:http/Request::set_path_with_query" = fn(i32, i32, i32, i32) -> i32;  // TypeId(64)
+type "functype//wasi/wasi:http/Request::set_path_with_query" = fn(i32, i32, i32, i32) -> i32;  // TypeId(69)
 
-type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  // TypeId(65)
+type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  // TypeId(70)
 
-type "functype//wasi/wasi:http/Response::get_status_code" = fn(i32) -> i32;  // TypeId(66)
+type "functype//wasi/wasi:http/Response::get_status_code" = fn(i32) -> i32;  // TypeId(71)
 
-type "functype//wasi/wasi:http/Response::set_status_code" = fn(i32, i32) -> i32;  // TypeId(67)
+type "functype//wasi/wasi:http/Response::set_status_code" = fn(i32, i32) -> i32;  // TypeId(72)
 
-type "functype//effect_handler_async_client_send.wado/fetch_upstream" = fn() -> i32;  // TypeId(68)
+type "functype//effect_handler_async_client_send.wado/fetch_upstream" = fn() -> i32;  // TypeId(73)
 
-type "functype//effect_handler_async_client_send.wado/handle" = fn(i32);  // TypeId(69)
+type "functype//effect_handler_async_client_send.wado/handle" = fn(i32);  // TypeId(74)
 
-type "functype//effect_handler_async_client_send.wado/__effect_dispatch__Client__send" = fn(i32) -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>";  // TypeId(70)
+type "functype//effect_handler_async_client_send.wado/__effect_dispatch__Client__send" = fn(i32) -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>";  // TypeId(75)
 
-type "functype//effect_handler_async_client_send.wado/__cm_binding__Request_get_path_with_query" = fn(i32) -> ref null "core:prelude/string.wado//String";  // TypeId(71)
+type "functype//effect_handler_async_client_send.wado/__cm_binding__Request_get_path_with_query" = fn(i32) -> ref null "core:prelude/string.wado//String";  // TypeId(76)
 
-type "functype//effect_handler_async_client_send.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(72)
+type "functype//effect_handler_async_client_send.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(77)
 
-type "functype//effect_handler_async_client_send.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(73)
+type "functype//effect_handler_async_client_send.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(78)
 
-type "functype//effect_handler_async_client_send.wado/__cm_binding__Response_set_status_code" = fn(i32, i32) -> ref "core:prelude/types.wado//Result<(),()>";  // TypeId(74)
+type "functype//effect_handler_async_client_send.wado/__cm_binding__Response_set_status_code" = fn(i32, i32) -> ref "core:prelude/types.wado//Result<(),()>";  // TypeId(79)
 
-type "functype//effect_handler_async_client_send.wado/__cm_binding__Request_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32, ref "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>") -> ref "tuple//[wasi:http/types.wado/Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(75)
+type "functype//effect_handler_async_client_send.wado/__cm_binding__Request_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32, ref "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>") -> ref "tuple//[wasi:http/types.wado/Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(80)
 
-type "functype//effect_handler_async_client_send.wado/__cm_binding__Request_set_path_with_query" = fn(i32, ref null "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Result<(),()>";  // TypeId(76)
+type "functype//effect_handler_async_client_send.wado/__cm_binding__Request_set_path_with_query" = fn(i32, ref null "core:prelude/string.wado//String") -> ref "core:prelude/types.wado//Result<(),()>";  // TypeId(81)
 
-type "functype//effect_handler_async_client_send.wado/__cm_binding__Response_get_status_code" = fn(i32) -> u16;  // TypeId(77)
+type "functype//effect_handler_async_client_send.wado/__cm_binding__Response_get_status_code" = fn(i32) -> u16;  // TypeId(82)
 
-type "functype//effect_handler_async_client_send.wado/__cm_binding__Client_send" = fn(i32) -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>";  // TypeId(78)
+type "functype//effect_handler_async_client_send.wado/__cm_binding__Client_send" = fn(i32) -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>";  // TypeId(83)
 
-type "functype//effect_handler_async_client_send.wado/__cm_lift__Client_send" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(79)
+type "functype//effect_handler_async_client_send.wado/__cm_lift__Client_send" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(84)
 
-type "functype//effect_handler_async_client_send.wado/__cm_wrap_async__Client_send" = fn(ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>") -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>";  // TypeId(80)
+type "functype//effect_handler_async_client_send.wado/__cm_wrap_async__Client_send" = fn(ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>") -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>";  // TypeId(85)
 
-type "functype//effect_handler_async_client_send.wado/__cm_export__handle" = fn(i32);  // TypeId(81)
+type "functype//effect_handler_async_client_send.wado/__cm_export__handle" = fn(i32);  // TypeId(86)
 
-type "functype//effect_handler_async_client_send.wado/$value_copy$wasi:http/types.wado/ErrorCode" = fn(ref "wasi:http/types.wado//ErrorCode") -> ref "wasi:http/types.wado//ErrorCode";  // TypeId(82)
+type "functype//effect_handler_async_client_send.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>" = fn(i32, ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>");  // TypeId(87)
 
-type "functype//effect_handler_async_client_send.wado/$value_copy$core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>" = fn(ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(83)
+type "functype//effect_handler_async_client_send.wado/$value_copy$wasi:http/types.wado/ErrorCode" = fn(ref "wasi:http/types.wado//ErrorCode") -> ref "wasi:http/types.wado//ErrorCode";  // TypeId(88)
 
-type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(84)
+type "functype//effect_handler_async_client_send.wado/$value_copy$core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>" = fn(ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(89)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(85)
+type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(90)
 
-type "functype//core:rt/memory_to_gc_array" = fn(i32, i32) -> ref Array<u8>;  // TypeId(86)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(91)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(87)
+type "functype//core:rt/memory_to_gc_array" = fn(i32, i32) -> ref Array<u8>;  // TypeId(92)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(88)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(93)
 
-type "functype//core:rt/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(89)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(94)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(90)
+type "functype//core:rt/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(95)
 
-type "functype//core:rt/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(91)
+type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(96)
 
-type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(92)
+type "functype//core:rt/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(97)
 
-type "functype//core:rt/wait_for_blocked" = fn(i32) -> i32;  // TypeId(93)
+type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(98)
 
-type "functype//core:rt/cm_stream_write_u8" = fn(i32, ref "core:prelude//List<u8>");  // TypeId(94)
+type "functype//core:rt/wait_for_blocked" = fn(i32) -> i32;  // TypeId(99)
 
-type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(95)
+type "functype//core:rt/future_await_blocked" = fn(i32) -> i32;  // TypeId(100)
 
-type "functype//core:rt/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(96)
+type "functype//core:rt/cm_stream_write_u8" = fn(i32, ref "core:prelude//List<u8>");  // TypeId(101)
 
-type "functype//core:rt/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(97)
+type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(102)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(98)
+type "functype//core:rt/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(103)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(99)
+type "functype//core:rt/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(104)
 
-type "functype//core:prelude/primitive.wado/i32^Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(100)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(105)
 
-type "functype//core:prelude/primitive.wado/i32^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(101)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(106)
 
-type "functype//core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(102)
+type "functype//core:prelude/primitive.wado/i32^Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(107)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(103)
+type "functype//core:prelude/primitive.wado/i32^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(108)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(104)
+type "functype//core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(109)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(105)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(110)
 
-type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref Array<u8>, ref Array<u8>, i32) -> bool;  // TypeId(106)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(111)
 
-type "functype//core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//List<u8>";  // TypeId(107)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(112)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(108)
+type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref Array<u8>, ref Array<u8>, i32) -> bool;  // TypeId(113)
 
-type "functype//effect_handler_async_client_send.wado/MockClient^Client::send" = fn(ref "effect_handler_async_client_send.wado//MockClient", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(109)
+type "functype//core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//List<u8>";  // TypeId(114)
 
-type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(110)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(115)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(111)
+type "functype//effect_handler_async_client_send.wado/MockClient^Client::send" = fn(ref "effect_handler_async_client_send.wado//MockClient", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(116)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(112)
+type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(117)
 
-type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(113)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(118)
 
-type "functype//core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(114)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(119)
 
-type "functype//core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(115)
+type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(120)
 
-type "functype//effect_handler_async_client_send.wado/__Closure_2::__call" = fn(ref "effect_handler_async_client_send.wado//__Closure_2", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(116)
+type "functype//core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(121)
 
-type "functype//effect_handler_async_client_send.wado/__Closure_3::__call" = fn(ref "effect_handler_async_client_send.wado//__Closure_3", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(117)
+type "functype//core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(122)
 
-type "functype//effect_handler_async_client_send.wado/__Closure_4::__call" = fn(ref "effect_handler_async_client_send.wado//__Closure_4", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(118)
+type "functype//effect_handler_async_client_send.wado/__Closure_2::__call" = fn(ref "effect_handler_async_client_send.wado//__Closure_2", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(123)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(119)
+type "functype//effect_handler_async_client_send.wado/__Closure_3::__call" = fn(ref "effect_handler_async_client_send.wado//__Closure_3", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(124)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(120)
+type "functype//effect_handler_async_client_send.wado/__Closure_4::__call" = fn(ref "effect_handler_async_client_send.wado//__Closure_4", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(125)
 
-type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(121)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(126)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(122)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(127)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(123)
+type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(128)
 
-type "functype//wasi/resource-drop:response" = fn(i32);  // TypeId(124)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(129)
 
-type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(125)
+type "functype//wasi/resource-drop:response" = fn(i32);  // TypeId(130)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(126)
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(131)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(127)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(132)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(133)
+
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(134)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -464,9 +493,9 @@ import fn wasi/future-new from "wasi/future-new";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/task-return:handle from "wasi/task-return:handle";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/future-write from "wasi/future-write";
 import fn wasi/resource-drop:response from "wasi/resource-drop:response";
 import fn wasi/resource-drop:request from "wasi/resource-drop:request";
+import fn wasi/future-write from "wasi/future-write";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 
@@ -979,23 +1008,7 @@ fn "effect_handler_async_client_send.wado/handle"(request) {
     }
     "core:rt/cm_stream_write_u8"(tx_179, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(__local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_14, global:effect_handler_async_client_send.wado::__const_obj_4); __local_15 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_14 }; "core:prelude/primitive.wado/i32::fmt_decimal"(status, __local_15); struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __local_14.repr, used: __local_14.used, index: 0 }));
     "wasi/stream-drop-writable"(tx_179);
-    let __fw_write_ptr_1: i32;
-    let __fw_result_1: i32;
-    builtin::store_i64(local.tee __fw_write_ptr_1("mem/realloc"(0, 0, 8, 40)), 0_i64);
-    builtin::store_i64[8](__fw_write_ptr_1, 0_i64);
-    builtin::store_i64[16](__fw_write_ptr_1, 0_i64);
-    builtin::store_i64[24](__fw_write_ptr_1, 0_i64);
-    builtin::store_i64[32](__fw_write_ptr_1, 0_i64);
-    __fw_result_1 = "wasi/future-write"(tx_176, __fw_write_ptr_1);
-    if __fw_result_1 == -1 {
-        let __fw_evt_1: i32;
-        __fw_result_1 = "wasi/waitable-set-new"();
-        "wasi/waitable-join"(tx_176, __fw_result_1);
-        __fw_evt_1 = "mem/realloc"(0, 0, 4, 8);
-        drop("wasi/waitable-set-wait"(__fw_result_1, __fw_evt_1));
-        drop("mem/realloc"(__fw_evt_1, 8, 4, 0));
-    }
-    drop("mem/realloc"(__fw_write_ptr_1, 40, 8, 0));
+    "effect_handler_async_client_send.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_176, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } });
     "wasi/resource-drop:response"(__local_170);
     "wasi/resource-drop:request"(request);
 }
@@ -1754,6 +1767,307 @@ fn "effect_handler_async_client_send.wado/__cm_export__handle"(request) {
     "effect_handler_async_client_send.wado/handle"(request);
 }
 
+fn "effect_handler_async_client_send.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(handle, value) {
+    let ptr: i32;
+    let __local_4: ref "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>";
+    let __local_6: i32;
+    let __local_7: ref "wasi:http/types.wado//ErrorCode";
+    let __local_9: ref "wasi:http/types.wado//DnsErrorPayload";
+    let __local_11: ref null "core:prelude/string.wado//String";
+    let __local_12: ref "core:prelude/string.wado//String";
+    let __local_13: i64;
+    let __local_14: ref "core:prelude/types.wado//Option<u16>";
+    let __local_15: u16;
+    let __local_16: ref "wasi:http/types.wado//TlsAlertReceivedPayload";
+    let __local_18: ref "core:prelude/types.wado//Option<u8>";
+    let __local_19: u8;
+    let __local_20: ref null "core:prelude/string.wado//String";
+    let __local_21: ref "core:prelude/string.wado//String";
+    let __local_22: i64;
+    let __local_23: ref "core:prelude/types.wado//Option<u64>";
+    let __local_25: u64;
+    let __local_26: ref "core:prelude/types.wado//Option<u32>";
+    let __local_28: u32;
+    let __local_29: ref null "wasi:http/types.wado//FieldSizePayload";
+    let __local_31: ref "wasi:http/types.wado//FieldSizePayload";
+    let __local_33: ref null "core:prelude/string.wado//String";
+    let __local_34: ref "core:prelude/string.wado//String";
+    let __local_35: i64;
+    let __local_36: ref "core:prelude/types.wado//Option<u32>";
+    let __local_37: u32;
+    let __local_38: ref "core:prelude/types.wado//Option<u32>";
+    let __local_40: u32;
+    let __local_41: ref "wasi:http/types.wado//FieldSizePayload";
+    let __local_43: ref null "core:prelude/string.wado//String";
+    let __local_44: ref "core:prelude/string.wado//String";
+    let __local_45: i64;
+    let __local_46: ref "core:prelude/types.wado//Option<u32>";
+    let __local_47: u32;
+    let __local_48: ref "core:prelude/types.wado//Option<u32>";
+    let __local_50: u32;
+    let __local_51: ref "wasi:http/types.wado//FieldSizePayload";
+    let __local_53: ref null "core:prelude/string.wado//String";
+    let __local_54: ref "core:prelude/string.wado//String";
+    let __local_55: i64;
+    let __local_56: ref "core:prelude/types.wado//Option<u32>";
+    let __local_57: u32;
+    let __local_58: ref "core:prelude/types.wado//Option<u64>";
+    let __local_60: u64;
+    let __local_61: ref "core:prelude/types.wado//Option<u32>";
+    let __local_63: u32;
+    let __local_64: ref "wasi:http/types.wado//FieldSizePayload";
+    let __local_66: ref null "core:prelude/string.wado//String";
+    let __local_67: ref "core:prelude/string.wado//String";
+    let __local_68: i64;
+    let __local_69: ref "core:prelude/types.wado//Option<u32>";
+    let __local_70: u32;
+    let __local_71: ref null "core:prelude/string.wado//String";
+    let __local_73: ref "core:prelude/string.wado//String";
+    let __local_74: i64;
+    let __local_75: ref null "core:prelude/string.wado//String";
+    let __local_77: ref "core:prelude/string.wado//String";
+    let __local_78: i64;
+    let __local_79: ref null "core:prelude/string.wado//String";
+    let __local_81: ref "core:prelude/string.wado//String";
+    let __local_82: i64;
+    let __written: i32;
+    ptr = "mem/realloc"(0, 0, 8, 40);
+    builtin::store_u8(ptr, ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Err"(value));
+    if ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok"(value) {
+        __local_4 = ref.cast "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok"(value).payload_0;
+        builtin::store_u8(ptr + 8, ref.test "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some"(__local_4));
+        if ref.test "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some"(__local_4) {
+            __local_6 = ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some"(__local_4).payload_0;
+            builtin::store_i32((ptr + 8) + 4, __local_6);
+        } else {
+        }
+    } else {
+        __local_7 = ref.cast "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Err"(value).payload_0;
+        builtin::store_u8(ptr + 8, __local_7.discriminant);
+        if __local_7.discriminant == 0 {
+        } else if ref.test "wasi:http/types.wado//ErrorCode::DnsError"(__local_7) {
+            __local_9 = ref.cast "wasi:http/types.wado//ErrorCode::DnsError"(__local_7).payload_0;
+            __local_11 = __local_9.rcode;
+            builtin::store_u8((ptr + 8) + 8, ref.is_null(__local_11) == 0);
+            if ref.is_null(__local_11) == 0 {
+                __local_12 = ref.as_non_null(__local_11);
+                __local_13 = "core:rt/cm_lower_string"(__local_12);
+                builtin::store_i32(((ptr + 8) + 8) + 4, builtin::i32_wrap_i64(__local_13));
+                builtin::store_i32((((ptr + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_13 >> 32_i64));
+            } else {
+            }
+            __local_14 = __local_9.info_code;
+            builtin::store_u8(((ptr + 8) + 8) + 12, ref.test "core:prelude/types.wado//Option<u16>::Some"(__local_14));
+            if ref.test "core:prelude/types.wado//Option<u16>::Some"(__local_14) {
+                __local_15 = ref.cast "core:prelude/types.wado//Option<u16>::Some"(__local_14).payload_0;
+                builtin::store_u16((((ptr + 8) + 8) + 12) + 2, __local_15);
+            } else {
+            }
+        } else if __local_7.discriminant == 2 {
+        } else if __local_7.discriminant == 3 {
+        } else if __local_7.discriminant == 4 {
+        } else if __local_7.discriminant == 5 {
+        } else if __local_7.discriminant == 6 {
+        } else if __local_7.discriminant == 7 {
+        } else if __local_7.discriminant == 8 {
+        } else if __local_7.discriminant == 9 {
+        } else if __local_7.discriminant == 10 {
+        } else if __local_7.discriminant == 11 {
+        } else if __local_7.discriminant == 12 {
+        } else if __local_7.discriminant == 13 {
+        } else if ref.test "wasi:http/types.wado//ErrorCode::TlsAlertReceived"(__local_7) {
+            __local_16 = ref.cast "wasi:http/types.wado//ErrorCode::TlsAlertReceived"(__local_7).payload_0;
+            __local_18 = __local_16.alert_id;
+            builtin::store_u8((ptr + 8) + 8, ref.test "core:prelude/types.wado//Option<u8>::Some"(__local_18));
+            if ref.test "core:prelude/types.wado//Option<u8>::Some"(__local_18) {
+                __local_19 = ref.cast "core:prelude/types.wado//Option<u8>::Some"(__local_18).payload_0;
+                builtin::store_u8(((ptr + 8) + 8) + 1, __local_19);
+            } else {
+            }
+            __local_20 = __local_16.alert_message;
+            builtin::store_u8(((ptr + 8) + 8) + 4, ref.is_null(__local_20) == 0);
+            if ref.is_null(__local_20) == 0 {
+                __local_21 = ref.as_non_null(__local_20);
+                __local_22 = "core:rt/cm_lower_string"(__local_21);
+                builtin::store_i32((((ptr + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_22));
+                builtin::store_i32(((((ptr + 8) + 8) + 4) + 4) + 4, builtin::i32_wrap_i64(__local_22 >> 32_i64));
+            } else {
+            }
+        } else if __local_7.discriminant == 15 {
+        } else if __local_7.discriminant == 16 {
+        } else if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestBodySize"(__local_7) {
+            __local_23 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestBodySize"(__local_7).payload_0;
+            builtin::store_u8((ptr + 8) + 8, ref.test "core:prelude/types.wado//Option<u64>::Some"(__local_23));
+            if ref.test "core:prelude/types.wado//Option<u64>::Some"(__local_23) {
+                __local_25 = ref.cast "core:prelude/types.wado//Option<u64>::Some"(__local_23).payload_0;
+                builtin::store_i64(((ptr + 8) + 8) + 8, __local_25);
+            } else {
+            }
+        } else if __local_7.discriminant == 18 {
+        } else if __local_7.discriminant == 19 {
+        } else if __local_7.discriminant == 20 {
+        } else if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSectionSize"(__local_7) {
+            __local_26 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSectionSize"(__local_7).payload_0;
+            builtin::store_u8((ptr + 8) + 8, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_26));
+            if ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_26) {
+                __local_28 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_26).payload_0;
+                builtin::store_i32(((ptr + 8) + 8) + 4, __local_28);
+            } else {
+            }
+        } else if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSize"(__local_7) {
+            __local_29 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSize"(__local_7).payload_0;
+            builtin::store_u8((ptr + 8) + 8, ref.is_null(__local_29) == 0);
+            if ref.is_null(__local_29) == 0 {
+                __local_31 = ref.as_non_null(__local_29);
+                __local_33 = __local_31.field_name;
+                builtin::store_u8(((ptr + 8) + 8) + 4, ref.is_null(__local_33) == 0);
+                if ref.is_null(__local_33) == 0 {
+                    __local_34 = ref.as_non_null(__local_33);
+                    __local_35 = "core:rt/cm_lower_string"(__local_34);
+                    builtin::store_i32((((ptr + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_35));
+                    builtin::store_i32(((((ptr + 8) + 8) + 4) + 4) + 4, builtin::i32_wrap_i64(__local_35 >> 32_i64));
+                } else {
+                }
+                __local_36 = __local_31.field_size;
+                builtin::store_u8((((ptr + 8) + 8) + 4) + 12, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_36));
+                if ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_36) {
+                    __local_37 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_36).payload_0;
+                    builtin::store_i32(((((ptr + 8) + 8) + 4) + 12) + 4, __local_37);
+                } else {
+                }
+            } else {
+            }
+        } else if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestTrailerSectionSize"(__local_7) {
+            __local_38 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestTrailerSectionSize"(__local_7).payload_0;
+            builtin::store_u8((ptr + 8) + 8, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_38));
+            if ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_38) {
+                __local_40 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_38).payload_0;
+                builtin::store_i32(((ptr + 8) + 8) + 4, __local_40);
+            } else {
+            }
+        } else if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestTrailerSize"(__local_7) {
+            __local_41 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestTrailerSize"(__local_7).payload_0;
+            __local_43 = __local_41.field_name;
+            builtin::store_u8((ptr + 8) + 8, ref.is_null(__local_43) == 0);
+            if ref.is_null(__local_43) == 0 {
+                __local_44 = ref.as_non_null(__local_43);
+                __local_45 = "core:rt/cm_lower_string"(__local_44);
+                builtin::store_i32(((ptr + 8) + 8) + 4, builtin::i32_wrap_i64(__local_45));
+                builtin::store_i32((((ptr + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_45 >> 32_i64));
+            } else {
+            }
+            __local_46 = __local_41.field_size;
+            builtin::store_u8(((ptr + 8) + 8) + 12, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_46));
+            if ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_46) {
+                __local_47 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_46).payload_0;
+                builtin::store_i32((((ptr + 8) + 8) + 12) + 4, __local_47);
+            } else {
+            }
+        } else if __local_7.discriminant == 25 {
+        } else if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSectionSize"(__local_7) {
+            __local_48 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSectionSize"(__local_7).payload_0;
+            builtin::store_u8((ptr + 8) + 8, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_48));
+            if ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_48) {
+                __local_50 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_48).payload_0;
+                builtin::store_i32(((ptr + 8) + 8) + 4, __local_50);
+            } else {
+            }
+        } else if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSize"(__local_7) {
+            __local_51 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSize"(__local_7).payload_0;
+            __local_53 = __local_51.field_name;
+            builtin::store_u8((ptr + 8) + 8, ref.is_null(__local_53) == 0);
+            if ref.is_null(__local_53) == 0 {
+                __local_54 = ref.as_non_null(__local_53);
+                __local_55 = "core:rt/cm_lower_string"(__local_54);
+                builtin::store_i32(((ptr + 8) + 8) + 4, builtin::i32_wrap_i64(__local_55));
+                builtin::store_i32((((ptr + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_55 >> 32_i64));
+            } else {
+            }
+            __local_56 = __local_51.field_size;
+            builtin::store_u8(((ptr + 8) + 8) + 12, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_56));
+            if ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_56) {
+                __local_57 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_56).payload_0;
+                builtin::store_i32((((ptr + 8) + 8) + 12) + 4, __local_57);
+            } else {
+            }
+        } else if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseBodySize"(__local_7) {
+            __local_58 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseBodySize"(__local_7).payload_0;
+            builtin::store_u8((ptr + 8) + 8, ref.test "core:prelude/types.wado//Option<u64>::Some"(__local_58));
+            if ref.test "core:prelude/types.wado//Option<u64>::Some"(__local_58) {
+                __local_60 = ref.cast "core:prelude/types.wado//Option<u64>::Some"(__local_58).payload_0;
+                builtin::store_i64(((ptr + 8) + 8) + 8, __local_60);
+            } else {
+            }
+        } else if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseTrailerSectionSize"(__local_7) {
+            __local_61 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseTrailerSectionSize"(__local_7).payload_0;
+            builtin::store_u8((ptr + 8) + 8, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_61));
+            if ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_61) {
+                __local_63 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_61).payload_0;
+                builtin::store_i32(((ptr + 8) + 8) + 4, __local_63);
+            } else {
+            }
+        } else if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseTrailerSize"(__local_7) {
+            __local_64 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseTrailerSize"(__local_7).payload_0;
+            __local_66 = __local_64.field_name;
+            builtin::store_u8((ptr + 8) + 8, ref.is_null(__local_66) == 0);
+            if ref.is_null(__local_66) == 0 {
+                __local_67 = ref.as_non_null(__local_66);
+                __local_68 = "core:rt/cm_lower_string"(__local_67);
+                builtin::store_i32(((ptr + 8) + 8) + 4, builtin::i32_wrap_i64(__local_68));
+                builtin::store_i32((((ptr + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_68 >> 32_i64));
+            } else {
+            }
+            __local_69 = __local_64.field_size;
+            builtin::store_u8(((ptr + 8) + 8) + 12, ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_69));
+            if ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_69) {
+                __local_70 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_69).payload_0;
+                builtin::store_i32((((ptr + 8) + 8) + 12) + 4, __local_70);
+            } else {
+            }
+        } else if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseTransferCoding"(__local_7) {
+            __local_71 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseTransferCoding"(__local_7).payload_0;
+            builtin::store_u8((ptr + 8) + 8, ref.is_null(__local_71) == 0);
+            if ref.is_null(__local_71) == 0 {
+                __local_73 = ref.as_non_null(__local_71);
+                __local_74 = "core:rt/cm_lower_string"(__local_73);
+                builtin::store_i32(((ptr + 8) + 8) + 4, builtin::i32_wrap_i64(__local_74));
+                builtin::store_i32((((ptr + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_74 >> 32_i64));
+            } else {
+            }
+        } else if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseContentCoding"(__local_7) {
+            __local_75 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseContentCoding"(__local_7).payload_0;
+            builtin::store_u8((ptr + 8) + 8, ref.is_null(__local_75) == 0);
+            if ref.is_null(__local_75) == 0 {
+                __local_77 = ref.as_non_null(__local_75);
+                __local_78 = "core:rt/cm_lower_string"(__local_77);
+                builtin::store_i32(((ptr + 8) + 8) + 4, builtin::i32_wrap_i64(__local_78));
+                builtin::store_i32((((ptr + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_78 >> 32_i64));
+            } else {
+            }
+        } else if __local_7.discriminant == 33 {
+        } else if __local_7.discriminant == 34 {
+        } else if __local_7.discriminant == 35 {
+        } else if __local_7.discriminant == 36 {
+        } else if __local_7.discriminant == 37 {
+        } else {
+            __local_79 = ref.cast "wasi:http/types.wado//ErrorCode::InternalError"(__local_7).payload_0;
+            builtin::store_u8((ptr + 8) + 8, ref.is_null(__local_79) == 0);
+            if ref.is_null(__local_79) == 0 {
+                __local_81 = ref.as_non_null(__local_79);
+                __local_82 = "core:rt/cm_lower_string"(__local_81);
+                builtin::store_i32(((ptr + 8) + 8) + 4, builtin::i32_wrap_i64(__local_82));
+                builtin::store_i32((((ptr + 8) + 8) + 4) + 4, builtin::i32_wrap_i64(__local_82 >> 32_i64));
+            } else {
+            }
+        }
+    }
+    __written = "wasi/future-write"(handle, ptr);
+    if __written == -1 {
+        __written = "core:rt/future_await_blocked"(handle);
+    }
+    drop("mem/realloc"(ptr, 40, 8, 0));
+}
+
 fn "effect_handler_async_client_send.wado/$value_copy$wasi:http/types.wado/ErrorCode"(v) {
     let __vc_payload_1: ref "wasi:http/types.wado//DnsErrorPayload";
     let __vc_payload_14: ref "wasi:http/types.wado//TlsAlertReceivedPayload";
@@ -1952,12 +2266,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b248: block {
-        l249: loop {
-            break_if b248 t <= 0_i64;
+    b310: block {
+        l311: loop {
+            break_if b310 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l249;
+            continue l311;
         };
     };
     return n;
@@ -1971,13 +2285,13 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b251: block {
-            l252: loop {
-                break_if b251 temp <= 0_i64;
+        b313: block {
+            l314: loop {
+                break_if b313 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l252;
+                continue l314;
             };
         };
     }
@@ -1988,12 +2302,12 @@ fn "core:rt/memory_to_gc_array"(ptr, len) {
     let i: i32;
     arr = builtin::array_new<u8>(len);
     i = 0;
-    b253: block {
-        l254: loop {
-            break_if b253 i >= len;
+    b315: block {
+        l316: loop {
+            break_if b315 i >= len;
             builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
             i = i + 1;
-            continue l254;
+            continue l316;
         };
     };
     return arr;
@@ -2002,12 +2316,12 @@ fn "core:rt/memory_to_gc_array"(ptr, len) {
 fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b255: block {
-        l256: loop {
-            break_if b255 i >= len;
+    b317: block {
+        l318: loop {
+            break_if b317 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l256;
+            continue l318;
         };
     };
 }
@@ -2076,6 +2390,21 @@ fn "core:rt/wait_for_blocked"(handle) {
     return payload;
 }
 
+fn "core:rt/future_await_blocked"(handle) {
+    let ws: i32;
+    let evt_ptr: i32;
+    let status: i32;
+    ws = "wasi/waitable-set-new"();
+    "wasi/waitable-join"(handle, ws);
+    evt_ptr = "mem/realloc"(0, 0, 4, 8);
+    drop("wasi/waitable-set-wait"(ws, evt_ptr));
+    status = builtin::load_i32(evt_ptr + 4);
+    drop("mem/realloc"(evt_ptr, 8, 4, 0));
+    "wasi/waitable-join"(handle, 0);
+    "wasi/waitable-set-drop"(ws);
+    return status;
+}
+
 fn "core:rt/cm_stream_write_u8"(handle, data) {
     let packed: i64;
     let ptr: i32;
@@ -2090,20 +2419,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b258: block {
-        l259: loop {
-            break_if b258 offset >= count;
+    b320: block {
+        l321: loop {
+            break_if b320 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/wait_for_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b258 (if (result >> 4) == 0 -> i32 {
+            break_if b320 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l259;
+            continue l321;
         };
     };
 }
@@ -2205,14 +2534,14 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     let i: i32;
     i = 0;
-    b266: block {
-        l267: loop {
-            break_if b266 i >= len;
+    b328: block {
+        l329: loop {
+            break_if b328 i >= len;
             if builtin::array_get<u8>(a, i) != builtin::array_get<u8>(b, i) {
                 return 0;
             }
             i = i + 1;
-            continue l267;
+            continue l329;
         };
     };
     return 1;
@@ -2228,16 +2557,16 @@ fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
     _licm_used_12 = self.used;
     _licm_repr_13 = self.repr;
     __hfs_index_14 = self.index;
-    b269: block {
-        l270: loop {
+    b331: block {
+        l332: loop {
             if __hfs_index_14 >= _licm_used_12 {
                 self.index = __hfs_index_14;
-                break b269;
+                break b331;
             }
             byte = builtin::array_get<u8>(_licm_repr_13, __hfs_index_14);
             __hfs_index_14 = __hfs_index_14 + 1;
             "core:prelude/list.wado/List<u8>::push"(__b, byte);
-            continue l270;
+            continue l332;
         };
     };
     return __b;
@@ -2324,12 +2653,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b279: block {
-        l280: loop {
-            break_if b279 i >= n;
+    b341: block {
+        l342: loop {
+            break_if b341 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l280;
+            continue l342;
         };
     };
 }
@@ -2422,14 +2751,14 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/t
     if handle_1 != 0 {
         ws_3 = "wasi/waitable-set-new"();
         "wasi/waitable-join"(handle_1, ws_3);
-        b299: block {
-            l300: loop {
+        b361: block {
+            l362: loop {
                 let event_mv_code: i32;
                 let event_mv_handle: i32;
                 let event_mv_payload: u32;
                 multivalue_bind [event_mv_code, event_mv_handle, event_mv_payload] = "core:rt/cm_waitable_set_wait"(ws_3);
-                break_if b299 event_mv_payload == 2;
-                continue l300;
+                break_if b361 event_mv_payload == 2;
+                continue l362;
             };
         };
         "wasi/subtask-drop"(handle_1);

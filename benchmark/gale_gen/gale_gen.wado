@@ -1,0 +1,50 @@
+// gale-gen benchmark: `gale gen` throughput (grammar assembly + codegen) over
+// the Rust grammar, as a byte rate over the input `.g4` size — the series on
+// the CI dashboard. Sources are embedded with `#include_str`, so no measured
+// iteration touches the filesystem. The ANTLR4 reference over the same `.g4`
+// (`antlr4_gen.mjs`) is a separate mise step.
+
+use { Stdout } from "core:cli";
+use { MonotonicClock } from "wasi:clocks";
+use { Benchmark } from "core:benchmark";
+use { assemble_grammar } from "../../package-gale/src/g4/parser.wado";
+use { generate, GenerateOptions } from "../../package-gale/src/codegen.wado";
+
+global RUST_LEXER: String = #include_str("../../package-gale/tests/grammars/RustLexer.g4");
+global RUST_PARSER: String = #include_str("../../package-gale/tests/grammars/RustParser.g4");
+
+fn gen_rust() -> i32 {
+    let inputs: List<[String, String]> = [
+        ["RustLexer.g4", RUST_LEXER],
+        ["RustParser.g4", RUST_PARSER],
+    ];
+    let mut grammar = match assemble_grammar(&inputs) {
+        Ok(g) => g,
+        Err(_) => panic("gale-gen: assemble_grammar failed on the Rust grammar"),
+    };
+    let out = generate(&mut grammar, &GenerateOptions {});
+    return out.source.len();
+}
+
+test "smoke" {
+    // A tiny grammar keeps this in the test world's timeout; the full Rust
+    // generation is `run()`'s workload, too slow under the debug allocator.
+    let inputs: List<[String, String]> = [
+        ["G.g4", "grammar G; r : 'a' ;"],
+    ];
+    let mut g = match assemble_grammar(&inputs) {
+        Ok(g) => g,
+        Err(_) => panic("smoke: assemble_grammar failed"),
+    };
+    assert generate(&mut g, &GenerateOptions {}).source.len() > 0;
+}
+
+export fn run() with Stdout, MonotonicClock {
+    let mut b = Benchmark {
+        name: "gale-gen (Rust)",
+        input_size: Option::Some(RUST_LEXER.len() + RUST_PARSER.len()),
+    };
+
+    let last = b.run("", || gen_rust());
+    assert last > 0;
+}

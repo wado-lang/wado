@@ -2175,13 +2175,6 @@ impl FunctionTranslator<'_, '_> {
                 // The callee descriptor comes from the function record by
                 // `func_id` (Phase 5); the call node carries no `FunctionRef`.
                 let func = &self.callee_descriptor(*func_id);
-                // Canonical resource method dispatch: uses #[canonical("...")] from types.wado
-                if let Some(re) = receiver.as_expr()
-                    && let Some(instr) =
-                        self.try_translate_canonical_method(re, func, args, expr.type_id)
-                {
-                    return instr;
-                }
 
                 let mut translated_args: Vec<WirInstr> = Vec::new();
                 // Receiver is always included (self/&self/&mut self is never unit).

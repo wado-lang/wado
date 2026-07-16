@@ -147,10 +147,11 @@ A body-less marker is itself an `Item::Impl` and lands in `TraitEnv`'s impl inde
 | `translate.rs`      | Stage 3 driver and dispatch (`translate_expr` / `translate_stmt` / `translate_block`) |
 | `primitive_ops.rs`  | Literals, binary / unary operators, casts, array indexing                             |
 | `calls.rs`          | Function-ref resolution, builtin intrinsics, indirect calls, closure-to-canonical     |
-| `canonical_abi.rs`  | CM canonical ABI: future / stream creation, read / write lowering, result lifting     |
 | `pattern_match.rs`  | `match` / `if let` / `switch` lowering, variant construct / test / payload            |
 
 Each helper module calls back into `translate.rs` for sub-expression translation; cross-module access uses `pub(super)` on shared fields.
+
+CM canonical operations (stream / future read + write, waitable-set, error-context) carry no `wir_build` code: they are lowered entirely in the synthesis phase (`synthesis/cm_binding/`) into ordinary TIR that translates like any other function.
 
 ## WIR Optimize
 
