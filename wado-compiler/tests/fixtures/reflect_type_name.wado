@@ -1,9 +1,15 @@
-// Reflect per-struct synthesis (WEP 2026-06-13 §1): `type_name()` returns
-// the struct's name. First slice of the compiler-synthesized `Reflect` trait.
+// Reflect per-struct synthesis (WEP 2026-06-13 §1): static string metadata
+// `type_name()` and `field_names()`.
 
 struct Point {
     x: i32,
     y: i32,
+}
+
+struct Named {
+    id: i32,
+    label: String,
+    active: bool,
 }
 
 struct Unit {}
@@ -11,6 +17,16 @@ struct Unit {}
 test "type_name is the struct name" {
     assert Point::type_name() == "Point";
     assert Unit::type_name() == "Unit";
+}
+
+test "field_names lists source names in order" {
+    assert Point::field_names() == ["x", "y"];
+    assert Named::field_names() == ["id", "label", "active"];
+}
+
+test "field_names of a fieldless struct is empty" {
+    let names: List<String> = Unit::field_names();
+    assert names.len() == 0;
 }
 
 __DATA__

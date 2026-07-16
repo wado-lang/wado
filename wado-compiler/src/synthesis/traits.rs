@@ -459,11 +459,14 @@ pub fn synthesize_reflect(project: &mut Package) {
     }
 }
 
-/// Synthesize `S^Reflect::type_name() -> String` for every requested struct.
+/// Synthesize `S^Reflect::type_name()` and `S^Reflect::field_names()` for every
+/// requested struct.
 ///
-/// `field_names()` and `fields(&self)` are separate follow-up slices (they
-/// need `List<String>` builder synthesis and the `Fields` associated tuple
-/// respectively); this slice covers the constant `type_name()` metadata.
+/// `fields(&self)` (the `Fields` associated tuple) is a separate follow-up
+/// slice; this covers the value-free string metadata. `field_names()` builds a
+/// homogeneous string tuple and hands it to the prelude `reflect_field_names`
+/// helper, which collects it into a `List<String>` — avoiding a hand-built
+/// `List` literal in synthesized TIR.
 fn generate_struct_reflect_impls(
     module: &mut TirModule,
     ctx: &mut SynthesisCtx<'_, '_, '_>,
@@ -473,29 +476,105 @@ fn generate_struct_reflect_impls(
         return;
     }
 
-    let names: Vec<(String, Span)> = module
+    let infos: Vec<(String, Vec<String>, Span)> = module
         .structs
         .iter()
         .filter(|s| s.type_params.is_empty() && s.monomorph_info.is_none())
-        .map(|s| (s.name.clone(), s.span))
+        .map(|s| {
+            (
+                s.name.clone(),
+                s.fields.iter().map(|f| f.name.clone()).collect(),
+                s.span,
+            )
+        })
         .collect();
 
     let string_type = module
         .type_table
         .borrow_mut()
         .make_compiler_struct(CompilerItem::String);
+    let list_string_type = module.type_table.borrow_mut().make_list(string_type);
 
     let mut generated = Vec::new();
-    for (name, span) in &names {
+    for (name, field_names, span) in &infos {
         if !ctx.should_synthesize(name, reflect_trait_name) {
             continue;
         }
-        let func = generate_struct_type_name_fn(name, string_type, reflect_trait_name, *span);
-        generated.push(Rc::new(RefCell::new(func)));
+        let type_name_fn =
+            generate_struct_type_name_fn(name, string_type, reflect_trait_name, *span);
+        let field_names_fn = {
+            let mut tt = module.type_table.borrow_mut();
+            let tuple_type =
+                tt.make_tuple(std::iter::repeat_n(string_type, field_names.len()).collect());
+            generate_struct_field_names_fn(
+                name,
+                field_names,
+                string_type,
+                tuple_type,
+                list_string_type,
+                reflect_trait_name,
+                *span,
+            )
+        };
+        generated.push(Rc::new(RefCell::new(type_name_fn)));
+        generated.push(Rc::new(RefCell::new(field_names_fn)));
         ctx.record_impl(name, reflect_trait_name);
     }
 
     module.functions.extend(generated);
+}
+
+/// Build `StructName^Reflect::field_names() -> List<String>` as
+/// `return reflect_field_names(["f0", "f1", ...]);`.
+fn generate_struct_field_names_fn(
+    struct_name: &str,
+    field_names: &[String],
+    string_type: TypeId,
+    tuple_type: TypeId,
+    list_string_type: TypeId,
+    reflect_trait_name: &str,
+    span: Span,
+) -> TirFunction {
+    let method_info = trait_method_info(struct_name, reflect_trait_name, "field_names");
+    let qualified_name = method_info.to_mangled_name();
+
+    let elements = field_names
+        .iter()
+        .map(|n| TirExpr::new(TirExprKind::StringLiteral(n.clone()), string_type, span))
+        .collect();
+    let tuple = TirExpr::new(TirExprKind::TupleLiteral { elements }, tuple_type, span);
+
+    let call = TirExpr::new(
+        TirExprKind::Call {
+            func: FunctionRef {
+                module_source: ModuleSource::list(),
+                name: "reflect_field_names".to_string(),
+                monomorph_info: None,
+                method_info: None,
+            },
+            type_args: vec![tuple_type],
+            args: vec![CallArg::new(tuple, false)],
+        },
+        list_string_type,
+        span,
+    );
+
+    let body = TirBlock::new(
+        vec![TirStmt::new(
+            TirStmtKind::Return { value: Some(call) },
+            span,
+        )],
+        span,
+    );
+
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        vec![],
+        list_string_type,
+        body,
+        vec![],
+    )
 }
 
 /// Build `StructName^Reflect::type_name() -> String { return "StructName"; }`.
