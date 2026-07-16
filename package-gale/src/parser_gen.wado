@@ -6648,13 +6648,7 @@ fn rule_ref_group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternativ
 /// value }`. Both scan-winner sites call this while iterating candidates in
 /// ASCENDING alt-index order, so the first (lowest-index) candidate to reach
 /// the running max keeps it — ANTLR4's ambiguity resolution.
-fn emit_argmax_update(
-    w: &mut CodeWriter,
-    best_var: &String,
-    winner_var: &String,
-    end_expr: &String,
-    winner_value: i32,
-) {
+fn emit_argmax_update(w: &mut CodeWriter, best_var: &String, winner_var: &String, end_expr: &String, winner_value: i32) {
     w.begin(&`if {*end_expr} > {*best_var}`);
     w.line(&`{*best_var} = {*end_expr};`);
     w.line(&`{*winner_var} = {winner_value};`);
