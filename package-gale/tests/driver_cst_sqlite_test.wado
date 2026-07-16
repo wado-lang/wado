@@ -26,7 +26,7 @@ test "tree: select literal" {
               (factored_select_stmt
                 (select_core SELECT
                   (result_column (expr (literal_value 1))))))
-            ; (sql_stmt)))
+            ; sql_stmt))
     ");
 }
 
@@ -48,7 +48,7 @@ test "tree: select with join" {
                         (expr (table_name (any_name t1)) . (column_name (any_name id)))
                         =
                         (expr (table_name (any_name t2)) . (column_name (any_name id)))))))))
-            ; (sql_stmt)))
+            ; sql_stmt))
     ");
 }
 
@@ -63,14 +63,14 @@ test "tree: create table with constraint" {
                   (column_def
                     (column_name (any_name id))
                     (type_name (name (any_name INTEGER)))
-                    (column_constraint PRIMARY KEY (conflict_clause)))
+                    (column_constraint PRIMARY KEY conflict_clause))
                   ,
                   (column_def
                     (column_name (any_name name))
                     (type_name (name (any_name TEXT)))
-                    (column_constraint NOT NULL (conflict_clause)))
+                    (column_constraint NOT NULL conflict_clause))
                 )))
-            ; (sql_stmt)))
+            ; sql_stmt))
     ");
 }
 
@@ -83,8 +83,7 @@ test "tree: select with between" {
                 (select_core SELECT
                   (result_column *)
                   FROM
-                  (join_clause
-                    (table_or_subquery (table_name (any_name t))))
+                  (table_or_subquery (table_name (any_name t)))
                   WHERE
                   (expr
                     (expr (column_name (any_name x)))
@@ -92,7 +91,7 @@ test "tree: select with between" {
                     (expr (literal_value 1))
                     AND
                     (expr (literal_value 10))))))
-            ; (sql_stmt)))
+            ; sql_stmt))
     ");
 }
 
@@ -108,6 +107,6 @@ test "tree: delete with where" {
                   (expr (column_name (any_name id)))
                   =
                   (expr (literal_value 1)))))
-            ; (sql_stmt)))
+            ; sql_stmt))
     ");
 }

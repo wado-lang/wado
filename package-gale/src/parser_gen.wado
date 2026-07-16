@@ -6643,13 +6643,18 @@ fn rule_ref_group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternativ
     return true;
 }
 
-/// First-success-wins scan dispatch for RuleRef-only group stores — scans
-/// each alt's rule in `sort_group_by_element_count` (longest-first) order
-/// and commits on first success. The matching alt is parsed once. This is
-/// the dispatch that makes `parse_sql_stmt`'s WITH/SELECT/.../UPDATE
-/// partition affordable when its alts transitively reference the LR rule
-/// `expr` — committing on first success skips the remaining 8 deep LR
-/// scans that a longest-match tournament would have run.
+/// Longest-match scan tournament over `sorted_group`: every alt scans
+/// from `p.pos` into a per-alt end position (`-1` on mismatch), then the
+/// greatest end wins with ties resolved to the LOWEST grammar alt index —
+/// ANTLR4's ambiguity resolution. First-success-wins over the static
+/// longest-first sort is NOT equivalent: on an input where two alts scan
+/// to the same end (SQLite's single-table / comma-list `FROM`, where both
+/// `table_or_subquery (',' table_or_subquery)*` and the `join_clause`
+/// catch-all consume the same tokens) it commits to whichever alt the
+/// sort put first, while ANTLR4 resolves the tie to the first grammar alt.
+///
+/// Returns the winner variable holding the *position in `sorted_group`*
+/// (`-1` when no scan matched — callers route that to their last branch).
 ///
 /// `scan_alts` drives the scan via the op-driven walker against the
 /// lowered `ScanBody`.
@@ -6661,27 +6666,55 @@ fn gen_scan_winner_tournament(
     name_counts: &mut List<[String, i32]>,
 ) -> String {
     let winner_var = dedup_name(&"gd_winner", name_counts);
-    let dispatch_label = dedup_name(&"gd_dispatch", name_counts);
+    let best_var = dedup_name(&"gd_best", name_counts);
     w.line(&`let mut {winner_var}: i32 = -1;`);
-    w.begin(&`{dispatch_label}:`);
-    let last = sorted_group.len() - 1;
+    w.line(&`let mut {best_var}: i32 = -1;`);
+    let mut end_vars: List<String> = [];
     for let mut k = 0; k < sorted_group.len(); k += 1 {
-        if k == last {
-            break;
+        let end_var = dedup_name(&"gd_end", name_counts);
+        let sb = &scan_alts[sorted_group[k]];
+        if sb.elements.is_empty() {
+            w.line(&`let {end_var}: i32 = p.pos;`);
+        } else {
+            w.line(&`let mut {end_var}: i32 = -1;`);
+            let scan_label = dedup_name(&"gd_scan", name_counts);
+            w.begin(&`{scan_label}:`);
+            w.line(&"let tokens = &p.kinds;");
+            w.line(&"let mut pos: i32 = p.pos;");
+            gen_scan_op_elements_in_block(w, &sb.elements, 0, sb.elements.len(), ctx, &scan_label);
+            w.line(&`{end_var} = pos;`);
+            w.end();
         }
-        let alt_index = sorted_group[k];
-        let scan_label = dedup_name(&"gd_scan", name_counts);
-        w.begin(&`{scan_label}:`);
-        w.line(&"let tokens = &p.kinds;");
-        w.line(&"let mut pos: i32 = p.pos;");
-        let sb = &scan_alts[alt_index];
-        gen_scan_op_elements_in_block(w, &sb.elements, 0, sb.elements.len(), ctx, &scan_label);
+        end_vars.push(end_var);
+    }
+    let order = positions_in_grammar_order(sorted_group);
+    for let k of order {
+        w.begin(&`if {end_vars[k]} > {best_var}`);
+        w.line(&`{best_var} = {end_vars[k]};`);
         w.line(&`{winner_var} = {k};`);
-        w.line(&`break {dispatch_label};`);
         w.end();
     }
-    w.end();
     return winner_var;
+}
+
+/// Positions `0..len` of `sorted_group` reordered so their alt indices
+/// ascend — the comparison order that makes a scan-length tie resolve to
+/// the first grammar alternative.
+fn positions_in_grammar_order(sorted_group: &List<i32>) -> List<i32> {
+    let mut order: List<i32> = [];
+    for let mut k = 0; k < sorted_group.len(); k += 1 {
+        order.push(k);
+    }
+    for let mut i = 0; i < order.len(); i += 1 {
+        for let mut j = i + 1; j < order.len(); j += 1 {
+            if sorted_group[order[j]] < sorted_group[order[i]] {
+                let tmp = order[i];
+                order[i] = order[j];
+                order[j] = tmp;
+            }
+        }
+    }
+    return order;
 }
 
 fn gen_simplecst_rulecall_value(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext) {
@@ -7171,13 +7204,10 @@ fn general_group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternative
     return true;
 }
 
-/// First-success-wins scan dispatch for general groups (overlapping alts).
-/// `sorted_group` is already in `sort_group_by_element_count` (longest-
-/// first) order; we scan candidates in that order and commit to the first
-/// match, then parse only the winner and store into `inner_var`. The
-/// longest-first sort plus first-success commit matches what a longest-
-/// match tournament would have picked while skipping the remaining scans,
-/// which matters when an alt's scan recurses through an LR rule.
+/// Longest-match scan dispatch for general groups (overlapping alts):
+/// `gen_scan_winner_tournament` scans every candidate and picks the
+/// furthest end (ties to the first grammar alt), then only the winner is
+/// parsed and stored into `inner_var`.
 fn gen_general_group_scan_dispatch(
     w: &mut CodeWriter,
     alts: &List<Alternative>,
@@ -7516,8 +7546,12 @@ fn gen_prediction_code_inner(
                     }
                     w.line(&"let mut _sd_best_i: i32 = -1;");
                     w.line(&"let mut _sd_best_p: i32 = -1;");
-                    for let mut i = 0; i < sorted_indices.len(); i += 1 {
-                        let idx = sorted_indices[i];
+                    // Compare in ascending alt-index order so a scan-length
+                    // tie resolves to the first grammar alternative (ANTLR4's
+                    // ambiguity resolution), not to the sort's front-runner.
+                    let cmp_order = sorted_indices.sorted();
+                    for let mut i = 0; i < cmp_order.len(); i += 1 {
+                        let idx = cmp_order[i];
                         w.begin(&`if _sd_p_{idx} > _sd_best_p`);
                         w.line(&`_sd_best_p = _sd_p_{idx};`);
                         w.line(&`_sd_best_i = {idx};`);

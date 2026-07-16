@@ -762,10 +762,11 @@ impl CstStore {
     }
 
     /// ANTLR4-style S-expression for the subtree at row `i`: `(name child ...)`,
-    /// tokens as their text. `rule_names[kind]` names rule nodes (`K_ERROR`
-    /// renders `<error>`); `token_names[kind]` names missing terminals. Real
-    /// terminals with empty text (e.g. EOF) are omitted; missing/skipped
-    /// terminals render markers.
+    /// tokens as their text; a childless node renders as its bare name, no
+    /// parens (ANTLR4's `Trees.toStringTree`). `rule_names[kind]` names rule
+    /// nodes (`K_ERROR` renders `<error>`); `token_names[kind]` names missing
+    /// terminals. Real terminals with empty text (e.g. EOF) are omitted;
+    /// missing/skipped terminals render markers.
     pub fn to_string_tree(
         &self,
         i: i32,
@@ -787,12 +788,13 @@ fn cst_to_string_tree_impl(
     rule_names: &List<String>,
     token_names: &List<String>,
 ) {
-    out.push_str(&"(");
-    if s.a[i] == K_ERROR as i32 {
-        out.push_str(&"<error>");
-    } else {
-        out.push_str(&rule_names[s.a[i]]);
+    let name = if s.a[i] == K_ERROR as i32 { "<error>" } else { rule_names[s.a[i]] };
+    if i + 1 >= s.next[i] - 1 {
+        out.push_str(&name);
+        return;
     }
+    out.push_str(&"(");
+    out.push_str(&name);
     let mut c = i + 1;
     while c < s.next[i] {
         match s.tag[c] {
@@ -1114,12 +1116,16 @@ fn render_builder_node(
     rule_names: &List<String>,
     token_names: &List<String>,
 ) -> i32 {
-    out.push_str(&"(");
-    if a[i] == K_ERROR as i32 {
-        out.push_str(&"<error>");
-    } else {
-        out.push_str(&rule_names[a[i]]);
+    let name = if a[i] == K_ERROR as i32 { "<error>" } else { rule_names[a[i]] };
+    if i + 1 >= tag.len() || tag[i + 1] matches { Close } {
+        out.push_str(&name);
+        if i + 1 < tag.len() {
+            return i + 2;
+        }
+        return i + 1;
     }
+    out.push_str(&"(");
+    out.push_str(&name);
     let mut c = i + 1;
     while c < tag.len() {
         match tag[c] {
@@ -15005,13 +15011,13 @@ fn _parse_type___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
             let _sd_p_0 = _parse_type___inner_scan_0(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
-            if _sd_p_1 > _sd_best_p {
-                _sd_best_p = _sd_p_1;
-                _sd_best_i = 1;
-            }
             if _sd_p_0 > _sd_best_p {
                 _sd_best_p = _sd_p_0;
                 _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
             }
             if _sd_best_i == 1 {
                 return _parse_type___inner_alt_1(p, follow);
@@ -15215,10 +15221,6 @@ fn _parse_primary_type__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &E
             let _sd_p_8 = _parse_primary_type__inner_scan_8(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
-            if _sd_p_9 > _sd_best_p {
-                _sd_best_p = _sd_p_9;
-                _sd_best_i = 9;
-            }
             if _sd_p_2 > _sd_best_p {
                 _sd_best_p = _sd_p_2;
                 _sd_best_i = 2;
@@ -15226,6 +15228,10 @@ fn _parse_primary_type__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &E
             if _sd_p_8 > _sd_best_p {
                 _sd_best_p = _sd_p_8;
                 _sd_best_i = 8;
+            }
+            if _sd_p_9 > _sd_best_p {
+                _sd_best_p = _sd_p_9;
+                _sd_best_i = 9;
             }
             if _sd_best_i == 9 {
                 return _parse_primary_type__inner_alt_9(p, follow);
@@ -17264,15 +17270,30 @@ fn _parse_decorator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     let grp_kind = p.peek_kind();
     if _kind_set_19(grp_kind) {
         let mut gd_winner: i32 = -1;
-        gd_dispatch: {
-            gd_scan: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_decorator_member_expression(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break gd_scan; }
-                gd_winner = 0;
-                break gd_dispatch;
-            }
+        let mut gd_best: i32 = -1;
+        let mut gd_end: i32 = -1;
+        gd_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_decorator_member_expression(tokens, pos, &EMPTY_FOLLOW, 0);
+            if pos < 0 { break gd_scan; }
+            gd_end = pos;
+        }
+        let mut gd_end_2: i32 = -1;
+        gd_scan_2: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_decorator_call_expression(tokens, pos, &EMPTY_FOLLOW, 0);
+            if pos < 0 { break gd_scan_2; }
+            gd_end_2 = pos;
+        }
+        if gd_end > gd_best {
+            gd_best = gd_end;
+            gd_winner = 0;
+        }
+        if gd_end_2 > gd_best {
+            gd_best = gd_end_2;
+            gd_winner = 1;
         }
         if gd_winner == 0 {
             p.atn_ret_pending = 1227;
@@ -17895,10 +17916,6 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             let _sd_p_25 = _parse_statement__inner_scan_25(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
-            if _sd_p_27 > _sd_best_p {
-                _sd_best_p = _sd_p_27;
-                _sd_best_i = 27;
-            }
             if _sd_p_3 > _sd_best_p {
                 _sd_best_p = _sd_p_3;
                 _sd_best_i = 3;
@@ -17922,6 +17939,10 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             if _sd_p_25 > _sd_best_p {
                 _sd_best_p = _sd_p_25;
                 _sd_best_i = 25;
+            }
+            if _sd_p_27 > _sd_best_p {
+                _sd_best_p = _sd_p_27;
+                _sd_best_i = 27;
             }
             if _sd_best_i == 27 {
                 return _parse_statement__inner_alt_27(p, follow);
@@ -18876,17 +18897,32 @@ fn _parse_abstract_declaration__inner(p: &mut Parser, follow: &List<List<i32>> =
     let grp_kind = p.peek_kind();
     if _kind_set_21(grp_kind) {
         let mut gd_winner: i32 = -1;
-        gd_dispatch: {
-            gd_scan: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_identifier(tokens, pos, &FOLLOW_MASK_18, 0);
-                if pos < 0 { break gd_scan; }
-                pos = scan_call_signature(tokens, pos, follow, 0);
-                if pos < 0 { break gd_scan; }
-                gd_winner = 0;
-                break gd_dispatch;
-            }
+        let mut gd_best: i32 = -1;
+        let mut gd_end: i32 = -1;
+        gd_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_identifier(tokens, pos, &FOLLOW_MASK_18, 0);
+            if pos < 0 { break gd_scan; }
+            pos = scan_call_signature(tokens, pos, follow, 0);
+            if pos < 0 { break gd_scan; }
+            gd_end = pos;
+        }
+        let mut gd_end_2: i32 = -1;
+        gd_scan_2: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_variable_statement(tokens, pos, follow, 0);
+            if pos < 0 { break gd_scan_2; }
+            gd_end_2 = pos;
+        }
+        if gd_end > gd_best {
+            gd_best = gd_end;
+            gd_winner = 0;
+        }
+        if gd_end_2 > gd_best {
+            gd_best = gd_end_2;
+            gd_winner = 1;
         }
         if gd_winner == 0 {
             p.atn_ret_pending = 1391;
@@ -19250,15 +19286,30 @@ fn _parse_export_statement__inner_alt_0(p: &mut Parser, follow: &List<List<i32>>
     let grp_kind = p.peek_kind();
     if _kind_set_26(grp_kind) {
         let mut gd_winner: i32 = -1;
-        gd_dispatch: {
-            gd_scan: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_export_from_block(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break gd_scan; }
-                gd_winner = 0;
-                break gd_dispatch;
-            }
+        let mut gd_best: i32 = -1;
+        let mut gd_end: i32 = -1;
+        gd_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_export_from_block(tokens, pos, &EMPTY_FOLLOW, 0);
+            if pos < 0 { break gd_scan; }
+            gd_end = pos;
+        }
+        let mut gd_end_2: i32 = -1;
+        gd_scan_2: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_declaration(tokens, pos, &EMPTY_FOLLOW, 0);
+            if pos < 0 { break gd_scan_2; }
+            gd_end_2 = pos;
+        }
+        if gd_end > gd_best {
+            gd_best = gd_end;
+            gd_winner = 0;
+        }
+        if gd_end_2 > gd_best {
+            gd_best = gd_end_2;
+            gd_winner = 1;
         }
         if gd_winner == 0 {
             p.atn_ret_pending = 1552;
@@ -19724,13 +19775,13 @@ fn _parse_variable_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &
             let _sd_p_0 = _parse_variable_statement__inner_scan_0(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
-            if _sd_p_1 > _sd_best_p {
-                _sd_best_p = _sd_p_1;
-                _sd_best_i = 1;
-            }
             if _sd_p_0 > _sd_best_p {
                 _sd_best_p = _sd_p_0;
                 _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
             }
             if _sd_best_i == 1 {
                 return _parse_variable_statement__inner_alt_1(p, follow);
@@ -20308,29 +20359,29 @@ fn _parse_iteration_statement__inner(p: &mut Parser, follow: &List<List<i32>> = 
         let _sd_p_4 = _parse_iteration_statement__inner_scan_4(_sd_tokens, _sd_pos);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
-        if _sd_p_3 > _sd_best_p {
-            _sd_best_p = _sd_p_3;
-            _sd_best_i = 3;
-        }
-        if _sd_p_7 > _sd_best_p {
-            _sd_best_p = _sd_p_7;
-            _sd_best_i = 7;
-        }
         if _sd_p_2 > _sd_best_p {
             _sd_best_p = _sd_p_2;
             _sd_best_i = 2;
         }
-        if _sd_p_6 > _sd_best_p {
-            _sd_best_p = _sd_p_6;
-            _sd_best_i = 6;
+        if _sd_p_3 > _sd_best_p {
+            _sd_best_p = _sd_p_3;
+            _sd_best_i = 3;
+        }
+        if _sd_p_4 > _sd_best_p {
+            _sd_best_p = _sd_p_4;
+            _sd_best_i = 4;
         }
         if _sd_p_5 > _sd_best_p {
             _sd_best_p = _sd_p_5;
             _sd_best_i = 5;
         }
-        if _sd_p_4 > _sd_best_p {
-            _sd_best_p = _sd_p_4;
-            _sd_best_i = 4;
+        if _sd_p_6 > _sd_best_p {
+            _sd_best_p = _sd_p_6;
+            _sd_best_i = 6;
+        }
+        if _sd_p_7 > _sd_best_p {
+            _sd_best_p = _sd_p_7;
+            _sd_best_i = 7;
         }
         if _sd_best_i == 3 {
             return _parse_iteration_statement__inner_alt_3(p, follow);
@@ -21221,13 +21272,13 @@ fn _parse_class_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
                 _sd_best_p = _sd_p_0;
                 _sd_best_i = 0;
             }
-            if _sd_p_3 > _sd_best_p {
-                _sd_best_p = _sd_p_3;
-                _sd_best_i = 3;
-            }
             if _sd_p_1 > _sd_best_p {
                 _sd_best_p = _sd_p_1;
                 _sd_best_i = 1;
+            }
+            if _sd_p_3 > _sd_best_p {
+                _sd_best_p = _sd_p_3;
+                _sd_best_i = 3;
             }
             if _sd_best_i == 0 {
                 return _parse_class_element__inner_alt_0(p, follow);
@@ -21268,13 +21319,13 @@ fn _parse_class_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             let _sd_p_1 = _parse_class_element__inner_scan_1(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
-            if _sd_p_3 > _sd_best_p {
-                _sd_best_p = _sd_p_3;
-                _sd_best_i = 3;
-            }
             if _sd_p_1 > _sd_best_p {
                 _sd_best_p = _sd_p_1;
                 _sd_best_i = 1;
+            }
+            if _sd_p_3 > _sd_best_p {
+                _sd_best_p = _sd_p_3;
+                _sd_best_i = 3;
             }
             if _sd_best_i == 3 {
                 return _parse_class_element__inner_alt_3(p, follow);
@@ -21427,15 +21478,30 @@ fn _parse_property_member_declaration__inner_alt_2(p: &mut Parser, follow: &List
     let grp_kind = p.peek_kind();
     if _kind_set_20(grp_kind) {
         let mut gd_winner: i32 = -1;
-        gd_dispatch: {
-            gd_scan: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_get_accessor(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break gd_scan; }
-                gd_winner = 0;
-                break gd_dispatch;
-            }
+        let mut gd_best: i32 = -1;
+        let mut gd_end: i32 = -1;
+        gd_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_get_accessor(tokens, pos, &EMPTY_FOLLOW, 0);
+            if pos < 0 { break gd_scan; }
+            gd_end = pos;
+        }
+        let mut gd_end_2: i32 = -1;
+        gd_scan_2: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_set_accessor(tokens, pos, &EMPTY_FOLLOW, 0);
+            if pos < 0 { break gd_scan_2; }
+            gd_end_2 = pos;
+        }
+        if gd_end > gd_best {
+            gd_best = gd_end;
+            gd_winner = 0;
+        }
+        if gd_end_2 > gd_best {
+            gd_best = gd_end_2;
+            gd_winner = 1;
         }
         if gd_winner == 0 {
             p.atn_ret_pending = 2335;
@@ -22031,13 +22097,13 @@ fn _parse_formal_parameter_list__inner(p: &mut Parser, follow: &List<List<i32>> 
             let _sd_p_0 = _parse_formal_parameter_list__inner_scan_0(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
-            if _sd_p_2 > _sd_best_p {
-                _sd_best_p = _sd_p_2;
-                _sd_best_i = 2;
-            }
             if _sd_p_0 > _sd_best_p {
                 _sd_best_p = _sd_p_0;
                 _sd_best_i = 0;
+            }
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
             }
             if _sd_best_i == 2 {
                 return _parse_formal_parameter_list__inner_alt_2(p, follow);
@@ -22378,15 +22444,30 @@ fn _parse_array_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let grp_kind = p.peek_kind();
     if _kind_set_30(grp_kind) {
         let mut gd_winner: i32 = -1;
-        gd_dispatch: {
-            gd_scan: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_single_expression(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break gd_scan; }
-                gd_winner = 0;
-                break gd_dispatch;
-            }
+        let mut gd_best: i32 = -1;
+        let mut gd_end: i32 = -1;
+        gd_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_single_expression(tokens, pos, &EMPTY_FOLLOW, 0);
+            if pos < 0 { break gd_scan; }
+            gd_end = pos;
+        }
+        let mut gd_end_2: i32 = -1;
+        gd_scan_2: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_identifier(tokens, pos, &EMPTY_FOLLOW, 0);
+            if pos < 0 { break gd_scan_2; }
+            gd_end_2 = pos;
+        }
+        if gd_end > gd_best {
+            gd_best = gd_end;
+            gd_winner = 0;
+        }
+        if gd_end_2 > gd_best {
+            gd_best = gd_end_2;
+            gd_winner = 1;
         }
         if gd_winner == 0 {
             p.atn_ret_pending = 2671;
@@ -22658,6 +22739,10 @@ fn _parse_property_assignment__inner(p: &mut Parser, follow: &List<List<i32>> = 
             let _sd_p_6 = _parse_property_assignment__inner_scan_6(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
             if _sd_p_1 > _sd_best_p {
                 _sd_best_p = _sd_p_1;
                 _sd_best_i = 1;
@@ -22665,10 +22750,6 @@ fn _parse_property_assignment__inner(p: &mut Parser, follow: &List<List<i32>> = 
             if _sd_p_4 > _sd_best_p {
                 _sd_best_p = _sd_p_4;
                 _sd_best_i = 4;
-            }
-            if _sd_p_0 > _sd_best_p {
-                _sd_best_p = _sd_p_0;
-                _sd_best_i = 0;
             }
             if _sd_p_6 > _sd_best_p {
                 _sd_best_p = _sd_p_6;
@@ -22698,6 +22779,10 @@ fn _parse_property_assignment__inner(p: &mut Parser, follow: &List<List<i32>> = 
             let _sd_p_6 = _parse_property_assignment__inner_scan_6(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
             if _sd_p_2 > _sd_best_p {
                 _sd_best_p = _sd_p_2;
                 _sd_best_i = 2;
@@ -22713,10 +22798,6 @@ fn _parse_property_assignment__inner(p: &mut Parser, follow: &List<List<i32>> = 
             if _sd_p_5 > _sd_best_p {
                 _sd_best_p = _sd_p_5;
                 _sd_best_i = 5;
-            }
-            if _sd_p_0 > _sd_best_p {
-                _sd_best_p = _sd_p_0;
-                _sd_best_i = 0;
             }
             if _sd_p_6 > _sd_best_p {
                 _sd_best_p = _sd_p_6;
@@ -22750,6 +22831,10 @@ fn _parse_property_assignment__inner(p: &mut Parser, follow: &List<List<i32>> = 
             let _sd_p_6 = _parse_property_assignment__inner_scan_6(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
             if _sd_p_4 > _sd_best_p {
                 _sd_best_p = _sd_p_4;
                 _sd_best_i = 4;
@@ -22757,10 +22842,6 @@ fn _parse_property_assignment__inner(p: &mut Parser, follow: &List<List<i32>> = 
             if _sd_p_5 > _sd_best_p {
                 _sd_best_p = _sd_p_5;
                 _sd_best_i = 5;
-            }
-            if _sd_p_0 > _sd_best_p {
-                _sd_best_p = _sd_p_0;
-                _sd_best_i = 0;
             }
             if _sd_p_6 > _sd_best_p {
                 _sd_best_p = _sd_p_6;
@@ -22787,13 +22868,13 @@ fn _parse_property_assignment__inner(p: &mut Parser, follow: &List<List<i32>> = 
             let _sd_p_6 = _parse_property_assignment__inner_scan_6(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
-            if _sd_p_4 > _sd_best_p {
-                _sd_best_p = _sd_p_4;
-                _sd_best_i = 4;
-            }
             if _sd_p_0 > _sd_best_p {
                 _sd_best_p = _sd_p_0;
                 _sd_best_i = 0;
+            }
+            if _sd_p_4 > _sd_best_p {
+                _sd_best_p = _sd_p_4;
+                _sd_best_i = 4;
             }
             if _sd_p_6 > _sd_best_p {
                 _sd_best_p = _sd_p_6;
@@ -23042,15 +23123,30 @@ fn _parse_argument__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
     let grp_kind = p.peek_kind();
     if _kind_set_30(grp_kind) {
         let mut gd_winner: i32 = -1;
-        gd_dispatch: {
-            gd_scan: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_single_expression(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break gd_scan; }
-                gd_winner = 0;
-                break gd_dispatch;
-            }
+        let mut gd_best: i32 = -1;
+        let mut gd_end: i32 = -1;
+        gd_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_single_expression(tokens, pos, &EMPTY_FOLLOW, 0);
+            if pos < 0 { break gd_scan; }
+            gd_end = pos;
+        }
+        let mut gd_end_2: i32 = -1;
+        gd_scan_2: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_identifier(tokens, pos, &EMPTY_FOLLOW, 0);
+            if pos < 0 { break gd_scan_2; }
+            gd_end_2 = pos;
+        }
+        if gd_end > gd_best {
+            gd_best = gd_end;
+            gd_winner = 0;
+        }
+        if gd_end_2 > gd_best {
+            gd_best = gd_end_2;
+            gd_winner = 1;
         }
         if gd_winner == 0 {
             p.atn_ret_pending = 2855;
@@ -23500,13 +23596,13 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>>
             let _sd_p_44 = _parse_single_expression__inner_scan_44(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
-            if _sd_p_1 > _sd_best_p {
-                _sd_best_p = _sd_p_1;
-                _sd_best_i = 1;
-            }
             if _sd_p_0 > _sd_best_p {
                 _sd_best_p = _sd_p_0;
                 _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
             }
             if _sd_p_44 > _sd_best_p {
                 _sd_best_p = _sd_p_44;
@@ -23531,6 +23627,10 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>>
             let _sd_p_44 = _parse_single_expression__inner_scan_44(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
             if _sd_p_6 > _sd_best_p {
                 _sd_best_p = _sd_p_6;
                 _sd_best_i = 6;
@@ -23538,10 +23638,6 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>>
             if _sd_p_7 > _sd_best_p {
                 _sd_best_p = _sd_p_7;
                 _sd_best_i = 7;
-            }
-            if _sd_p_0 > _sd_best_p {
-                _sd_best_p = _sd_p_0;
-                _sd_best_i = 0;
             }
             if _sd_p_44 > _sd_best_p {
                 _sd_best_p = _sd_p_44;
@@ -23568,13 +23664,13 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>>
             let _sd_p_44 = _parse_single_expression__inner_scan_44(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
-            if _sd_p_11 > _sd_best_p {
-                _sd_best_p = _sd_p_11;
-                _sd_best_i = 11;
-            }
             if _sd_p_0 > _sd_best_p {
                 _sd_best_p = _sd_p_0;
                 _sd_best_i = 0;
+            }
+            if _sd_p_11 > _sd_best_p {
+                _sd_best_p = _sd_p_11;
+                _sd_best_i = 11;
             }
             if _sd_p_44 > _sd_best_p {
                 _sd_best_p = _sd_p_44;
@@ -23598,13 +23694,13 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>>
             let _sd_p_44 = _parse_single_expression__inner_scan_44(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
-            if _sd_p_12 > _sd_best_p {
-                _sd_best_p = _sd_p_12;
-                _sd_best_i = 12;
-            }
             if _sd_p_0 > _sd_best_p {
                 _sd_best_p = _sd_p_0;
                 _sd_best_i = 0;
+            }
+            if _sd_p_12 > _sd_best_p {
+                _sd_best_p = _sd_p_12;
+                _sd_best_i = 12;
             }
             if _sd_p_44 > _sd_best_p {
                 _sd_best_p = _sd_p_44;
@@ -23628,13 +23724,13 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>>
             let _sd_p_44 = _parse_single_expression__inner_scan_44(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
-            if _sd_p_13 > _sd_best_p {
-                _sd_best_p = _sd_p_13;
-                _sd_best_i = 13;
-            }
             if _sd_p_0 > _sd_best_p {
                 _sd_best_p = _sd_p_0;
                 _sd_best_i = 0;
+            }
+            if _sd_p_13 > _sd_best_p {
+                _sd_best_p = _sd_p_13;
+                _sd_best_i = 13;
             }
             if _sd_p_44 > _sd_best_p {
                 _sd_best_p = _sd_p_44;
@@ -23658,13 +23754,13 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>>
             let _sd_p_44 = _parse_single_expression__inner_scan_44(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
-            if _sd_p_20 > _sd_best_p {
-                _sd_best_p = _sd_p_20;
-                _sd_best_i = 20;
-            }
             if _sd_p_0 > _sd_best_p {
                 _sd_best_p = _sd_p_0;
                 _sd_best_i = 0;
+            }
+            if _sd_p_20 > _sd_best_p {
+                _sd_best_p = _sd_p_20;
+                _sd_best_i = 20;
             }
             if _sd_p_44 > _sd_best_p {
                 _sd_best_p = _sd_p_44;
@@ -23692,13 +23788,13 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>>
                 _sd_best_p = _sd_p_0;
                 _sd_best_i = 0;
             }
-            if _sd_p_44 > _sd_best_p {
-                _sd_best_p = _sd_p_44;
-                _sd_best_i = 44;
-            }
             if _sd_p_43 > _sd_best_p {
                 _sd_best_p = _sd_p_43;
                 _sd_best_i = 43;
+            }
+            if _sd_p_44 > _sd_best_p {
+                _sd_best_p = _sd_p_44;
+                _sd_best_i = 44;
             }
             if _sd_best_i == 0 {
                 return _parse_single_expression__inner_alt_0(p, follow);
@@ -23769,13 +23865,13 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>>
             let _sd_p_0 = _parse_single_expression__inner_scan_0(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
-            if _sd_p_49 > _sd_best_p {
-                _sd_best_p = _sd_p_49;
-                _sd_best_i = 49;
-            }
             if _sd_p_0 > _sd_best_p {
                 _sd_best_p = _sd_p_0;
                 _sd_best_i = 0;
+            }
+            if _sd_p_49 > _sd_best_p {
+                _sd_best_p = _sd_p_49;
+                _sd_best_i = 49;
             }
             if _sd_best_i == 49 {
                 return _parse_single_expression__inner_alt_49(p, follow);
@@ -23858,13 +23954,13 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>>
                 _sd_best_p = _sd_p_0;
                 _sd_best_i = 0;
             }
-            if _sd_p_46 > _sd_best_p {
-                _sd_best_p = _sd_p_46;
-                _sd_best_i = 46;
-            }
             if _sd_p_44 > _sd_best_p {
                 _sd_best_p = _sd_p_44;
                 _sd_best_i = 44;
+            }
+            if _sd_p_46 > _sd_best_p {
+                _sd_best_p = _sd_p_46;
+                _sd_best_i = 46;
             }
             if _sd_best_i == 0 {
                 return _parse_single_expression__inner_alt_0(p, follow);
@@ -24315,29 +24411,48 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
                     p.b.set_alt(25);
                     let mut gd_winner: i32 = -1;
-                    gd_dispatch: {
-                        gd_scan: {
-                            let tokens = &p.kinds;
-                            let mut pos: i32 = p.pos;
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break gd_scan; }
-                            pos += 1;
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break gd_scan; }
-                            pos += 1;
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break gd_scan; }
-                            pos += 1;
-                            gd_winner = 0;
-                            break gd_dispatch;
-                        }
-                        gd_scan_2: {
-                            let tokens = &p.kinds;
-                            let mut pos: i32 = p.pos;
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break gd_scan_2; }
-                            pos += 1;
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break gd_scan_2; }
-                            pos += 1;
-                            gd_winner = 1;
-                            break gd_dispatch;
-                        }
+                    let mut gd_best: i32 = -1;
+                    let mut gd_end: i32 = -1;
+                    gd_scan: {
+                        let tokens = &p.kinds;
+                        let mut pos: i32 = p.pos;
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break gd_scan; }
+                        pos += 1;
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break gd_scan; }
+                        pos += 1;
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break gd_scan; }
+                        pos += 1;
+                        gd_end = pos;
+                    }
+                    let mut gd_end_2: i32 = -1;
+                    gd_scan_2: {
+                        let tokens = &p.kinds;
+                        let mut pos: i32 = p.pos;
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break gd_scan_2; }
+                        pos += 1;
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break gd_scan_2; }
+                        pos += 1;
+                        gd_end_2 = pos;
+                    }
+                    let mut gd_end_3: i32 = -1;
+                    gd_scan_3: {
+                        let tokens = &p.kinds;
+                        let mut pos: i32 = p.pos;
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_LTLT { break gd_scan_3; }
+                        pos += 1;
+                        gd_end_3 = pos;
+                    }
+                    if gd_end_3 > gd_best {
+                        gd_best = gd_end_3;
+                        gd_winner = 2;
+                    }
+                    if gd_end_2 > gd_best {
+                        gd_best = gd_end_2;
+                        gd_winner = 1;
+                    }
+                    if gd_end > gd_best {
+                        gd_best = gd_end;
+                        gd_winner = 0;
                     }
                     if gd_winner == 0 {
                         let gt = p.expect(TK_LIT_GT, &EMPTY_SYNC);
@@ -24406,29 +24521,48 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                         p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
                         p.b.set_alt(25);
                         let mut gd_winner_2: i32 = -1;
-                        gd_dispatch_2: {
-                            gd_scan_3: {
-                                let tokens = &p.kinds;
-                                let mut pos: i32 = p.pos;
-                                if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break gd_scan_3; }
-                                pos += 1;
-                                if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break gd_scan_3; }
-                                pos += 1;
-                                if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break gd_scan_3; }
-                                pos += 1;
-                                gd_winner_2 = 0;
-                                break gd_dispatch_2;
-                            }
-                            gd_scan_4: {
-                                let tokens = &p.kinds;
-                                let mut pos: i32 = p.pos;
-                                if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break gd_scan_4; }
-                                pos += 1;
-                                if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break gd_scan_4; }
-                                pos += 1;
-                                gd_winner_2 = 1;
-                                break gd_dispatch_2;
-                            }
+                        let mut gd_best_2: i32 = -1;
+                        let mut gd_end_4: i32 = -1;
+                        gd_scan_4: {
+                            let tokens = &p.kinds;
+                            let mut pos: i32 = p.pos;
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break gd_scan_4; }
+                            pos += 1;
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break gd_scan_4; }
+                            pos += 1;
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break gd_scan_4; }
+                            pos += 1;
+                            gd_end_4 = pos;
+                        }
+                        let mut gd_end_5: i32 = -1;
+                        gd_scan_5: {
+                            let tokens = &p.kinds;
+                            let mut pos: i32 = p.pos;
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break gd_scan_5; }
+                            pos += 1;
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break gd_scan_5; }
+                            pos += 1;
+                            gd_end_5 = pos;
+                        }
+                        let mut gd_end_6: i32 = -1;
+                        gd_scan_6: {
+                            let tokens = &p.kinds;
+                            let mut pos: i32 = p.pos;
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_LTLT { break gd_scan_6; }
+                            pos += 1;
+                            gd_end_6 = pos;
+                        }
+                        if gd_end_6 > gd_best_2 {
+                            gd_best_2 = gd_end_6;
+                            gd_winner_2 = 2;
+                        }
+                        if gd_end_5 > gd_best_2 {
+                            gd_best_2 = gd_end_5;
+                            gd_winner_2 = 1;
+                        }
+                        if gd_end_4 > gd_best_2 {
+                            gd_best_2 = gd_end_4;
+                            gd_winner_2 = 0;
                         }
                         if gd_winner_2 == 0 {
                             let gt = p.expect(TK_LIT_GT, &EMPTY_SYNC);
@@ -24705,13 +24839,13 @@ fn _parse_as_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             let _sd_p_0 = _parse_as_expression__inner_scan_0(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
-            if _sd_p_1 > _sd_best_p {
-                _sd_best_p = _sd_p_1;
-                _sd_best_i = 1;
-            }
             if _sd_p_0 > _sd_best_p {
                 _sd_best_p = _sd_p_0;
                 _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
             }
             if _sd_best_i == 1 {
                 return _parse_as_expression__inner_alt_1(p, follow);
@@ -24942,13 +25076,13 @@ fn _parse_anonymous_function__inner(p: &mut Parser, follow: &List<List<i32>> = &
             let _sd_p_2 = _parse_anonymous_function__inner_scan_2(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
-            if _sd_p_1 > _sd_best_p {
-                _sd_best_p = _sd_p_1;
-                _sd_best_i = 1;
-            }
             if _sd_p_0 > _sd_best_p {
                 _sd_best_p = _sd_p_0;
                 _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
             }
             if _sd_p_2 > _sd_best_p {
                 _sd_best_p = _sd_p_2;
@@ -25107,13 +25241,13 @@ fn _parse_arrow_function_body__inner(p: &mut Parser, follow: &List<List<i32>> = 
             let _sd_p_0 = _parse_arrow_function_body__inner_scan_0(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
-            if _sd_p_1 > _sd_best_p {
-                _sd_best_p = _sd_p_1;
-                _sd_best_i = 1;
-            }
             if _sd_p_0 > _sd_best_p {
                 _sd_best_p = _sd_p_0;
                 _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
             }
             if _sd_best_i == 1 {
                 return _parse_arrow_function_body__inner_alt_1(p, follow);

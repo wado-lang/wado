@@ -269,12 +269,15 @@ only at regeneration time — the trees are committed, so CI needs none.
 
 Pinned so far:
 
-- **`sqlite`** — 14 cases, 8 `#[TODO]`. Inputs omit the trailing `;` so
+- **`sqlite`** — 14 cases, 0 `#[TODO]`. Inputs omit the trailing `;` so
   the `sql_stmt_list` trailing-separator shape stays out of scope. The
-  `#[TODO]`s expose two divergence classes the hand-written test had
-  locked in as "correct": a single-table `FROM` wrapped in `join_clause`
-  (ANTLR4 uses a bare `table_or_subquery`), and empty optional nodes
-  materialised where ANTLR4 emits none (e.g. `conflict_clause`).
+  original 8 `#[TODO]`s exposed two divergence classes the hand-written
+  test had locked in as "correct", both fixed since: a scan-length tie
+  in the group tournament committed to the sort's front-runner instead
+  of the first grammar alternative (a single-table `FROM` wrapped in
+  `join_clause` where ANTLR4 uses a bare `table_or_subquery`), and a
+  childless rule node rendered as `(conflict_clause)` where ANTLR4's
+  `toStringTree` renders the bare name.
 - **`json`** — 11 cases, 0 `#[TODO]`: Gale's JSON parser matches ANTLR4
   exactly, so this is a pure lock-in against regressions.
 
@@ -288,12 +291,8 @@ in `regen-oracle.sh`:
   `.g4`, so the oracle's `javac` fails, and Gale itself needs predicate
   support for them;
 - grammars that emit whitespace as tree tokens (css3's `ws`) — their
-  trees are whitespace-sensitive and render childless rules differently,
-  so css3 stays pinned by parse-success (`driver_cst_css3_test`), not
-  tree equality.
-
-Closing the SQLite divergences is separate Gale work; the mechanism just
-makes them visible and regression-tracked.
+  trees are whitespace-sensitive, so css3 stays pinned by parse-success
+  (`driver_cst_css3_test`), not tree equality.
 
 ### Stage C — action-body translation (not yet built)
 
@@ -349,7 +348,10 @@ simulator (next section), never a try-fail-retry loop.
 Multi-alt dispatch is a scan-side longest-match tournament: candidate
 alts are partitioned by their depth-0 first token, and within a partition
 every candidate is scanned from the same start, keeping the greatest
-successful end. This is not first-success-wins — that is unsound when
+successful end. A scan-length tie resolves to the lowest grammar
+alternative — ANTLR4's ambiguity resolution (SQLite's single-table `FROM`
+picks `table_or_subquery (',' table_or_subquery)*` over the `join_clause`
+catch-all). This is not first-success-wins — that is unsound when
 alts share a prefix and tie on static length (`'mut'? IDENT` vs `path '('
 … ')'` on `N(n)`). An alt whose suffix is unscannable at a tournament
 site is a codegen-time panic; the fix is to file an issue, never to add
