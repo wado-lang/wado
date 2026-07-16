@@ -464,9 +464,8 @@ pub fn synthesize_reflect(project: &mut Package) {
 ///
 /// `fields(&self)` (the `Fields` associated tuple) is a separate follow-up
 /// slice; this covers the value-free string metadata. `field_names()` builds a
-/// homogeneous string tuple and hands it to the prelude `reflect_field_names`
-/// helper, which collects it into a `List<String>` — avoiding a hand-built
-/// `List` literal in synthesized TIR.
+/// homogeneous string tuple and hands it to the general `List::from_tuple`
+/// prelude constructor, avoiding a hand-built `List` literal in synthesized TIR.
 fn generate_struct_reflect_impls(
     module: &mut TirModule,
     ctx: &mut SynthesisCtx<'_, '_, '_>,
@@ -489,11 +488,13 @@ fn generate_struct_reflect_impls(
         })
         .collect();
 
-    let string_type = module
-        .type_table
-        .borrow_mut()
-        .make_compiler_struct(CompilerItem::String);
-    let list_string_type = module.type_table.borrow_mut().make_list(string_type);
+    let (string_type, list_string_type, string_type_name) = {
+        let mut tt = module.type_table.borrow_mut();
+        let string_type = tt.make_compiler_struct(CompilerItem::String);
+        let list_string_type = tt.make_list(string_type);
+        let string_type_name = tt.mangle_type_name(string_type);
+        (string_type, list_string_type, string_type_name)
+    };
 
     let mut generated = Vec::new();
     for (name, field_names, span) in &infos {
@@ -506,6 +507,7 @@ fn generate_struct_reflect_impls(
             let mut tt = module.type_table.borrow_mut();
             let tuple_type =
                 tt.make_tuple(std::iter::repeat_n(string_type, field_names.len()).collect());
+            drop(tt);
             generate_struct_field_names_fn(
                 name,
                 field_names,
@@ -513,6 +515,7 @@ fn generate_struct_reflect_impls(
                 tuple_type,
                 list_string_type,
                 reflect_trait_name,
+                &string_type_name,
                 *span,
             )
         };
@@ -525,7 +528,10 @@ fn generate_struct_reflect_impls(
 }
 
 /// Build `StructName^Reflect::field_names() -> List<String>` as
-/// `return reflect_field_names(["f0", "f1", ...]);`.
+/// `return List::<String>::from_tuple(["f0", "f1", ...]);`.
+///
+/// The homogeneous string tuple is collected by the general `List::from_tuple`
+/// prelude constructor rather than a hand-built `List` literal in TIR.
 fn generate_struct_field_names_fn(
     struct_name: &str,
     field_names: &[String],
@@ -533,6 +539,7 @@ fn generate_struct_field_names_fn(
     tuple_type: TypeId,
     list_string_type: TypeId,
     reflect_trait_name: &str,
+    string_type_name: &str,
     span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(struct_name, reflect_trait_name, "field_names");
@@ -544,13 +551,20 @@ fn generate_struct_field_names_fn(
         .collect();
     let tuple = TirExpr::new(TirExprKind::TupleLiteral { elements }, tuple_type, span);
 
+    let from_tuple = LocalMethodName::new("List".to_string(), None, "from_tuple".to_string())
+        .with_struct_type_args(&[string_type_name.to_string()]);
     let call = TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef {
                 module_source: ModuleSource::list(),
-                name: "reflect_field_names".to_string(),
-                monomorph_info: None,
-                method_info: None,
+                name: from_tuple.to_mangled_name(),
+                monomorph_info: Some(MonomorphInfo {
+                    generic_name: "List::from_tuple".to_string(),
+                    impl_type_args: vec![string_type],
+                    method_type_args: vec![tuple_type],
+                    is_blanket: false,
+                }),
+                method_info: Some(from_tuple),
             },
             type_args: vec![tuple_type],
             args: vec![CallArg::new(tuple, false)],

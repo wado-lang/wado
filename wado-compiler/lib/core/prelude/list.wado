@@ -62,6 +62,15 @@ impl List<T> {
         return List { repr, used: n };
     }
 
+    /// Collect a homogeneous tuple `[T, T, ...]` into a `List<T>`.
+    pub fn from_tuple<..Elems>(elements: [..Elems]) -> List<T> {
+        let mut out = List::<T>::with_capacity(elements.len());
+        for let element of elements {
+            out.push(element);
+        }
+        return out;
+    }
+
     pub fn len(&self) -> i32 {
         return self.used;
     }
@@ -612,18 +621,6 @@ impl Default for List<T> {
     pub fn default() -> List<T> {
         return [] as List<T>;
     }
-}
-
-// Collect a homogeneous tuple of strings into a `List<String>`. Called by the
-// compiler-synthesized `Reflect::field_names` (WEP 2026-06-13 §1): synthesis
-// builds the field-name tuple and hands it here rather than emitting a
-// `List<String>` literal at the TIR level.
-internal fn reflect_field_names<..T>(names: [..T]) -> List<String> {
-    let mut out: List<String> = [];
-    for let name of names {
-        out.push(name);
-    }
-    return out;
 }
 
 impl<T: Inspect> Inspect for List<T> {
