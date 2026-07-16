@@ -2205,6 +2205,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return struct_type;
         }
 
+        // Auto-derived `Reflect` static metadata return types.
+        if (method_name == "field_names" || method_name == "type_name")
+            && self.type_lookup().struct_fields(struct_name).is_some()
+        {
+            let mut tt = self.tysys.type_table.borrow_mut();
+            let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
+            return if method_name == "type_name" {
+                string_type
+            } else {
+                tt.make_list(string_type)
+            };
+        }
+
         // Fall back to a trait default method body. When
         // `impl Trait for Type` does not override a static method that the
         // trait provides a default for, concrete `Type::method()` calls
@@ -2961,6 +2974,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ));
         }
 
+        // Auto-derived `Reflect` static metadata: `S::field_names()` /
+        // `S::type_name()` for any struct. The body is emitted by
+        // `synthesis::traits`.
+        if (method_name == "field_names" || method_name == "type_name")
+            && self.type_lookup().struct_fields(struct_name).is_some()
+        {
+            let reflect_trait_name = self
+                .tysys
+                .type_table
+                .borrow()
+                .compiler_trait_name(crate::compiler_item::CompilerItem::Reflect)
+                .to_string();
+            let module_source = self.find_struct_module_source(struct_name);
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .record_bound_driven_synth_request(
+                    struct_name,
+                    &module_source,
+                    &reflect_trait_name,
+                );
+            return Some(StaticMethodRef::new(
+                module_source,
+                struct_name,
+                method_name,
+                Some(reflect_trait_name),
+            ));
+        }
+
         None
     }
 
@@ -3042,6 +3084,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .auto_derive_default_struct_type(&self.type_lookup(), struct_name)
                 .is_some()
+        {
+            return true;
+        }
+
+        // Auto-derived `Reflect` static metadata: `field_names` / `type_name`
+        // on any struct.
+        if (method_name == "field_names" || method_name == "type_name")
+            && self.type_lookup().struct_fields(struct_name).is_some()
         {
             return true;
         }

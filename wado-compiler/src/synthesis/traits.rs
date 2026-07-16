@@ -418,6 +418,114 @@ pub fn synthesize_defaults(project: &mut Package) {
     }
 }
 
+/// Generate `Struct^Reflect::type_name()` for each requested struct
+/// (WEP 2026-06-13 §1). Runs after `synthesize_defaults` so any late demand
+/// recorded by other synthesized bodies is captured.
+pub fn synthesize_reflect(project: &mut Package) {
+    let trait_env = project.trait_env.clone();
+    let first_module = project
+        .tir_modules
+        .values()
+        .next()
+        .expect("tir_modules must contain at least the entry module during synthesis");
+    let reflect_trait_name = first_module
+        .type_table
+        .borrow()
+        .compiler_items()
+        .trait_name(CompilerItem::Reflect)
+        .to_string();
+    let requested: IndexSet<(String, ModuleSource, String)> = first_module
+        .type_table
+        .borrow()
+        .bound_driven_synth_requests(|trait_name| trait_name == reflect_trait_name)
+        .into_iter()
+        .collect();
+
+    let mut pending: IndexSet<(String, ModuleSource, String)> = IndexSet::default();
+    for module in project.tir_modules.values_mut() {
+        let module_source = module.module_source.clone();
+        let names = {
+            let tt = module.type_table.borrow();
+            TraitsStdlibNames::from_compiler_items(tt.compiler_items())
+        };
+        let mut ctx = SynthesisCtx {
+            trait_env: &trait_env,
+            pending: &mut pending,
+            requested: &requested,
+            module: module_source,
+            names: &names,
+        };
+        generate_struct_reflect_impls(module, &mut ctx, &reflect_trait_name);
+    }
+}
+
+/// Synthesize `S^Reflect::type_name() -> String` for every requested struct.
+///
+/// `field_names()` and `fields(&self)` are separate follow-up slices (they
+/// need `List<String>` builder synthesis and the `Fields` associated tuple
+/// respectively); this slice covers the constant `type_name()` metadata.
+fn generate_struct_reflect_impls(
+    module: &mut TirModule,
+    ctx: &mut SynthesisCtx<'_, '_, '_>,
+    reflect_trait_name: &str,
+) {
+    if module.structs.is_empty() {
+        return;
+    }
+
+    let names: Vec<(String, Span)> = module
+        .structs
+        .iter()
+        .filter(|s| s.type_params.is_empty() && s.monomorph_info.is_none())
+        .map(|s| (s.name.clone(), s.span))
+        .collect();
+
+    let string_type = module
+        .type_table
+        .borrow_mut()
+        .make_compiler_struct(CompilerItem::String);
+
+    let mut generated = Vec::new();
+    for (name, span) in &names {
+        if !ctx.should_synthesize(name, reflect_trait_name) {
+            continue;
+        }
+        let func = generate_struct_type_name_fn(name, string_type, reflect_trait_name, *span);
+        generated.push(Rc::new(RefCell::new(func)));
+        ctx.record_impl(name, reflect_trait_name);
+    }
+
+    module.functions.extend(generated);
+}
+
+/// Build `StructName^Reflect::type_name() -> String { return "StructName"; }`.
+fn generate_struct_type_name_fn(
+    struct_name: &str,
+    string_type: TypeId,
+    reflect_trait_name: &str,
+    span: Span,
+) -> TirFunction {
+    let method_info = trait_method_info(struct_name, reflect_trait_name, "type_name");
+    let qualified_name = method_info.to_mangled_name();
+
+    let literal = TirExpr::new(
+        TirExprKind::StringLiteral(struct_name.to_string()),
+        string_type,
+        span,
+    );
+    let body = TirBlock::new(
+        vec![TirStmt::new(
+            TirStmtKind::Return {
+                value: Some(literal),
+            },
+            span,
+        )],
+        span,
+    );
+
+    make_synthetic_method(qualified_name, method_info, vec![], string_type, body, vec![])
+}
+
 /// Threading of trait-impl knowledge through the synthesis sub-passes.
 ///
 /// `trait_env` exposes the AST-layer (and any prior synthesis-layer) impls

@@ -1,0 +1,17 @@
+// Reflect per-struct synthesis (WEP 2026-06-13 §1): `type_name()` returns
+// the struct's name. First slice of the compiler-synthesized `Reflect` trait.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Unit {}
+
+test "type_name is the struct name" {
+    assert Point::type_name() == "Point";
+    assert Unit::type_name() == "Unit";
+}
+
+__DATA__
+{"test": {}}

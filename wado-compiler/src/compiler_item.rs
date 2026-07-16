@@ -120,6 +120,9 @@ pub enum CompilerItem {
     // ── Traits ────────────────────────────────────────────────────────
     /// `Default` — `Default::default()` synthesis anchor.
     Default,
+    /// `Reflect` — compile-time struct-introspection anchor; the
+    /// per-struct `impl Reflect for S` synthesis points at it.
+    Reflect,
     /// `Eq` — anchor for synthesised `==` / `!=` lowering and the
     /// auto-derive checks that decide whether a compound type
     /// (struct, variant, generic instance) implements `Eq`.
@@ -398,6 +401,7 @@ impl CompilerItem {
         Self::Result,
         Self::Ordering,
         Self::Default,
+        Self::Reflect,
         Self::Eq,
         Self::Ord,
         Self::From,
@@ -514,6 +518,7 @@ impl CompilerItem {
             Self::Result => "result",
             Self::Ordering => "ordering",
             Self::Default => "default",
+            Self::Reflect => "reflect",
             Self::Eq => "eq",
             Self::Ord => "ord",
             Self::From => "from",
@@ -647,6 +652,7 @@ impl CompilerItem {
             | Self::Result
             | Self::Ordering
             | Self::Default
+            | Self::Reflect
             | Self::Eq
             | Self::Ord
             | Self::From
@@ -773,6 +779,7 @@ impl CompilerItem {
             Self::SerializeErrorKind | Self::DeserializeErrorKind => CompilerItemKind::Enum,
             Self::Formatter => CompilerItemKind::Struct,
             Self::Default
+            | Self::Reflect
             | Self::Eq
             | Self::Ord
             | Self::From
