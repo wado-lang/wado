@@ -1074,29 +1074,31 @@ impl<'a> Unparser<'a> {
 
         self.with_braced_body(t.span, |this| {
             for assoc in &t.associated_types {
-                this.write_indent();
-                this.output.push_str("type ");
-                this.output.push_str(&assoc.name);
-                if !assoc.bounds.is_empty() {
-                    this.output.push_str(": ");
-                    this.comma_sep_with(" + ", &assoc.bounds, |this, bound| {
-                        this.output.push_str(&bound.name);
-                        if !bound.assoc_types.is_empty() {
-                            this.delimited("<", ">", &bound.assoc_types, |this, ab| {
-                                this.output.push_str(&ab.name);
-                                this.output.push_str(" = ");
-                                this.unparse_type(&ab.ty);
-                            });
-                        }
-                    });
-                }
-                this.output.push_str(";\n");
-                this.last_source_line = assoc.span.end_line();
+                this.emit_member(assoc.id, assoc.span, &[], |this| {
+                    this.write_indent();
+                    this.output.push_str("type ");
+                    this.output.push_str(&assoc.name);
+                    if !assoc.bounds.is_empty() {
+                        this.output.push_str(": ");
+                        this.comma_sep_with(" + ", &assoc.bounds, |this, bound| {
+                            this.output.push_str(&bound.name);
+                            if !bound.assoc_types.is_empty() {
+                                this.delimited("<", ">", &bound.assoc_types, |this, ab| {
+                                    this.output.push_str(&ab.name);
+                                    this.output.push_str(" = ");
+                                    this.unparse_type(&ab.ty);
+                                });
+                            }
+                        });
+                    }
+                    this.output.push(';');
+                });
             }
 
             for method in &t.methods {
+                let effective_line = effective_start_line(&method.attrs, method.span.line);
                 this.emit_leading_for(method.id);
-                this.emit_blank_lines_to(method.span.line);
+                this.emit_blank_lines_to(effective_line);
                 this.unparse_function(method);
                 this.last_source_line = method.span.end_line();
             }
