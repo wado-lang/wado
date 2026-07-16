@@ -45,7 +45,8 @@ pub unsafe extern "C" fn wado_free(ptr: *mut u8, len: usize) {
 /// and filled with `len` bytes.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn wado_compile(ptr: *mut u8, len: usize) -> *const u8 {
-    let source = unsafe { String::from_utf8_lossy(std::slice::from_raw_parts(ptr, len)).into_owned() };
+    let source =
+        unsafe { String::from_utf8_lossy(std::slice::from_raw_parts(ptr, len)).into_owned() };
     unsafe { wado_free(ptr, len) };
 
     let host = InMemoryCompilerHost::new();
@@ -130,7 +131,10 @@ mod tests {
         let (status, payload) = compile_str("this is not valid wado");
         assert_eq!(status, 0, "expected failure");
         assert!(!payload.is_empty(), "diagnostics text present");
-        assert!(std::str::from_utf8(&payload).is_ok(), "diagnostics are UTF-8");
+        assert!(
+            std::str::from_utf8(&payload).is_ok(),
+            "diagnostics are UTF-8"
+        );
     }
 
     #[test]

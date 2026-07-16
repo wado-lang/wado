@@ -37,7 +37,7 @@ is the UI.
 ## Requirements
 
 - A **JSPI-capable browser**: Chromium/Chrome **137+** (stable JSPI). Both the
-  transpiled program *and* jco's own bindgen use `WebAssembly.Suspending`.
+  transpiled program _and_ jco's own bindgen use `WebAssembly.Suspending`.
 - WasmGC (Chrome 119+, Firefox 120+) — Wado uses GC.
 
 ## Build
