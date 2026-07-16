@@ -479,6 +479,7 @@ fn generate_struct_reflect_impls(
         .structs
         .iter()
         .filter(|s| s.type_params.is_empty() && s.monomorph_info.is_none())
+        .filter(|s| ctx.should_synthesize(&s.name, reflect_trait_name))
         .map(|s| {
             (
                 s.name.clone(),
@@ -488,7 +489,21 @@ fn generate_struct_reflect_impls(
         })
         .collect();
 
-    let (string_type, list_string_type, string_type_name, from_tuple, type_name_method, field_names_method) = {
+    // Nothing to synthesize in this module: skip the registry lookups (and the
+    // `require_method` invariant assertion) entirely rather than run them for
+    // every module that merely declares a struct.
+    if infos.is_empty() {
+        return;
+    }
+
+    let (
+        string_type,
+        list_string_type,
+        string_type_name,
+        from_tuple,
+        type_name_method,
+        field_names_method,
+    ) = {
         let mut tt = module.type_table.borrow_mut();
         let string_type = tt.make_compiler_struct(CompilerItem::String);
         let list_string_type = tt.make_list(string_type);
@@ -514,9 +529,6 @@ fn generate_struct_reflect_impls(
 
     let mut generated = Vec::new();
     for (name, field_names, span) in &infos {
-        if !ctx.should_synthesize(name, reflect_trait_name) {
-            continue;
-        }
         let type_name_fn = generate_struct_type_name_fn(
             name,
             string_type,

@@ -2219,7 +2219,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return struct_type;
         }
 
-
         // Fall back to a trait default method body. When
         // `impl Trait for Type` does not override a static method that the
         // trait provides a default for, concrete `Type::method()` calls
@@ -3000,22 +2999,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // Resolve arguments (none for `type_name` / `field_names`).
-        let _args: Vec<TirExpr> = static_call
-            .args
-            .iter()
-            .map(|a| placeholder(self.resolve_expr(a, ctx, None), a.span()))
-            .collect();
+        // `type_name` / `field_names` take no arguments. Resolve any supplied
+        // args so errors inside them still surface, then reject the arity —
+        // without this the extra operands reach a 0-param synthesized call and
+        // trip a WIR-pipeline validation ICE.
+        if !static_call.args.is_empty() {
+            for arg in &static_call.args {
+                self.resolve_expr(arg, ctx, None);
+            }
+            let _ = self.logger.error(TypeError::ArgumentCountMismatch {
+                expected: 0,
+                found: static_call.args.len(),
+                span: static_call.span,
+            });
+            return TypeTable::ERROR;
+        }
 
-        let (reflect_trait_name, field_names_method, type_name_method, module_source) = {
+        let (reflect_trait_name, type_name_method, module_source) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
                 items
                     .trait_name(crate::compiler_item::CompilerItem::Reflect)
-                    .to_string(),
-                items
-                    .method_name(crate::compiler_item::CompilerItem::ReflectFieldNames)
                     .to_string(),
                 items
                     .method_name(crate::compiler_item::CompilerItem::ReflectTypeName)
@@ -3030,6 +3035,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow_mut()
             .record_bound_driven_synth_request(&self_name, &module_source, &reflect_trait_name);
 
+        // `is_reflect_trait_call` admits only `type_name` / `field_names`, so a
+        // non-`type_name` method is `field_names` and returns `List<String>`.
         let return_type = {
             let mut tt = self.tysys.type_table.borrow_mut();
             let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
@@ -3039,7 +3046,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 tt.make_list(string_type)
             }
         };
-        let _ = field_names_method;
 
         let func_ref = FunctionRef {
             module_source: module_source.clone(),
@@ -3065,16 +3071,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether `prefix::method` names a `Reflect` trait-qualified static call
-    /// (`Reflect::<T>::field_names` / `type_name`). `prefix` is the `Reflect`
-    /// trait; `method` one of its static metadata methods. Resolved through the
-    /// compiler-item registry so a stdlib rename flows through.
+    /// (`Reflect::<T>::field_names` / `type_name`). `prefix` must resolve to the
+    /// compiler's `Reflect` trait *in this scope* — `classify_on_bound_trait`
+    /// applies the same module check `on_bound` dispatch uses, so a user type or
+    /// trait that happens to be named `Reflect` is not hijacked. `method` is
+    /// matched through the compiler-item registry so a stdlib rename flows through.
     pub(super) fn is_reflect_trait_call(&self, prefix: &str, method: &str) -> bool {
+        if self
+            .tysys
+            .classify_on_bound_trait(&self.type_lookup(), prefix)
+            != Some(super::trait_query::OnBoundTrait::Reflect)
+        {
+            return false;
+        }
         let tt = self.tysys.type_table.borrow();
         let items = tt.compiler_items();
-        prefix == items.trait_name(crate::compiler_item::CompilerItem::Reflect)
-            && (method == items.method_name(crate::compiler_item::CompilerItem::ReflectFieldNames)
-                || method
-                    == items.method_name(crate::compiler_item::CompilerItem::ReflectTypeName))
+        method == items.method_name(crate::compiler_item::CompilerItem::ReflectFieldNames)
+            || method == items.method_name(crate::compiler_item::CompilerItem::ReflectTypeName)
     }
 
     /// Get the operator trait and method name for a binary operator.
