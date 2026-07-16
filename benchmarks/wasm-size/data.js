@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784212495688,
+  "lastUpdate": 1784239656779,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -40977,6 +40977,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c4d4fd17d7a92f5fbc461a5b527c42e45643a099"
         },
         "date": 1784212494932,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16233,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 259842,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "51e19372f6b790e4e3b7387bc2266f2db03dec38",
+          "message": "Merge pull request #1597 from wado-lang/claude/reflection-implementation-t1btfg\n\nfeat(compiler): compiler-synthesized Reflect — sealed trait, Reflect::&lt;T&gt;:: metadata",
+          "timestamp": "2026-07-17T06:51:01+09:00",
+          "tree_id": "fcc3a81ffd091d5284a477791dc8ea0bb671b7b5",
+          "url": "https://github.com/wado-lang/wado/commit/51e19372f6b790e4e3b7387bc2266f2db03dec38"
+        },
+        "date": 1784239656037,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
