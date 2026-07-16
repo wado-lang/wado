@@ -20,66 +20,107 @@ fn assert_tree(input: &String, expected: &String) {
 }
 
 test "oracle: SELECT 1" {
-    assert_tree(&"SELECT 1", &"(parse (sql_stmt_list (sql_stmt (factored_select_stmt (select_core SELECT (result_column (expr (literal_value 1))))))))");
+    assert_tree(
+        &"SELECT 1",
+        &"(parse (sql_stmt_list (sql_stmt (factored_select_stmt (select_core SELECT (result_column (expr (literal_value 1))))))))",
+    );
 }
 
 #[TODO]
 test "oracle: SELECT a, b FROM t" {
-    assert_tree(&"SELECT a, b FROM t", &"(parse (sql_stmt_list (sql_stmt (factored_select_stmt (select_core SELECT (result_column (expr (column_name (any_name a)))) , (result_column (expr (column_name (any_name b)))) FROM (table_or_subquery (table_name (any_name t))))))))");
+    assert_tree(
+        &"SELECT a, b FROM t",
+        &"(parse (sql_stmt_list (sql_stmt (factored_select_stmt (select_core SELECT (result_column (expr (column_name (any_name a)))) , (result_column (expr (column_name (any_name b)))) FROM (table_or_subquery (table_name (any_name t))))))))",
+    );
 }
 
 #[TODO]
 test "oracle: SELECT * FROM t WHERE x BETWEEN 1 AND 10" {
-    assert_tree(&"SELECT * FROM t WHERE x BETWEEN 1 AND 10", &"(parse (sql_stmt_list (sql_stmt (factored_select_stmt (select_core SELECT (result_column *) FROM (table_or_subquery (table_name (any_name t))) WHERE (expr (expr (column_name (any_name x))) BETWEEN (expr (literal_value 1)) AND (expr (literal_value 10))))))))");
+    assert_tree(
+        &"SELECT * FROM t WHERE x BETWEEN 1 AND 10",
+        &"(parse (sql_stmt_list (sql_stmt (factored_select_stmt (select_core SELECT (result_column *) FROM (table_or_subquery (table_name (any_name t))) WHERE (expr (expr (column_name (any_name x))) BETWEEN (expr (literal_value 1)) AND (expr (literal_value 10))))))))",
+    );
 }
 
 test "oracle: SELECT a FROM t1 JOIN t2 ON t1.id = t2.id" {
-    assert_tree(&"SELECT a FROM t1 JOIN t2 ON t1.id = t2.id", &"(parse (sql_stmt_list (sql_stmt (factored_select_stmt (select_core SELECT (result_column (expr (column_name (any_name a)))) FROM (join_clause (table_or_subquery (table_name (any_name t1))) (join_operator JOIN) (table_or_subquery (table_name (any_name t2))) (join_constraint ON (expr (expr (table_name (any_name t1)) . (column_name (any_name id))) = (expr (table_name (any_name t2)) . (column_name (any_name id)))))))))))");
+    assert_tree(
+        &"SELECT a FROM t1 JOIN t2 ON t1.id = t2.id",
+        &"(parse (sql_stmt_list (sql_stmt (factored_select_stmt (select_core SELECT (result_column (expr (column_name (any_name a)))) FROM (join_clause (table_or_subquery (table_name (any_name t1))) (join_operator JOIN) (table_or_subquery (table_name (any_name t2))) (join_constraint ON (expr (expr (table_name (any_name t1)) . (column_name (any_name id))) = (expr (table_name (any_name t2)) . (column_name (any_name id)))))))))))",
+    );
 }
 
 #[TODO]
 test "oracle: SELECT count(*) FROM t GROUP BY a HAVING count(*) > 1" {
-    assert_tree(&"SELECT count(*) FROM t GROUP BY a HAVING count(*) > 1", &"(parse (sql_stmt_list (sql_stmt (factored_select_stmt (select_core SELECT (result_column (expr (function_name (any_name count)) ( * ))) FROM (table_or_subquery (table_name (any_name t))) GROUP BY (expr (column_name (any_name a))) HAVING (expr (expr (function_name (any_name count)) ( * )) > (expr (literal_value 1))))))))");
+    assert_tree(
+        &"SELECT count(*) FROM t GROUP BY a HAVING count(*) > 1",
+        &"(parse (sql_stmt_list (sql_stmt (factored_select_stmt (select_core SELECT (result_column (expr (function_name (any_name count)) ( * ))) FROM (table_or_subquery (table_name (any_name t))) GROUP BY (expr (column_name (any_name a))) HAVING (expr (expr (function_name (any_name count)) ( * )) > (expr (literal_value 1))))))))",
+    );
 }
 
 #[TODO]
 test "oracle: SELECT a FROM t ORDER BY a DESC LIMIT 10" {
-    assert_tree(&"SELECT a FROM t ORDER BY a DESC LIMIT 10", &"(parse (sql_stmt_list (sql_stmt (factored_select_stmt (select_core SELECT (result_column (expr (column_name (any_name a)))) FROM (table_or_subquery (table_name (any_name t)))) ORDER BY (ordering_term (expr (column_name (any_name a))) DESC) LIMIT (expr (literal_value 10))))))");
+    assert_tree(
+        &"SELECT a FROM t ORDER BY a DESC LIMIT 10",
+        &"(parse (sql_stmt_list (sql_stmt (factored_select_stmt (select_core SELECT (result_column (expr (column_name (any_name a)))) FROM (table_or_subquery (table_name (any_name t)))) ORDER BY (ordering_term (expr (column_name (any_name a))) DESC) LIMIT (expr (literal_value 10))))))",
+    );
 }
 
 #[TODO]
 test "oracle: SELECT a FROM t UNION SELECT b FROM u" {
-    assert_tree(&"SELECT a FROM t UNION SELECT b FROM u", &"(parse (sql_stmt_list (sql_stmt (compound_select_stmt (select_core SELECT (result_column (expr (column_name (any_name a)))) FROM (table_or_subquery (table_name (any_name t)))) UNION (select_core SELECT (result_column (expr (column_name (any_name b)))) FROM (table_or_subquery (table_name (any_name u))))))))");
+    assert_tree(
+        &"SELECT a FROM t UNION SELECT b FROM u",
+        &"(parse (sql_stmt_list (sql_stmt (compound_select_stmt (select_core SELECT (result_column (expr (column_name (any_name a)))) FROM (table_or_subquery (table_name (any_name t)))) UNION (select_core SELECT (result_column (expr (column_name (any_name b)))) FROM (table_or_subquery (table_name (any_name u))))))))",
+    );
 }
 
 #[TODO]
 test "oracle: SELECT CASE WHEN a > 0 THEN 1 ELSE 2 END FROM t" {
-    assert_tree(&"SELECT CASE WHEN a > 0 THEN 1 ELSE 2 END FROM t", &"(parse (sql_stmt_list (sql_stmt (factored_select_stmt (select_core SELECT (result_column (expr CASE WHEN (expr (expr (column_name (any_name a))) > (expr (literal_value 0))) THEN (expr (literal_value 1)) ELSE (expr (literal_value 2)) END)) FROM (table_or_subquery (table_name (any_name t))))))))");
+    assert_tree(
+        &"SELECT CASE WHEN a > 0 THEN 1 ELSE 2 END FROM t",
+        &"(parse (sql_stmt_list (sql_stmt (factored_select_stmt (select_core SELECT (result_column (expr CASE WHEN (expr (expr (column_name (any_name a))) > (expr (literal_value 0))) THEN (expr (literal_value 1)) ELSE (expr (literal_value 2)) END)) FROM (table_or_subquery (table_name (any_name t))))))))",
+    );
 }
 
 test "oracle: INSERT INTO t (a, b) VALUES (1, 2)" {
-    assert_tree(&"INSERT INTO t (a, b) VALUES (1, 2)", &"(parse (sql_stmt_list (sql_stmt (insert_stmt INSERT INTO (table_name (any_name t)) ( (column_name (any_name a)) , (column_name (any_name b)) ) VALUES ( (expr (literal_value 1)) , (expr (literal_value 2)) )))))");
+    assert_tree(
+        &"INSERT INTO t (a, b) VALUES (1, 2)",
+        &"(parse (sql_stmt_list (sql_stmt (insert_stmt INSERT INTO (table_name (any_name t)) ( (column_name (any_name a)) , (column_name (any_name b)) ) VALUES ( (expr (literal_value 1)) , (expr (literal_value 2)) )))))",
+    );
 }
 
 test "oracle: DELETE FROM t WHERE id = 1" {
-    assert_tree(&"DELETE FROM t WHERE id = 1", &"(parse (sql_stmt_list (sql_stmt (delete_stmt DELETE FROM (qualified_table_name (table_name (any_name t))) WHERE (expr (expr (column_name (any_name id))) = (expr (literal_value 1)))))))");
+    assert_tree(
+        &"DELETE FROM t WHERE id = 1",
+        &"(parse (sql_stmt_list (sql_stmt (delete_stmt DELETE FROM (qualified_table_name (table_name (any_name t))) WHERE (expr (expr (column_name (any_name id))) = (expr (literal_value 1)))))))",
+    );
 }
 
 test "oracle: UPDATE t SET a = 1 WHERE id = 2" {
-    assert_tree(&"UPDATE t SET a = 1 WHERE id = 2", &"(parse (sql_stmt_list (sql_stmt (update_stmt UPDATE (qualified_table_name (table_name (any_name t))) SET (column_name (any_name a)) = (expr (literal_value 1)) WHERE (expr (expr (column_name (any_name id))) = (expr (literal_value 2)))))))");
+    assert_tree(
+        &"UPDATE t SET a = 1 WHERE id = 2",
+        &"(parse (sql_stmt_list (sql_stmt (update_stmt UPDATE (qualified_table_name (table_name (any_name t))) SET (column_name (any_name a)) = (expr (literal_value 1)) WHERE (expr (expr (column_name (any_name id))) = (expr (literal_value 2)))))))",
+    );
 }
 
 #[TODO]
 test "oracle: CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL)" {
-    assert_tree(&"CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL)", &"(parse (sql_stmt_list (sql_stmt (create_table_stmt CREATE TABLE (table_name (any_name t)) ( (column_def (column_name (any_name id)) (type_name (name (any_name INTEGER))) (column_constraint PRIMARY KEY conflict_clause)) , (column_def (column_name (any_name name)) (type_name (name (any_name TEXT))) (column_constraint NOT NULL conflict_clause)) )))))");
+    assert_tree(
+        &"CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+        &"(parse (sql_stmt_list (sql_stmt (create_table_stmt CREATE TABLE (table_name (any_name t)) ( (column_def (column_name (any_name id)) (type_name (name (any_name INTEGER))) (column_constraint PRIMARY KEY conflict_clause)) , (column_def (column_name (any_name name)) (type_name (name (any_name TEXT))) (column_constraint NOT NULL conflict_clause)) )))))",
+    );
 }
 
 test "oracle: CREATE INDEX idx ON t (a, b)" {
-    assert_tree(&"CREATE INDEX idx ON t (a, b)", &"(parse (sql_stmt_list (sql_stmt (create_index_stmt CREATE INDEX (index_name (any_name idx)) ON (table_name (any_name t)) ( (indexed_column (column_name (any_name a))) , (indexed_column (column_name (any_name b))) )))))");
+    assert_tree(
+        &"CREATE INDEX idx ON t (a, b)",
+        &"(parse (sql_stmt_list (sql_stmt (create_index_stmt CREATE INDEX (index_name (any_name idx)) ON (table_name (any_name t)) ( (indexed_column (column_name (any_name a))) , (indexed_column (column_name (any_name b))) )))))",
+    );
 }
 
 #[TODO]
 test "oracle: SELECT a + b * c FROM t" {
-    assert_tree(&"SELECT a + b * c FROM t", &"(parse (sql_stmt_list (sql_stmt (factored_select_stmt (select_core SELECT (result_column (expr (expr (column_name (any_name a))) + (expr (expr (column_name (any_name b))) * (expr (column_name (any_name c)))))) FROM (table_or_subquery (table_name (any_name t))))))))");
+    assert_tree(
+        &"SELECT a + b * c FROM t",
+        &"(parse (sql_stmt_list (sql_stmt (factored_select_stmt (select_core SELECT (result_column (expr (expr (column_name (any_name a))) + (expr (expr (column_name (any_name b))) * (expr (column_name (any_name c)))))) FROM (table_or_subquery (table_name (any_name t))))))))",
+    );
 }
-

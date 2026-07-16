@@ -29,7 +29,9 @@ fn gen_rust() -> i32 {
 test "smoke" {
     // A tiny grammar keeps this in the test world's timeout; the full Rust
     // generation is `run()`'s workload, too slow under the debug allocator.
-    let inputs: List<[String, String]> = [["G.g4", "grammar G; r : 'a' ;"]];
+    let inputs: List<[String, String]> = [
+        ["G.g4", "grammar G; r : 'a' ;"],
+    ];
     let mut g = match assemble_grammar(&inputs) {
         Ok(g) => g,
         Err(_) => panic("smoke: assemble_grammar failed"),

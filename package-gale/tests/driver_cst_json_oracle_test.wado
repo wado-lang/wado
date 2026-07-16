@@ -28,7 +28,10 @@ test "oracle: [1, 2, 3]" {
 }
 
 test "oracle: {x: {y: [true, false, null]}}" {
-    assert_tree(&"{\"x\": {\"y\": [true, false, null]}}", &"(json (value (obj { (pair \"x\" : (value (obj { (pair \"y\" : (value (arr [ (value true) , (value false) , (value null) ]))) }))) })))");
+    assert_tree(
+        &"{\"x\": {\"y\": [true, false, null]}}",
+        &"(json (value (obj { (pair \"x\" : (value (obj { (pair \"y\" : (value (arr [ (value true) , (value false) , (value null) ]))) }))) })))",
+    );
 }
 
 test "oracle: hello" {
@@ -44,7 +47,10 @@ test "oracle: -3.14" {
 }
 
 test "oracle: {emptyArr: [], emptyObj: {}}" {
-    assert_tree(&"{\"emptyArr\": [], \"emptyObj\": {}}", &"(json (value (obj { (pair \"emptyArr\" : (value (arr [ ]))) , (pair \"emptyObj\" : (value (obj { }))) })))");
+    assert_tree(
+        &"{\"emptyArr\": [], \"emptyObj\": {}}",
+        &"(json (value (obj { (pair \"emptyArr\" : (value (arr [ ]))) , (pair \"emptyObj\" : (value (obj { }))) })))",
+    );
 }
 
 test "oracle: [{k: v}]" {
@@ -60,6 +66,8 @@ test "oracle: null" {
 }
 
 test "oracle: {nested: [1, [2, [3]]]}" {
-    assert_tree(&"{\"nested\": [1, [2, [3]]]}", &"(json (value (obj { (pair \"nested\" : (value (arr [ (value 1) , (value (arr [ (value 2) , (value (arr [ (value 3) ])) ])) ]))) })))");
+    assert_tree(
+        &"{\"nested\": [1, [2, [3]]]}",
+        &"(json (value (obj { (pair \"nested\" : (value (arr [ (value 1) , (value (arr [ (value 2) , (value (arr [ (value 3) ])) ])) ]))) })))",
+    );
 }
-
