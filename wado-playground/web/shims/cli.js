@@ -1,16 +1,11 @@
-// Browser WASI P3 CLI shim for jco-transpiled Wado programs.
+// Browser WASI P3 CLI shim: bytes from `_jcoStreamWriteHook` are decoded and
+// delivered to `globalThis._wadoWrite(kind, text)`.
 //
-// stdout/stderr bytes captured via `_jcoStreamWriteHook` are decoded and
-// delivered to `globalThis._wadoWrite(kind, text)` (kind = "stdout" | "stderr").
-//
-// jco's write hook identifies a stream only by its writable-end index, and jco
-// recycles those indices once a stream is dropped — so a permanent
-// index→target map mis-routes a later stream that reuses an old index (this is
-// how stderr bytes leaked into stdout). We instead track the most recently
-// opened stream: `println`/`eprintln` open a stream, write, and drop it, so the
-// last `writeViaStream` before a write is always the right target. Each open
-// gets its own `TextDecoder`, so a multi-byte glyph split across writes on one
-// stream decodes intact and never bleeds into the other stream.
+// jco identifies a write only by a writable-end index and recycles those, so a
+// permanent index→target map mis-routes (stderr leaked into stdout). We target
+// the most recently opened stream instead — `println`/`eprintln` open, write,
+// and drop, so the last `writeViaStream` is the right target. Each open gets its
+// own `TextDecoder`, so multi-byte glyphs don't corrupt or cross streams.
 
 function _sink(kind) {
   const decoder = new TextDecoder();

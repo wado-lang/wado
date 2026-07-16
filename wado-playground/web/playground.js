@@ -1,10 +1,8 @@
-// Fully client-side Wado playground: compile Wado source to a component with
-// the wasm-sandboxed Wado compiler, transpile that component to JS with jco
-// (also wasm, in-browser), then import and run the result — all in the browser.
+// Client-side Wado playground: compile → transpile (jco) → import and run, all
+// in the browser. See README.md for the pipeline.
 
 import { transpileBytes } from "./vendor/jco-transpile.browser.js";
-// Same P3-runtime re-injection the Node pipeline uses; staged by build.sh so
-// the browser and Node paths share one source of truth (no drift on jco bumps).
+// Shared with the Node pipeline (staged by build.sh) to avoid drift on jco bumps.
 import { postprocess } from "./vendor/postprocess.js";
 
 const BASE = new URL(".", import.meta.url);
@@ -28,8 +26,7 @@ export async function compile(source) {
   const inPtr = wado_alloc(src.length);
   new Uint8Array(memory.buffer, inPtr, src.length).set(src);
 
-  // wado_compile consumes (frees) the input buffer and returns a result buffer
-  // we own: [status:u32][len:u32][payload…]. Copy the payload out, then free it.
+  // wado_compile frees inPtr and returns an owned result buffer; copy, then free.
   const outPtr = wado_compile(inPtr, src.length);
   const header = new DataView(memory.buffer, outPtr, 8);
   const status = header.getUint32(0, true);

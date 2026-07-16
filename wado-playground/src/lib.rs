@@ -1,19 +1,13 @@
 //! wasm32 wrapper exposing the Wado compiler for an in-browser playground.
 //!
-//! The C ABI is intentionally minimal so the browser side can drive it with
-//! plain `WebAssembly` (no wasm-bindgen runtime):
+//! Minimal C ABI so the browser can drive it with plain `WebAssembly` (no
+//! wasm-bindgen):
 //!
-//! - `wado_alloc(len)` reserves `len` bytes the host fills with UTF-8 source.
-//! - `wado_compile(ptr, len)` compiles that source and returns a pointer to a
-//!   result buffer laid out as `[status:u32 LE][len:u32 LE][payload…]`.
-//!   `status == 1`: payload is the component Wasm. `status == 0`: payload is
-//!   UTF-8 diagnostics text. It **consumes** the input buffer (frees it), so
-//!   the host must not reuse `ptr` afterwards.
-//! - `wado_free(ptr, len)` releases a buffer. The host calls it on the result
-//!   pointer (with `len == 8 + payload_len`) once it has copied the bytes out.
-//!
-//! Every buffer is allocated with an exact `[u8; len]` layout and freed with
-//! the same layout, so alloc/dealloc always agree (no `Vec` capacity slack).
+//! - `wado_alloc(len)` reserves `len` bytes for the host to fill with UTF-8 source.
+//! - `wado_compile(ptr, len)` compiles it, freeing the input buffer, and returns
+//!   an owned result buffer `[status:u32 LE][len:u32 LE][payload…]` — `status 1`
+//!   payload is the component Wasm, `status 0` payload is UTF-8 diagnostics.
+//! - `wado_free(ptr, len)` releases a buffer (result buffers: `len == 8 + payload`).
 
 use std::alloc::{Layout, alloc, dealloc};
 use std::future::Future;
@@ -76,8 +70,7 @@ pub unsafe extern "C" fn wado_compile(ptr: *mut u8, len: usize) -> *const u8 {
     }
 }
 
-/// Allocate a result buffer `[status:u32 LE][len:u32 LE][payload…]` and return
-/// it for the host to read and then release with [`wado_free`].
+/// Allocate and fill an owned `[status:u32 LE][len:u32 LE][payload…]` buffer.
 fn encode(status: u32, payload: &[u8]) -> *const u8 {
     let total = 8 + payload.len();
     let out = wado_alloc(total);
@@ -90,10 +83,9 @@ fn encode(status: u32, payload: &[u8]) -> *const u8 {
     out
 }
 
-/// Drive a future to completion. `InMemoryCompilerHost` never truly suspends
-/// (every `load_source` resolves immediately), so the noop waker suffices; a
-/// `Pending` would mean that invariant broke, so fail loudly instead of
-/// spinning forever.
+/// Poll a future to completion. `InMemoryCompilerHost` resolves every
+/// `load_source` immediately, so one poll suffices; a `Pending` means that
+/// invariant broke — panic rather than spin forever.
 fn block_on<F: Future>(fut: F) -> F::Output {
     let waker = Waker::noop();
     let mut cx = Context::from_waker(waker);

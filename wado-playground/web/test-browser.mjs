@@ -48,9 +48,9 @@ const CASES = [
     expect: "sum=5050 pi=3.14",
   },
   {
-    // Exercises the cli.js FIFO sink attribution + per-stream decoders: a
-    // program that opens both stdout and stderr must not cross its channels,
-    // and a multi-byte (non-ASCII) glyph must decode intact.
+    // Exercises cli.js stream routing + per-stream decoders: writing to both
+    // stdout and stderr must not cross channels, and a multi-byte glyph must
+    // decode intact.
     name: "stdout+stderr+utf8",
     src: `use { println, eprintln, Stdout, Stderr } from "core:cli";\n\nexport fn run() with Stdout, Stderr {\n    println("out: café ☕");\n    eprintln("err: naïve");\n}\n`,
     expect: "out: café ☕",
