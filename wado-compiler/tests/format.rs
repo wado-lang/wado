@@ -831,6 +831,50 @@ impl Container for Foo {
 }
 
 #[test]
+fn test_format_preserves_trait_assoc_type_leading_comment() {
+    // Regression (#1598): a doc comment on a trait's associated-type
+    // declaration must be preserved, not dropped (fail-closed).
+    let source = r"trait Foo {
+    /// The item type.
+    type Item;
+
+    /// Get the item.
+    fn get(&self) -> Self::Item;
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(
+        formatted, source,
+        "trait assoc-type doc comment should round-trip"
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "should be idempotent");
+}
+
+#[test]
+fn test_format_preserves_trait_doc_before_attributed_member() {
+    // Regression (#1598): a doc comment immediately before a member carrying
+    // an attribute must stay attached — no blank line inserted between the
+    // doc comment and the attribute, and the output must be idempotent.
+    let source = r#"trait Reflect {
+    /// The field types as a tuple.
+    type Fields;
+
+    /// Returns the field values.
+    #[compiler_item("reflect_fields")]
+    fn fields(&self) -> Self::Fields;
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(
+        formatted, source,
+        "trait doc-before-attribute should round-trip"
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "should be idempotent");
+}
+
+#[test]
 fn test_format_comment_inside_nested_block() {
     let source = r"fn run() {
     if true {
