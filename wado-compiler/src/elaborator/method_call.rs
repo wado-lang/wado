@@ -2206,12 +2206,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Auto-derived `Reflect` static metadata return types.
-        if (method_name == "field_names" || method_name == "type_name")
+        let (reflect_field_names, reflect_type_name) = self.reflect_static_method_names();
+        if (method_name == reflect_field_names || method_name == reflect_type_name)
             && self.type_lookup().struct_fields(struct_name).is_some()
         {
             let mut tt = self.tysys.type_table.borrow_mut();
             let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
-            return if method_name == "type_name" {
+            return if method_name == reflect_type_name {
                 string_type
             } else {
                 tt.make_list(string_type)
@@ -2977,7 +2978,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Auto-derived `Reflect` static metadata: `S::field_names()` /
         // `S::type_name()` for any struct. The body is emitted by
         // `synthesis::traits`.
-        if (method_name == "field_names" || method_name == "type_name")
+        let (reflect_field_names, reflect_type_name) = self.reflect_static_method_names();
+        if (method_name == reflect_field_names || method_name == reflect_type_name)
             && self.type_lookup().struct_fields(struct_name).is_some()
         {
             let reflect_trait_name = self
@@ -3004,6 +3006,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         None
+    }
+
+    /// The auto-derived `Reflect::field_names` / `Reflect::type_name` method
+    /// names, resolved from the compiler-item registry so a stdlib rename flows
+    /// through instead of being hard-coded at each dispatch site.
+    fn reflect_static_method_names(&self) -> (String, String) {
+        let tt = self.tysys.type_table.borrow();
+        let items = tt.compiler_items();
+        (
+            items
+                .method_name(crate::compiler_item::CompilerItem::ReflectFieldNames)
+                .to_string(),
+            items
+                .method_name(crate::compiler_item::CompilerItem::ReflectTypeName)
+                .to_string(),
+        )
     }
 
     /// Get the operator trait and method name for a binary operator.
@@ -3090,7 +3108,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Auto-derived `Reflect` static metadata: `field_names` / `type_name`
         // on any struct.
-        if (method_name == "field_names" || method_name == "type_name")
+        let (reflect_field_names, reflect_type_name) = self.reflect_static_method_names();
+        if (method_name == reflect_field_names || method_name == reflect_type_name)
             && self.type_lookup().struct_fields(struct_name).is_some()
         {
             return true;

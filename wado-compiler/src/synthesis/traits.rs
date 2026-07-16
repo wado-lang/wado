@@ -488,19 +488,28 @@ fn generate_struct_reflect_impls(
         })
         .collect();
 
-    let (string_type, list_string_type, string_type_name, from_tuple) = {
+    let (string_type, list_string_type, string_type_name, from_tuple, type_name_method, field_names_method) = {
         let mut tt = module.type_table.borrow_mut();
         let string_type = tt.make_compiler_struct(CompilerItem::String);
         let list_string_type = tt.make_list(string_type);
         let string_type_name = tt.mangle_type_name(string_type);
-        let (module_source, owner, name) =
-            tt.compiler_items().require_method(CompilerItem::ListFromTuple);
+        let items = tt.compiler_items();
+        let (module_source, owner, name) = items.require_method(CompilerItem::ListFromTuple);
         let from_tuple = FromTupleItem {
             module_source: module_source.clone(),
             owner: owner.to_string(),
             name: name.to_string(),
         };
-        (string_type, list_string_type, string_type_name, from_tuple)
+        let type_name_method = items.method_name(CompilerItem::ReflectTypeName).to_string();
+        let field_names_method = items.method_name(CompilerItem::ReflectFieldNames).to_string();
+        (
+            string_type,
+            list_string_type,
+            string_type_name,
+            from_tuple,
+            type_name_method,
+            field_names_method,
+        )
     };
 
     let mut generated = Vec::new();
@@ -508,8 +517,13 @@ fn generate_struct_reflect_impls(
         if !ctx.should_synthesize(name, reflect_trait_name) {
             continue;
         }
-        let type_name_fn =
-            generate_struct_type_name_fn(name, string_type, reflect_trait_name, *span);
+        let type_name_fn = generate_struct_type_name_fn(
+            name,
+            string_type,
+            reflect_trait_name,
+            &type_name_method,
+            *span,
+        );
         let field_names_fn = {
             let mut tt = module.type_table.borrow_mut();
             let tuple_type =
@@ -524,6 +538,7 @@ fn generate_struct_reflect_impls(
                 reflect_trait_name,
                 &string_type_name,
                 &from_tuple,
+                &field_names_method,
                 *span,
             )
         };
@@ -558,9 +573,10 @@ fn generate_struct_field_names_fn(
     reflect_trait_name: &str,
     string_type_name: &str,
     from_tuple_item: &FromTupleItem,
+    field_names_method: &str,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(struct_name, reflect_trait_name, "field_names");
+    let method_info = trait_method_info(struct_name, reflect_trait_name, field_names_method);
     let qualified_name = method_info.to_mangled_name();
 
     let elements = field_names
@@ -614,9 +630,10 @@ fn generate_struct_type_name_fn(
     struct_name: &str,
     string_type: TypeId,
     reflect_trait_name: &str,
+    type_name_method: &str,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(struct_name, reflect_trait_name, "type_name");
+    let method_info = trait_method_info(struct_name, reflect_trait_name, type_name_method);
     let qualified_name = method_info.to_mangled_name();
 
     let literal = TirExpr::new(

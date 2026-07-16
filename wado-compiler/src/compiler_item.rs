@@ -267,6 +267,12 @@ pub enum CompilerItem {
     /// `List::from_tuple` — collects a homogeneous tuple into a `List<T>`;
     /// synthesized `Reflect::field_names` calls it.
     ListFromTuple,
+    /// `Reflect::fields` — the per-struct field-value tuple projection.
+    ReflectFields,
+    /// `Reflect::field_names` — the per-struct source-name list.
+    ReflectFieldNames,
+    /// `Reflect::type_name` — the per-struct type name.
+    ReflectTypeName,
     /// `String::push_str` — recognised by the WIR optimiser for
     /// string-building inlining.
     StringPushStr,
@@ -455,6 +461,9 @@ impl CompilerItem {
         Self::AlignmentRight,
         Self::ListPush,
         Self::ListFromTuple,
+        Self::ReflectFields,
+        Self::ReflectFieldNames,
+        Self::ReflectTypeName,
         Self::StringPushStr,
         Self::StringPushChar,
         Self::StringGetByteUnchecked,
@@ -573,6 +582,9 @@ impl CompilerItem {
             Self::AlignmentRight => "alignment_right",
             Self::ListPush => "list_push",
             Self::ListFromTuple => "list_from_tuple",
+            Self::ReflectFields => "reflect_fields",
+            Self::ReflectFieldNames => "reflect_field_names",
+            Self::ReflectTypeName => "reflect_type_name",
             Self::StringPushStr => "string_push_str",
             Self::StringPushChar => "string_push_char",
             Self::StringGetByteUnchecked => "string_get_byte_unchecked",
@@ -663,6 +675,9 @@ impl CompilerItem {
             | Self::From
             | Self::ListPush
             | Self::ListFromTuple
+            | Self::ReflectFields
+            | Self::ReflectFieldNames
+            | Self::ReflectTypeName
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringGetByteUnchecked
@@ -816,6 +831,9 @@ impl CompilerItem {
             | Self::UpperExp => CompilerItemKind::Trait,
             Self::ListPush
             | Self::ListFromTuple
+            | Self::ReflectFields
+            | Self::ReflectFieldNames
+            | Self::ReflectTypeName
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringGetByteUnchecked
