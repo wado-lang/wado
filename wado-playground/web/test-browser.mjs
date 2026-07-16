@@ -31,6 +31,7 @@ function chromePath() {
 const MIME = {
   ".html": "text/html",
   ".js": "text/javascript",
+  ".mjs": "text/javascript",
   ".wasm": "application/wasm",
   ".json": "application/json",
 };
@@ -45,6 +46,15 @@ const CASES = [
     name: "compute+float",
     src: `use { println, Stdout } from "core:cli";\n\nexport fn run() with Stdout {\n    let mut s = 0;\n    let mut i = 1;\n    while i <= 100 { s = s + i; i = i + 1; }\n    println(\`sum={s} pi={355.0 / 113.0}\`);\n}\n`,
     expect: "sum=5050 pi=3.14",
+  },
+  {
+    // Exercises the cli.js FIFO sink attribution + per-stream decoders: a
+    // program that opens both stdout and stderr must not cross its channels,
+    // and a multi-byte (non-ASCII) glyph must decode intact.
+    name: "stdout+stderr+utf8",
+    src: `use { println, eprintln, Stdout, Stderr } from "core:cli";\n\nexport fn run() with Stdout, Stderr {\n    println("out: café ☕");\n    eprintln("err: naïve");\n}\n`,
+    expect: "out: café ☕",
+    expectStderr: "err: naïve",
   },
 ];
 
@@ -76,8 +86,13 @@ try {
         return { ok: false, error: String(e?.stack ?? e) };
       }
     }, c.src);
-    const pass = r.ok && r.stdout.includes(c.expect);
-    console.log(`${pass ? "✅" : "❌"} ${c.name}: ${JSON.stringify(r.stdout ?? r.error)}`);
+    const pass =
+      r.ok &&
+      r.stdout.includes(c.expect) &&
+      (c.expectStderr === undefined
+        ? true
+        : r.stderr.includes(c.expectStderr) && !r.stdout.includes(c.expectStderr));
+    console.log(`${pass ? "✅" : "❌"} ${c.name}: ${JSON.stringify(r.ok ? { stdout: r.stdout, stderr: r.stderr } : r.error)}`);
     if (!pass) failed++;
   }
 } finally {

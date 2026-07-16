@@ -1,34 +1,32 @@
 // Browser WASI P3 CLI shim for jco-transpiled Wado programs.
 //
-// Mirrors example/jco-shim/cli.js but targets the browser: stdout/stderr bytes
-// captured via `_jcoStreamWriteHook` are decoded and delivered to
-// `globalThis._wadoWrite(kind, text)` (kind = "stdout" | "stderr") instead of
-// Node's process streams.
-
-const _decoder = new TextDecoder();
+// stdout/stderr bytes captured via `_jcoStreamWriteHook` are decoded and
+// delivered to `globalThis._wadoWrite(kind, text)` (kind = "stdout" | "stderr").
+//
+// jco's write hook identifies a stream only by its writable-end index, and jco
+// recycles those indices once a stream is dropped — so a permanent
+// index→target map mis-routes a later stream that reuses an old index (this is
+// how stderr bytes leaked into stdout). We instead track the most recently
+// opened stream: `println`/`eprintln` open a stream, write, and drop it, so the
+// last `writeViaStream` before a write is always the right target. Each open
+// gets its own `TextDecoder`, so a multi-byte glyph split across writes on one
+// stream decodes intact and never bleeds into the other stream.
 
 function _sink(kind) {
+  const decoder = new TextDecoder();
   return {
     write(data) {
-      const text = _decoder.decode(data, { stream: true });
-      if (typeof globalThis._wadoWrite === "function") globalThis._wadoWrite(kind, text);
+      const text = decoder.decode(data, { stream: true });
+      if (text && typeof globalThis._wadoWrite === "function") globalThis._wadoWrite(kind, text);
     },
   };
 }
 
-const _streamTargets = new Map();
-let _defaultTarget = _sink("stdout");
+let _current = _sink("stdout");
 
-globalThis._jcoStreamWriteHook = (writableEndIdx, data) => {
-  if (!_streamTargets.has(writableEndIdx) && _defaultTarget) {
-    _streamTargets.set(writableEndIdx, _defaultTarget);
-  }
-  const target = _streamTargets.get(writableEndIdx);
-  if (target) {
-    target.write(data);
-    return true;
-  }
-  return false;
+globalThis._jcoStreamWriteHook = (_writableEndIdx, data) => {
+  _current.write(data);
+  return true;
 };
 
 export const types = {
@@ -37,7 +35,7 @@ export const types = {
 
 export const stdout = {
   writeViaStream(_stream) {
-    _defaultTarget = _sink("stdout");
+    _current = _sink("stdout");
     return Promise.resolve({ tag: "ok" });
   },
 };
@@ -45,7 +43,7 @@ stdout.writeViaStream._isHostProvided = true;
 
 export const stderr = {
   writeViaStream(_stream) {
-    _defaultTarget = _sink("stderr");
+    _current = _sink("stderr");
     return Promise.resolve({ tag: "ok" });
   },
 };
