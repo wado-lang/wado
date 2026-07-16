@@ -436,7 +436,9 @@ fn generate_import_adapters(project: &mut Package) {
 
     // Rewrite effect-like call nodes to target adapters. Call sites
     // are keyed by qualified `interface::method` name, exactly how
-    // `adapters` is keyed.
+    // `adapters` is keyed. `applied_returns` spans all modules so call
+    // sites that disagree on a shared adapter's return type are caught.
+    let mut applied_returns: IndexMap<String, TypeId> = IndexMap::default();
     for module in project.tir_modules.values() {
         for func_rc in &module.functions {
             let mut func = func_rc.borrow_mut();
@@ -447,6 +449,7 @@ fn generate_import_adapters(project: &mut Package) {
                     &entry_source,
                     &project.cm_interface_registry,
                     &entry_type_table,
+                    &mut applied_returns,
                 );
             }
             // Sync locals with any Let stmts that were updated by the rewrite

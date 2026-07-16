@@ -658,8 +658,9 @@ fn assign_flat_values_into_slots(
         lowered.len(),
         slot_locals.len(),
     );
-    for (flat_val, (&(slot_local, ref slot_name), &slot_vt)) in
-        lowered.iter().zip(slot_locals.iter().zip(slot_types.iter()))
+    for (flat_val, (&(slot_local, ref slot_name), &slot_vt)) in lowered
+        .iter()
+        .zip(slot_locals.iter().zip(slot_types.iter()))
     {
         let slot_type_id = cm_val_type_to_type_id(slot_vt);
         let source_type_id = cm_val_type_to_type_id(flat_val.cm_type);

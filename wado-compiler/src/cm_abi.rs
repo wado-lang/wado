@@ -306,9 +306,7 @@ pub fn variant_payload_offset_with_registry_scoped<'a>(
     wasi_package: Option<&str>,
 ) -> u32 {
     let max_payload_align = payloads
-        .map(|ty| {
-            crate::component_model::cm_align_with_registry_scoped(ty, registry, wasi_package)
-        })
+        .map(|ty| crate::component_model::cm_align_with_registry_scoped(ty, registry, wasi_package))
         .max()
         .unwrap_or(1);
     align_to(1, max_payload_align)

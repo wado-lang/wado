@@ -9,6 +9,15 @@
 //! [`fixup_wasi_derived_types_in_adapter`] to re-type the binding body.
 //! [`collect_effect_calls_in_block`] is the discovery pass that drives
 //! the same set of call sites for adapter generation.
+//!
+//! Design invariant: one binding function is shared by every call site of
+//! its import, so all sites must agree on the types the fixup applies. The
+//! rewrite records each adapter's applied return type and turns a
+//! disagreeing site into an ICE (see
+//! `fixup_adapter_return_from_call_site`) instead of silently overwriting
+//! an earlier site's typing. The longer-term direction is to synthesize
+//! bindings with call-site types up front and retire this pass; until
+//! then, the invariant is enforced, not assumed.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -602,26 +611,32 @@ pub(super) fn rewrite_calls_in_block(
     entry_source: &ModuleSource,
     cm_interface_registry: &CmInterfaceRegistry,
     type_table: &Rc<RefCell<TypeTable>>,
+    applied_returns: &mut IndexMap<String, TypeId>,
 ) {
     CallRewriteWalker {
         adapters,
         entry_source,
         cm_interface_registry,
         type_table,
+        applied_returns,
     }
     .visit_block(block);
 }
 
 /// Drives the exhaustive block / statement / generic-expression traversal for
-/// [`rewrite_calls_in_expr`]. The per-node rewrite logic (effect calls,
-/// resource methods, resource statics) lives in `rewrite_calls_in_expr`, which
-/// this walker re-enters via `visit_expr`; the walker supplies only the shared
-/// traversal plus the `Let` type-sync and the defensive `TaskReturn` descent.
+/// [`Self::rewrite_expr`]. The per-node rewrite logic (effect calls,
+/// resource methods, resource statics) lives in `rewrite_expr`, which
+/// this walker re-enters via `visit_expr`; the walker supplies the shared
+/// traversal plus the `Let` type-sync, the defensive `TaskReturn` descent,
+/// and `applied_returns` — the per-run record of which call-site return type
+/// each shared adapter was retyped to, so a second call site that disagrees
+/// is an ICE instead of a silent last-write-wins overwrite.
 struct CallRewriteWalker<'a> {
     adapters: &'a IndexMap<String, Rc<RefCell<TirFunction>>>,
     entry_source: &'a ModuleSource,
     cm_interface_registry: &'a CmInterfaceRegistry,
     type_table: &'a Rc<RefCell<TypeTable>>,
+    applied_returns: &'a mut IndexMap<String, TypeId>,
 }
 
 impl TirMutVisitor for CallRewriteWalker<'_> {
@@ -650,6 +665,7 @@ impl TirMutVisitor for CallRewriteWalker<'_> {
             self.entry_source,
             self.cm_interface_registry,
             self.type_table,
+            self.applied_returns,
         );
     }
 }
@@ -657,12 +673,35 @@ impl TirMutVisitor for CallRewriteWalker<'_> {
 /// Retype a shared adapter's return from a call site. Streaming adapters keep
 /// their WIR-level i32 return (the caller-visible `Future` type stays on the
 /// call expression), so they are left untouched.
+///
+/// The adapter is shared by every call site of the import, so all sites must
+/// agree on its return type; `applied_returns` records what each adapter was
+/// typed to, and a disagreeing site is an ICE rather than a silent
+/// last-write-wins overwrite of the earlier site's typing.
 fn fixup_adapter_return_from_call_site(
     adapter: &mut TirFunction,
     call_site_type: TypeId,
     is_streaming: bool,
+    type_table: &RefCell<TypeTable>,
+    applied_returns: &mut IndexMap<String, TypeId>,
 ) {
-    if is_streaming || adapter.return_type == call_site_type {
+    if is_streaming {
+        return;
+    }
+    if let Some(&prev) = applied_returns.get(&adapter.name)
+        && prev != call_site_type
+    {
+        let tt = type_table.borrow();
+        panic!(
+            "call sites disagree on the return type of shared CM binding `{}`: \
+             `{}` vs `{}`; one binding cannot satisfy both",
+            adapter.name,
+            tt.type_name(prev),
+            tt.type_name(call_site_type)
+        );
+    }
+    applied_returns.insert(adapter.name.clone(), call_site_type);
+    if adapter.return_type == call_site_type {
         return;
     }
     let old_return_type = adapter.return_type;
@@ -779,6 +818,7 @@ fn rewrite_calls_in_expr(
     entry_source: &ModuleSource,
     cm_interface_registry: &CmInterfaceRegistry,
     type_table: &Rc<RefCell<TypeTable>>,
+    applied_returns: &mut IndexMap<String, TypeId>,
 ) {
     let names =
         super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
@@ -810,12 +850,22 @@ fn rewrite_calls_in_expr(
             // Fix up binding function types from the call site
             {
                 let mut adapter = adapter_rc.borrow_mut();
-                fixup_adapter_return_from_call_site(&mut adapter, expr.type_id, is_streaming);
+                fixup_adapter_return_from_call_site(
+                    &mut adapter,
+                    expr.type_id,
+                    is_streaming,
+                    type_table,
+                    applied_returns,
+                );
                 let wasi_func = cm_interface_registry.get_function(&qualified);
                 for (i, arg) in args.iter().enumerate() {
                     let is_gc_passthrough = wasi_func.is_some_and(|f| {
                         i < f.params.len()
-                            && is_gc_passthrough_param(&f.params[i].2, cm_interface_registry, &names)
+                            && is_gc_passthrough_param(
+                                &f.params[i].2,
+                                cm_interface_registry,
+                                &names,
+                            )
                     });
                     fixup_adapter_param_from_call_site(
                         &mut adapter,
@@ -856,6 +906,7 @@ fn rewrite_calls_in_expr(
                     entry_source,
                     cm_interface_registry,
                     type_table,
+                    applied_returns,
                 );
             }
             return;
@@ -907,7 +958,13 @@ fn rewrite_calls_in_expr(
             // The binding params include self as the first param
             {
                 let mut adapter = adapter_rc.borrow_mut();
-                fixup_adapter_return_from_call_site(&mut adapter, expr.type_id, is_streaming);
+                fixup_adapter_return_from_call_site(
+                    &mut adapter,
+                    expr.type_id,
+                    is_streaming,
+                    type_table,
+                    applied_returns,
+                );
                 // Self param (index 0): unconditional retype from the receiver.
                 fixup_adapter_param_from_call_site(
                     &mut adapter,
@@ -999,6 +1056,7 @@ fn rewrite_calls_in_expr(
                         entry_source,
                         cm_interface_registry,
                         type_table,
+                        applied_returns,
                     );
                 }
             }
@@ -1028,7 +1086,13 @@ fn rewrite_calls_in_expr(
             // Fix up adapter return type and param types from the call site
             {
                 let mut adapter = adapter_rc.borrow_mut();
-                fixup_adapter_return_from_call_site(&mut adapter, expr.type_id, false);
+                fixup_adapter_return_from_call_site(
+                    &mut adapter,
+                    expr.type_id,
+                    false,
+                    type_table,
+                    applied_returns,
+                );
                 // Fix up adapter param types for GC pass-through params (String,
                 // List<T>) where the binding receives the GC value directly.
                 // Do NOT fix up params that get flattened (Option, resource handles)
@@ -1115,6 +1179,7 @@ fn rewrite_calls_in_expr(
                         entry_source,
                         cm_interface_registry,
                         type_table,
+                        applied_returns,
                     );
                 }
             }
@@ -1130,6 +1195,7 @@ fn rewrite_calls_in_expr(
         entry_source,
         cm_interface_registry,
         type_table,
+        applied_returns,
     }
     .walk_expr(expr);
 }

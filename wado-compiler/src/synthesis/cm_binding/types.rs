@@ -325,7 +325,9 @@ pub fn cm_type_to_type_id(
                     let is_resource = registry
                         .resolve_cm_source_for(named, Some(wasi_package))
                         .is_some_and(|s| {
-                            registry.get_resource_cm_name_by_source(s, &named.name).is_some()
+                            registry
+                                .get_resource_cm_name_by_source(s, &named.name)
+                                .is_some()
                         });
                     if is_resource {
                         TypeTable::I32
@@ -585,11 +587,9 @@ pub(super) fn check_cm_boundary_representable(
             }
             // Scalars, plain discriminants, bitflags, and plain resource
             // handles lower to an i32 handle identically in every world.
-            R::Primitive(_)
-            | R::Unit
-            | R::Enum { .. }
-            | R::Flags { .. }
-            | R::Resource { .. } => Ok(()),
+            R::Primitive(_) | R::Unit | R::Enum { .. } | R::Flags { .. } | R::Resource { .. } => {
+                Ok(())
+            }
             // Stream/Future handles are themselves i32, but their payload is
             // lifted/lowered by value on read/write, so it must be
             // representable (and non-recursive) too.
@@ -986,8 +986,20 @@ fn flatten_export_type_inner(
             out.push(cm_abi::CmValType::I32); // discriminant
             let mut ok_flat = Vec::new();
             let mut err_flat = Vec::new();
-            flatten_export_type_inner(&generic.args[0], &mut ok_flat, tir_modules, type_table, names);
-            flatten_export_type_inner(&generic.args[1], &mut err_flat, tir_modules, type_table, names);
+            flatten_export_type_inner(
+                &generic.args[0],
+                &mut ok_flat,
+                tir_modules,
+                type_table,
+                names,
+            );
+            flatten_export_type_inner(
+                &generic.args[1],
+                &mut err_flat,
+                tir_modules,
+                type_table,
+                names,
+            );
             out.extend(cm_abi::join_flat_unions(&ok_flat, &err_flat));
         }
         // Stream / Future / Own / Borrow and other generics are i32 handles.

@@ -235,7 +235,12 @@ pub(super) fn synthesize_lower_tuple(
         // type lacks args (shouldn't happen for a well-formed tuple value).
         let field_type_id = elem_type_ids.get(i).copied().unwrap_or_else(|| {
             let mut tt = ctx.type_table.borrow_mut();
-            cm_type_to_type_id(elem_ty, &mut tt, ctx.cm_interface_registry, ctx.wasi_package)
+            cm_type_to_type_id(
+                elem_ty,
+                &mut tt,
+                ctx.cm_interface_registry,
+                ctx.wasi_package,
+            )
         });
 
         // Extract the i-th field from the tuple using FieldAccess
@@ -258,12 +263,7 @@ pub(super) fn synthesize_lower_tuple(
         // lists, results, nested tuples) lay out their payload correctly
         // rather than being stored as an opaque i32 GC ref.
         stmts.extend(synthesize_lower_wasi_type_to_memory(
-            elem_ty,
-            field_expr,
-            field_addr,
-            next_local,
-            locals,
-            ctx,
+            elem_ty, field_expr, field_addr, next_local, locals, ctx,
         ));
     }
 
@@ -308,7 +308,9 @@ fn synthesize_lower_variant_to_memory(
     )));
 
     let payload_offset = cm_abi::variant_payload_offset_with_registry_scoped(
-        cases.iter().filter_map(|(_, p)| p.as_ref().map(|(ty, _)| ty)),
+        cases
+            .iter()
+            .filter_map(|(_, p)| p.as_ref().map(|(ty, _)| ty)),
         ctx.cm_interface_registry,
         Some(ctx.wasi_package),
     );
@@ -628,9 +630,7 @@ pub(super) fn synthesize_lower_result_to_memory(
     // disc byte: `variant_test(Err)` → 1 when Err, 0 when Ok. (`variant_tag`,
     // used for registry variants, mis-resolves the generic `Result` struct.)
     let disc_of = move |v: TirExpr| variant_test(v, err_index, &err_name);
-    synthesize_lower_variant_to_memory(
-        value, addr, cases, disc_of, next_local, stmts, locals, ctx,
-    );
+    synthesize_lower_variant_to_memory(value, addr, cases, disc_of, next_local, stmts, locals, ctx);
 }
 
 /// Lower a `List<T>` (GC value) to a CM `list` element buffer in linear memory,
@@ -1085,29 +1085,14 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
         // (e.g. `span: Option<SourceSpan>` on the kiln-host Diagnostic).
         Type::Generic(g) if g.name == names.option && g.args.len() == 1 => {
             synthesize_flatten_option_to_flat_args(
-                &g.args[0],
-                value,
-                prefix,
-                next_local,
-                stmts,
-                locals,
-                flat_args,
-                ctx,
+                &g.args[0], value, prefix, next_local, stmts, locals, flat_args, ctx,
             );
         }
         // The core `Result` is not a CM-registry variant, so it never matches
         // the variant arm above and needs its own flattener.
         Type::Generic(g) if g.name == names.result && g.args.len() == 2 => {
             synthesize_flatten_result_to_flat_args(
-                &g.args[0],
-                &g.args[1],
-                value,
-                prefix,
-                next_local,
-                stmts,
-                locals,
-                flat_args,
-                ctx,
+                &g.args[0], &g.args[1], value, prefix, next_local, stmts, locals, flat_args, ctx,
             );
         }
         // List<T> → (ptr, len): lower into an element buffer, push base/len.
@@ -1184,7 +1169,12 @@ fn synthesize_flatten_tuple_to_flat_args(
     for (i, elem_ty) in elems.iter().enumerate() {
         let elem_type_id = elem_type_ids.get(i).copied().unwrap_or_else(|| {
             let mut tt = ctx.type_table.borrow_mut();
-            cm_type_to_type_id(elem_ty, &mut tt, ctx.cm_interface_registry, ctx.wasi_package)
+            cm_type_to_type_id(
+                elem_ty,
+                &mut tt,
+                ctx.cm_interface_registry,
+                ctx.wasi_package,
+            )
         });
         let elem_expr = field_access(
             local_ref(val_local, &val_name, tuple_type_id),
@@ -1317,7 +1307,12 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
     // `Option<T>` so no wildcard is required.
     let inner_type_id = {
         let mut tt = ctx.type_table.borrow_mut();
-        cm_type_to_type_id(inner_type, &mut tt, ctx.cm_interface_registry, ctx.wasi_package)
+        cm_type_to_type_id(
+            inner_type,
+            &mut tt,
+            ctx.cm_interface_registry,
+            ctx.wasi_package,
+        )
     };
     let payload_binding_local = alloc_local(next_local, locals, inner_type_id);
     let payload_binding_name = format!("__opt_payload_{payload_binding_local}");
@@ -1653,12 +1648,7 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
                         binary_add(addr.clone(), i32_const(offset as i32))
                     };
                     stmts.extend(synthesize_lower_wasi_type_to_memory(
-                        field_ty,
-                        field_expr,
-                        field_addr,
-                        next_local,
-                        locals,
-                        ctx,
+                        field_ty, field_expr, field_addr, next_local, locals, ctx,
                     ));
                 }
                 return stmts;
@@ -1675,14 +1665,7 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
             {
                 let mut stmts = Vec::new();
                 synthesize_lower_wasi_variant_to_memory(
-                    n,
-                    src,
-                    value,
-                    addr,
-                    next_local,
-                    &mut stmts,
-                    locals,
-                    ctx,
+                    n, src, value, addr, next_local, &mut stmts, locals, ctx,
                 );
                 return stmts;
             }
