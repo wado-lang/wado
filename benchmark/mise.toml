@@ -243,7 +243,7 @@ cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 js
 """
 
 [tasks.sqlite-parse]
-description = "Run sqlite-parse benchmark (Gale parser vs sqlparser-rs)"
+description = "Run sqlite-parse benchmark (Gale parser vs sqlparser-rs vs ANTLR4 Java, same SQLite.g4)"
 run = """
 #!/usr/bin/env bash
 set -e
@@ -253,6 +253,9 @@ cargo build --release --manifest-path sqlite_parse/Cargo.toml --quiet
 
 echo "=== Rust sqlparser-rs ==="
 ./sqlite_parse/target/release/sqlite_parse_bench
+
+echo "=== ANTLR4 (Java, generated from the same SQLite.g4) ==="
+node sqlite_parse/antlr4_java_bench.mjs
 
 echo "=== Wado (Gale) ==="
 cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 sqlite_parse/sqlite_parse.wado
@@ -280,6 +283,19 @@ echo "=== Wado (Gale) ==="
 cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 syntax_highlight/syntax_highlight.wado
 """
 
+[tasks.gale-gen]
+description = "Run gale-gen benchmark (Gale generator vs ANTLR4 over the same .g4)"
+run = """
+#!/usr/bin/env bash
+set -e
+
+echo "=== ANTLR4 (generate, same RustLexer.g4 + RustParser.g4) ==="
+node gale_gen/antlr4_gen.mjs
+
+echo "=== Wado (Gale generator, Rust grammar) ==="
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 gale_gen/gale_gen.wado
+"""
+
 [tasks.http-routing]
 description = "Run HTTP routing benchmark (wado serve vs Hono on Node.js and Bun vs Axum)"
 run = "./http_routing/bench.sh"
@@ -303,6 +319,7 @@ MISE_JOBS=1 mise run zlib
 # parsing
 MISE_JOBS=1 mise run sqlite-parse
 MISE_JOBS=1 mise run syntax-highlight
+MISE_JOBS=1 mise run gale-gen
 """
 
 [tasks.clean]
