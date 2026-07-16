@@ -8,7 +8,6 @@ use crate::nir_package::NirPackage;
 use crate::wir::WirPackage;
 
 mod calls;
-mod canonical_abi;
 pub mod component_imports;
 pub mod component_plan;
 mod context;

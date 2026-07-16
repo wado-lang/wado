@@ -878,8 +878,8 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
     synthesize_future_reads(&mut project);
 
     // ---- Future Write Adapters ----
-    // Generate `__cm_future_write_<T>` binding functions for aggregate
-    // `FutureWritable<T>::write()`. Must run before rewrite_cm_resource_methods.
+    // Generate `__cm_future_write_<T>` binding functions for `FutureWritable<T>::write()`.
+    // Must run before rewrite_cm_resource_methods.
     synthesize_future_writes(&mut project);
 
     // ---- Stream Write Adapters ----
