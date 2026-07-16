@@ -12,17 +12,23 @@ export class WadoLsp {
     this.exited = false;
 
     this.ready = new Promise((resolve, reject) => {
+      const die = (reason) => {
+        reject(new Error(reason));
+        this.fail(reason);
+      };
       this.worker.onmessage = (e) => {
         const { type, msg, text, code } = e.data;
         if (type === "ready") resolve();
         else if (type === "message") this.dispatch(msg);
         else if (type === "stderr") console.warn("[wado-lsp]", text);
-        else if (type === "exit") this.fail(`wado-lsp exited with code ${code}`);
-        else if (type === "error") {
-          reject(new Error(text));
-          this.fail(text);
-        }
+        else if (type === "exit") die(`wado-lsp exited with code ${code}`);
+        else if (type === "error") die(text);
       };
+      // A worker that fails to load/parse (bad URL, import error) fires
+      // `onerror` and never posts a message; reject `ready` so the page
+      // surfaces the failure instead of hanging.
+      this.worker.onerror = (e) =>
+        die(`wado-lsp worker failed to load: ${e.message || e.filename || "unknown error"}`);
     });
   }
 

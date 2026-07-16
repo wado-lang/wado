@@ -22,15 +22,11 @@ const bytes = () => new Uint8Array(memory.buffer);
 // --- stdin: queued frames + a waiter resolved on arrival ---
 
 const stdinChunks = [];
-let stdinWaiter = null;
+const stdinWaiters = [];
 
 function pushStdin(chunk) {
   stdinChunks.push(chunk);
-  if (stdinWaiter) {
-    const wake = stdinWaiter;
-    stdinWaiter = null;
-    wake();
-  }
+  while (stdinWaiters.length > 0) stdinWaiters.shift()();
 }
 
 self.onmessage = (e) => {
@@ -46,7 +42,7 @@ self.onmessage = (e) => {
 
 async function readStdin(iovsPtr, iovsLen, nreadPtr) {
   while (stdinChunks.length === 0) {
-    await new Promise((resolve) => (stdinWaiter = resolve));
+    await new Promise((resolve) => stdinWaiters.push(resolve));
   }
   const dv = view();
   let nread = 0;

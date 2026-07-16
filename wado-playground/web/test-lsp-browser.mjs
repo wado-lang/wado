@@ -112,12 +112,23 @@ try {
       const fixedDiags = await diagsPromise;
 
       lsp.dispose();
+
+      // A worker that fails to load must reject initialize(), not hang.
+      let badError = null;
+      try {
+        const bad = new WadoLsp(new URL("./does-not-exist-worker.js", location.href));
+        await Promise.race([bad.initialize(), timeout(15000, "bad-worker initialize")]);
+      } catch (e) {
+        badError = String(e?.message ?? e);
+      }
+
       return {
         serverName: init?.serverInfo?.name,
         brokenCount: brokenDiags.diagnostics.length,
         firstMessage: brokenDiags.diagnostics[0]?.message ?? "",
         hoverText: JSON.stringify(hover?.contents ?? null),
         fixedCount: fixedDiags.diagnostics.length,
+        badError,
       };
     },
     { broken: BROKEN, fixed: FIXED },
@@ -131,6 +142,11 @@ try {
   );
   check("hover on println", r.hoverText.includes("println"), r.hoverText);
   check("diagnostics cleared after fix", r.fixedCount === 0, `${r.fixedCount} diagnostic(s)`);
+  check(
+    "bad worker rejects (no hang)",
+    Boolean(r.badError) && !r.badError.startsWith("timeout:"),
+    r.badError ?? "did not reject",
+  );
 } catch (e) {
   check("lsp round-trip", false, String(e?.stack ?? e));
 } finally {
