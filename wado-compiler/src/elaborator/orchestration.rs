@@ -855,8 +855,29 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 &invocations,
             )
         };
-        for violation in orphan_violations {
-            let _ = logger.error(violation);
+        // These diagnostics are raised at the phase boundary (before the
+        // per-module resolution loop establishes a file context), and each
+        // `TypeError` carries only a bare `Span` with no owning-module
+        // identity. Derive the file from the offending impl block's `AstId`
+        // via the `AstIdSpace → ModuleSource` registry — the same mapping
+        // `Semantics::module_of_id` uses — so the printer attributes the
+        // location to the user's file instead of a stdlib module (#1596).
+        let space_modules: IndexMap<crate::ast::AstIdSpace, &ModuleSource> = modules
+            .iter()
+            .map(|(ms, m)| (m.ast_id_space(), ms))
+            .collect();
+        let emit_phase_diagnostic = |id: crate::ast::AstId, err: TypeError| {
+            let mut diag: crate::compiler_host::Diagnostic = err.into();
+            if let Some(module_source) = space_modules.get(&id.space())
+                && let Some(span) = diag.span.as_mut()
+                && span.file.is_empty()
+            {
+                span.file = module_source.source_path();
+            }
+            let _ = logger.error(diag);
+        };
+        for (id, violation) in orphan_violations {
+            emit_phase_diagnostic(id, violation);
         }
 
         // Seal `Reflect`: compiler-synthesized, it may not be implemented in
@@ -887,10 +908,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             && let Some(trait_type) = &impl_block.trait_type
                             && super::trait_env::get_type_name_static(trait_type) == reflect_name
                         {
-                            let _ = logger.error(TypeError::SealedTraitImpl {
-                                trait_name: reflect_name.clone(),
-                                span: impl_block.span,
-                            });
+                            // Same phase-boundary file attribution as the
+                            // orphan/coherence diagnostics above (#1596).
+                            emit_phase_diagnostic(
+                                impl_block.id,
+                                TypeError::SealedTraitImpl {
+                                    trait_name: reflect_name.clone(),
+                                    span: impl_block.span,
+                                },
+                            );
                         }
                     }
                 }

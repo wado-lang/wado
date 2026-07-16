@@ -6,7 +6,7 @@
 mod common;
 
 use std::path::Path;
-use wado_compiler::CompileError;
+use wado_compiler::{CompileError, OptLevel};
 
 #[test]
 fn test_io_error_file_not_found() {
@@ -551,4 +551,45 @@ fn test_error_display_analyzer_without_filename() {
     let display = format!("{err}");
     assert!(display.contains("type mismatch"));
     assert!(display.contains("analysis error"));
+}
+
+/// Diagnostics emitted at the `trait_env` build phase (orphan / coherence /
+/// sealed-`Reflect`) carry a bare `Span` with no owning-module identity, so
+/// before the fix the printer mis-attributed the source file to a stdlib
+/// module (`core:libm.wat`). The offending impl block is in the user's file,
+/// and the diagnostic must point there. Regression test for issue #1596.
+fn analyzer_filename(source: &str) -> String {
+    let path = Path::new("orphan_phase_diag.wado");
+    let err = common::compile_source_with_opts(path, source, OptLevel::default())
+        .expect_err("expected a compile error");
+    match err {
+        CompileError::Analyzer { filename, .. } => {
+            filename.expect("diagnostic must carry a source file")
+        }
+        other => panic!("expected Analyzer error, got: {other}"),
+    }
+}
+
+#[test]
+fn test_coherence_error_attributed_to_user_file() {
+    let filename = analyzer_filename(
+        "impl i32 {\n    fn my_foo(&self) -> i32 { return 1; }\n}\n\nexport fn run() {}\n",
+    );
+    assert_eq!(filename, "orphan_phase_diag.wado");
+}
+
+#[test]
+fn test_orphan_error_attributed_to_user_file() {
+    let filename = analyzer_filename(
+        "impl Eq for String {\n    fn eq(&self, other: &Self) -> bool { return true; }\n}\n\nexport fn run() {}\n",
+    );
+    assert_eq!(filename, "orphan_phase_diag.wado");
+}
+
+#[test]
+fn test_sealed_reflect_error_attributed_to_user_file() {
+    let filename = analyzer_filename(
+        "struct Point { x: i32, y: i32 }\n\nimpl Reflect for Point {\n    type Fields = [i32, i32];\n    fn fields(&self) -> Self::Fields { return [self.x, self.y]; }\n    fn field_names() -> List<String> { return [\"a\", \"b\"]; }\n    fn type_name() -> String { return \"forged\"; }\n}\n\nexport fn run() {}\n",
+    );
+    assert_eq!(filename, "orphan_phase_diag.wado");
 }
