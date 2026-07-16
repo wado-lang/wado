@@ -878,7 +878,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .any(|it| matches!(it, Item::Trait(t) if t.name == reflect_name))
             });
             if !user_owns_reflect {
-                for (module_source, module) in modules.iter() {
+                for (module_source, module) in modules {
                     if !super::trait_env::is_user_local(module_source) {
                         continue;
                     }

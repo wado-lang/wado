@@ -3048,7 +3048,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         let func_ref = FunctionRef {
-            module_source: module_source.clone(),
+            module_source,
             name: MethodName::format_local(&self_name, Some(&reflect_trait_name), &method),
             monomorph_info: None,
             method_info: Some(LocalMethodName::new(
