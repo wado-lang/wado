@@ -864,7 +864,11 @@ fn synthesize_future_write_func(
     ));
 
     let written_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, awaits_reader);
-    let write_binding = if awaits_reader { let_mut_stmt } else { let_stmt };
+    let write_binding = if awaits_reader {
+        let_mut_stmt
+    } else {
+        let_stmt
+    };
     stmts.push(write_binding(
         "__written",
         written_idx,
