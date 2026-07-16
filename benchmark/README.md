@@ -195,14 +195,30 @@ reference SQL highlighters:
 
 ### Grammar Generation
 
-Run the Gale generator (`gale gen`: grammar assembly + code generation) over the
-Rust grammar — `RustLexer.g4` + `RustParser.g4` (34390 bytes), a large ALL(\*)
-grammar. Absolute throughput only; there is no reference implementation to
-compare against.
+Generate a Rust parser from an authored Rust grammar, comparing the Gale
+generator against [tree-sitter](https://tree-sitter.github.io/)'s. The two tools
+take a similarly-sized authored grammar and turn it into parser source:
 
-| Implementation  | Throughput  | ms/iter    | vs best |
-| --------------- | ----------- | ---------- | ------- |
-| **Wado** (Gale) | 151.83 KB/s | 226.498 ms | 1.00x   |
+- **Wado (Gale)** — `gale gen` (grammar assembly + code generation) over the
+  ANTLR4 `RustLexer.g4` + `RustParser.g4` (34390 bytes), measured in-process. It
+  emits an ALL(\*) recursive-descent parser.
+- **Rust (tree-sitter)** — the `tree-sitter generate` CLI over the tree-sitter
+  Rust `grammar.js` (38730 bytes), measured end to end (evaluate the JS grammar
+  DSL → build the LR/GLR parse tables → emit `parser.c`). Throughput is over the
+  authored grammar size.
+
+Throughput is grammar bytes processed per second (higher is better).
+
+| Implementation     | Throughput  | ms/iter     | vs best |
+| ------------------ | ----------- | ----------- | ------- |
+| **Wado** (Gale)    | 151.83 KB/s | 226.498 ms  | 1.00x   |
+| Rust (tree-sitter) | 12.02 KB/s  | 3221.708 ms | 12.63x  |
+
+This is a cross-tool reference, not an identical workload: the generators
+implement different algorithms and emit very different artifacts — Gale a
+recursive-descent parser, tree-sitter a full LR/GLR parse-table parser (a 6.4 MB
+`parser.c`). The tree-sitter row needs `cargo install tree-sitter-cli` and
+`node`; it is skipped if the CLI is absent.
 
 ## Application Server
 
@@ -254,7 +270,8 @@ mise run benchmark-http-routing     # HTTP routing (wado serve vs Hono vs Axum)
 ```
 
 Prerequisites: `cc` and `cargo` (system); `node` and `bun` (managed by
-`mise install`).
+`mise install`). The gale-gen tree-sitter reference also needs
+`cargo install tree-sitter-cli` (skipped if absent).
 
 ## Profiling
 

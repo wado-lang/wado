@@ -281,10 +281,13 @@ cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 sy
 """
 
 [tasks.gale-gen]
-description = "Run gale-gen benchmark (Gale generator throughput over the Rust grammar; absolute value, no comparison)"
+description = "Run gale-gen benchmark (Gale generator vs tree-sitter generate, over the Rust grammar)"
 run = """
 #!/usr/bin/env bash
 set -e
+
+echo "=== tree-sitter (generate, Rust grammar.js) ==="
+node gale_gen/tree_sitter_gen.mjs
 
 echo "=== Wado (Gale generator, Rust grammar) ==="
 cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 gale_gen/gale_gen.wado

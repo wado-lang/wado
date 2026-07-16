@@ -16,6 +16,8 @@ mise run on-task-started
 - `vendor/wasmtime` submodule must exist (the SessionStart hook handles it;
   otherwise `git submodule update --init --recommend-shallow vendor/wasmtime`).
 - http-routing needs `oha` (`cargo install oha`); `bun` is mise-managed.
+- gale-gen's tree-sitter reference needs `tree-sitter` on PATH
+  (`cargo install tree-sitter-cli`) and `node`; the row is skipped if absent.
 - wasm-size needs `rustup target add wasm32-wasip1` and Moonbit
   (`curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash`, then
   `moon update` in each `wasm-size/*` dir).
@@ -53,7 +55,8 @@ this rate. Implementations per benchmark:
 - json-\*: serde_json, JSON.parse, Wado (catalog also Wado v2)
 - sqlite-parse: sqlparser-rs, Wado
 - syntax-highlight: Prism, Lezer, tree-sitter, Shiki, Wado
-- gale-gen: Wado only (absolute value; the Gale generator over the Rust grammar)
+- gale-gen: Wado (Gale), tree-sitter (needs `cargo install tree-sitter-cli`;
+  skipped if absent) — parser-generator throughput over a Rust grammar
 - http-routing: wado serve, Hono (Node/Bun), Axum
 
 ## Workload sizing
