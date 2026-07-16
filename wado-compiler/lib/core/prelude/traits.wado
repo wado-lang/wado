@@ -60,21 +60,23 @@ internal trait Default {
 
 /// Compile-time struct introspection. The compiler synthesizes an impl for
 /// every struct; it cannot be implemented in user code and is callable only in
-/// monomorphized contexts (`T` a concrete struct). See WEP 2026-06-13.
+/// monomorphized contexts (`T` a concrete struct). `Fields` is the field types
+/// as a tuple `[F_0, F_1, ...]`; `fields` returns those values as a tuple,
+/// `field_names` the source names, and `type_name` the struct name.
+/// See WEP 2026-06-13.
 #[compiler_item("reflect")]
 internal trait Reflect {
-    /// Field types as a tuple `[F_0, F_1, ...]`.
     type Fields;
 
-    /// Field values packed into a tuple `[self.f_0, self.f_1, ...]`.
+
     #[compiler_item("reflect_fields")]
     fn fields(&self) -> Self::Fields;
 
-    /// Source field names in declaration order.
+
     #[compiler_item("reflect_field_names")]
     fn field_names() -> List<String>;
 
-    /// The struct's name.
+
     #[compiler_item("reflect_type_name")]
     fn type_name() -> String;
 }
