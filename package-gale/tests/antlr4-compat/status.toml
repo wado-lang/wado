@@ -149,7 +149,10 @@
 "Sets/UnicodeUnescapedBMPSet" = "oracle: TestRig encodes non-ASCII as `?`; Gale renders `äあ亜`. Same root cause as UnicodeEscapedBMPRangeSet."
 
 [stage_b_oracle_todo]
-"ParserErrors/LL1ErrorInfo" = "Error recovery: ANTLR4's recovered tree pulls `acClass` up as a bare token (single-token insertion), while Gale produces a proper empty-rule `(acClass)` node. Error-recovery shape differences are the same gap as `ParseTrees/ExtraToken` / `NoViableAlt` / `Sync`; flip together when error recovery lands."
+# ParserErrors/LL1ErrorInfo flipped to a plain pass once childless rule
+# nodes render as their bare name (matching ANTLR4's toStringTree): the
+# oracle's `acClass` in its expected tree is a childless rule node, not
+# an error-recovery artifact.
 
 # Stage C — action-print output-compare (result.output vs descriptor [output]).
 # These execute action bodies but do not yet match; each names the gap.
