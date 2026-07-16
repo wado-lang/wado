@@ -21,9 +21,11 @@
 //!   guard facts and refuting dominated re-checks (`rbce_walk`), which needs no
 //!   source-level guard, only a first access. This is what removes the doubled
 //!   `arr[i]`/`arr[j]` checks in an `if arr[i] > arr[j] { arr[j] = arr[i] }`;
-//! - last-element: `arr[arr.len() - k]` (k >= 1) is always in bounds — a length
-//!   is non-negative, so `used - k < used` — so its guard is dropped outright
-//!   (`is_last_element_index`, the top-of-stack / `arr.last()` idiom).
+//! - last-element: a `let idx = arr.len() - k` (k >= 1) binding proves
+//!   `idx < arr.len()` (a length is non-negative, so `used - k < used`), so the
+//!   later `arr[idx]` guard is refuted — the top-of-stack / `arr.last()` idiom.
+//!   Harvested as an ordinary fact (`len_minus_fact`), so it is dropped if the
+//!   array is resized before the access, unlike a stale check-point match.
 //!
 //! Matching is **syntactic over the skeleton plus the value pool**, never the
 //! `value_of` side-table: a guard's `var` / `bound` are compared by structure
@@ -289,12 +291,29 @@ fn parse_const_i64(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
 /// stable local index — matching a check `parent >= bound` against a guard on the
 /// same `parent` — instead of dead-ending in the block resolution.
 pub(super) fn parse_var_offset(engine: &Engine, binds: &Binds, op: Operand) -> Option<(u32, i64)> {
+    parse_var_offset_depth(engine, binds, op, 0)
+}
+
+/// Bind-chain / arithmetic depth cap, matching [`resolve`]'s bounded walk, so a
+/// pathological copy chain (`let a1 = a0; let a2 = a1; …`) cannot recurse
+/// without bound. Exceeding it only forgoes an optimization, never miscompiles.
+const VAR_OFFSET_MAX_DEPTH: u32 = 16;
+
+fn parse_var_offset_depth(
+    engine: &Engine,
+    binds: &Binds,
+    op: Operand,
+    depth: u32,
+) -> Option<(u32, i64)> {
+    if depth >= VAR_OFFSET_MAX_DEPTH {
+        return None;
+    }
     if let Operand::Expr(e) = op
         && let ExprKind::Local { index, .. } = &engine.body.exprs[e].kind
     {
         let idx = *index;
         if let Some(&b) = binds.get(&idx)
-            && let Some(vo) = parse_var_offset(engine, binds, b)
+            && let Some(vo) = parse_var_offset_depth(engine, binds, b, depth + 1)
         {
             return Some(vo);
         }
@@ -308,12 +327,12 @@ pub(super) fn parse_var_offset(engine: &Engine, binds: &Binds, op: Operand) -> O
                 op: NirBinaryOp::Add,
                 right,
             } => {
-                if let Some((v, o)) = parse_var_offset(engine, binds, *left)
+                if let Some((v, o)) = parse_var_offset_depth(engine, binds, *left, depth + 1)
                     && let Some(c) = parse_const_i64(engine, binds, *right)
                 {
                     return Some((v, o + c));
                 }
-                if let Some((v, o)) = parse_var_offset(engine, binds, *right)
+                if let Some((v, o)) = parse_var_offset_depth(engine, binds, *right, depth + 1)
                     && let Some(c) = parse_const_i64(engine, binds, *left)
                 {
                     return Some((v, o + c));
@@ -1349,26 +1368,31 @@ fn sub_const(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Operand, i6
     parse_const_i64(engine, binds, b).map(|k| (a, k))
 }
 
-/// A bounds-check `idx >= bound` where `idx` is `bound - k` (k >= 1) over the
-/// *same length field* — the `arr[arr.len() - k]` last-element / top-of-stack
-/// idiom. Always false: `bound` is a panic-guard array length, hence
-/// non-negative, so `bound - k < bound` with no signed wrap (`bound >= 0` ⇒
-/// `bound - k > i32::MIN` for any in-range `k`). Restricted to a `Field` bound
-/// so the non-negativity holds; a bare-local bound is not provably a length.
-fn is_last_element_index(engine: &Engine, binds: &Binds, cond: Operand) -> bool {
-    let Some((left, right)) = ge_check_operands(engine, binds, cond) else {
-        return false;
+/// The fact a `let idx = <length field> - k` (k >= 1) binding proves:
+/// `idx + (k-1) < <field>`, i.e. `idx <= field - 1 < field`. Sound because the
+/// field is an array length (`parse_bound` restricted to `Field`), hence
+/// non-negative, so `field - k` cannot signed-wrap (`field >= 0` ⇒
+/// `field - k > i32::MIN` for any in-range `k`). Returned as an ordinary
+/// [`ProvenLt`] so the forward walk drops it via [`invalidate`] the moment the
+/// array is resized before the check — the top-of-stack / `arr.last()` idiom,
+/// made flow-sensitive rather than a stale check-point structural match.
+fn len_minus_fact(engine: &Engine, binds: &Binds, node: NodeRef) -> Option<ProvenLt> {
+    let NodeRef::Stmt(s) = node else {
+        return None;
     };
-    let Some(bound) = parse_bound(engine, binds, right) else {
-        return false;
+    let StmtKind::Let {
+        local_index, value, ..
+    } = &engine.body.stmts[s].kind
+    else {
+        return None;
     };
-    if !matches!(bound, BoundKey::Field(..)) {
-        return false;
+    let (local_index, value) = (*local_index, *value);
+    let (minuend, k) = sub_const(engine, binds, value)?;
+    if k < 1 {
+        return None;
     }
-    let Some((minuend, k)) = sub_const(engine, binds, left) else {
-        return false;
-    };
-    k >= 1 && parse_bound(engine, binds, minuend) == Some(bound)
+    let bound = parse_bound(engine, binds, minuend)?;
+    matches!(bound, BoundKey::Field(..)).then_some((local_index, k - 1, bound))
 }
 
 /// A panic-guard `if <check> { panic }` (no else, `then` a panic block): the
@@ -1452,11 +1476,6 @@ fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, bind
     // plain comparison (no nested guards) and its `then` diverges, so neither is
     // walked.
     if let Some(cond) = panic_guard_check(engine, node) {
-        // `arr[arr.len() - k]` last-element access is unconditionally in bounds.
-        if is_last_element_index(engine, binds, cond) {
-            eliminate_condition(engine, node, cond);
-            return true;
-        }
         if let Some((var, off, bound)) = parse_check(engine, binds, cond) {
             if facts_refute(facts, var, off, bound) {
                 eliminate_condition(engine, node, cond);
@@ -1528,26 +1547,27 @@ fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, bind
     }
 
     // A `match` / `switch` runs its scrutinee unconditionally but each arm
-    // conditionally: process arm bodies with a clone. `for_each_child` yields
-    // the scrutinee first, so persist facts through it and clone for the rest.
-    let arm_split = match node {
-        NodeRef::Expr(e) => matches!(
-            engine.body.exprs[e].kind,
-            ExprKind::Match { .. } | ExprKind::Switch { .. }
-        ),
-        _ => false,
+    // conditionally. Identify the scrutinee child by the node's own fields (not
+    // positionally): a scrutinee promoted to `Operand::Value` yields no child,
+    // so a positional "first child is the scrutinee" guess would misread the
+    // first arm's guard/body as unconditional and leak its facts.
+    let scrutinee = match node {
+        NodeRef::Expr(e) => match &engine.body.exprs[e].kind {
+            ExprKind::Match { expr, .. } => Some(*expr),
+            ExprKind::Switch { scrutinee, .. } => Some(*scrutinee),
+            _ => None,
+        },
+        _ => None,
     };
-    if arm_split {
+    if let Some(scrutinee) = scrutinee {
+        let scrut_child = scrutinee.as_expr().map(NodeRef::Expr);
         let mut kids = Vec::new();
         engine.body.for_each_child(node, |c| kids.push(c));
         let mut changed = false;
-        let mut first = true;
         for c in kids {
-            if first && matches!(c, NodeRef::Expr(_)) {
-                // The scrutinee (an operand) — unconditional.
+            if Some(c) == scrut_child {
                 changed |= rbce_walk(engine, c, facts, binds);
                 invalidate(engine, c, facts);
-                first = false;
             } else {
                 let mut arm = facts.clone();
                 changed |= rbce_walk(engine, c, &mut arm, binds);
@@ -1560,13 +1580,20 @@ fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, bind
     // Default: every child runs unconditionally and in order (arithmetic, casts,
     // field/index reads, assignments, calls, aggregate literals, plain blocks).
     // Thread facts through each, invalidating after — a harvest by an earlier
-    // child refutes a later one.
+    // child refutes a later one. A `let idx = arr.len() - k` binding harvests
+    // `idx < arr.len()` here, so the last-element / top-of-stack access is
+    // proven in bounds by the same flow-tracked machinery — dropped by
+    // `invalidate` if the array is resized before the check (unlike a
+    // check-point structural match, which would miss the stale length).
     let mut kids = Vec::new();
     engine.body.for_each_child(node, |c| kids.push(c));
     let mut changed = false;
     for c in kids {
         changed |= rbce_walk(engine, c, facts, binds);
         invalidate(engine, c, facts);
+        if let Some(fact) = len_minus_fact(engine, binds, c) {
+            facts.push(fact);
+        }
     }
     changed
 }

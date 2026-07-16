@@ -1,0 +1,18 @@
+// Regression: the `arr[arr.len() - k]` last-element elimination must be
+// flow-sensitive. `idx` is bound to the OLD length, then the array is resized
+// before the access, so `arr[idx]` is genuinely out of bounds and MUST still
+// trap — the guard may not be eliminated by a stale check-point match.
+#[inline(never)]
+fn last_after_pop(arr: &mut List<i32>) -> i32 {
+    let idx = arr.len() - 1;
+    let _ = arr.pop();
+    return arr[idx];
+}
+
+export fn run() {
+    let mut a: List<i32> = [10, 20];
+    let _ = last_after_pop(&mut a);
+}
+
+__DATA__
+{"stderr_contains": ["index out of bounds"], "trapped": true}

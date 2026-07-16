@@ -1,0 +1,22 @@
+// Regression: a bounds-check fact harvested inside a `match` arm (conditionally
+// executed) must not leak past the match. Here the `true` arm accesses `arr[i]`,
+// but for `i = 5` the arm is not taken; the access after the match must still be
+// guarded and trap, not be eliminated by a leaked arm fact.
+#[inline(never)]
+fn f(arr: &List<i32>, i: i32) -> i32 {
+    let mut acc = 0;
+    match i == 0 {
+        true => { acc = arr[i]; }
+        false => { acc = 1; }
+    }
+    acc = acc + arr[i];
+    return acc;
+}
+
+export fn run() {
+    let a: List<i32> = [10];
+    let _ = f(&a, 5);
+}
+
+__DATA__
+{"stderr_contains": ["index out of bounds"], "trapped": true}
