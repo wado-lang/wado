@@ -66,9 +66,11 @@ This produces the git-ignored artifacts (`wado-playground.wasm`,
 `wado-lsp.wasm`, `vendor/*`, `examples.json`).
 
 `examples.json` (built by `build-examples.mjs`) collects the `example/*.wado`
-programs the playground can load: single-file, `core:*`-only imports, with an
-exported `run`. `test-browser.mjs` compiles and runs every entry, so a listed
-example is guaranteed to work in the browser.
+programs the playground can load: single-file, with an exported `run`, and
+importing only what the browser can satisfy — `core:*` (embedded in the
+compiler) plus the shimmed `wasi:clocks` / `wasi:random`. `test-browser.mjs`
+compiles and runs every entry, so a listed example is guaranteed to work in
+the browser.
 
 ## Run
 
