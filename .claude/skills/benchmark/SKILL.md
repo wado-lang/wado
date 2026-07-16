@@ -17,8 +17,7 @@ mise run on-task-started
   otherwise `git submodule update --init --recommend-shallow vendor/wasmtime`).
 - http-routing needs `oha` (`cargo install oha`); `bun` is mise-managed.
 - gale-gen's ANTLR4 reference needs `java` (the jar is fetched to
-  `~/.cache/gale`); its tree-sitter reference needs `tree-sitter` on PATH
-  (`cargo install tree-sitter-cli`) and `node`. Each row is skipped if absent.
+  `~/.cache/gale`); the row is skipped if java is absent.
 - wasm-size needs `rustup target add wasm32-wasip1` and Moonbit
   (`curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash`, then
   `moon update` in each `wasm-size/*` dir).
@@ -56,9 +55,8 @@ this rate. Implementations per benchmark:
 - json-\*: serde_json, JSON.parse, Wado (catalog also Wado v2)
 - sqlite-parse: sqlparser-rs, Wado
 - syntax-highlight: Prism, Lezer, tree-sitter, Shiki, Wado
-- gale-gen: Wado (Gale) vs ANTLR4 over the same `.g4` (needs `java`); tree-sitter
-  as a looser reference (needs `cargo install tree-sitter-cli`). Each reference
-  is skipped if its tool is absent.
+- gale-gen: Wado (Gale) vs ANTLR4 over the same `.g4` (needs `java`; the ANTLR4
+  row is skipped if java is absent)
 - http-routing: wado serve, Hono (Node/Bun), Axum
 
 ## Workload sizing

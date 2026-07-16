@@ -210,20 +210,8 @@ per second (higher is better).
 Gale is measured in-process (grammar assembly + code generation) and emits a
 Wado recursive-descent parser; ANTLR4 runs its reference jar
 (`java -jar antlr-4.13.2-complete.jar -Dlanguage=Java`, ~0.14 s of which is JVM
-startup) over the same two files and emits Java.
-
-For a looser cross-tool reference, [tree-sitter](https://tree-sitter.github.io/)
-generates over its own Rust `grammar.js` (38730 bytes, a comparable authored
-size) via `tree-sitter generate`:
-
-| Implementation     | Throughput | ms/iter     | vs Gale |
-| ------------------ | ---------- | ----------- | ------- |
-| Rust (tree-sitter) | 11.88 KB/s | 3260.894 ms | 11.57x  |
-
-This last row is not the same input or algorithm — tree-sitter builds a full
-LR/GLR parse-table parser (a 6.4 MB `parser.c`) — so read it as context, not a
-head-to-head. The ANTLR4 row needs `java`; the tree-sitter row needs
-`cargo install tree-sitter-cli`; each is skipped if its tool is absent.
+startup) over the same two files and emits Java. The ANTLR4 row needs `java` and
+is skipped if it is absent.
 
 ## Application Server
 
@@ -276,8 +264,7 @@ mise run benchmark-http-routing     # HTTP routing (wado serve vs Hono vs Axum)
 
 Prerequisites: `cc` and `cargo` (system); `node` and `bun` (managed by
 `mise install`). gale-gen's ANTLR4 reference needs `java` (the jar is fetched to
-`~/.cache/gale`); its tree-sitter reference needs `cargo install tree-sitter-cli`
-(each row is skipped if its tool is absent).
+`~/.cache/gale`; the row is skipped if java is absent).
 
 ## Profiling
 

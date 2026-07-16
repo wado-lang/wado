@@ -281,16 +281,13 @@ cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 sy
 """
 
 [tasks.gale-gen]
-description = "Run gale-gen benchmark (Gale generator vs ANTLR4 over the same .g4; tree-sitter as a looser reference)"
+description = "Run gale-gen benchmark (Gale generator vs ANTLR4 over the same .g4)"
 run = """
 #!/usr/bin/env bash
 set -e
 
 echo "=== ANTLR4 (generate, same RustLexer.g4 + RustParser.g4) ==="
 node gale_gen/antlr4_gen.mjs
-
-echo "=== tree-sitter (generate, Rust grammar.js) ==="
-node gale_gen/tree_sitter_gen.mjs
 
 echo "=== Wado (Gale generator, Rust grammar) ==="
 cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 gale_gen/gale_gen.wado

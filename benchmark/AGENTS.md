@@ -32,7 +32,7 @@ mise run zlib          # compression (zlib-rs native vs Wado)
 # parsing
 mise run sqlite-parse       # SQLite parsing (Gale vs sqlparser-rs)
 mise run syntax-highlight   # syntax highlighting (Gale vs tree-sitter)
-mise run gale-gen           # Gale generator vs ANTLR4 over the same .g4 (+ tree-sitter reference)
+mise run gale-gen           # Gale generator vs ANTLR4 over the same .g4
 
 # application server
 mise run http-routing       # HTTP routing (wado serve vs Hono vs Axum)
@@ -66,4 +66,4 @@ node pick.ts run1.log run2.log run3.log
 
 ## Structure
 
-Each benchmark has its own directory with implementations in all languages side by side. The `gale_gen/` benchmark measures parser-generator throughput over a Rust grammar. The Gale generator runs in-process (grammar assembly + codegen over `package-gale/tests/grammars/RustLexer.g4` + `RustParser.g4`, embedded via `#include_str`). Its head-to-head reference is ANTLR4 over the _same_ `.g4` (`antlr4_gen.mjs`; needs `java`, fetches the jar to `~/.cache/gale`); a looser reference is `tree-sitter generate` over the vendored tree-sitter Rust `grammar.js` (`tree_sitter_gen.mjs`; needs `cargo install tree-sitter-cli`). Both references are skipped if their tool is absent. The `zlib/` directory also contains a Rust (`Cargo.toml` + `zlib_rs.rs`) native reference. The `json_*` directories contain JSON ser/de benchmarks with Rust `serde_json` as the native reference; the `cbor/` directory holds the CBOR ser/de benchmarks (twitter, canada, catalog) with `serde_cbor` (Rust) as the reference. Each `json_*` directory defines a shared schema module (`twitter_schema.wado`, `canada_schema.wado`, `catalog_schema.wado`) imported by both the JSON and CBOR benchmarks, so the two codecs are compared over identical data types.
+Each benchmark has its own directory with implementations in all languages side by side. The `gale_gen/` benchmark measures parser-generator throughput over a Rust grammar. The Gale generator runs in-process (grammar assembly + codegen over `package-gale/tests/grammars/RustLexer.g4` + `RustParser.g4`, embedded via `#include_str`); its head-to-head reference is ANTLR4 over the _same_ `.g4` (`antlr4_gen.mjs`; needs `java`, fetches the jar to `~/.cache/gale`, skipped if java is absent). The `zlib/` directory also contains a Rust (`Cargo.toml` + `zlib_rs.rs`) native reference. The `json_*` directories contain JSON ser/de benchmarks with Rust `serde_json` as the native reference; the `cbor/` directory holds the CBOR ser/de benchmarks (twitter, canada, catalog) with `serde_cbor` (Rust) as the reference. Each `json_*` directory defines a shared schema module (`twitter_schema.wado`, `canada_schema.wado`, `catalog_schema.wado`) imported by both the JSON and CBOR benchmarks, so the two codecs are compared over identical data types.
