@@ -31,10 +31,7 @@ use crate::tir_visitor::TirRefVisitor;
 use crate::wir::CmPayloadType;
 
 pub use export_adapter::export_binding_func_name;
-use export_adapter::{
-    synthesize_async_export_binding, synthesize_result_export_binding,
-    synthesize_sync_export_binding, synthesize_void_export_binding,
-};
+use export_adapter::{ExportBindingEnv, ExportReturnStrategy, synthesize_export_binding};
 pub use import_adapter::binding_func_name;
 use import_adapter::synthesize_adapter;
 pub use lift::synthesize_lift;
@@ -446,7 +443,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
             .map(|m| m.type_table.clone())
             .unwrap_or_else(|| Rc::new(RefCell::new(TypeTable::new())));
 
-        // Collect adapters in a read-only pass (synthesize_result_export_binding needs &tir_modules)
+        // Collect adapters in a read-only pass (synthesize_export_binding needs &tir_modules)
         let mut export_adapters: Vec<(String, String, Rc<RefCell<TirFunction>>)> = Vec::new();
         {
             let entry_module = project
@@ -621,10 +618,10 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                         user_func.is_async
                     };
 
-                    if is_async_export {
+                    let strategy = if is_async_export {
                         // Async export: the user function calls task-return internally via
                         // `task return expr` stmts. Expand those stmts into CM task-return
-                        // calls and synthesize a simple lifting adapter.
+                        // calls; the binding only lifts params and calls.
                         if let Some(return_type) = &export.return_type {
                             let tt = entry_type_table.borrow();
                             let flat_types = compute_export_flat_return_types(
@@ -649,33 +646,11 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                 &project.interner,
                             );
                         }
-                        synthesize_async_export_binding(
-                            &export.name,
-                            user_func_rc,
-                            &callee_module,
-                            &project.tir_modules,
-                            &entry_type_table,
-                            &export.params,
-                            &project.cm_interface_registry,
-                            &binding_cm_package,
-                            &project.interner,
-                        )
+                        ExportReturnStrategy::AsyncTaskReturn
                     } else if is_lib_world && !is_kiln_generator {
                         // Library exports: synchronous lift. The core function
-                        // returns the lowered value directly (milestone 2:
-                        // primitives only).
-                        synthesize_sync_export_binding(
-                            &export.name,
-                            user_func_rc,
-                            &callee_module,
-                            &project.tir_modules,
-                            &entry_type_table,
-                            &export.params,
-                            export.return_type.as_ref(),
-                            &project.cm_interface_registry,
-                            &binding_cm_package,
-                            &project.interner,
-                        )
+                        // returns the lowered value directly.
+                        ExportReturnStrategy::SyncReturn
                     } else {
                         // Check the user function's actual return type (signature-driven)
                         let user_returns_result = {
@@ -693,29 +668,10 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
 
                         if user_returns_result {
                             // Result<T, E> return: full lowering adapter (signature-driven)
-                            let tt = entry_type_table.borrow();
-                            let flat_types = compute_export_flat_return_types(
-                                export.return_type.as_ref().unwrap(),
-                                &project.tir_modules,
-                                &tt,
-                            );
-                            drop(tt);
-                            synthesize_result_export_binding(
-                                &export.name,
-                                user_func_rc,
-                                &callee_module,
-                                export.return_type.as_ref().unwrap(),
-                                &flat_types,
-                                &project.tir_modules,
-                                &entry_type_table,
-                                &export.params,
-                                &project.cm_interface_registry,
-                                &binding_cm_package,
-                                &project.interner,
-                            )
+                            ExportReturnStrategy::ResultTaskReturn
                         } else {
-                            // Non-Result return: check if we can use the simple void adapter
-                            // (only when no params AND unit return type)
+                            // Non-Result return: use the simple void adapter only
+                            // when no params AND unit return type
                             let is_void_no_params = export.params.is_empty() && {
                                 let user_func = user_func_rc.borrow();
                                 let tt = entry_type_table.borrow();
@@ -723,12 +679,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                             };
 
                             if is_void_no_params {
-                                // Simple void adapter for () -> ()
-                                synthesize_void_export_binding(
-                                    &export.name,
-                                    user_func_rc,
-                                    &callee_module,
-                                )
+                                ExportReturnStrategy::VoidTaskReturn
                             } else {
                                 // Sync export returning a plain value (not a
                                 // `Result`), e.g. a `--lib` export like
@@ -740,21 +691,27 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                 // component declares the export sync
                                 // (`.async_(false)`), so an async task-return
                                 // lowering produces an invalid core module.
-                                synthesize_sync_export_binding(
-                                    &export.name,
-                                    user_func_rc,
-                                    &callee_module,
-                                    &project.tir_modules,
-                                    &entry_type_table,
-                                    &export.params,
-                                    export.return_type.as_ref(),
-                                    &project.cm_interface_registry,
-                                    &binding_cm_package,
-                                    &project.interner,
-                                )
+                                ExportReturnStrategy::SyncReturn
                             }
                         }
-                    }
+                    };
+
+                    let env = ExportBindingEnv {
+                        tir_modules: &project.tir_modules,
+                        type_table: &entry_type_table,
+                        world_params: &export.params,
+                        world_return: export.return_type.as_ref(),
+                        cm_interface_registry: &project.cm_interface_registry,
+                        cm_package: &binding_cm_package,
+                        interner: &project.interner,
+                    };
+                    synthesize_export_binding(
+                        &export.name,
+                        &user_func_rc,
+                        &callee_module,
+                        &env,
+                        strategy,
+                    )
                 };
                 export_adapters.push((export.name.clone(), binding_name, adapter));
             }
@@ -800,43 +757,79 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
     // Only when targeting the test world — in other worlds, tests are dead code.
     if project.is_test_world() {
         let test_name_filters = project.test_name_filters.clone();
-        let entry_module = project
+        let entry_type_table = project
             .tir_modules
-            .get_mut(&entry_source)
-            .expect("entry module should exist");
+            .get(&entry_source)
+            .map(|m| m.type_table.clone())
+            .unwrap_or_else(|| Rc::new(RefCell::new(TypeTable::new())));
 
-        // Map each test's mangled function name → its original (lossless) name
-        // so `--test-name` matches against what the user wrote, not the
-        // ASCII-folded export name.
-        let original_names: crate::hashmap::IndexMap<&str, Option<&str>> = entry_module
-            .tests
-            .iter()
-            .map(|t| (t.function_name.as_str(), t.name.as_deref()))
-            .collect();
-
-        // Collect test functions first to avoid borrow conflict.
         // Test functions have is_export=false (they're not world exports),
         // but they need adapters for task-return when called via `wado test`.
         // Only selected tests get an adapter: an unselected test then has no
         // `is_cm_export` root, so early DCE drops its body — that is what makes
         // `--test-name` speed up compilation.
-        let test_funcs: Vec<(String, Rc<RefCell<TirFunction>>)> = entry_module
-            .functions
-            .iter()
-            .filter(|f| {
-                let name = f.borrow().name.clone();
-                name.starts_with("__test_")
-                    && crate::package::test_selected(
-                        original_names.get(name.as_str()).copied().flatten(),
-                        &test_name_filters,
-                    )
+        let test_funcs: Vec<(String, Rc<RefCell<TirFunction>>)> = {
+            let entry_module = project
+                .tir_modules
+                .get(&entry_source)
+                .expect("entry module should exist");
+
+            // Map each test's mangled function name → its original (lossless)
+            // name so `--test-name` matches against what the user wrote, not
+            // the ASCII-folded export name.
+            let original_names: crate::hashmap::IndexMap<&str, Option<&str>> = entry_module
+                .tests
+                .iter()
+                .map(|t| (t.function_name.as_str(), t.name.as_deref()))
+                .collect();
+
+            entry_module
+                .functions
+                .iter()
+                .filter(|f| {
+                    let name = f.borrow().name.clone();
+                    name.starts_with("__test_")
+                        && crate::package::test_selected(
+                            original_names.get(name.as_str()).copied().flatten(),
+                            &test_name_filters,
+                        )
+                })
+                .map(|f| (f.borrow().name.clone(), f.clone()))
+                .collect()
+        };
+
+        // The test world is a bare-name world, so its CM package is empty
+        // (`fq_name_package`); test adapters take no params, so the package is
+        // never consulted.
+        let env = ExportBindingEnv {
+            tir_modules: &project.tir_modules,
+            type_table: &entry_type_table,
+            world_params: &[],
+            world_return: None,
+            cm_interface_registry: &project.cm_interface_registry,
+            cm_package: crate::world_registry::fq_name_package(crate::world_registry::TEST_WORLD),
+            interner: &project.interner,
+        };
+        let adapters: Vec<(String, String, Rc<RefCell<TirFunction>>)> = test_funcs
+            .into_iter()
+            .map(|(test_name, user_func_rc)| {
+                let binding_name = export_binding_func_name(&test_name);
+                let adapter = synthesize_export_binding(
+                    &test_name,
+                    &user_func_rc,
+                    &entry_source,
+                    &env,
+                    ExportReturnStrategy::VoidTaskReturn,
+                );
+                (test_name, binding_name, adapter)
             })
-            .map(|f| (f.borrow().name.clone(), f.clone()))
             .collect();
 
-        for (test_name, user_func_rc) in test_funcs {
-            let binding_name = export_binding_func_name(&test_name);
-            let adapter = synthesize_void_export_binding(&test_name, user_func_rc, &entry_source);
+        let entry_module = project
+            .tir_modules
+            .get_mut(&entry_source)
+            .expect("entry module should exist");
+        for (test_name, binding_name, adapter) in adapters {
             project.export_binding_names.insert(test_name, binding_name);
             entry_module.functions.push(adapter);
         }
@@ -1780,7 +1773,6 @@ mod tests {
             &mut stmts,
             &mut locals,
             &tir_modules,
-            &fix.type_table,
             fix.ctx(),
         );
         assert_eq!(consumed, 1);
@@ -1804,7 +1796,6 @@ mod tests {
             &mut stmts,
             &mut locals,
             &tir_modules,
-            &fix.type_table,
             fix.ctx(),
         );
         assert_eq!(consumed, 2);
@@ -1828,7 +1819,6 @@ mod tests {
             &mut stmts,
             &mut locals,
             &tir_modules,
-            &fix.type_table,
             fix.ctx(),
         );
         assert_eq!(consumed, 1);
@@ -1852,7 +1842,6 @@ mod tests {
             &mut stmts,
             &mut locals,
             &tir_modules,
-            &fix.type_table,
             fix.ctx(),
         );
         assert_eq!(consumed, 0);
@@ -1875,7 +1864,6 @@ mod tests {
             &mut stmts,
             &mut locals,
             &tir_modules,
-            &fix.type_table,
             fix.ctx(),
         );
         assert_eq!(consumed, 1);

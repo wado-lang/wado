@@ -1,15 +1,19 @@
 //! Export-side CM adapter synthesis.
 //!
-//! For each world export the user defines, the driver picks one of these
-//! synthesizers based on the function shape:
+//! Every world export gets one binding function, built by
+//! [`synthesize_export_binding`]: a shared prelude lifts the flat CM params
+//! into Wado values ([`build_export_adapter_params`]), the user function is
+//! called once, and an [`ExportReturnStrategy`] — picked by the driver from
+//! the export's shape — selects the epilogue:
 //!
-//! - [`synthesize_void_export_binding`] for `() -> ()` exports.
-//! - [`synthesize_general_export_binding`] for non-Result returns.
-//! - [`synthesize_result_export_binding`] for `Result<T, E>` returns.
-//! - [`synthesize_async_export_binding`] for `export async fn` (whose body
-//!   does its own `task return`).
-//! - [`synthesize_void_stub_adapter`] for worlds that declare an export the
-//!   user did not define (test-only files).
+//! - [`ExportReturnStrategy::VoidTaskReturn`] for async `() -> ()` exports:
+//!   `task-return(0)` after the call.
+//! - [`ExportReturnStrategy::SyncReturn`] for sync `--lib` exports: return
+//!   the flattened value directly (out-pointer for multi-value results).
+//! - [`ExportReturnStrategy::AsyncTaskReturn`] for `export async fn`, whose
+//!   body does its own `task return`.
+//! - [`ExportReturnStrategy::ResultTaskReturn`] for async exports returning
+//!   `Result<T, E>`: match Ok/Err, lower the payload, `task-return`.
 //!
 //! Each binding name is built by [`export_binding_func_name`]. The
 //! `synthesize_lower_to_flat` / `synthesize_variant_lower_to_flat` /
@@ -45,9 +49,9 @@ use super::lower::synthesize_lower_wasi_type_to_memory;
 use super::types::{
     LiftContext, LowerContext, binary_add, binary_ne, cm_val_type_to_type_id, cm_zero,
     coerce_flat_lift, coerce_flat_lower, compute_export_flat_param_types,
-    export_needs_param_lifting, field_access, find_struct_decl, find_variant_decl,
-    flat_types_from_type_id, flatten_export_type, is_unit_type, type_id_to_ast_type,
-    variant_payload, variant_tag, variant_test,
+    compute_export_flat_return_types, export_needs_param_lifting, field_access, find_struct_decl,
+    find_variant_decl, flat_types_from_type_id, flatten_export_type, is_unit_type,
+    type_id_to_ast_type, variant_payload, variant_tag, variant_test,
 };
 
 /// Build the export binding function name for a world export.
@@ -133,8 +137,12 @@ fn lower_to_flat_inner(
                 cm_type,
             }]
         }
-        ResolvedType::Resource { .. } | ResolvedType::Enum { .. } => {
-            // Resource handles and enums are i32
+        ResolvedType::Resource { .. }
+        | ResolvedType::Enum { .. }
+        | ResolvedType::GenericResource { .. }
+        | ResolvedType::Flags { .. } => {
+            // Resource handles (incl. Future/Stream/Own/Borrow), enums, and
+            // flags bitmasks are i32
             let local = alloc_local(next_local, locals, TypeTable::I32);
             stmts.push(let_stmt("__flat", local, TypeTable::I32, value));
             vec![FlatLocal {
@@ -365,7 +373,7 @@ fn lower_to_flat_inner(
         }
         ResolvedType::GenericInstance {
             name, type_args, ..
-        } if name == "Option" && type_args.len() == 1 => {
+        } if name == &names.option && type_args.len() == 1 => {
             // Option<T> → disc(i32) + flat(T)
             let inner_type_id = type_args[0];
             let mut result = Vec::new();
@@ -406,7 +414,7 @@ fn lower_to_flat_inner(
             };
             if !inner_flat_types.is_empty() {
                 // Allocate locals for inner flat values (initialized to zero)
-                let inner_locals: Vec<(u32, cm_abi::CmValType, String)> = inner_flat_types
+                let inner_locals: Vec<(u32, String)> = inner_flat_types
                     .iter()
                     .enumerate()
                     .map(|(i, &vt)| {
@@ -414,7 +422,7 @@ fn lower_to_flat_inner(
                         let l = alloc_local(next_local, locals, tid);
                         let name = format!("__opt_inner_{i}");
                         stmts.push(let_mut_stmt(&name, l, tid, cm_zero(vt)));
-                        (l, vt, name)
+                        (l, name)
                     })
                     .collect();
 
@@ -434,21 +442,12 @@ fn lower_to_flat_inner(
                     tir_modules,
                     ctx,
                 );
-                for (i, flat_val) in inner_lowered.iter().enumerate() {
-                    if i < inner_locals.len() {
-                        let (target_local, target_vt, ref target_name) = inner_locals[i];
-                        let target_type = cm_val_type_to_type_id(target_vt);
-                        let source_type = cm_val_type_to_type_id(flat_val.cm_type);
-                        let mut val = local_ref(flat_val.index, "__flat", source_type);
-                        if flat_val.cm_type != target_vt {
-                            val = cast(val, target_type);
-                        }
-                        then_stmts.push(expr_stmt(assign(
-                            local_ref(target_local, target_name, target_type),
-                            val,
-                        )));
-                    }
-                }
+                assign_flat_values_into_slots(
+                    &inner_lowered,
+                    &inner_locals,
+                    &inner_flat_types,
+                    &mut then_stmts,
+                );
 
                 stmts.push(if_stmt(
                     binary(
@@ -461,7 +460,7 @@ fn lower_to_flat_inner(
                     None,
                 ));
 
-                for (l, vt, _) in inner_locals {
+                for (&(l, _), &vt) in inner_locals.iter().zip(inner_flat_types.iter()) {
                     result.push(FlatLocal {
                         index: l,
                         cm_type: vt,
@@ -473,7 +472,7 @@ fn lower_to_flat_inner(
         }
         ResolvedType::GenericInstance {
             name, type_args, ..
-        } if name == "Result" && type_args.len() == 2 => {
+        } if name == &names.result && type_args.len() == 2 => {
             // Result<T, E> → disc(i32) + join(flat(T), flat(E)). disc 0 = Ok,
             // 1 = Err. The active arm's payload lowers into the shared joined
             // slots (the other arm leaves them zero), per the Canonical ABI's
@@ -524,7 +523,7 @@ fn lower_to_flat_inner(
                     .unwrap_or_default()
             };
             if !payload_flats.is_empty() {
-                let slot_locals: Vec<(u32, cm_abi::CmValType, String)> = payload_flats
+                let slot_locals: Vec<(u32, String)> = payload_flats
                     .iter()
                     .enumerate()
                     .map(|(i, &vt)| {
@@ -532,7 +531,7 @@ fn lower_to_flat_inner(
                         let l = alloc_local(next_local, locals, tid);
                         let name = format!("__res_slot_{i}");
                         stmts.push(let_mut_stmt(&name, l, tid, cm_zero(vt)));
-                        (l, vt, name)
+                        (l, name)
                     })
                     .collect();
 
@@ -556,24 +555,12 @@ fn lower_to_flat_inner(
                         tir_modules,
                         ctx,
                     );
-                    for (i, flat_val) in lowered.iter().enumerate() {
-                        if i < slot_locals.len() {
-                            let (target_local, target_vt, ref target_name) = slot_locals[i];
-                            let target_type = cm_val_type_to_type_id(target_vt);
-                            let source_type = cm_val_type_to_type_id(flat_val.cm_type);
-                            // Join the case payload into the shared slot,
-                            // bit-reinterpreting on a class mismatch.
-                            let val = coerce_flat_lower(
-                                local_ref(flat_val.index, "__flat", source_type),
-                                flat_val.cm_type,
-                                target_vt,
-                            );
-                            arm_stmts.push(expr_stmt(assign(
-                                local_ref(target_local, target_name, target_type),
-                                val,
-                            )));
-                        }
-                    }
+                    assign_flat_values_into_slots(
+                        &lowered,
+                        &slot_locals,
+                        &payload_flats,
+                        &mut arm_stmts,
+                    );
                     arm_stmts
                 };
 
@@ -591,7 +578,7 @@ fn lower_to_flat_inner(
                     Some(block(err_stmts)),
                 ));
 
-                for (l, vt, _) in slot_locals {
+                for (&(l, _), &vt) in slot_locals.iter().zip(payload_flats.iter()) {
                     result.push(FlatLocal {
                         index: l,
                         cm_type: vt,
@@ -630,12 +617,7 @@ fn lower_to_flat_inner(
                 }
                 result
             } else {
-                let local = alloc_local(next_local, locals, TypeTable::I32);
-                stmts.push(let_stmt("__flat", local, TypeTable::I32, value));
-                vec![FlatLocal {
-                    index: local,
-                    cm_type: cm_abi::CmValType::I32,
-                }]
+                panic!("struct `{name}` has no TIR declaration; cannot lower it to flat CM values")
             }
         }
         ResolvedType::Newtype { base_type, .. } => {
@@ -653,15 +635,43 @@ fn lower_to_flat_inner(
                 ctx,
             )
         }
-        _ => {
-            // For other types (including complex variants, etc.), lower as i32
-            let local = alloc_local(next_local, locals, TypeTable::I32);
-            stmts.push(let_stmt("__flat", local, TypeTable::I32, value));
-            vec![FlatLocal {
-                index: local,
-                cm_type: cm_abi::CmValType::I32,
-            }]
+        other => {
+            panic!("cannot lower `{other:?}` to flat CM values at the export boundary")
         }
+    }
+}
+
+/// Assign lowered flat values into pre-allocated slot locals, coercing each
+/// value to its slot's CM type ([`coerce_flat_lower`]). Trailing slots may
+/// stay zero when the value flattens narrower than the join (variant arms),
+/// but a lowered value count exceeding the slot count is an ABI flattening
+/// bug.
+fn assign_flat_values_into_slots(
+    lowered: &[FlatLocal],
+    slot_locals: &[(u32, String)],
+    slot_types: &[cm_abi::CmValType],
+    stmts: &mut Vec<TirStmt>,
+) {
+    assert!(
+        lowered.len() <= slot_locals.len(),
+        "lowered {} flat values but only {} flat slots: CM ABI flattening mismatch",
+        lowered.len(),
+        slot_locals.len(),
+    );
+    for (flat_val, (&(slot_local, ref slot_name), &slot_vt)) in
+        lowered.iter().zip(slot_locals.iter().zip(slot_types.iter()))
+    {
+        let slot_type_id = cm_val_type_to_type_id(slot_vt);
+        let source_type_id = cm_val_type_to_type_id(flat_val.cm_type);
+        let val = coerce_flat_lower(
+            local_ref(flat_val.index, "__flat", source_type_id),
+            flat_val.cm_type,
+            slot_vt,
+        );
+        stmts.push(expr_stmt(assign(
+            local_ref(slot_local, slot_name, slot_type_id),
+            val,
+        )));
     }
 }
 
@@ -676,6 +686,7 @@ fn lower_to_flat_inner(
 /// `lift_ctx` carries the full CM resolution stack (WASI + kiln registries,
 /// type-table cell, binding package hint) used for List / nested-struct
 /// lifts and for the `struct_type_map` lookup in WIR.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn synthesize_lift_from_flat_params(
     ty: &Type,
     flat_param_locals: &[u32],
@@ -685,9 +696,9 @@ pub(super) fn synthesize_lift_from_flat_params(
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
-    type_table_cell: &RefCell<TypeTable>,
     lift_ctx: LiftContext<'_>,
 ) -> (TirExpr, usize) {
+    let type_table_cell = lift_ctx.type_table;
     let names =
         super::types::CmStdlibNames::from_compiler_items(type_table_cell.borrow().compiler_items());
     match ty {
@@ -728,7 +739,6 @@ pub(super) fn synthesize_lift_from_flat_params(
                 stmts,
                 locals,
                 tir_modules,
-                type_table_cell,
                 lift_ctx,
             )
         }
@@ -800,7 +810,6 @@ pub(super) fn synthesize_lift_from_flat_params(
                             stmts,
                             locals,
                             tir_modules,
-                            type_table_cell,
                             lift_ctx,
                         );
                         fields_out.push(TirStructField {
@@ -840,7 +849,6 @@ pub(super) fn synthesize_lift_from_flat_params(
                 // case's payload recursively from `flat[1..]`.
                 if let Some(variant_decl) = find_variant_decl(&named.name, tir_modules) {
                     return lift_variant_from_flat_params(
-                        &named.name,
                         &variant_decl,
                         flat_param_locals,
                         flat_types,
@@ -849,7 +857,6 @@ pub(super) fn synthesize_lift_from_flat_params(
                         stmts,
                         locals,
                         tir_modules,
-                        type_table_cell,
                         lift_ctx,
                     );
                 }
@@ -922,7 +929,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 )));
                 (lifted, 2)
             }
-            "Option" if generic.args.len() == 1 => {
+            n if n == names.option && generic.args.len() == 1 => {
                 // option<T> flat ABI: (disc: i32, ...T_flat)
                 let (inner_flat, inner_type_id) = {
                     let tt = type_table_cell.borrow();
@@ -972,7 +979,6 @@ pub(super) fn synthesize_lift_from_flat_params(
                         &mut then_stmts,
                         locals,
                         tir_modules,
-                        type_table_cell,
                         lift_ctx,
                     );
                     let opt_some_inner = {
@@ -996,13 +1002,12 @@ pub(super) fn synthesize_lift_from_flat_params(
                     total_flat,
                 )
             }
-            "Result" if generic.args.len() == 2 => {
+            n if n == names.result && generic.args.len() == 2 => {
                 // `Result<T, E>` is a 2-case variant (Ok=0, Err=1) — lift it
                 // through the shared variant path with a synthetic decl carrying
                 // the concrete arm TypeIds.
                 let decl = synthetic_result_variant_decl(&type_table_cell.borrow(), target_type_id);
                 lift_variant_from_flat_params(
-                    &decl.name.clone(),
                     &decl,
                     flat_param_locals,
                     flat_types,
@@ -1011,7 +1016,6 @@ pub(super) fn synthesize_lift_from_flat_params(
                     stmts,
                     locals,
                     tir_modules,
-                    type_table_cell,
                     lift_ctx,
                 )
             }
@@ -1043,7 +1047,6 @@ pub(super) fn synthesize_lift_from_flat_params(
                     stmts,
                     locals,
                     tir_modules,
-                    type_table_cell,
                     lift_ctx,
                 );
                 elem_exprs.push(lifted);
@@ -1062,10 +1065,13 @@ pub(super) fn synthesize_lift_from_flat_params(
         Type::Reference(_) | Type::MutReference(_) => {
             (local_ref(flat_param_locals[0], "__p", TypeTable::I32), 1)
         }
-        _ => (
-            TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
-            0,
-        ),
+        Type::NamespacedGeneric(_)
+        | Type::Function(_)
+        | Type::TypePackSpread(..)
+        | Type::Infer(_)
+        | Type::Error(_) => {
+            panic!("cannot lift export parameter of type `{ty:?}` from flat CM params")
+        }
     }
 }
 
@@ -1163,7 +1169,6 @@ fn coerce_payload_slots(
 /// discriminant plus the widest case's payload flattening).
 #[allow(clippy::too_many_arguments)]
 fn lift_variant_from_flat_params(
-    _name: &str,
     variant_decl: &TirVariantDecl,
     flat_param_locals: &[u32],
     flat_types: &[cm_abi::CmValType],
@@ -1172,9 +1177,9 @@ fn lift_variant_from_flat_params(
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
-    type_table_cell: &RefCell<TypeTable>,
     lift_ctx: LiftContext<'_>,
 ) -> (TirExpr, usize) {
+    let type_table_cell = lift_ctx.type_table;
     // Widest case payload flattening sets the consumed slot count.
     let max_payload_flats = {
         let tt = type_table_cell.borrow();
@@ -1241,7 +1246,6 @@ fn lift_variant_from_flat_params(
                 &mut case_stmts,
                 locals,
                 tir_modules,
-                type_table_cell,
                 lift_ctx,
             );
             Some(Box::new(lifted))
@@ -1286,28 +1290,25 @@ fn lift_variant_from_flat_params(
 
 /// Build the adapter parameters and call arguments for an export binding.
 ///
-/// Shared by [`synthesize_sync_export_binding`] and
-/// [`synthesize_general_export_binding`]: both lift flat CM params back to
-/// Wado-typed args (when `export_needs_param_lifting`) or pass the user
-/// params through unchanged. The lifting prelude is appended to `body_stmts`
-/// and the param locals to `locals`. Only the divergent tail (async
-/// `task.return` vs sync `return`/expr) is left to the callers.
+/// The shared prelude of [`synthesize_export_binding`]: lifts flat CM params
+/// back to Wado-typed args (when `export_needs_param_lifting`) or passes the
+/// user params through unchanged, regardless of which
+/// [`ExportReturnStrategy`] follows. The lifting prelude is appended to
+/// `body_stmts` and the param locals to `locals`.
 ///
 /// Returns `(adapter_params, call_args, next_local)` where `next_local` is the
 /// first free local index after the params and any lifting temporaries.
-#[allow(clippy::too_many_arguments)]
 fn build_export_adapter_params(
     user_func_ref: &TirFunction,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
-    type_table: &Rc<RefCell<TypeTable>>,
     world_params: &[(String, Type)],
     lift_ctx: LiftContext<'_>,
     body_stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
 ) -> (Vec<TirParam>, Vec<TirExpr>, u32) {
-    let needs_lifting = export_needs_param_lifting(&user_func_ref.params, type_table);
+    let needs_lifting = export_needs_param_lifting(&user_func_ref.params, lift_ctx.type_table);
     if needs_lifting {
-        let tt = type_table.borrow();
+        let tt = lift_ctx.type_table.borrow();
         let flat_param_types = compute_export_flat_param_types(world_params, tir_modules, &tt);
         drop(tt);
 
@@ -1349,7 +1350,6 @@ fn build_export_adapter_params(
                 body_stmts,
                 locals,
                 tir_modules,
-                type_table,
                 lift_ctx,
             );
             lifted_args.push(lifted);
@@ -1386,401 +1386,188 @@ fn build_export_adapter_params(
     }
 }
 
-/// Synthesize a CM export binding for an async export with a Result return type.
-///
-/// The binding:
-/// 1. Lifts flat CM params to Wado-typed values (if needed)
-/// 2. Calls the user's export function with lifted args
-/// 3. Pattern-matches the Result<T, E> return value
-/// 4. For Ok(T): lowers T to flat CM values, calls task-return
-/// 5. For Err(E): lowers E to flat CM values, calls task-return
-///
-/// This is signature-driven: it examines the param/return types to generate
-/// appropriate lifting/lowering code for any export signature.
-pub(super) fn synthesize_result_export_binding(
+/// Selects the epilogue of [`synthesize_export_binding`]: what the binding
+/// does with the user function's result. The prelude (lift flat CM params,
+/// call the user function once) is shared by every strategy.
+#[derive(Clone, Copy)]
+pub(super) enum ExportReturnStrategy {
+    /// Async `() -> ()` export: call, then `task-return(0)` (the Ok
+    /// discriminant for `result<_, _>`).
+    VoidTaskReturn,
+    /// Sync `--lib` export: the synchronous canon lift returns the lowered
+    /// value directly — a single-core-value result verbatim, a multi-value
+    /// result (string, list, tuple, record, option, result) via an i32
+    /// out-pointer into fresh linear memory.
+    SyncReturn,
+    /// `export async fn`: the user body performs its own `task return`
+    /// (expanded by `expand_task_returns_in_func`), so the binding only
+    /// lifts params and calls.
+    AsyncTaskReturn,
+    /// Async export returning `Result<T, E>`: match Ok/Err, lower the active
+    /// payload into the joined flat slots, then `task-return`.
+    ResultTaskReturn,
+}
+
+/// Compilation context an export binding is synthesized against.
+pub(super) struct ExportBindingEnv<'a> {
+    pub tir_modules: &'a IndexMap<ModuleSource, TirModule>,
+    pub type_table: &'a Rc<RefCell<TypeTable>>,
+    /// World-declared export params (CM surface types).
+    pub world_params: &'a [(String, Type)],
+    /// World-declared export return type (CM surface type).
+    pub world_return: Option<&'a Type>,
+    pub cm_interface_registry: &'a CmInterfaceRegistry,
+    pub cm_package: &'a str,
+    pub interner: &'a RefCell<ModuleSourceInterner>,
+}
+
+impl<'a> ExportBindingEnv<'a> {
+    fn lift_ctx(&self) -> LiftContext<'a> {
+        LiftContext {
+            cm_interface_registry: self.cm_interface_registry,
+            type_table: self.type_table,
+            cm_package: self.cm_package,
+            interner: self.interner,
+        }
+    }
+
+    fn lower_ctx(&self) -> LowerContext<'a> {
+        LowerContext {
+            cm_interface_registry: self.cm_interface_registry,
+            type_table: self.type_table,
+            wasi_package: self.cm_package,
+            names: super::types::CmStdlibNames::from_compiler_items(
+                self.type_table.borrow().compiler_items(),
+            ),
+        }
+    }
+}
+
+/// Synthesize the CM export binding for a world export: lift flat CM params
+/// to Wado-typed values, call the user's export function once, then run the
+/// `strategy` epilogue on the result.
+pub(super) fn synthesize_export_binding(
     export_name: &str,
-    user_func: Rc<RefCell<TirFunction>>,
+    user_func: &Rc<RefCell<TirFunction>>,
     callee_module: &ModuleSource,
-    _return_type: &Type,
-    flat_return_types: &[cm_abi::CmValType],
-    tir_modules: &IndexMap<ModuleSource, TirModule>,
-    type_table: &Rc<RefCell<TypeTable>>,
-    world_params: &[(String, Type)],
-    cm_interface_registry: &CmInterfaceRegistry,
-    cm_package: &str,
-    interner: &RefCell<ModuleSourceInterner>,
+    env: &ExportBindingEnv<'_>,
+    strategy: ExportReturnStrategy,
 ) -> Rc<RefCell<TirFunction>> {
     let binding_name = export_binding_func_name(export_name);
     let mut body_stmts: Vec<TirStmt> = Vec::new();
     let mut locals: Vec<TirLocal> = Vec::new();
+    let lift_ctx = env.lift_ctx();
 
     let user_func_ref = user_func.borrow();
     let user_return_type = user_func_ref.return_type;
-    let needs_lifting = export_needs_param_lifting(&user_func_ref.params, type_table);
-    let lift_ctx = LiftContext {
-        cm_interface_registry,
-        type_table,
-        cm_package,
-        interner,
-    };
-
-    // Build adapter params and call args
-    let (adapter_params, call_args, param_count) = if needs_lifting {
-        // Compute flat param types from world export signature
-        let tt = type_table.borrow();
-        let flat_param_types = compute_export_flat_param_types(world_params, tir_modules, &tt);
-        drop(tt);
-
-        // Create adapter params with flat types
-        let flat_params: Vec<TirParam> = flat_param_types
-            .iter()
-            .enumerate()
-            .map(|(i, &vt)| TirParam {
-                name: format!("__p{i}"),
-                type_id: cm_val_type_to_type_id(vt),
-                local_index: i as u32,
-                is_mut: false,
-                is_mut_ref: false,
-                span: synth_span(),
-            })
-            .collect();
-
-        let flat_count = flat_params.len() as u32;
-        for p in &flat_params {
-            locals.push(param_local(&p.name, p.type_id, false));
-        }
-
-        let mut next_local_tmp = flat_count;
-        let flat_param_locals: Vec<u32> = (0..flat_count).collect();
-
-        // Lift flat params to Wado-typed call args
-        let mut lifted_args = Vec::new();
-        let mut flat_offset = 0;
-        for (i, (_name, param_ty)) in world_params.iter().enumerate() {
-            let user_type_id = user_func_ref
-                .params
-                .get(i)
-                .map(|p| p.type_id)
-                .unwrap_or(TypeTable::I32);
-            let (lifted, consumed) = synthesize_lift_from_flat_params(
-                param_ty,
-                &flat_param_locals[flat_offset..],
-                &flat_param_types[flat_offset..],
-                user_type_id,
-                &mut next_local_tmp,
-                &mut body_stmts,
-                &mut locals,
-                tir_modules,
-                type_table,
-                lift_ctx,
-            );
-            lifted_args.push(lifted);
-            flat_offset += consumed;
-        }
-
-        (flat_params, lifted_args, next_local_tmp)
-    } else {
-        // No lifting needed — pass params through (resource handles, primitives)
-        let params: Vec<TirParam> = user_func_ref
-            .params
-            .iter()
-            .enumerate()
-            .map(|(i, p)| TirParam {
-                name: p.name.clone(),
-                type_id: p.type_id,
-                local_index: i as u32,
-                is_mut: false,
-                is_mut_ref: false,
-                span: synth_span(),
-            })
-            .collect();
-
-        let count = params.len() as u32;
-        for p in &params {
-            locals.push(param_local(&p.name, p.type_id, false));
-        }
-
-        let args: Vec<TirExpr> = params
-            .iter()
-            .map(|p| local_ref(p.local_index, &p.name, p.type_id))
-            .collect();
-
-        (params, args, count)
-    };
-
+    let (adapter_params, call_args, param_count) = build_export_adapter_params(
+        &user_func_ref,
+        env.tir_modules,
+        env.world_params,
+        lift_ctx,
+        &mut body_stmts,
+        &mut locals,
+    );
+    drop(user_func_ref);
     let mut next_local = param_count;
 
-    // Call user function — derive param_is_mut from the actual function params.
-    let call_user_param_is_mut: Vec<bool> =
-        user_func.borrow().params.iter().map(|p| p.is_mut).collect();
-    let call_user = TirExpr::new(
+    let call_return_type = match strategy {
+        ExportReturnStrategy::VoidTaskReturn | ExportReturnStrategy::AsyncTaskReturn => {
+            TypeTable::UNIT
+        }
+        ExportReturnStrategy::SyncReturn | ExportReturnStrategy::ResultTaskReturn => {
+            user_return_type
+        }
+    };
+    let call_user = build_call_user(user_func, callee_module, call_args, call_return_type);
+
+    let adapter_return = match strategy {
+        ExportReturnStrategy::VoidTaskReturn => {
+            body_stmts.push(expr_stmt(call_user));
+            body_stmts.push(expr_stmt(cm_raw_call(
+                "task-return",
+                vec![i32_const(0)],
+                TypeTable::UNIT,
+            )));
+            TypeTable::UNIT
+        }
+        ExportReturnStrategy::AsyncTaskReturn => {
+            body_stmts.push(expr_stmt(call_user));
+            TypeTable::UNIT
+        }
+        ExportReturnStrategy::SyncReturn => push_sync_return_epilogue(
+            call_user,
+            user_return_type,
+            env,
+            lift_ctx,
+            &mut next_local,
+            &mut body_stmts,
+            &mut locals,
+        ),
+        ExportReturnStrategy::ResultTaskReturn => {
+            push_result_task_return_epilogue(
+                call_user,
+                user_return_type,
+                env,
+                lift_ctx,
+                &mut next_local,
+                &mut body_stmts,
+                &mut locals,
+            );
+            TypeTable::UNIT
+        }
+    };
+
+    finalize_export_binding(
+        binding_name,
+        adapter_params,
+        adapter_return,
+        body_stmts,
+        locals,
+    )
+}
+
+/// Build the call to the user's export function, threading each user param's
+/// `is_mut` into its `CallArg` (lifted args beyond the user param list are
+/// immutable).
+fn build_call_user(
+    user_func: &Rc<RefCell<TirFunction>>,
+    callee_module: &ModuleSource,
+    call_args: Vec<TirExpr>,
+    return_type: TypeId,
+) -> TirExpr {
+    let user_func_ref = user_func.borrow();
+    let param_is_mut: Vec<bool> = user_func_ref.params.iter().map(|p| p.is_mut).collect();
+    TirExpr::new(
         TirExprKind::Call {
-            func: FunctionRef::from_resolved(&user_func.borrow(), callee_module.clone()),
+            func: FunctionRef::from_resolved(&user_func_ref, callee_module.clone()),
             type_args: vec![],
             args: call_args
                 .into_iter()
-                .zip(
-                    call_user_param_is_mut
-                        .into_iter()
-                        .chain(std::iter::repeat(false)),
-                )
+                .zip(param_is_mut.into_iter().chain(std::iter::repeat(false)))
                 .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
                 .collect(),
         },
-        user_return_type,
+        return_type,
         synth_span(),
-    );
+    )
+}
 
-    // Store result in a local
-    let result_local = alloc_local(&mut next_local, &mut locals, user_return_type);
-    body_stmts.push(let_stmt(
-        "__result",
-        result_local,
-        user_return_type,
-        call_user,
-    ));
-
-    // Determine Ok and Err type IDs from the Result type
-    let tt = type_table.borrow();
-    let (ok_type_id, err_type_id) = match tt.get(user_return_type) {
-        ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
-            (type_args[0], type_args[1])
-        }
-        _ => {
-            // Not a Result — shouldn't happen for result export bindings
-            panic!(
-                "Expected Result type for export binding return, got: {:?}",
-                tt.get(user_return_type)
-            );
-        }
-    };
-    let (_, _, ok_case_name, ok_case_index) =
-        tt.compiler_variant_case(crate::compiler_item::CompilerItem::ResultOk);
-    let ok_case_name = ok_case_name.to_string();
-    let (_, _, err_case_name, err_case_index) =
-        tt.compiler_variant_case(crate::compiler_item::CompilerItem::ResultErr);
-    let err_case_name = err_case_name.to_string();
-    drop(tt);
-
-    // Allocate mutable flat value locals (initialized to zero)
-    // These hold the flattened task-return args
-    let flat_locals: Vec<(u32, String)> = flat_return_types
-        .iter()
-        .enumerate()
-        .map(|(i, &vt)| {
-            let type_id = cm_val_type_to_type_id(vt);
-            let local = alloc_local(&mut next_local, &mut locals, type_id);
-            let name = format!("__tv_{i}");
-            body_stmts.push(let_mut_stmt(&name, local, type_id, cm_zero(vt)));
-            (local, name)
-        })
-        .collect();
-
-    // Determine Ok flat-arg count up-front so the arm bodies know
-    // whether to call `synthesize_lower_to_flat` on the payload local.
-    let tt = type_table.borrow();
-    let ok_flat_types = flat_types_from_type_id(ok_type_id, tir_modules, &tt);
-    drop(tt);
-
-    // Allocate the Ok payload binding local unconditionally so the
-    // arm pattern can reference it even when the payload has no flat
-    // slots (`Ok(())`-style); the binding is bound-but-unused in that
-    // case, which wir_build handles cleanly.
-    let ok_payload_local = alloc_local(&mut next_local, &mut locals, ok_type_id);
-    let ok_payload_name = format!("__ok_val_{ok_payload_local}");
-
-    // === Ok arm body ===
-    let mut ok_stmts: Vec<TirStmt> = Vec::new();
-    ok_stmts.push(expr_stmt(assign(
-        local_ref(
-            flat_locals[0].0,
-            &flat_locals[0].1,
-            cm_val_type_to_type_id(flat_return_types[0]),
-        ),
-        i32_const(0),
-    )));
-    if !ok_flat_types.is_empty() {
-        let ok_lowered = synthesize_lower_to_flat(
-            local_ref(ok_payload_local, &ok_payload_name, ok_type_id),
-            ok_type_id,
-            &mut next_local,
-            &mut ok_stmts,
-            &mut locals,
-            tir_modules,
-            lift_ctx,
-        );
-        for (i, flat_val) in ok_lowered.iter().enumerate() {
-            if 1 + i < flat_locals.len() {
-                let target_type = cm_val_type_to_type_id(flat_return_types[1 + i]);
-                let source_type = cm_val_type_to_type_id(flat_val.cm_type);
-                let val = coerce_flat_lower(
-                    local_ref(flat_val.index, "__flat", source_type),
-                    flat_val.cm_type,
-                    flat_return_types[1 + i],
-                );
-                ok_stmts.push(expr_stmt(assign(
-                    local_ref(flat_locals[1 + i].0, &flat_locals[1 + i].1, target_type),
-                    val,
-                )));
-            }
-        }
-    }
-    let task_return_args: Vec<TirExpr> = flat_locals
-        .iter()
-        .zip(flat_return_types.iter())
-        .map(|((local, name), &vt)| local_ref(*local, name, cm_val_type_to_type_id(vt)))
-        .collect();
-    ok_stmts.push(expr_stmt(cm_raw_call(
-        "task-return",
-        task_return_args,
-        TypeTable::UNIT,
-    )));
-    ok_stmts.push(return_stmt(None));
-
-    // === Err arm body ===
-    let err_payload_local = alloc_local(&mut next_local, &mut locals, err_type_id);
-    let err_payload_name = format!("__err_val_{err_payload_local}");
-    let mut err_stmts: Vec<TirStmt> = Vec::new();
-    err_stmts.push(expr_stmt(assign(
-        local_ref(
-            flat_locals[0].0,
-            &flat_locals[0].1,
-            cm_val_type_to_type_id(flat_return_types[0]),
-        ),
-        i32_const(1),
-    )));
-    let err_resolved = type_table.borrow().get(err_type_id).clone();
-    if let ResolvedType::Variant { name, .. } = &err_resolved {
-        if let Some(variant_decl) = find_variant_decl(name, tir_modules) {
-            synthesize_variant_lower_to_flat(
-                err_payload_local,
-                err_type_id,
-                &variant_decl,
-                &flat_locals[1..],
-                &flat_return_types[1..],
-                &mut next_local,
-                &mut err_stmts,
-                &mut locals,
-                tir_modules,
-                lift_ctx,
-            );
-        } else if flat_locals.len() > 1 {
-            err_stmts.push(expr_stmt(assign(
-                local_ref(
-                    flat_locals[1].0,
-                    &flat_locals[1].1,
-                    cm_val_type_to_type_id(flat_return_types[1]),
-                ),
-                local_ref(err_payload_local, &err_payload_name, err_type_id),
-            )));
-        }
-    } else {
-        let err_lowered = synthesize_lower_to_flat(
-            local_ref(err_payload_local, &err_payload_name, err_type_id),
-            err_type_id,
-            &mut next_local,
-            &mut err_stmts,
-            &mut locals,
-            tir_modules,
-            lift_ctx,
-        );
-        for (i, flat_val) in err_lowered.iter().enumerate() {
-            if 1 + i < flat_locals.len() {
-                let target_type = cm_val_type_to_type_id(flat_return_types[1 + i]);
-                let source_type = cm_val_type_to_type_id(flat_val.cm_type);
-                let val = coerce_flat_lower(
-                    local_ref(flat_val.index, "__flat", source_type),
-                    flat_val.cm_type,
-                    flat_return_types[1 + i],
-                );
-                err_stmts.push(expr_stmt(assign(
-                    local_ref(flat_locals[1 + i].0, &flat_locals[1 + i].1, target_type),
-                    val,
-                )));
-            }
-        }
-    }
-    let task_return_args: Vec<TirExpr> = flat_locals
-        .iter()
-        .zip(flat_return_types.iter())
-        .map(|((local, name), &vt)| local_ref(*local, name, cm_val_type_to_type_id(vt)))
-        .collect();
-    err_stmts.push(expr_stmt(cm_raw_call(
-        "task-return",
-        task_return_args,
-        TypeTable::UNIT,
-    )));
-    err_stmts.push(return_stmt(None));
-
-    // === Combine Ok/Err arms in a single TIR `Match` ===
-    let span = synth_span();
-    let ok_arm = TirMatchArm {
-        pattern: TirPattern::Variant {
-            enum_type: user_return_type,
-            variant_name: ok_case_name,
-            bindings: vec![TirPattern::Binding {
-                name: ok_payload_name,
-                local_index: ok_payload_local,
-                type_id: ok_type_id,
-            }],
-            payload_type: ok_type_id,
-        },
-        guard: None,
-        body: TirExpr::new(
-            TirExprKind::Block(TirBlock::new(ok_stmts, span)),
-            TypeTable::UNIT,
-            span,
-        ),
-        span,
-    };
-    let err_arm = TirMatchArm {
-        pattern: TirPattern::Variant {
-            enum_type: user_return_type,
-            variant_name: err_case_name,
-            bindings: vec![TirPattern::Binding {
-                name: err_payload_name,
-                local_index: err_payload_local,
-                type_id: err_type_id,
-            }],
-            payload_type: err_type_id,
-        },
-        guard: None,
-        body: TirExpr::new(
-            TirExprKind::Block(TirBlock::new(err_stmts, span)),
-            TypeTable::UNIT,
-            span,
-        ),
-        span,
-    };
-    let match_expr = TirExpr::new(
-        TirExprKind::Match {
-            expr: Box::new(local_ref(result_local, "__result", user_return_type)),
-            arms: vec![ok_arm, err_arm],
-        },
-        TypeTable::UNIT,
-        span,
-    );
-    body_stmts.push(TirStmt::new(TirStmtKind::Expr(match_expr), span));
-    // Suppress unused-variable warning for the case-index locals: the
-    // canonical Match path encodes the case via the pattern itself.
-    let _ = (ok_case_index, err_case_index);
-
-    // Fallthrough (unreachable because both arms return, but emit task-return just in case)
-    let fallthrough_args: Vec<TirExpr> = flat_return_types.iter().map(|&vt| cm_zero(vt)).collect();
-    body_stmts.push(expr_stmt(cm_raw_call(
-        "task-return",
-        fallthrough_args,
-        TypeTable::UNIT,
-    )));
-
-    let body = block(body_stmts);
-    let local_count = next_local;
-
+/// Wrap the synthesized body into the binding `TirFunction`, marked as a CM
+/// export so DCE keeps it as a root.
+fn finalize_export_binding(
+    binding_name: String,
+    params: Vec<TirParam>,
+    return_type: TypeId,
+    body_stmts: Vec<TirStmt>,
+    locals: Vec<TirLocal>,
+) -> Rc<RefCell<TirFunction>> {
+    let local_count = locals.len() as u32;
     let binding = make_binding_function(
         binding_name,
-        adapter_params,
-        TypeTable::UNIT,
-        body,
+        params,
+        return_type,
+        block(body_stmts),
         local_count,
         locals,
     );
@@ -1790,6 +1577,333 @@ pub(super) fn synthesize_result_export_binding(
         b.is_cm_export = true;
     }
     binding
+}
+
+/// `SyncReturn` epilogue: the synchronous canon lift expects the core
+/// function to return the flattened result — directly when it flattens to a
+/// single core value, or via a single i32 out-pointer into linear memory for
+/// multi-value results (strings, lists, tuples, records, options, results).
+/// Returns the adapter's core return type.
+fn push_sync_return_epilogue(
+    call_user: TirExpr,
+    user_return_type: TypeId,
+    env: &ExportBindingEnv<'_>,
+    lift_ctx: LiftContext<'_>,
+    next_local: &mut u32,
+    body_stmts: &mut Vec<TirStmt>,
+    locals: &mut Vec<TirLocal>,
+) -> TypeId {
+    let is_unit_return = matches!(
+        env.type_table.borrow().get(user_return_type),
+        ResolvedType::Unit
+    );
+    let flat_count = env
+        .world_return
+        .map(|ty| {
+            let tt = env.type_table.borrow();
+            compute_export_flat_return_types(ty, env.tir_modules, &tt).len()
+        })
+        .unwrap_or(0);
+
+    if is_unit_return {
+        body_stmts.push(expr_stmt(call_user));
+        TypeTable::UNIT
+    } else if flat_count > 1 {
+        let ty = env
+            .world_return
+            .expect("multi-flat result implies a return type");
+        let result_local = alloc_local(next_local, locals, user_return_type);
+        body_stmts.push(let_stmt(
+            "__result",
+            result_local,
+            user_return_type,
+            call_user,
+        ));
+
+        let size = crate::component_model::cm_size_with_registry(ty, env.cm_interface_registry);
+        let align = crate::component_model::cm_align_with_registry(ty, env.cm_interface_registry);
+        let ptr_local = alloc_local(next_local, locals, TypeTable::I32);
+        body_stmts.push(let_stmt(
+            "__ret_ptr",
+            ptr_local,
+            TypeTable::I32,
+            builtin_call(
+                "realloc",
+                vec![
+                    i32_const(0),
+                    i32_const(0),
+                    i32_const(align as i32),
+                    i32_const(size as i32),
+                ],
+                TypeTable::I32,
+            ),
+        ));
+
+        body_stmts.extend(synthesize_lower_wasi_type_to_memory(
+            ty,
+            local_ref(result_local, "__result", user_return_type),
+            local_ref(ptr_local, "__ret_ptr", TypeTable::I32),
+            next_local,
+            locals,
+            &env.lower_ctx(),
+        ));
+        body_stmts.push(return_stmt(Some(local_ref(
+            ptr_local,
+            "__ret_ptr",
+            TypeTable::I32,
+        ))));
+        TypeTable::I32
+    } else {
+        let result_local = alloc_local(next_local, locals, user_return_type);
+        body_stmts.push(let_stmt(
+            "__result",
+            result_local,
+            user_return_type,
+            call_user,
+        ));
+        let flat = synthesize_lower_to_flat(
+            local_ref(result_local, "__result", user_return_type),
+            user_return_type,
+            next_local,
+            body_stmts,
+            locals,
+            env.tir_modules,
+            lift_ctx,
+        );
+        match flat.first() {
+            None => TypeTable::UNIT,
+            Some(f) => {
+                let tid = cm_val_type_to_type_id(f.cm_type);
+                body_stmts.push(return_stmt(Some(local_ref(f.index, "__flat", tid))));
+                tid
+            }
+        }
+    }
+}
+
+/// `ResultTaskReturn` epilogue: store the `Result<T, E>` value, zero the flat
+/// task-return slots, match Ok/Err to lower the active payload into the
+/// joined slots ([`lower_result_arm`]), then call `task-return` once with the
+/// filled slots.
+fn push_result_task_return_epilogue(
+    call_user: TirExpr,
+    user_return_type: TypeId,
+    env: &ExportBindingEnv<'_>,
+    lift_ctx: LiftContext<'_>,
+    next_local: &mut u32,
+    body_stmts: &mut Vec<TirStmt>,
+    locals: &mut Vec<TirLocal>,
+) {
+    let return_ast = env
+        .world_return
+        .expect("Result export binding requires a world return type");
+    let flat_return_types = {
+        let tt = env.type_table.borrow();
+        compute_export_flat_return_types(return_ast, env.tir_modules, &tt)
+    };
+
+    let result_local = alloc_local(next_local, locals, user_return_type);
+    body_stmts.push(let_stmt(
+        "__result",
+        result_local,
+        user_return_type,
+        call_user,
+    ));
+
+    let tt = env.type_table.borrow();
+    let (ok_type_id, err_type_id) = match tt.get(user_return_type) {
+        ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
+            (type_args[0], type_args[1])
+        }
+        other => panic!("expected Result type for export binding return, got: {other:?}"),
+    };
+    let names = super::types::CmStdlibNames::from_compiler_items(tt.compiler_items());
+    drop(tt);
+
+    // Mutable flat slots holding the flattened task-return args, zeroed.
+    let flat_locals: Vec<(u32, String)> = flat_return_types
+        .iter()
+        .enumerate()
+        .map(|(i, &vt)| {
+            let type_id = cm_val_type_to_type_id(vt);
+            let local = alloc_local(next_local, locals, type_id);
+            let name = format!("__tv_{i}");
+            body_stmts.push(let_mut_stmt(&name, local, type_id, cm_zero(vt)));
+            (local, name)
+        })
+        .collect();
+
+    // Payload binding locals are allocated unconditionally so the arm
+    // patterns can reference them even when the payload has no flat slots
+    // (`Ok(())`-style); a bound-but-unused binding is fine for wir_build.
+    let ok_payload_local = alloc_local(next_local, locals, ok_type_id);
+    let ok_payload_name = format!("__ok_val_{ok_payload_local}");
+    let ok_stmts = lower_result_arm(
+        0,
+        ok_payload_local,
+        &ok_payload_name,
+        ok_type_id,
+        &flat_locals,
+        &flat_return_types,
+        next_local,
+        locals,
+        env.tir_modules,
+        lift_ctx,
+    );
+
+    let err_payload_local = alloc_local(next_local, locals, err_type_id);
+    let err_payload_name = format!("__err_val_{err_payload_local}");
+    let err_stmts = lower_result_arm(
+        1,
+        err_payload_local,
+        &err_payload_name,
+        err_type_id,
+        &flat_locals,
+        &flat_return_types,
+        next_local,
+        locals,
+        env.tir_modules,
+        lift_ctx,
+    );
+
+    let span = synth_span();
+    let arm = |case_name: &str,
+               payload_name: String,
+               payload_local: u32,
+               payload_type: TypeId,
+               stmts: Vec<TirStmt>| TirMatchArm {
+        pattern: TirPattern::Variant {
+            enum_type: user_return_type,
+            variant_name: case_name.to_string(),
+            bindings: vec![TirPattern::Binding {
+                name: payload_name,
+                local_index: payload_local,
+                type_id: payload_type,
+            }],
+            payload_type,
+        },
+        guard: None,
+        body: TirExpr::new(
+            TirExprKind::Block(TirBlock::new(stmts, span)),
+            TypeTable::UNIT,
+            span,
+        ),
+        span,
+    };
+    let match_expr = TirExpr::new(
+        TirExprKind::Match {
+            expr: Box::new(local_ref(result_local, "__result", user_return_type)),
+            arms: vec![
+                arm(
+                    &names.ok_name,
+                    ok_payload_name,
+                    ok_payload_local,
+                    ok_type_id,
+                    ok_stmts,
+                ),
+                arm(
+                    &names.err_name,
+                    err_payload_name,
+                    err_payload_local,
+                    err_type_id,
+                    err_stmts,
+                ),
+            ],
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    body_stmts.push(TirStmt::new(TirStmtKind::Expr(match_expr), span));
+
+    let task_return_args: Vec<TirExpr> = flat_locals
+        .iter()
+        .zip(flat_return_types.iter())
+        .map(|((local, name), &vt)| local_ref(*local, name, cm_val_type_to_type_id(vt)))
+        .collect();
+    body_stmts.push(expr_stmt(cm_raw_call(
+        "task-return",
+        task_return_args,
+        TypeTable::UNIT,
+    )));
+}
+
+/// Build one arm body of the Result epilogue's Ok/Err match: set the
+/// discriminant slot to `disc`, then lower the bound payload into the joined
+/// payload slots. A named `variant` payload goes through
+/// [`synthesize_variant_lower_to_flat`]; everything else through
+/// [`synthesize_lower_to_flat`].
+#[allow(clippy::too_many_arguments)]
+fn lower_result_arm(
+    disc: i32,
+    payload_local: u32,
+    payload_name: &str,
+    payload_type_id: TypeId,
+    flat_locals: &[(u32, String)],
+    flat_return_types: &[cm_abi::CmValType],
+    next_local: &mut u32,
+    locals: &mut Vec<TirLocal>,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    lift_ctx: LiftContext<'_>,
+) -> Vec<TirStmt> {
+    let mut arm_stmts: Vec<TirStmt> = Vec::new();
+    arm_stmts.push(expr_stmt(assign(
+        local_ref(
+            flat_locals[0].0,
+            &flat_locals[0].1,
+            cm_val_type_to_type_id(flat_return_types[0]),
+        ),
+        i32_const(disc),
+    )));
+
+    let payload_resolved = lift_ctx.type_table.borrow().get(payload_type_id).clone();
+    if let ResolvedType::Variant { name, .. } = &payload_resolved {
+        if let Some(variant_decl) = find_variant_decl(name, tir_modules) {
+            synthesize_variant_lower_to_flat(
+                payload_local,
+                payload_type_id,
+                &variant_decl,
+                &flat_locals[1..],
+                &flat_return_types[1..],
+                next_local,
+                &mut arm_stmts,
+                locals,
+                tir_modules,
+                lift_ctx,
+            );
+        } else if flat_locals.len() > 1 {
+            arm_stmts.push(expr_stmt(assign(
+                local_ref(
+                    flat_locals[1].0,
+                    &flat_locals[1].1,
+                    cm_val_type_to_type_id(flat_return_types[1]),
+                ),
+                local_ref(payload_local, payload_name, payload_type_id),
+            )));
+        }
+    } else {
+        let payload_flat_types = {
+            let tt = lift_ctx.type_table.borrow();
+            flat_types_from_type_id(payload_type_id, tir_modules, &tt)
+        };
+        if !payload_flat_types.is_empty() {
+            let lowered = synthesize_lower_to_flat(
+                local_ref(payload_local, payload_name, payload_type_id),
+                payload_type_id,
+                next_local,
+                &mut arm_stmts,
+                locals,
+                tir_modules,
+                lift_ctx,
+            );
+            assign_flat_values_into_slots(
+                &lowered,
+                &flat_locals[1..],
+                &flat_return_types[1..],
+                &mut arm_stmts,
+            );
+        }
+    }
+    arm_stmts
 }
 
 /// Synthesize TIR for lowering a variant value to flat CM locals.
@@ -1821,7 +1935,7 @@ pub(super) fn synthesize_variant_lower_to_flat(
                 &flat_locals[0].1,
                 cm_val_type_to_type_id(flat_types[0]),
             ),
-            variant_tag(local_ref(value_local, "__err_val", value_type_id)),
+            variant_tag(local_ref(value_local, "__variant_val", value_type_id)),
         )));
     }
 
@@ -1894,7 +2008,7 @@ pub(super) fn synthesize_variant_lower_to_flat(
     if !arms.is_empty() {
         let match_expr = TirExpr::new(
             TirExprKind::Match {
-                expr: Box::new(local_ref(value_local, "__err_val", value_type_id)),
+                expr: Box::new(local_ref(value_local, "__variant_val", value_type_id)),
                 arms,
             },
             TypeTable::UNIT,
@@ -1902,405 +2016,4 @@ pub(super) fn synthesize_variant_lower_to_flat(
         );
         stmts.push(TirStmt::new(TirStmtKind::Expr(match_expr), span));
     }
-}
-
-/// Synthesize a CM export binding for a `() -> ()` async export.
-///
-/// The binding calls the user's export function and then calls `task-return(0)`
-/// to signal successful completion. This replaces the task-return wrapping
-/// that was previously done at the codegen level.
-///
-/// Generated TIR (for export name "run"):
-/// ```text
-/// fn __cm_export__run() {
-///     run();
-///     cm_raw_call task-return(0);
-/// }
-/// ```
-pub(super) fn synthesize_void_export_binding(
-    export_name: &str,
-    user_func: Rc<RefCell<TirFunction>>,
-    callee_module: &ModuleSource,
-) -> Rc<RefCell<TirFunction>> {
-    let binding_name = export_binding_func_name(export_name);
-    let mut body_stmts: Vec<TirStmt> = Vec::new();
-
-    // Call the user's export function
-    let call_user = TirExpr::new(
-        TirExprKind::Call {
-            func: FunctionRef::from_resolved(&user_func.borrow(), callee_module.clone()),
-            type_args: vec![],
-            args: vec![],
-        },
-        TypeTable::UNIT,
-        synth_span(),
-    );
-    body_stmts.push(expr_stmt(call_user));
-
-    // Call task-return(0) — Ok discriminant for result<_, _>
-    body_stmts.push(expr_stmt(cm_raw_call(
-        "task-return",
-        vec![i32_const(0)],
-        TypeTable::UNIT,
-    )));
-
-    let body = block(body_stmts);
-
-    let binding = make_binding_function(binding_name, vec![], TypeTable::UNIT, body, 0, vec![]);
-    // Mark as export so DCE keeps it as a root
-    {
-        let mut b = binding.borrow_mut();
-        b.is_export = true;
-        b.is_cm_export = true;
-    }
-    binding
-}
-
-/// Synthesize a **synchronous** export binding for a non-`async` `--lib`
-/// world export.
-///
-/// The synchronous canon lift returns the lowered value directly rather than
-/// via an async `task.return`: a single-core-value result is returned verbatim
-/// (after lifting any flat params, e.g. `string` ptr/len, back to Wado values);
-/// a multi-value result (string, list, tuple, record, option, result) is lowered
-/// into fresh linear memory and returned as the i32 out-pointer.
-///
-/// Generated TIR for `export fn id_u32(v: u32) -> u32`:
-/// ```text
-/// fn __cm_export__id_u32(v: u32) -> u32 {
-///     return id_u32(v);
-/// }
-/// ```
-pub(super) fn synthesize_sync_export_binding(
-    export_name: &str,
-    user_func: Rc<RefCell<TirFunction>>,
-    callee_module: &ModuleSource,
-    tir_modules: &IndexMap<ModuleSource, TirModule>,
-    type_table: &Rc<RefCell<TypeTable>>,
-    world_params: &[(String, Type)],
-    return_ast: Option<&Type>,
-    cm_interface_registry: &CmInterfaceRegistry,
-    cm_package: &str,
-    interner: &RefCell<ModuleSourceInterner>,
-) -> Rc<RefCell<TirFunction>> {
-    let binding_name = export_binding_func_name(export_name);
-    let mut body_stmts: Vec<TirStmt> = Vec::new();
-    let mut locals: Vec<TirLocal> = Vec::new();
-
-    let user_func_ref = user_func.borrow();
-    let user_return_type = user_func_ref.return_type;
-    let lift_ctx = LiftContext {
-        cm_interface_registry,
-        type_table,
-        cm_package,
-        interner,
-    };
-    let lower_ctx = LowerContext {
-        cm_interface_registry,
-        type_table,
-        wasi_package: cm_package,
-        names: super::types::CmStdlibNames::from_compiler_items(
-            type_table.borrow().compiler_items(),
-        ),
-    };
-
-    let (adapter_params, call_args, param_count) = build_export_adapter_params(
-        &user_func_ref,
-        tir_modules,
-        type_table,
-        world_params,
-        lift_ctx,
-        &mut body_stmts,
-        &mut locals,
-    );
-
-    let call_user_param_is_mut: Vec<bool> =
-        user_func.borrow().params.iter().map(|p| p.is_mut).collect();
-    let call_user = TirExpr::new(
-        TirExprKind::Call {
-            func: FunctionRef::from_resolved(&user_func.borrow(), callee_module.clone()),
-            type_args: vec![],
-            args: call_args
-                .into_iter()
-                .zip(
-                    call_user_param_is_mut
-                        .into_iter()
-                        .chain(std::iter::repeat(false)),
-                )
-                .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
-                .collect(),
-        },
-        user_return_type,
-        synth_span(),
-    );
-
-    let tt = type_table.borrow();
-    let is_unit_return = matches!(tt.get(user_return_type), ResolvedType::Unit);
-    drop(tt);
-
-    // Lower the user result into the canonical lifted form. The sync canon lift
-    // expects the core function to return the *flattened* result: directly when
-    // it flattens to a single core value, or — for multi-value results — via a
-    // single i32 pointer into linear memory (the out-pointer convention).
-    // Flat count from the canonical ABI: a result flattening to >1 core value
-    // returns via the out-pointer convention.
-    let flat_count = return_ast
-        .map(|ty| {
-            let tt = type_table.borrow();
-            super::types::compute_export_flat_return_types(ty, tir_modules, &tt).len()
-        })
-        .unwrap_or(0);
-
-    let adapter_return = if is_unit_return {
-        body_stmts.push(expr_stmt(call_user));
-        TypeTable::UNIT
-    } else if flat_count > 1 {
-        // Out-pointer return: allocate, lower the result into linear memory,
-        // and return the i32 pointer (the canonical sync-lift convention for
-        // multi-value results — strings, lists, tuples, records, options,
-        // results).
-        let ty = return_ast.expect("multi-flat result implies a return type");
-        let mut next_local = param_count;
-        let result_local = alloc_local(&mut next_local, &mut locals, user_return_type);
-        body_stmts.push(let_stmt(
-            "__result",
-            result_local,
-            user_return_type,
-            call_user,
-        ));
-
-        let size = crate::component_model::cm_size_with_registry(ty, cm_interface_registry);
-        let align = crate::component_model::cm_align_with_registry(ty, cm_interface_registry);
-        let ptr_local = alloc_local(&mut next_local, &mut locals, TypeTable::I32);
-        body_stmts.push(let_stmt(
-            "__ret_ptr",
-            ptr_local,
-            TypeTable::I32,
-            builtin_call(
-                "realloc",
-                vec![
-                    i32_const(0),
-                    i32_const(0),
-                    i32_const(align as i32),
-                    i32_const(size as i32),
-                ],
-                TypeTable::I32,
-            ),
-        ));
-
-        let store = synthesize_lower_wasi_type_to_memory(
-            ty,
-            local_ref(result_local, "__result", user_return_type),
-            local_ref(ptr_local, "__ret_ptr", TypeTable::I32),
-            &mut next_local,
-            &mut locals,
-            &lower_ctx,
-        );
-        body_stmts.extend(store);
-        body_stmts.push(return_stmt(Some(local_ref(
-            ptr_local,
-            "__ret_ptr",
-            TypeTable::I32,
-        ))));
-        TypeTable::I32
-    } else {
-        let mut next_local = param_count;
-        let result_local = alloc_local(&mut next_local, &mut locals, user_return_type);
-        body_stmts.push(let_stmt(
-            "__result",
-            result_local,
-            user_return_type,
-            call_user,
-        ));
-        let flat = synthesize_lower_to_flat(
-            local_ref(result_local, "__result", user_return_type),
-            user_return_type,
-            &mut next_local,
-            &mut body_stmts,
-            &mut locals,
-            tir_modules,
-            lift_ctx,
-        );
-        match flat.first() {
-            None => TypeTable::UNIT,
-            Some(f) => {
-                let tid = cm_val_type_to_type_id(f.cm_type);
-                body_stmts.push(return_stmt(Some(local_ref(f.index, "__flat", tid))));
-                tid
-            }
-        }
-    };
-
-    let body = block(body_stmts);
-    let binding = make_binding_function(
-        binding_name,
-        adapter_params,
-        adapter_return,
-        body,
-        param_count,
-        locals,
-    );
-    {
-        let mut b = binding.borrow_mut();
-        b.is_export = true;
-        b.is_cm_export = true;
-    }
-    binding
-}
-
-/// Synthesize an export binding for `export async fn` functions.
-///
-/// The user function calls `task-return` internally via `task return expr` stmts
-/// (which are expanded by `expand_task_returns_in_func`). The binding only needs to
-/// lift flat CM params to Wado types and call the user function.
-///
-/// Generated TIR (for `export async fn handle(request: Request)`):
-/// ```text
-/// fn __cm_export__handle(__p0: i32, ...) {
-///     let __request = lift_request(__p0, ...);
-///     handle(__request);  // user fn calls task-return internally
-/// }
-/// ```
-pub(super) fn synthesize_async_export_binding(
-    export_name: &str,
-    user_func: Rc<RefCell<TirFunction>>,
-    callee_module: &ModuleSource,
-    tir_modules: &IndexMap<ModuleSource, TirModule>,
-    type_table: &Rc<RefCell<TypeTable>>,
-    world_params: &[(String, Type)],
-    cm_interface_registry: &CmInterfaceRegistry,
-    cm_package: &str,
-    interner: &RefCell<ModuleSourceInterner>,
-) -> Rc<RefCell<TirFunction>> {
-    let binding_name = export_binding_func_name(export_name);
-    let mut body_stmts: Vec<TirStmt> = Vec::new();
-    let mut locals: Vec<TirLocal> = Vec::new();
-
-    let user_func_ref = user_func.borrow();
-    let needs_lifting = export_needs_param_lifting(&user_func_ref.params, type_table);
-
-    let (adapter_params, call_args) = if needs_lifting {
-        let tt = type_table.borrow();
-        let flat_param_types = compute_export_flat_param_types(world_params, tir_modules, &tt);
-        drop(tt);
-
-        let flat_params: Vec<TirParam> = flat_param_types
-            .iter()
-            .enumerate()
-            .map(|(i, &vt)| TirParam {
-                name: format!("__p{i}"),
-                type_id: cm_val_type_to_type_id(vt),
-                local_index: i as u32,
-                is_mut: false,
-                is_mut_ref: false,
-                span: synth_span(),
-            })
-            .collect();
-
-        let flat_count = flat_params.len() as u32;
-        for p in &flat_params {
-            locals.push(param_local(&p.name, p.type_id, false));
-        }
-
-        let mut next_local_tmp = flat_count;
-        let flat_param_locals: Vec<u32> = (0..flat_count).collect();
-
-        let mut lifted_args = Vec::new();
-        let mut flat_offset = 0;
-        let lift_ctx = LiftContext {
-            cm_interface_registry,
-            type_table,
-            cm_package,
-            interner,
-        };
-        for (i, (_name, param_ty)) in world_params.iter().enumerate() {
-            let user_type_id = user_func_ref
-                .params
-                .get(i)
-                .map(|p| p.type_id)
-                .unwrap_or(TypeTable::I32);
-            let (lifted, consumed) = synthesize_lift_from_flat_params(
-                param_ty,
-                &flat_param_locals[flat_offset..],
-                &flat_param_types[flat_offset..],
-                user_type_id,
-                &mut next_local_tmp,
-                &mut body_stmts,
-                &mut locals,
-                tir_modules,
-                type_table,
-                lift_ctx,
-            );
-            lifted_args.push(lifted);
-            flat_offset += consumed;
-        }
-
-        (flat_params, lifted_args)
-    } else {
-        let params: Vec<TirParam> = user_func_ref
-            .params
-            .iter()
-            .enumerate()
-            .map(|(i, p)| TirParam {
-                name: p.name.clone(),
-                type_id: p.type_id,
-                local_index: i as u32,
-                is_mut: false,
-                is_mut_ref: false,
-                span: synth_span(),
-            })
-            .collect();
-
-        for p in &params {
-            locals.push(param_local(&p.name, p.type_id, false));
-        }
-
-        let args: Vec<TirExpr> = params
-            .iter()
-            .map(|p| local_ref(p.local_index, &p.name, p.type_id))
-            .collect();
-
-        (params, args)
-    };
-
-    // Call user function (it returns unit; task-return is called internally)
-    let call_user_param_is_mut: Vec<bool> =
-        user_func.borrow().params.iter().map(|p| p.is_mut).collect();
-    let call_user = TirExpr::new(
-        TirExprKind::Call {
-            func: FunctionRef::from_resolved(&user_func.borrow(), callee_module.clone()),
-            type_args: vec![],
-            args: call_args
-                .into_iter()
-                .zip(
-                    call_user_param_is_mut
-                        .into_iter()
-                        .chain(std::iter::repeat(false)),
-                )
-                .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
-                .collect(),
-        },
-        TypeTable::UNIT,
-        synth_span(),
-    );
-    body_stmts.push(expr_stmt(call_user));
-    // No task-return here: user function handles it via task return stmts.
-
-    let body = block(body_stmts);
-    let local_count = locals.len() as u32;
-
-    let binding = make_binding_function(
-        binding_name,
-        adapter_params,
-        TypeTable::UNIT,
-        body,
-        local_count,
-        locals,
-    );
-    {
-        let mut b = binding.borrow_mut();
-        b.is_export = true;
-        b.is_cm_export = true;
-    }
-    binding
 }
