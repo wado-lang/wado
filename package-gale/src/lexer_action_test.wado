@@ -1,0 +1,93 @@
+//! Lexer `{ ... }` action execution (Stage C, `language = Wado`).
+//!
+//! A lexer action runs at the tournament commit for the *winning* rule only,
+//! never for a losing candidate. Codegen emits a `LexerActions` context, an
+//! `apply_<rule>_actions` replay per executing rule, and a `best_act` tracker
+//! folded into the commit. These tests pin the emit shape, the byte-identical
+//! guard for actionless grammars, and the loud safety net for action forms
+//! codegen does not yet execute (nested-group, multi-alt, mode grammars).
+
+use { parse } from "./g4/parser.wado";
+use { generate, GenerateOptions } from "./codegen.wado";
+use { Diagnostic, DiagnosticKind } from "./gir.wado";
+
+global OPTS: GenerateOptions = GenerateOptions {};
+
+fn gen_source(src: &String) -> String {
+    let mut g = parse(*src).unwrap();
+    return generate(&mut g, &OPTS).source;
+}
+
+fn count_unsupported(diags: &List<Diagnostic>) -> i32 {
+    let mut n = 0;
+    for let d of diags {
+        if d.kind matches { UnsupportedAction } {
+            n += 1;
+        }
+    }
+    return n;
+}
+
+fn unsupported_count(src: &String) -> i32 {
+    let mut g = parse(*src).unwrap();
+    return count_unsupported(&generate(&mut g, &OPTS).diagnostics);
+}
+
+test "a single-alt lexer set_type action is emitted and not warned" {
+    let src = gen_source(&"lexer grammar L;
+options { language = Wado; }
+A : 'a' { lx.set_type(TK_B) } ;
+B : 'b' ;
+WS : ' ' -> skip ;
+");
+    assert src.contains("struct LexerActions"), "LexerActions context emitted";
+    assert src.contains("fn apply_A_actions"), "per-rule replay fn emitted";
+    assert src.contains("lx.set_type(TK_B);"), "translated action body emitted";
+    assert src.contains("best_act"), "tournament tracks the winning action rule";
+    assert unsupported_count(&"lexer grammar L;
+options { language = Wado; }
+A : 'a' { lx.set_type(TK_B) } ;
+B : 'b' ;
+WS : ' ' -> skip ;
+") == 0, "an executed lexer action must not warn";
+}
+
+test "an actionless grammar keeps no action machinery (byte-identical guard)" {
+    let src = gen_source(&"lexer grammar L;
+A : 'a' ;
+WS : ' ' -> skip ;
+");
+    assert !src.contains("LexerActions"), "no LexerActions struct without actions";
+    assert !src.contains("best_act"), "no best_act without actions";
+    assert !src.contains("apply_"), "no apply fn without actions";
+}
+
+test "a predicate-only grammar keeps no action-replay machinery" {
+    let src = gen_source(&"lexer grammar L;
+options { language = Wado; }
+KW : [a-z]+ { $text == \"cat\" }? ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+");
+    assert !src.contains("LexerActions"), "predicates need no LexerActions context";
+    assert !src.contains("best_act"), "predicates need no best_act";
+}
+
+test "a nested-group lexer action warns loudly (not yet executed)" {
+    // The action sits inside a `( ... )` group, not at the rule's top level.
+    assert unsupported_count(&"lexer grammar L;
+options { language = Wado; }
+A : ('a' { lx.set_type(TK_B) } | 'c') ;
+B : 'b' ;
+WS : ' ' -> skip ;
+") == 1, "a nested-group action must surface UnsupportedAction";
+}
+
+test "a multi-alt lexer rule action warns loudly (not yet executed)" {
+    assert unsupported_count(&"lexer grammar L;
+options { language = Wado; }
+A : 'a' { lx.set_type(TK_B) } | 'c' ;
+B : 'b' ;
+WS : ' ' -> skip ;
+") == 1, "a multi-alt rule action must surface UnsupportedAction";
+}

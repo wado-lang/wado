@@ -18,7 +18,7 @@ use {
     AltAction,
 } from "./ir.wado";
 use { literal_const_name, gen_visibility_comment } from "./gen_util.wado";
-use { translate_lexer_predicate } from "./action_translate.wado";
+use { translate_lexer_predicate, translate_lexer_action } from "./action_translate.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec, Vis, char_lit, char_range_pat } from "./wadopoet.wado";
 use { TreeMap } from "core:collections";
 
@@ -299,10 +299,15 @@ pub fn gen_lexer(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitTok
     let keywords = collect_keyword_rules(&grammar.lexer_rules, &grammar.options);
     let ea = grammar.action_language matches { Wado };
     gen_lexer_struct(w);
+    let act_rule_names = executed_action_rule_names(grammar);
+    if !act_rule_names.is_empty() {
+        gen_lexer_actions_struct(w);
+        gen_lexer_apply_fns(w, grammar);
+    }
     gen_lexer_match_fns(w, &grammar.lexer_rules, &keywords, lit_tokens, &grammar.options, atn_class, ea);
     gen_literal_match_fns(w, lit_tokens, grammar_ci);
     gen_keyword_classifier_fn(w, &keywords);
-    gen_tokenize_fn(w, &grammar.lexer_rules, lit_tokens, &grammar.mode_names, &keywords, &grammar.options);
+    gen_tokenize_fn(w, &grammar.lexer_rules, lit_tokens, &grammar.mode_names, &keywords, &grammar.options, &act_rule_names);
     gen_token_kind_name_fn(w, &grammar.lexer_rules, lit_tokens);
 }
 
@@ -505,6 +510,188 @@ fn gen_lexer_rule_predicates(w: &mut CodeWriter, actions: &List<AltAction>, befo
             };
             w.line(&`if !({cond}) \{ {fail_action}; \}`);
         }
+    }
+}
+
+/// Whether codegen runs `{ ... }` action bodies for this grammar's lexer at
+/// all: `language = Wado` and modeless (the winner-replay path is wired only
+/// for the modeless tournament). A grammar with `mode`s keeps actions
+/// unexecuted (they warn). `language = Java` lexer actions await java2wado.
+pub fn lexer_grammar_executes_actions(grammar: &Grammar) -> bool {
+    return grammar.action_language matches { Wado } && !has_modes(&grammar.mode_names);
+}
+
+/// Whether this rule's top-level actions run: an executing grammar, a real
+/// (non-fragment) rule with a single alternative. Multi-alt rules and
+/// fragments are Step-2 gaps — their actions warn.
+pub fn lexer_rule_executes_actions(grammar: &Grammar, rule: &LexerRule) -> bool {
+    return lexer_grammar_executes_actions(grammar)
+        && !rule.is_fragment
+        && !rule.is_virtual
+        && rule.body.len() == 1;
+}
+
+/// The action ids codegen runs for `rule`: the top-level `{ ... }` (non-
+/// predicate) actions of an executing single-alt rule. Single source of truth
+/// shared by the apply-fn emit and `warn_unhandled_lexer_actions`, so a run
+/// action and a warned-unhandled action cannot disagree.
+fn lexer_rule_executed_action_ids(grammar: &Grammar, rule: &LexerRule, out: &mut List<i32>) {
+    if !lexer_rule_executes_actions(grammar, rule) {
+        return;
+    }
+    for let a of &rule.body[0].actions {
+        if a.kind matches { Action } {
+            out.push(a.source.action_id);
+        }
+    }
+}
+
+/// Names of the lexer rules whose top-level actions codegen runs, in grammar
+/// order. A rule's position in this list is its `act_index` — the tournament
+/// records it in `best_act`, and the commit dispatches `apply_<name>_actions`.
+/// Empty keeps every actionless / predicate-only grammar byte-identical (no
+/// `LexerActions` struct, no `apply_*` fn, no `best_act` wiring).
+pub fn executed_action_rule_names(grammar: &Grammar) -> List<String> {
+    let mut names: List<String> = [];
+    for let rule of &grammar.lexer_rules {
+        let mut ids: List<i32> = [];
+        lexer_rule_executed_action_ids(grammar, rule, &mut ids);
+        if ids.len() > 0 {
+            names.push(rule.name);
+        }
+    }
+    return names;
+}
+
+/// The runtime action-context passed to every `apply_<rule>_actions` as `lx`.
+/// A lexer action's effects are collected here (last-wins), then folded into
+/// the tournament outcome at commit. `act_type < 0` means the action left the
+/// emitted kind unchanged. Emitted only when a grammar runs a lexer action.
+fn gen_lexer_actions_struct(w: &mut CodeWriter) {
+    let mut s = StructSpec::new("LexerActions");
+    s.add_field(&"act_type", &"i32");
+    s.emit(w);
+    w.blank();
+
+    ImplSpec::new("LexerActions").emit_begin(w);
+    let mut f = FnSpec::new("new");
+    f.set_return_type(&"LexerActions");
+    f.emit_begin(w);
+    w.line(&"return LexerActions { act_type: -1 };");
+    w.end();
+    w.blank();
+
+    let mut ft = FnSpec::new("set_type");
+    ft.set_receiver(&"&mut self");
+    ft.add_param(&"t", &"i32");
+    ft.emit_begin(w);
+    w.line(&"self.act_type = t;");
+    w.end();
+    w.end();  // impl
+    w.blank();
+}
+
+/// Emit one `apply_<rule>_actions(chars, start, pos, lx)` per executing rule.
+/// It runs the rule's top-level `{ ... }` actions in `before_index` order
+/// (identity-translated: `$text` resolves over `chars`/`start`/`pos`, the rest
+/// — `lx.set_type(...)` and friends — passes through). Called post-tournament
+/// for the winner only, so a losing candidate's actions never run.
+fn gen_lexer_apply_fns(w: &mut CodeWriter, grammar: &Grammar) {
+    for let rule of &grammar.lexer_rules {
+        let mut ids: List<i32> = [];
+        lexer_rule_executed_action_ids(grammar, rule, &mut ids);
+        if ids.is_empty() {
+            continue;
+        }
+        let mut f = FnSpec::new(&apply_fn_name(&rule.name));
+        f.add_param(&"chars", &"&List<char>");
+        f.add_param(&"start", &"i32");
+        f.add_param(&"pos", &"i32");
+        f.add_param(&"lx", &"&mut LexerActions");
+        f.emit_begin(w);
+        // Top-level actions in source order (their `before_index` order for a
+        // single-alt rule). Predicates are placed elsewhere (`gen_lexer_alt_seq`).
+        for let a of &rule.body[0].actions {
+            if !(a.kind matches { Action }) {
+                continue;
+            }
+            let body = match translate_lexer_action(&a.source.text) {
+                Ok(b) => b,
+                Err(e) => panic(`lexer action: {e}`),
+            };
+            emit_lexer_action_stmt(w, &body);
+        }
+        w.end();
+        w.blank();
+    }
+}
+
+/// Emit a translated lexer-action body as a statement. The identity translator
+/// hands back a Wado expression/statement; normalize the trailing separator so
+/// a body written with or without `;` yields exactly one statement.
+fn emit_lexer_action_stmt(w: &mut CodeWriter, body: &String) {
+    let trimmed = body.trim();
+    if trimmed.ends_with(";") || trimmed.ends_with("}") {
+        w.line(&trimmed);
+    } else {
+        w.line(&`{trimmed};`);
+    }
+}
+
+fn apply_fn_name(rule_name: &String) -> String {
+    return `apply_{*rule_name}_actions`;
+}
+
+/// Emit the post-tournament replay dispatch: for the winning rule (`best_act`),
+/// run its `apply_<rule>_actions` into a fresh `LexerActions`, then fold the
+/// collected effects into the tournament outcome. Only reached with
+/// `best_act >= 0`, i.e. the winner runs actions.
+fn gen_lexer_action_replay(w: &mut CodeWriter, act_rule_names: &List<String>) {
+    w.begin(&"if best_act >= 0");
+    w.line(&"let mut lx = LexerActions::new();");
+    for let mut i = 0; i < act_rule_names.len(); i += 1 {
+        let call = `{apply_fn_name(&act_rule_names[i])}(&lexer.chars, start, best_end, &mut lx);`;
+        if i == 0 {
+            w.begin(&`if best_act == {i}`);
+        } else {
+            w.else_begin(&`else if best_act == {i}`);
+        }
+        w.line(&call);
+    }
+    w.end();
+    // `set_type` overrides the emitted kind; an untouched `act_type` (<0)
+    // leaves the tournament's `best_kind` in place.
+    w.line(&"if lx.act_type >= 0 { best_kind = lx.act_type; }");
+    w.end();
+}
+
+/// Collect the `Action`-kind ids in `alt` that codegen does not run.
+/// `top_executes` is true only for the top-level alt of an executing rule,
+/// where its own `{ ... }` actions run (so they are excluded); every nested
+/// (in-element) action, and every action of a non-executing alt, is unhandled.
+/// Drives the loud safety net (`warn_unhandled_lexer_actions` in `codegen`).
+pub fn collect_unhandled_lexer_alt_action_ids(alt: &LexerAlternative, top_executes: bool, out: &mut List<i32>) {
+    for let a of &alt.actions {
+        if a.kind matches { Action } && !top_executes {
+            out.push(a.source.action_id);
+        }
+    }
+    for let e of &alt.elements {
+        collect_unhandled_lexer_element_action_ids(e, out);
+    }
+}
+
+fn collect_unhandled_lexer_element_action_ids(elem: &LexerElement, out: &mut List<i32>) {
+    match *elem {
+        Group(alts) => {
+            for let alt of &alts {
+                collect_unhandled_lexer_alt_action_ids(alt, false, out);
+            }
+        },
+        Repeat(rep) => collect_unhandled_lexer_element_action_ids(&rep.element, out),
+        Not(n) => collect_unhandled_lexer_element_action_ids(&n.element, out),
+        _ => {
+        },
     }
 }
 
@@ -1521,6 +1708,10 @@ struct TryCall {
     first_chars: List<[char, char]>,
     is_wildcard: bool,
     is_catch_all: bool,
+    /// Index of this rule's `apply_<rule>_actions` replay, or -1 when the rule
+    /// runs no `{ ... }` action. When the rule wins the tournament, its winner
+    /// block records `best_act = act_index` so the commit dispatches the replay.
+    act_index: i32 = -1,
 }
 
 fn best_state_extras(
@@ -1976,12 +2167,27 @@ fn gen_group_calls(w: &mut CodeWriter, calls: &List<TryCall>, indices: &List<i32
     for let call_idx of indices {
         let call = &calls[*call_idx];
         w.line(&`end = {call.fn_name}(&lexer.chars, start);`);
+        // A rule that runs `{ ... }` actions records its replay index in the
+        // same winner block, so `best_act` always tracks the current longest
+        // match. `-1` (no action) emits nothing, keeping other grammars intact.
+        let act = if call.act_index >= 0 { ` best_act = {call.act_index};` } else { String::new() };
         if needs_extras {
-            w.line(&`if end > best_end \{ best_end = end; best_kind = {call.token_kind};{call.extra} \}`);
+            w.line(&`if end > best_end \{ best_end = end; best_kind = {call.token_kind};{call.extra}{act} \}`);
         } else {
-            w.line(&`if end > best_end \{ best_end = end; best_kind = {call.token_kind}; \}`);
+            w.line(&`if end > best_end \{ best_end = end; best_kind = {call.token_kind};{act} \}`);
         }
     }
+}
+
+/// Index of `name` in `names`, or -1. Small linear scan — the executed-action
+/// rule list is short.
+fn index_of_name(names: &List<String>, name: &String) -> i32 {
+    for let mut i = 0; i < names.len(); i += 1 {
+        if names[i] == *name {
+            return i;
+        }
+    }
+    return -1;
 }
 
 fn gen_tokenize_fn(
@@ -1991,7 +2197,9 @@ fn gen_tokenize_fn(
     mode_names: &List<String>,
     keywords: &List<KeywordInfo>,
     grammar_opts: &List<GrammarOption>,
+    act_rule_names: &List<String>,
 ) {
+    let has_actions = !act_rule_names.is_empty();
     let use_modes = has_modes(mode_names);
     let has_set_mode_rules = has_set_mode(lexer_rules);
     let has_more_rules = has_more(lexer_rules);
@@ -2028,6 +2236,11 @@ fn gen_tokenize_fn(
     w.line(&"let mut best_end: i32 = -1;");
     w.line(&"let mut best_kind: i32 = TK_ERROR;");
     w.line(&"let mut end: i32 = -1;");
+    if has_actions {
+        // Which winning rule's `apply_<rule>_actions` to replay post-tournament
+        // (-1 = none). Set in the winner block alongside `best_end`/`best_kind`.
+        w.line(&"let mut best_act: i32 = -1;");
+    }
     w.line(&"let first_char = lexer.chars[start];");
 
     if use_modes {
@@ -2140,7 +2353,7 @@ fn gen_tokenize_fn(
                 && !rule.is_virtual
                 && !is_keyword_rule_name(&rule.name, keywords)
                 && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
-                all_calls.push(build_rule_try_call(
+                let mut call = build_rule_try_call(
                     rule,
                     lexer_rules,
                     false,
@@ -2148,7 +2361,9 @@ fn gen_tokenize_fn(
                     has_more_rules,
                     has_channel_rules,
                     grammar_opts,
-                ));
+                );
+                call.act_index = index_of_name(act_rule_names, &rule.name);
+                all_calls.push(call);
             }
         }
         let groups = build_dispatch_groups(&all_calls);
@@ -2186,6 +2401,14 @@ fn gen_tokenize_fn(
     emit_token_commit(w, &"TK_ERROR", &"start", &"start + 1");
     w.line(&"lexer.pos = start + 1;");
     w.else_begin(&"else");
+
+    // Winner-replay: the chosen rule's `{ ... }` actions run once, here, on the
+    // committed match — never for a losing candidate. Placed after keyword
+    // reclassification so an explicit `set_type` wins, and before the
+    // skip/more/channel commit so its effects (`best_kind`) feed them.
+    if has_actions {
+        gen_lexer_action_replay(w, act_rule_names);
+    }
 
     // `more` rules accumulate text into the next emitted token. `tok_start`
     // is the earliest start position of the current pending `more` chain,
