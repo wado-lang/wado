@@ -121,6 +121,21 @@ try {
     ["compiling", "transpiling", "running"].every((p) => phases.includes(p));
   console.log(`${workerPass ? "✅" : "❌"} runner-worker: ${JSON.stringify({ phases, stdout, stderr, result: w.result })}`);
   if (!workerPass) failed++;
+
+  // Every playground example (examples.json) must compile and run cleanly.
+  const examples = JSON.parse(await readFile(join(WEB, "examples.json"), "utf8"));
+  for (const ex of examples) {
+    const r = await page.evaluate(async (source) => {
+      try {
+        return { ok: true, ...(await globalThis.__wadoRun(source)) };
+      } catch (e) {
+        return { ok: false, error: String(e?.message ?? e) };
+      }
+    }, ex.source);
+    const pass = r.ok;
+    console.log(`${pass ? "✅" : "❌"} example ${ex.name}: ${pass ? `${r.stdout.length}B stdout` : r.error}`);
+    if (!pass) failed++;
+  }
 } finally {
   await browser.close();
   server.close();

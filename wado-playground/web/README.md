@@ -63,7 +63,12 @@ mise run playground-web-build      # compiles the wasm, bundles jco, stages asse
 ```
 
 This produces the git-ignored artifacts (`wado-playground.wasm`,
-`wado-lsp.wasm`, `vendor/*`).
+`wado-lsp.wasm`, `vendor/*`, `examples.json`).
+
+`examples.json` (built by `build-examples.mjs`) collects the `example/*.wado`
+programs the playground can load: single-file, `core:*`-only imports, with an
+exported `run`. `test-browser.mjs` compiles and runs every entry, so a listed
+example is guaranteed to work in the browser.
 
 ## Run
 

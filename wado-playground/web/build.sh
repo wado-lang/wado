@@ -31,6 +31,9 @@ echo "==> bundling jco transpileBytes for the browser"
 mkdir -p "$WEB/vendor"
 node "$WEB/build-jco.mjs"
 
+echo "==> collecting playground examples"
+node "$WEB/build-examples.mjs"
+
 echo "==> staging jco runtime assets"
 cp "$JCO_VENDOR"/js-component-bindgen-component.core*.wasm "$WEB/vendor/"
 cp "$JCO_VENDOR"/wasm-tools.core*.wasm "$WEB/vendor/"
