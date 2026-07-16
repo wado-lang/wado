@@ -195,30 +195,35 @@ reference SQL highlighters:
 
 ### Grammar Generation
 
-Generate a Rust parser from an authored Rust grammar, comparing the Gale
-generator against [tree-sitter](https://tree-sitter.github.io/)'s. The two tools
-take a similarly-sized authored grammar and turn it into parser source:
+Generate a Rust parser from an ANTLR4 `.g4` grammar. Gale is an
+ANTLR4-compatible generator, so the head-to-head comparison is against
+[ANTLR4](https://www.antlr.org/) itself over the **identical grammar** —
+`RustLexer.g4` + `RustParser.g4` (34390 bytes), same input, same ALL(\*)
+algorithm family, both emitting a parser. Throughput is grammar bytes processed
+per second (higher is better).
 
-- **Wado (Gale)** — `gale gen` (grammar assembly + code generation) over the
-  ANTLR4 `RustLexer.g4` + `RustParser.g4` (34390 bytes), measured in-process. It
-  emits an ALL(\*) recursive-descent parser.
-- **Rust (tree-sitter)** — the `tree-sitter generate` CLI over the tree-sitter
-  Rust `grammar.js` (38730 bytes), measured end to end (evaluate the JS grammar
-  DSL → build the LR/GLR parse tables → emit `parser.c`). Throughput is over the
-  authored grammar size.
+| Implementation  | Throughput  | ms/iter    | vs best |
+| --------------- | ----------- | ---------- | ------- |
+| **Wado** (Gale) | 137.46 KB/s | 250.179 ms | 1.00x   |
+| Java (ANTLR4)   | 34.52 KB/s  | 996.200 ms | 3.98x   |
 
-Throughput is grammar bytes processed per second (higher is better).
+Gale is measured in-process (grammar assembly + code generation) and emits a
+Wado recursive-descent parser; ANTLR4 runs its reference jar
+(`java -jar antlr-4.13.2-complete.jar -Dlanguage=Java`, ~0.14 s of which is JVM
+startup) over the same two files and emits Java.
 
-| Implementation     | Throughput  | ms/iter     | vs best |
-| ------------------ | ----------- | ----------- | ------- |
-| **Wado** (Gale)    | 151.83 KB/s | 226.498 ms  | 1.00x   |
-| Rust (tree-sitter) | 12.02 KB/s  | 3221.708 ms | 12.63x  |
+For a looser cross-tool reference, [tree-sitter](https://tree-sitter.github.io/)
+generates over its own Rust `grammar.js` (38730 bytes, a comparable authored
+size) via `tree-sitter generate`:
 
-This is a cross-tool reference, not an identical workload: the generators
-implement different algorithms and emit very different artifacts — Gale a
-recursive-descent parser, tree-sitter a full LR/GLR parse-table parser (a 6.4 MB
-`parser.c`). The tree-sitter row needs `cargo install tree-sitter-cli` and
-`node`; it is skipped if the CLI is absent.
+| Implementation     | Throughput | ms/iter     | vs Gale |
+| ------------------ | ---------- | ----------- | ------- |
+| Rust (tree-sitter) | 11.88 KB/s | 3260.894 ms | 11.57x  |
+
+This last row is not the same input or algorithm — tree-sitter builds a full
+LR/GLR parse-table parser (a 6.4 MB `parser.c`) — so read it as context, not a
+head-to-head. The ANTLR4 row needs `java`; the tree-sitter row needs
+`cargo install tree-sitter-cli`; each is skipped if its tool is absent.
 
 ## Application Server
 
@@ -270,8 +275,9 @@ mise run benchmark-http-routing     # HTTP routing (wado serve vs Hono vs Axum)
 ```
 
 Prerequisites: `cc` and `cargo` (system); `node` and `bun` (managed by
-`mise install`). The gale-gen tree-sitter reference also needs
-`cargo install tree-sitter-cli` (skipped if absent).
+`mise install`). gale-gen's ANTLR4 reference needs `java` (the jar is fetched to
+`~/.cache/gale`); its tree-sitter reference needs `cargo install tree-sitter-cli`
+(each row is skipped if its tool is absent).
 
 ## Profiling
 
