@@ -163,12 +163,21 @@ Decompress:
 
 ### SQL Parse
 
-Parse 81 SQL statements (13366 bytes). Gale-generated parser vs sqlparser-rs.
+Parse 81 SQL statements (13366 bytes). Two parsers are generated from the same
+`SQLite.g4` — the Gale one and ANTLR4's own (Java) — alongside the hand-written
+`sqlparser-rs`.
 
-| Implementation      | Throughput | ms/iter  | vs best |
-| ------------------- | ---------- | -------- | ------- |
-| Rust (sqlparser-rs) | 6.80 MB/s  | 1.965 ms | 1.00x   |
-| **Wado** (Gale)     | 3.92 MB/s  | 3.405 ms | 1.73x   |
+| Implementation      | Throughput | ms/iter    | vs best |
+| ------------------- | ---------- | ---------- | ------- |
+| Rust (sqlparser-rs) | 7.93 MB/s  | 1.685 ms   | 1.00x   |
+| **Wado** (Gale)     | 5.54 MB/s  | 2.410 ms   | 1.43x   |
+| Java (ANTLR4)       | 0.06 MB/s  | 223.580 ms | 132.71x |
+
+ANTLR4 (Java) is the head-to-head for Gale's generated parser — the same grammar
+turned into a parser by the reference tool — on the JVM (JIT-warmed). It runs
+under full-context LL prediction: this grammar's ambiguities defeat the two-stage
+SLL fast path (SLL bails), which is the dominant cost on this input. Needs `java`
+and is skipped if it is absent.
 
 ### Syntax Highlight
 
@@ -263,8 +272,9 @@ mise run benchmark-http-routing     # HTTP routing (wado serve vs Hono vs Axum)
 ```
 
 Prerequisites: `cc` and `cargo` (system); `node` and `bun` (managed by
-`mise install`). gale-gen's ANTLR4 reference needs `java` (the jar is fetched to
-`~/.cache/gale`; the row is skipped if java is absent).
+`mise install`). The ANTLR4 reference rows (gale-gen, sqlite-parse) need `java`
+(sqlite-parse also `javac`); the jar is fetched to `~/.cache/gale`. Those rows
+are skipped if the tool is absent.
 
 ## Profiling
 

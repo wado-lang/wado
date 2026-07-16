@@ -243,7 +243,7 @@ cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 js
 """
 
 [tasks.sqlite-parse]
-description = "Run sqlite-parse benchmark (Gale parser vs sqlparser-rs)"
+description = "Run sqlite-parse benchmark (Gale parser vs sqlparser-rs vs ANTLR4 Java, same SQLite.g4)"
 run = """
 #!/usr/bin/env bash
 set -e
@@ -253,6 +253,9 @@ cargo build --release --manifest-path sqlite_parse/Cargo.toml --quiet
 
 echo "=== Rust sqlparser-rs ==="
 ./sqlite_parse/target/release/sqlite_parse_bench
+
+echo "=== ANTLR4 (Java, generated from the same SQLite.g4) ==="
+node sqlite_parse/antlr4_java_bench.mjs
 
 echo "=== Wado (Gale) ==="
 cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 sqlite_parse/sqlite_parse.wado

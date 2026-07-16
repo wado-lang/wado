@@ -16,8 +16,9 @@ mise run on-task-started
 - `vendor/wasmtime` submodule must exist (the SessionStart hook handles it;
   otherwise `git submodule update --init --recommend-shallow vendor/wasmtime`).
 - http-routing needs `oha` (`cargo install oha`); `bun` is mise-managed.
-- gale-gen's ANTLR4 reference needs `java` (the jar is fetched to
-  `~/.cache/gale`); the row is skipped if java is absent.
+- gale-gen's and sqlite-parse's ANTLR4 references need `java` (sqlite-parse also
+  needs `javac`); the jar is fetched to `~/.cache/gale`. Those rows are skipped
+  if the tool is absent.
 - wasm-size needs `rustup target add wasm32-wasip1` and Moonbit
   (`curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash`, then
   `moon update` in each `wasm-size/*` dir).
@@ -53,7 +54,8 @@ this rate. Implementations per benchmark:
 - fts: Rust, C, Wado
 - zlib: zlib-rs, Wado
 - json-\*: serde_json, JSON.parse, Wado (catalog also Wado v2)
-- sqlite-parse: sqlparser-rs, Wado
+- sqlite-parse: sqlparser-rs, ANTLR4 Java (needs `java`/`javac`; generated from
+  the same SQLite.g4; skipped if absent), Wado
 - syntax-highlight: Prism, Lezer, tree-sitter, Shiki, Wado
 - gale-gen: Wado (Gale) vs ANTLR4 over the same `.g4` (needs `java`; the ANTLR4
   row is skipped if java is absent)
