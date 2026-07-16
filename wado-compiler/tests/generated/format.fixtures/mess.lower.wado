@@ -1761,7 +1761,7 @@ pub fn env(name: String) -> Option<String> with Environment {
         __for_0_body: {
             let pair: [String, String] = vars."List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^IndexValue<i32>::index_value"(i);
             if pair.0."String^Eq::eq"(&name) {
-                return Option<String>::Some("mess_dirty.wado::$value_copy$T28"(pair.1));
+                return Option<String>::Some("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(pair.1));
             }
         }
         i = (i + 1);
@@ -2128,7 +2128,7 @@ fn __test_0() {
     greeting.String::push_str(&String { repr: packed"Hello, ", used: 7 });
     greeting.String::push_str(&String { repr: packed"Wado!", used: 5 });
     __assert_0: {
-        let __v0: String = "mess_dirty.wado::$value_copy$T28"(greeting);
+        let __v0: String = "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(greeting);
         let __cond: bool = __v0."String^Eq::eq"(&String { repr: packed"Hello, Wado!", used: 12 });
         if !__cond {
             core::builtin::cold_path();
@@ -3969,7 +3969,7 @@ pub fn u128::div_rem(self: &u128, divisor: &u128) -> [u128, u128] {
         core::rt::panic(String { repr: packed"u128 division by zero", used: 21 });
     }
     if (*self."u128^Ord::cmp"(&*divisor) == Ordering::Less) {
-        return ["core::prelude/int128.wado::u128::zero"(), "mess_dirty.wado::$value_copy$T108"(*self)];
+        return ["core::prelude/int128.wado::u128::zero"(), "mess_dirty.wado::$value_copy$core:prelude/int128.wado/u128"(*self)];
     }
     if *self."u128^Eq::eq"(&*divisor) {
         return ["core::prelude/int128.wado::u128::one"(), "core::prelude/int128.wado::u128::zero"()];
@@ -3982,7 +3982,7 @@ pub fn u128::div_rem(self: &u128, divisor: &u128) -> [u128, u128] {
         if !(i >= 0) {
             break;
         }
-        remainder = "mess_dirty.wado::$value_copy$T108"(remainder."u128^Shl::shl"(1));
+        remainder = "mess_dirty.wado::$value_copy$core:prelude/int128.wado/u128"(remainder."u128^Shl::shl"(1));
         let bit: bool = self.u128::get_bit(i);
         if bit {
             remainder = remainder."u128^BitOr::bitor"(&one);
@@ -4040,7 +4040,7 @@ fn u128::fmt_decimal_magnitude(self: &u128, f: &mut Formatter, is_neg: bool) {
     }
     let ten: u128 = "core::prelude/int128.wado::u128::from_u64"(10);
     let mut digit_count: i32 = 0;
-    let mut temp: u128 = "mess_dirty.wado::$value_copy$T108"(*self);
+    let mut temp: u128 = "mess_dirty.wado::$value_copy$core:prelude/int128.wado/u128"(*self);
     loop {
         if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
             break;
@@ -4053,7 +4053,7 @@ fn u128::fmt_decimal_magnitude(self: &u128, f: &mut Formatter, is_neg: bool) {
     let offset: i32 = f.Formatter::prepare_int_write(is_neg, String { repr: packed"", used: 0 }, digit_count);
     let arr: &mut Array<u8> = f.buf.String::internal_raw_bytes_mut();
     let mut pos: i32 = (offset + digit_count);
-    let mut temp: u128 = "mess_dirty.wado::$value_copy$T108"(*self);
+    let mut temp: u128 = "mess_dirty.wado::$value_copy$core:prelude/int128.wado/u128"(*self);
     loop {
         if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
             break;
@@ -5749,7 +5749,7 @@ pub fn "()::to_string"(self: &()) -> String {
 }
 
 fn bool::fmt_into(self: Box<bool>, f: &mut Formatter) {
-    f.Formatter::pad("mess_dirty.wado::$value_copy$T28"(if self.value {
+    f.Formatter::pad("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(if self.value {
         String { repr: packed"true", used: 4 };
     } else {
         String { repr: packed"false", used: 5 };
@@ -6813,7 +6813,7 @@ pub fn "f32^FromStr::from_str"(s: &String) -> Result<f32, ParseFloatError> {
 }
 
 fn "f32^LenientFromStr::from_str_lenient"(s: &String) -> Result<f32, LenientParseError> {
-    let cleaned: String = "mess_dirty.wado::$value_copy$T28"("core::prelude/intparse.wado::lenient_float_preprocess"(s));
+    let cleaned: String = "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"("core::prelude/intparse.wado::lenient_float_preprocess"(s));
     return match "core::prelude/primitive.wado::f32^FromStr::from_str"(&cleaned) {
         Ok(v) => Result<f32, LenientParseError>::Ok(v),
         Err(e) => Result<f32, LenientParseError>::Err("core::prelude/intparse.wado::lenient_float_error"(e)),
@@ -7161,7 +7161,7 @@ pub fn "f64^FromStr::from_str"(s: &String) -> Result<f64, ParseFloatError> {
 }
 
 fn "f64^LenientFromStr::from_str_lenient"(s: &String) -> Result<f64, LenientParseError> {
-    let cleaned: String = "mess_dirty.wado::$value_copy$T28"("core::prelude/intparse.wado::lenient_float_preprocess"(s));
+    let cleaned: String = "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"("core::prelude/intparse.wado::lenient_float_preprocess"(s));
     return match "core::prelude/primitive.wado::f64^FromStr::from_str"(&cleaned) {
         Ok(v) => Result<f64, LenientParseError>::Ok(v),
         Err(e) => Result<f64, LenientParseError>::Err("core::prelude/intparse.wado::lenient_float_error"(e)),
@@ -8865,7 +8865,7 @@ fn "String^Eq::eq_bytes"(a: &Array<u8>, b: &Array<u8>, len: i32) -> bool {
 }
 
 fn "String^LenientFromStr::from_str_lenient"(s: &String) -> Result<String, LenientParseError> {
-    return Result<String, LenientParseError>::Ok("mess_dirty.wado::$value_copy$T28"(*s));
+    return Result<String, LenientParseError>::Ok("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(*s));
 }
 
 pub fn "String^Ord::cmp"(self: &String, other: &String) -> Ordering {
@@ -9088,19 +9088,19 @@ pub fn "StrUtf8ByteIter^Iterator::reduce"(self: &mut StrUtf8ByteIter, f: fn mut(
 }
 
 pub fn "StrUtf8ByteIter^Iterator::filter"(self: &StrUtf8ByteIter, pred: fn mut(u8) -> bool) -> IterFilter<core:prelude/string.wado/StrUtf8ByteIter> {
-    return IterFilter<core:prelude/string.wado/StrUtf8ByteIter> { inner: "mess_dirty.wado::$value_copy$T64"(*self), pred: pred };
+    return IterFilter<core:prelude/string.wado/StrUtf8ByteIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrUtf8ByteIter"(*self), pred: pred };
 }
 
 pub fn "StrUtf8ByteIter^Iterator::enumerate"(self: &StrUtf8ByteIter) -> IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter> {
-    return IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter> { inner: "mess_dirty.wado::$value_copy$T64"(*self), count: 0 };
+    return IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrUtf8ByteIter"(*self), count: 0 };
 }
 
 pub fn "StrUtf8ByteIter^Iterator::take"(self: &StrUtf8ByteIter, n: i32) -> IterTake<core:prelude/string.wado/StrUtf8ByteIter> {
-    return IterTake<core:prelude/string.wado/StrUtf8ByteIter> { inner: "mess_dirty.wado::$value_copy$T64"(*self), remaining: n };
+    return IterTake<core:prelude/string.wado/StrUtf8ByteIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrUtf8ByteIter"(*self), remaining: n };
 }
 
 pub fn "StrUtf8ByteIter^Iterator::skip"(self: &StrUtf8ByteIter, n: i32) -> IterSkip<core:prelude/string.wado/StrUtf8ByteIter> {
-    return IterSkip<core:prelude/string.wado/StrUtf8ByteIter> { inner: "mess_dirty.wado::$value_copy$T64"(*self), remaining: n };
+    return IterSkip<core:prelude/string.wado/StrUtf8ByteIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrUtf8ByteIter"(*self), remaining: n };
 }
 
 pub fn "StrCharIter^Iterator::next"(self: &mut StrCharIter) -> Option<char> {
@@ -9311,19 +9311,19 @@ pub fn "StrCharIter^Iterator::reduce"(self: &mut StrCharIter, f: fn mut(char, ch
 }
 
 pub fn "StrCharIter^Iterator::filter"(self: &StrCharIter, pred: fn mut(char) -> bool) -> IterFilter<core:prelude/string.wado/StrCharIter> {
-    return IterFilter<core:prelude/string.wado/StrCharIter> { inner: "mess_dirty.wado::$value_copy$T65"(*self), pred: pred };
+    return IterFilter<core:prelude/string.wado/StrCharIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(*self), pred: pred };
 }
 
 pub fn "StrCharIter^Iterator::enumerate"(self: &StrCharIter) -> IterEnumerate<core:prelude/string.wado/StrCharIter> {
-    return IterEnumerate<core:prelude/string.wado/StrCharIter> { inner: "mess_dirty.wado::$value_copy$T65"(*self), count: 0 };
+    return IterEnumerate<core:prelude/string.wado/StrCharIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(*self), count: 0 };
 }
 
 pub fn "StrCharIter^Iterator::take"(self: &StrCharIter, n: i32) -> IterTake<core:prelude/string.wado/StrCharIter> {
-    return IterTake<core:prelude/string.wado/StrCharIter> { inner: "mess_dirty.wado::$value_copy$T65"(*self), remaining: n };
+    return IterTake<core:prelude/string.wado/StrCharIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(*self), remaining: n };
 }
 
 pub fn "StrCharIter^Iterator::skip"(self: &StrCharIter, n: i32) -> IterSkip<core:prelude/string.wado/StrCharIter> {
-    return IterSkip<core:prelude/string.wado/StrCharIter> { inner: "mess_dirty.wado::$value_copy$T65"(*self), remaining: n };
+    return IterSkip<core:prelude/string.wado/StrCharIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(*self), remaining: n };
 }
 
 pub fn String::bytes(self: &String) -> StrUtf8ByteIter with stores[self] {
@@ -9343,7 +9343,13 @@ pub fn String::to_chars(self: &String) -> List<char> {
         if !(i < len) {
             break;
         }
-        let scalar: Utf8Scalar = "core::prelude/string.wado::decode_utf8_scalar"("mess_dirty.wado::$value_copy$T25"(bytes), i, len);
+        let b0: u8 = bytes."ArraySlice<u8>::get_unchecked"(i);
+        if (b0 < 128) {
+            chars."List<char>::push"("core::prelude/primitive.wado::char::from_u32_unchecked"(b0 as u32));
+            i = (i + 1);
+            continue;
+        }
+        let scalar: Utf8Scalar = "core::prelude/string.wado::decode_utf8_scalar"("mess_dirty.wado::$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(bytes), i, len);
         chars."List<char>::push"("core::prelude/primitive.wado::char::from_u32_unchecked"(scalar.code));
         i = (i + scalar.advance);
     }
@@ -9445,7 +9451,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 642 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 651 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"negative length", used: 15 });
                 __r.String::push_str(&String { repr: packed"\ncondition: byte_len >= 0\n", used: 26 });
@@ -9470,7 +9476,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 643 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 652 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"not on a UTF-8 character boundary", used: 33 });
                 __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_len)\n", used: 44 });
@@ -9751,7 +9757,7 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 884 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 893 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"byte range out of bounds", used: 24 });
                 __r.String::push_str(&String { repr: packed"\ncondition: 0 <= start && start <= end && end <= self.used\n", used: 59 });
@@ -9809,7 +9815,7 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 885 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 894 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"byte range not on UTF-8 character boundaries", used: 44 });
                 __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(start) && self.is_char_boundary(end)\n", used: 71 });
@@ -9889,7 +9895,7 @@ pub fn String::ends_with(self: &String, pat: String) -> bool {
 }
 
 pub fn String::strip_prefix(self: &String, prefix: String) -> Option<String> {
-    if !self.String::starts_with("mess_dirty.wado::$value_copy$T28"(prefix)) {
+    if !self.String::starts_with("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(prefix)) {
         return %0;
     }
     let start: i32 = prefix.String::len();
@@ -9900,7 +9906,7 @@ pub fn String::strip_prefix(self: &String, prefix: String) -> Option<String> {
 }
 
 pub fn String::strip_suffix(self: &String, suffix: String) -> Option<String> {
-    if !self.String::ends_with("mess_dirty.wado::$value_copy$T28"(suffix)) {
+    if !self.String::ends_with("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(suffix)) {
         return %0;
     }
     let len: i32 = (self.used - suffix.String::len());
@@ -9986,7 +9992,7 @@ pub fn String::rfind(self: &String, pat: String) -> Option<i32> {
 
 pub fn String::contains_char(self: &String, ch: char) -> bool {
     __for_of_2: {
-        let mut __iter_2: StrCharIter = "mess_dirty.wado::$value_copy$T65"(self.String::chars()."core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"());
+        let mut __iter_2: StrCharIter = "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(self.String::chars()."core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"());
         loop {
             let __match_4: Option<char> = __iter_2."StrCharIter^Iterator::next"();
             match __match_4 {
@@ -10040,7 +10046,7 @@ pub fn String::insert(self: &mut String, byte_index: i32, ch: char) {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 1046 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1055 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"insert index not on UTF-8 character boundary", used: 44 });
                 __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_index)\n", used: 46 });
@@ -10099,7 +10105,7 @@ pub fn String::insert_str(self: &mut String, byte_index: i32, s: String) {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 1087 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1096 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"insert_str index not on UTF-8 character boundary", used: 48 });
                 __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_index)\n", used: 46 });
@@ -10146,7 +10152,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 1115 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1124 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"index out of bounds", used: 19 });
                 __r.String::push_str(&String { repr: packed"\ncondition: byte_index >= 0 && byte_index < self.used\n", used: 54 });
@@ -10187,7 +10193,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 1116 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1125 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"remove index not on UTF-8 character boundary", used: 44 });
                 __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_index)\n", used: 46 });
@@ -10336,7 +10342,7 @@ pub fn "String^Default::default"() -> String {
 }
 
 pub fn String::from_utf8_slice(bytes: ArraySlice<u8>) -> Result<String, String> {
-    if !"core::prelude/string.wado::String::is_valid_utf8"("mess_dirty.wado::$value_copy$T25"(bytes)) {
+    if !"core::prelude/string.wado::String::is_valid_utf8"("mess_dirty.wado::$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(bytes)) {
         core::builtin::cold_path();
         return Result<String, String>::Err(String { repr: packed"invalid UTF-8", used: 13 });
     }
@@ -10350,7 +10356,7 @@ pub fn String::is_valid_utf8(bytes: ArraySlice<u8>) -> bool {
         if !(i < len) {
             break;
         }
-        let scalar: Utf8Scalar = "core::prelude/string.wado::decode_utf8_scalar"("mess_dirty.wado::$value_copy$T25"(bytes), i, len);
+        let scalar: Utf8Scalar = "core::prelude/string.wado::decode_utf8_scalar"("mess_dirty.wado::$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(bytes), i, len);
         if !scalar.valid {
             core::builtin::cold_path();
             return false;
@@ -10460,8 +10466,8 @@ pub fn "StrSplitIter^Iterator::find"(self: &mut StrSplitIter, pred: fn mut(Strin
         let __match_3: Option<String> = self."StrSplitIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("mess_dirty.wado::$value_copy$T28"(item)) {
-                    return Option<String>::Some("mess_dirty.wado::$value_copy$T28"(item));
+                if pred("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(item)) {
+                    return Option<String>::Some("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(item));
                 }
             },
             _ => {
@@ -10569,14 +10575,14 @@ pub fn "StrSplitIter^Iterator::reduce"(self: &mut StrSplitIter, f: fn mut(String
                 let __match_6: Option<String> = self."StrSplitIter^Iterator::next"();
                 match __match_6 {
                     Some(item) => {
-                        acc = "mess_dirty.wado::$value_copy$T28"(f("mess_dirty.wado::$value_copy$T28"(acc), item));
+                        acc = "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(f("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(acc), item));
                     },
                     _ => {
                         break;
                     },
                 };
             }
-            return Option<String>::Some("mess_dirty.wado::$value_copy$T28"(acc));
+            return Option<String>::Some("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(acc));
         },
         _ => (),
     };
@@ -10584,19 +10590,19 @@ pub fn "StrSplitIter^Iterator::reduce"(self: &mut StrSplitIter, f: fn mut(String
 }
 
 pub fn "StrSplitIter^Iterator::filter"(self: &StrSplitIter, pred: fn mut(String) -> bool) -> IterFilter<core:prelude/string.wado/StrSplitIter> {
-    return IterFilter<core:prelude/string.wado/StrSplitIter> { inner: "mess_dirty.wado::$value_copy$T66"(*self), pred: pred };
+    return IterFilter<core:prelude/string.wado/StrSplitIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitIter"(*self), pred: pred };
 }
 
 pub fn "StrSplitIter^Iterator::enumerate"(self: &StrSplitIter) -> IterEnumerate<core:prelude/string.wado/StrSplitIter> {
-    return IterEnumerate<core:prelude/string.wado/StrSplitIter> { inner: "mess_dirty.wado::$value_copy$T66"(*self), count: 0 };
+    return IterEnumerate<core:prelude/string.wado/StrSplitIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitIter"(*self), count: 0 };
 }
 
 pub fn "StrSplitIter^Iterator::take"(self: &StrSplitIter, n: i32) -> IterTake<core:prelude/string.wado/StrSplitIter> {
-    return IterTake<core:prelude/string.wado/StrSplitIter> { inner: "mess_dirty.wado::$value_copy$T66"(*self), remaining: n };
+    return IterTake<core:prelude/string.wado/StrSplitIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitIter"(*self), remaining: n };
 }
 
 pub fn "StrSplitIter^Iterator::skip"(self: &StrSplitIter, n: i32) -> IterSkip<core:prelude/string.wado/StrSplitIter> {
-    return IterSkip<core:prelude/string.wado/StrSplitIter> { inner: "mess_dirty.wado::$value_copy$T66"(*self), remaining: n };
+    return IterSkip<core:prelude/string.wado/StrSplitIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitIter"(*self), remaining: n };
 }
 
 pub fn "StrSplitNIter^Iterator::next"(self: &mut StrSplitNIter) -> Option<String> {
@@ -10701,8 +10707,8 @@ pub fn "StrSplitNIter^Iterator::find"(self: &mut StrSplitNIter, pred: fn mut(Str
         let __match_3: Option<String> = self."StrSplitNIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("mess_dirty.wado::$value_copy$T28"(item)) {
-                    return Option<String>::Some("mess_dirty.wado::$value_copy$T28"(item));
+                if pred("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(item)) {
+                    return Option<String>::Some("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(item));
                 }
             },
             _ => {
@@ -10810,14 +10816,14 @@ pub fn "StrSplitNIter^Iterator::reduce"(self: &mut StrSplitNIter, f: fn mut(Stri
                 let __match_6: Option<String> = self."StrSplitNIter^Iterator::next"();
                 match __match_6 {
                     Some(item) => {
-                        acc = "mess_dirty.wado::$value_copy$T28"(f("mess_dirty.wado::$value_copy$T28"(acc), item));
+                        acc = "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(f("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(acc), item));
                     },
                     _ => {
                         break;
                     },
                 };
             }
-            return Option<String>::Some("mess_dirty.wado::$value_copy$T28"(acc));
+            return Option<String>::Some("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(acc));
         },
         _ => (),
     };
@@ -10825,19 +10831,19 @@ pub fn "StrSplitNIter^Iterator::reduce"(self: &mut StrSplitNIter, f: fn mut(Stri
 }
 
 pub fn "StrSplitNIter^Iterator::filter"(self: &StrSplitNIter, pred: fn mut(String) -> bool) -> IterFilter<core:prelude/string.wado/StrSplitNIter> {
-    return IterFilter<core:prelude/string.wado/StrSplitNIter> { inner: "mess_dirty.wado::$value_copy$T67"(*self), pred: pred };
+    return IterFilter<core:prelude/string.wado/StrSplitNIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitNIter"(*self), pred: pred };
 }
 
 pub fn "StrSplitNIter^Iterator::enumerate"(self: &StrSplitNIter) -> IterEnumerate<core:prelude/string.wado/StrSplitNIter> {
-    return IterEnumerate<core:prelude/string.wado/StrSplitNIter> { inner: "mess_dirty.wado::$value_copy$T67"(*self), count: 0 };
+    return IterEnumerate<core:prelude/string.wado/StrSplitNIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitNIter"(*self), count: 0 };
 }
 
 pub fn "StrSplitNIter^Iterator::take"(self: &StrSplitNIter, n: i32) -> IterTake<core:prelude/string.wado/StrSplitNIter> {
-    return IterTake<core:prelude/string.wado/StrSplitNIter> { inner: "mess_dirty.wado::$value_copy$T67"(*self), remaining: n };
+    return IterTake<core:prelude/string.wado/StrSplitNIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitNIter"(*self), remaining: n };
 }
 
 pub fn "StrSplitNIter^Iterator::skip"(self: &StrSplitNIter, n: i32) -> IterSkip<core:prelude/string.wado/StrSplitNIter> {
-    return IterSkip<core:prelude/string.wado/StrSplitNIter> { inner: "mess_dirty.wado::$value_copy$T67"(*self), remaining: n };
+    return IterSkip<core:prelude/string.wado/StrSplitNIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitNIter"(*self), remaining: n };
 }
 
 fn is_ascii_whitespace_byte(b: u8) -> bool {
@@ -10921,8 +10927,8 @@ pub fn "StrSplitWhitespaceIter^Iterator::find"(self: &mut StrSplitWhitespaceIter
         let __match_3: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("mess_dirty.wado::$value_copy$T28"(item)) {
-                    return Option<String>::Some("mess_dirty.wado::$value_copy$T28"(item));
+                if pred("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(item)) {
+                    return Option<String>::Some("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(item));
                 }
             },
             _ => {
@@ -11030,14 +11036,14 @@ pub fn "StrSplitWhitespaceIter^Iterator::reduce"(self: &mut StrSplitWhitespaceIt
                 let __match_6: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
                 match __match_6 {
                     Some(item) => {
-                        acc = "mess_dirty.wado::$value_copy$T28"(f("mess_dirty.wado::$value_copy$T28"(acc), item));
+                        acc = "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(f("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(acc), item));
                     },
                     _ => {
                         break;
                     },
                 };
             }
-            return Option<String>::Some("mess_dirty.wado::$value_copy$T28"(acc));
+            return Option<String>::Some("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(acc));
         },
         _ => (),
     };
@@ -11045,19 +11051,19 @@ pub fn "StrSplitWhitespaceIter^Iterator::reduce"(self: &mut StrSplitWhitespaceIt
 }
 
 pub fn "StrSplitWhitespaceIter^Iterator::filter"(self: &StrSplitWhitespaceIter, pred: fn mut(String) -> bool) -> IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter> {
-    return IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter> { inner: "mess_dirty.wado::$value_copy$T68"(*self), pred: pred };
+    return IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitWhitespaceIter"(*self), pred: pred };
 }
 
 pub fn "StrSplitWhitespaceIter^Iterator::enumerate"(self: &StrSplitWhitespaceIter) -> IterEnumerate<core:prelude/string.wado/StrSplitWhitespaceIter> {
-    return IterEnumerate<core:prelude/string.wado/StrSplitWhitespaceIter> { inner: "mess_dirty.wado::$value_copy$T68"(*self), count: 0 };
+    return IterEnumerate<core:prelude/string.wado/StrSplitWhitespaceIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitWhitespaceIter"(*self), count: 0 };
 }
 
 pub fn "StrSplitWhitespaceIter^Iterator::take"(self: &StrSplitWhitespaceIter, n: i32) -> IterTake<core:prelude/string.wado/StrSplitWhitespaceIter> {
-    return IterTake<core:prelude/string.wado/StrSplitWhitespaceIter> { inner: "mess_dirty.wado::$value_copy$T68"(*self), remaining: n };
+    return IterTake<core:prelude/string.wado/StrSplitWhitespaceIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitWhitespaceIter"(*self), remaining: n };
 }
 
 pub fn "StrSplitWhitespaceIter^Iterator::skip"(self: &StrSplitWhitespaceIter, n: i32) -> IterSkip<core:prelude/string.wado/StrSplitWhitespaceIter> {
-    return IterSkip<core:prelude/string.wado/StrSplitWhitespaceIter> { inner: "mess_dirty.wado::$value_copy$T68"(*self), remaining: n };
+    return IterSkip<core:prelude/string.wado/StrSplitWhitespaceIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitWhitespaceIter"(*self), remaining: n };
 }
 
 pub fn "StrLinesIter^Iterator::next"(self: &mut StrLinesIter) -> Option<String> {
@@ -11158,8 +11164,8 @@ pub fn "StrLinesIter^Iterator::find"(self: &mut StrLinesIter, pred: fn mut(Strin
         let __match_3: Option<String> = self."StrLinesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("mess_dirty.wado::$value_copy$T28"(item)) {
-                    return Option<String>::Some("mess_dirty.wado::$value_copy$T28"(item));
+                if pred("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(item)) {
+                    return Option<String>::Some("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(item));
                 }
             },
             _ => {
@@ -11267,14 +11273,14 @@ pub fn "StrLinesIter^Iterator::reduce"(self: &mut StrLinesIter, f: fn mut(String
                 let __match_6: Option<String> = self."StrLinesIter^Iterator::next"();
                 match __match_6 {
                     Some(item) => {
-                        acc = "mess_dirty.wado::$value_copy$T28"(f("mess_dirty.wado::$value_copy$T28"(acc), item));
+                        acc = "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(f("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(acc), item));
                     },
                     _ => {
                         break;
                     },
                 };
             }
-            return Option<String>::Some("mess_dirty.wado::$value_copy$T28"(acc));
+            return Option<String>::Some("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(acc));
         },
         _ => (),
     };
@@ -11282,19 +11288,19 @@ pub fn "StrLinesIter^Iterator::reduce"(self: &mut StrLinesIter, f: fn mut(String
 }
 
 pub fn "StrLinesIter^Iterator::filter"(self: &StrLinesIter, pred: fn mut(String) -> bool) -> IterFilter<core:prelude/string.wado/StrLinesIter> {
-    return IterFilter<core:prelude/string.wado/StrLinesIter> { inner: "mess_dirty.wado::$value_copy$T69"(*self), pred: pred };
+    return IterFilter<core:prelude/string.wado/StrLinesIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrLinesIter"(*self), pred: pred };
 }
 
 pub fn "StrLinesIter^Iterator::enumerate"(self: &StrLinesIter) -> IterEnumerate<core:prelude/string.wado/StrLinesIter> {
-    return IterEnumerate<core:prelude/string.wado/StrLinesIter> { inner: "mess_dirty.wado::$value_copy$T69"(*self), count: 0 };
+    return IterEnumerate<core:prelude/string.wado/StrLinesIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrLinesIter"(*self), count: 0 };
 }
 
 pub fn "StrLinesIter^Iterator::take"(self: &StrLinesIter, n: i32) -> IterTake<core:prelude/string.wado/StrLinesIter> {
-    return IterTake<core:prelude/string.wado/StrLinesIter> { inner: "mess_dirty.wado::$value_copy$T69"(*self), remaining: n };
+    return IterTake<core:prelude/string.wado/StrLinesIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrLinesIter"(*self), remaining: n };
 }
 
 pub fn "StrLinesIter^Iterator::skip"(self: &StrLinesIter, n: i32) -> IterSkip<core:prelude/string.wado/StrLinesIter> {
-    return IterSkip<core:prelude/string.wado/StrLinesIter> { inner: "mess_dirty.wado::$value_copy$T69"(*self), remaining: n };
+    return IterSkip<core:prelude/string.wado/StrLinesIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrLinesIter"(*self), remaining: n };
 }
 
 pub fn "StrCharIndicesIter^Iterator::next"(self: &mut StrCharIndicesIter) -> Option<[i32, char]> {
@@ -11382,8 +11388,8 @@ pub fn "StrCharIndicesIter^Iterator::find"(self: &mut StrCharIndicesIter, pred: 
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("mess_dirty.wado::$value_copy$T204"(item)) {
-                    return Option<[i32, char]>::Some("mess_dirty.wado::$value_copy$T204"(item));
+                if pred("mess_dirty.wado::$value_copy$[i32,char]"(item)) {
+                    return Option<[i32, char]>::Some("mess_dirty.wado::$value_copy$[i32,char]"(item));
                 }
             },
             _ => {
@@ -11491,14 +11497,14 @@ pub fn "StrCharIndicesIter^Iterator::reduce"(self: &mut StrCharIndicesIter, f: f
                 let __match_6: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
                 match __match_6 {
                     Some(item) => {
-                        acc = "mess_dirty.wado::$value_copy$T204"(f("mess_dirty.wado::$value_copy$T204"(acc), item));
+                        acc = "mess_dirty.wado::$value_copy$[i32,char]"(f("mess_dirty.wado::$value_copy$[i32,char]"(acc), item));
                     },
                     _ => {
                         break;
                     },
                 };
             }
-            return Option<[i32, char]>::Some("mess_dirty.wado::$value_copy$T204"(acc));
+            return Option<[i32, char]>::Some("mess_dirty.wado::$value_copy$[i32,char]"(acc));
         },
         _ => (),
     };
@@ -11506,19 +11512,19 @@ pub fn "StrCharIndicesIter^Iterator::reduce"(self: &mut StrCharIndicesIter, f: f
 }
 
 pub fn "StrCharIndicesIter^Iterator::filter"(self: &StrCharIndicesIter, pred: fn mut([i32, char]) -> bool) -> IterFilter<core:prelude/string.wado/StrCharIndicesIter> {
-    return IterFilter<core:prelude/string.wado/StrCharIndicesIter> { inner: "mess_dirty.wado::$value_copy$T70"(*self), pred: pred };
+    return IterFilter<core:prelude/string.wado/StrCharIndicesIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"(*self), pred: pred };
 }
 
 pub fn "StrCharIndicesIter^Iterator::enumerate"(self: &StrCharIndicesIter) -> IterEnumerate<core:prelude/string.wado/StrCharIndicesIter> {
-    return IterEnumerate<core:prelude/string.wado/StrCharIndicesIter> { inner: "mess_dirty.wado::$value_copy$T70"(*self), count: 0 };
+    return IterEnumerate<core:prelude/string.wado/StrCharIndicesIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"(*self), count: 0 };
 }
 
 pub fn "StrCharIndicesIter^Iterator::take"(self: &StrCharIndicesIter, n: i32) -> IterTake<core:prelude/string.wado/StrCharIndicesIter> {
-    return IterTake<core:prelude/string.wado/StrCharIndicesIter> { inner: "mess_dirty.wado::$value_copy$T70"(*self), remaining: n };
+    return IterTake<core:prelude/string.wado/StrCharIndicesIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"(*self), remaining: n };
 }
 
 pub fn "StrCharIndicesIter^Iterator::skip"(self: &StrCharIndicesIter, n: i32) -> IterSkip<core:prelude/string.wado/StrCharIndicesIter> {
-    return IterSkip<core:prelude/string.wado/StrCharIndicesIter> { inner: "mess_dirty.wado::$value_copy$T70"(*self), remaining: n };
+    return IterSkip<core:prelude/string.wado/StrCharIndicesIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"(*self), remaining: n };
 }
 
 pub fn String::split(self: &String, sep: String) -> StrSplitIter with stores[self] {
@@ -12436,7 +12442,7 @@ fn cm_lower_array_u8(arr: List<u8>) -> i64 {
 
 fn write_escaped_string(s: String, f: &mut Formatter) {
     __for_of_2: {
-        let mut __iter_2: StrCharIter = "mess_dirty.wado::$value_copy$T65"(s.String::chars()."core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"());
+        let mut __iter_2: StrCharIter = "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(s.String::chars()."core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"());
         loop {
             let __match_4: Option<char> = __iter_2."StrCharIter^Iterator::next"();
             match __match_4 {
@@ -15008,7 +15014,7 @@ pub fn Formatter::close_brace(self: &mut Formatter, close: String) {
 
 pub fn "String^Display::fmt"(self: &String, f: &mut Formatter) {
     if (f.precision >= 0) {
-        let mut capped: String = "mess_dirty.wado::$value_copy$T28"(*self);
+        let mut capped: String = "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(*self);
         capped.String::truncate_chars(f.precision);
         f.Formatter::pad(capped);
     } else {
@@ -15022,7 +15028,7 @@ pub fn "String^Inspect::inspect"(self: &String, f: &mut Formatter) {
     let mut count: i32 = 0;
     let mut truncated: bool = false;
     __for_of_5: {
-        let mut __iter_5: StrCharIter = "mess_dirty.wado::$value_copy$T65"(*self.String::chars()."core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"());
+        let mut __iter_5: StrCharIter = "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(*self.String::chars()."core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"());
         loop {
             let __match_10: Option<char> = __iter_5."StrCharIter^Iterator::next"();
             match __match_10 {
@@ -15482,7 +15488,7 @@ pub fn "List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>:
 fn "[]<f64,f64>^InspectAlt::inspect_alt"(self: &[f64, f64], f: &mut Formatter) {
     f.Formatter::open_brace(String { repr: packed"[", used: 1 });
     __tuple_for_of_2: {
-        let __tuple_2: [f64, f64] = "mess_dirty.wado::$value_copy$T26"(*self);
+        let __tuple_2: [f64, f64] = "mess_dirty.wado::$value_copy$[f64,f64]"(*self);
         __tuple_iter_2_0: {
             let v: f64 = __tuple_2.0;
             f.Formatter::write_newline_indent();
@@ -15503,7 +15509,7 @@ fn "[]<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"[", used: 1 });
     let mut first: bool = true;
     __tuple_for_of_3: {
-        let __tuple_3: [f64, f64] = "mess_dirty.wado::$value_copy$T26"(*self);
+        let __tuple_3: [f64, f64] = "mess_dirty.wado::$value_copy$[f64,f64]"(*self);
         __tuple_iter_3_0: {
             let v: f64 = __tuple_3.0;
             if !first {
@@ -15606,13 +15612,13 @@ fn "core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"(self: &StrChar
 }
 
 pub fn "StrCharIter^Iterator::map<char>"(self: &StrCharIter, f: fn mut(char) -> char) -> IterMap<core:prelude/string.wado/StrCharIter,char> {
-    return IterMap<core:prelude/string.wado/StrCharIter,char> { inner: "mess_dirty.wado::$value_copy$T65"(*self), f: f };
+    return IterMap<core:prelude/string.wado/StrCharIter,char> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(*self), f: f };
 }
 
 pub fn "String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>>"(iter: IterMap<core:prelude/string.wado/StrCharIter,char>) -> String {
     let mut s: String = "core::prelude/string.wado::String::with_capacity"(8);
     __for_of_2: {
-        let mut __iter_2: IterMap<core:prelude/string.wado/StrCharIter,char> = "mess_dirty.wado::$value_copy$T739"(iter."IterMap<core:prelude/string.wado/StrCharIter,char>^IntoIterator::into_iter"());
+        let mut __iter_2: IterMap<core:prelude/string.wado/StrCharIter,char> = "mess_dirty.wado::$value_copy$core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>"(iter."IterMap<core:prelude/string.wado/StrCharIter,char>^IntoIterator::into_iter"());
         loop {
             let __match_4: Option<char> = __iter_2."IterMap<core:prelude/string.wado/StrCharIter,char>^Iterator::next"();
             match __match_4 {
@@ -15887,7 +15893,7 @@ fn "ArrayIter<core:prelude/string.wado/String>^Iterator::next"(self: &mut ArrayI
     if (self.index >= self.end) {
         return %0;
     }
-    let item: String = "mess_dirty.wado::$value_copy$T28"(core::builtin::array_get::<String>(self.repr, self.index));
+    let item: String = "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(core::builtin::array_get::<String>(self.repr, self.index));
     self.index = (self.index + 1);
     return Option<String>::Some(item);
 }
@@ -16233,182 +16239,178 @@ fn __initialize_modules() {
     mess_dirty.wado::__modules_initialized = true;
 }
 
-fn "$value_copy$T127"(v: List<u64>) -> List<u64> {
+fn "$value_copy$core:prelude/list.wado/List<u64>"(v: List<u64>) -> List<u64> {
     return List<u64> { repr: core::builtin::array_clone::<u64>(&v.repr), used: v.used };
 }
 
-fn "$value_copy$T759"(v: ArraySlice<u8>) -> ArraySlice<u8> {
+fn "$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(v: ArraySlice<u8>) -> ArraySlice<u8> {
     return ArraySlice<u8> { repr: v.repr, start: v.start, end: v.end };
 }
 
-fn "$value_copy$T26"(v: [f64, f64]) -> [f64, f64] {
+fn "$value_copy$[f64,f64]"(v: [f64, f64]) -> [f64, f64] {
     return [f64,f64] { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$T80"(v: WaitEvent) -> WaitEvent {
+fn "$value_copy$core:prelude/types.wado/WaitEvent"(v: WaitEvent) -> WaitEvent {
     return WaitEvent { code: v.code, handle: v.handle, payload: v.payload };
 }
 
-fn "$value_copy$T70"(v: StrCharIndicesIter) -> StrCharIndicesIter {
+fn "$value_copy$core:prelude/string.wado/StrCharIndicesIter"(v: StrCharIndicesIter) -> StrCharIndicesIter {
     return StrCharIndicesIter { repr: v.repr, used: v.used, byte_index: v.byte_index };
 }
 
-fn "$value_copy$T204"(v: [i32, char]) -> [i32, char] {
+fn "$value_copy$[i32,char]"(v: [i32, char]) -> [i32, char] {
     return [i32,char] { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$T482"(v: List<[i32, char]>) -> List<[i32, char]> {
+fn "$value_copy$core:prelude/list.wado/List<[i32,char]>"(v: List<[i32, char]>) -> List<[i32, char]> {
     return List<[i32,char]> { repr: core::builtin::array_clone::<[i32, char]>(&v.repr), used: v.used };
 }
 
-fn "$value_copy$T69"(v: StrLinesIter) -> StrLinesIter {
+fn "$value_copy$core:prelude/string.wado/StrLinesIter"(v: StrLinesIter) -> StrLinesIter {
     return StrLinesIter { repr: v.repr, used: v.used, pos: v.pos, finished: v.finished };
 }
 
-fn "$value_copy$T68"(v: StrSplitWhitespaceIter) -> StrSplitWhitespaceIter {
+fn "$value_copy$core:prelude/string.wado/StrSplitWhitespaceIter"(v: StrSplitWhitespaceIter) -> StrSplitWhitespaceIter {
     return StrSplitWhitespaceIter { repr: v.repr, used: v.used, pos: v.pos };
 }
 
-fn "$value_copy$T67"(v: StrSplitNIter) -> StrSplitNIter {
+fn "$value_copy$core:prelude/string.wado/StrSplitNIter"(v: StrSplitNIter) -> StrSplitNIter {
     return StrSplitNIter { repr: v.repr, used: v.used, pos: v.pos, sep_repr: core::builtin::array_clone::<u8>(&v.sep_repr), sep_len: v.sep_len, remaining: v.remaining, finished: v.finished };
 }
 
-fn "$value_copy$T66"(v: StrSplitIter) -> StrSplitIter {
+fn "$value_copy$core:prelude/string.wado/StrSplitIter"(v: StrSplitIter) -> StrSplitIter {
     return StrSplitIter { repr: v.repr, used: v.used, pos: v.pos, sep_repr: core::builtin::array_clone::<u8>(&v.sep_repr), sep_len: v.sep_len, finished: v.finished };
 }
 
-fn "$value_copy$T121"(v: List<String>) -> List<String> {
+fn "$value_copy$core:prelude/list.wado/List<core:prelude/string.wado/String>"(v: List<String>) -> List<String> {
     return List<core:prelude/string.wado/String> { repr: core::builtin::array_clone::<String>(&v.repr), used: v.used };
 }
 
-fn "$value_copy$T739"(v: IterMap<core:prelude/string.wado/StrCharIter,char>) -> IterMap<core:prelude/string.wado/StrCharIter,char> {
-    return IterMap<core:prelude/string.wado/StrCharIter,char> { inner: "mess_dirty.wado::$value_copy$T65"(v.inner), f: v.f };
+fn "$value_copy$core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>"(v: IterMap<core:prelude/string.wado/StrCharIter,char>) -> IterMap<core:prelude/string.wado/StrCharIter,char> {
+    return IterMap<core:prelude/string.wado/StrCharIter,char> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(v.inner), f: v.f };
 }
 
-fn "$value_copy$T63"(v: Utf8Scalar) -> Utf8Scalar {
+fn "$value_copy$core:prelude/string.wado/Utf8Scalar"(v: Utf8Scalar) -> Utf8Scalar {
     return Utf8Scalar { code: v.code, advance: v.advance, valid: v.valid };
 }
 
-fn "$value_copy$T25"(v: ArraySlice<u8>) -> ArraySlice<u8> {
-    return ArraySlice<u8> { repr: v.repr, start: v.start, end: v.end };
-}
-
-fn "$value_copy$T202"(v: List<char>) -> List<char> {
+fn "$value_copy$core:prelude/list.wado/List<char>"(v: List<char>) -> List<char> {
     return List<char> { repr: core::builtin::array_clone::<char>(&v.repr), used: v.used };
 }
 
-fn "$value_copy$T64"(v: StrUtf8ByteIter) -> StrUtf8ByteIter {
+fn "$value_copy$core:prelude/string.wado/StrUtf8ByteIter"(v: StrUtf8ByteIter) -> StrUtf8ByteIter {
     return StrUtf8ByteIter { repr: v.repr, used: v.used, index: v.index };
 }
 
-fn "$value_copy$T20"(v: Array<u8>) -> Array<u8> {
+fn "$value_copy$Array<u8>"(v: Array<u8>) -> Array<u8> {
     return core::builtin::array_clone::<u8>(&v);
 }
 
-fn "$value_copy$T114"(v: FormatResult) -> FormatResult {
+fn "$value_copy$core:prelude/fpfmt.wado/FormatResult"(v: FormatResult) -> FormatResult {
     return FormatResult { digits: v.digits, exponent: v.exponent, n_digits: v.n_digits };
 }
 
-fn "$value_copy$T129"(v: [bool, bool, SpecialKind]) -> [bool, bool, SpecialKind] {
+fn "$value_copy$[bool,bool,core:prelude/fpfmt.wado/SpecialKind]"(v: [bool, bool, SpecialKind]) -> [bool, bool, SpecialKind] {
     return [bool,bool,core:prelude/fpfmt.wado/SpecialKind] { 0: v.0, 1: v.1, 2: v.2 };
 }
 
-fn "$value_copy$T65"(v: StrCharIter) -> StrCharIter {
+fn "$value_copy$core:prelude/string.wado/StrCharIter"(v: StrCharIter) -> StrCharIter {
     return StrCharIter { repr: v.repr, used: v.used, byte_index: v.byte_index };
 }
 
-fn "$value_copy$T111"(v: ParseFloatError) -> ParseFloatError {
+fn "$value_copy$core:prelude/intparse.wado/ParseFloatError"(v: ParseFloatError) -> ParseFloatError {
     return ParseFloatError { kind: v.kind };
 }
 
-fn "$value_copy$T98"(v: ConvertError) -> ConvertError {
-    return ConvertError { message: "mess_dirty.wado::$value_copy$T28"(v.message) };
+fn "$value_copy$core:prelude/traits.wado/ConvertError"(v: ConvertError) -> ConvertError {
+    return ConvertError { message: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.message) };
 }
 
-fn "$value_copy$T137"(v: [i128, i128]) -> [i128, i128] {
-    return [core:prelude/int128.wado/i128,core:prelude/int128.wado/i128] { 0: "mess_dirty.wado::$value_copy$T109"(v.0), 1: "mess_dirty.wado::$value_copy$T109"(v.1) };
+fn "$value_copy$[core:prelude/int128.wado/i128,core:prelude/int128.wado/i128]"(v: [i128, i128]) -> [i128, i128] {
+    return [core:prelude/int128.wado/i128,core:prelude/int128.wado/i128] { 0: "mess_dirty.wado::$value_copy$core:prelude/int128.wado/i128"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/int128.wado/i128"(v.1) };
 }
 
-fn "$value_copy$T109"(v: i128) -> i128 {
+fn "$value_copy$core:prelude/int128.wado/i128"(v: i128) -> i128 {
     return i128 { low: v.low, high: v.high };
 }
 
-fn "$value_copy$T151"(v: [bool, i32]) -> [bool, i32] {
+fn "$value_copy$[bool,i32]"(v: [bool, i32]) -> [bool, i32] {
     return [bool,i32] { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$T134"(v: [u128, u128]) -> [u128, u128] {
-    return [core:prelude/int128.wado/u128,core:prelude/int128.wado/u128] { 0: "mess_dirty.wado::$value_copy$T108"(v.0), 1: "mess_dirty.wado::$value_copy$T108"(v.1) };
+fn "$value_copy$[core:prelude/int128.wado/u128,core:prelude/int128.wado/u128]"(v: [u128, u128]) -> [u128, u128] {
+    return [core:prelude/int128.wado/u128,core:prelude/int128.wado/u128] { 0: "mess_dirty.wado::$value_copy$core:prelude/int128.wado/u128"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/int128.wado/u128"(v.1) };
 }
 
-fn "$value_copy$T99"(v: LenientParseError) -> LenientParseError {
-    return LenientParseError { reason: "mess_dirty.wado::$value_copy$T28"(v.reason) };
+fn "$value_copy$core:prelude/traits.wado/LenientParseError"(v: LenientParseError) -> LenientParseError {
+    return LenientParseError { reason: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.reason) };
 }
 
-fn "$value_copy$T147"(v: [String, u32]) -> [String, u32] {
-    return [core:prelude/string.wado/String,u32] { 0: "mess_dirty.wado::$value_copy$T28"(v.0), 1: v.1 };
+fn "$value_copy$[core:prelude/string.wado/String,u32]"(v: [String, u32]) -> [String, u32] {
+    return [core:prelude/string.wado/String,u32] { 0: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.0), 1: v.1 };
 }
 
-fn "$value_copy$T133"(v: [u64, i64]) -> [u64, i64] {
+fn "$value_copy$[u64,i64]"(v: [u64, i64]) -> [u64, i64] {
     return [u64,i64] { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$T108"(v: u128) -> u128 {
+fn "$value_copy$core:prelude/int128.wado/u128"(v: u128) -> u128 {
     return u128 { low: v.low, high: v.high };
 }
 
-fn "$value_copy$T110"(v: ParseIntError) -> ParseIntError {
+fn "$value_copy$core:prelude/intparse.wado/ParseIntError"(v: ParseIntError) -> ParseIntError {
     return ParseIntError { kind: v.kind };
 }
 
-fn "$value_copy$T128"(v: [u64, i32]) -> [u64, i32] {
+fn "$value_copy$[u64,i32]"(v: [u64, i32]) -> [u64, i32] {
     return [u64,i32] { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$T112"(v: UnpackResult) -> UnpackResult {
+fn "$value_copy$core:prelude/fpfmt.wado/UnpackResult"(v: UnpackResult) -> UnpackResult {
     return UnpackResult { mantissa: v.mantissa, exponent: v.exponent };
 }
 
-fn "$value_copy$T113"(v: PmHiLo) -> PmHiLo {
+fn "$value_copy$core:prelude/fpfmt.wado/PmHiLo"(v: PmHiLo) -> PmHiLo {
     return PmHiLo { hi: v.hi, lo: v.lo };
 }
 
-fn "$value_copy$T203"(v: Result<String, String>) -> Result<String, String> {
+fn "$value_copy$core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>"(v: Result<String, String>) -> Result<String, String> {
     return match v {
-        Ok(__vc_payload_0) => Result<String, String>::Ok("mess_dirty.wado::$value_copy$T28"(__vc_payload_0)),
-        Err(__vc_payload_1) => Result<String, String>::Err("mess_dirty.wado::$value_copy$T28"(__vc_payload_1)),
+        Ok(__vc_payload_0) => Result<String, String>::Ok("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(__vc_payload_0)),
+        Err(__vc_payload_1) => Result<String, String>::Err("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(__vc_payload_1)),
     };
 }
 
-fn "$value_copy$T243"(v: List<i32>) -> List<i32> {
+fn "$value_copy$core:prelude/list.wado/List<i32>"(v: List<i32>) -> List<i32> {
     return List<i32> { repr: core::builtin::array_clone::<i32>(&v.repr), used: v.used };
 }
 
-fn "$value_copy$T72"(v: Formatter) -> Formatter {
+fn "$value_copy$core:prelude/format.wado/Formatter"(v: Formatter) -> Formatter {
     return Formatter { fill: v.fill, align: v.align, sign_plus: v.sign_plus, zero_pad: v.zero_pad, width: v.width, precision: v.precision, indent: v.indent, buf: v.buf };
 }
 
-fn "$value_copy$T234"(v: [String, String]) -> [String, String] {
-    return [core:prelude/string.wado/String,core:prelude/string.wado/String] { 0: "mess_dirty.wado::$value_copy$T28"(v.0), 1: "mess_dirty.wado::$value_copy$T28"(v.1) };
+fn "$value_copy$[core:prelude/string.wado/String,core:prelude/string.wado/String]"(v: [String, String]) -> [String, String] {
+    return [core:prelude/string.wado/String,core:prelude/string.wado/String] { 0: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.1) };
 }
 
-fn "$value_copy$T235"(v: List<[String, String]>) -> List<[String, String]> {
+fn "$value_copy$core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>"(v: List<[String, String]>) -> List<[String, String]> {
     return List<[core:prelude/string.wado/String,core:prelude/string.wado/String]> { repr: core::builtin::array_clone::<[String, String]>(&v.repr), used: v.used };
 }
 
-fn "$value_copy$T22"(v: List<u8>) -> List<u8> {
+fn "$value_copy$core:prelude/list.wado/List<u8>"(v: List<u8>) -> List<u8> {
     return List<u8> { repr: core::builtin::array_clone::<u8>(&v.repr), used: v.used };
 }
 
-fn "$value_copy$T264"(v: [Stream<u8>, StreamWritable<u8>]) -> [Stream<u8>, StreamWritable<u8>] {
+fn "$value_copy$[Stream<u8>,StreamWritable<u8>]"(v: [Stream<u8>, StreamWritable<u8>]) -> [Stream<u8>, StreamWritable<u8>] {
     return [Stream<u8>,StreamWritable<u8>] { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$T28"(v: String) -> String {
+fn "$value_copy$core:prelude/string.wado/String"(v: String) -> String {
     return String { repr: core::builtin::array_clone::<u8>(&v.repr), used: v.used };
 }
 
-fn "$value_copy$T753"(v: ArrayIter<core:prelude/string.wado/String>) -> ArrayIter<core:prelude/string.wado/String> {
+fn "$value_copy$core:prelude/slice.wado/ArrayIter<core:prelude/string.wado/String>"(v: ArrayIter<core:prelude/string.wado/String>) -> ArrayIter<core:prelude/string.wado/String> {
     return ArrayIter<core:prelude/string.wado/String> { repr: v.repr, index: v.index, end: v.end };
 }
 
