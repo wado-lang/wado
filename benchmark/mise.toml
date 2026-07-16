@@ -280,6 +280,16 @@ echo "=== Wado (Gale) ==="
 cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 syntax_highlight/syntax_highlight.wado
 """
 
+[tasks.gale-gen]
+description = "Run gale-gen benchmark (Gale generator throughput over the Rust grammar; absolute value, no comparison)"
+run = """
+#!/usr/bin/env bash
+set -e
+
+echo "=== Wado (Gale generator, Rust grammar) ==="
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 gale_gen/gale_gen.wado
+"""
+
 [tasks.http-routing]
 description = "Run HTTP routing benchmark (wado serve vs Hono on Node.js and Bun vs Axum)"
 run = "./http_routing/bench.sh"
@@ -303,6 +313,7 @@ MISE_JOBS=1 mise run zlib
 # parsing
 MISE_JOBS=1 mise run sqlite-parse
 MISE_JOBS=1 mise run syntax-highlight
+MISE_JOBS=1 mise run gale-gen
 """
 
 [tasks.clean]

@@ -23,9 +23,9 @@ mise run on-task-started
 ## Procedure
 
 1. Run `mise run benchmark-all` **three times**; per implementation keep the
-   fastest value (throttling only ever slows things down). It runs 10
+   fastest value (throttling only ever slows things down). It runs 11
    benchmarks serially: count-prime, mandelbrot, sieve, zlib, fts,
-   json-{twitter,canada,catalog}, sqlite-parse, syntax-highlight.
+   json-{twitter,canada,catalog}, sqlite-parse, syntax-highlight, gale-gen.
 2. Run http-routing separately (needs `oha` + pinned cores):
    `SLICE=4 ROUNDS=5 CONNECTIONS=50 mise run benchmark-http-routing`. It keeps
    the per-(server, request) max internally, so one invocation suffices.
@@ -44,8 +44,8 @@ Each program prints a throughput line — `<rate> <unit>/s   (<ms> ms/iter,
 Read the rate and the ms/iter straight off; the iteration count auto-calibrates
 to ~1s, so there is no total to report. Units: numbers/s (count-prime, sieve),
 px/s (mandelbrot), conversions/s (fts), MB/s (zlib, json-\*, sqlite-parse,
-syntax-highlight), req/s (http-routing). `vs best` = fastest rate / this rate.
-Implementations per benchmark:
+syntax-highlight, gale-gen), req/s (http-routing). `vs best` = fastest rate /
+this rate. Implementations per benchmark:
 
 - count-prime / mandelbrot / sieve: C, JavaScript, Wado
 - fts: Rust, C, Wado
@@ -53,6 +53,7 @@ Implementations per benchmark:
 - json-\*: serde_json, JSON.parse, Wado (catalog also Wado v2)
 - sqlite-parse: sqlparser-rs, Wado
 - syntax-highlight: Prism, Lezer, tree-sitter, Shiki, Wado
+- gale-gen: Wado only (absolute value; the Gale generator over the Rust grammar)
 - http-routing: wado serve, Hono (Node/Bun), Axum
 
 ## Workload sizing

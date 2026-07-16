@@ -193,6 +193,17 @@ reference SQL highlighters:
 | JavaScript (web-tree-sitter) | 1.34 MB/s   | 9.944 ms  | 5.01x   |
 | JavaScript (Shiki)           | 573.18 KB/s | 23.319 ms | 12.01x  |
 
+### Grammar Generation
+
+Run the Gale generator (`gale gen`: grammar assembly + code generation) over the
+Rust grammar — `RustLexer.g4` + `RustParser.g4` (34390 bytes), a large ALL(\*)
+grammar. Absolute throughput only; there is no reference implementation to
+compare against.
+
+| Implementation  | Throughput  | ms/iter    | vs best |
+| --------------- | ----------- | ---------- | ------- |
+| **Wado** (Gale) | 151.83 KB/s | 226.498 ms | 1.00x   |
+
 ## Application Server
 
 ### HTTP Routing
@@ -236,6 +247,7 @@ mise run benchmark-zlib             # compression
 # parsing
 mise run benchmark-sqlite-parse     # SQL parsing
 mise run benchmark-syntax-highlight # syntax highlighting
+mise run benchmark-gale-gen         # Gale generator over the Rust grammar
 
 # application server
 mise run benchmark-http-routing     # HTTP routing (wado serve vs Hono vs Axum)

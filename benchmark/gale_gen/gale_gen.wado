@@ -1,0 +1,47 @@
+// gale-gen benchmark: run the Gale generator over the Rust grammar.
+//
+// Measures the throughput of `gale gen` (grammar assembly + code generation)
+// on the RustLexer.g4 + RustParser.g4 pair — a large, real-world grammar.
+// Absolute value only; there is no cross-implementation comparison. Throughput
+// is reported as a byte rate over the input grammar size (grammar bytes/s).
+//
+// The grammar sources are embedded at compile time with `#include_str`, so the
+// benchmark performs no runtime file I/O — every measured iteration is the
+// generator itself.
+
+use { Stdout } from "core:cli";
+use { MonotonicClock } from "wasi:clocks";
+use { Benchmark } from "core:benchmark";
+use { assemble_grammar } from "../../package-gale/src/g4/parser.wado";
+use { generate, GenerateOptions } from "../../package-gale/src/codegen.wado";
+
+global RUST_LEXER: String = #include_str("../../package-gale/tests/grammars/RustLexer.g4");
+global RUST_PARSER: String = #include_str("../../package-gale/tests/grammars/RustParser.g4");
+
+fn gen_rust() -> i32 {
+    let inputs: List<[String, String]> = [
+        ["RustLexer.g4", RUST_LEXER],
+        ["RustParser.g4", RUST_PARSER],
+    ];
+    let mut grammar = match assemble_grammar(&inputs) {
+        Ok(g) => g,
+        Err(_) => panic("gale-gen: assemble_grammar failed on the Rust grammar"),
+    };
+    let out = generate(&mut grammar, &GenerateOptions {});
+    return out.source.len();
+}
+
+test "smoke" {
+    let len = gen_rust();
+    assert len > 0, "generated parser source must be non-empty";
+}
+
+export fn run() with Stdout, MonotonicClock {
+    let mut b = Benchmark {
+        name: "gale-gen (Rust)",
+        input_size: Option::Some(RUST_LEXER.len() + RUST_PARSER.len()),
+    };
+
+    let last = b.run("", || gen_rust());
+    assert last > 0;
+}
