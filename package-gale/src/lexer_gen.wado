@@ -529,7 +529,9 @@ pub fn lexer_grammar_executes_actions(grammar: &Grammar) -> bool {
 /// (non-fragment, non-virtual) rule. Both single-alt and multi-alt rules run
 /// their alternatives' top-level `{ ... }` actions (a multi-alt rule re-matches
 /// to find the winning alternative in `apply_<rule>_actions`). Fragments and
-/// actions nested inside an element still warn.
+/// actions nested inside an element still warn. (A single-literal rule folded
+/// into the keyword classifier does not set `best_act`, so its action does not
+/// run — see the known limitations in `action.md`.)
 pub fn lexer_rule_executes_actions(grammar: &Grammar, rule: &LexerRule) -> bool {
     return lexer_grammar_executes_actions(grammar)
         && !rule.is_fragment
@@ -2291,10 +2293,10 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
     return groups;
 }
 
-fn gen_dispatch_groups(w: &mut CodeWriter, calls: &List<TryCall>, groups: &List<DispatchGroup>, needs_extras: bool) {
+fn gen_dispatch_groups(w: &mut CodeWriter, calls: &List<TryCall>, groups: &List<DispatchGroup>, needs_extras: bool, has_actions: bool) {
     // If only a wildcard group exists, emit calls directly without dispatch
     if groups.len() == 1 && groups[0].guard == "true" {
-        gen_group_calls(w, calls, &groups[0].calls, needs_extras);
+        gen_group_calls(w, calls, &groups[0].calls, needs_extras, has_actions);
         return;
     }
     let mut first_group = true;
@@ -2302,7 +2304,7 @@ fn gen_dispatch_groups(w: &mut CodeWriter, calls: &List<TryCall>, groups: &List<
         let is_wc = g.guard == "true";
         if is_wc {
             if first_group {
-                gen_group_calls(w, calls, &g.calls, needs_extras);
+                gen_group_calls(w, calls, &g.calls, needs_extras, has_actions);
                 continue;
             }
             w.else_begin(&"else");
@@ -2312,23 +2314,24 @@ fn gen_dispatch_groups(w: &mut CodeWriter, calls: &List<TryCall>, groups: &List<
             w.else_begin(&`else if {g.guard}`);
         }
         first_group = false;
-        gen_group_calls(w, calls, &g.calls, needs_extras);
+        gen_group_calls(w, calls, &g.calls, needs_extras, has_actions);
     }
     if !first_group {
         w.end();
     }
 }
 
-fn gen_group_calls(w: &mut CodeWriter, calls: &List<TryCall>, indices: &List<i32>, needs_extras: bool) {
+fn gen_group_calls(w: &mut CodeWriter, calls: &List<TryCall>, indices: &List<i32>, needs_extras: bool, has_actions: bool) {
     // Uniform `try_*` call per candidate (keep the longest match). Single-char
     // literals are not hand-inlined — the wado compiler folds the tiny bodies.
     for let call_idx of indices {
         let call = &calls[*call_idx];
         w.line(&`end = {call.fn_name}(&lexer.chars, start);`);
-        // A rule that runs `{ ... }` actions records its replay index in the
-        // same winner block, so `best_act` always tracks the current longest
-        // match. `-1` (no action) emits nothing, keeping other grammars intact.
-        let act = if call.act_index >= 0 { ` best_act = {call.act_index};` } else { String::new() };
+        // Under `has_actions` EVERY winner block reassigns `best_act` — the
+        // rule's replay index, or -1 for a literal / non-action rule — so a
+        // longer non-action match that supersedes an earlier action match does
+        // not leave `best_act` pointing at the losing action rule.
+        let act = if has_actions { ` best_act = {call.act_index};` } else { String::new() };
         if needs_extras {
             w.line(&`if end > best_end \{ best_end = end; best_kind = {call.token_kind};{call.extra}{act} \}`);
         } else {
@@ -2446,8 +2449,12 @@ fn gen_tokenize_fn(
                         has_more_rules,
                         has_channel_rules,
                     );
+                    // A literal never runs an action; under `has_actions` its
+                    // winner block still resets `best_act` to -1 so it cannot
+                    // inherit an earlier action rule's index.
+                    let lit_act = if has_actions { " best_act = -1;" } else { "" };
                     w.line(
-                        &`if end > best_end \{ best_end = end; best_kind = {lit.const_name};{lit_reset} \}`,
+                        &`if end > best_end \{ best_end = end; best_kind = {lit.const_name};{lit_reset}{lit_act} \}`,
                     );
                 }
             }
@@ -2478,11 +2485,11 @@ fn gen_tokenize_fn(
                     } else {
                         `TK_{rule.name}`;
                     };
-                    // A rule that runs `{ ... }` actions records its replay
-                    // index so `best_act` tracks the winning match, matching
+                    // Under `has_actions` every winner block reassigns
+                    // `best_act` (the replay index, or -1) so a longer non-action
+                    // match cannot inherit an earlier action rule's index — see
                     // the modeless dispatch (`gen_group_calls`).
-                    let act_idx = index_of_name(act_rule_names, &rule.name);
-                    let act = if act_idx >= 0 { ` best_act = {act_idx};` } else { String::new() };
+                    let act = if has_actions { ` best_act = {index_of_name(act_rule_names, &rule.name)};` } else { String::new() };
                     w.line(&`if end > best_end \{ best_end = end; best_kind = {emit_kind};{extra}{act} \}`);
                 }
             }
@@ -2538,7 +2545,7 @@ fn gen_tokenize_fn(
             }
         }
         let groups = build_dispatch_groups(&all_calls);
-        gen_dispatch_groups(w, &all_calls, &groups, needs_extras);
+        gen_dispatch_groups(w, &all_calls, &groups, needs_extras, has_actions);
     }
 
     // Keyword reclassification: check if the matched text is actually a keyword.

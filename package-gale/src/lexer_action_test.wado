@@ -96,6 +96,21 @@ B : 'b' ;
     assert !src.contains("MODE_"), "no mode constants without modes";
 }
 
+test "every winner block resets best_act under an action grammar" {
+    // Regression: a non-action rule / literal that wins after an action rule
+    // must reset best_act (to -1), else it replays the losing action rule.
+    let src = gen_source(&"lexer grammar L;
+options { language = Wado; }
+SHORT : [a-z] { lx.set_type(TK_RETYPED) } ;
+LONG : [a-z] [a-z] ;
+WS : ' ' -> skip ;
+");
+    // LONG carries no action; its winner block must still assign best_act = -1.
+    assert src.contains("best_kind = TK_LONG; best_more = false; best_channel = 0; best_act = -1;")
+        || src.contains("best_kind = TK_LONG;")
+        && src.contains("best_act = -1;"), "non-action winner block must reset best_act";
+}
+
 test "an actionless grammar keeps no action machinery (byte-identical guard)" {
     let src = gen_source(&"lexer grammar L;
 A : 'a' ;
