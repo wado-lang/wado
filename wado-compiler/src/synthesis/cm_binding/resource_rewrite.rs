@@ -2085,8 +2085,13 @@ fn pascal_to_kebab(name: &str) -> String {
     })
 }
 
-/// Check if a `TypeId` represents `List<u8>`.
+/// Check if a `TypeId` represents `List<u8>`, structurally — never via the
+/// rendered type name, which a stdlib rename or newtype alias would break.
 fn is_u8_array_type(type_id: TypeId, tt: &TypeTable) -> bool {
-    let name = tt.type_name(type_id);
-    name == "List<u8>"
+    tt.as_list(type_id).is_some_and(|elem| {
+        matches!(
+            tt.get(elem),
+            ResolvedType::Primitive(crate::tir::PrimitiveType::U8)
+        )
+    })
 }

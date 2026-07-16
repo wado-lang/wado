@@ -1719,7 +1719,7 @@ pub(super) fn synthesize_adapter(
                         .get_struct_fields_by_source(s, &n.name)
                         .is_some()
                 }));
-        if needs_flat_result_lifting(&resolved) {
+        if needs_flat_result_lifting(&resolved, &names) {
             // Flat return with complex type (e.g., Result<(), ()>): the raw call returns
             // an i32 discriminant on the stack, but the binding needs to return a GC struct.
             // Synthesize VariantConstruct from the discriminant.

@@ -23,7 +23,8 @@ use crate::synthesis::common::{
 };
 
 use super::types::{
-    LiftContext, binary_add, cm_flags_byte_size, cm_type_to_type_id, is_unit_type, kebab_to_pascal,
+    LiftContext, binary_add, cm_enum_byte_size, cm_flags_byte_size, cm_type_to_type_id,
+    disc_load_op, is_unit_type, kebab_to_pascal,
 };
 
 /// Synthesize a TIR expression that loads a CM value from linear memory.
@@ -192,9 +193,12 @@ fn synthesize_lift_inner(
                         {
                             let load_name = match cm_flags_byte_size(members.len()) {
                                 0 => return i32_const(0),
-                                1 => "i32_load8_u",
-                                2 => "i32_load16_u",
-                                _ => "i32_load",
+                                size @ (1 | 2 | 4) => disc_load_op(size),
+                                size => panic!(
+                                    "flags `{}` with {} members ({size} bytes) exceeds the single-i32 lift",
+                                    named.name,
+                                    members.len()
+                                ),
                             };
                             return builtin_call(load_name, vec![addr], TypeTable::I32);
                         }
@@ -202,13 +206,7 @@ fn synthesize_lift_inner(
                             .cm_interface_registry
                             .get_enum_variants_by_source(source, &named.name)
                         {
-                            let load_name = if variants.len() <= 256 {
-                                "i32_load8_u"
-                            } else if variants.len() <= 65536 {
-                                "i32_load16_u"
-                            } else {
-                                "i32_load"
-                            };
+                            let load_name = disc_load_op(cm_enum_byte_size(variants.len()));
                             return builtin_call(load_name, vec![addr], TypeTable::I32);
                         }
                     }
@@ -227,9 +225,10 @@ fn synthesize_lift_inner(
                 synthesize_lift_result_inner(
                     &g.args[0], &g.args[1], addr, next_local, stmts, locals, ctx,
                 )
-            } else {
-                // Own<T>, Borrow<T>, Stream<T>, Future<T> are i32 handles
+            } else if matches!(gname, "Stream" | "Future" | "Own" | "Borrow") {
                 builtin_call("i32_load", vec![addr], TypeTable::I32)
+            } else {
+                panic!("unsupported generic type for CM lift: {gname}")
             }
         }
         Type::Tuple(elems) if elems.is_empty() => {
@@ -239,7 +238,7 @@ fn synthesize_lift_inner(
         Type::Reference(_) | Type::MutReference(_) => {
             builtin_call("i32_load", vec![addr], TypeTable::I32)
         }
-        _ => builtin_call("i32_load", vec![addr], TypeTable::I32),
+        other => panic!("unsupported type for CM lift: {other:?}"),
     }
 }
 
@@ -323,20 +322,13 @@ fn try_lift_wasi_struct(
         .iter()
         .map(|(fname, fty)| (fname.clone(), ctx.cm_interface_registry.resolve_type(fty)))
         .collect();
-    let field_types: Vec<&Type> = resolved_fields.iter().map(|(_, ty)| ty).collect();
-
-    // Compute field offsets using registry-aware layout
-    let mut offset = 0u32;
-    let mut max_align = 1u32;
-    let mut offsets = Vec::with_capacity(field_types.len());
-    for ft in &field_types {
-        let fa = crate::component_model::cm_align_with_registry(ft, ctx.cm_interface_registry);
-        let fs = crate::component_model::cm_size_with_registry(ft, ctx.cm_interface_registry);
-        offset = cm_abi::align_to(offset, fa);
-        offsets.push(offset);
-        offset += fs;
-        max_align = max_align.max(fa);
-    }
+    let field_types: Vec<Type> = resolved_fields.iter().map(|(_, ty)| ty.clone()).collect();
+    let offsets = cm_abi::layout_record_with_registry_scoped(
+        &field_types,
+        ctx.cm_interface_registry,
+        Some(ctx.cm_package),
+    )
+    .offsets;
 
     // Create the struct type in the type table using the exact source
     // interface — no scan across packages. Covers both `wasi:*` and
@@ -436,20 +428,11 @@ fn synthesize_lift_wasi_variant(
         null_expr(variant_type),
     ));
 
-    // Compute max payload alignment for payload offset calculation
-    let max_payload_align = cases
-        .iter()
-        .filter_map(|case| case.payload.as_ref())
-        .map(|ty| {
-            crate::component_model::cm_align_with_registry_scoped(
-                ty,
-                ctx.cm_interface_registry,
-                Some(ctx.cm_package),
-            )
-        })
-        .max()
-        .unwrap_or(1);
-    let payload_offset = cm_abi::align_to(1, max_payload_align); // after 1-byte disc
+    let payload_offset = cm_abi::variant_payload_offset_with_registry_scoped(
+        cases.iter().filter_map(|case| case.payload.as_ref()),
+        ctx.cm_interface_registry,
+        Some(ctx.cm_package),
+    );
 
     // Build if/else chain for each case (last case is the else branch)
     let case_count = cases.len();
@@ -529,14 +512,7 @@ fn synthesize_lift_wasi_enum(
     locals: &mut Vec<TirLocal>,
 ) -> TirExpr {
     let disc_local = alloc_local(next_local, locals, TypeTable::I32);
-    // CM spec: enum discriminant is u8 for ≤256 cases, u16 for ≤65536, u32 otherwise.
-    let load_name = if case_names.len() <= 256 {
-        "i32_load8_u"
-    } else if case_names.len() <= 65536 {
-        "i32_load16_u"
-    } else {
-        "i32_load"
-    };
+    let load_name = disc_load_op(cm_enum_byte_size(case_names.len()));
     stmts.push(let_stmt(
         "__edisc",
         disc_local,

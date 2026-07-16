@@ -1379,6 +1379,22 @@ mod tests {
             cm_package: "sockets",
             interner: &interner,
         };
+        // Register the variant TypeId the way the elaborator does in
+        // production; an unregistered CM type is a loud error, not an
+        // i32 fallback.
+        {
+            let Type::Named(elem_named) = &elem_ty else {
+                unreachable!("elem_ty is a named type")
+            };
+            let source = registry
+                .resolve_cm_source_for(elem_named, Some("sockets"))
+                .expect("IpAddress resolves in the stdlib registry");
+            let module_source = ctx.module_source_for(source);
+            type_table
+                .borrow_mut()
+                .make_variant("IpAddress".to_string(), module_source);
+        }
+
         let list_ty = cm_abi::generic_type("List", vec![elem_ty]);
         let mut stmts = Vec::new();
         let mut locals = Vec::new();

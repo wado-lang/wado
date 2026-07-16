@@ -287,6 +287,70 @@ pub fn layout_tuple_with_registry_scoped(
     }
 }
 
+/// Package-scoped registry-aware layout for a record: fields lay out exactly
+/// like a tuple of the field types.
+pub fn layout_record_with_registry_scoped(
+    field_types: &[Type],
+    registry: &crate::component_model::CmInterfaceRegistry,
+    wasi_package: Option<&str>,
+) -> CmLayout {
+    layout_tuple_with_registry_scoped(field_types, registry, wasi_package)
+}
+
+/// Package-scoped payload offset for a variant: the payload of every case
+/// starts at `align_to(1, max_payload_align)` after the 1-byte discriminant.
+/// `payloads` iterates the payload types of the payload-bearing cases only.
+pub fn variant_payload_offset_with_registry_scoped<'a>(
+    payloads: impl Iterator<Item = &'a Type>,
+    registry: &crate::component_model::CmInterfaceRegistry,
+    wasi_package: Option<&str>,
+) -> u32 {
+    let max_payload_align = payloads
+        .map(|ty| {
+            crate::component_model::cm_align_with_registry_scoped(ty, registry, wasi_package)
+        })
+        .max()
+        .unwrap_or(1);
+    align_to(1, max_payload_align)
+}
+
+/// CM Canonical ABI byte size for a flags type given its label count.
+/// Per the CM spec: ≤8 labels → 1 byte, ≤16 → 2 bytes, >16 → ceil(n/32)*4 bytes.
+pub fn cm_flags_byte_size(count: usize) -> u32 {
+    if count == 0 {
+        0
+    } else if count <= 8 {
+        1
+    } else if count <= 16 {
+        2
+    } else {
+        4 * (count as u32).div_ceil(32)
+    }
+}
+
+/// CM Canonical ABI alignment for a flags type given its label count.
+pub fn cm_flags_byte_align(count: usize) -> u32 {
+    if count <= 8 {
+        1
+    } else if count <= 16 {
+        2
+    } else {
+        4
+    }
+}
+
+/// CM Canonical ABI byte size for an enum discriminant given its case count.
+/// Per the CM spec `discriminant_type`: ≤256 → 1 byte, ≤65536 → 2 bytes, else 4 bytes.
+pub fn cm_enum_byte_size(count: usize) -> u32 {
+    if count <= 256 {
+        1
+    } else if count <= 65536 {
+        2
+    } else {
+        4
+    }
+}
+
 /// Registry-aware layout for result<T, E>.
 pub fn layout_result_with_registry(
     ok: &Type,
@@ -356,6 +420,15 @@ impl CmValType {
             Self::I64 | Self::F64 => 8,
         }
     }
+}
+
+/// Join two flat-type unions slot by slot, per the Canonical ABI variant
+/// flattening: the union has `max(len)` slots, each the [`CmValType::join`]
+/// of the two sides' slots at that position.
+pub fn join_flat_unions(a: &[CmValType], b: &[CmValType]) -> Vec<CmValType> {
+    (0..a.len().max(b.len()))
+        .map(|i| CmValType::join(a.get(i).copied(), b.get(i).copied()))
+        .collect()
 }
 
 /// For tuple return types, return the list of `CmPrimitiveType`s.

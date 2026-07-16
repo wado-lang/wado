@@ -304,7 +304,24 @@ pub fn cm_type_to_type_id(
                         .lib_local_type_source(&named.name)
                         .and_then(|ms| type_table.find_named_type_by_source(&named.name, ms))
                 })
-                .unwrap_or(TypeTable::I32),
+                // Resources are bare i32 handles at the CM boundary and need no
+                // registered GC type. Anything else without a TypeId would
+                // miscompile (e.g. FieldAccess on an i32), so fail loudly.
+                .unwrap_or_else(|| {
+                    let is_resource = registry
+                        .resolve_cm_source_for(named, Some(wasi_package))
+                        .is_some_and(|s| {
+                            registry.get_resource_cm_name_by_source(s, &named.name).is_some()
+                        });
+                    if is_resource {
+                        TypeTable::I32
+                    } else {
+                        panic!(
+                            "CM type `{}` (package `{wasi_package}`) has no registered TypeId",
+                            named.name
+                        )
+                    }
+                }),
         },
         Type::Generic(g) => {
             let list_name = type_table
@@ -344,7 +361,7 @@ pub fn cm_type_to_type_id(
                 }
                 // Own/Borrow are handle types represented as i32
                 "Own" | "Borrow" => TypeTable::I32,
-                _ => TypeTable::UNIT,
+                other => panic!("unsupported generic type at CM boundary: {other}"),
             }
         }
         Type::Tuple(types) if types.is_empty() => TypeTable::UNIT,
@@ -355,7 +372,9 @@ pub fn cm_type_to_type_id(
                 .collect();
             type_table.make_tuple(resolved)
         }
-        _ => TypeTable::UNIT,
+        // Borrowed resource handles are i32 at the CM boundary.
+        Type::Reference(_) | Type::MutReference(_) => TypeTable::I32,
+        other => panic!("unsupported type at CM boundary: {other:?}"),
     }
 }
 
@@ -751,40 +770,26 @@ pub fn flatten_param_type(
         .collect()
 }
 
-/// Compute the CM Canonical ABI byte size for a flags type given its label count.
-/// Per the CM spec: ≤8 labels → 1 byte, ≤16 → 2 bytes, >16 → ceil(n/32)*4 bytes.
-pub fn cm_flags_byte_size(count: usize) -> u32 {
-    if count == 0 {
-        0
-    } else if count <= 8 {
-        1
-    } else if count <= 16 {
-        2
-    } else {
-        4 * (count as u32).div_ceil(32)
+pub use crate::cm_abi::{cm_enum_byte_size, cm_flags_byte_align, cm_flags_byte_size};
+
+/// Core-wasm load op for a CM discriminant of the given byte size.
+/// Discriminants are unsigned, so 1/2-byte widths zero-extend.
+pub(super) fn disc_load_op(byte_size: u32) -> &'static str {
+    match byte_size {
+        1 => "i32_load8_u",
+        2 => "i32_load16_u",
+        4 => "i32_load",
+        other => panic!("invalid CM discriminant byte size: {other}"),
     }
 }
 
-/// Compute the CM Canonical ABI alignment for a flags type given its label count.
-pub fn cm_flags_byte_align(count: usize) -> u32 {
-    if count <= 8 {
-        1
-    } else if count <= 16 {
-        2
-    } else {
-        4
-    }
-}
-
-/// Compute the CM Canonical ABI byte size for an enum type given its variant count.
-/// Per the CM spec `discriminant_type`: ≤256 → 1 byte, ≤65536 → 2 bytes, else 4 bytes.
-pub fn cm_enum_byte_size(count: usize) -> u32 {
-    if count <= 256 {
-        1
-    } else if count <= 65536 {
-        2
-    } else {
-        4
+/// Core-wasm store op for a CM discriminant of the given byte size.
+pub(super) fn disc_store_op(byte_size: u32) -> &'static str {
+    match byte_size {
+        1 => "i32_store8",
+        2 => "i32_store16",
+        4 => "i32_store",
+        other => panic!("invalid CM discriminant byte size: {other}"),
     }
 }
 
@@ -823,9 +828,12 @@ pub(super) fn cm_param_store_plan(
         {
             let store = match cm_flags_byte_size(members.len()) {
                 0 => return vec![],
-                1 => "i32_store8",
-                2 => "i32_store16",
-                _ => "i32_store",
+                size @ (1 | 2 | 4) => disc_store_op(size),
+                size => panic!(
+                    "flags `{}` with {} members ({size} bytes) exceeds the single-i32 store plan",
+                    named.name,
+                    members.len()
+                ),
             };
             return vec![(0, store)];
         }
@@ -833,11 +841,7 @@ pub(super) fn cm_param_store_plan(
         if let Some(variants) =
             source.and_then(|s| cm_interface_registry.get_enum_variants_by_source(s, &named.name))
         {
-            let store = match cm_enum_byte_size(variants.len()) {
-                1 => "i32_store8",
-                2 => "i32_store16",
-                _ => "i32_store",
-            };
+            let store = disc_store_op(cm_enum_byte_size(variants.len()));
             return vec![(0, store)];
         }
         // Standard named types
@@ -854,23 +858,19 @@ pub(super) fn cm_param_store_plan(
     match ty {
         Type::Reference(_) | Type::MutReference(_) => vec![(0, "i32_store")],
         Type::Generic(g) if g.name == names.array => vec![(0, "i32_store"), (4, "i32_store")],
-        Type::Generic(g) => match g.name.as_str() {
-            "Option" if g.args.len() == 1 => {
-                // option<T>: disc (u8) at offset 0, payload at align_to(1, align(T))
-                let inner_align = crate::component_model::cm_align_with_registry(
-                    &g.args[0],
-                    cm_interface_registry,
-                );
-                let payload_offset = crate::cm_abi::align_to(1, inner_align);
-                let inner_store = cm_param_store_plan(&g.args[0], cm_interface_registry, names);
-                let mut stores = vec![(0, "i32_store8")]; // discriminant
-                for (sub_offset, store_name) in inner_store {
-                    stores.push((payload_offset + sub_offset, store_name));
-                }
-                stores
+        Type::Generic(g) if g.name == names.option && g.args.len() == 1 => {
+            // option<T>: disc (u8) at offset 0, payload at align_to(1, align(T))
+            let inner_align =
+                crate::component_model::cm_align_with_registry(&g.args[0], cm_interface_registry);
+            let payload_offset = crate::cm_abi::align_to(1, inner_align);
+            let inner_store = cm_param_store_plan(&g.args[0], cm_interface_registry, names);
+            let mut stores = vec![(0, "i32_store8")]; // discriminant
+            for (sub_offset, store_name) in inner_store {
+                stores.push((payload_offset + sub_offset, store_name));
             }
-            _ => vec![(0, "i32_store")],
-        },
+            stores
+        }
+        Type::Generic(_) => vec![(0, "i32_store")],
         _ => vec![(0, "i32_store")],
     }
 }
@@ -878,8 +878,8 @@ pub(super) fn cm_param_store_plan(
 /// Check whether a return type needs lifting from a flat i32 discriminant to a GC struct.
 /// This is true for Result types where all payloads are empty (unit), so the raw call
 /// returns just a discriminant on the stack without an outptr.
-pub(super) fn needs_flat_result_lifting(ty: &Type) -> bool {
-    matches!(ty, Type::Generic(g) if g.name == "Result" && g.args.len() == 2)
+pub(super) fn needs_flat_result_lifting(ty: &Type, names: &CmStdlibNames) -> bool {
+    matches!(ty, Type::Generic(g) if g.name == names.result && g.args.len() == 2)
 }
 
 pub(super) fn compute_export_flat_return_types(
@@ -933,27 +933,20 @@ pub(super) fn flatten_export_type(
             out.push(cm_abi::CmValType::I32); // ptr
             out.push(cm_abi::CmValType::I32); // len
         }
-        Type::Generic(generic) => match generic.name.as_str() {
-            "Stream" | "Future" | "Own" | "Borrow" => out.push(cm_abi::CmValType::I32),
-            "Option" if generic.args.len() == 1 => {
-                out.push(cm_abi::CmValType::I32); // discriminant
-                flatten_export_type(&generic.args[0], out, tir_modules, type_table);
-            }
-            "Result" if generic.args.len() == 2 => {
-                out.push(cm_abi::CmValType::I32); // discriminant
-                let mut ok_flat = Vec::new();
-                let mut err_flat = Vec::new();
-                flatten_export_type(&generic.args[0], &mut ok_flat, tir_modules, type_table);
-                flatten_export_type(&generic.args[1], &mut err_flat, tir_modules, type_table);
-                let max_len = ok_flat.len().max(err_flat.len());
-                for i in 0..max_len {
-                    let ok_val = ok_flat.get(i).copied();
-                    let err_val = err_flat.get(i).copied();
-                    out.push(cm_abi::CmValType::join(ok_val, err_val));
-                }
-            }
-            _ => out.push(cm_abi::CmValType::I32),
-        },
+        Type::Generic(generic) if generic.name == names.option && generic.args.len() == 1 => {
+            out.push(cm_abi::CmValType::I32); // discriminant
+            flatten_export_type(&generic.args[0], out, tir_modules, type_table);
+        }
+        Type::Generic(generic) if generic.name == names.result && generic.args.len() == 2 => {
+            out.push(cm_abi::CmValType::I32); // discriminant
+            let mut ok_flat = Vec::new();
+            let mut err_flat = Vec::new();
+            flatten_export_type(&generic.args[0], &mut ok_flat, tir_modules, type_table);
+            flatten_export_type(&generic.args[1], &mut err_flat, tir_modules, type_table);
+            out.extend(cm_abi::join_flat_unions(&ok_flat, &err_flat));
+        }
+        // Stream / Future / Own / Borrow and other generics are i32 handles.
+        Type::Generic(_) => out.push(cm_abi::CmValType::I32),
         Type::Tuple(elems) => {
             for elem in elems {
                 flatten_export_type(elem, out, tir_modules, type_table);
@@ -972,19 +965,12 @@ pub(super) fn flatten_variant_type(
     type_table: &TypeTable,
 ) {
     out.push(cm_abi::CmValType::I32); // variant discriminant
-    let mut max_payload: Vec<cm_abi::CmValType> = Vec::new();
+    let mut union: Vec<cm_abi::CmValType> = Vec::new();
     for case in &variant_decl.cases {
         let case_flat = flat_types_from_type_id(case.payload, tir_modules, type_table);
-        // Union: extend with join at each position
-        for (i, &val) in case_flat.iter().enumerate() {
-            if i < max_payload.len() {
-                max_payload[i] = cm_abi::CmValType::join(Some(max_payload[i]), Some(val));
-            } else {
-                max_payload.push(val);
-            }
-        }
+        union = cm_abi::join_flat_unions(&union, &case_flat);
     }
-    out.extend(max_payload);
+    out.extend(union);
 }
 
 /// Flatten a struct type: concatenation of all field flat types.
@@ -1074,12 +1060,7 @@ pub(super) fn flat_types_from_type_id_into(
                 let mut err_flat = Vec::new();
                 flat_types_from_type_id_into(type_args[0], &mut ok_flat, tir_modules, type_table);
                 flat_types_from_type_id_into(type_args[1], &mut err_flat, tir_modules, type_table);
-                let max_len = ok_flat.len().max(err_flat.len());
-                for i in 0..max_len {
-                    let ok_val = ok_flat.get(i).copied();
-                    let err_val = err_flat.get(i).copied();
-                    out.push(cm_abi::CmValType::join(ok_val, err_val));
-                }
+                out.extend(cm_abi::join_flat_unions(&ok_flat, &err_flat));
             } else if name == &names.array {
                 out.push(cm_abi::CmValType::I32); // ptr
                 out.push(cm_abi::CmValType::I32); // len

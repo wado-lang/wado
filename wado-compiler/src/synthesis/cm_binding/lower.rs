@@ -164,78 +164,30 @@ pub fn synthesize_lower(
                 TypeTable::UNIT,
             ))],
         },
-        Type::Generic(g) => match g.name.as_str() {
-            // list<T>: lowered as (ptr, len) pair stored at addr
-            name if name == names.array
-                && g.args.len() == 1
-                && matches!(&g.args[0], Type::Named(n) if n.name == "u8") =>
-            {
-                // list<u8>: use cm_lower_array_u8 → packed i64, store (ptr, len)
-                let packed_local = *next_local;
-                locals.push(TirLocal::synth(*next_local, TypeTable::I64, false));
-                *next_local += 1;
-                let packed = internal_call("cm_lower_array_u8", vec![value], TypeTable::I64);
-                let mut stmts = vec![let_stmt(
-                    "__elem_packed",
-                    packed_local,
-                    TypeTable::I64,
-                    packed,
-                )];
-                // Store ptr (low 32 bits) at addr
-                let ptr = cast(
-                    local_ref(packed_local, "__elem_packed", TypeTable::I64),
-                    TypeTable::I32,
-                );
-                stmts.push(expr_stmt(builtin_call(
-                    "i32_store",
-                    vec![addr.clone(), ptr],
-                    TypeTable::UNIT,
-                )));
-                // Store len (high 32 bits) at addr + 4
-                let shifted = binary(
-                    TirBinaryOp::Shr,
-                    local_ref(packed_local, "__elem_packed", TypeTable::I64),
-                    i64_const(32),
-                    TypeTable::I64,
-                );
-                let len = cast(shifted, TypeTable::I32);
-                stmts.push(expr_stmt(builtin_call(
-                    "i32_store",
-                    vec![
-                        binary(TirBinaryOp::Add, addr, i32_const(4), TypeTable::I32),
-                        len,
-                    ],
-                    TypeTable::UNIT,
-                )));
-                stmts
-            }
-            name if name == names.array => {
-                // General list<T>: treat as opaque i32 for now
-                vec![expr_stmt(builtin_call(
-                    "i32_store",
-                    vec![addr, value],
-                    TypeTable::UNIT,
-                ))]
-            }
-            // Own<T>, Borrow<T>, Stream<T>, Future<T>: i32 handles
-            _ => vec![expr_stmt(builtin_call(
+        // Own<T>, Borrow<T>, Stream<T>, Future<T>: i32 handles
+        Type::Generic(g) if matches!(g.name.as_str(), "Stream" | "Future" | "Own" | "Borrow") => {
+            vec![expr_stmt(builtin_call(
                 "i32_store",
                 vec![addr, value],
                 TypeTable::UNIT,
-            ))],
-        },
-        Type::Tuple(elems) if elems.is_empty() => vec![],
-        Type::Tuple(_) => {
-            // Tuple lowering requires type_table for correct TypeIds.
-            // Callers with tuple elements should call synthesize_lower_tuple directly.
-            vec![]
+            ))]
         }
+        Type::Generic(g) => panic!(
+            "`{}` must lower via synthesize_lower_wasi_type_to_memory, \
+             which handles aggregate layout; synthesize_lower covers primitives only",
+            g.name
+        ),
+        Type::Tuple(elems) if elems.is_empty() => vec![],
+        Type::Tuple(_) => panic!(
+            "tuples must lower via synthesize_lower_tuple, \
+             which computes element offsets; synthesize_lower covers primitives only"
+        ),
         Type::Reference(_) | Type::MutReference(_) => vec![expr_stmt(builtin_call(
             "i32_store",
             vec![addr, value],
             TypeTable::UNIT,
         ))],
-        _ => vec![],
+        other => panic!("unsupported type for CM memory lower: {other:?}"),
     }
 }
 
@@ -360,15 +312,11 @@ fn synthesize_lower_variant_to_memory(
         TypeTable::UNIT,
     )));
 
-    let mut max_payload_align = 1u32;
-    for (_, payload) in &cases {
-        if let Some((payload_ty, _)) = payload {
-            max_payload_align = max_payload_align.max(
-                crate::component_model::cm_align_with_registry(payload_ty, cm_interface_registry),
-            );
-        }
-    }
-    let payload_offset = cm_abi::align_to(1, max_payload_align);
+    let payload_offset = cm_abi::variant_payload_offset_with_registry_scoped(
+        cases.iter().filter_map(|(_, p)| p.as_ref().map(|(ty, _)| ty)),
+        cm_interface_registry,
+        Some(wasi_package),
+    );
     let payload_addr = if payload_offset == 0 {
         addr
     } else {
@@ -537,10 +485,12 @@ pub(super) fn synthesize_lower_option_to_memory(
         TypeTable::UNIT,
     )));
 
-    // Compute payload offset (aligned to payload alignment)
-    let payload_align =
-        crate::component_model::cm_align_with_registry(inner_type, cm_interface_registry);
-    let payload_offset = cm_abi::align_to(1, payload_align);
+    let payload_offset = cm_abi::layout_option_with_registry_scoped(
+        inner_type,
+        cm_interface_registry,
+        Some(wasi_package),
+    )
+    .offsets[1];
 
     let payload_addr = if payload_offset == 0 {
         addr
@@ -1171,7 +1121,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
         // dedicated option flattener, which conditionally lowers the Some
         // payload via a Match. Reached for an `Option` field of a CM record
         // (e.g. `span: Option<SourceSpan>` on the kiln-host Diagnostic).
-        Type::Generic(g) if g.name == "Option" && g.args.len() == 1 => {
+        Type::Generic(g) if g.name == names.option && g.args.len() == 1 => {
             synthesize_flatten_option_to_flat_args(
                 &g.args[0],
                 value,
@@ -1187,7 +1137,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
         }
         // The core `Result` is not a CM-registry variant, so it never matches
         // the variant arm above and needs its own flattener.
-        Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
+        Type::Generic(g) if g.name == names.result && g.args.len() == 2 => {
             synthesize_flatten_result_to_flat_args(
                 &g.args[0],
                 &g.args[1],
@@ -1746,23 +1696,21 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
                     .iter()
                     .map(|(wn, _, ft)| (wn.clone(), cm_interface_registry.resolve_type(ft)))
                     .collect();
+                let field_types: Vec<Type> =
+                    resolved_fields.iter().map(|(_, ty)| ty.clone()).collect();
+                let offsets = cm_abi::layout_record_with_registry_scoped(
+                    &field_types,
+                    cm_interface_registry,
+                    Some(wasi_package),
+                )
+                .offsets;
                 let mut stmts = Vec::new();
-                let mut offset = 0u32;
-                let mut max_align = 1u32;
                 let value_type_id = value.type_id;
                 let val_local = alloc_local(next_local, locals, value_type_id);
                 stmts.push(let_stmt("__struct_val", val_local, value_type_id, value));
 
                 for (field_idx, (wado_name, field_ty)) in resolved_fields.iter().enumerate() {
-                    let fa = crate::component_model::cm_align_with_registry(
-                        field_ty,
-                        cm_interface_registry,
-                    );
-                    let fs = crate::component_model::cm_size_with_registry(
-                        field_ty,
-                        cm_interface_registry,
-                    );
-                    offset = cm_abi::align_to(offset, fa);
+                    let offset = offsets[field_idx];
                     let field_type_id = {
                         let mut tt = type_table.borrow_mut();
                         cm_type_to_type_id(field_ty, &mut tt, cm_interface_registry, wasi_package)
@@ -1791,8 +1739,6 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
                         wasi_package,
                         type_table,
                     ));
-                    offset += fs;
-                    max_align = max_align.max(fa);
                 }
                 return stmts;
             }
@@ -1833,7 +1779,7 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
             wasi_package,
             type_table,
         ),
-        Type::Generic(g) if g.name == "Option" && g.args.len() == 1 => {
+        Type::Generic(g) if g.name == names.option && g.args.len() == 1 => {
             let inner = cm_interface_registry.resolve_type(&g.args[0]);
             let mut stmts = Vec::new();
             synthesize_lower_option_to_memory(
@@ -1861,7 +1807,7 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
                 type_table,
             )
         }
-        Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
+        Type::Generic(g) if g.name == names.result && g.args.len() == 2 => {
             let ok = cm_interface_registry.resolve_type(&g.args[0]);
             let err = cm_interface_registry.resolve_type(&g.args[1]);
             let mut stmts = Vec::new();
