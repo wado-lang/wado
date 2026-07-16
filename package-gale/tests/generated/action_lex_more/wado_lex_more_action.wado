@@ -1439,7 +1439,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_A; best_more = false; best_channel = 0; best_act = 0; }
         } else if first_char == 'b' {
             end = try_B(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_B; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_B; best_more = false; best_channel = 0; best_act = -1; }
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());

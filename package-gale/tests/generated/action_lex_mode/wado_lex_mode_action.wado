@@ -1516,14 +1516,14 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_LT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 0; }
             end = try_W(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_W; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_W; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_WS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
         } else if current_mode == 1 {
             end = try_GT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_GT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 1; }
             end = try_N(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_N; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_N; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
         }
         if best_end < start || (best_end == start && best_push_mode < 0 && !best_pop_mode && best_set_mode < 0) {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
