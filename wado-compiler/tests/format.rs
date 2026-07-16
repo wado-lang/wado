@@ -843,7 +843,10 @@ fn test_format_preserves_trait_assoc_type_leading_comment() {
 }
 ";
     let formatted = wado_compiler::format(source).expect("format failed");
-    assert_eq!(formatted, source, "trait assoc-type doc comment should round-trip");
+    assert_eq!(
+        formatted, source,
+        "trait assoc-type doc comment should round-trip"
+    );
     let formatted2 = wado_compiler::format(&formatted).expect("format failed");
     assert_eq!(formatted, formatted2, "should be idempotent");
 }
@@ -863,7 +866,10 @@ fn test_format_preserves_trait_doc_before_attributed_member() {
 }
 "#;
     let formatted = wado_compiler::format(source).expect("format failed");
-    assert_eq!(formatted, source, "trait doc-before-attribute should round-trip");
+    assert_eq!(
+        formatted, source,
+        "trait doc-before-attribute should round-trip"
+    );
     let formatted2 = wado_compiler::format(&formatted).expect("format failed");
     assert_eq!(formatted, formatted2, "should be idempotent");
 }
