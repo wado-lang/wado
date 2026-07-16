@@ -257,24 +257,43 @@ hand-curated Stage B driver tests, whose expected trees are
 hand-written and so can silently encode a Gale-vs-ANTLR4 divergence
 rather than ANTLR4's actual output.
 
-`scripts/regen-sqlite-oracle.sh` extends the Stage B′ mechanism to a
-real grammar: for each input in `tests/oracle/sqlite/cases.sql` it runs
-the same `antlr4-oracle.sh` black box to get the reference tree and
-Gale's generated parser to get its current tree, then regenerates
-`tests/driver_cst_sqlite_oracle_test.wado` with the **oracle** tree as
-the expected value. A case Gale currently parses differently is emitted
-`#[TODO]` (same semantics as `[stage_b_oracle_todo]`: resolving it is
-the signal the divergence closed). Inputs omit the trailing `;` so the
-`sql_stmt_list` trailing-separator shape stays out of scope; `<EOF>` is
-stripped as cosmetic. Java runs only at regeneration time — the trees
-are committed, so CI needs none.
+`scripts/regen-oracle.sh <key>` extends the Stage B′ mechanism to a real
+grammar: for each input in `tests/oracle/<key>/cases.*` it runs the same
+`antlr4-oracle.sh` black box to get the reference tree and Gale's
+generated parser to get its current tree, then regenerates
+`tests/driver_cst_<key>_oracle_test.wado` with the **oracle** tree as the
+expected value. A case Gale currently parses differently is emitted
+`#[TODO]` (same semantics as `[stage_b_oracle_todo]`: resolving it is the
+signal the divergence closed). `<EOF>` is stripped as cosmetic. Java runs
+only at regeneration time — the trees are committed, so CI needs none.
 
-The initial run pins 14 cases with 8 `#[TODO]`, exposing two divergence
-classes the hand-written test had locked in as "correct": a single-table
-`FROM` wrapped in `join_clause` (ANTLR4 uses a bare `table_or_subquery`),
-and empty optional nodes materialised where ANTLR4 emits none (e.g.
-`conflict_clause`). Closing those is separate Gale work; the mechanism
-just makes them visible and regression-tracked.
+Pinned so far:
+
+- **`sqlite`** — 14 cases, 8 `#[TODO]`. Inputs omit the trailing `;` so
+  the `sql_stmt_list` trailing-separator shape stays out of scope. The
+  `#[TODO]`s expose two divergence classes the hand-written test had
+  locked in as "correct": a single-table `FROM` wrapped in `join_clause`
+  (ANTLR4 uses a bare `table_or_subquery`), and empty optional nodes
+  materialised where ANTLR4 emits none (e.g. `conflict_clause`).
+- **`json`** — 11 cases, 0 `#[TODO]`: Gale's JSON parser matches ANTLR4
+  exactly, so this is a pure lock-in against regressions.
+
+Adding a grammar is config + a cases file, but only for a **clean single
+combined grammar with `WS -> skip`**. Out of scope, with reasons recorded
+in `regen-oracle.sh`:
+
+- split lexer/parser grammars — `antlr4-oracle.sh` takes one `.g4`;
+- `options { superClass = ... }` grammars (RustParser, TypeScriptParser)
+  — the generated Java references a hand-written base class outside the
+  `.g4`, so the oracle's `javac` fails, and Gale itself needs predicate
+  support for them;
+- grammars that emit whitespace as tree tokens (css3's `ws`) — their
+  trees are whitespace-sensitive and render childless rules differently,
+  so css3 stays pinned by parse-success (`driver_cst_css3_test`), not
+  tree equality.
+
+Closing the SQLite divergences is separate Gale work; the mechanism just
+makes them visible and regression-tracked.
 
 ### Stage C — action-body translation (not yet built)
 
