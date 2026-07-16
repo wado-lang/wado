@@ -1,0 +1,160 @@
+//! Lexer `{ ... }` action execution (Stage C, `language = Wado`).
+//!
+//! A lexer action runs at the tournament commit for the *winning* rule only,
+//! never for a losing candidate. Codegen emits a `LexerActions` context, an
+//! `apply_<rule>_actions` replay per executing rule, and a `best_act` tracker
+//! folded into the commit. These tests pin the emit shape, the byte-identical
+//! guard for actionless grammars, and the loud safety net for action forms
+//! codegen does not yet execute (nested-group, multi-alt, mode grammars).
+
+use { parse } from "./g4/parser.wado";
+use { generate, GenerateOptions } from "./codegen.wado";
+use { Diagnostic, DiagnosticKind } from "./gir.wado";
+
+global OPTS: GenerateOptions = GenerateOptions {};
+
+fn gen_source(src: &String) -> String {
+    let mut g = parse(*src).unwrap();
+    return generate(&mut g, &OPTS).source;
+}
+
+fn count_unsupported(diags: &List<Diagnostic>) -> i32 {
+    let mut n = 0;
+    for let d of diags {
+        if d.kind matches { UnsupportedAction } {
+            n += 1;
+        }
+    }
+    return n;
+}
+
+fn unsupported_count(src: &String) -> i32 {
+    let mut g = parse(*src).unwrap();
+    return count_unsupported(&generate(&mut g, &OPTS).diagnostics);
+}
+
+test "a single-alt lexer set_type action is emitted and not warned" {
+    let src = gen_source(&"lexer grammar L;
+options { language = Wado; }
+A : 'a' { lx.set_type(TK_B) } ;
+B : 'b' ;
+WS : ' ' -> skip ;
+");
+    assert src.contains("struct LexerActions"), "LexerActions context emitted";
+    assert src.contains("fn apply_A_actions"), "per-rule replay fn emitted";
+    assert src.contains("lx.set_type(TK_B);"), "translated action body emitted";
+    assert src.contains("best_act"), "tournament tracks the winning action rule";
+    assert unsupported_count(&"lexer grammar L;
+options { language = Wado; }
+A : 'a' { lx.set_type(TK_B) } ;
+B : 'b' ;
+WS : ' ' -> skip ;
+") == 0, "an executed lexer action must not warn";
+}
+
+test "command-style lexer actions emit their fold and API" {
+    let src = gen_source(&"lexer grammar L;
+options { language = Wado; }
+SK : 'a' { lx.skip() } ;
+CH : 'c' { lx.set_channel(1) } ;
+MO : 'm' { lx.more() } ;
+B : 'b' ;
+");
+    assert src.contains("fn skip"), "skip API method emitted";
+    assert src.contains("fn set_channel"), "set_channel API method emitted";
+    assert src.contains("fn more"), "more API method emitted";
+    assert src.contains("best_act_skip"), "skip folds through best_act_skip";
+    assert src.contains("if lx.act_channel >= 0"), "channel folds into best_channel";
+    assert src.contains("if lx.act_more"), "more folds into best_more";
+}
+
+test "mode-op lexer actions emit MODE_ constants and the fold" {
+    let src = gen_source(&"grammar L;
+options { language = Wado; }
+prog : (LT | GT | W)* ;
+LT : '<' { lx.push_mode(MODE_INNER) } ;
+W : [a-z]+ ;
+mode INNER;
+GT : '>' { lx.pop_mode() } ;
+N : [0-9]+ ;
+");
+    assert src.contains("MODE_DEFAULT_MODE"), "default mode constant emitted";
+    assert src.contains("MODE_INNER"), "named mode constant emitted";
+    assert src.contains("fn push_mode"), "push_mode API emitted";
+    assert src.contains("fn pop_mode"), "pop_mode API emitted";
+    assert src.contains("if lx.act_push_mode >= 0"), "push_mode folds into best_push_mode";
+    assert src.contains("if lx.act_pop_mode"), "pop_mode folds into best_pop_mode";
+}
+
+test "a modeless action grammar emits no mode-op API (gated)" {
+    let src = gen_source(&"lexer grammar L;
+options { language = Wado; }
+A : 'a' { lx.set_type(TK_B) } ;
+B : 'b' ;
+");
+    assert !src.contains("act_push_mode"), "no mode fields without modes";
+    assert !src.contains("MODE_"), "no mode constants without modes";
+}
+
+test "every winner block resets best_act under an action grammar" {
+    // Regression: a non-action rule / literal that wins after an action rule
+    // must reset best_act (to -1), else it replays the losing action rule.
+    let src = gen_source(&"lexer grammar L;
+options { language = Wado; }
+SHORT : [a-z] { lx.set_type(TK_RETYPED) } ;
+LONG : [a-z] [a-z] ;
+WS : ' ' -> skip ;
+");
+    // LONG carries no action; its winner block must still assign best_act = -1.
+    assert src.contains("best_kind = TK_LONG; best_more = false; best_channel = 0; best_act = -1;")
+        || src.contains("best_kind = TK_LONG;") && src.contains("best_act = -1;"), "non-action winner block must reset best_act";
+}
+
+test "an actionless grammar keeps no action machinery (byte-identical guard)" {
+    let src = gen_source(&"lexer grammar L;
+A : 'a' ;
+WS : ' ' -> skip ;
+");
+    assert !src.contains("LexerActions"), "no LexerActions struct without actions";
+    assert !src.contains("best_act"), "no best_act without actions";
+    assert !src.contains("apply_"), "no apply fn without actions";
+}
+
+test "a predicate-only grammar keeps no action-replay machinery" {
+    let src = gen_source(&"lexer grammar L;
+options { language = Wado; }
+KW : [a-z]+ { $text == \"cat\" }? ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+");
+    assert !src.contains("LexerActions"), "predicates need no LexerActions context";
+    assert !src.contains("best_act"), "predicates need no best_act";
+}
+
+test "a nested-group lexer action warns loudly (not yet executed)" {
+    // The action sits inside a `( ... )` group, not at the rule's top level.
+    assert unsupported_count(&"lexer grammar L;
+options { language = Wado; }
+A : ('a' { lx.set_type(TK_B) } | 'c') ;
+B : 'b' ;
+WS : ' ' -> skip ;
+") == 1, "a nested-group action must surface UnsupportedAction";
+}
+
+test "a multi-alt lexer rule runs each alt's top-level action (no warn)" {
+    let src = gen_source(&"lexer grammar L;
+options { language = Wado; }
+A : 'a' { lx.set_type(TK_X) } | 'c' { lx.set_type(TK_Y) } ;
+B : 'b' ;
+WS : ' ' -> skip ;
+");
+    assert src.contains("fn winning_alt_A"), "multi-alt rule gets a winning_alt helper";
+    assert src.contains("lx.set_type(TK_X);"), "alt 0 action emitted";
+    assert src.contains("lx.set_type(TK_Y);"), "alt 1 action emitted";
+    assert unsupported_count(&"lexer grammar L;
+options { language = Wado; }
+A : 'a' { lx.set_type(TK_X) } | 'c' { lx.set_type(TK_Y) } ;
+B : 'b' ;
+WS : ' ' -> skip ;
+") == 0, "multi-alt top-level actions must not warn";
+}

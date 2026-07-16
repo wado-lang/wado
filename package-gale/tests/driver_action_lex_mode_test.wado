@@ -1,0 +1,24 @@
+//! Stage C lexer mode-op actions: `lx.push_mode(MODE_INNER)` and
+//! `lx.pop_mode()` run at the tournament commit and move the lexer's mode
+//! stack, so letters lex as `W` in the default mode while digits lex as `N`
+//! only inside `< ... >`. The Wado analog of ANTLR's lexer `pushMode` /
+//! `popMode`, driven from a combined grammar so the parser reports the tokens.
+
+use m from "./grammars/wado_lex_mode_action.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/action_lex_mode" },
+    };
+
+test "push_mode / pop_mode from actions switch the lexer mode" {
+    // "ab" -> W, '<' pushes INNER, "12" -> N (digits only lex in INNER),
+    // '>' pops, "cd" -> W again.
+    let r = m::parse(&"ab<12>cd");
+    assert r.ok(), `clean parse of 'ab<12>cd': {r.diagnostics.len()} diagnostics`;
+    assert r.output == "w<n>w", `output: '{r.output}'`;
+}
+
+test "a mode grammar with no mode switch round-trips in the default mode" {
+    let r = m::parse(&"ab cd");
+    assert r.ok(), "two default-mode words";
+    assert r.output == "ww", `output: '{r.output}'`;
+}
