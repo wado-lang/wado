@@ -68,6 +68,34 @@ B : 'b' ;
     assert src.contains("if lx.act_more"), "more folds into best_more";
 }
 
+test "mode-op lexer actions emit MODE_ constants and the fold" {
+    let src = gen_source(&"grammar L;
+options { language = Wado; }
+prog : (LT | GT | W)* ;
+LT : '<' { lx.push_mode(MODE_INNER) } ;
+W : [a-z]+ ;
+mode INNER;
+GT : '>' { lx.pop_mode() } ;
+N : [0-9]+ ;
+");
+    assert src.contains("MODE_DEFAULT_MODE"), "default mode constant emitted";
+    assert src.contains("MODE_INNER"), "named mode constant emitted";
+    assert src.contains("fn push_mode"), "push_mode API emitted";
+    assert src.contains("fn pop_mode"), "pop_mode API emitted";
+    assert src.contains("if lx.act_push_mode >= 0"), "push_mode folds into best_push_mode";
+    assert src.contains("if lx.act_pop_mode"), "pop_mode folds into best_pop_mode";
+}
+
+test "a modeless action grammar emits no mode-op API (gated)" {
+    let src = gen_source(&"lexer grammar L;
+options { language = Wado; }
+A : 'a' { lx.set_type(TK_B) } ;
+B : 'b' ;
+");
+    assert !src.contains("act_push_mode"), "no mode fields without modes";
+    assert !src.contains("MODE_"), "no mode constants without modes";
+}
+
 test "an actionless grammar keeps no action machinery (byte-identical guard)" {
     let src = gen_source(&"lexer grammar L;
 A : 'a' ;

@@ -300,8 +300,12 @@ pub fn gen_lexer(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitTok
     let ea = grammar.action_language matches { Wado };
     gen_lexer_struct(w);
     let act_rule_names = executed_action_rule_names(grammar);
+    let uses_modes = has_modes(&grammar.mode_names);
     if !act_rule_names.is_empty() {
-        gen_lexer_actions_struct(w);
+        if uses_modes {
+            gen_mode_constants(w, &grammar.mode_names);
+        }
+        gen_lexer_actions_struct(w, uses_modes);
         gen_lexer_apply_fns(w, grammar);
     }
     gen_lexer_match_fns(w, &grammar.lexer_rules, &keywords, lit_tokens, &grammar.options, atn_class, ea);
@@ -514,11 +518,11 @@ fn gen_lexer_rule_predicates(w: &mut CodeWriter, actions: &List<AltAction>, befo
 }
 
 /// Whether codegen runs `{ ... }` action bodies for this grammar's lexer at
-/// all: `language = Wado` and modeless (the winner-replay path is wired only
-/// for the modeless tournament). A grammar with `mode`s keeps actions
-/// unexecuted (they warn). `language = Java` lexer actions await java2wado.
+/// all: `language = Wado`. The winner-replay path is wired for both the
+/// modeless and the `mode`-dispatch tournaments. `language = Java` lexer
+/// actions await java2wado.
 pub fn lexer_grammar_executes_actions(grammar: &Grammar) -> bool {
-    return grammar.action_language matches { Wado } && !has_modes(&grammar.mode_names);
+    return grammar.action_language matches { Wado };
 }
 
 /// Whether this rule's top-level actions run: an executing grammar, a real
@@ -568,20 +572,26 @@ pub fn executed_action_rule_names(grammar: &Grammar) -> List<String> {
 /// the tournament outcome at commit. `act_type` / `act_channel` are `< 0` when
 /// the action left the emitted kind / channel unchanged; `act_skip` / `act_more`
 /// are latched flags. Emitted only when a grammar runs a lexer action.
-fn gen_lexer_actions_struct(w: &mut CodeWriter) {
+fn gen_lexer_actions_struct(w: &mut CodeWriter, uses_modes: bool) {
     let mut s = StructSpec::new("LexerActions");
     s.add_field(&"act_type", &"i32");
     s.add_field(&"act_channel", &"i32");
     s.add_field(&"act_skip", &"bool");
     s.add_field(&"act_more", &"bool");
+    if uses_modes {
+        s.add_field(&"act_push_mode", &"i32");
+        s.add_field(&"act_pop_mode", &"bool");
+        s.add_field(&"act_set_mode", &"i32");
+    }
     s.emit(w);
     w.blank();
 
+    let mode_init = if uses_modes { ", act_push_mode: -1, act_pop_mode: false, act_set_mode: -1" } else { "" };
     ImplSpec::new("LexerActions").emit_begin(w);
     let mut f = FnSpec::new("new");
     f.set_return_type(&"LexerActions");
     f.emit_begin(w);
-    w.line(&"return LexerActions { act_type: -1, act_channel: -1, act_skip: false, act_more: false };");
+    w.line(&`return LexerActions \{ act_type: -1, act_channel: -1, act_skip: false, act_more: false{mode_init} \};`);
     w.end();
     w.blank();
 
@@ -613,7 +623,42 @@ fn gen_lexer_actions_struct(w: &mut CodeWriter) {
     fm.emit_begin(w);
     w.line(&"self.act_more = true;");
     w.end();
+
+    if uses_modes {
+        w.blank();
+        let mut fp = FnSpec::new("push_mode");
+        fp.set_receiver(&"&mut self");
+        fp.add_param(&"m", &"i32");
+        fp.emit_begin(w);
+        w.line(&"self.act_push_mode = m;");
+        w.end();
+        w.blank();
+
+        let mut fpo = FnSpec::new("pop_mode");
+        fpo.set_receiver(&"&mut self");
+        fpo.emit_begin(w);
+        w.line(&"self.act_pop_mode = true;");
+        w.end();
+        w.blank();
+
+        let mut fsm = FnSpec::new("set_mode");
+        fsm.set_receiver(&"&mut self");
+        fsm.add_param(&"m", &"i32");
+        fsm.emit_begin(w);
+        w.line(&"self.act_set_mode = m;");
+        w.end();
+    }
     w.end();  // impl
+    w.blank();
+}
+
+/// Emit a `MODE_<NAME>` constant per lexer mode so a `language = Wado` action
+/// can name a target mode (`lx.push_mode(MODE_TAG)`) instead of a bare index.
+/// Only emitted for a `mode` grammar that runs actions.
+fn gen_mode_constants(w: &mut CodeWriter, mode_names: &List<String>) {
+    for let mut i = 0; i < mode_names.len(); i += 1 {
+        GlobalSpec::new(&`MODE_{mode_names[i]}`, "i32", &`{i}`, Vis::Pub).emit(w);
+    }
     w.blank();
 }
 
@@ -672,7 +717,12 @@ fn apply_fn_name(rule_name: &String) -> String {
 /// run its `apply_<rule>_actions` into a fresh `LexerActions`, then fold the
 /// collected effects into the tournament outcome. Only reached with
 /// `best_act >= 0`, i.e. the winner runs actions.
-fn gen_lexer_action_replay(w: &mut CodeWriter, act_rule_names: &List<String>) {
+fn gen_lexer_action_replay(
+    w: &mut CodeWriter,
+    act_rule_names: &List<String>,
+    use_modes: bool,
+    has_set_mode_rules: bool,
+) {
     w.begin(&"if best_act >= 0");
     w.line(&"let mut lx = LexerActions::new();");
     for let mut i = 0; i < act_rule_names.len(); i += 1 {
@@ -693,6 +743,15 @@ fn gen_lexer_action_replay(w: &mut CodeWriter, act_rule_names: &List<String>) {
     w.line(&"if lx.act_channel >= 0 { best_channel = lx.act_channel; }");
     w.line(&"if lx.act_more { best_more = true; }");
     w.line(&"if lx.act_skip { best_act_skip = true; }");
+    // Mode ops fold into the mode-transition vars, which exist only under
+    // `use_modes` (push/pop) and `has_set_mode_rules` (set_mode).
+    if use_modes {
+        w.line(&"if lx.act_push_mode >= 0 { best_push_mode = lx.act_push_mode; }");
+        w.line(&"if lx.act_pop_mode { best_pop_mode = true; }");
+        if has_set_mode_rules {
+            w.line(&"if lx.act_set_mode >= 0 { best_set_mode = lx.act_set_mode; }");
+        }
+    }
     w.end();
 }
 
@@ -2232,12 +2291,12 @@ fn gen_tokenize_fn(
 ) {
     let has_actions = !act_rule_names.is_empty();
     let use_modes = has_modes(mode_names);
-    let has_set_mode_rules = has_set_mode(lexer_rules);
-    // A lexer action may call `lx.more()` / `lx.set_channel(n)`, so an
-    // action grammar needs the `more_start` / `best_more` / `best_channel`
-    // commit machinery even when no rule carries a `-> more` / `-> channel`
-    // command. `has_actions` is only ever set in the modeless path, so this
-    // never perturbs a `mode` grammar.
+    // A lexer action may call `lx.more()` / `lx.set_channel(n)` / `lx.set_mode(m)`,
+    // so an action grammar needs the `more_start` / `best_more` / `best_channel`
+    // / `best_set_mode` commit machinery even when no rule carries the matching
+    // `-> more` / `-> channel` / `-> mode` command. `set_mode` only applies in
+    // a `mode` grammar, so its machinery is forced only under `use_modes`.
+    let has_set_mode_rules = has_set_mode(lexer_rules) || (has_actions && use_modes);
     let has_more_rules = has_more(lexer_rules) || has_actions;
     let has_channel_rules = has_channel(lexer_rules) || has_actions;
     let empty_opts: List<GrammarOption> = [];
@@ -2351,7 +2410,12 @@ fn gen_tokenize_fn(
                     } else {
                         `TK_{rule.name}`;
                     };
-                    w.line(&`if end > best_end \{ best_end = end; best_kind = {emit_kind};{extra} \}`);
+                    // A rule that runs `{ ... }` actions records its replay
+                    // index so `best_act` tracks the winning match, matching
+                    // the modeless dispatch (`gen_group_calls`).
+                    let act_idx = index_of_name(act_rule_names, &rule.name);
+                    let act = if act_idx >= 0 { ` best_act = {act_idx};` } else { String::new() };
+                    w.line(&`if end > best_end \{ best_end = end; best_kind = {emit_kind};{extra}{act} \}`);
                 }
             }
         }
@@ -2446,7 +2510,7 @@ fn gen_tokenize_fn(
     // reclassification so an explicit `set_type` wins, and before the
     // skip/more/channel commit so its effects (`best_kind`) feed them.
     if has_actions {
-        gen_lexer_action_replay(w, act_rule_names);
+        gen_lexer_action_replay(w, act_rule_names, use_modes, has_set_mode_rules);
     }
 
     // `more` rules accumulate text into the next emitted token. `tok_start`
