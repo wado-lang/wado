@@ -267,14 +267,13 @@ expected value. A case Gale currently parses differently is emitted
 signal the divergence closed). `<EOF>` is stripped as cosmetic. Java runs
 only at regeneration time — the trees are committed, so CI needs none.
 
-Pinned so far:
+Pinned grammars:
 
-- **`sqlite`** — 14 cases, 0 `#[TODO]`. Inputs omit the trailing `;` so
-  the `sql_stmt_list` trailing-separator shape stays out of scope.
-- **`json`** — 11 cases, 0 `#[TODO]`: Gale's JSON parser matches ANTLR4
-  exactly.
+- **`sqlite`** — 14 cases. Inputs omit the trailing `;` so the
+  `sql_stmt_list` trailing-separator shape stays out of scope.
+- **`json`** — 11 cases; Gale's JSON parser matches ANTLR4 exactly.
 
-Both are pure lock-ins against regressions.
+Both lock the generated trees against regressions.
 
 Adding a grammar is config + a cases file, but only for a **clean single
 combined grammar with `WS -> skip`**. Out of scope, with reasons recorded
