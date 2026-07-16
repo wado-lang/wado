@@ -52,6 +52,22 @@ WS : ' ' -> skip ;
 ") == 0, "an executed lexer action must not warn";
 }
 
+test "command-style lexer actions emit their fold and API" {
+    let src = gen_source(&"lexer grammar L;
+options { language = Wado; }
+SK : 'a' { lx.skip() } ;
+CH : 'c' { lx.set_channel(1) } ;
+MO : 'm' { lx.more() } ;
+B : 'b' ;
+");
+    assert src.contains("fn skip"), "skip API method emitted";
+    assert src.contains("fn set_channel"), "set_channel API method emitted";
+    assert src.contains("fn more"), "more API method emitted";
+    assert src.contains("best_act_skip"), "skip folds through best_act_skip";
+    assert src.contains("if lx.act_channel >= 0"), "channel folds into best_channel";
+    assert src.contains("if lx.act_more"), "more folds into best_more";
+}
+
 test "an actionless grammar keeps no action machinery (byte-identical guard)" {
     let src = gen_source(&"lexer grammar L;
 A : 'a' ;

@@ -565,11 +565,15 @@ pub fn executed_action_rule_names(grammar: &Grammar) -> List<String> {
 
 /// The runtime action-context passed to every `apply_<rule>_actions` as `lx`.
 /// A lexer action's effects are collected here (last-wins), then folded into
-/// the tournament outcome at commit. `act_type < 0` means the action left the
-/// emitted kind unchanged. Emitted only when a grammar runs a lexer action.
+/// the tournament outcome at commit. `act_type` / `act_channel` are `< 0` when
+/// the action left the emitted kind / channel unchanged; `act_skip` / `act_more`
+/// are latched flags. Emitted only when a grammar runs a lexer action.
 fn gen_lexer_actions_struct(w: &mut CodeWriter) {
     let mut s = StructSpec::new("LexerActions");
     s.add_field(&"act_type", &"i32");
+    s.add_field(&"act_channel", &"i32");
+    s.add_field(&"act_skip", &"bool");
+    s.add_field(&"act_more", &"bool");
     s.emit(w);
     w.blank();
 
@@ -577,7 +581,7 @@ fn gen_lexer_actions_struct(w: &mut CodeWriter) {
     let mut f = FnSpec::new("new");
     f.set_return_type(&"LexerActions");
     f.emit_begin(w);
-    w.line(&"return LexerActions { act_type: -1 };");
+    w.line(&"return LexerActions { act_type: -1, act_channel: -1, act_skip: false, act_more: false };");
     w.end();
     w.blank();
 
@@ -586,6 +590,28 @@ fn gen_lexer_actions_struct(w: &mut CodeWriter) {
     ft.add_param(&"t", &"i32");
     ft.emit_begin(w);
     w.line(&"self.act_type = t;");
+    w.end();
+    w.blank();
+
+    let mut fc = FnSpec::new("set_channel");
+    fc.set_receiver(&"&mut self");
+    fc.add_param(&"c", &"i32");
+    fc.emit_begin(w);
+    w.line(&"self.act_channel = c;");
+    w.end();
+    w.blank();
+
+    let mut fs = FnSpec::new("skip");
+    fs.set_receiver(&"&mut self");
+    fs.emit_begin(w);
+    w.line(&"self.act_skip = true;");
+    w.end();
+    w.blank();
+
+    let mut fm = FnSpec::new("more");
+    fm.set_receiver(&"&mut self");
+    fm.emit_begin(w);
+    w.line(&"self.act_more = true;");
     w.end();
     w.end();  // impl
     w.blank();
@@ -659,9 +685,14 @@ fn gen_lexer_action_replay(w: &mut CodeWriter, act_rule_names: &List<String>) {
         w.line(&call);
     }
     w.end();
-    // `set_type` overrides the emitted kind; an untouched `act_type` (<0)
-    // leaves the tournament's `best_kind` in place.
+    // Fold the collected effects into the tournament outcome. `best_channel`
+    // and `best_more` exist because `has_actions` forced their machinery on;
+    // `best_act_skip` feeds the `is_skip` decision below. An untouched
+    // `act_type` / `act_channel` (<0) leaves the tournament value in place.
     w.line(&"if lx.act_type >= 0 { best_kind = lx.act_type; }");
+    w.line(&"if lx.act_channel >= 0 { best_channel = lx.act_channel; }");
+    w.line(&"if lx.act_more { best_more = true; }");
+    w.line(&"if lx.act_skip { best_act_skip = true; }");
     w.end();
 }
 
@@ -2202,8 +2233,13 @@ fn gen_tokenize_fn(
     let has_actions = !act_rule_names.is_empty();
     let use_modes = has_modes(mode_names);
     let has_set_mode_rules = has_set_mode(lexer_rules);
-    let has_more_rules = has_more(lexer_rules);
-    let has_channel_rules = has_channel(lexer_rules);
+    // A lexer action may call `lx.more()` / `lx.set_channel(n)`, so an
+    // action grammar needs the `more_start` / `best_more` / `best_channel`
+    // commit machinery even when no rule carries a `-> more` / `-> channel`
+    // command. `has_actions` is only ever set in the modeless path, so this
+    // never perturbs a `mode` grammar.
+    let has_more_rules = has_more(lexer_rules) || has_actions;
+    let has_channel_rules = has_channel(lexer_rules) || has_actions;
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(grammar_opts, &empty_opts);
 
@@ -2240,6 +2276,9 @@ fn gen_tokenize_fn(
         // Which winning rule's `apply_<rule>_actions` to replay post-tournament
         // (-1 = none). Set in the winner block alongside `best_end`/`best_kind`.
         w.line(&"let mut best_act: i32 = -1;");
+        // Latched by an action's `lx.skip()` (no `best_skip` tournament var
+        // exists — skip is otherwise decided by `best_kind`).
+        w.line(&"let mut best_act_skip = false;");
     }
     w.line(&"let first_char = lexer.chars[start];");
 
@@ -2422,8 +2461,11 @@ fn gen_tokenize_fn(
     let skip_names: List<String> = lexer_rules.iter().filter(|rule: &LexerRule| rule.skip).map(
         |rule: &LexerRule| `TK_{rule.name}`,
     ).collect();
+    // An action's `lx.skip()` latches `best_act_skip`; OR it into the
+    // command-derived skip decision so either route routes the token to trivia.
+    let act_skip = if has_actions { " || best_act_skip" } else { "" };
     if skip_names.is_empty() {
-        w.line(&"let is_skip = false;");
+        w.line(&`let is_skip = false{act_skip};`);
     } else {
         w.write(&"let is_skip = best_kind matches { ");
         for let mut i = 0; i < skip_names.len(); i += 1 {
@@ -2432,7 +2474,7 @@ fn gen_tokenize_fn(
             }
             w.write(&skip_names[i]);
         }
-        w.write(&" };\n");
+        w.write(&` }{act_skip};\n`);
     }
 
     if has_more_rules {
