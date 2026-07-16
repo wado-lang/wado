@@ -47,8 +47,7 @@ filesystem — `path_open` returns `ENOENT`.
 `lsp-client.js` is the main-thread API: JSON-RPC over the worker port with
 `initialize()` / `didOpen` / `didChange` / `request()` /
 `onNotification()`. Editor bindings (Monaco providers) belong to the
-consuming page. See `docs/wep-2026-07-16-browser-playground.md` for the
-site design.
+consuming page (the official site's `playground/`).
 
 ## Requirements
 
