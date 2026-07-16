@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784209525418,
+  "lastUpdate": 1784210781504,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -40889,6 +40889,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/833f19a731a6901c5d9c539bfb89245dc73e2a7a"
         },
         "date": 1784209524690,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16233,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 259842,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "729472e390224378aab70410efaaf81710b87dbb",
+          "message": "Merge pull request #1594 from wado-lang/claude/cm-synthesis-logic-8qruhz\n\nrefactor(compiler): move all CM canonical synthesis into the synthesis phase",
+          "timestamp": "2026-07-16T22:55:20+09:00",
+          "tree_id": "ee75498ce55b3ebd431d9f911781022b88f46c90",
+          "url": "https://github.com/wado-lang/wado/commit/729472e390224378aab70410efaaf81710b87dbb"
+        },
+        "date": 1784210780747,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
