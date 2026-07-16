@@ -14,7 +14,13 @@
 //!   in the statements after it (`recognize_early_exit`);
 //! - short-circuit `(var + k) >= bound || expr` → checks in `expr`
 //!   (`ShortCircuitEliminator`);
-//! - bitmask `(x & MASK) >= BOUND`, `BOUND > MASK >= 0` (`BitmaskEliminator`).
+//! - bitmask `(x & MASK) >= BOUND`, `BOUND > MASK >= 0` (`BitmaskEliminator`);
+//! - redundant re-check: the panic-guard `arr[i]` lowers to proves `i < arr.used`,
+//!   so a later `arr[i]` (array unmodified between) is dropped — a forward walk
+//!   ([`rbce_walk`]) harvesting guard facts, needing no source-level guard;
+//! - last-element: a `let idx = arr.len() - k` (k >= 1) proves `idx < arr.len()`
+//!   ([`len_minus_fact`]), refuting the later `arr[idx]` guard — the
+//!   top-of-stack / `arr.last()` idiom, dropped if the array is resized between.
 //!
 //! Matching is **syntactic over the skeleton plus the value pool**, never the
 //! `value_of` side-table: a guard's `var` / `bound` are compared by structure
@@ -44,7 +50,10 @@ pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
     // Built once and threaded down: sound because eliminations never add
     // reassignments, so the snapshot only omits bindings, never holds a stale one.
     let binds = build_copy_bindings(engine.body);
-    process_block(engine, root, &binds)
+    let mut changed = process_block(engine, root, &binds);
+    let mut facts: Vec<ProvenLt> = Vec::new();
+    changed |= rbce_walk(engine, NodeRef::Block(root), &mut facts, &binds);
+    changed
 }
 
 /// The [`FuncId`](crate::nir::FuncId)s of the diverging panic / `unreachable`
@@ -269,7 +278,40 @@ fn parse_const_i64(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
 /// local is offset 0; `+ const` accumulates through `Binary(Add)` (either side).
 /// Bounded recursion via the copy-temp chain. Lets `arr[q]` where `q = p + 2`,
 /// `p = pos + 1` decompose to `(pos, 3)`.
+///
+/// A bare `Local(idx)` is a variable in its own right: its bind is followed only
+/// when that exposes a cleaner var+offset (`let q = p + 2`); otherwise the local
+/// itself is the var, so `let parent = <opaque block>` still matches a check
+/// `parent >= bound` by its stable index instead of dead-ending in the block.
 pub(super) fn parse_var_offset(engine: &Engine, binds: &Binds, op: Operand) -> Option<(u32, i64)> {
+    parse_var_offset_depth(engine, binds, op, 0)
+}
+
+/// Bind-chain / arithmetic depth cap, matching [`resolve`]'s bounded walk, so a
+/// pathological copy chain (`let a1 = a0; let a2 = a1; …`) cannot recurse
+/// without bound. Exceeding it only forgoes an optimization, never miscompiles.
+const VAR_OFFSET_MAX_DEPTH: u32 = 16;
+
+fn parse_var_offset_depth(
+    engine: &Engine,
+    binds: &Binds,
+    op: Operand,
+    depth: u32,
+) -> Option<(u32, i64)> {
+    if depth >= VAR_OFFSET_MAX_DEPTH {
+        return None;
+    }
+    if let Operand::Expr(e) = op
+        && let ExprKind::Local { index, .. } = &engine.body.exprs[e].kind
+    {
+        let idx = *index;
+        if let Some(&b) = binds.get(&idx)
+            && let Some(vo) = parse_var_offset_depth(engine, binds, b, depth + 1)
+        {
+            return Some(vo);
+        }
+        return Some((idx, 0));
+    }
     match resolve(engine, binds, op) {
         Operand::Expr(e) => match &engine.body.exprs[e].kind {
             ExprKind::Local { index, .. } => Some((*index, 0)),
@@ -278,12 +320,12 @@ pub(super) fn parse_var_offset(engine: &Engine, binds: &Binds, op: Operand) -> O
                 op: NirBinaryOp::Add,
                 right,
             } => {
-                if let Some((v, o)) = parse_var_offset(engine, binds, *left)
+                if let Some((v, o)) = parse_var_offset_depth(engine, binds, *left, depth + 1)
                     && let Some(c) = parse_const_i64(engine, binds, *right)
                 {
                     return Some((v, o + c));
                 }
-                if let Some((v, o)) = parse_var_offset(engine, binds, *right)
+                if let Some((v, o)) = parse_var_offset_depth(engine, binds, *right, depth + 1)
                     && let Some(c) = parse_const_i64(engine, binds, *left)
                 {
                     return Some((v, o + c));
@@ -1271,6 +1313,261 @@ impl ArenaOptVisitor for ConstBoundIndexEliminator<'_> {
         }
         arena_opt_walk(self, engine, NodeRef::Stmt(s))
     }
+}
+
+// ---------------------------------------------------------------------------
+// Redundant bounds-check elimination (forward, dominating panic-guards)
+// ---------------------------------------------------------------------------
+
+/// A proven fact `var + off < bound`, established by a dominating panic-guard's
+/// fall-through and held while walking in execution order.
+type ProvenLt = (u32, i64, BoundKey);
+
+/// True if some fact refutes the check `var + j >= bound`: a fact
+/// `var + off < bound` with `off >= j` gives `var + j <= var + off < bound`.
+fn facts_refute(facts: &[ProvenLt], var: u32, j: i64, bound: BoundKey) -> bool {
+    facts
+        .iter()
+        .any(|&(fv, foff, fb)| fv == var && fb == bound && foff >= j)
+}
+
+/// Drop every fact whose `var` / `bound` root `node` may modify (conservative:
+/// a false "modifies" only keeps a fact, never invents one).
+fn invalidate(engine: &Engine, node: NodeRef, facts: &mut Vec<ProvenLt>) {
+    facts.retain(|&(v, _, b)| !node_modifies(engine, node, v, b));
+}
+
+/// The `(minuend, k)` of a `<expr> - k` (skeleton or promoted), if any.
+fn sub_const(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Operand, i64)> {
+    let (a, b) = match resolve(engine, binds, op) {
+        Operand::Expr(e) => match &engine.body.exprs[e].kind {
+            ExprKind::Binary {
+                left,
+                op: NirBinaryOp::Sub,
+                right,
+            } => (*left, *right),
+            _ => return None,
+        },
+        Operand::Value(v) => match engine.body.values.kind(v) {
+            ValueKind::Binary {
+                op: NirBinaryOp::Sub,
+                lhs,
+                rhs,
+                ..
+            } => (Operand::Value(*lhs), Operand::Value(*rhs)),
+            _ => return None,
+        },
+    };
+    parse_const_i64(engine, binds, b).map(|k| (a, k))
+}
+
+/// The fact a `let idx = <length field> - k` (k >= 1) proves: `idx + (k-1) <
+/// field`. Sound because the field is an array length (`Field` bound), hence
+/// non-negative, so `field - k` never signed-wraps (`field >= 0` ⇒
+/// `field - k > i32::MIN`). Returned as an ordinary [`ProvenLt`] so [`invalidate`]
+/// drops it if the array is resized before the check — the `arr.last()` idiom,
+/// flow-sensitive rather than a stale check-point match.
+fn len_minus_fact(engine: &Engine, binds: &Binds, node: NodeRef) -> Option<ProvenLt> {
+    let NodeRef::Stmt(s) = node else {
+        return None;
+    };
+    let StmtKind::Let {
+        local_index, value, ..
+    } = &engine.body.stmts[s].kind
+    else {
+        return None;
+    };
+    let (local_index, value) = (*local_index, *value);
+    let (minuend, k) = sub_const(engine, binds, value)?;
+    if k < 1 {
+        return None;
+    }
+    let bound = parse_bound(engine, binds, minuend)?;
+    matches!(bound, BoundKey::Field(..)).then_some((local_index, k - 1, bound))
+}
+
+/// A panic-guard `if <check> { panic }` (no else, `then` a panic block): the
+/// implicit bounds check every `arr[i]` lowers to. Returns its check condition.
+fn panic_guard_check(engine: &Engine, node: NodeRef) -> Option<Operand> {
+    let (cond, then_b) = match node {
+        NodeRef::Stmt(s) => match &engine.body.stmts[s].kind {
+            StmtKind::If {
+                condition,
+                then_block,
+                else_block: None,
+            } => (*condition, *then_block),
+            _ => return None,
+        },
+        NodeRef::Expr(e) => match &engine.body.exprs[e].kind {
+            ExprKind::If {
+                condition,
+                then_branch,
+                else_branch: None,
+            } => (*condition, *then_branch),
+            _ => return None,
+        },
+        _ => return None,
+    };
+    is_panic_block(engine, then_b).then_some(cond)
+}
+
+/// The `if`'s `(condition, then, else)` when `node` is a `StmtKind::If` /
+/// `ExprKind::If` — the two share a shape but different field names.
+fn if_parts(engine: &Engine, node: NodeRef) -> Option<(Operand, BlockId, Option<BlockId>)> {
+    match node {
+        NodeRef::Stmt(s) => match &engine.body.stmts[s].kind {
+            StmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => Some((*condition, *then_block, *else_block)),
+            _ => None,
+        },
+        NodeRef::Expr(e) => match &engine.body.exprs[e].kind {
+            ExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => Some((*condition, *then_branch, *else_branch)),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// The short-circuit `&&` / `||` operands of `node`, if any: the left runs
+/// unconditionally, the right only conditionally.
+fn short_circuit_parts(engine: &Engine, node: NodeRef) -> Option<(Operand, Operand)> {
+    let NodeRef::Expr(e) = node else { return None };
+    match &engine.body.exprs[e].kind {
+        ExprKind::Binary {
+            left,
+            op: NirBinaryOp::And | NirBinaryOp::Or,
+            right,
+        } => Some((*left, *right)),
+        _ => None,
+    }
+}
+
+/// Forward redundant-bounds-check elimination: walk `node` in execution order
+/// maintaining a set of proven `var + off < bound` facts harvested from
+/// panic-guard checks at *unconditionally-executed* positions, and drive to
+/// `false` any later dominated check the facts already refute (e.g. `arr[i]`
+/// re-checked after an earlier `arr[i]` with the array unmodified between).
+///
+/// Facts thread by `&mut` through straight-line positions, by clone into
+/// conditional ones (an `if` branch, short-circuit RHS, or `match` arm — a
+/// branch's harvest must not escape), and afresh into loop / labeled-block
+/// bodies. [`invalidate`] drops a fact when a processed node may modify its
+/// `var` / `bound` root, so a resize between two checks keeps the later one —
+/// the same mod-tracking the straight-line early-exit elimination above uses.
+fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, binds: &Binds) -> bool {
+    if let Some(cond) = panic_guard_check(engine, node) {
+        if let Some((var, off, bound)) = parse_check(engine, binds, cond) {
+            if facts_refute(facts, var, off, bound) {
+                eliminate_condition(engine, node, cond);
+                return true;
+            }
+            facts.push((var, off, bound));
+            return false;
+        }
+        if let Some(ce) = cond.as_expr() {
+            return rbce_walk(engine, NodeRef::Expr(ce), facts, binds);
+        }
+        return false;
+    }
+
+    if let Some((cond, then_b, else_b)) = if_parts(engine, node) {
+        let mut changed = false;
+        if let Some(ce) = cond.as_expr() {
+            changed |= rbce_walk(engine, NodeRef::Expr(ce), facts, binds);
+            invalidate(engine, NodeRef::Expr(ce), facts);
+        }
+        let mut ft = facts.clone();
+        changed |= rbce_walk(engine, NodeRef::Block(then_b), &mut ft, binds);
+        if let Some(eb) = else_b {
+            let mut fe = facts.clone();
+            changed |= rbce_walk(engine, NodeRef::Block(eb), &mut fe, binds);
+            invalidate(engine, NodeRef::Block(eb), facts);
+        }
+        invalidate(engine, NodeRef::Block(then_b), facts);
+        return changed;
+    }
+
+    if let Some((left, right)) = short_circuit_parts(engine, node) {
+        let mut changed = false;
+        if let Some(le) = left.as_expr() {
+            changed |= rbce_walk(engine, NodeRef::Expr(le), facts, binds);
+            invalidate(engine, NodeRef::Expr(le), facts);
+        }
+        if let Some(re) = right.as_expr() {
+            let mut fr = facts.clone();
+            changed |= rbce_walk(engine, NodeRef::Expr(re), &mut fr, binds);
+            invalidate(engine, NodeRef::Expr(re), facts);
+        }
+        return changed;
+    }
+
+    let fresh_region = match node {
+        NodeRef::Stmt(s) => matches!(engine.body.stmts[s].kind, StmtKind::Loop { .. }),
+        NodeRef::Expr(e) => matches!(engine.body.exprs[e].kind, ExprKind::LabeledBlock { .. }),
+        _ => false,
+    };
+    if fresh_region {
+        let mut inner: Vec<ProvenLt> = Vec::new();
+        let mut changed = false;
+        let mut kids = Vec::new();
+        engine.body.for_each_child(node, |c| kids.push(c));
+        for c in kids {
+            changed |= rbce_walk(engine, c, &mut inner, binds);
+        }
+        invalidate(engine, node, facts);
+        return changed;
+    }
+
+    // Scrutinee runs unconditionally, arms conditionally. Identify the scrutinee
+    // by the node's fields, not positionally: a scrutinee promoted to
+    // `Operand::Value` yields no child, so a positional guess would misread an
+    // arm's guard/body as unconditional and leak its facts.
+    let scrutinee = match node {
+        NodeRef::Expr(e) => match &engine.body.exprs[e].kind {
+            ExprKind::Match { expr, .. } => Some(*expr),
+            ExprKind::Switch { scrutinee, .. } => Some(*scrutinee),
+            _ => None,
+        },
+        _ => None,
+    };
+    if let Some(scrutinee) = scrutinee {
+        let scrut_child = scrutinee.as_expr().map(NodeRef::Expr);
+        let mut kids = Vec::new();
+        engine.body.for_each_child(node, |c| kids.push(c));
+        let mut changed = false;
+        for c in kids {
+            if Some(c) == scrut_child {
+                changed |= rbce_walk(engine, c, facts, binds);
+                invalidate(engine, c, facts);
+            } else {
+                let mut arm = facts.clone();
+                changed |= rbce_walk(engine, c, &mut arm, binds);
+            }
+        }
+        invalidate(engine, node, facts);
+        return changed;
+    }
+
+    // Every child runs unconditionally in order; a `let idx = arr.len() - k`
+    // harvests `idx < arr.len()` for the checks that follow it.
+    let mut kids = Vec::new();
+    engine.body.for_each_child(node, |c| kids.push(c));
+    let mut changed = false;
+    for c in kids {
+        changed |= rbce_walk(engine, c, facts, binds);
+        invalidate(engine, c, facts);
+        if let Some(fact) = len_minus_fact(engine, binds, c) {
+            facts.push(fact);
+        }
+    }
+    changed
 }
 
 // ---------------------------------------------------------------------------
