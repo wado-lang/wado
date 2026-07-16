@@ -99,6 +99,30 @@ where T: Reflect<Fields = [..F]>
   **value-free**: `schema_for::<T>()` has no instance, yet `[..F::json_schema()]`
   still expands per field type.
 
+### 1a. API surface: a sealed trait, called as `Reflect::<T>::…`
+
+`Reflect` is a **sealed trait** — the compiler synthesizes `impl Reflect for S`
+for every eligible struct, and a user `impl Reflect for T` is a compile error.
+Sealing is what lets a derivation trust the projection: a program cannot forge a
+type's reflection. `Reflect` stays a trait (not a struct or a builtin type)
+because the derivation mechanism binds it as `where T: Reflect<Fields = [..F]>`
+(§1) — only a trait can carry that bound and its associated `Fields` pack.
+
+Its members are reached **only** through the trait-qualified form, with the
+subject type as a turbofish on the trait:
+
+```wado
+Reflect::<Point>::type_name()     // "Point"
+Reflect::<Point>::field_names()   // ["x", "y"]
+Reflect::<Point>::fields(&p)      // [p.x, p.y]
+```
+
+There is deliberately no bare `Point::type_name()` / `p.fields()` spelling: the
+metadata is introspection _about_ a type, not part of the type's own API, so it
+lives in the `Reflect` namespace and never pollutes the struct's method
+namespace (a user's own `Point::type_name()` is unaffected). In generic code the
+same form applies to a type parameter — `Reflect::<T>::field_names()`.
+
 ### 2. Extend `Reflect` with derivation metadata
 
 The extension is **purely additive** over the §10 signature — `type Fields`,

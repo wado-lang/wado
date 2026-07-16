@@ -339,6 +339,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A sealed, compiler-synthesized trait (`Reflect`) cannot be implemented
+    /// in user code — the compiler provides its impl for every eligible type.
+    SealedTraitImpl {
+        trait_name: String,
+        span: Span,
+    },
+
     /// Invalid stores declaration
     InvalidStores {
         message: String,
@@ -787,6 +794,13 @@ impl TypeError {
                 Code::OrphanRule,
                 format!(
                     "coherence violation: cannot define an inherent `impl` on foreign type `{self_type_name}` (defined in another package); use a trait to extend it"
+                ),
+                *span,
+            ),
+            TypeError::SealedTraitImpl { trait_name, span } => (
+                Code::OrphanRule,
+                format!(
+                    "cannot implement `{trait_name}`: it is a sealed, compiler-synthesized trait provided automatically for every eligible type"
                 ),
                 *span,
             ),

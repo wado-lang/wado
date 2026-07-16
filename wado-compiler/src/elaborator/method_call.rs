@@ -1037,6 +1037,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
+        // Reflect trait-qualified static call: `Reflect::<T>::field_names()` /
+        // `type_name()`. `Reflect` is a (sealed) trait, not a type, so
+        // `target_type` would not resolve — intercept and route to the
+        // concrete `T`'s synthesized `T^Reflect::method`. This is the only
+        // spelling for Reflect metadata; a bare `T::field_names()` never
+        // resolves, so struct namespaces stay clean.
+        if let ast::Type::Generic(g) = &static_call.target_type
+            && self.is_reflect_trait_call(&g.name, &static_call.method)
+            && let Some(self_ty_ast) = g.args.first()
+        {
+            let self_ty = self.resolve_type(self_ty_ast);
+            return self.resolve_reflect_static_call(self_ty, static_call, ctx);
+        }
+
         // Resolve the target type first to get struct name for parameter type lookup
         let target_type_id = self.resolve_type(&static_call.target_type);
 
@@ -2205,19 +2219,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return struct_type;
         }
 
-        // Auto-derived `Reflect` static metadata return types.
-        let (reflect_field_names, reflect_type_name) = self.reflect_static_method_names();
-        if (method_name == reflect_field_names || method_name == reflect_type_name)
-            && self.type_lookup().struct_fields(struct_name).is_some()
-        {
-            let mut tt = self.tysys.type_table.borrow_mut();
-            let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
-            return if method_name == reflect_type_name {
-                string_type
-            } else {
-                tt.make_list(string_type)
-            };
-        }
 
         // Fall back to a trait default method body. When
         // `impl Trait for Type` does not override a static method that the
@@ -2975,53 +2976,105 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ));
         }
 
-        // Auto-derived `Reflect` static metadata: `S::field_names()` /
-        // `S::type_name()` for any struct. The body is emitted by
-        // `synthesis::traits`.
-        let (reflect_field_names, reflect_type_name) = self.reflect_static_method_names();
-        if (method_name == reflect_field_names || method_name == reflect_type_name)
-            && self.type_lookup().struct_fields(struct_name).is_some()
-        {
-            let reflect_trait_name = self
-                .tysys
-                .type_table
-                .borrow()
-                .compiler_trait_name(crate::compiler_item::CompilerItem::Reflect)
-                .to_string();
-            let module_source = self.find_struct_module_source(struct_name);
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .record_bound_driven_synth_request(
-                    struct_name,
-                    &module_source,
-                    &reflect_trait_name,
-                );
-            return Some(StaticMethodRef::new(
-                module_source,
-                struct_name,
-                method_name,
-                Some(reflect_trait_name),
-            ));
-        }
-
         None
     }
 
-    /// The auto-derived `Reflect::field_names` / `Reflect::type_name` method
-    /// names, resolved from the compiler-item registry so a stdlib rename flows
-    /// through instead of being hard-coded at each dispatch site.
-    fn reflect_static_method_names(&self) -> (String, String) {
+    /// Resolve a `Reflect::<T>::method()` trait-qualified static call to the
+    /// synthesized `T^Reflect::method` and record the dispatch fact for reify.
+    /// Self-contained: it does not go through the bare-`Type::method` static
+    /// path, so struct namespaces are never polluted with `T::field_names()`.
+    fn resolve_reflect_static_call(
+        &mut self,
+        self_ty: TypeId,
+        static_call: &ast::StaticMethodCallExpr,
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
+        let method = static_call.method.clone();
+        let self_name = self.tysys.type_table.borrow().type_name(self_ty);
+
+        if self.type_lookup().struct_fields(&self_name).is_none() {
+            let _ = self.logger.error(TypeError::UnknownFunction {
+                name: format!("Reflect::<{self_name}>::{method}"),
+                span: static_call.span,
+            });
+            return TypeTable::ERROR;
+        }
+
+        // Resolve arguments (none for `type_name` / `field_names`).
+        let _args: Vec<TirExpr> = static_call
+            .args
+            .iter()
+            .map(|a| placeholder(self.resolve_expr(a, ctx, None), a.span()))
+            .collect();
+
+        let (reflect_trait_name, field_names_method, type_name_method, module_source) = {
+            let tt = self.tysys.type_table.borrow();
+            let items = tt.compiler_items();
+            (
+                items
+                    .trait_name(crate::compiler_item::CompilerItem::Reflect)
+                    .to_string(),
+                items
+                    .method_name(crate::compiler_item::CompilerItem::ReflectFieldNames)
+                    .to_string(),
+                items
+                    .method_name(crate::compiler_item::CompilerItem::ReflectTypeName)
+                    .to_string(),
+                self.find_struct_module_source(&self_name),
+            )
+        };
+
+        // Demand-synthesize `impl Reflect for T`.
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .record_bound_driven_synth_request(&self_name, &module_source, &reflect_trait_name);
+
+        let return_type = {
+            let mut tt = self.tysys.type_table.borrow_mut();
+            let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
+            if method == type_name_method {
+                string_type
+            } else {
+                tt.make_list(string_type)
+            }
+        };
+        let _ = field_names_method;
+
+        let func_ref = FunctionRef {
+            module_source: module_source.clone(),
+            name: MethodName::format_local(&self_name, Some(&reflect_trait_name), &method),
+            monomorph_info: None,
+            method_info: Some(LocalMethodName::new(
+                self_name.clone(),
+                Some(reflect_trait_name.clone()),
+                method.clone(),
+            )),
+        };
+        self.sem.types.static_method_dispatch.insert(
+            static_call.id,
+            super::sem::types::StaticMethodDispatch {
+                function_ref: func_ref,
+                param_is_mut: Vec::new(),
+                type_args: Vec::new(),
+                param_defaults: Vec::new(),
+            },
+        );
+
+        return_type
+    }
+
+    /// Whether `prefix::method` names a `Reflect` trait-qualified static call
+    /// (`Reflect::<T>::field_names` / `type_name`). `prefix` is the `Reflect`
+    /// trait; `method` one of its static metadata methods. Resolved through the
+    /// compiler-item registry so a stdlib rename flows through.
+    pub(super) fn is_reflect_trait_call(&self, prefix: &str, method: &str) -> bool {
         let tt = self.tysys.type_table.borrow();
         let items = tt.compiler_items();
-        (
-            items
-                .method_name(crate::compiler_item::CompilerItem::ReflectFieldNames)
-                .to_string(),
-            items
-                .method_name(crate::compiler_item::CompilerItem::ReflectTypeName)
-                .to_string(),
-        )
+        prefix == items.trait_name(crate::compiler_item::CompilerItem::Reflect)
+            && (method == items.method_name(crate::compiler_item::CompilerItem::ReflectFieldNames)
+                || method
+                    == items.method_name(crate::compiler_item::CompilerItem::ReflectTypeName))
     }
 
     /// Get the operator trait and method name for a binary operator.
@@ -3106,14 +3159,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return true;
         }
 
-        // Auto-derived `Reflect` static metadata: `field_names` / `type_name`
-        // on any struct.
-        let (reflect_field_names, reflect_type_name) = self.reflect_static_method_names();
-        if (method_name == reflect_field_names || method_name == reflect_type_name)
-            && self.type_lookup().struct_fields(struct_name).is_some()
-        {
-            return true;
-        }
+        // `Reflect` metadata is reachable only through the trait-qualified form
+        // `Reflect::<T>::method()` (see `resolve_call`), never as a bare
+        // `T::method()` static method — that keeps struct namespaces clean.
 
         // Defaulted trait method: when `impl Trait for Type` does not
         // override a static method that the trait provides a default for,

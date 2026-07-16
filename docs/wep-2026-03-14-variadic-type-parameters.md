@@ -248,13 +248,13 @@ impl<T, ..F: Inspect> Inspect for T
 where T: Reflect<Fields = [..F]>
 {
     fn inspect(&self) -> String {
-        let names = T::field_names();
-        let values: [..F] = self.fields();
+        let names = Reflect::<T>::field_names();
+        let values: [..F] = Reflect::<T>::fields(self);
         let mut parts: List<String> = [];
         for let [i, v] of values.enumerate() {
             parts.push(`{names[i]}: {v.inspect()}`);
         }
-        return `{T::type_name()} \{ {parts.join(", ")} \}`;
+        return `{Reflect::<T>::type_name()} \{ {parts.join(", ")} \}`;
     }
 }
 ```
@@ -373,13 +373,13 @@ impl<T, ..F: Inspect> Inspect for T
 where T: Reflect<Fields = [..F]>
 {
     fn inspect(&self) -> String {
-        let names = T::field_names();
-        let values: [..F] = self.fields();
+        let names = Reflect::<T>::field_names();
+        let values: [..F] = Reflect::<T>::fields(self);
         let mut parts: List<String> = [];
         for let [i, v] of values.enumerate() {
             parts.push(`{names[i]}: {v.inspect()}`);
         }
-        return `{T::type_name()} \{ {parts.join(", ")} \}`;
+        return `{Reflect::<T>::type_name()} \{ {parts.join(", ")} \}`;
     }
 }
 ```

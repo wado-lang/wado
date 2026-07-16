@@ -859,6 +859,32 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let _ = logger.error(violation);
         }
 
+        // Seal `Reflect`: compiler-synthesized, it may not be implemented in
+        // user code (that would let a program forge a type's reflection).
+        if let Some(reflect_name) = type_table
+            .borrow()
+            .compiler_items()
+            .trait_name_opt(crate::compiler_item::CompilerItem::Reflect)
+            .map(str::to_string)
+        {
+            for (module_source, module) in modules.iter() {
+                if !super::trait_env::is_user_local(module_source) {
+                    continue;
+                }
+                for item in &module.items {
+                    if let Item::Impl(impl_block) = item
+                        && let Some(trait_type) = &impl_block.trait_type
+                        && super::trait_env::get_type_name_static(trait_type) == reflect_name
+                    {
+                        let _ = logger.error(TypeError::SealedTraitImpl {
+                            trait_name: reflect_name.clone(),
+                            span: impl_block.span,
+                        });
+                    }
+                }
+            }
+        }
+
         // Pre-pass: register generic associated type defs from ALL modules before any module
         // is resolved. This ensures that when resolving module X, it can look up associated
         // types from module Y's impl blocks even if Y hasn't been processed yet in the main
