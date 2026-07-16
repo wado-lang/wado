@@ -171,13 +171,15 @@ Parse 81 SQL statements (13366 bytes). Two parsers are generated from the same
 | ------------------- | ---------- | ---------- | ------- |
 | Rust (sqlparser-rs) | 7.93 MB/s  | 1.685 ms   | 1.00x   |
 | **Wado** (Gale)     | 5.54 MB/s  | 2.410 ms   | 1.43x   |
-| Java (ANTLR4)       | 0.06 MB/s  | 223.580 ms | 132.71x |
+| Java (ANTLR4)       | 0.06 MB/s  | 212.926 ms | 126.36x |
 
 ANTLR4 (Java) is the head-to-head for Gale's generated parser — the same grammar
-turned into a parser by the reference tool — on the JVM (JIT-warmed). It runs
-under full-context LL prediction: this grammar's ambiguities defeat the two-stage
-SLL fast path (SLL bails), which is the dominant cost on this input. Needs `java`
-and is skipped if it is absent.
+turned into a parser by the reference tool — on the JVM. The harness warms the
+JIT and ANTLR's DFA cache to steady state first (the most Java-favourable
+condition): the per-parse time flattens after ~50 warmup parses, so this gap is
+algorithmic, not a warmup artifact. The cost is full-context LL prediction —
+this grammar's ambiguities defeat the two-stage SLL fast path (SLL bails). Needs
+`java` and is skipped if it is absent.
 
 ### Syntax Highlight
 

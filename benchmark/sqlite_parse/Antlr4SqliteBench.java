@@ -37,10 +37,16 @@ public class Antlr4SqliteBench {
         String sql = new String(Files.readAllBytes(Paths.get(args[0])), "UTF-8");
         int size = sql.getBytes("UTF-8").length;
 
-        // Warm the JIT and ANTLR's static DFA cache for ~2s before measuring.
-        long warmUntil = System.nanoTime() + 2_000_000_000L;
-        while (System.nanoTime() < warmUntil) {
+        // Warm the JIT (C2) and ANTLR's static DFA cache to steady state before
+        // measuring — the most Java-favourable condition. On this grammar the
+        // per-iteration time flattens by ~40-50 parses (the cold first parse is
+        // ~3x the steady cost); warm past that knee on any machine by requiring
+        // both a time and an iteration floor.
+        long warmUntil = System.nanoTime() + 8_000_000_000L;
+        long warmIters = 0;
+        while (System.nanoTime() < warmUntil || warmIters < 60) {
             parseOnce(sql);
+            warmIters++;
         }
 
         final long target = 1_000_000_000L; // ~1s measured window
