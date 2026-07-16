@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784204429819,
+  "lastUpdate": 1784209525418,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -40865,6 +40865,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 265171,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "833f19a731a6901c5d9c539bfb89245dc73e2a7a",
+          "message": "Merge pull request #1593 from wado-lang/claude/wado-sqlite-parse-perf-frsjrg\n\nperf(optimizer): eliminate redundant and last-element array bounds checks",
+          "timestamp": "2026-07-16T22:35:40+09:00",
+          "tree_id": "46877c9eea5a1bb4aad1a9d69800e4caf042255d",
+          "url": "https://github.com/wado-lang/wado/commit/833f19a731a6901c5d9c539bfb89245dc73e2a7a"
+        },
+        "date": 1784209524690,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16233,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 259842,
             "unit": "bytes"
           }
         ]
