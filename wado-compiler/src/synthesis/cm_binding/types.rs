@@ -583,15 +583,23 @@ pub(super) fn check_cm_boundary_representable(
                     type_table.type_name(type_id)
                 ))
             }
-            // Scalars, plain discriminants, bitflags, and resource/handle types
-            // (`resource`, `own`/`borrow`, `stream`/`future`) — the last group
-            // lowers to an i32 handle identically in every world.
+            // Scalars, plain discriminants, bitflags, and plain resource
+            // handles lower to an i32 handle identically in every world.
             R::Primitive(_)
             | R::Unit
             | R::Enum { .. }
             | R::Flags { .. }
-            | R::Resource { .. }
-            | R::GenericResource { .. } => Ok(()),
+            | R::Resource { .. } => Ok(()),
+            // Stream/Future handles are themselves i32, but their payload is
+            // lifted/lowered by value on read/write, so it must be
+            // representable (and non-recursive) too.
+            R::GenericResource { type_args, .. } => {
+                let args = type_args.clone();
+                for a in args {
+                    recurse(a, visited)?;
+                }
+                Ok(())
+            }
             R::Struct { name, .. } => {
                 let names = CmStdlibNames::from_compiler_items(type_table.compiler_items());
                 if name == &names.string {
