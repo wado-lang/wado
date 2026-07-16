@@ -43,10 +43,11 @@ use super::import_adapter::make_binding_function;
 use super::lift::synthesize_lift_list;
 use super::lower::synthesize_lower_wasi_type_to_memory;
 use super::types::{
-    LiftContext, binary_add, binary_ne, cm_val_type_to_type_id, cm_zero, coerce_flat_lift,
-    coerce_flat_lower, compute_export_flat_param_types, export_needs_param_lifting, field_access,
-    find_struct_decl, find_variant_decl, flat_types_from_type_id, flatten_export_type,
-    is_unit_type, type_id_to_ast_type, variant_payload, variant_tag, variant_test,
+    LiftContext, LowerContext, binary_add, binary_ne, cm_val_type_to_type_id, cm_zero,
+    coerce_flat_lift, coerce_flat_lower, compute_export_flat_param_types,
+    export_needs_param_lifting, field_access, find_struct_decl, find_variant_decl,
+    flat_types_from_type_id, flatten_export_type, is_unit_type, type_id_to_ast_type,
+    variant_payload, variant_tag, variant_test,
 };
 
 /// Build the export binding function name for a world export.
@@ -184,6 +185,12 @@ fn lower_to_flat_inner(
             // List<T> flat ABI: (ptr: i32, len: i32) pointing at
             // `len * cm_size(T)` bytes of linear memory with `cm_align(T)`
             // alignment, laid out per the Canonical ABI.
+            let lower_ctx = LowerContext {
+                cm_interface_registry: ctx.cm_interface_registry,
+                type_table: ctx.type_table,
+                wasi_package: ctx.cm_package,
+                names: names.clone(),
+            };
             let elem_type_id = type_args[0];
             let elem_ast_type = {
                 let tt = ctx.type_table.borrow();
@@ -334,9 +341,7 @@ fn lower_to_flat_inner(
                 local_ref(elem_addr_local, "__arr_elem_addr", TypeTable::I32),
                 next_local,
                 locals,
-                ctx.cm_interface_registry,
-                ctx.cm_package,
-                ctx.type_table,
+                &lower_ctx,
             ));
 
             // __i += 1
@@ -1990,6 +1995,14 @@ pub(super) fn synthesize_sync_export_binding(
         cm_package,
         interner,
     };
+    let lower_ctx = LowerContext {
+        cm_interface_registry,
+        type_table,
+        wasi_package: cm_package,
+        names: super::types::CmStdlibNames::from_compiler_items(
+            type_table.borrow().compiler_items(),
+        ),
+    };
 
     let (adapter_params, call_args, param_count) = build_export_adapter_params(
         &user_func_ref,
@@ -2081,9 +2094,7 @@ pub(super) fn synthesize_sync_export_binding(
             local_ref(ptr_local, "__ret_ptr", TypeTable::I32),
             &mut next_local,
             &mut locals,
-            cm_interface_registry,
-            cm_package,
-            type_table,
+            &lower_ctx,
         );
         body_stmts.extend(store);
         body_stmts.push(return_stmt(Some(local_ref(

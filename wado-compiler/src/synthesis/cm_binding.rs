@@ -907,7 +907,7 @@ mod tests {
 
     use super::export_adapter::synthesize_lift_from_flat_params;
     use super::types::{
-        CmStdlibNames, compute_export_flat_param_types, export_needs_param_lifting,
+        CmStdlibNames, LowerContext, compute_export_flat_param_types, export_needs_param_lifting,
         param_needs_lifting,
     };
     use super::*;
@@ -926,6 +926,20 @@ mod tests {
             span: synth_span(),
             source_interface: None,
         })
+    }
+
+    /// `LowerContext` over an empty registry / type table, sufficient for the
+    /// primitive `synthesize_lower` paths (which only read `names`).
+    fn lower_ctx_for_tests<'a>(
+        registry: &'a CmInterfaceRegistry,
+        type_table: &'a RefCell<TypeTable>,
+    ) -> LowerContext<'a> {
+        LowerContext {
+            cm_interface_registry: registry,
+            type_table,
+            wasi_package: "test",
+            names: CmStdlibNames::for_tests(),
+        }
     }
 
     /// Register the `Option`, `Result`, `String`, and `List` compiler
@@ -1418,13 +1432,16 @@ mod tests {
 
     #[test]
     fn lower_i32() {
+        let registry = CmInterfaceRegistry::new();
+        let type_table = RefCell::new(TypeTable::new());
+        let ctx = lower_ctx_for_tests(&registry, &type_table);
         let stmts = synthesize_lower(
             &named_type("i32"),
             i32_const(42),
             i32_const(100),
             &mut 0,
             &mut vec![],
-            &CmStdlibNames::for_tests(),
+            &ctx,
         );
         assert_eq!(stmts.len(), 1);
     }
@@ -1436,13 +1453,16 @@ mod tests {
             TypeTable::BOOL,
             synth_span(),
         );
+        let registry = CmInterfaceRegistry::new();
+        let type_table = RefCell::new(TypeTable::new());
+        let ctx = lower_ctx_for_tests(&registry, &type_table);
         let stmts = synthesize_lower(
             &named_type("bool"),
             value,
             i32_const(100),
             &mut 0,
             &mut vec![],
-            &CmStdlibNames::for_tests(),
+            &ctx,
         );
         assert_eq!(stmts.len(), 1);
     }
@@ -1450,13 +1470,16 @@ mod tests {
     #[test]
     fn lower_unit() {
         let value = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span());
+        let registry = CmInterfaceRegistry::new();
+        let type_table = RefCell::new(TypeTable::new());
+        let ctx = lower_ctx_for_tests(&registry, &type_table);
         let stmts = synthesize_lower(
             &Type::Tuple(vec![]),
             value,
             i32_const(100),
             &mut 0,
             &mut vec![],
-            &CmStdlibNames::for_tests(),
+            &ctx,
         );
         assert!(stmts.is_empty());
     }
@@ -1469,13 +1492,16 @@ mod tests {
             synth_span(),
         );
         let mut next_local = 10_u32;
+        let registry = CmInterfaceRegistry::new();
+        let type_table = RefCell::new(TypeTable::new());
+        let ctx = lower_ctx_for_tests(&registry, &type_table);
         let stmts = synthesize_lower(
             &named_type("String"),
             value,
             i32_const(100),
             &mut next_local,
             &mut vec![],
-            &CmStdlibNames::for_tests(),
+            &ctx,
         );
         // Should produce: let __packed = cm_lower_string(value); store ptr; store len
         assert_eq!(stmts.len(), 3);

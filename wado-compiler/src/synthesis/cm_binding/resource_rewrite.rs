@@ -34,7 +34,7 @@ use crate::synthesis::common::{
 use crate::wir::{CanonicalIntrinsic, CmFuturePayload, CmStreamPayload};
 
 use super::synthesize_lift;
-use super::types::{LiftContext, binary_add, type_id_to_ast_type};
+use super::types::{CmStdlibNames, LiftContext, LowerContext, binary_add, type_id_to_ast_type};
 
 /// Generate binding functions for Stream<T>.`read()` where T is a non-u8 WASI record type.
 ///
@@ -499,14 +499,18 @@ fn synthesize_stream_write_func(
     let data_idx = alloc(&mut next_local, &mut locals, list_type_id, false);
 
     // Lower the list into a CM element buffer: (ptr, element count).
+    let lower_ctx = LowerContext {
+        cm_interface_registry,
+        type_table,
+        wasi_package: "cli",
+        names: CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items()),
+    };
     let (lower_stmts, ptr_local, count_local) = super::lower::synthesize_lower_list_to_buffer(
         &elem_ast,
         local_ref(data_idx, "data", list_type_id),
         &mut next_local,
         &mut locals,
-        cm_interface_registry,
-        "cli",
-        type_table,
+        &lower_ctx,
     );
     stmts.extend(lower_stmts);
 
@@ -852,15 +856,19 @@ fn synthesize_future_write_func(
     ));
 
     // Lower `value` into the buffer using the shared registry-backed lowerer.
+    let lower_ctx = LowerContext {
+        cm_interface_registry,
+        type_table,
+        wasi_package: &cm_package,
+        names: CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items()),
+    };
     stmts.extend(super::lower::synthesize_lower_wasi_type_to_memory(
         &payload_ast,
         local_ref(value_idx, "value", payload_type_id),
         local_ref(ptr_idx, "ptr", TypeTable::I32),
         &mut next_local,
         &mut locals,
-        cm_interface_registry,
-        &cm_package,
-        type_table,
+        &lower_ctx,
     ));
 
     let written_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, awaits_reader);

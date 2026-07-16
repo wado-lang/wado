@@ -53,14 +53,11 @@ pub struct CmStdlibNames {
 
 impl CmStdlibNames {
     /// Look up every name through the [`CompilerItems`] registry.
-    /// Cheap (a handful of registry hits + clones); `cm_binding`'s
-    /// multi-entry-point shape (lift / lower / adapter / `type_fixup` /
-    /// `task_return` are all called independently from outside paths)
-    /// means each entry rebuilds the snapshot locally rather than
-    /// threading a single one through a single context — mirrors the
-    /// `from_compiler_items` constructor shape used by the other
-    /// synthesis passes (`SerdeStdlibNames`, `FormatStdlibNames`,
-    /// `TraitsStdlibNames`).
+    /// Cheap (a handful of registry hits + clones). Each synthesis entry
+    /// point builds the snapshot once per binding — the lower side threads
+    /// it through [`LowerContext`] — mirroring the `from_compiler_items`
+    /// constructor shape used by the other synthesis passes
+    /// (`SerdeStdlibNames`, `FormatStdlibNames`, `TraitsStdlibNames`).
     pub fn from_compiler_items(items: &CompilerItems) -> Self {
         let (_, _, some_name, some_index) = items.require_variant_case(CompilerItem::OptionSome);
         let (_, _, none_name, none_index) = items.require_variant_case(CompilerItem::OptionNone);
@@ -230,6 +227,23 @@ impl LiftContext<'_> {
             _ => cm_type_to_type_id(ty, tt, self.cm_interface_registry, self.cm_package),
         }
     }
+}
+
+/// Context for lowering GC values to CM representations, providing access
+/// to the WASI registry (for record/variant layout), the type table (for
+/// `TypeId`s), and the stdlib-name snapshot.
+///
+/// Mirror of [`LiftContext`] for the lower-side synthesis paths in
+/// `lower.rs`. Not `Copy`: it owns the [`CmStdlibNames`] snapshot, so it is
+/// passed by reference through the recursion sites.
+pub struct LowerContext<'a> {
+    pub cm_interface_registry: &'a CmInterfaceRegistry,
+    pub type_table: &'a RefCell<TypeTable>,
+    /// CM package owning the binding being synthesized (same semantics as
+    /// `LiftContext::cm_package`).
+    pub wasi_package: &'a str,
+    /// Stdlib-name snapshot; built once per binding instead of per call.
+    pub names: CmStdlibNames,
 }
 
 /// Convert a WASI AST `Type` to a `TypeId` in the type table.
@@ -893,6 +907,9 @@ pub(super) fn compute_export_flat_return_types(
 }
 
 /// Recursively flatten an export type to CM ABI flat values.
+///
+/// Thin wrapper that builds the [`CmStdlibNames`] snapshot once and delegates
+/// to the recursive inner function, so recursion does not rebuild it per level.
 pub(super) fn flatten_export_type(
     ty: &Type,
     out: &mut Vec<cm_abi::CmValType>,
@@ -900,6 +917,16 @@ pub(super) fn flatten_export_type(
     type_table: &TypeTable,
 ) {
     let names = CmStdlibNames::from_compiler_items(type_table.compiler_items());
+    flatten_export_type_inner(ty, out, tir_modules, type_table, &names);
+}
+
+fn flatten_export_type_inner(
+    ty: &Type,
+    out: &mut Vec<cm_abi::CmValType>,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    type_table: &TypeTable,
+    names: &CmStdlibNames,
+) {
     match ty {
         Type::Named(named) if named.name == names.string => {
             out.push(cm_abi::CmValType::I32); // ptr
@@ -916,13 +943,13 @@ pub(super) fn flatten_export_type(
             _ => {
                 // Check if it's a variant type defined in TIR modules
                 if let Some(variant_decl) = find_variant_decl(&named.name, tir_modules) {
-                    flatten_variant_type(&variant_decl, out, tir_modules, type_table);
+                    flatten_variant_type(&variant_decl, out, tir_modules, type_table, names);
                 } else if let Some(struct_decl) = find_struct_decl(&named.name, tir_modules) {
-                    flatten_struct_type(&struct_decl, out, tir_modules, type_table);
+                    flatten_struct_type(&struct_decl, out, tir_modules, type_table, names);
                 } else if let Some(nt_type_id) = find_newtype_type_id(&named.name, tir_modules) {
                     // A newtype flattens as its base, not the i32 fallback below,
                     // so the flat signature matches the canonical ABI.
-                    flat_types_from_type_id_into(nt_type_id, out, tir_modules, type_table);
+                    flat_types_from_type_id_inner(nt_type_id, out, tir_modules, type_table, names);
                 } else {
                     // Resource handles, enums, unknown → i32
                     out.push(cm_abi::CmValType::I32);
@@ -935,21 +962,21 @@ pub(super) fn flatten_export_type(
         }
         Type::Generic(generic) if generic.name == names.option && generic.args.len() == 1 => {
             out.push(cm_abi::CmValType::I32); // discriminant
-            flatten_export_type(&generic.args[0], out, tir_modules, type_table);
+            flatten_export_type_inner(&generic.args[0], out, tir_modules, type_table, names);
         }
         Type::Generic(generic) if generic.name == names.result && generic.args.len() == 2 => {
             out.push(cm_abi::CmValType::I32); // discriminant
             let mut ok_flat = Vec::new();
             let mut err_flat = Vec::new();
-            flatten_export_type(&generic.args[0], &mut ok_flat, tir_modules, type_table);
-            flatten_export_type(&generic.args[1], &mut err_flat, tir_modules, type_table);
+            flatten_export_type_inner(&generic.args[0], &mut ok_flat, tir_modules, type_table, names);
+            flatten_export_type_inner(&generic.args[1], &mut err_flat, tir_modules, type_table, names);
             out.extend(cm_abi::join_flat_unions(&ok_flat, &err_flat));
         }
         // Stream / Future / Own / Borrow and other generics are i32 handles.
         Type::Generic(_) => out.push(cm_abi::CmValType::I32),
         Type::Tuple(elems) => {
             for elem in elems {
-                flatten_export_type(elem, out, tir_modules, type_table);
+                flatten_export_type_inner(elem, out, tir_modules, type_table, names);
             }
         }
         Type::Reference(_) | Type::MutReference(_) => out.push(cm_abi::CmValType::I32),
@@ -958,30 +985,33 @@ pub(super) fn flatten_export_type(
 }
 
 /// Flatten a variant type: discriminant + union of all case payloads.
-pub(super) fn flatten_variant_type(
+fn flatten_variant_type(
     variant_decl: &TirVariantDecl,
     out: &mut Vec<cm_abi::CmValType>,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &TypeTable,
+    names: &CmStdlibNames,
 ) {
     out.push(cm_abi::CmValType::I32); // variant discriminant
     let mut union: Vec<cm_abi::CmValType> = Vec::new();
     for case in &variant_decl.cases {
-        let case_flat = flat_types_from_type_id(case.payload, tir_modules, type_table);
+        let mut case_flat = Vec::new();
+        flat_types_from_type_id_inner(case.payload, &mut case_flat, tir_modules, type_table, names);
         union = cm_abi::join_flat_unions(&union, &case_flat);
     }
     out.extend(union);
 }
 
 /// Flatten a struct type: concatenation of all field flat types.
-pub(super) fn flatten_struct_type(
+fn flatten_struct_type(
     struct_decl: &TirStruct,
     out: &mut Vec<cm_abi::CmValType>,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &TypeTable,
+    names: &CmStdlibNames,
 ) {
     for field in &struct_decl.fields {
-        flat_types_from_type_id_into(field.type_id, out, tir_modules, type_table);
+        flat_types_from_type_id_inner(field.type_id, out, tir_modules, type_table, names);
     }
 }
 
@@ -997,6 +1027,9 @@ pub(super) fn flat_types_from_type_id(
 }
 
 /// Append flat CM ABI types from a `TypeId` to `out`.
+///
+/// Thin wrapper that builds the [`CmStdlibNames`] snapshot once and delegates
+/// to the recursive inner function, so recursion does not rebuild it per level.
 pub(super) fn flat_types_from_type_id_into(
     type_id: TypeId,
     out: &mut Vec<cm_abi::CmValType>,
@@ -1004,6 +1037,16 @@ pub(super) fn flat_types_from_type_id_into(
     type_table: &TypeTable,
 ) {
     let names = CmStdlibNames::from_compiler_items(type_table.compiler_items());
+    flat_types_from_type_id_inner(type_id, out, tir_modules, type_table, &names);
+}
+
+fn flat_types_from_type_id_inner(
+    type_id: TypeId,
+    out: &mut Vec<cm_abi::CmValType>,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    type_table: &TypeTable,
+    names: &CmStdlibNames,
+) {
     match type_table.get(type_id) {
         ResolvedType::Primitive(p) => match p {
             PrimitiveType::I8
@@ -1030,7 +1073,7 @@ pub(super) fn flat_types_from_type_id_into(
                 out.push(cm_abi::CmValType::I32); // ptr
                 out.push(cm_abi::CmValType::I32); // len
             } else if let Some(struct_decl) = find_struct_decl(name, tir_modules) {
-                flatten_struct_type(&struct_decl, out, tir_modules, type_table);
+                flatten_struct_type(&struct_decl, out, tir_modules, type_table, names);
             } else {
                 out.push(cm_abi::CmValType::I32); // unknown struct → i32
             }
@@ -1039,7 +1082,7 @@ pub(super) fn flat_types_from_type_id_into(
         ResolvedType::Enum { .. } => out.push(cm_abi::CmValType::I32),
         ResolvedType::Variant { name, .. } => {
             if let Some(variant_decl) = find_variant_decl(name, tir_modules) {
-                flatten_variant_type(&variant_decl, out, tir_modules, type_table);
+                flatten_variant_type(&variant_decl, out, tir_modules, type_table, names);
             } else {
                 out.push(cm_abi::CmValType::I32);
             }
@@ -1049,17 +1092,29 @@ pub(super) fn flat_types_from_type_id_into(
         } => {
             if TypeTable::is_tuple_type(name) {
                 for &elem in type_args {
-                    flat_types_from_type_id_into(elem, out, tir_modules, type_table);
+                    flat_types_from_type_id_inner(elem, out, tir_modules, type_table, names);
                 }
             } else if name == &names.option && type_args.len() == 1 {
                 out.push(cm_abi::CmValType::I32); // discriminant
-                flat_types_from_type_id_into(type_args[0], out, tir_modules, type_table);
+                flat_types_from_type_id_inner(type_args[0], out, tir_modules, type_table, names);
             } else if name == &names.result && type_args.len() == 2 {
                 out.push(cm_abi::CmValType::I32); // discriminant
                 let mut ok_flat = Vec::new();
                 let mut err_flat = Vec::new();
-                flat_types_from_type_id_into(type_args[0], &mut ok_flat, tir_modules, type_table);
-                flat_types_from_type_id_into(type_args[1], &mut err_flat, tir_modules, type_table);
+                flat_types_from_type_id_inner(
+                    type_args[0],
+                    &mut ok_flat,
+                    tir_modules,
+                    type_table,
+                    names,
+                );
+                flat_types_from_type_id_inner(
+                    type_args[1],
+                    &mut err_flat,
+                    tir_modules,
+                    type_table,
+                    names,
+                );
                 out.extend(cm_abi::join_flat_unions(&ok_flat, &err_flat));
             } else if name == &names.array {
                 out.push(cm_abi::CmValType::I32); // ptr
@@ -1069,7 +1124,7 @@ pub(super) fn flat_types_from_type_id_into(
             }
         }
         ResolvedType::Newtype { base_type, .. } => {
-            flat_types_from_type_id_into(*base_type, out, tir_modules, type_table);
+            flat_types_from_type_id_inner(*base_type, out, tir_modules, type_table, names);
         }
         ResolvedType::Flags { .. } => {
             // Flags are u32 at the CM ABI level

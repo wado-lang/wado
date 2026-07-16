@@ -39,8 +39,9 @@ use super::lower::{
     synthesize_lower_wasi_variant_to_memory,
 };
 use super::types::{
-    LiftContext, binary_add, cm_param_align, cm_param_size, cm_param_store_plan,
-    cm_type_to_type_id, cm_val_type_to_type_id, flatten_param_type, needs_flat_result_lifting,
+    CmStdlibNames, LiftContext, LowerContext, binary_add, cm_param_align, cm_param_size,
+    cm_param_store_plan, cm_type_to_type_id, cm_val_type_to_type_id, flatten_param_type,
+    needs_flat_result_lifting,
 };
 
 /// Build the binding function name for a WASI import.
@@ -349,8 +350,7 @@ fn synthesize_async_wrap_function(
     outptr_size: u32,
     outptr_align: u32,
     lift_fn_ref: TirExpr,
-    cm_interface_registry: &CmInterfaceRegistry,
-    type_table: &RefCell<TypeTable>,
+    ctx: &LowerContext<'_>,
 ) -> Rc<RefCell<TirFunction>> {
     let span = synth_span();
     let mut next_local: u32 = 0;
@@ -406,9 +406,7 @@ fn synthesize_async_wrap_function(
             local_ref(outptr_local, "__outptr", TypeTable::I32),
             &mut next_local,
             &mut locals,
-            cm_interface_registry,
-            &func_info.package,
-            type_table,
+            ctx,
         ));
         local_ref(outptr_local, "__outptr", TypeTable::I32)
     } else {
@@ -561,8 +559,13 @@ pub(super) fn synthesize_adapter(
     owner_module: &ModuleSource,
     entry_source: &ModuleSource,
 ) -> AdapterArtifacts {
-    let names =
-        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
+    let lower_ctx = LowerContext {
+        cm_interface_registry,
+        type_table,
+        wasi_package: &func_info.package,
+        names: CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items()),
+    };
+    let names = &lower_ctx.names;
     let name = binding_func_name(&func_info.interface_name, &func_info.method_name);
     let local_name = func_info.local_alias_name();
 
@@ -627,7 +630,7 @@ pub(super) fn synthesize_adapter(
     // Track (start_param_idx, param_count) per WASI param for Pass 2 indexing.
     let mut param_mapping: Vec<(usize, usize)> = Vec::new();
     for (param_name, _, param_type) in &func_info.params {
-        let flat_tys = flatten_param_type(param_type, cm_interface_registry, &names);
+        let flat_tys = flatten_param_type(param_type, cm_interface_registry, names);
         if flat_tys.is_empty() {
             continue; // unit param, skip
         }
@@ -833,7 +836,7 @@ pub(super) fn synthesize_adapter(
     // Intermediate locals (packed i64, etc.) are allocated after all params.
     let mut mapping_idx = 0usize;
     for (param_name, _, param_type) in &func_info.params {
-        let flat_tys = flatten_param_type(param_type, cm_interface_registry, &names);
+        let flat_tys = flatten_param_type(param_type, cm_interface_registry, names);
         if flat_tys.is_empty() {
             continue; // unit param, skip
         }
@@ -1085,9 +1088,7 @@ pub(super) fn synthesize_adapter(
                     addr_ref,
                     &mut next_local,
                     &mut locals,
-                    cm_interface_registry,
-                    &func_info.package,
-                    type_table,
+                    &lower_ctx,
                 );
                 loop_body.extend(lower_stmts);
                 // __i += 1
@@ -1144,9 +1145,7 @@ pub(super) fn synthesize_adapter(
                     &mut body_stmts,
                     &mut locals,
                     &mut flat_args,
-                    cm_interface_registry,
-                    &func_info.package,
-                    type_table,
+                    &lower_ctx,
                 );
             }
             // Variant param: for async, pass GC ref (lowered in Step 3 indirect params);
@@ -1170,9 +1169,7 @@ pub(super) fn synthesize_adapter(
                         &mut body_stmts,
                         &mut locals,
                         &mut flat_args,
-                        cm_interface_registry,
-                        &func_info.package,
-                        type_table,
+                        &lower_ctx,
                     );
                 }
             }
@@ -1191,9 +1188,7 @@ pub(super) fn synthesize_adapter(
                         &mut body_stmts,
                         &mut locals,
                         &mut flat_args,
-                        cm_interface_registry,
-                        &func_info.package,
-                        type_table,
+                        &lower_ctx,
                     );
                 }
             }
@@ -1215,9 +1210,7 @@ pub(super) fn synthesize_adapter(
                     &mut body_stmts,
                     &mut locals,
                     &mut flat_args,
-                    cm_interface_registry,
-                    &func_info.package,
-                    type_table,
+                    &lower_ctx,
                 );
             }
             Type::Tuple(elems) if !elems.is_empty() => {
@@ -1235,9 +1228,7 @@ pub(super) fn synthesize_adapter(
                     &mut body_stmts,
                     &mut locals,
                     &mut flat_args,
-                    cm_interface_registry,
-                    &func_info.package,
-                    type_table,
+                    &lower_ctx,
                 );
             }
             // All other types: flat params passed through directly
@@ -1404,9 +1395,7 @@ pub(super) fn synthesize_adapter(
                         &mut next_local,
                         &mut body_stmts,
                         &mut locals,
-                        cm_interface_registry,
-                        &func_info.package,
-                        type_table,
+                        &lower_ctx,
                     );
                     continue;
                 }
@@ -1432,13 +1421,11 @@ pub(super) fn synthesize_adapter(
                         &mut next_local,
                         &mut body_stmts,
                         &mut locals,
-                        cm_interface_registry,
-                        &func_info.package,
-                        type_table,
+                        &lower_ctx,
                     );
                     continue;
                 }
-                let stores = cm_param_store_plan(ty, cm_interface_registry, &names);
+                let stores = cm_param_store_plan(ty, cm_interface_registry, names);
                 for (sub_offset, store_name) in &stores {
                     let offset = base_offset + sub_offset;
                     let addr = if offset == 0 {
@@ -1657,8 +1644,7 @@ pub(super) fn synthesize_adapter(
                 wrap_size,
                 wrap_align,
                 wrap_lift_ref,
-                cm_interface_registry,
-                type_table,
+                &lower_ctx,
             ));
         }
     } else if let Some((alloc_size, alloc_align)) = outptr_alloc {
@@ -1719,7 +1705,7 @@ pub(super) fn synthesize_adapter(
                         .get_struct_fields_by_source(s, &n.name)
                         .is_some()
                 }));
-        if needs_flat_result_lifting(&resolved, &names) {
+        if needs_flat_result_lifting(&resolved, names) {
             // Flat return with complex type (e.g., Result<(), ()>): the raw call returns
             // an i32 discriminant on the stack, but the binding needs to return a GC struct.
             // Synthesize VariantConstruct from the discriminant.
