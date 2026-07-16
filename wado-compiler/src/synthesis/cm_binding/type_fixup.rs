@@ -102,7 +102,7 @@ fn replace_wasi_derived_type_recursive(
                 }
             }
         }
-        Type::Generic(g) if g.name == "Option" && g.args.len() == 1 => {
+        Type::Generic(g) if g.name == names.option && g.args.len() == 1 => {
             let tt = type_table.borrow();
             if let Some(new_args) = tt.generic_type_args(user_type)
                 && new_args.len() == 1
@@ -119,7 +119,7 @@ fn replace_wasi_derived_type_recursive(
                 );
             }
         }
-        Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
+        Type::Generic(g) if g.name == names.result && g.args.len() == 2 => {
             let tt = type_table.borrow();
             if let Some(new_args) = tt.generic_type_args(user_type)
                 && new_args.len() == 2
@@ -311,10 +311,8 @@ impl TypeReplacer<'_> {
     /// Apply the type swap (and optional rename) to a callee `FunctionRef`'s
     /// name and monomorphization type arguments.
     fn fix_func_ref(&self, func: &mut FunctionRef) {
-        if let Some((old_name, new_name)) = self.rename
-            && func.name.contains(old_name)
-        {
-            func.name = func.name.replace(old_name, new_name);
+        if let Some((old_name, new_name)) = self.rename {
+            func.name = crate::name::replace_type_name_in_mangled(&func.name, old_name, new_name);
         }
         if let Some(mono) = &mut func.monomorph_info {
             for ta in mono
@@ -656,6 +654,125 @@ impl TirMutVisitor for CallRewriteWalker<'_> {
     }
 }
 
+/// Retype a shared adapter's return from a call site. Streaming adapters keep
+/// their WIR-level i32 return (the caller-visible `Future` type stays on the
+/// call expression), so they are left untouched.
+fn fixup_adapter_return_from_call_site(
+    adapter: &mut TirFunction,
+    call_site_type: TypeId,
+    is_streaming: bool,
+) {
+    if is_streaming || adapter.return_type == call_site_type {
+        return;
+    }
+    let old_return_type = adapter.return_type;
+    adapter.return_type = call_site_type;
+    fixup_return_type_in_body(adapter, old_return_type, call_site_type);
+}
+
+/// Retype one adapter param (and its local slot) from a call-site arg.
+/// Skipped when the param is a flat wasm type whose adapter-side type is
+/// authoritative — the arg is cast at the call site instead — and for
+/// streaming adapters, which keep their i32 params. Pass
+/// `is_gc_passthrough: true, is_streaming: false` for an unconditional
+/// retype (the `self` receiver param).
+fn fixup_adapter_param_from_call_site(
+    adapter: &mut TirFunction,
+    param_idx: usize,
+    arg_type: TypeId,
+    is_gc_passthrough: bool,
+    is_streaming: bool,
+) {
+    let Some(param) = adapter.params.get_mut(param_idx) else {
+        return;
+    };
+    if param.type_id == arg_type {
+        return;
+    }
+    if is_streaming && param.type_id == TypeTable::I32 {
+        return;
+    }
+    if !is_gc_passthrough && is_wasm_flat_type(param.type_id) {
+        return;
+    }
+    let local_idx = param.local_index as usize;
+    param.type_id = arg_type;
+    if local_idx < adapter.locals.len() {
+        adapter.locals[local_idx].type_id = arg_type;
+    }
+}
+
+/// Cast call-site args whose flat-typed adapter param is authoritative
+/// (e.g. an i32 literal passed where the ABI wants i64). `param_offset`
+/// skips the `self` param for method calls.
+fn cast_args_to_adapter_params(adapter: &TirFunction, args: &mut [CallArg], param_offset: usize) {
+    for (i, arg) in args.iter_mut().enumerate() {
+        let idx = i + param_offset;
+        if idx < adapter.params.len()
+            && adapter.params[idx].type_id != arg.expr.type_id
+            && is_wasm_flat_type(adapter.params[idx].type_id)
+        {
+            let target = adapter.params[idx].type_id;
+            let original = std::mem::replace(
+                &mut arg.expr,
+                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
+            );
+            arg.expr = cast(original, target);
+        }
+    }
+}
+
+/// Flatten call-site args to the binding's flat CM param shape. GC
+/// passthrough params (String / List / Option-of-GC) pass the GC ref through
+/// — a bare `null` becomes a typed `None` — while multi-flat aggregates
+/// expand via [`flatten_arg_for_call_site`]. `skip_self` offsets into the
+/// WASI param list for method calls, whose `args` exclude the receiver.
+fn flatten_call_site_args(
+    func_info: &CmFunctionInfo,
+    args: &[TirExpr],
+    skip_self: bool,
+    cm_interface_registry: &CmInterfaceRegistry,
+    type_table: &RefCell<TypeTable>,
+    names: &super::types::CmStdlibNames,
+) -> Vec<TirExpr> {
+    let param_offset = usize::from(skip_self);
+    let mut flat = Vec::new();
+    for (i, arg) in args.iter().enumerate() {
+        let Some((_, _, param_type)) = func_info.params.get(i + param_offset) else {
+            flat.push(arg.clone());
+            continue;
+        };
+        let flat_tys = flatten_param_type(param_type, cm_interface_registry, names);
+        if flat_tys.is_empty() {
+            continue;
+        }
+        if is_gc_passthrough_param(param_type, cm_interface_registry, names) {
+            if matches!(arg.kind, TirExprKind::Null) {
+                // Use the binding's param type (from the WASI registry) to
+                // type the `None`; the source null's inner type may be unknown.
+                let none_expr = {
+                    let mut tt = type_table.borrow_mut();
+                    let option_type_id = cm_type_to_type_id(
+                        param_type,
+                        &mut tt,
+                        cm_interface_registry,
+                        &func_info.package,
+                    );
+                    option_none(option_type_id, tt.compiler_items())
+                };
+                flat.push(none_expr);
+            } else {
+                flat.push(arg.clone());
+            }
+        } else if flat_tys.len() == 1 {
+            flat.push(arg.clone());
+        } else {
+            flatten_arg_for_call_site(arg, &flat_tys, &mut flat, names);
+        }
+    }
+    flat
+}
+
 fn rewrite_calls_in_expr(
     expr: &mut TirExpr,
     adapters: &IndexMap<String, Rc<RefCell<TirFunction>>>,
@@ -693,61 +810,26 @@ fn rewrite_calls_in_expr(
             // Fix up binding function types from the call site
             {
                 let mut adapter = adapter_rc.borrow_mut();
-                if is_streaming {
-                    // Streaming adapters return i32 (Future handle) at WIR level.
-                    // Keep the caller's original Future type for Wado-level type
-                    // checking and CM method dispatch (.drop(), .read()).
-                    // WIR flattens Future<T> (GenericResource) to i32 automatically.
-                } else if adapter.return_type != expr.type_id {
-                    let old_return_type = adapter.return_type;
-                    adapter.return_type = expr.type_id;
-                    fixup_return_type_in_body(&mut adapter, old_return_type, expr.type_id);
-                }
+                fixup_adapter_return_from_call_site(&mut adapter, expr.type_id, is_streaming);
                 let wasi_func = cm_interface_registry.get_function(&qualified);
                 for (i, arg) in args.iter().enumerate() {
-                    if i < adapter.params.len() && adapter.params[i].type_id != arg.expr.type_id {
-                        let is_gc_passthrough = wasi_func.is_some_and(|f| {
-                            i < f.params.len()
-                                && is_gc_passthrough_param(
-                                    &f.params[i].2,
-                                    cm_interface_registry,
-                                    &names,
-                                )
-                        });
-                        if is_streaming && adapter.params[i].type_id == TypeTable::I32 {
-                            // Streaming: keep adapter param as i32, cast the arg instead
-                        } else if !is_gc_passthrough && is_wasm_flat_type(adapter.params[i].type_id)
-                        {
-                            // Non-GC flat param: adapter type is authoritative, cast arg.
-                        } else {
-                            let local_idx = adapter.params[i].local_index as usize;
-                            adapter.params[i].type_id = arg.expr.type_id;
-                            if local_idx < adapter.locals.len() {
-                                adapter.locals[local_idx].type_id = arg.expr.type_id;
-                            }
-                        }
-                    }
+                    let is_gc_passthrough = wasi_func.is_some_and(|f| {
+                        i < f.params.len()
+                            && is_gc_passthrough_param(&f.params[i].2, cm_interface_registry, &names)
+                    });
+                    fixup_adapter_param_from_call_site(
+                        &mut adapter,
+                        i,
+                        arg.expr.type_id,
+                        is_gc_passthrough,
+                        is_streaming,
+                    );
                 }
             }
 
             // Cast call-site args to match adapter param types when they differ
             // (e.g., i32 literal → i64 for Duration newtype)
-            {
-                let adapter = adapter_rc.borrow();
-                for (i, arg) in args.iter_mut().enumerate() {
-                    if i < adapter.params.len()
-                        && adapter.params[i].type_id != arg.expr.type_id
-                        && is_wasm_flat_type(adapter.params[i].type_id)
-                    {
-                        let target = adapter.params[i].type_id;
-                        let original = std::mem::replace(
-                            &mut arg.expr,
-                            TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
-                        );
-                        arg.expr = cast(original, target);
-                    }
-                }
-            }
+            cast_args_to_adapter_params(&adapter_rc.borrow(), args, 0);
 
             // For streaming adapters, cast GC ref args to i32
             if is_streaming {
@@ -825,57 +907,35 @@ fn rewrite_calls_in_expr(
             // The binding params include self as the first param
             {
                 let mut adapter = adapter_rc.borrow_mut();
-                if is_streaming {
-                    // Streaming adapters return i32 (Future handle) at WIR level.
-                    // Keep the caller's original Future type for Wado-level type
-                    // checking and CM method dispatch (.drop(), .read()).
-                    // WIR flattens Future<T> (GenericResource) to i32 automatically.
-                } else if adapter.return_type != expr.type_id {
-                    let old_return_type = adapter.return_type;
-                    adapter.return_type = expr.type_id;
-                    fixup_return_type_in_body(&mut adapter, old_return_type, expr.type_id);
-                }
-                // Fix up self param (index 0) from the receiver
-                if !adapter.params.is_empty() && adapter.params[0].type_id != taken_receiver.type_id
-                {
-                    let local_idx = adapter.params[0].local_index as usize;
-                    adapter.params[0].type_id = taken_receiver.type_id;
-                    if local_idx < adapter.locals.len() {
-                        adapter.locals[local_idx].type_id = taken_receiver.type_id;
-                    }
-                }
-                // Fix up remaining params from the args
+                fixup_adapter_return_from_call_site(&mut adapter, expr.type_id, is_streaming);
+                // Self param (index 0): unconditional retype from the receiver.
+                fixup_adapter_param_from_call_site(
+                    &mut adapter,
+                    0,
+                    taken_receiver.type_id,
+                    true,
+                    false,
+                );
+                // Remaining params: the i-th arg corresponds to WASI param
+                // index i+1 (WASI params include self at index 0).
                 let method_func = cm_interface_registry.get_function(&qualified);
                 for (i, arg) in taken_args.iter().enumerate() {
-                    let param_idx = i + 1; // +1 to skip self
-                    if param_idx < adapter.params.len()
-                        && adapter.params[param_idx].type_id != arg.expr.type_id
-                    {
-                        // For method calls, WASI params include self at index 0, so
-                        // the i-th arg corresponds to WASI param index i+1
-                        let wasi_param_idx = i + 1;
-                        let is_gc_passthrough = method_func.is_some_and(|f| {
-                            wasi_param_idx < f.params.len()
-                                && is_gc_passthrough_param(
-                                    &f.params[wasi_param_idx].2,
-                                    cm_interface_registry,
-                                    &names,
-                                )
-                        });
-                        if is_streaming && adapter.params[param_idx].type_id == TypeTable::I32 {
-                            // Streaming: keep adapter param as i32, cast the arg instead
-                        } else if !is_gc_passthrough
-                            && is_wasm_flat_type(adapter.params[param_idx].type_id)
-                        {
-                            // Non-GC flat param: adapter type is authoritative, cast arg.
-                        } else {
-                            let local_idx = adapter.params[param_idx].local_index as usize;
-                            adapter.params[param_idx].type_id = arg.expr.type_id;
-                            if local_idx < adapter.locals.len() {
-                                adapter.locals[local_idx].type_id = arg.expr.type_id;
-                            }
-                        }
-                    }
+                    let wasi_param_idx = i + 1;
+                    let is_gc_passthrough = method_func.is_some_and(|f| {
+                        wasi_param_idx < f.params.len()
+                            && is_gc_passthrough_param(
+                                &f.params[wasi_param_idx].2,
+                                cm_interface_registry,
+                                &names,
+                            )
+                    });
+                    fixup_adapter_param_from_call_site(
+                        &mut adapter,
+                        i + 1,
+                        arg.expr.type_id,
+                        is_gc_passthrough,
+                        is_streaming,
+                    );
                 }
                 // Replace WASI-derived types in the body (including function names).
                 // Skip for CM bindings — their types were set precisely by synthesis
@@ -899,68 +959,21 @@ fn rewrite_calls_in_expr(
             }
 
             // Cast call-site args to match adapter param types when they differ
-            {
-                let adapter = adapter_rc.borrow();
-                for (i, arg) in taken_args.iter_mut().enumerate() {
-                    let param_idx = i + 1; // +1 to skip self
-                    if param_idx < adapter.params.len()
-                        && adapter.params[param_idx].type_id != arg.expr.type_id
-                        && is_wasm_flat_type(adapter.params[param_idx].type_id)
-                    {
-                        let target = adapter.params[param_idx].type_id;
-                        let original = std::mem::replace(
-                            &mut arg.expr,
-                            TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
-                        );
-                        arg.expr = cast(original, target);
-                    }
-                }
-            }
+            cast_args_to_adapter_params(&adapter_rc.borrow(), &mut taken_args, 1);
 
             // Flatten call site args to match the binding's flat CM params.
             // For method calls, self is the first param; remaining args may need flattening.
-            let method_func = cm_interface_registry.get_function(&qualified);
-            let flat_taken_args = if let Some(func_info) = method_func {
-                let mut flat = Vec::new();
-                for (i, arg) in taken_args.iter().enumerate() {
-                    // WASI param index: i+1 to skip self
-                    let wasi_param_idx = i + 1;
-                    if wasi_param_idx >= func_info.params.len() {
-                        flat.push(arg.expr.clone());
-                        continue;
-                    }
-                    let param_type = &func_info.params[wasi_param_idx].2;
-                    let flat_tys = flatten_param_type(param_type, cm_interface_registry, &names);
-                    if flat_tys.is_empty() {
-                        continue;
-                    }
-                    if is_gc_passthrough_param(param_type, cm_interface_registry, &names) {
-                        if matches!(arg.expr.kind, TirExprKind::Null) {
-                            let (option_type_id, none_expr) = {
-                                let mut tt = type_table.borrow_mut();
-                                let option_type_id = cm_type_to_type_id(
-                                    param_type,
-                                    &mut tt,
-                                    cm_interface_registry,
-                                    &func_info.package,
-                                );
-                                let none_expr = option_none(option_type_id, tt.compiler_items());
-                                (option_type_id, none_expr)
-                            };
-                            let _ = option_type_id;
-                            flat.push(none_expr);
-                        } else {
-                            flat.push(arg.expr.clone());
-                        }
-                    } else if flat_tys.len() == 1 {
-                        flat.push(arg.expr.clone());
-                    } else {
-                        flatten_arg_for_call_site(&arg.expr, &flat_tys, &mut flat, &names);
-                    }
-                }
-                flat
-            } else {
-                taken_args.into_iter().map(|a| a.expr).collect()
+            let taken_exprs: Vec<TirExpr> = taken_args.into_iter().map(|a| a.expr).collect();
+            let flat_taken_args = match cm_interface_registry.get_function(&qualified) {
+                Some(func_info) => flatten_call_site_args(
+                    func_info,
+                    &taken_exprs,
+                    true,
+                    cm_interface_registry,
+                    type_table,
+                    &names,
+                ),
+                None => taken_exprs,
             };
 
             // Replace MethodCall with Call targeting the binding
@@ -1015,11 +1028,7 @@ fn rewrite_calls_in_expr(
             // Fix up adapter return type and param types from the call site
             {
                 let mut adapter = adapter_rc.borrow_mut();
-                if adapter.return_type != expr.type_id {
-                    let old_return_type = adapter.return_type;
-                    adapter.return_type = expr.type_id;
-                    fixup_return_type_in_body(&mut adapter, old_return_type, expr.type_id);
-                }
+                fixup_adapter_return_from_call_site(&mut adapter, expr.type_id, false);
                 // Fix up adapter param types for GC pass-through params (String,
                 // List<T>) where the binding receives the GC value directly.
                 // Do NOT fix up params that get flattened (Option, resource handles)
@@ -1035,15 +1044,14 @@ fn rewrite_calls_in_expr(
                             Type::Generic(g) if g.name == names.array && g.args.len() == 1
                         );
                         if is_gc_passthrough {
-                            if flat_idx < adapter.params.len()
-                                && i < taken_args.len()
-                                && adapter.params[flat_idx].type_id != taken_args[i].type_id
-                            {
-                                let local_idx = adapter.params[flat_idx].local_index as usize;
-                                adapter.params[flat_idx].type_id = taken_args[i].type_id;
-                                if local_idx < adapter.locals.len() {
-                                    adapter.locals[local_idx].type_id = taken_args[i].type_id;
-                                }
+                            if let Some(arg) = taken_args.get(i) {
+                                fixup_adapter_param_from_call_site(
+                                    &mut adapter,
+                                    flat_idx,
+                                    arg.type_id,
+                                    true,
+                                    false,
+                                );
                             }
                             flat_idx += 1;
                         } else {
@@ -1075,42 +1083,14 @@ fn rewrite_calls_in_expr(
             // through as GC refs — the binding body handles lowering.
             // Other multi-flat types are flattened here into individual i32 args.
             let flat_call_args = if let Some(func_info) = &wasi_func_info {
-                let mut flat = Vec::new();
-                for (i, (_param_name, _, param_type)) in func_info.params.iter().enumerate() {
-                    let flat_tys = flatten_param_type(param_type, cm_interface_registry, &names);
-                    if flat_tys.is_empty() || i >= taken_args.len() {
-                        continue;
-                    }
-                    if is_gc_passthrough_param(param_type, cm_interface_registry, &names) {
-                        let arg = &taken_args[i];
-                        // Convert bare Null to VariantConstruct None.
-                        // Use the binding's param type (from the WASI registry)
-                        // to get a properly-resolved type_id, since the
-                        // source null's type_id may have unknown inner type.
-                        if matches!(arg.kind, TirExprKind::Null) {
-                            let (option_type_id, none_expr) = {
-                                let mut tt = type_table.borrow_mut();
-                                let option_type_id = cm_type_to_type_id(
-                                    param_type,
-                                    &mut tt,
-                                    cm_interface_registry,
-                                    &func_info.package,
-                                );
-                                let none_expr = option_none(option_type_id, tt.compiler_items());
-                                (option_type_id, none_expr)
-                            };
-                            let _ = option_type_id;
-                            flat.push(none_expr);
-                        } else {
-                            flat.push(arg.clone());
-                        }
-                    } else if flat_tys.len() == 1 {
-                        flat.push(taken_args[i].clone());
-                    } else {
-                        flatten_arg_for_call_site(&taken_args[i], &flat_tys, &mut flat, &names);
-                    }
-                }
-                flat
+                flatten_call_site_args(
+                    func_info,
+                    &taken_args,
+                    false,
+                    cm_interface_registry,
+                    type_table,
+                    &names,
+                )
             } else {
                 // No WASI function info: pass args as-is (fallback)
                 taken_args
