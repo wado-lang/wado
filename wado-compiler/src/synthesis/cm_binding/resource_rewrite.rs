@@ -190,15 +190,17 @@ pub(super) fn synthesize_future_reads(project: &mut Package) {
 }
 
 /// Generate the per-payload `FutureWritable<T>::write()` binding functions for
-/// general (aggregate) payloads, mirroring [`synthesize_future_reads`].
+/// every written payload, mirroring [`synthesize_future_reads`].
 ///
-/// For each distinct aggregate payload `T` written, synthesizes
+/// For each distinct payload `T` written, synthesizes
 /// `__cm_future_write_<mangle(T)>(handle: i32, value: T)` which allocates a CM
 /// buffer (sized via `cm_abi`), lowers `value` into it with the shared
 /// `synthesize_lower_wasi_type_to_memory`, and calls the payload-parameterized
-/// `future-write` canonical. As with the scalar WIR path, the buffer is
-/// intentionally left alive: the `async` canonical option returns BLOCKED until
-/// the reader copies the value, so freeing here (or waiting) would be wrong.
+/// `future-write` canonical. The BLOCKED strategy is payload-dependent (see
+/// [`synthesize_future_write_func`]): scalar / aggregate value payloads leave
+/// the buffer alive and return so the async executor resumes a same-instance
+/// reader, while transmission shapes (write-completion, trailers) await the host
+/// reader via `future_await_blocked` and then free the buffer.
 pub(super) fn synthesize_future_writes(project: &mut Package) {
     let cm_interface_registry = &project.cm_interface_registry;
     // payload mangle -> payload_type_id
@@ -244,12 +246,13 @@ pub(super) fn synthesize_future_writes(project: &mut Package) {
     }
 }
 
-/// The future-write payload type for a value `future-write` method call, or
-/// `None` if it is not a future-write or its payload is a transmission shape
-/// (`Result<(), E>`, `Result<Option<resource>, E>`) that the WIR-build path
-/// still lowers directly. Covers scalar and aggregate payloads alike — both go
-/// through the synthesized `__cm_future_write_<T>` helper.
-fn future_write_value_payload(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
+/// The payload type of a `future-write` method call, or `None` if the
+/// expression is not a future-write. Covers every payload shape — scalar,
+/// aggregate value, and transmission (`Result<(), E>`,
+/// `Result<Option<resource>, E>`) — all of which route through the synthesized
+/// `__cm_future_write_<T>` helper. The helper's wait/free strategy is chosen per
+/// payload classification in [`synthesize_future_write_func`].
+fn future_write_payload(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
     let (func, receiver) = match &expr.kind {
         TirExprKind::MethodCall { func, receiver, .. } => (func, receiver),
         _ => return None,
@@ -261,10 +264,7 @@ fn future_write_value_payload(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> 
     while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(recv) {
         recv = *inner;
     }
-    let payload = *tt.generic_type_args(recv)?.first()?;
-    crate::component_model::cm_payload_type_from_type_id(tt, payload)
-        .is_some()
-        .then_some(payload)
+    tt.generic_type_args(recv)?.first().copied()
 }
 
 /// The `__cm_future_write_*` helper name for a payload type. Finder, rewriter,
@@ -733,7 +733,7 @@ fn synthesize_stream_write_func(
 
 impl TirRefVisitor for FutureWriteFinder<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
-        if let Some(payload_type_id) = future_write_value_payload(self.tt, expr) {
+        if let Some(payload_type_id) = future_write_payload(self.tt, expr) {
             let name = future_write_func_name(self.tt, payload_type_id);
             self.results.entry(name).or_insert(payload_type_id);
         }
@@ -746,7 +746,7 @@ fn synthesize_future_write_func(
     cm_interface_registry: &CmInterfaceRegistry,
     type_table: &RefCell<TypeTable>,
 ) -> TirFunction {
-    let (func_name, write_name, cm_package, payload_ast, size, align) = {
+    let (func_name, write_name, cm_package, payload_ast, size, align, awaits_reader) = {
         let tt = type_table.borrow();
         let func_name = future_write_func_name(&tt, payload_type_id);
         let payload = crate::component_model::classify_future_payload(&tt, payload_type_id);
@@ -763,7 +763,25 @@ fn synthesize_future_write_func(
             cm_interface_registry,
             Some(&cm_package),
         ) as i32;
-        (func_name, write_name, cm_package, payload_ast, size, align)
+        // Transmission shapes (write-completion `Result<(), E>`, trailers
+        // `Result<Option<resource>, E>`) are delivered to the host, which reads
+        // concurrently: block on BLOCKED via `future_await_blocked` and free the
+        // buffer once the write completes. Value payloads (scalar / aggregate)
+        // are read by another task in the same instance, so busy-waiting would
+        // deadlock the async executor — those leave the buffer alive and return.
+        let awaits_reader = matches!(
+            payload,
+            CmFuturePayload::Trailers | CmFuturePayload::Transmission(_)
+        );
+        (
+            func_name,
+            write_name,
+            cm_package,
+            payload_ast,
+            size,
+            align,
+            awaits_reader,
+        )
     };
 
     let mut next_local: u32 = 0;
@@ -811,10 +829,13 @@ fn synthesize_future_write_func(
         type_table,
     ));
 
-    // let __written = future-write:<payload>(handle, ptr)
-    // The result is intentionally ignored and the buffer left alive (see above).
-    let written_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, false);
-    stmts.push(let_stmt(
+    // let mut __written = future-write:<payload>(handle, ptr)
+    let written_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, awaits_reader);
+    stmts.push(if awaits_reader {
+        let_mut_stmt
+    } else {
+        let_stmt
+    }(
         "__written",
         written_idx,
         TypeTable::I32,
@@ -827,6 +848,51 @@ fn synthesize_future_write_func(
             TypeTable::I32,
         ),
     ));
+
+    // Value payloads leave the buffer alive and return: BLOCKED is resolved by
+    // the async executor when a same-instance reader posts its read.
+    // Transmission shapes wait for the host reader, then free the buffer.
+    if awaits_reader {
+        // if __written == -1 { __written = future_await_blocked(handle); }
+        stmts.push(if_stmt(
+            binary(
+                TirBinaryOp::Eq,
+                local_ref(written_idx, "__written", TypeTable::I32),
+                i32_const(-1),
+                TypeTable::BOOL,
+            ),
+            TirBlock {
+                stmts: vec![expr_stmt(assign(
+                    local_ref(written_idx, "__written", TypeTable::I32),
+                    internal_call(
+                        "future_await_blocked",
+                        vec![local_ref(handle_idx, "handle", TypeTable::I32)],
+                        TypeTable::I32,
+                    ),
+                ))],
+                span: synth_span(),
+            },
+            None,
+        ));
+
+        // let __freed = realloc(ptr, size, align, 0)
+        let freed_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, false);
+        stmts.push(let_stmt(
+            "__freed",
+            freed_idx,
+            TypeTable::I32,
+            builtin_call(
+                "realloc",
+                vec![
+                    local_ref(ptr_idx, "ptr", TypeTable::I32),
+                    i32_const(size),
+                    i32_const(align),
+                    i32_const(0),
+                ],
+                TypeTable::I32,
+            ),
+        ));
+    }
 
     TirFunction {
         module_source: ModuleSource::default(),
@@ -1734,11 +1800,10 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             rewrite_cm_new(expr, self.tt, cm_name == "future-new");
             return;
         }
-        // Value future writes (scalar + aggregate) call a generated per-payload
-        // binding function; only the transmission shapes (`Result<(), E>`,
-        // `Result<Option<resource>, E>`) fall through to the WIR-build path.
+        // Every future write (scalar, aggregate value, and transmission shapes
+        // alike) calls a generated per-payload binding function.
         if cm_name == "future-write"
-            && let Some(payload_type_id) = future_write_value_payload(self.tt, expr)
+            && let Some(payload_type_id) = future_write_payload(self.tt, expr)
         {
             let func_name = future_write_func_name(self.tt, payload_type_id);
             rewrite_cm_instance_method(expr, "entry", &func_name, self.entry_source);
