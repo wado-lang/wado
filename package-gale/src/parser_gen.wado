@@ -4361,11 +4361,11 @@ fn gen_alt_dispatch(
             let last = td.alts.len() - 1;
             for let mut k = 0; k < td.alts.len(); k += 1 {
                 if k == 0 && k != last {
-                    w.begin(&`if {winner} == {k}`);
+                    w.begin(&`if {winner} == {td.alts[k]}`);
                 } else if k == last {
                     w.else_begin(&"else");
                 } else {
-                    w.else_begin(&`else if {winner} == {k}`);
+                    w.else_begin(&`else if {winner} == {td.alts[k]}`);
                 }
                 gen_ops(w, &alt_by_index(alts, td.alts[k]).ops, ctx, nc);
             }
@@ -6643,18 +6643,33 @@ fn rule_ref_group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternativ
     return true;
 }
 
-/// Longest-match scan tournament over `sorted_group`: every alt scans
-/// from `p.pos` into a per-alt end position (`-1` on mismatch), then the
-/// greatest end wins with ties resolved to the LOWEST grammar alt index —
-/// ANTLR4's ambiguity resolution. First-success-wins over the static
-/// longest-first sort is NOT equivalent: on an input where two alts scan
-/// to the same end (SQLite's single-table / comma-list `FROM`, where both
-/// `table_or_subquery (',' table_or_subquery)*` and the `join_clause`
-/// catch-all consume the same tokens) it commits to whichever alt the
-/// sort put first, while ANTLR4 resolves the tie to the first grammar alt.
+/// Emit the strict-`>` argmax update that resolves ties to the first
+/// grammar alternative: `if {end_expr} > {best_var} { best = end; winner =
+/// value }`. Both scan-winner sites call this while iterating candidates in
+/// ASCENDING alt-index order, so the first (lowest-index) candidate to reach
+/// the running max keeps it — ANTLR4's ambiguity resolution.
+fn emit_argmax_update(
+    w: &mut CodeWriter,
+    best_var: &String,
+    winner_var: &String,
+    end_expr: &String,
+    winner_value: i32,
+) {
+    w.begin(&`if {*end_expr} > {*best_var}`);
+    w.line(&`{*best_var} = {*end_expr};`);
+    w.line(&`{*winner_var} = {winner_value};`);
+    w.end();
+}
+
+/// Longest-match scan tournament over `sorted_group`: each alt scans from
+/// `p.pos`, the greatest end wins, and ties resolve to the LOWEST grammar
+/// alt index (ANTLR4's ambiguity resolution). Iterating in grammar order
+/// (`sorted_group.sorted()`) with `emit_argmax_update`'s strict `>` gives
+/// that tie-break; a match consuming to the end of the token stream cannot
+/// be beaten, so the loop exits early once `best` reaches `p.kinds.len()`.
 ///
-/// Returns the winner variable holding the *position in `sorted_group`*
-/// (`-1` when no scan matched — callers route that to their last branch).
+/// Returns the winner variable holding the winning ALT INDEX (`-1` when no
+/// scan matched — callers route that to their last branch).
 ///
 /// `scan_alts` drives the scan via the op-driven walker against the
 /// lowered `ScanBody`.
@@ -6669,13 +6684,15 @@ fn gen_scan_winner_tournament(
     let best_var = dedup_name(&"gd_best", name_counts);
     w.line(&`let mut {winner_var}: i32 = -1;`);
     w.line(&`let mut {best_var}: i32 = -1;`);
-    let mut end_vars: List<String> = [];
-    for let mut k = 0; k < sorted_group.len(); k += 1 {
-        let end_var = dedup_name(&"gd_end", name_counts);
-        let sb = &scan_alts[sorted_group[k]];
+    let tourney_label = dedup_name(&"gd_tourney", name_counts);
+    w.begin(&`{tourney_label}:`);
+    for let ai of sorted_group.sorted() {
+        let sb = &scan_alts[ai];
         if sb.elements.is_empty() {
-            w.line(&`let {end_var}: i32 = p.pos;`);
+            let epsilon = "p.pos";
+            emit_argmax_update(w, &best_var, &winner_var, &epsilon, ai);
         } else {
+            let end_var = dedup_name(&"gd_end", name_counts);
             w.line(&`let mut {end_var}: i32 = -1;`);
             let scan_label = dedup_name(&"gd_scan", name_counts);
             w.begin(&`{scan_label}:`);
@@ -6684,37 +6701,14 @@ fn gen_scan_winner_tournament(
             gen_scan_op_elements_in_block(w, &sb.elements, 0, sb.elements.len(), ctx, &scan_label);
             w.line(&`{end_var} = pos;`);
             w.end();
+            emit_argmax_update(w, &best_var, &winner_var, &end_var, ai);
         }
-        end_vars.push(end_var);
-    }
-    let order = positions_in_grammar_order(sorted_group);
-    for let k of order {
-        w.begin(&`if {end_vars[k]} > {best_var}`);
-        w.line(&`{best_var} = {end_vars[k]};`);
-        w.line(&`{winner_var} = {k};`);
+        w.begin(&`if {best_var} >= p.kinds.len()`);
+        w.line(&`break {tourney_label};`);
         w.end();
     }
+    w.end();
     return winner_var;
-}
-
-/// Positions `0..len` of `sorted_group` reordered so their alt indices
-/// ascend — the comparison order that makes a scan-length tie resolve to
-/// the first grammar alternative.
-fn positions_in_grammar_order(sorted_group: &List<i32>) -> List<i32> {
-    let mut order: List<i32> = [];
-    for let mut k = 0; k < sorted_group.len(); k += 1 {
-        order.push(k);
-    }
-    for let mut i = 0; i < order.len(); i += 1 {
-        for let mut j = i + 1; j < order.len(); j += 1 {
-            if sorted_group[order[j]] < sorted_group[order[i]] {
-                let tmp = order[i];
-                order[i] = order[j];
-                order[j] = tmp;
-            }
-        }
-    }
-    return order;
 }
 
 fn gen_simplecst_rulecall_value(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext) {
@@ -6752,11 +6746,11 @@ fn gen_rule_ref_group_scan_dispatch(
         let is_last = k == last;
 
         if k == 0 && !is_last {
-            w.begin(&`if {winner_var} == {k}`);
+            w.begin(&`if {winner_var} == {alt_index}`);
         } else if is_last {
             w.else_begin(&"else");
         } else {
-            w.else_begin(&`else if {winner_var} == {k}`);
+            w.else_begin(&`else if {winner_var} == {alt_index}`);
         }
         let _ = opt_var;
         gen_simplecst_rulecall_value(w, &g_op_alts[alt_index].ops[0], ctx);
@@ -7231,11 +7225,11 @@ fn gen_general_group_scan_dispatch(
         let is_last = k == last;
 
         if k == 0 && !is_last {
-            w.begin(&`if {winner_var} == {k}`);
+            w.begin(&`if {winner_var} == {alt_index}`);
         } else if is_last {
             w.else_begin(&"else");
         } else {
-            w.else_begin(&`else if {winner_var} == {k}`);
+            w.else_begin(&`else if {winner_var} == {alt_index}`);
         }
 
         gen_general_alt_parse_and_store(
@@ -7546,16 +7540,14 @@ fn gen_prediction_code_inner(
                     }
                     w.line(&"let mut _sd_best_i: i32 = -1;");
                     w.line(&"let mut _sd_best_p: i32 = -1;");
-                    // Compare in ascending alt-index order so a scan-length
+                    // Iterate in ascending alt-index order so a scan-length
                     // tie resolves to the first grammar alternative (ANTLR4's
                     // ambiguity resolution), not to the sort's front-runner.
-                    let cmp_order = sorted_indices.sorted();
-                    for let mut i = 0; i < cmp_order.len(); i += 1 {
-                        let idx = cmp_order[i];
-                        w.begin(&`if _sd_p_{idx} > _sd_best_p`);
-                        w.line(&`_sd_best_p = _sd_p_{idx};`);
-                        w.line(&`_sd_best_i = {idx};`);
-                        w.end();
+                    let best_i = "_sd_best_i";
+                    let best_p = "_sd_best_p";
+                    for let idx of sorted_indices.sorted() {
+                        let end_expr = `_sd_p_{idx}`;
+                        emit_argmax_update(w, &best_p, &best_i, &end_expr, idx);
                     }
                     emit_index_pick_dispatch(w, &"_sd_best_i", &sorted_indices, fn_name, rule_display, ctx);
                 } else {

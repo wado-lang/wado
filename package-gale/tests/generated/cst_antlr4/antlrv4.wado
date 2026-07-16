@@ -789,7 +789,7 @@ fn cst_to_string_tree_impl(
     token_names: &List<String>,
 ) {
     let name = if s.a[i] == K_ERROR as i32 { "<error>" } else { rule_names[s.a[i]] };
-    if i + 1 >= s.next[i] - 1 {
+    if i + 1 >= s.tag.len() || s.tag[i + 1] matches { Close } {
         out.push_str(&name);
         return;
     }

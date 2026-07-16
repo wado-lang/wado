@@ -785,7 +785,7 @@ fn cst_to_string_tree_impl(
     token_names: &List<String>,
 ) {
     let name = if s.a[i] == K_ERROR as i32 { "<error>" } else { rule_names[s.a[i]] };
-    if i + 1 >= s.next[i] - 1 {
+    if i + 1 >= s.tag.len() || s.tag[i + 1] matches { Close } {
         out.push_str(&name);
         return;
     }
@@ -1730,33 +1730,41 @@ fn _parse_prog__inner(p: &mut Parser) -> () {
     if grp_kind == TK_LIT_X {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
-        let mut gd_end: i32 = -1;
-        gd_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break gd_scan; }
-            pos += 1;
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_Y { break gd_scan; }
-            pos += 1;
-            gd_end = pos;
+        gd_tourney: {
+            let mut gd_end: i32 = -1;
+            gd_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break gd_scan; }
+                pos += 1;
+                gd_end = pos;
+            }
+            if gd_end > gd_best {
+                gd_best = gd_end;
+                gd_winner = 0;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
+            let mut gd_end_2: i32 = -1;
+            gd_scan_2: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break gd_scan_2; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_Y { break gd_scan_2; }
+                pos += 1;
+                gd_end_2 = pos;
+            }
+            if gd_end_2 > gd_best {
+                gd_best = gd_end_2;
+                gd_winner = 1;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
         }
-        let mut gd_end_2: i32 = -1;
-        gd_scan_2: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break gd_scan_2; }
-            pos += 1;
-            gd_end_2 = pos;
-        }
-        if gd_end_2 > gd_best {
-            gd_best = gd_end_2;
-            gd_winner = 1;
-        }
-        if gd_end > gd_best {
-            gd_best = gd_end;
-            gd_winner = 0;
-        }
-        if gd_winner == 0 {
+        if gd_winner == 1 {
             let lit_x = p.expect(TK_LIT_X, &SYNC_0);
             let lit_y = p.expect(TK_LIT_Y, &EMPTY_SYNC);
         } else {

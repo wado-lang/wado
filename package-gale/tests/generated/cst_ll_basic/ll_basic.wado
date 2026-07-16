@@ -785,7 +785,7 @@ fn cst_to_string_tree_impl(
     token_names: &List<String>,
 ) {
     let name = if s.a[i] == K_ERROR as i32 { "<error>" } else { rule_names[s.a[i]] };
-    if i + 1 >= s.next[i] - 1 {
+    if i + 1 >= s.tag.len() || s.tag[i + 1] matches { Close } {
         out.push_str(&name);
         return;
     }
@@ -1849,31 +1849,39 @@ fn _parse_r__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
     if grp_kind == TK_X {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
-        let mut gd_end: i32 = -1;
-        gd_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            pos = scan_a(tokens, pos, &FOLLOW_MASK_0, 0);
-            if pos < 0 { break gd_scan; }
-            pos = scan_b(tokens, pos, follow, 0);
-            if pos < 0 { break gd_scan; }
-            gd_end = pos;
-        }
-        let mut gd_end_2: i32 = -1;
-        gd_scan_2: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            pos = scan_a(tokens, pos, follow, 0);
-            if pos < 0 { break gd_scan_2; }
-            gd_end_2 = pos;
-        }
-        if gd_end > gd_best {
-            gd_best = gd_end;
-            gd_winner = 0;
-        }
-        if gd_end_2 > gd_best {
-            gd_best = gd_end_2;
-            gd_winner = 1;
+        gd_tourney: {
+            let mut gd_end: i32 = -1;
+            gd_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_a(tokens, pos, &FOLLOW_MASK_0, 0);
+                if pos < 0 { break gd_scan; }
+                pos = scan_b(tokens, pos, follow, 0);
+                if pos < 0 { break gd_scan; }
+                gd_end = pos;
+            }
+            if gd_end > gd_best {
+                gd_best = gd_end;
+                gd_winner = 0;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
+            let mut gd_end_2: i32 = -1;
+            gd_scan_2: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_a(tokens, pos, follow, 0);
+                if pos < 0 { break gd_scan_2; }
+                gd_end_2 = pos;
+            }
+            if gd_end_2 > gd_best {
+                gd_best = gd_end_2;
+                gd_winner = 1;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
         }
         if gd_winner == 0 {
             let a = _parse_a(p, &FOLLOW_MASK_0);

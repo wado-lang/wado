@@ -789,7 +789,7 @@ fn cst_to_string_tree_impl(
     token_names: &List<String>,
 ) {
     let name = if s.a[i] == K_ERROR as i32 { "<error>" } else { rule_names[s.a[i]] };
-    if i + 1 >= s.next[i] - 1 {
+    if i + 1 >= s.tag.len() || s.tag[i + 1] matches { Close } {
         out.push_str(&name);
         return;
     }
@@ -16121,101 +16121,124 @@ fn _parse_vis_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
     if _kind_set_112(grp_kind) {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
-        let mut gd_end: i32 = -1;
-        gd_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            pos = scan_module(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break gd_scan; }
-            gd_end = pos;
-        }
-        let mut gd_end_2: i32 = -1;
-        gd_scan_2: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            pos = scan_extern_crate(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break gd_scan_2; }
-            gd_end_2 = pos;
-        }
-        let mut gd_end_3: i32 = -1;
-        gd_scan_3: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            pos = scan_function_(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break gd_scan_3; }
-            gd_end_3 = pos;
-        }
-        let mut gd_end_4: i32 = -1;
-        gd_scan_4: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            pos = scan_constant_item(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break gd_scan_4; }
-            gd_end_4 = pos;
-        }
-        let mut gd_end_5: i32 = -1;
-        gd_scan_5: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            pos = scan_trait_(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break gd_scan_5; }
-            gd_end_5 = pos;
-        }
-        let mut gd_end_6: i32 = -1;
-        gd_scan_6: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            pos = scan_implementation(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break gd_scan_6; }
-            gd_end_6 = pos;
-        }
-        let mut gd_end_7: i32 = -1;
-        gd_scan_7: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            pos = scan_extern_block(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break gd_scan_7; }
-            gd_end_7 = pos;
-        }
-        if gd_end > gd_best {
-            gd_best = gd_end;
-            gd_winner = 0;
-        }
-        if gd_end_2 > gd_best {
-            gd_best = gd_end_2;
-            gd_winner = 1;
-        }
-        if gd_end_3 > gd_best {
-            gd_best = gd_end_3;
-            gd_winner = 2;
-        }
-        if gd_end_4 > gd_best {
-            gd_best = gd_end_4;
-            gd_winner = 3;
-        }
-        if gd_end_5 > gd_best {
-            gd_best = gd_end_5;
-            gd_winner = 4;
-        }
-        if gd_end_6 > gd_best {
-            gd_best = gd_end_6;
-            gd_winner = 5;
-        }
-        if gd_end_7 > gd_best {
-            gd_best = gd_end_7;
-            gd_winner = 6;
+        gd_tourney: {
+            let mut gd_end: i32 = -1;
+            gd_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_module(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break gd_scan; }
+                gd_end = pos;
+            }
+            if gd_end > gd_best {
+                gd_best = gd_end;
+                gd_winner = 0;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
+            let mut gd_end_2: i32 = -1;
+            gd_scan_2: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_extern_crate(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break gd_scan_2; }
+                gd_end_2 = pos;
+            }
+            if gd_end_2 > gd_best {
+                gd_best = gd_end_2;
+                gd_winner = 1;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
+            let mut gd_end_3: i32 = -1;
+            gd_scan_3: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_function_(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break gd_scan_3; }
+                gd_end_3 = pos;
+            }
+            if gd_end_3 > gd_best {
+                gd_best = gd_end_3;
+                gd_winner = 3;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
+            let mut gd_end_4: i32 = -1;
+            gd_scan_4: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_constant_item(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break gd_scan_4; }
+                gd_end_4 = pos;
+            }
+            if gd_end_4 > gd_best {
+                gd_best = gd_end_4;
+                gd_winner = 8;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
+            let mut gd_end_5: i32 = -1;
+            gd_scan_5: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_trait_(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break gd_scan_5; }
+                gd_end_5 = pos;
+            }
+            if gd_end_5 > gd_best {
+                gd_best = gd_end_5;
+                gd_winner = 10;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
+            let mut gd_end_6: i32 = -1;
+            gd_scan_6: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_implementation(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break gd_scan_6; }
+                gd_end_6 = pos;
+            }
+            if gd_end_6 > gd_best {
+                gd_best = gd_end_6;
+                gd_winner = 11;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
+            let mut gd_end_7: i32 = -1;
+            gd_scan_7: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_extern_block(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break gd_scan_7; }
+                gd_end_7 = pos;
+            }
+            if gd_end_7 > gd_best {
+                gd_best = gd_end_7;
+                gd_winner = 12;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
         }
         if gd_winner == 0 {
             let module = _parse_module(p, &EMPTY_FOLLOW);
         } else if gd_winner == 1 {
             let extern_crate = _parse_extern_crate(p, &EMPTY_FOLLOW);
-        } else if gd_winner == 2 {
-            let function_ = _parse_function_(p, &EMPTY_FOLLOW);
         } else if gd_winner == 3 {
+            let function_ = _parse_function_(p, &EMPTY_FOLLOW);
+        } else if gd_winner == 8 {
             let constant_item = _parse_constant_item(p, &EMPTY_FOLLOW);
-        } else if gd_winner == 4 {
+        } else if gd_winner == 10 {
             let trait_ = _parse_trait_(p, &EMPTY_FOLLOW);
-        } else if gd_winner == 5 {
+        } else if gd_winner == 11 {
             let implementation = _parse_implementation(p, &EMPTY_FOLLOW);
         } else {
             let extern_block = _parse_extern_block(p, &EMPTY_FOLLOW);
@@ -17036,29 +17059,37 @@ fn _parse_self_param__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     if _kind_set_25(grp_kind) {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
-        let mut gd_end: i32 = -1;
-        gd_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            pos = scan_shorthand_self(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break gd_scan; }
-            gd_end = pos;
-        }
-        let mut gd_end_2: i32 = -1;
-        gd_scan_2: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            pos = scan_typed_self(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break gd_scan_2; }
-            gd_end_2 = pos;
-        }
-        if gd_end > gd_best {
-            gd_best = gd_end;
-            gd_winner = 0;
-        }
-        if gd_end_2 > gd_best {
-            gd_best = gd_end_2;
-            gd_winner = 1;
+        gd_tourney: {
+            let mut gd_end: i32 = -1;
+            gd_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_shorthand_self(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break gd_scan; }
+                gd_end = pos;
+            }
+            if gd_end > gd_best {
+                gd_best = gd_end;
+                gd_winner = 0;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
+            let mut gd_end_2: i32 = -1;
+            gd_scan_2: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_typed_self(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break gd_scan_2; }
+                gd_end_2 = pos;
+            }
+            if gd_end_2 > gd_best {
+                gd_best = gd_end_2;
+                gd_winner = 1;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
         }
         if gd_winner == 0 {
             let shorthand_self = _parse_shorthand_self(p, &EMPTY_FOLLOW);
@@ -17162,29 +17193,37 @@ fn _parse_function_param__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
     if _kind_set_113(grp_kind) {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
-        let mut gd_end: i32 = -1;
-        gd_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            pos = scan_function_param_pattern(tokens, pos, follow, 0);
-            if pos < 0 { break gd_scan; }
-            gd_end = pos;
-        }
-        let mut gd_end_2: i32 = -1;
-        gd_scan_2: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            pos = scan_type_(tokens, pos, follow, 0);
-            if pos < 0 { break gd_scan_2; }
-            gd_end_2 = pos;
-        }
-        if gd_end > gd_best {
-            gd_best = gd_end;
-            gd_winner = 0;
-        }
-        if gd_end_2 > gd_best {
-            gd_best = gd_end_2;
-            gd_winner = 1;
+        gd_tourney: {
+            let mut gd_end: i32 = -1;
+            gd_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_function_param_pattern(tokens, pos, follow, 0);
+                if pos < 0 { break gd_scan; }
+                gd_end = pos;
+            }
+            if gd_end > gd_best {
+                gd_best = gd_end;
+                gd_winner = 0;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
+            let mut gd_end_2: i32 = -1;
+            gd_scan_2: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_type_(tokens, pos, follow, 0);
+                if pos < 0 { break gd_scan_2; }
+                gd_end_2 = pos;
+            }
+            if gd_end_2 > gd_best {
+                gd_best = gd_end_2;
+                gd_winner = 2;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
         }
         if gd_winner == 0 {
             let function_param_pattern = _parse_function_param_pattern(p, follow);
@@ -18486,29 +18525,37 @@ fn _parse_generic_param__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     if _kind_set_114(grp_kind) {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
-        let mut gd_end: i32 = -1;
-        gd_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            pos = scan_lifetime_param(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break gd_scan; }
-            gd_end = pos;
-        }
-        let mut gd_end_2: i32 = -1;
-        gd_scan_2: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            pos = scan_type_param(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break gd_scan_2; }
-            gd_end_2 = pos;
-        }
-        if gd_end > gd_best {
-            gd_best = gd_end;
-            gd_winner = 0;
-        }
-        if gd_end_2 > gd_best {
-            gd_best = gd_end_2;
-            gd_winner = 1;
+        gd_tourney: {
+            let mut gd_end: i32 = -1;
+            gd_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_lifetime_param(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break gd_scan; }
+                gd_end = pos;
+            }
+            if gd_end > gd_best {
+                gd_best = gd_end;
+                gd_winner = 0;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
+            let mut gd_end_2: i32 = -1;
+            gd_scan_2: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_type_param(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break gd_scan_2; }
+                gd_end_2 = pos;
+            }
+            if gd_end_2 > gd_best {
+                gd_best = gd_end_2;
+                gd_winner = 1;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
         }
         if gd_winner == 0 {
             let lifetime_param = _parse_lifetime_param(p, &EMPTY_FOLLOW);
@@ -18825,31 +18872,39 @@ fn _parse_associated_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         } else if _kind_set_12(grp_kind) {
             let mut gd_winner: i32 = -1;
             let mut gd_best: i32 = -1;
-            let mut gd_end: i32 = -1;
-            gd_scan: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_constant_item(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break gd_scan; }
-                gd_end = pos;
+            gd_tourney: {
+                let mut gd_end: i32 = -1;
+                gd_scan: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    pos = scan_constant_item(tokens, pos, &EMPTY_FOLLOW, 0);
+                    if pos < 0 { break gd_scan; }
+                    gd_end = pos;
+                }
+                if gd_end > gd_best {
+                    gd_best = gd_end;
+                    gd_winner = 1;
+                }
+                if gd_best >= p.kinds.len() {
+                    break gd_tourney;
+                }
+                let mut gd_end_2: i32 = -1;
+                gd_scan_2: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    pos = scan_function_(tokens, pos, &EMPTY_FOLLOW, 0);
+                    if pos < 0 { break gd_scan_2; }
+                    gd_end_2 = pos;
+                }
+                if gd_end_2 > gd_best {
+                    gd_best = gd_end_2;
+                    gd_winner = 2;
+                }
+                if gd_best >= p.kinds.len() {
+                    break gd_tourney;
+                }
             }
-            let mut gd_end_2: i32 = -1;
-            gd_scan_2: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_function_(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break gd_scan_2; }
-                gd_end_2 = pos;
-            }
-            if gd_end > gd_best {
-                gd_best = gd_end;
-                gd_winner = 0;
-            }
-            if gd_end_2 > gd_best {
-                gd_best = gd_end_2;
-                gd_winner = 1;
-            }
-            if gd_winner == 0 {
+            if gd_winner == 1 {
                 let constant_item = _parse_constant_item(p, &EMPTY_FOLLOW);
             } else {
                 let function_ = _parse_function_(p, &EMPTY_FOLLOW);
@@ -20967,34 +21022,42 @@ fn _parse_struct_expr_fields__inner(p: &mut Parser, follow: &List<List<i32>> = &
     if grp_kind == TK_COMMA {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
-        let mut gd_end: i32 = -1;
-        gd_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            if pos >= tokens.len() || tokens[pos] != TK_COMMA { break gd_scan; }
-            pos += 1;
-            pos = scan_struct_base(tokens, pos, follow, 0);
-            if pos < 0 { break gd_scan; }
-            gd_end = pos;
-        }
-        let mut gd_end_2: i32 = -1;
-        gd_scan_2: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            if pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
-                let sp = pos;
-                if pos >= tokens.len() || tokens[pos] != TK_COMMA { pos = -1; } else { pos += 1; }
-                if pos < 0 { pos = sp; }
+        gd_tourney: {
+            let mut gd_end: i32 = -1;
+            gd_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] != TK_COMMA { break gd_scan; }
+                pos += 1;
+                pos = scan_struct_base(tokens, pos, follow, 0);
+                if pos < 0 { break gd_scan; }
+                gd_end = pos;
             }
-            gd_end_2 = pos;
-        }
-        if gd_end > gd_best {
-            gd_best = gd_end;
-            gd_winner = 0;
-        }
-        if gd_end_2 > gd_best {
-            gd_best = gd_end_2;
-            gd_winner = 1;
+            if gd_end > gd_best {
+                gd_best = gd_end;
+                gd_winner = 0;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
+            let mut gd_end_2: i32 = -1;
+            gd_scan_2: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                    let sp = pos;
+                    if pos >= tokens.len() || tokens[pos] != TK_COMMA { pos = -1; } else { pos += 1; }
+                    if pos < 0 { pos = sp; }
+                }
+                gd_end_2 = pos;
+            }
+            if gd_end_2 > gd_best {
+                gd_best = gd_end_2;
+                gd_winner = 1;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
         }
         if gd_winner == 0 {
             let comma = p.expect(TK_COMMA, &SYNC_49);
@@ -21053,52 +21116,60 @@ fn _parse_struct_expr_field__inner(p: &mut Parser, follow: &List<List<i32>> = &E
     if _kind_set_54(grp_kind) {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
-        let mut gd_end: i32 = -1;
-        gd_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            let gp_159 = pos;
-            let sgk_159 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if _kind_set_54(sgk_159) {
-                sg_159: {
-                    pos = gp_159;
-                    sg_159_0: {
-                        pos = scan_identifier(tokens, pos, &EMPTY_FOLLOW, 0);
-                        if pos < 0 { break sg_159_0; }
-                        break sg_159;
-                    }
-                    pos = gp_159;
-                    sg_159_1: {
-                        pos = scan_tuple_index(tokens, pos, &EMPTY_FOLLOW, 0);
-                        if pos < 0 { break sg_159_1; }
-                        break sg_159;
-                    }
-                    pos = gp_159;
-                }
+        gd_tourney: {
+            let mut gd_end: i32 = -1;
+            gd_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_identifier(tokens, pos, follow, 0);
+                if pos < 0 { break gd_scan; }
+                gd_end = pos;
             }
-            if pos >= tokens.len() || tokens[pos] != TK_COLON { break gd_scan; }
-            pos += 1;
-            pos = scan_expression(tokens, pos, follow, 0);
-            if pos < 0 { break gd_scan; }
-            gd_end = pos;
+            if gd_end > gd_best {
+                gd_best = gd_end;
+                gd_winner = 0;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
+            let mut gd_end_2: i32 = -1;
+            gd_scan_2: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                let gp_159 = pos;
+                let sgk_159 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if _kind_set_54(sgk_159) {
+                    sg_159: {
+                        pos = gp_159;
+                        sg_159_0: {
+                            pos = scan_identifier(tokens, pos, &EMPTY_FOLLOW, 0);
+                            if pos < 0 { break sg_159_0; }
+                            break sg_159;
+                        }
+                        pos = gp_159;
+                        sg_159_1: {
+                            pos = scan_tuple_index(tokens, pos, &EMPTY_FOLLOW, 0);
+                            if pos < 0 { break sg_159_1; }
+                            break sg_159;
+                        }
+                        pos = gp_159;
+                    }
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_COLON { break gd_scan_2; }
+                pos += 1;
+                pos = scan_expression(tokens, pos, follow, 0);
+                if pos < 0 { break gd_scan_2; }
+                gd_end_2 = pos;
+            }
+            if gd_end_2 > gd_best {
+                gd_best = gd_end_2;
+                gd_winner = 1;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
         }
-        let mut gd_end_2: i32 = -1;
-        gd_scan_2: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            pos = scan_identifier(tokens, pos, follow, 0);
-            if pos < 0 { break gd_scan_2; }
-            gd_end_2 = pos;
-        }
-        if gd_end_2 > gd_best {
-            gd_best = gd_end_2;
-            gd_winner = 1;
-        }
-        if gd_end > gd_best {
-            gd_best = gd_end;
-            gd_winner = 0;
-        }
-        if gd_winner == 0 {
+        if gd_winner == 1 {
             let grp_kind = p.peek_kind();
             if _kind_set_4(grp_kind) {
                 let identifier = _parse_identifier(p, &EMPTY_FOLLOW);
@@ -21803,31 +21874,39 @@ fn _parse_loop_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
     } else if grp_kind == TK_KW_WHILE {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
-        let mut gd_end: i32 = -1;
-        gd_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            pos = scan_predicate_loop_expression(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break gd_scan; }
-            gd_end = pos;
+        gd_tourney: {
+            let mut gd_end: i32 = -1;
+            gd_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_predicate_loop_expression(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break gd_scan; }
+                gd_end = pos;
+            }
+            if gd_end > gd_best {
+                gd_best = gd_end;
+                gd_winner = 1;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
+            let mut gd_end_2: i32 = -1;
+            gd_scan_2: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_predicate_pattern_loop_expression(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break gd_scan_2; }
+                gd_end_2 = pos;
+            }
+            if gd_end_2 > gd_best {
+                gd_best = gd_end_2;
+                gd_winner = 2;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
         }
-        let mut gd_end_2: i32 = -1;
-        gd_scan_2: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            pos = scan_predicate_pattern_loop_expression(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break gd_scan_2; }
-            gd_end_2 = pos;
-        }
-        if gd_end > gd_best {
-            gd_best = gd_end;
-            gd_winner = 0;
-        }
-        if gd_end_2 > gd_best {
-            gd_best = gd_end_2;
-            gd_winner = 1;
-        }
-        if gd_winner == 0 {
+        if gd_winner == 1 {
             let predicate_loop_expression = _parse_predicate_loop_expression(p, &EMPTY_FOLLOW);
         } else {
             let predicate_pattern_loop_expression = _parse_predicate_pattern_loop_expression(p, &EMPTY_FOLLOW);
@@ -21960,31 +22039,39 @@ fn _parse_if_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         } else if grp_kind == TK_KW_IF {
             let mut gd_winner: i32 = -1;
             let mut gd_best: i32 = -1;
-            let mut gd_end: i32 = -1;
-            gd_scan: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_if_expression(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break gd_scan; }
-                gd_end = pos;
+            gd_tourney: {
+                let mut gd_end: i32 = -1;
+                gd_scan: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    pos = scan_if_expression(tokens, pos, &EMPTY_FOLLOW, 0);
+                    if pos < 0 { break gd_scan; }
+                    gd_end = pos;
+                }
+                if gd_end > gd_best {
+                    gd_best = gd_end;
+                    gd_winner = 1;
+                }
+                if gd_best >= p.kinds.len() {
+                    break gd_tourney;
+                }
+                let mut gd_end_2: i32 = -1;
+                gd_scan_2: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    pos = scan_if_let_expression(tokens, pos, &EMPTY_FOLLOW, 0);
+                    if pos < 0 { break gd_scan_2; }
+                    gd_end_2 = pos;
+                }
+                if gd_end_2 > gd_best {
+                    gd_best = gd_end_2;
+                    gd_winner = 2;
+                }
+                if gd_best >= p.kinds.len() {
+                    break gd_tourney;
+                }
             }
-            let mut gd_end_2: i32 = -1;
-            gd_scan_2: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_if_let_expression(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break gd_scan_2; }
-                gd_end_2 = pos;
-            }
-            if gd_end > gd_best {
-                gd_best = gd_end;
-                gd_winner = 0;
-            }
-            if gd_end_2 > gd_best {
-                gd_best = gd_end_2;
-                gd_winner = 1;
-            }
-            if gd_winner == 0 {
+            if gd_winner == 1 {
                 let if_expression = _parse_if_expression(p, &EMPTY_FOLLOW);
             } else {
                 let if_let_expression = _parse_if_let_expression(p, &EMPTY_FOLLOW);
@@ -22021,31 +22108,39 @@ fn _parse_if_let_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         } else if grp_kind == TK_KW_IF {
             let mut gd_winner: i32 = -1;
             let mut gd_best: i32 = -1;
-            let mut gd_end: i32 = -1;
-            gd_scan: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_if_expression(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break gd_scan; }
-                gd_end = pos;
+            gd_tourney: {
+                let mut gd_end: i32 = -1;
+                gd_scan: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    pos = scan_if_expression(tokens, pos, &EMPTY_FOLLOW, 0);
+                    if pos < 0 { break gd_scan; }
+                    gd_end = pos;
+                }
+                if gd_end > gd_best {
+                    gd_best = gd_end;
+                    gd_winner = 1;
+                }
+                if gd_best >= p.kinds.len() {
+                    break gd_tourney;
+                }
+                let mut gd_end_2: i32 = -1;
+                gd_scan_2: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    pos = scan_if_let_expression(tokens, pos, &EMPTY_FOLLOW, 0);
+                    if pos < 0 { break gd_scan_2; }
+                    gd_end_2 = pos;
+                }
+                if gd_end_2 > gd_best {
+                    gd_best = gd_end_2;
+                    gd_winner = 2;
+                }
+                if gd_best >= p.kinds.len() {
+                    break gd_tourney;
+                }
             }
-            let mut gd_end_2: i32 = -1;
-            gd_scan_2: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_if_let_expression(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break gd_scan_2; }
-                gd_end_2 = pos;
-            }
-            if gd_end > gd_best {
-                gd_best = gd_end;
-                gd_winner = 0;
-            }
-            if gd_end_2 > gd_best {
-                gd_best = gd_end_2;
-                gd_winner = 1;
-            }
-            if gd_winner == 0 {
+            if gd_winner == 1 {
                 let if_expression = _parse_if_expression(p, &EMPTY_FOLLOW);
             } else {
                 let if_let_expression = _parse_if_let_expression(p, &EMPTY_FOLLOW);
@@ -23252,45 +23347,53 @@ fn _parse_struct_pattern_field__inner(p: &mut Parser, follow: &List<List<i32>> =
     } else if _kind_set_63(grp_kind) {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
-        let mut gd_end: i32 = -1;
-        gd_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            pos = scan_identifier(tokens, pos, &FOLLOW_MASK_15, 0);
-            if pos < 0 { break gd_scan; }
-            if pos >= tokens.len() || tokens[pos] != TK_COLON { break gd_scan; }
-            pos += 1;
-            pos = scan_pattern(tokens, pos, follow, 0);
-            if pos < 0 { break gd_scan; }
-            gd_end = pos;
-        }
-        let mut gd_end_2: i32 = -1;
-        gd_scan_2: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            if pos < tokens.len() && tokens[pos] == TK_KW_REF {
-                let sp = pos;
-                if pos >= tokens.len() || tokens[pos] != TK_KW_REF { pos = -1; } else { pos += 1; }
-                if pos < 0 { pos = sp; }
+        gd_tourney: {
+            let mut gd_end: i32 = -1;
+            gd_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_identifier(tokens, pos, &FOLLOW_MASK_15, 0);
+                if pos < 0 { break gd_scan; }
+                if pos >= tokens.len() || tokens[pos] != TK_COLON { break gd_scan; }
+                pos += 1;
+                pos = scan_pattern(tokens, pos, follow, 0);
+                if pos < 0 { break gd_scan; }
+                gd_end = pos;
             }
-            if pos < tokens.len() && tokens[pos] == TK_KW_MUT {
-                let sp = pos;
-                if pos >= tokens.len() || tokens[pos] != TK_KW_MUT { pos = -1; } else { pos += 1; }
-                if pos < 0 { pos = sp; }
+            if gd_end > gd_best {
+                gd_best = gd_end;
+                gd_winner = 1;
             }
-            pos = scan_identifier(tokens, pos, follow, 0);
-            if pos < 0 { break gd_scan_2; }
-            gd_end_2 = pos;
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
+            let mut gd_end_2: i32 = -1;
+            gd_scan_2: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos < tokens.len() && tokens[pos] == TK_KW_REF {
+                    let sp = pos;
+                    if pos >= tokens.len() || tokens[pos] != TK_KW_REF { pos = -1; } else { pos += 1; }
+                    if pos < 0 { pos = sp; }
+                }
+                if pos < tokens.len() && tokens[pos] == TK_KW_MUT {
+                    let sp = pos;
+                    if pos >= tokens.len() || tokens[pos] != TK_KW_MUT { pos = -1; } else { pos += 1; }
+                    if pos < 0 { pos = sp; }
+                }
+                pos = scan_identifier(tokens, pos, follow, 0);
+                if pos < 0 { break gd_scan_2; }
+                gd_end_2 = pos;
+            }
+            if gd_end_2 > gd_best {
+                gd_best = gd_end_2;
+                gd_winner = 2;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
         }
-        if gd_end > gd_best {
-            gd_best = gd_end;
-            gd_winner = 0;
-        }
-        if gd_end_2 > gd_best {
-            gd_best = gd_end_2;
-            gd_winner = 1;
-        }
-        if gd_winner == 0 {
+        if gd_winner == 1 {
             let identifier = _parse_identifier(p, &FOLLOW_MASK_15);
             let colon = p.expect(TK_COLON, &SYNC_55);
             let pattern = _parse_pattern(p, follow);
