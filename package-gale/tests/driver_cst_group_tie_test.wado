@@ -1,0 +1,33 @@
+//! Group scan tournament vs ANTLR4 ambiguity resolution: on a scan-length
+//! tie the lowest alternative wins (SQLite's single-table / comma-list FROM
+//! shape); the bare-RuleRef catch-all wins only on a strictly longer scan.
+//! Also pins ANTLR4's childless-node rendering (bare `opt_tail`, no parens).
+
+use g from "./grammars/group_tie_catch_all.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_group_tie" },
+    };
+use { normalize_tree } from "./grammars/group_tie_catch_all.g4";
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    let actual = g::to_string_tree(&result);
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+test "tie: single item picks the first alt, not the catch-all" {
+    assert_tree(&"F a", &"(s F (item a))");
+}
+
+test "tie: comma list picks the first alt, not the catch-all" {
+    assert_tree(&"F a , b", &"(s F (item a) , (item b))");
+}
+
+test "catch-all wins on a strictly longer scan" {
+    assert_tree(&"F a J b", &"(s F (pair (item a) (op J) (item b) opt_tail))");
+}
+
+test "catch-all with tail consumed" {
+    assert_tree(&"F a J b T", &"(s F (pair (item a) (op J) (item b) (opt_tail T)))");
+}

@@ -758,10 +758,11 @@ impl CstStore {
     }
 
     /// ANTLR4-style S-expression for the subtree at row `i`: `(name child ...)`,
-    /// tokens as their text. `rule_names[kind]` names rule nodes (`K_ERROR`
-    /// renders `<error>`); `token_names[kind]` names missing terminals. Real
-    /// terminals with empty text (e.g. EOF) are omitted; missing/skipped
-    /// terminals render markers.
+    /// tokens as their text; a childless node renders as its bare name, no
+    /// parens (ANTLR4's `Trees.toStringTree`). `rule_names[kind]` names rule
+    /// nodes (`K_ERROR` renders `<error>`); `token_names[kind]` names missing
+    /// terminals. Real terminals with empty text (e.g. EOF) are omitted;
+    /// missing/skipped terminals render markers.
     pub fn to_string_tree(
         &self,
         i: i32,
@@ -783,12 +784,13 @@ fn cst_to_string_tree_impl(
     rule_names: &List<String>,
     token_names: &List<String>,
 ) {
-    out.push_str(&"(");
-    if s.a[i] == K_ERROR as i32 {
-        out.push_str(&"<error>");
-    } else {
-        out.push_str(&rule_names[s.a[i]]);
+    let name = if s.a[i] == K_ERROR as i32 { "<error>" } else { rule_names[s.a[i]] };
+    if i + 1 >= s.tag.len() || s.tag[i + 1] matches { Close } {
+        out.push_str(&name);
+        return;
     }
+    out.push_str(&"(");
+    out.push_str(&name);
     let mut c = i + 1;
     while c < s.next[i] {
         match s.tag[c] {
@@ -1110,12 +1112,16 @@ fn render_builder_node(
     rule_names: &List<String>,
     token_names: &List<String>,
 ) -> i32 {
-    out.push_str(&"(");
-    if a[i] == K_ERROR as i32 {
-        out.push_str(&"<error>");
-    } else {
-        out.push_str(&rule_names[a[i]]);
+    let name = if a[i] == K_ERROR as i32 { "<error>" } else { rule_names[a[i]] };
+    if i + 1 >= tag.len() || tag[i + 1] matches { Close } {
+        out.push_str(&name);
+        if i + 1 < tag.len() {
+            return i + 2;
+        }
+        return i + 1;
     }
+    out.push_str(&"(");
+    out.push_str(&name);
     let mut c = i + 1;
     while c < tag.len() {
         match tag[c] {
@@ -1845,7 +1851,9 @@ fn _parse_r__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
     let grp_kind = p.peek_kind();
     if grp_kind == TK_X {
         let mut gd_winner: i32 = -1;
-        gd_dispatch: {
+        let mut gd_best: i32 = -1;
+        gd_tourney: {
+            let mut gd_end: i32 = -1;
             gd_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
@@ -1856,8 +1864,29 @@ fn _parse_r__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
                     pos = scan_b(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
                 }
+                gd_end = pos;
+            }
+            if gd_end > gd_best {
+                gd_best = gd_end;
                 gd_winner = 0;
-                break gd_dispatch;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
+            let mut gd_end_2: i32 = -1;
+            gd_scan_2: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_a(tokens, pos, follow, 0);
+                if pos < 0 { break gd_scan_2; }
+                gd_end_2 = pos;
+            }
+            if gd_end_2 > gd_best {
+                gd_best = gd_end_2;
+                gd_winner = 1;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
             }
         }
         if gd_winner == 0 {

@@ -193,10 +193,11 @@ pub fn sort_group_by_specificity(group: &mut List<i32>, first_sets: &List<List<S
 //
 // `BareRuleRef` (3) is the catch-all rank: a single-RuleRef alt
 // whose body can match complex internal patterns (`join_clause`,
-// `expr`). Tried before `MultiRuleRefLed` so single-RuleRef
-// catch-alls win against multi-element-RuleRef siblings — this is
-// what SQLite-style `(table_or_subquery (',' tor)* | join_clause)`
-// dispatch relies on.
+// `expr`). Ordered before `MultiRuleRefLed` so the scan cascade
+// tries the catch-all early; this is a tie-break for emission order
+// only — the runtime tournament decides the winner by scan length,
+// with ties resolved to the first grammar alt (ANTLR4's ambiguity
+// resolution), so the band ordering does not decide correctness.
 //
 // `MultiRuleRefLed` (2) is a multi-element alt whose first non-
 // nullable element is itself a RuleRef. Less specific than
@@ -241,9 +242,9 @@ pub fn alt_sort_priority(alt: &Alternative) -> i32 {
 /// Counting mandatory elements only is the LL distinguisher:
 /// `( a b | a )` (where `b` is mandatory) sorts the 2-elem alt first,
 /// while `( a b? | a )` (where `b?` is optional) ties on mandatory
-/// length and falls through to priority — which prefers the single-
-/// RuleRef catch-all the way ANTLR4's full-context fallback does for
-/// SQLite-style `( tor (',' tor)* | join_clause )` groupings.
+/// length and falls through to priority. The order affects only which
+/// scan is emitted first — the runtime tournament picks the longest
+/// scan, resolving ties to the first grammar alt.
 pub fn sort_group_by_mandatory_count_desc(group: &mut List<i32>, alts: &List<Alternative>, ctx: &mut GenContext) {
     for let mut i = 0; i < group.len(); i += 1 {
         for let mut j = i + 1; j < group.len(); j += 1 {
