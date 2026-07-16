@@ -741,6 +741,63 @@ impl TirRefVisitor for FutureWriteFinder<'_> {
     }
 }
 
+/// `if <status> == -1 { <status> = future_await_blocked(handle) }` — resolve a
+/// BLOCKED (`-1`) canonical future result by awaiting the counterpart, storing
+/// the completion code back into the mutable `status` local. Shared by the
+/// future read and (transmission) future write synthesizers.
+fn await_if_blocked(status_idx: u32, status_name: &str, handle_idx: u32) -> TirStmt {
+    if_stmt(
+        binary(
+            TirBinaryOp::Eq,
+            local_ref(status_idx, status_name, TypeTable::I32),
+            i32_const(-1),
+            TypeTable::BOOL,
+        ),
+        TirBlock {
+            stmts: vec![expr_stmt(assign(
+                local_ref(status_idx, status_name, TypeTable::I32),
+                internal_call(
+                    "future_await_blocked",
+                    vec![local_ref(handle_idx, "handle", TypeTable::I32)],
+                    TypeTable::I32,
+                ),
+            ))],
+            span: synth_span(),
+        },
+        None,
+    )
+}
+
+/// `realloc(ptr, size, align, 0)` — free a CM buffer, binding the ignored
+/// result to a fresh local. Shared by the future read and (transmission) future
+/// write synthesizers.
+fn free_cm_buffer(
+    ptr_idx: u32,
+    size: i32,
+    align: i32,
+    next_local: &mut u32,
+    locals: &mut Vec<TirLocal>,
+) -> TirStmt {
+    let freed_idx = *next_local;
+    *next_local += 1;
+    locals.push(TirLocal::synth(*next_local, TypeTable::I32, false));
+    let_stmt(
+        "__freed",
+        freed_idx,
+        TypeTable::I32,
+        builtin_call(
+            "realloc",
+            vec![
+                local_ref(ptr_idx, "ptr", TypeTable::I32),
+                i32_const(size),
+                i32_const(align),
+                i32_const(0),
+            ],
+            TypeTable::I32,
+        ),
+    )
+}
+
 fn synthesize_future_write_func(
     payload_type_id: TypeId,
     cm_interface_registry: &CmInterfaceRegistry,
@@ -829,13 +886,13 @@ fn synthesize_future_write_func(
         type_table,
     ));
 
-    // let mut __written = future-write:<payload>(handle, ptr)
+    // __written = future-write:<payload>(handle, ptr). Value payloads leave the
+    // buffer alive and return: BLOCKED is resolved by the async executor when a
+    // same-instance reader posts its read, so busy-waiting would deadlock it.
+    // Transmission shapes are read by the host, so they await and free.
     let written_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, awaits_reader);
-    stmts.push(if awaits_reader {
-        let_mut_stmt
-    } else {
-        let_stmt
-    }(
+    let write_binding = if awaits_reader { let_mut_stmt } else { let_stmt };
+    stmts.push(write_binding(
         "__written",
         written_idx,
         TypeTable::I32,
@@ -849,48 +906,14 @@ fn synthesize_future_write_func(
         ),
     ));
 
-    // Value payloads leave the buffer alive and return: BLOCKED is resolved by
-    // the async executor when a same-instance reader posts its read.
-    // Transmission shapes wait for the host reader, then free the buffer.
     if awaits_reader {
-        // if __written == -1 { __written = future_await_blocked(handle); }
-        stmts.push(if_stmt(
-            binary(
-                TirBinaryOp::Eq,
-                local_ref(written_idx, "__written", TypeTable::I32),
-                i32_const(-1),
-                TypeTable::BOOL,
-            ),
-            TirBlock {
-                stmts: vec![expr_stmt(assign(
-                    local_ref(written_idx, "__written", TypeTable::I32),
-                    internal_call(
-                        "future_await_blocked",
-                        vec![local_ref(handle_idx, "handle", TypeTable::I32)],
-                        TypeTable::I32,
-                    ),
-                ))],
-                span: synth_span(),
-            },
-            None,
-        ));
-
-        // let __freed = realloc(ptr, size, align, 0)
-        let freed_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, false);
-        stmts.push(let_stmt(
-            "__freed",
-            freed_idx,
-            TypeTable::I32,
-            builtin_call(
-                "realloc",
-                vec![
-                    local_ref(ptr_idx, "ptr", TypeTable::I32),
-                    i32_const(size),
-                    i32_const(align),
-                    i32_const(0),
-                ],
-                TypeTable::I32,
-            ),
+        stmts.push(await_if_blocked(written_idx, "__written", handle_idx));
+        stmts.push(free_cm_buffer(
+            ptr_idx,
+            size,
+            align,
+            &mut next_local,
+            &mut locals,
         ));
     }
 
@@ -1072,27 +1095,7 @@ fn synthesize_future_read_func(
         ),
     ));
 
-    // if status == -1 { status = future_await_blocked(handle); }
-    stmts.push(if_stmt(
-        binary(
-            TirBinaryOp::Eq,
-            local_ref(status_idx, "status", TypeTable::I32),
-            i32_const(-1),
-            TypeTable::BOOL,
-        ),
-        TirBlock {
-            stmts: vec![expr_stmt(assign(
-                local_ref(status_idx, "status", TypeTable::I32),
-                internal_call(
-                    "future_await_blocked",
-                    vec![local_ref(handle_idx, "handle", TypeTable::I32)],
-                    TypeTable::I32,
-                ),
-            ))],
-            span: synth_span(),
-        },
-        None,
-    ));
+    stmts.push(await_if_blocked(status_idx, "status", handle_idx));
 
     // let mut result: Option<T> = None
     let result_idx = alloc(&mut next_local, &mut locals, option_type_id, true);
@@ -1141,21 +1144,12 @@ fn synthesize_future_read_func(
     ));
 
     // Free the CM buffer (after the lift has read from it).
-    let freed_idx = alloc(&mut next_local, &mut locals, TypeTable::I32, false);
-    stmts.push(let_stmt(
-        "__freed",
-        freed_idx,
-        TypeTable::I32,
-        builtin_call(
-            "realloc",
-            vec![
-                local_ref(ptr_idx, "ptr", TypeTable::I32),
-                i32_const(size),
-                i32_const(align),
-                i32_const(0),
-            ],
-            TypeTable::I32,
-        ),
+    stmts.push(free_cm_buffer(
+        ptr_idx,
+        size,
+        align,
+        &mut next_local,
+        &mut locals,
     ));
 
     stmts.push(return_stmt(Some(local_ref(
