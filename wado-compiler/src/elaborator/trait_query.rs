@@ -23,6 +23,7 @@ pub(super) enum OnBoundTrait {
     Serialize,
     Deserialize,
     Default,
+    Reflect,
     Inspect,
     InspectAlt,
     DisplayAlt,
@@ -515,6 +516,8 @@ impl TypeSystem {
                 of(CompilerItem::Deserialize, OnBoundTrait::Deserialize)
             } else if trait_name == items.trait_name(CompilerItem::Default) {
                 of(CompilerItem::Default, OnBoundTrait::Default)
+            } else if trait_name == items.trait_name(CompilerItem::Reflect) {
+                of(CompilerItem::Reflect, OnBoundTrait::Reflect)
             } else if trait_name == items.trait_name(CompilerItem::Inspect) {
                 of(CompilerItem::Inspect, OnBoundTrait::Inspect)
             } else if trait_name == items.trait_name(CompilerItem::InspectAlt) {
@@ -798,6 +801,21 @@ impl TypeSystem {
         } = &resolved
             && on_bound == Some(OnBoundTrait::Default)
             && self.auto_derive_default_struct_type(scope, name).is_some()
+        {
+            self.type_table
+                .borrow_mut()
+                .record_bound_driven_synth_request(name, module_source, trait_name);
+            return true;
+        }
+
+        // `Reflect` is synthesized for every struct: eligibility is "is a
+        // struct", not a field-recursive check.
+        if let ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } = &resolved
+            && on_bound == Some(OnBoundTrait::Reflect)
         {
             self.type_table
                 .borrow_mut()

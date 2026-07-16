@@ -58,6 +58,29 @@ internal trait Default {
     fn default() -> Self;
 }
 
+/// Compile-time struct introspection. The compiler synthesizes an impl for
+/// every struct; it cannot be implemented in user code and is callable only in
+/// monomorphized contexts (`T` a concrete struct). `Fields` is the field types
+/// as a tuple `[F_0, F_1, ...]`; `fields` returns those values as a tuple,
+/// `field_names` the source names, and `type_name` the struct name.
+/// See WEP 2026-06-13.
+#[compiler_item("reflect")]
+internal trait Reflect {
+    type Fields;
+
+
+    #[compiler_item("reflect_fields")]
+    fn fields(&self) -> Self::Fields;
+
+
+    #[compiler_item("reflect_field_names")]
+    fn field_names() -> List<String>;
+
+
+    #[compiler_item("reflect_type_name")]
+    fn type_name() -> String;
+}
+
 /// Trait for immutable indexing operations.
 /// Types implementing this trait can be indexed with the `[]` operator for reading.
 internal trait Index<IndexType> {

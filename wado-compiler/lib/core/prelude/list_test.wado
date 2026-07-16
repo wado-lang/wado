@@ -1,3 +1,17 @@
+test "from_tuple collects a homogeneous tuple" {
+    let a: List<i32> = List::from_tuple([1, 2, 3]);
+    assert a.len() == 3;
+    assert a[0] == 1;
+    assert a[2] == 3;
+
+    let b: List<String> = List::from_tuple(["p", "q"]);
+    assert b.len() == 2;
+    assert b[1] == "q";
+
+    let empty: List<bool> = List::from_tuple([]);
+    assert empty.len() == 0;
+}
+
 test "push to empty array" {
     let arr: List<i32> = [];
     arr.push(10);

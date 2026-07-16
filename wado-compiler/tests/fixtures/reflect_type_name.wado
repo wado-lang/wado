@@ -1,0 +1,33 @@
+// Reflect per-struct synthesis (WEP 2026-06-13 §1): trait-qualified static
+// metadata `Reflect::<T>::type_name()` and `Reflect::<T>::field_names()`.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Named {
+    id: i32,
+    label: String,
+    active: bool,
+}
+
+struct Unit {}
+
+test "type_name is the struct name" {
+    assert Reflect::<Point>::type_name() == "Point";
+    assert Reflect::<Unit>::type_name() == "Unit";
+}
+
+test "field_names lists source names in order" {
+    assert Reflect::<Point>::field_names() == ["x", "y"];
+    assert Reflect::<Named>::field_names() == ["id", "label", "active"];
+}
+
+test "field_names of a fieldless struct is empty" {
+    let names: List<String> = Reflect::<Unit>::field_names();
+    assert names.len() == 0;
+}
+
+__DATA__
+{"test": {}}
