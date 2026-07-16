@@ -516,7 +516,9 @@ fn generate_struct_reflect_impls(
             name: name.to_string(),
         };
         let type_name_method = items.method_name(CompilerItem::ReflectTypeName).to_string();
-        let field_names_method = items.method_name(CompilerItem::ReflectFieldNames).to_string();
+        let field_names_method = items
+            .method_name(CompilerItem::ReflectFieldNames)
+            .to_string();
         (
             string_type,
             list_string_type,
@@ -597,8 +599,12 @@ fn generate_struct_field_names_fn(
         .collect();
     let tuple = TirExpr::new(TirExprKind::TupleLiteral { elements }, tuple_type, span);
 
-    let from_tuple = LocalMethodName::new(from_tuple_item.owner.clone(), None, from_tuple_item.name.clone())
-        .with_struct_type_args(&[string_type_name.to_string()]);
+    let from_tuple = LocalMethodName::new(
+        from_tuple_item.owner.clone(),
+        None,
+        from_tuple_item.name.clone(),
+    )
+    .with_struct_type_args(&[string_type_name.to_string()]);
     let call = TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef {
@@ -663,7 +669,14 @@ fn generate_struct_type_name_fn(
         span,
     );
 
-    make_synthetic_method(qualified_name, method_info, vec![], string_type, body, vec![])
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        vec![],
+        string_type,
+        body,
+        vec![],
+    )
 }
 
 /// Threading of trait-impl knowledge through the synthesis sub-passes.
