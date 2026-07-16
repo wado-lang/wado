@@ -158,11 +158,11 @@ type "functype//display_1.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) 
 
 type "functype//display_1.wado/__cm_export__run" = fn();  // TypeId(44)
 
-type "functype//display_1.wado/$value_copy$T56" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(45)
+type "functype//display_1.wado/$value_copy$core:prelude/string.wado/StrCharIter" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(45)
 
-type "functype//display_1.wado/$value_copy$T99" = fn(ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(46)
+type "functype//display_1.wado/$value_copy$core:prelude/int128.wado/u128" = fn(ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(46)
 
-type "functype//display_1.wado/$value_copy$T30$shallow" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(47)
+type "functype//display_1.wado/$value_copy$core:prelude/string.wado/String$shallow" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(47)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(48)
 
@@ -4517,15 +4517,15 @@ fn "display_1.wado/__cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "display_1.wado/$value_copy$T56"(v) {
+fn "display_1.wado/$value_copy$core:prelude/string.wado/StrCharIter"(v) {
     return struct.new "core:prelude/string.wado//StrCharIter" { repr: v.repr, used: v.used, byte_index: v.byte_index };
 }
 
-fn "display_1.wado/$value_copy$T99"(v) {
+fn "display_1.wado/$value_copy$core:prelude/int128.wado/u128"(v) {
     return struct.new "core:prelude/int128.wado//u128" { low: v.low, high: v.high };
 }
 
-fn "display_1.wado/$value_copy$T30$shallow"(v) {
+fn "display_1.wado/$value_copy$core:prelude/string.wado/String$shallow"(v) {
     return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_18: ref Array<u8>; __array_clone_src_18 = v.repr; let __array_clone_len_18: i32; __array_clone_len_18 = builtin::array_len(__array_clone_src_18); let __array_clone_dst_18: ref Array<u8>; __array_clone_dst_18 = builtin::array_new<u8>(__array_clone_len_18); builtin::array_copy<u8>(__array_clone_dst_18, 0, __array_clone_src_18, 0, __array_clone_len_18); __array_clone_dst_18), used: v.used };
 }
 
@@ -5606,7 +5606,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
         unreachable;
     }
     if "core:prelude/int128.wado/u128^Ord::cmp"(self, divisor) == 0 {
-        return struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }, ref.as_non_null("display_1.wado/$value_copy$T99"(self));
+        return struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }, ref.as_non_null("display_1.wado/$value_copy$core:prelude/int128.wado/u128"(self));
     }
     if (if self.low == divisor.low -> i32 {
         self.high == divisor.high;
@@ -5621,7 +5621,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
     b498: block {
         l499: loop {
             break_if b498 i < 0;
-            remainder = "display_1.wado/$value_copy$T99"("core:prelude/int128.wado/u128^Shl::shl"(remainder, 1));
+            remainder = "display_1.wado/$value_copy$core:prelude/int128.wado/u128"("core:prelude/int128.wado/u128^Shl::shl"(remainder, 1));
             bit = "core:prelude/int128.wado/u128::get_bit"(self, i);
             if bit {
                 remainder = struct.new "core:prelude/int128.wado//u128" { low: remainder.low | 1_i64, high: remainder.high | 0_i64 };
@@ -5688,7 +5688,7 @@ fn "core:prelude/int128.wado/u128::fmt_decimal_magnitude"(self, f, is_neg) {
     }
     ten = struct.new "core:prelude/int128.wado//u128" { low: 10_i64, high: 0_i64 };
     digit_count = 0;
-    temp_7 = "display_1.wado/$value_copy$T99"(self);
+    temp_7 = "display_1.wado/$value_copy$core:prelude/int128.wado/u128"(self);
     b506: block {
         l507: loop {
             break_if b506 "core:prelude/int128.wado/u128^Ord::cmp"(temp_7, global:core:prelude/int128.wado::__const_obj_46) != 2;
@@ -5705,7 +5705,7 @@ fn "core:prelude/int128.wado/u128::fmt_decimal_magnitude"(self, f, is_neg) {
     self_27 = f.buf;
     arr_9 = self_27.repr;
     pos = offset_8 + digit_count;
-    temp_11 = "display_1.wado/$value_copy$T99"(self);
+    temp_11 = "display_1.wado/$value_copy$core:prelude/int128.wado/u128"(self);
     b508: block {
         l509: loop {
             break_if b508 "core:prelude/int128.wado/u128^Ord::cmp"(temp_11, global:core:prelude/int128.wado::__const_obj_46) != 2;
@@ -6682,7 +6682,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 fn "core:prelude/format.wado/String^Display::fmt"(self, f) {
     let capped: ref "core:prelude/string.wado//String";
     if f.precision >= 0 {
-        capped = "display_1.wado/$value_copy$T30$shallow"(self);
+        capped = "display_1.wado/$value_copy$core:prelude/string.wado/String$shallow"(self);
         "core:prelude/string.wado/String::truncate_chars"(capped, f.precision);
         "core:prelude/format.wado/Formatter::pad"(f, capped);
     } else {
@@ -6710,7 +6710,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
     count = 0;
     truncated = 0;
-    __iter_5 = "display_1.wado/$value_copy$T56"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
+    __iter_5 = "display_1.wado/$value_copy$core:prelude/string.wado/StrCharIter"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
     _licm_arith_52 = limit >= 0;
     b643: block {
         l644: loop {

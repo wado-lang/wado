@@ -350,7 +350,7 @@ type "functype//http_fields_immutable_errors.wado/__cm_binding__Response_new" = 
 
 type "functype//http_fields_immutable_errors.wado/__cm_export__handle" = fn(i32);  // TypeId(81)
 
-type "functype//http_fields_immutable_errors.wado/$value_copy$T21" = fn(ref "core:prelude//List<u8>") -> ref "core:prelude//List<u8>";  // TypeId(82)
+type "functype//http_fields_immutable_errors.wado/$value_copy$core:prelude/list.wado/List<u8>" = fn(ref "core:prelude//List<u8>") -> ref "core:prelude//List<u8>";  // TypeId(82)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(83)
 
@@ -1314,7 +1314,7 @@ fn "http_fields_immutable_errors.wado/__cm_binding__Fields_get_and_delete"(self,
         if __count_7 > 0 {
             drop("mem/realloc"(__base_6, __count_7 * 8, 4, 0));
         }
-        __result_val = struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>,wasi:http/types.wado/HeaderError>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude//List<core:prelude/list.wado/List<u8>>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude//List<u8>">(/*via $value_copy$T21*/ __result_8.repr)), used: __result_8.used } };
+        __result_val = struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>,wasi:http/types.wado/HeaderError>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude//List<core:prelude/list.wado/List<u8>>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude//List<u8>">(__result_8.repr)), used: __result_8.used } };
     } else {
         __vdisc = builtin::load_u8(__outptr + 4);
         __vresult = ref.null none;
@@ -1434,7 +1434,7 @@ fn "http_fields_immutable_errors.wado/__cm_export__handle"(request) {
     "http_fields_immutable_errors.wado/handle"(request);
 }
 
-fn "http_fields_immutable_errors.wado/$value_copy$T21"(v) {
+fn "http_fields_immutable_errors.wado/$value_copy$core:prelude/list.wado/List<u8>"(v) {
     return struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v.used };
 }
 

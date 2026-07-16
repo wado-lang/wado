@@ -542,6 +542,15 @@ impl String {
         let mut chars: List<char> = List::with_capacity(len);
         let mut i = 0;
         while i < len {
+            // ASCII is the overwhelming common case; take it inline so a plain
+            // byte never pays the `decode_utf8_scalar` call and its struct
+            // return (which dominates otherwise-ASCII text).
+            let b0 = bytes.get_unchecked(i);
+            if b0 < 0x80 {
+                chars.push(char::from_u32_unchecked(b0 as u32));
+                i += 1;
+                continue;
+            }
             let scalar = decode_utf8_scalar(bytes, i, len);
             chars.push(char::from_u32_unchecked(scalar.code));
             i += scalar.advance;

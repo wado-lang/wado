@@ -90,9 +90,9 @@ type "functype//iter_map_collect_variant.wado/__cm_binding__Stdout_write_via_str
 
 type "functype//iter_map_collect_variant.wado/__cm_export__run" = fn();  // TypeId(25)
 
-type "functype//iter_map_collect_variant.wado/$value_copy$T30" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(26)
+type "functype//iter_map_collect_variant.wado/$value_copy$core:prelude/string.wado/String" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(26)
 
-type "functype//iter_map_collect_variant.wado/$value_copy$T30$shallow" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(27)
+type "functype//iter_map_collect_variant.wado/$value_copy$core:prelude/string.wado/String$shallow" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(27)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(28)
 
@@ -192,11 +192,11 @@ fn "iter_map_collect_variant.wado/__cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "iter_map_collect_variant.wado/$value_copy$T30"(v) {
+fn "iter_map_collect_variant.wado/$value_copy$core:prelude/string.wado/String"(v) {
     return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = v.repr; let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__array_clone_src_1); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: v.used };
 }
 
-fn "iter_map_collect_variant.wado/$value_copy$T30$shallow"(v) {
+fn "iter_map_collect_variant.wado/$value_copy$core:prelude/string.wado/String$shallow"(v) {
     return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = v.repr; let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__array_clone_src_1); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: v.used };
 }
 
@@ -437,7 +437,7 @@ fn "core:prelude/format.wado/Formatter::pad"(self, content) {
 fn "core:prelude/format.wado/String^Display::fmt"(self, f) {
     let capped: ref "core:prelude/string.wado//String";
     if f.precision >= 0 {
-        capped = "iter_map_collect_variant.wado/$value_copy$T30$shallow"(self);
+        capped = "iter_map_collect_variant.wado/$value_copy$core:prelude/string.wado/String$shallow"(self);
         "core:prelude/string.wado/String::truncate_chars"(capped, f.precision);
         "core:prelude/format.wado/Formatter::pad"(f, capped);
     } else {
@@ -520,7 +520,7 @@ fn "core:prelude/traits.wado/IterMap<core:prelude/slice.wado/ArrayIter<iter_map_
     __match_2 = "core:prelude/slice.wado/ArrayIter<iter_map_collect_variant.wado/Color>^Iterator::next"(self.inner);
     if ref.is_null(__match_2) == 0 {
         item = ref.as_non_null(__match_2);
-        return ref.as_non_null("iter_map_collect_variant.wado/$value_copy$T30"(block -> ref "core:prelude/string.wado//String" {
+        return ref.as_non_null("iter_map_collect_variant.wado/$value_copy$core:prelude/string.wado/String"(block -> ref "core:prelude/string.wado//String" {
             let __indirect_call_0: ref "canonical//CanonicalClosure_0";
             __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(self.f);
             call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env, item);

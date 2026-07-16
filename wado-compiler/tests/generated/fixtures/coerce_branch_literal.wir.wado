@@ -121,7 +121,7 @@ type "functype//coerce_branch_literal.wado/__cm_export____test_5_match_arm_liter
 
 type "functype//coerce_branch_literal.wado/__cm_export____test_6_if_else_literal_adopts_the_typed_branch__either_side_" = fn();  // TypeId(35)
 
-type "functype//coerce_branch_literal.wado/$value_copy$T51" = fn(ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(36)
+type "functype//coerce_branch_literal.wado/$value_copy$core:prelude/int128.wado/u128" = fn(ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(36)
 
 type "functype//core:prelude/fpfmt.wado/unpack64" = fn(f64) -> [u64, i32];  // TypeId(37)
 
@@ -458,7 +458,7 @@ fn "coerce_branch_literal.wado/__cm_export____test_6_if_else_literal_adopts_the_
     "wasi/task-return"(0);
 }
 
-fn "coerce_branch_literal.wado/$value_copy$T51"(v) {
+fn "coerce_branch_literal.wado/$value_copy$core:prelude/int128.wado/u128"(v) {
     return struct.new "core:prelude/int128.wado//u128" { low: v.low, high: v.high };
 }
 
@@ -1350,7 +1350,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
         unreachable;
     }
     if "core:prelude/int128.wado/u128^Ord::cmp"(self, divisor) == 0 {
-        return struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }, ref.as_non_null("coerce_branch_literal.wado/$value_copy$T51"(self));
+        return struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }, ref.as_non_null("coerce_branch_literal.wado/$value_copy$core:prelude/int128.wado/u128"(self));
     }
     if (if self.low == divisor.low -> i32 {
         self.high == divisor.high;
@@ -1365,7 +1365,7 @@ fn "core:prelude/int128.wado/u128::div_rem"(self, divisor) {
     b142: block {
         l143: loop {
             break_if b142 i < 0;
-            remainder = "coerce_branch_literal.wado/$value_copy$T51"("core:prelude/int128.wado/u128^Shl::shl"(remainder, 1));
+            remainder = "coerce_branch_literal.wado/$value_copy$core:prelude/int128.wado/u128"("core:prelude/int128.wado/u128^Shl::shl"(remainder, 1));
             bit = "core:prelude/int128.wado/u128::get_bit"(self, i);
             if bit {
                 remainder = struct.new "core:prelude/int128.wado//u128" { low: remainder.low | 1_i64, high: remainder.high | 0_i64 };
@@ -1432,7 +1432,7 @@ fn "core:prelude/int128.wado/u128::fmt_decimal_magnitude"(self, f, is_neg) {
     }
     ten = struct.new "core:prelude/int128.wado//u128" { low: 10_i64, high: 0_i64 };
     digit_count = 0;
-    temp_7 = "coerce_branch_literal.wado/$value_copy$T51"(self);
+    temp_7 = "coerce_branch_literal.wado/$value_copy$core:prelude/int128.wado/u128"(self);
     b150: block {
         l151: loop {
             break_if b150 "core:prelude/int128.wado/u128^Ord::cmp"(temp_7, global:core:prelude/int128.wado::__const_obj_58) != 2;
@@ -1449,7 +1449,7 @@ fn "core:prelude/int128.wado/u128::fmt_decimal_magnitude"(self, f, is_neg) {
     self_27 = f.buf;
     arr_9 = self_27.repr;
     pos = offset_8 + digit_count;
-    temp_11 = "coerce_branch_literal.wado/$value_copy$T51"(self);
+    temp_11 = "coerce_branch_literal.wado/$value_copy$core:prelude/int128.wado/u128"(self);
     b152: block {
         l153: loop {
             break_if b152 "core:prelude/int128.wado/u128^Ord::cmp"(temp_11, global:core:prelude/int128.wado::__const_obj_58) != 2;

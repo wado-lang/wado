@@ -104,9 +104,9 @@ type "functype//serde_json_ser_error.wado/__cm_export____test_6_normal_f64_succe
 
 type "functype//serde_json_ser_error.wado/__cm_export____test_7_normal_f32_succeeds" = fn();  // TypeId(36)
 
-type "functype//serde_json_ser_error.wado/$value_copy$T87" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(37)
+type "functype//serde_json_ser_error.wado/$value_copy$core:prelude/string.wado/StrCharIter" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(37)
 
-type "functype//serde_json_ser_error.wado/$value_copy$T27" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(38)
+type "functype//serde_json_ser_error.wado/$value_copy$core:prelude/string.wado/String" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(38)
 
 type "functype//core:prelude/fpfmt.wado/unpack64" = fn(f64) -> [u64, i32];  // TypeId(39)
 
@@ -561,11 +561,11 @@ fn "serde_json_ser_error.wado/__cm_export____test_7_normal_f32_succeeds"() {
     "wasi/task-return"(0);
 }
 
-fn "serde_json_ser_error.wado/$value_copy$T87"(v) {
+fn "serde_json_ser_error.wado/$value_copy$core:prelude/string.wado/StrCharIter"(v) {
     return struct.new "core:prelude/string.wado//StrCharIter" { repr: v.repr, used: v.used, byte_index: v.byte_index };
 }
 
-fn "serde_json_ser_error.wado/$value_copy$T27"(v) {
+fn "serde_json_ser_error.wado/$value_copy$core:prelude/string.wado/String"(v) {
     return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_7: ref Array<u8>; __array_clone_src_7 = v.repr; let __array_clone_len_7: i32; __array_clone_len_7 = builtin::array_len(__array_clone_src_7); let __array_clone_dst_7: ref Array<u8>; __array_clone_dst_7 = builtin::array_new<u8>(__array_clone_len_7); builtin::array_copy<u8>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7); __array_clone_dst_7), used: v.used };
 }
 
@@ -1484,7 +1484,7 @@ fn "core:json/core/json/to_string<f32>"(value) {
         cold_path;
         return 1, ref.null none, __qm_e;
     }
-    return 0, ref.as_non_null("serde_json_ser_error.wado/$value_copy$T27"(buf_1)), ref.null none;
+    return 0, ref.as_non_null("serde_json_ser_error.wado/$value_copy$core:prelude/string.wado/String"(buf_1)), ref.null none;
 }
 
 fn "core:json/core/json/to_string<f64>"(value) {
@@ -1499,7 +1499,7 @@ fn "core:json/core/json/to_string<f64>"(value) {
         cold_path;
         return 1, ref.null none, __qm_e;
     }
-    return 0, ref.as_non_null("serde_json_ser_error.wado/$value_copy$T27"(buf)), ref.null none;
+    return 0, ref.as_non_null("serde_json_ser_error.wado/$value_copy$core:prelude/string.wado/String"(buf)), ref.null none;
 }
 
 fn "core:base64/__initialize_module"() {
@@ -1628,7 +1628,7 @@ fn "core:prelude/primitive.wado/i32^Display::fmt"(self, f) {
 }
 
 fn "core:prelude/primitive.wado/bool^Inspect::inspect"(self, f) {
-    "core:prelude/format.wado/Formatter::pad"(f, "serde_json_ser_error.wado/$value_copy$T27"((if self.value -> ref "core:prelude/string.wado//String" {
+    "core:prelude/format.wado/Formatter::pad"(f, "serde_json_ser_error.wado/$value_copy$core:prelude/string.wado/String"((if self.value -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -2049,7 +2049,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
     count = 0;
     truncated = 0;
-    __iter_5 = "serde_json_ser_error.wado/$value_copy$T87"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
+    __iter_5 = "serde_json_ser_error.wado/$value_copy$core:prelude/string.wado/StrCharIter"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
     _licm_arith_52 = limit >= 0;
     b225: block {
         l226: loop {

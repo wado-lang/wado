@@ -94,9 +94,9 @@ type "functype//template_string_generic.wado/__cm_export____test_9_turbofish_wit
 
 type "functype//template_string_generic.wado/__cm_export____test_10_turbofish_on_generic_constructor" = fn();  // TypeId(35)
 
-type "functype//template_string_generic.wado/$value_copy$T66" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(36)
+type "functype//template_string_generic.wado/$value_copy$core:prelude/string.wado/StrCharIter" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//StrCharIter";  // TypeId(36)
 
-type "functype//template_string_generic.wado/$value_copy$T28$shallow" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(37)
+type "functype//template_string_generic.wado/$value_copy$core:prelude/string.wado/String$shallow" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(37)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(38)
 
@@ -660,11 +660,11 @@ fn "template_string_generic.wado/__cm_export____test_10_turbofish_on_generic_con
     "wasi/task-return"(0);
 }
 
-fn "template_string_generic.wado/$value_copy$T66"(v) {
+fn "template_string_generic.wado/$value_copy$core:prelude/string.wado/StrCharIter"(v) {
     return struct.new "core:prelude/string.wado//StrCharIter" { repr: v.repr, used: v.used, byte_index: v.byte_index };
 }
 
-fn "template_string_generic.wado/$value_copy$T28$shallow"(v) {
+fn "template_string_generic.wado/$value_copy$core:prelude/string.wado/String$shallow"(v) {
     return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_4: ref Array<u8>; __array_clone_src_4 = v.repr; let __array_clone_len_4: i32; __array_clone_len_4 = builtin::array_len(__array_clone_src_4); let __array_clone_dst_4: ref Array<u8>; __array_clone_dst_4 = builtin::array_new<u8>(__array_clone_len_4); builtin::array_copy<u8>(__array_clone_dst_4, 0, __array_clone_src_4, 0, __array_clone_len_4); __array_clone_dst_4), used: v.used };
 }
 
@@ -1215,7 +1215,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 fn "core:prelude/format.wado/String^Display::fmt"(self, f) {
     let capped: ref "core:prelude/string.wado//String";
     if f.precision >= 0 {
-        capped = "template_string_generic.wado/$value_copy$T28$shallow"(self);
+        capped = "template_string_generic.wado/$value_copy$core:prelude/string.wado/String$shallow"(self);
         "core:prelude/string.wado/String::truncate_chars"(capped, f.precision);
         "core:prelude/format.wado/Formatter::pad"(f, capped);
     } else {
@@ -1243,7 +1243,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
     count = 0;
     truncated = 0;
-    __iter_5 = "template_string_generic.wado/$value_copy$T66"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
+    __iter_5 = "template_string_generic.wado/$value_copy$core:prelude/string.wado/StrCharIter"(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 }; self_15);
     _licm_arith_52 = limit >= 0;
     b100: block {
         l101: loop {

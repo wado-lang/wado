@@ -440,6 +440,9 @@ fn register_single_function(
         type_id,
         param_names,
         body: None, // Filled later by translate phase
+        value_copy_mangle: tir_func
+            .value_copy_type()
+            .map(|t| type_table.mangle_type_arg_for_generic(t)),
         meta: WirMeta {
             module_source: Some(module_source.clone()),
             ..WirMeta::default()

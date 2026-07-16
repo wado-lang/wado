@@ -323,7 +323,7 @@ type "functype//http_fields_from_list_error.wado/__cm_binding__Response_new" = f
 
 type "functype//http_fields_from_list_error.wado/__cm_export__handle" = fn(i32);  // TypeId(65)
 
-type "functype//http_fields_from_list_error.wado/$value_copy$T33" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref "core:prelude/slice.wado//ArraySlice<u8>";  // TypeId(66)
+type "functype//http_fields_from_list_error.wado/$value_copy$core:prelude/slice.wado/ArraySlice<u8>" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref "core:prelude/slice.wado//ArraySlice<u8>";  // TypeId(66)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(67)
 
@@ -1096,7 +1096,7 @@ fn "http_fields_from_list_error.wado/__cm_export__handle"(request) {
     "http_fields_from_list_error.wado/handle"(request);
 }
 
-fn "http_fields_from_list_error.wado/$value_copy$T33"(v) {
+fn "http_fields_from_list_error.wado/$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(v) {
     return struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: v.repr, start: v.start, end: v.end };
 }
 
@@ -1519,7 +1519,7 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 
 fn "core:prelude/string.wado/String::from_utf8_slice"(bytes) {
     let bytes_2: ref Array<u8>;
-    if @unlikely("core:prelude/string.wado/String::is_valid_utf8"("http_fields_from_list_error.wado/$value_copy$T33"(bytes)) == 0) {
+    if @unlikely("core:prelude/string.wado/String::is_valid_utf8"("http_fields_from_list_error.wado/$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(bytes)) == 0) {
         cold_path;
         return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8"), used: 13 };
     }
@@ -1537,7 +1537,7 @@ fn "core:prelude/string.wado/String::is_valid_utf8"(bytes) {
             let scalar_mv_code: u32;
             let scalar_mv_advance: i32;
             let scalar_mv_valid: bool;
-            multivalue_bind [scalar_mv_code, scalar_mv_advance, scalar_mv_valid] = "core:prelude/string.wado/decode_utf8_scalar"("http_fields_from_list_error.wado/$value_copy$T33"(bytes), i, len);
+            multivalue_bind [scalar_mv_code, scalar_mv_advance, scalar_mv_valid] = "core:prelude/string.wado/decode_utf8_scalar"("http_fields_from_list_error.wado/$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(bytes), i, len);
             if @unlikely(scalar_mv_valid == 0) {
                 cold_path;
                 return 0;

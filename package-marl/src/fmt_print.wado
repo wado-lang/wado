@@ -210,7 +210,15 @@ fn print_list(list: &MdList, out: &mut String) {
                 out.push('\n');
             }
         }
-        let marker = if list.ordered { `{list.start + idx}.` } else { "-" };
+        let marker = if list.ordered {
+            if list.same_number {
+                `{list.start}.`;
+            } else {
+                `{list.start + idx}.`;
+            }
+        } else {
+            "-";
+        };
         print_item(&item, &marker, out);
         idx += 1;
     }
