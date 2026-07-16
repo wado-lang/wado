@@ -526,26 +526,29 @@ pub fn lexer_grammar_executes_actions(grammar: &Grammar) -> bool {
 }
 
 /// Whether this rule's top-level actions run: an executing grammar, a real
-/// (non-fragment) rule with a single alternative. Multi-alt rules and
-/// fragments are Step-2 gaps — their actions warn.
+/// (non-fragment, non-virtual) rule. Both single-alt and multi-alt rules run
+/// their alternatives' top-level `{ ... }` actions (a multi-alt rule re-matches
+/// to find the winning alternative in `apply_<rule>_actions`). Fragments and
+/// actions nested inside an element still warn.
 pub fn lexer_rule_executes_actions(grammar: &Grammar, rule: &LexerRule) -> bool {
     return lexer_grammar_executes_actions(grammar)
         && !rule.is_fragment
-        && !rule.is_virtual
-        && rule.body.len() == 1;
+        && !rule.is_virtual;
 }
 
 /// The action ids codegen runs for `rule`: the top-level `{ ... }` (non-
-/// predicate) actions of an executing single-alt rule. Single source of truth
-/// shared by the apply-fn emit and `warn_unhandled_lexer_actions`, so a run
-/// action and a warned-unhandled action cannot disagree.
+/// predicate) actions of every alternative of an executing rule. Single source
+/// of truth shared by the apply-fn emit and `warn_unhandled_lexer_actions`, so
+/// a run action and a warned-unhandled action cannot disagree.
 fn lexer_rule_executed_action_ids(grammar: &Grammar, rule: &LexerRule, out: &mut List<i32>) {
     if !lexer_rule_executes_actions(grammar, rule) {
         return;
     }
-    for let a of &rule.body[0].actions {
-        if a.kind matches { Action } {
-            out.push(a.source.action_id);
+    for let alt of &rule.body {
+        for let a of &alt.actions {
+            if a.kind matches { Action } {
+                out.push(a.source.action_id);
+            }
         }
     }
 }
@@ -662,11 +665,14 @@ fn gen_mode_constants(w: &mut CodeWriter, mode_names: &List<String>) {
     w.blank();
 }
 
-/// Emit one `apply_<rule>_actions(chars, start, pos, lx)` per executing rule.
-/// It runs the rule's top-level `{ ... }` actions in `before_index` order
-/// (identity-translated: `$text` resolves over `chars`/`start`/`pos`, the rest
-/// — `lx.set_type(...)` and friends — passes through). Called post-tournament
-/// for the winner only, so a losing candidate's actions never run.
+/// Emit the replay fns per executing rule. A single-alt rule gets one
+/// `apply_<rule>_actions(chars, start, pos, lx)` running its top-level
+/// `{ ... }` actions. A multi-alt rule additionally gets a match-only
+/// `winning_alt_<rule>(chars, start) -> i32` helper so the apply fn re-derives
+/// which alternative matched (first-match, mirroring `gen_lexer_alts`) and runs
+/// only that alt's actions. Bodies are identity-translated (`$text` over
+/// `chars`/`start`/`pos`, `lx.*` verbatim). Called post-tournament for the
+/// winner only, so a losing candidate's actions never run.
 fn gen_lexer_apply_fns(w: &mut CodeWriter, grammar: &Grammar) {
     for let rule of &grammar.lexer_rules {
         let mut ids: List<i32> = [];
@@ -674,27 +680,89 @@ fn gen_lexer_apply_fns(w: &mut CodeWriter, grammar: &Grammar) {
         if ids.is_empty() {
             continue;
         }
+        let ci = resolve_ci(&grammar.options, &rule.options);
+        if rule.body.len() > 1 {
+            gen_lexer_winning_alt_fn(w, rule, &grammar.lexer_rules, ci);
+        }
         let mut f = FnSpec::new(&apply_fn_name(&rule.name));
         f.add_param(&"chars", &"&List<char>");
         f.add_param(&"start", &"i32");
         f.add_param(&"pos", &"i32");
         f.add_param(&"lx", &"&mut LexerActions");
         f.emit_begin(w);
-        // Top-level actions in source order (their `before_index` order for a
-        // single-alt rule). Predicates are placed elsewhere (`gen_lexer_alt_seq`).
-        for let a of &rule.body[0].actions {
-            if !(a.kind matches { Action }) {
-                continue;
+        if rule.body.len() == 1 {
+            gen_lexer_alt_action_stmts(w, &rule.body[0]);
+        } else {
+            w.line(&`let _walt = winning_alt_{rule.name}(chars, start);`);
+            let mut first = true;
+            for let mut ai = 0; ai < rule.body.len(); ai += 1 {
+                if !lexer_alt_has_action(&rule.body[ai]) {
+                    continue;
+                }
+                if first {
+                    w.begin(&`if _walt == {ai}`);
+                    first = false;
+                } else {
+                    w.else_begin(&`else if _walt == {ai}`);
+                }
+                gen_lexer_alt_action_stmts(w, &rule.body[ai]);
             }
-            let body = match translate_lexer_action(&a.source.text) {
-                Ok(b) => b,
-                Err(e) => panic(`lexer action: {e}`),
-            };
-            emit_lexer_action_stmt(w, &body);
+            if !first {
+                w.end();
+            }
         }
         w.end();
         w.blank();
     }
+}
+
+/// Whether an alt carries a top-level `{ ... }` action (not a predicate).
+fn lexer_alt_has_action(alt: &LexerAlternative) -> bool {
+    for let a of &alt.actions {
+        if a.kind matches { Action } {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Emit an alt's top-level actions (identity-translated) as statements.
+fn gen_lexer_alt_action_stmts(w: &mut CodeWriter, alt: &LexerAlternative) {
+    for let a of &alt.actions {
+        if !(a.kind matches { Action }) {
+            continue;
+        }
+        let body = match translate_lexer_action(&a.source.text) {
+            Ok(b) => b,
+            Err(e) => panic(`lexer action: {e}`),
+        };
+        emit_lexer_action_stmt(w, &body);
+    }
+}
+
+/// Emit `winning_alt_<rule>(chars, start) -> i32`: a match-only re-scan that
+/// returns the index of the first alternative that matches from `start`
+/// (first-match, mirroring `gen_lexer_alts`), or -1. Each alt sits in its own
+/// labeled block; a failed match `break`s to the next, a full match returns its
+/// index. No side effects — actions are run by the caller for the returned alt.
+fn gen_lexer_winning_alt_fn(w: &mut CodeWriter, rule: &LexerRule, all_rules: &List<LexerRule>, ci: bool) {
+    let mut f = FnSpec::new(&`winning_alt_{rule.name}`);
+    f.add_param(&"chars", &"&List<char>");
+    f.add_param(&"start", &"i32");
+    f.set_return_type(&"i32");
+    f.emit_begin(w);
+    w.line(&"let mut pos = start;");
+    for let mut ai = 0; ai < rule.body.len(); ai += 1 {
+        let label = `walt_{ai}`;
+        w.begin(&`{label}:`);
+        w.line(&"pos = start;");
+        gen_lexer_alt_seq(w, &rule.body[ai], all_rules, &`break {label}`, ci, true);
+        w.line(&`return {ai};`);
+        w.end();
+    }
+    w.line(&"return -1;");
+    w.end();
+    w.blank();
 }
 
 /// Emit a translated lexer-action body as a statement. The identity translator

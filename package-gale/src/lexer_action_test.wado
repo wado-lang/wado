@@ -127,11 +127,20 @@ WS : ' ' -> skip ;
 ") == 1, "a nested-group action must surface UnsupportedAction";
 }
 
-test "a multi-alt lexer rule action warns loudly (not yet executed)" {
-    assert unsupported_count(&"lexer grammar L;
+test "a multi-alt lexer rule runs each alt's top-level action (no warn)" {
+    let src = gen_source(&"lexer grammar L;
 options { language = Wado; }
-A : 'a' { lx.set_type(TK_B) } | 'c' ;
+A : 'a' { lx.set_type(TK_X) } | 'c' { lx.set_type(TK_Y) } ;
 B : 'b' ;
 WS : ' ' -> skip ;
-") == 1, "a multi-alt rule action must surface UnsupportedAction";
+");
+    assert src.contains("fn winning_alt_A"), "multi-alt rule gets a winning_alt helper";
+    assert src.contains("lx.set_type(TK_X);"), "alt 0 action emitted";
+    assert src.contains("lx.set_type(TK_Y);"), "alt 1 action emitted";
+    assert unsupported_count(&"lexer grammar L;
+options { language = Wado; }
+A : 'a' { lx.set_type(TK_X) } | 'c' { lx.set_type(TK_Y) } ;
+B : 'b' ;
+WS : ' ' -> skip ;
+") == 0, "multi-alt top-level actions must not warn";
 }

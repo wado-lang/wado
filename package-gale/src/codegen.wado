@@ -249,14 +249,16 @@ fn warn_unhandled_lexer_actions(grammar: &Grammar, ctx: &mut GenContext) {
     for let rule of &grammar.lexer_rules {
         let executes = lexer_rule_executes_actions(grammar, rule);
         for let mut ai = 0; ai < rule.body.len(); ai += 1 {
-            let top_executes = executes && ai == 0;
+            // Every alt's top-level actions run for an executing rule (the
+            // winning alt is picked at replay); only in-element actions warn.
+            let top_executes = executes;
             let mut ids: List<i32> = [];
             collect_unhandled_lexer_alt_action_ids(&rule.body[ai], top_executes, &mut ids);
             for let id of &ids {
                 ctx.warn(
                     &`lexer action {*id}`,
                     DiagnosticKind::UnsupportedAction,
-                    `action {*id} in lexer rule '{rule.name}' is not yet executed (only single-alt rule top-level actions and predicates run today)`,
+                    `action {*id} in lexer rule '{rule.name}' is not yet executed (nested inside an element; only top-level rule/alt actions and predicates run today)`,
                 );
             }
         }
