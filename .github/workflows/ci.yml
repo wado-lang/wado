@@ -301,9 +301,13 @@ jobs:
           MISE_VERBOSE: ${{ runner.debug }}
 
       - run: mise run check-deps
-      # wado-compiler and wado-manifest must both compile for wasm32 (see
-      # CLAUDE.md / wado-manifest); check them directly with the locked lockfile.
+      # wado-compiler, wado-lsp, and wado-manifest must all compile for wasm32
+      # (see CLAUDE.md / wado-manifest). This is deliberate: the compiler and
+      # LSP engine stay OS-independent so they can run in the browser (the
+      # playground), with all I/O delegated to the wado-cli host. Check them
+      # directly with the locked lockfile.
       - run: cargo check --locked -p wado-compiler --target wasm32-unknown-unknown
+      - run: cargo check --locked -p wado-lsp --target wasm32-unknown-unknown
       - run: cargo check --locked -p wado-manifest --target wasm32-unknown-unknown
 
   test:

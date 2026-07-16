@@ -57,6 +57,7 @@ run = """
 set -xe -o pipefail
 cargo check
 cargo check -p wado-compiler --target wasm32-unknown-unknown
+cargo check -p wado-lsp --target wasm32-unknown-unknown
 cargo check -p wado-manifest --target wasm32-unknown-unknown
 """
 
@@ -679,4 +680,22 @@ for i in $(seq 1 "$RUNS"); do
     exit 1
   fi
 done
+"""
+
+[tasks.playground-web-build]
+description = "Build the client-side browser playground assets into wado-playground/web/"
+depends = ["jco-deps"]
+run = "wado-playground/web/build.sh"
+
+[tasks.playground-web-serve]
+description = "Serve the browser playground on http://127.0.0.1:8088 (run playground-web-build first)"
+run = "cd wado-playground/web && python3 -m http.server 8088"
+
+[tasks.playground-web-test]
+description = "Browser smoke test for the playground (installs playwright-core; needs Chromium 137+)"
+run = """
+#!/usr/bin/env bash
+set -e -o pipefail
+(cd scripts/jco && node -e "require.resolve('playwright-core')" 2>/dev/null || npm install playwright-core)
+node wado-playground/web/test-browser.mjs
 """
