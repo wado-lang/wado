@@ -104,15 +104,15 @@ shim:
 `textDocument/didOpen` for `file:///playground.wado`, full-text `didChange`
 debounced ~200 ms, and maps responses onto Monaco:
 
-| LSP                               | Monaco                                  |
-| --------------------------------- | --------------------------------------- |
-| `publishDiagnostics` (push)       | `setModelMarkers`                       |
-| `textDocument/hover`              | `registerHoverProvider`                 |
-| `textDocument/definition`         | `registerDefinitionProvider`            |
-| `textDocument/references`         | `registerReferenceProvider`             |
-| `textDocument/documentHighlight`  | `registerDocumentHighlightProvider`     |
-| `textDocument/semanticTokens/full`| `registerDocumentSemanticTokensProvider`|
-| `textDocument/inlayHint`          | `registerInlayHintsProvider`            |
+| LSP                                | Monaco                                   |
+| ---------------------------------- | ---------------------------------------- |
+| `publishDiagnostics` (push)        | `setModelMarkers`                        |
+| `textDocument/hover`               | `registerHoverProvider`                  |
+| `textDocument/definition`          | `registerDefinitionProvider`             |
+| `textDocument/references`          | `registerReferenceProvider`              |
+| `textDocument/documentHighlight`   | `registerDocumentHighlightProvider`      |
+| `textDocument/semanticTokens/full` | `registerDocumentSemanticTokensProvider` |
+| `textDocument/inlayHint`           | `registerInlayHintsProvider`             |
 
 `monaco-languageclient` is rejected: it drags in `vscode-languageclient` plus
 VS Code API shims and a bundler, for seven provider mappings that are ~200
