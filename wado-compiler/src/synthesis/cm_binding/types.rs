@@ -528,7 +528,10 @@ pub(super) fn is_wasm_flat_type(type_id: TypeId) -> bool {
 /// and async types (`resource`, `own`/`borrow`, `stream`/`future`) *are*
 /// representable — they lower to `i32` handles identically in every world — so
 /// they pass. Recurses through containers and named aggregates to catch a
-/// non-representable type nested inside one; `visited` guards against cycles.
+/// non-representable type nested inside one; `visited` is the recursion path,
+/// and a type that revisits itself is rejected — WIT has no recursive types,
+/// and the lift/lower synthesizers would otherwise recurse forever generating
+/// inline code for one.
 pub(super) fn check_cm_boundary_representable(
     type_id: TypeId,
     type_table: &TypeTable,
@@ -538,7 +541,14 @@ pub(super) fn check_cm_boundary_representable(
     use crate::tir::{PrimitiveType, ResolvedType as R};
 
     if visited.contains(&type_id) {
-        return Ok(());
+        // `visited` is the recursion path (pushed on entry, popped on exit),
+        // so a revisit is a genuine cycle. WIT cannot express recursive
+        // types, so the type has no CM representation.
+        return Err(format!(
+            "recursive type `{}` cannot cross the Component Model boundary \
+             — WIT has no recursive types",
+            type_table.type_name(type_id)
+        ));
     }
     visited.push(type_id);
 
