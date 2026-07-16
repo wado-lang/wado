@@ -488,12 +488,19 @@ fn generate_struct_reflect_impls(
         })
         .collect();
 
-    let (string_type, list_string_type, string_type_name) = {
+    let (string_type, list_string_type, string_type_name, from_tuple) = {
         let mut tt = module.type_table.borrow_mut();
         let string_type = tt.make_compiler_struct(CompilerItem::String);
         let list_string_type = tt.make_list(string_type);
         let string_type_name = tt.mangle_type_name(string_type);
-        (string_type, list_string_type, string_type_name)
+        let (module_source, owner, name) =
+            tt.compiler_items().require_method(CompilerItem::ListFromTuple);
+        let from_tuple = FromTupleItem {
+            module_source: module_source.clone(),
+            owner: owner.to_string(),
+            name: name.to_string(),
+        };
+        (string_type, list_string_type, string_type_name, from_tuple)
     };
 
     let mut generated = Vec::new();
@@ -516,6 +523,7 @@ fn generate_struct_reflect_impls(
                 list_string_type,
                 reflect_trait_name,
                 &string_type_name,
+                &from_tuple,
                 *span,
             )
         };
@@ -525,6 +533,15 @@ fn generate_struct_reflect_impls(
     }
 
     module.functions.extend(generated);
+}
+
+/// The `List::from_tuple` constructor, resolved from
+/// [`CompilerItem::ListFromTuple`] so synthesis never hard-codes its owner /
+/// method name / module.
+struct FromTupleItem {
+    module_source: ModuleSource,
+    owner: String,
+    name: String,
 }
 
 /// Build `StructName^Reflect::field_names() -> List<String>` as
@@ -540,6 +557,7 @@ fn generate_struct_field_names_fn(
     list_string_type: TypeId,
     reflect_trait_name: &str,
     string_type_name: &str,
+    from_tuple_item: &FromTupleItem,
     span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(struct_name, reflect_trait_name, "field_names");
@@ -551,15 +569,15 @@ fn generate_struct_field_names_fn(
         .collect();
     let tuple = TirExpr::new(TirExprKind::TupleLiteral { elements }, tuple_type, span);
 
-    let from_tuple = LocalMethodName::new("List".to_string(), None, "from_tuple".to_string())
+    let from_tuple = LocalMethodName::new(from_tuple_item.owner.clone(), None, from_tuple_item.name.clone())
         .with_struct_type_args(&[string_type_name.to_string()]);
     let call = TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef {
-                module_source: ModuleSource::list(),
+                module_source: from_tuple_item.module_source.clone(),
                 name: from_tuple.to_mangled_name(),
                 monomorph_info: Some(MonomorphInfo {
-                    generic_name: "List::from_tuple".to_string(),
+                    generic_name: format!("{}::{}", from_tuple_item.owner, from_tuple_item.name),
                     impl_type_args: vec![string_type],
                     method_type_args: vec![tuple_type],
                     is_blanket: false,

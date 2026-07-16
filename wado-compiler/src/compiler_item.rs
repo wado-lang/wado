@@ -264,6 +264,9 @@ pub enum CompilerItem {
     /// `List::new` + a sequence of `.push(...)` calls into
     /// `array.new_fixed`.
     ListPush,
+    /// `List::from_tuple` — collects a homogeneous tuple into a `List<T>`;
+    /// synthesized `Reflect::field_names` calls it.
+    ListFromTuple,
     /// `String::push_str` — recognised by the WIR optimiser for
     /// string-building inlining.
     StringPushStr,
@@ -451,6 +454,7 @@ impl CompilerItem {
         Self::AlignmentCenter,
         Self::AlignmentRight,
         Self::ListPush,
+        Self::ListFromTuple,
         Self::StringPushStr,
         Self::StringPushChar,
         Self::StringGetByteUnchecked,
@@ -568,6 +572,7 @@ impl CompilerItem {
             Self::AlignmentCenter => "alignment_center",
             Self::AlignmentRight => "alignment_right",
             Self::ListPush => "list_push",
+            Self::ListFromTuple => "list_from_tuple",
             Self::StringPushStr => "string_push_str",
             Self::StringPushChar => "string_push_char",
             Self::StringGetByteUnchecked => "string_get_byte_unchecked",
@@ -657,6 +662,7 @@ impl CompilerItem {
             | Self::Ord
             | Self::From
             | Self::ListPush
+            | Self::ListFromTuple
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringGetByteUnchecked
@@ -809,6 +815,7 @@ impl CompilerItem {
             | Self::LowerExp
             | Self::UpperExp => CompilerItemKind::Trait,
             Self::ListPush
+            | Self::ListFromTuple
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringGetByteUnchecked
