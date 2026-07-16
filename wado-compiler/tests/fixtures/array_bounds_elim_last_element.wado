@@ -1,8 +1,6 @@
-// Last-element bounds-check elimination: `arr[arr.len() - k]` (k >= 1) is
-// unconditionally in bounds because a length is non-negative, so the guard is
-// dropped (see the WIR count in `tests/redundant_bce.rs`). This fixture pins
-// the runtime behavior: the elimination must not change results, and an
-// out-of-bounds access on an empty list (guarded here) must not be reached.
+// Last-element elimination: `arr[arr.len() - k]` (k >= 1) is unconditionally in
+// bounds, so its guard is dropped (WIR count in `tests/redundant_bce.rs`). Pins
+// that results are unchanged and the empty-list path is never accessed.
 #[inline(never)]
 fn top(stack: &List<i32>) -> i32 {
     if stack.len() > 0 {

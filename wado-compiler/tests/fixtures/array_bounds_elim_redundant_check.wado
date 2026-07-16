@@ -1,12 +1,6 @@
-// Redundant bounds-check elimination via a dominating panic-guard.
-//
-// `end[child]` and `end[parent]` are each accessed in the `if` condition and
-// again in the body. The condition's bounds-check panic-guard proves the index
-// is in bounds, so the body's re-check of the same index into the same
-// (unmodified) array is redundant and must be eliminated (see the WIR count in
-// `tests/redundant_bce.rs`). This fixture pins the runtime behavior across
-// optimization levels — the elimination must not change results, and an actual
-// out-of-bounds index must still trap.
+// Redundant bounds-check elimination: `end[child]` / `end[parent]` are each
+// checked in the `if` condition and re-checked (redundantly) in the body. Pins
+// runtime behavior across O-levels; the WIR count is in `tests/redundant_bce.rs`.
 #[inline(never)]
 fn bump(end: &mut List<i32>, child: i32, parent: i32) {
     if end[child] > end[parent] {

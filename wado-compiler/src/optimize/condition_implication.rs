@@ -15,17 +15,12 @@
 //! - short-circuit `(var + k) >= bound || expr` → checks in `expr`
 //!   (`ShortCircuitEliminator`);
 //! - bitmask `(x & MASK) >= BOUND`, `BOUND > MASK >= 0` (`BitmaskEliminator`);
-//! - redundant re-check: the implicit panic-guard `arr[i]` lowers to itself
-//!   proves `i < arr.used`, so a later `arr[i]` (same index, array unmodified
-//!   between) re-check is dropped — a forward walk in execution order harvesting
-//!   guard facts and refuting dominated re-checks (`rbce_walk`), which needs no
-//!   source-level guard, only a first access. This is what removes the doubled
-//!   `arr[i]`/`arr[j]` checks in an `if arr[i] > arr[j] { arr[j] = arr[i] }`;
-//! - last-element: a `let idx = arr.len() - k` (k >= 1) binding proves
-//!   `idx < arr.len()` (a length is non-negative, so `used - k < used`), so the
-//!   later `arr[idx]` guard is refuted — the top-of-stack / `arr.last()` idiom.
-//!   Harvested as an ordinary fact (`len_minus_fact`), so it is dropped if the
-//!   array is resized before the access, unlike a stale check-point match.
+//! - redundant re-check: the panic-guard `arr[i]` lowers to proves `i < arr.used`,
+//!   so a later `arr[i]` (array unmodified between) is dropped — a forward walk
+//!   ([`rbce_walk`]) harvesting guard facts, needing no source-level guard;
+//! - last-element: a `let idx = arr.len() - k` (k >= 1) proves `idx < arr.len()`
+//!   ([`len_minus_fact`]), refuting the later `arr[idx]` guard — the
+//!   top-of-stack / `arr.last()` idiom, dropped if the array is resized between.
 //!
 //! Matching is **syntactic over the skeleton plus the value pool**, never the
 //! `value_of` side-table: a guard's `var` / `bound` are compared by structure
@@ -285,11 +280,9 @@ fn parse_const_i64(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
 /// `p = pos + 1` decompose to `(pos, 3)`.
 ///
 /// A bare `Local(idx)` is a variable in its own right: its bind is followed only
-/// when that exposes a cleaner var+offset (`let q = p + 2`), otherwise the local
-/// itself is the var. So `let parent = <opaque computation>` (a single-assignment
-/// local bound to a whole guarded-index block, not a copy) still matches by its
-/// stable local index — matching a check `parent >= bound` against a guard on the
-/// same `parent` — instead of dead-ending in the block resolution.
+/// when that exposes a cleaner var+offset (`let q = p + 2`); otherwise the local
+/// itself is the var, so `let parent = <opaque block>` still matches a check
+/// `parent >= bound` by its stable index instead of dead-ending in the block.
 pub(super) fn parse_var_offset(engine: &Engine, binds: &Binds, op: Operand) -> Option<(u32, i64)> {
     parse_var_offset_depth(engine, binds, op, 0)
 }
@@ -1368,14 +1361,12 @@ fn sub_const(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Operand, i6
     parse_const_i64(engine, binds, b).map(|k| (a, k))
 }
 
-/// The fact a `let idx = <length field> - k` (k >= 1) binding proves:
-/// `idx + (k-1) < <field>`, i.e. `idx <= field - 1 < field`. Sound because the
-/// field is an array length (`parse_bound` restricted to `Field`), hence
-/// non-negative, so `field - k` cannot signed-wrap (`field >= 0` ⇒
-/// `field - k > i32::MIN` for any in-range `k`). Returned as an ordinary
-/// [`ProvenLt`] so the forward walk drops it via [`invalidate`] the moment the
-/// array is resized before the check — the top-of-stack / `arr.last()` idiom,
-/// made flow-sensitive rather than a stale check-point structural match.
+/// The fact a `let idx = <length field> - k` (k >= 1) proves: `idx + (k-1) <
+/// field`. Sound because the field is an array length (`Field` bound), hence
+/// non-negative, so `field - k` never signed-wraps (`field >= 0` ⇒
+/// `field - k > i32::MIN`). Returned as an ordinary [`ProvenLt`] so [`invalidate`]
+/// drops it if the array is resized before the check — the `arr.last()` idiom,
+/// flow-sensitive rather than a stale check-point match.
 fn len_minus_fact(engine: &Engine, binds: &Binds, node: NodeRef) -> Option<ProvenLt> {
     let NodeRef::Stmt(s) = node else {
         return None;
@@ -1464,17 +1455,13 @@ fn short_circuit_parts(engine: &Engine, node: NodeRef) -> Option<(Operand, Opera
 /// `false` any later dominated check the facts already refute (e.g. `arr[i]`
 /// re-checked after an earlier `arr[i]` with the array unmodified between).
 ///
-/// `facts` are threaded by `&mut` through straight-line positions (an earlier
-/// sibling's harvest refutes a later one) and by clone into conditional /
-/// looping sub-positions (a branch's harvest must not escape). A processed node
-/// that may modify a fact's root drops it ([`invalidate`]), so a resize between
-/// the two checks preserves the later one — the same mod-tracking predicate the
-/// straight-line early-exit elimination above relies on.
+/// Facts thread by `&mut` through straight-line positions, by clone into
+/// conditional ones (an `if` branch, short-circuit RHS, or `match` arm — a
+/// branch's harvest must not escape), and afresh into loop / labeled-block
+/// bodies. [`invalidate`] drops a fact when a processed node may modify its
+/// `var` / `bound` root, so a resize between two checks keeps the later one —
+/// the same mod-tracking the straight-line early-exit elimination above uses.
 fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, binds: &Binds) -> bool {
-    // A panic-guard: harvest its `var + off < bound` fact for later siblings, or
-    // eliminate it when an earlier guard already proved it. Its condition is a
-    // plain comparison (no nested guards) and its `then` diverges, so neither is
-    // walked.
     if let Some(cond) = panic_guard_check(engine, node) {
         if let Some((var, off, bound)) = parse_check(engine, binds, cond) {
             if facts_refute(facts, var, off, bound) {
@@ -1484,15 +1471,12 @@ fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, bind
             facts.push((var, off, bound));
             return false;
         }
-        // Non-parseable guard: its condition still runs unconditionally.
         if let Some(ce) = cond.as_expr() {
             return rbce_walk(engine, NodeRef::Expr(ce), facts, binds);
         }
         return false;
     }
 
-    // A general `if`: the condition runs unconditionally (its facts persist to
-    // siblings); each branch runs conditionally (a clone, discarded after).
     if let Some((cond, then_b, else_b)) = if_parts(engine, node) {
         let mut changed = false;
         if let Some(ce) = cond.as_expr() {
@@ -1506,12 +1490,10 @@ fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, bind
             changed |= rbce_walk(engine, NodeRef::Block(eb), &mut fe, binds);
             invalidate(engine, NodeRef::Block(eb), facts);
         }
-        // Either branch may have modified a fact's root before a later sibling.
         invalidate(engine, NodeRef::Block(then_b), facts);
         return changed;
     }
 
-    // Short-circuit `&&` / `||`: left unconditional, right conditional.
     if let Some((left, right)) = short_circuit_parts(engine, node) {
         let mut changed = false;
         if let Some(le) = left.as_expr() {
@@ -1526,9 +1508,6 @@ fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, bind
         return changed;
     }
 
-    // A loop / labeled block runs its body conditionally and (for a loop)
-    // repeatedly, so outer facts must not enter and inner facts must not escape:
-    // process it as its own region with a fresh fact set.
     let fresh_region = match node {
         NodeRef::Stmt(s) => matches!(engine.body.stmts[s].kind, StmtKind::Loop { .. }),
         NodeRef::Expr(e) => matches!(engine.body.exprs[e].kind, ExprKind::LabeledBlock { .. }),
@@ -1546,11 +1525,10 @@ fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, bind
         return changed;
     }
 
-    // A `match` / `switch` runs its scrutinee unconditionally but each arm
-    // conditionally. Identify the scrutinee child by the node's own fields (not
-    // positionally): a scrutinee promoted to `Operand::Value` yields no child,
-    // so a positional "first child is the scrutinee" guess would misread the
-    // first arm's guard/body as unconditional and leak its facts.
+    // Scrutinee runs unconditionally, arms conditionally. Identify the scrutinee
+    // by the node's fields, not positionally: a scrutinee promoted to
+    // `Operand::Value` yields no child, so a positional guess would misread an
+    // arm's guard/body as unconditional and leak its facts.
     let scrutinee = match node {
         NodeRef::Expr(e) => match &engine.body.exprs[e].kind {
             ExprKind::Match { expr, .. } => Some(*expr),
@@ -1577,14 +1555,8 @@ fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, bind
         return changed;
     }
 
-    // Default: every child runs unconditionally and in order (arithmetic, casts,
-    // field/index reads, assignments, calls, aggregate literals, plain blocks).
-    // Thread facts through each, invalidating after — a harvest by an earlier
-    // child refutes a later one. A `let idx = arr.len() - k` binding harvests
-    // `idx < arr.len()` here, so the last-element / top-of-stack access is
-    // proven in bounds by the same flow-tracked machinery — dropped by
-    // `invalidate` if the array is resized before the check (unlike a
-    // check-point structural match, which would miss the stale length).
+    // Every child runs unconditionally in order; a `let idx = arr.len() - k`
+    // harvests `idx < arr.len()` for the checks that follow it.
     let mut kids = Vec::new();
     engine.body.for_each_child(node, |c| kids.push(c));
     let mut changed = false;
