@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784167138225,
+  "lastUpdate": 1784198512550,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -40757,6 +40757,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/aced94f6a449b4e696cc563b12e0c1879681f269"
         },
         "date": 1784167137653,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16422,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265171,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "481ebc782d4d92e1a2c009accb8f036e3ea790aa",
+          "message": "Merge pull request #1591 from wado-lang/claude/gale-gen-rust-grammar-benchmark-nzht0k\n\nfeat: benchmark Gale against ANTLR4 and oracle-pin real grammars",
+          "timestamp": "2026-07-16T19:32:12+09:00",
+          "tree_id": "f75312d59c9844311e72b2f9360ce9ff00eaa6d5",
+          "url": "https://github.com/wado-lang/wado/commit/481ebc782d4d92e1a2c009accb8f036e3ea790aa"
+        },
+        "date": 1784198512220,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
