@@ -1,0 +1,37 @@
+// A `let r = &b.xs` capture folded to a re-read of `b.xs` is unsound if `b.xs`
+// is rewritten inside a loop that also reads `r`: the write, though textually
+// after the read, precedes it on the next iteration's back-edge. ref_elim's
+// capture interval must extend across the enclosing loop, so `r.v` is NOT
+// folded here and each iteration reads the value written by the previous one.
+use { println, Stdout } from "core:cli";
+
+struct Inner {
+    v: i32,
+}
+
+struct Outer {
+    xs: Inner,
+}
+
+#[inline(never)]
+fn opaque(x: i32) -> i32 {
+    return x;
+}
+
+export fn run() with Stdout {
+    let n = opaque(2);
+    let mut b = Outer { xs: Inner { v: 1 } };
+    let r = &b.xs;
+    let mut i = 0;
+    let mut total = 0;
+    while i < n {
+        total += r.v;
+        b.xs = Inner { v: 999 };
+        i += 1;
+    }
+    println(`{total}`);
+    assert total == 2;
+}
+
+__DATA__
+{"stdout": "2\n"}

@@ -284,6 +284,11 @@ fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Opti
                     return None;
                 }
                 default_arm = Some(arm_idx);
+                // `match` is first-match-wins, so a wildcard matches everything
+                // from this position on: every later arm is dead. Stop here —
+                // collecting their specs would route their values to their own
+                // arms instead of the wildcard default.
+                break;
             }
             // A `Binding` default arm (`n => use(n)`) would need an
             // arm-local `Let n = scrutinee` that `build_switch` doesn't

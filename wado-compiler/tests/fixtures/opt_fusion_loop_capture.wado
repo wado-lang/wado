@@ -1,0 +1,40 @@
+// The fused consumer block carries an unlabeled `break`. If the labeled block
+// being fused contains a loop (here nested inside an if-expression), splicing
+// the consumer inside that loop would retarget the break. The loop-detection
+// guard must see loops in if/match arms, so fusion is refused and `hits` is 100.
+use { println, Stdout } from "core:cli";
+
+#[inline]
+fn f(c: bool) -> Option<i32> {
+    let y = if c {
+        for let j of 0..<5 {
+            if j == 2 {
+                return Option::Some(100);
+            }
+        }
+        0
+    } else {
+        1
+    };
+    if y > 100 {
+        return null;
+    }
+    return Option::Some(y + 7);
+}
+
+export fn run() with Stdout {
+    let mut hits = 0;
+    for let i of 0..<3 {
+        let x = f(i < 5);
+        if let Some(v) = x {
+            hits += v;
+            break;
+        }
+        hits += 1000;
+    }
+    println(`{hits}`);
+    assert hits == 100;
+}
+
+__DATA__
+{"stdout": "100\n"}

@@ -1,0 +1,27 @@
+// `let r = &b.xs` captures the `Inner` object currently in `b.xs`. A write
+// through a `&mut b` alias created before the capture (`m.xs = ...`) rebinds the
+// field to a *new* object but leaves the captured one untouched, so `r.v` stays
+// 1. ref_elim must not fold `r.v` to a re-read of `b.xs` (which would observe
+// the new 999 object): the pre-existing `&mut` borrow replaces the capture, as
+// its alias outlives its creation point.
+use { println, Stdout } from "core:cli";
+
+struct Inner {
+    v: i32,
+}
+
+struct Outer {
+    xs: Inner,
+}
+
+export fn run() with Stdout {
+    let mut b = Outer { xs: Inner { v: 1 } };
+    let m = &mut b;
+    let r = &b.xs;
+    m.xs = Inner { v: 999 };
+    println(`{r.v}`);
+    assert r.v == 1;
+}
+
+__DATA__
+{"stdout": "1\n"}

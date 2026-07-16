@@ -1,0 +1,25 @@
+// Dead-argument elimination drops `helper`'s unused param and, with it, the
+// argument expression `100 / zero`. That argument traps (divide by zero), an
+// observable effect the program is entitled to, so DAE must not delete it: the
+// deletion passes gate on `is_pure_nontrapping_*`, keeping the param alive.
+// The trap must fire at every optimization level, not just -O0.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn opaque(x: i32) -> i32 {
+    return x;
+}
+
+#[inline(never)]
+fn helper(unused: i32) with Stdout {
+    println("helper ran");
+}
+
+export fn run() with Stdout {
+    let zero = opaque(0);
+    helper(100 / zero);
+    println("done");
+}
+
+__DATA__
+{"trapped": true}

@@ -362,7 +362,18 @@ fn is_inline_eligible(
         return false;
     }
 
-    // #[inline(always)] skips all heuristic checks (but still requires a body and non-adapter)
+    // Not recursive — compare using the same fully qualified name used to build
+    // the recursive set, so that cross-module recursive functions are not missed.
+    // This precedes the `#[inline(always)]` short-circuit: inlining a recursive
+    // call only exposes the next recursive call, so an unconditional force would
+    // re-inline every fixed-point iteration and expand without bound (a compiler
+    // stack overflow at higher iteration counts).
+    if recursive_functions.contains(&tir_function_full_name(func)) {
+        return false;
+    }
+
+    // #[inline(always)] skips the remaining heuristic checks (but still requires
+    // a body, a non-adapter, and non-recursion, all checked above)
     if func.inline_hint == InlineHint::Always {
         return true;
     }
@@ -370,12 +381,6 @@ fn is_inline_eligible(
     // Don't inline functions that return Never (!)
     // These are error/abort paths that are never hot, so no performance benefit to inlining
     if type_table.is_never(func.return_type) {
-        return false;
-    }
-
-    // Not recursive — compare using the same fully qualified name used to build
-    // the recursive set, so that cross-module recursive functions are not missed.
-    if recursive_functions.contains(&tir_function_full_name(func)) {
         return false;
     }
 
@@ -821,7 +826,8 @@ pub fn inline_functions(
                 // reads across the splice.
                 let preserving = func.body.as_ref().is_some_and(|b| {
                     reval.iter().all(|i| {
-                        pure_set.contains(&i.call_expr) && !block_contains_loop(b, i.block)
+                        pure_set.contains(&i.call_expr)
+                            && !arena_query::block_contains_loop(b, i.block)
                     })
                 });
                 if !preserving
@@ -1291,22 +1297,6 @@ pub(super) struct InlineRevalInfo {
     pub call_expr: ExprId,
 }
 
-/// Whether any node under `block` (statements and nested expression blocks) is a
-/// `Loop`. A loop-free splice introduces no new value-graph back-edge, so the
-/// caller's `loop_entry_values` stay valid across the inline (see the
-/// graph-preserving gate at the splice site).
-fn block_contains_loop(body: &Body, block: BlockId) -> bool {
-    let mut stack = vec![NodeRef::Block(block)];
-    while let Some(n) = stack.pop() {
-        if let NodeRef::Stmt(s) = n
-            && matches!(body.stmts[s].kind, StmtKind::Loop { .. })
-        {
-            return true;
-        }
-        body.for_each_child(n, |c| stack.push(c));
-    }
-    false
-}
 
 /// Core inlining routine: builds a labeled block (in the caller arena) that
 /// binds each prepared parameter value and executes the spliced callee body

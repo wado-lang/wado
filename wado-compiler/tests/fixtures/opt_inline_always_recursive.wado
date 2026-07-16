@@ -1,0 +1,27 @@
+// A recursive function marked `#[inline(always)]` must not be inlined:
+// inlining a recursive call only exposes the next one, so an unconditional
+// force re-inlines every fixed-point iteration and expands without bound
+// (a compiler stack overflow at -O3's higher iteration count). The recursion
+// check precedes the `#[inline(always)]` short-circuit in `is_inline_eligible`,
+// so the function stays a normal call and the program compiles at every level.
+use { println, Stdout } from "core:cli";
+
+#[inline(always)]
+fn fact(n: i32) -> i32 {
+    if n <= 1 {
+        return 1;
+    }
+    return n * fact(n - 1);
+}
+
+export fn run() with Stdout {
+    let mut acc = 0;
+    for let i of 1..<6 {
+        acc += fact(i);
+    }
+    println(`{acc}`);
+    assert acc == 153;
+}
+
+__DATA__
+{"stdout": "153\n"}

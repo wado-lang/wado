@@ -157,7 +157,10 @@ fn has_only_pure_returns_with_explicit_tail(body: &Body) -> bool {
             match &body.stmts[s].kind {
                 StmtKind::Return { value: None } => return false,
                 StmtKind::Return { value: Some(v) } => {
-                    if !arena_query::is_pure_operand(body, *v) {
+                    // Voiding the function discards the return value's
+                    // evaluation, so a trapping value must keep the function
+                    // value-returning (the trap is observable).
+                    if !arena_query::is_pure_nontrapping_operand(body, *v) {
                         return false;
                     }
                 }

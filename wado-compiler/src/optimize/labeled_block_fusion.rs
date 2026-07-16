@@ -29,7 +29,9 @@ use crate::nir_visitor::NirRefVisitor;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
-use super::arena_query::{has_break_to, is_local, is_local_operand, single_payload_binding};
+use super::arena_query::{
+    block_contains_loop, has_break_to, is_local, is_local_operand, single_payload_binding,
+};
 
 /// `expr_has_break_to` arena adapter.
 fn expr_has_break_to(body: &Body, label: &str, e: ExprId) -> bool {
@@ -74,6 +76,16 @@ impl Rule for LabeledBlockFusionRule {
             else {
                 continue;
             };
+            // `perform_fusion` deletes the `let temp = LB` binding, so the temp
+            // is dead afterwards. The precondition check only inspects the
+            // consumer's arms; a use of the temp anywhere else in the function
+            // (a later statement, another branch) would then read a deleted
+            // local. Fuse only when every mention of the temp lives inside the
+            // consumer statement.
+            let consumer_uses = count_local_uses_in_stmt(engine.body, stmts[i + 1], info.temp_local);
+            if engine.local_reads(info.temp_local).len() != consumer_uses {
+                continue;
+            }
             if yields && i + 2 == stmts.len() {
                 continue;
             }
@@ -647,7 +659,17 @@ fn check_lb_breaks_in_stmt(
             .is_none_or(|v| check_lb_breaks_in_operand(body, v, label, case_index, payload_type)),
         StmtKind::Return { value } => value
             .is_none_or(|v| check_lb_breaks_in_operand(body, v, label, case_index, payload_type)),
-        _ => true,
+        // Descend into statement-position expressions and destructuring
+        // initializers: a `break L: <value>` can hide under a match/switch in
+        // statement position, and `transform_lb_stmt` still rewrites it, so it
+        // must be validated (or the fusion rejected) here too.
+        StmtKind::Expr(op) => {
+            check_lb_breaks_in_operand(body, *op, label, case_index, payload_type)
+        }
+        StmtKind::LetDestructure { value, .. } => {
+            check_lb_breaks_in_operand(body, *value, label, case_index, payload_type)
+        }
+        StmtKind::Continue => true,
     }
 }
 
@@ -726,6 +748,15 @@ fn count_local_uses_in_block(body: &Body, block: BlockId, local_idx: u32) -> usi
     v.count
 }
 
+fn count_local_uses_in_stmt(body: &Body, stmt: StmtId, local_idx: u32) -> usize {
+    let mut v = LocalUseCounter {
+        local_idx,
+        count: 0,
+    };
+    v.visit_node(body, NodeRef::Stmt(stmt));
+    v.count
+}
+
 fn count_local_uses_in_operand(body: &Body, op: Operand, local_idx: u32) -> usize {
     let mut v = LocalUseCounter {
         local_idx,
@@ -783,9 +814,6 @@ fn expr_has_free_unlabeled_loop_exit_operand(body: &Body, op: Operand, loop_dept
 fn expr_has_break_to_operand(body: &Body, label: &str, op: Operand) -> bool {
     op.as_expr()
         .is_some_and(|e| expr_has_break_to(body, label, e))
-}
-fn expr_contains_loop_operand(body: &Body, op: Operand) -> bool {
-    op.as_expr().is_some_and(|e| expr_contains_loop(body, e))
 }
 
 // ---------------------------------------------------------------------------
@@ -1527,42 +1555,6 @@ fn subst_variant_payload_in_expr(
     }
 }
 
-/// Returns `true` if `block` contains a `Loop` statement at any nesting depth.
-pub(super) fn block_contains_loop(body: &Body, block: BlockId) -> bool {
-    body.blocks[block]
-        .stmts
-        .iter()
-        .any(|s| stmt_contains_loop(body, *s))
-}
-
-fn stmt_contains_loop(body: &Body, s: StmtId) -> bool {
-    match &body.stmts[s].kind {
-        StmtKind::Loop { .. } => true,
-        StmtKind::LabeledBlock { block, .. } => block_contains_loop(body, *block),
-        StmtKind::If {
-            then_block,
-            else_block,
-            ..
-        } => {
-            block_contains_loop(body, *then_block)
-                || else_block.is_some_and(|b| block_contains_loop(body, b))
-        }
-        StmtKind::Let { value, .. }
-        | StmtKind::LetDestructure { value, .. }
-        | StmtKind::Return { value: Some(value) } => expr_contains_loop_operand(body, *value),
-        StmtKind::Expr(value) => expr_contains_loop_operand(body, *value),
-        _ => false,
-    }
-}
-
-fn expr_contains_loop(body: &Body, e: ExprId) -> bool {
-    match &body.exprs[e].kind {
-        ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
-            block_contains_loop(body, *block)
-        }
-        _ => false,
-    }
-}
 
 /// Returns `true` if `block` contains a "free" unlabeled `break;` or `continue`
 /// — one not nested inside a `loop {}` within the block itself.

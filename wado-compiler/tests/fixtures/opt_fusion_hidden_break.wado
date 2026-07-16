@@ -1,0 +1,46 @@
+// A `break L: <dynamic value>` can hide under a match/switch in statement
+// position. The break checker must descend such statements (not skip them),
+// or `transform_lb_stmt` would route the dynamic `Some(n)` values to the else
+// branch. `g(A(6))`/`g(A(7))` must yield 6/7 (sum 13), never the 1000 else path.
+use { println, Stdout } from "core:cli";
+
+variant Sig {
+    A(i32),
+    B,
+}
+
+#[inline(never)]
+fn h(n: i32) -> Option<i32> {
+    if n > 5 {
+        return Option::Some(n);
+    }
+    return null;
+}
+
+fn g(s: Sig) -> Option<i32> {
+    match s {
+        Sig::A(n) => {
+            let r = h(n);
+            return r;
+        },
+        Sig::B => {},
+    };
+    return Option::Some(10);
+}
+
+export fn run() with Stdout {
+    let mut got = 0;
+    for let i of 6..<8 {
+        let x = g(Sig::A(i));
+        if let Some(v) = x {
+            got += v;
+        } else {
+            got += 1000;
+        }
+    }
+    println(`{got}`);
+    assert got == 13;
+}
+
+__DATA__
+{"stdout": "13\n"}

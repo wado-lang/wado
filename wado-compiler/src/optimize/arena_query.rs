@@ -249,9 +249,45 @@ fn node_mentions_local(body: &Body, node: NodeRef, idx: u32) -> bool {
     found
 }
 
+/// Whether any `Loop` statement is nested anywhere under `block`. Exhaustive
+/// via `for_each_child`, so it sees loops in `if`/`match`/`switch` arms, break
+/// values, and every other position — not just direct `Block`/`LabeledBlock`
+/// nesting. Shared by the inliner (cold-cost) and labeled-block fusion
+/// (unlabeled-break capture guard).
+pub(super) fn block_contains_loop(body: &Body, block: BlockId) -> bool {
+    let mut stack = vec![NodeRef::Block(block)];
+    while let Some(n) = stack.pop() {
+        if let NodeRef::Stmt(s) = n
+            && matches!(body.stmts[s].kind, StmtKind::Loop { .. })
+        {
+            return true;
+        }
+        body.for_each_child(n, |c| stack.push(c));
+    }
+    false
+}
+
 /// [`is_pure_expr`] for an operand: a promoted constant is pure.
 pub(super) fn is_pure_operand(body: &Body, op: Operand) -> bool {
     op.as_expr().is_none_or(|e| is_pure_expr(body, e))
+}
+
+/// True when the expression has no observable effect *and cannot trap*. A trap
+/// is an observable effect that must survive, so this — not [`is_pure_expr`] —
+/// is the predicate for passes that *delete* an expression (dead-argument
+/// elimination, dead-return-value elimination, write-only-local elision):
+/// dropping a `100 / x` or `arr[i]` erases a runtime trap the program is
+/// entitled to. `is_pure_expr` stays trap-agnostic for reordering/CSE, which
+/// keep the expression (its trap still fires). The trap dimension comes from the
+/// shared [`ModRef`] oracle so the taxonomy lives in one place.
+pub(super) fn is_pure_nontrapping_expr(body: &Body, id: ExprId) -> bool {
+    is_pure_expr(body, id) && !super::mod_ref::ModRef::of_expr(body, id).may_trap
+}
+
+/// [`is_pure_nontrapping_expr`] for an operand: a promoted constant is pure and
+/// cannot trap.
+pub(super) fn is_pure_nontrapping_operand(body: &Body, op: Operand) -> bool {
+    op.as_expr().is_none_or(|e| is_pure_nontrapping_expr(body, e))
 }
 
 /// True when the expression at `id` and every sub-expression has no observable

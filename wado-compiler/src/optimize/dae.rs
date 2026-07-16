@@ -311,9 +311,11 @@ fn validate_call(
                 if !*dead_at_i {
                     continue;
                 }
+                // Dropping the argument erases its evaluation, so a trapping
+                // (but side-effect-free) argument must keep the param alive.
                 let pure = match args.get(i).map(|a| a.expr) {
                     Some(Operand::Value(_)) => true,
-                    Some(Operand::Expr(e)) => arena_query::is_pure_expr(body, e),
+                    Some(Operand::Expr(e)) => arena_query::is_pure_nontrapping_expr(body, e),
                     None => false,
                 };
                 if !pure {
@@ -341,7 +343,7 @@ fn validate_call(
             if drops_receiver
                 && !receiver
                     .as_expr()
-                    .is_none_or(|e| arena_query::is_pure_expr(body, e))
+                    .is_none_or(|e| arena_query::is_pure_nontrapping_expr(body, e))
             {
                 rejected.insert(key);
             } else {
@@ -352,7 +354,7 @@ fn validate_call(
                         continue;
                     }
                     match args.get(i - 1) {
-                        Some(arg) if arena_query::is_pure_operand(body, arg.expr) => {}
+                        Some(arg) if arena_query::is_pure_nontrapping_operand(body, arg.expr) => {}
                         _ => {
                             rejected.insert(key);
                             break;
