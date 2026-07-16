@@ -1,0 +1,64 @@
+// Regression: copy_prop's scope-stability check recorded a `&mut y` borrow as
+// a point event at the borrow's statement index; a later write through the
+// alias (`r.f = 5`) was attributed to `r` only. A `let x = y` binding sitting
+// between the borrow and the write then looked "scope stable" and the copy was
+// propagated, making `x` observe the write. The `&mut`-alias map
+// (`arena_query::MutRefAliases`) now attributes through-alias writes back to
+// `y` at the write's own index.
+//
+// `Big` has 16 fields so its `$value_copy$Big` helper stays un-inlined and the
+// trivial `let x = y` copy binding actually reaches copy_prop; the conditional
+// rebind keeps `r` alive past `ref_elim` / SROA.
+
+struct Big {
+    a: i32, b: i32, c: i32, d: i32,
+    e: i32, f: i32, g: i32, h: i32,
+    i: i32, j: i32, k: i32, l: i32,
+    m: i32, n: i32, o: i32, p: i32,
+}
+
+#[inline(never)]
+fn make(v: i32) -> Big {
+    return Big {
+        a: v, b: v, c: v, d: v,
+        e: v, f: v, g: v, h: v,
+        i: v, j: v, k: v, l: v,
+        m: v, n: v, o: v, p: v,
+    };
+}
+
+#[inline(never)]
+fn geta(x: Big) -> i32 {
+    return x.a;
+}
+
+#[inline(never)]
+fn cond() -> bool {
+    return true;
+}
+
+test "copy of an aliased struct captures the pre-write value" {
+    let mut y = make(1);
+    let mut z = make(2);
+    let mut r = &mut z;
+    if cond() {
+        r = &mut y;
+    }
+    let x = y;
+    r.a = 50;
+    assert geta(x) == 1;
+    assert y.a == 50;
+    assert z.a == 2;
+}
+
+test "straight-line alias write after the copy" {
+    let mut y = make(3);
+    let r = &mut y;
+    let x = y;
+    r.a = 60;
+    assert geta(x) == 3;
+    assert y.a == 60;
+}
+
+__DATA__
+{"test": {}}

@@ -1,0 +1,57 @@
+// A unit-typed argument is erased from the WIR call (unit params have no
+// Wasm representation), but its expression must still evaluate: arguments
+// are evaluated left-to-right regardless of type. Pinned shapes: an
+// assignment argument (`touch(p.f = 5)`), a unit-returning call argument
+// (`touch(bump())`), and evaluation-order preservation around the erased
+// slot (`mixed(mark(1), mark_unit(2), mark(3))` logs 1,2,3).
+use { println, Stdout } from "core:cli";
+
+global mut LOG: i32 = 0;
+
+struct P {
+    f: i32,
+}
+
+#[inline(never)]
+fn touch(u: ()) {
+}
+
+#[inline(never)]
+fn bump() {
+    LOG = LOG * 10 + 9;
+}
+
+#[inline(never)]
+fn mark(step: i32) -> i32 {
+    LOG = LOG * 10 + step;
+    return step;
+}
+
+#[inline(never)]
+fn mark_unit(step: i32) {
+    LOG = LOG * 10 + step;
+}
+
+#[inline(never)]
+fn mixed(a: i32, u: (), b: i32) -> i32 {
+    return a + b;
+}
+
+export fn run() with Stdout {
+    let mut p = P { f: 1 };
+    touch(p.f = 5);
+    assert p.f == 5;
+
+    touch(bump());
+    assert LOG == 9;
+
+    LOG = 0;
+    let r = mixed(mark(1), mark_unit(2), mark(3));
+    assert r == 4;
+    assert LOG == 123;
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

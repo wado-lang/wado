@@ -1,0 +1,33 @@
+// Regression: a call inside an `if` arm can mutate a local passed to it
+// (`grow` pushes through `&mut`), so the branch merge must invalidate
+// that local's field facts: `a.len()` is 3 or 4 depending on `c` and
+// must not fold to the pre-branch constant 3.
+
+use { println, Stdout } from "core:cli";
+
+#[inline("never")]
+fn grow(xs: &mut List<i32>) {
+    xs.push(4);
+}
+
+#[inline("never")]
+fn f(c: bool) -> i32 {
+    let mut a: List<i32> = [1, 2, 3];
+    if c {
+        grow(&mut a);
+    }
+    return a.len();
+}
+
+export fn run() with Stdout {
+    println(`{f(false)} {f(true)}`);
+}
+
+__DATA__
+{
+    "stdout": "3 4\n",
+    "wir_not_expect:O2": [
+        "return 3;",
+        "return 4;"
+    ]
+}

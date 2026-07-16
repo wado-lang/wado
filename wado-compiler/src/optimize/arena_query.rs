@@ -348,3 +348,397 @@ fn is_pure_block(body: &Body, block: BlockId) -> bool {
             _ => false,
         })
 }
+
+// ---------------------------------------------------------------------------
+// Mutated-root queries
+// ---------------------------------------------------------------------------
+//
+// The canonical "which locals may a subtree mutate" facility, shared so every
+// consumer applies one witness taxonomy, one bodyless-callee fallback, and one
+// `&mut`-alias resolution. Direct consumers today: `copy_prop` (scope-stability
+// scan and usage marking). Consolidation target for the hand-rolled variants in
+// `const_folding::record_loop_write` and `condition_implication::node_modifies`.
+//
+// Receiver-wrapper caveat: at reification a `&mut self` receiver is
+// `&mut`-typed or an explicit `Unary(MutRef)` (`elaborator/method_lookup.rs`,
+// `adjust_receiver_for_self_kind_static`), but the boxing rewrite erases the
+// `&mut`/`&` wrapper distinction for boxed-scalar receivers, so at NIR a
+// mutating receiver can arrive as a bare shared `&` borrow. Mutation is
+// therefore recognized by the callee's *declared* pre-boxing bit (the oracle
+// verdict / the call site's `is_mut` bit), never by the wrapper shape alone;
+// with a mutating verdict the attribution sees through either wrapper to the
+// storage root. This is also why the bodyless fallback trusts `is_mut` rather
+// than the — boxing-erased — `&mut` type.
+
+/// Flow-insensitive `&mut`-alias map: for every `&mut`-typed local, the set of
+/// function locals its stored reference may point into.
+///
+/// Built in one walk + a fixpoint over ref-to-ref copies:
+///
+/// - `let r = &mut place` / `r = &mut place` contributes the place's root
+///   (or, when the place derefs another ref local, that local's own roots).
+/// - `let r2 = r` between ref locals copies `r`'s roots.
+/// - Every other definition shape (a call returning `&mut`, a ref read back
+///   out of an aggregate, a pattern binding, an `if` producing a ref) makes
+///   the local's provenance *unknown*: a write through it may hit any local
+///   whose `&mut` was ever taken (`borrowed`).
+///
+/// Parameters are external: a caller cannot hold a `&mut` into this frame's
+/// fresh locals, so a mut-ref parameter aliases no function local.
+#[derive(Debug, Default)]
+pub(super) struct MutRefAliases {
+    entries: crate::hashmap::IndexMap<u32, AliasEntry>,
+    /// Locals whose storage some `&mut` may alias — the conservative target
+    /// set for writes through an unknown-provenance reference.
+    borrowed: IndexSet<u32>,
+}
+
+#[derive(Debug, Default)]
+struct AliasEntry {
+    roots: IndexSet<u32>,
+    copies: IndexSet<u32>,
+    unknown: bool,
+    saw_def: bool,
+}
+
+/// Root of a written-through place chain (an `Assign` target's receiver).
+enum WriteRoot {
+    /// Chain bottoms out at a local (derefs of ref locals resolve through
+    /// [`MutRefAliases`]).
+    Local(u32),
+    /// Chain passed a deref of a non-place (a call result, a ref stored in an
+    /// aggregate): the written storage may belong to any borrowed local.
+    Aliased,
+    /// Fresh temporary storage (a literal receiver, no deref): mutating it
+    /// cannot touch a named local.
+    Temp,
+}
+
+fn write_root(body: &Body, e: ExprId, derefed: bool) -> WriteRoot {
+    match &body.exprs[e].kind {
+        ExprKind::Local { index, .. } => WriteRoot::Local(*index),
+        ExprKind::Unary {
+            op: NirUnaryOp::Deref,
+            expr: inner,
+        } => match inner.as_expr() {
+            Some(ie) => write_root(body, ie, true),
+            None => WriteRoot::Aliased,
+        },
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+            expr: inner,
+        }
+        | ExprKind::Cast { expr: inner, .. }
+        | ExprKind::FieldAccess { expr: inner, .. }
+        | ExprKind::VariantPayload { expr: inner, .. }
+        | ExprKind::Index { expr: inner, .. } => match inner.as_expr() {
+            Some(ie) => write_root(body, ie, derefed),
+            None if derefed => WriteRoot::Aliased,
+            None => WriteRoot::Temp,
+        },
+        _ if derefed => WriteRoot::Aliased,
+        _ => WriteRoot::Temp,
+    }
+}
+
+impl MutRefAliases {
+    /// Build the alias map for one function body. `locals` is the owning
+    /// function's local table; locals `0..param_count` are its parameters
+    /// (the layout `wir_build` also relies on).
+    pub(super) fn of_body(
+        body: &Body,
+        locals: &[crate::nir::NirLocal],
+        param_count: usize,
+        type_table: &crate::tir::TypeTable,
+    ) -> Self {
+        use crate::tir::ResolvedType;
+        let mut map = Self::default();
+        for (i, l) in locals.iter().enumerate().skip(param_count) {
+            if matches!(type_table.get(l.type_id), ResolvedType::MutRef(_)) {
+                map.entries.entry(i as u32).or_default();
+            }
+        }
+        let mut borrowed_refs: IndexSet<u32> = IndexSet::default();
+        map.build_walk(body, NodeRef::Block(body.root), &mut borrowed_refs);
+        // A ref-typed local with no recognized definition (a pattern binding,
+        // an engine-synthesized slot) has unknown provenance.
+        for e in map.entries.values_mut() {
+            if !e.saw_def {
+                e.unknown = true;
+            }
+        }
+        // Fixpoint over ref-to-ref copies.
+        loop {
+            let mut changed = false;
+            let keys: Vec<u32> = map.entries.keys().copied().collect();
+            for k in &keys {
+                let copies: Vec<u32> = map.entries[k].copies.iter().copied().collect();
+                for c in copies {
+                    let Some(src) = map.entries.get(&c) else {
+                        continue;
+                    };
+                    let add_roots: Vec<u32> = src.roots.iter().copied().collect();
+                    let add_unknown = src.unknown;
+                    let e = map.entries.get_mut(k).expect("key from entries");
+                    for r in add_roots {
+                        changed |= e.roots.insert(r);
+                    }
+                    if add_unknown && !e.unknown {
+                        e.unknown = true;
+                        changed = true;
+                    }
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        // Storage reachable through a borrowed ref local is borrowed too.
+        for r in borrowed_refs {
+            if let Some(e) = map.entries.get(&r) {
+                let roots: Vec<u32> = e.roots.iter().copied().collect();
+                for root in roots {
+                    map.borrowed.insert(root);
+                }
+            }
+        }
+        map
+    }
+
+    fn build_walk(&mut self, body: &Body, node: NodeRef, borrowed_refs: &mut IndexSet<u32>) {
+        match node {
+            NodeRef::Stmt(s) => {
+                if let StmtKind::Let {
+                    local_index, value, ..
+                } = &body.stmts[s].kind
+                {
+                    self.classify_def(body, *local_index, *value);
+                }
+            }
+            NodeRef::Expr(e) => match &body.exprs[e].kind {
+                ExprKind::Assign { target, value } => {
+                    if let ExprKind::Local { index, .. } = &body.exprs[*target].kind {
+                        self.classify_def(body, *index, *value);
+                    }
+                }
+                ExprKind::Unary {
+                    op: NirUnaryOp::MutRef,
+                    expr: inner,
+                } => {
+                    if let Some(ie) = inner.as_expr() {
+                        self.record_borrow_target(body, ie, borrowed_refs);
+                    }
+                }
+                ExprKind::Call { args, .. } | ExprKind::MethodCall { args, .. } => {
+                    for arg in args {
+                        if arg.is_mut
+                            && let Some(ae) = arg.expr.as_expr()
+                        {
+                            self.record_borrow_target(body, ae, borrowed_refs);
+                        }
+                    }
+                }
+                _ => {}
+            },
+            NodeRef::Block(_) | NodeRef::Pat(_) => {}
+        }
+        let mut kids = Vec::new();
+        body.for_each_child(node, |c| kids.push(c));
+        for c in kids {
+            self.build_walk(body, c, borrowed_refs);
+        }
+    }
+
+    /// Record the storage a `&mut place` (or `mut`-flagged argument) may
+    /// alias: a plain local root goes into `borrowed`; a chain through a ref
+    /// local defers to that local's resolved roots (`borrowed_refs`).
+    fn record_borrow_target(&mut self, body: &Body, e: ExprId, borrowed_refs: &mut IndexSet<u32>) {
+        if let WriteRoot::Local(root) = write_root(body, e, false) {
+            if self.entries.contains_key(&root) {
+                borrowed_refs.insert(root);
+            } else {
+                self.borrowed.insert(root);
+            }
+        }
+    }
+
+    fn classify_def(&mut self, body: &Body, local: u32, value: Operand) {
+        if !self.entries.contains_key(&local) {
+            return;
+        }
+        enum Def {
+            Root(u32),
+            Copy(u32),
+            Unknown,
+        }
+        let def = match value.as_expr().map(|ve| &body.exprs[ve].kind) {
+            Some(ExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr: inner,
+            }) => match inner.as_expr().map(|ie| write_root(body, ie, false)) {
+                Some(WriteRoot::Local(root)) => {
+                    if self.entries.contains_key(&root) {
+                        Def::Copy(root)
+                    } else {
+                        Def::Root(root)
+                    }
+                }
+                Some(WriteRoot::Temp | WriteRoot::Aliased) | None => Def::Unknown,
+            },
+            Some(ExprKind::Local { index, .. }) => Def::Copy(*index),
+            Some(_) | None => Def::Unknown,
+        };
+        let e = self.entries.get_mut(&local).expect("checked above");
+        e.saw_def = true;
+        match def {
+            Def::Root(r) => {
+                e.roots.insert(r);
+            }
+            Def::Copy(r) => {
+                e.copies.insert(r);
+            }
+            Def::Unknown => e.unknown = true,
+        }
+    }
+
+    /// Invoke `sink` with `root` plus every local the stored `&mut` in `root`
+    /// may point into (all of `borrowed` for unknown provenance).
+    fn expand(&self, root: u32, sink: &mut impl FnMut(u32)) {
+        sink(root);
+        if let Some(e) = self.entries.get(&root) {
+            for &r in &e.roots {
+                sink(r);
+            }
+            if e.unknown {
+                for &b in &self.borrowed {
+                    sink(b);
+                }
+            }
+        }
+    }
+}
+
+/// One mutation of a local root: a whole-value rebind (`x = v`) or a write
+/// into storage the root owns or aliases (field / index / payload / deref
+/// store, `&mut` escape, mutating callee channel).
+#[derive(Debug, Clone, Copy)]
+pub(super) enum RootMutation {
+    Rebind(u32),
+    Through(u32),
+}
+
+impl RootMutation {
+    pub(super) fn local(self) -> u32 {
+        match self {
+            RootMutation::Rebind(l) | RootMutation::Through(l) => l,
+        }
+    }
+}
+
+fn is_mut_ref_typed(body: &Body, e: ExprId, type_table: &crate::tir::TypeTable) -> bool {
+    matches!(
+        type_table.get(body.exprs[e].type_id),
+        crate::tir::ResolvedType::MutRef(_)
+    )
+}
+
+/// Report every local root the expression node `id` itself may mutate (the
+/// caller's walk drives traversal into children). The single shared
+/// witness→root dispatch: one root resolution (a storage chain, expanded
+/// through [`MutRefAliases`]) and one bodyless-callee fallback.
+///
+/// Bodyless-callee fallback (`verdict: None`): trust the call site's declared
+/// `mut` bit for arguments. The `&mut`-type test used for receivers /
+/// indirect arguments has false negatives for arguments the lowering boxed
+/// (`&mut scalar` arrives `Box`-typed with `is_mut` still set, and the box
+/// cell IS the caller-visible storage), so where the declared bit exists it
+/// is the more faithful signal; where it does not (receivers, indirect call
+/// operands), the `&mut` type is all there is.
+pub(super) fn for_each_mutated_root(
+    body: &Body,
+    id: ExprId,
+    type_table: &crate::tir::TypeTable,
+    oracle: &super::value_copy::mutation::MutationOracle<'_>,
+    aliases: &MutRefAliases,
+    sink: &mut impl FnMut(RootMutation),
+) {
+    use super::value_copy::mutation::{Witness, expr_witnesses};
+    let through_storage = |sink: &mut dyn FnMut(RootMutation), e: ExprId| {
+        // A rootless chain here is a fresh temporary (e.g. a `Box { … }`
+        // literal receiver): mutating it cannot touch a named local.
+        if let Some(root) = storage_root(body, e) {
+            aliases.expand(root, &mut |r| sink(RootMutation::Through(r)));
+        }
+    };
+    expr_witnesses(body, id, oracle, &mut |w| match w {
+        Witness::Rebind(l) => sink(RootMutation::Rebind(l)),
+        Witness::Write(inner) => {
+            let Some(ie) = inner.as_expr() else {
+                return;
+            };
+            match write_root(body, ie, false) {
+                WriteRoot::Local(root) => {
+                    aliases.expand(root, &mut |r| sink(RootMutation::Through(r)));
+                }
+                WriteRoot::Aliased => {
+                    for &b in &aliases.borrowed {
+                        sink(RootMutation::Through(b));
+                    }
+                }
+                WriteRoot::Temp => {}
+            }
+        }
+        Witness::MutBorrow(e) => through_storage(sink, e),
+        Witness::CalleeArg {
+            expr,
+            verdict,
+            is_mut,
+        } => {
+            if verdict.unwrap_or(is_mut) {
+                through_storage(sink, expr);
+            }
+        }
+        // The elaborator guarantees a `&mut self` receiver is `&mut`-typed or
+        // an explicit `MutRef` at reification, but the boxing rewrite erases
+        // the `&mut`/`&` wrapper distinction for boxed-scalar receivers (see
+        // the `mutation.rs` module doc), so a mutating receiver can appear as
+        // a shared `Ref` here. `through_storage` sees through either wrapper
+        // to the storage root, which is what soundness requires.
+        Witness::Receiver { expr, verdict } => {
+            if verdict.unwrap_or_else(|| is_mut_ref_typed(body, expr, type_table)) {
+                through_storage(sink, expr);
+            }
+        }
+        Witness::IndirectArg(e) => {
+            if is_mut_ref_typed(body, e, type_table) {
+                through_storage(sink, e);
+            }
+        }
+    });
+}
+
+/// Every local possibly mutated anywhere in the subtree at `node` — the
+/// consolidation query for pass-local "loop write" / "modifies" scans.
+// Canonical implementation ahead of its consumers: `const_folding`'s
+// `record_loop_write` and `condition_implication`'s `node_modifies` migrate
+// onto it next.
+#[allow(dead_code)]
+pub(super) fn locals_possibly_mutated(
+    body: &Body,
+    node: NodeRef,
+    type_table: &crate::tir::TypeTable,
+    oracle: &super::value_copy::mutation::MutationOracle<'_>,
+    aliases: &MutRefAliases,
+) -> IndexSet<u32> {
+    let mut out = IndexSet::default();
+    let mut stack = vec![node];
+    while let Some(n) = stack.pop() {
+        if let NodeRef::Expr(e) = n {
+            for_each_mutated_root(body, e, type_table, oracle, aliases, &mut |rm| {
+                out.insert(rm.local());
+            });
+        }
+        body.for_each_child(n, |c| stack.push(c));
+    }
+    out
+}

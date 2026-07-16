@@ -1,0 +1,50 @@
+// Test: variant SROA accepts mutually tail-recursive candidates.
+//
+// `even_step` and `odd_step` tail-call each other, so a pessimistic
+// grow-from-leaves fix-point can never seed either (each is blocked on the
+// other in round 1). The optimistic assume-then-refute fix-point keeps both:
+// each one's tail call targets the other, which stays assumed. Both must get
+// the multi-value ABI.
+
+#[inline("never")]
+fn even_step(n: i32) -> Result<i32, String> {
+    if n < 0 {
+        return Result::<i32, String>::Err("neg");
+    }
+    if n == 0 {
+        return Result::<i32, String>::Ok(1);
+    }
+    return odd_step(n - 1);
+}
+
+#[inline("never")]
+fn odd_step(n: i32) -> Result<i32, String> {
+    if n == 0 {
+        return Result::<i32, String>::Ok(0);
+    }
+    return even_step(n - 1);
+}
+
+#[inline("never")]
+fn is_even(n: i32) -> i32 {
+    let r = even_step(n);
+    if let Ok(v) = r {
+        return v;
+    }
+    return -1;
+}
+
+export fn run() {
+    assert is_even(4) == 1;
+    assert is_even(5) == 0;
+    assert is_even(-1) == -1;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "/even_step\" = fn(i32) -> [i32, i32, ref null \"core:prelude/string.wado//String\"]",
+        "/odd_step\" = fn(i32) -> [i32, i32, ref null \"core:prelude/string.wado//String\"]"
+    ]
+}

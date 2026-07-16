@@ -1,0 +1,38 @@
+// HFS pre-call write-back vs. arg effects: the inlined `bump_val` arg writes
+// the scalar, so the write-back for `consume` must run between the args and
+// the call — the call inputs are hoisted into temps to make room. Hoisting
+// the write-back before the whole statement would let `consume` read the
+// pre-bump field.
+
+struct Counter {
+    x: i32,
+    y: i32,
+}
+
+fn bump_val(c: &mut Counter) -> i32 {
+    c.x += 1;
+    return c.x;
+}
+
+#[inline(never)]
+fn consume(c: &mut Counter, v: i32) -> i32 {
+    return c.x + v;
+}
+
+export fn run() {
+    let mut c = Counter { x: 1, y: 0 };
+    let mut total = 0;
+    for let mut i = 0; i < 2; i += 1 {
+        c.x += 1;
+        total += consume(&mut c, bump_val(&mut c));
+        total += c.x;
+    }
+    assert total == 24, `expected 24, got {total}`;
+    assert c.x == 5, `expected 5, got {c.x}`;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["__hfs_x"]
+}

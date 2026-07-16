@@ -29,7 +29,14 @@ use crate::wir::{
     WirFuncType, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId, WirVariantType,
 };
 
-use super::util::collect_pinned_func_ids;
+use super::util::{collect_pinned_func_ids, is_root_observable};
+
+/// Result-vector cap for the shared (homogeneous) layout:
+/// 1 discriminant + 3 shared payload slots.
+const MAX_SHARED_RESULT_FIELDS: usize = 4;
+/// Result-vector cap for the per-case layout:
+/// 1 discriminant + up to 7 per-case payload slots.
+const MAX_PER_CASE_RESULT_FIELDS: usize = 8;
 
 /// Variant-return SROA (Scalar Replacement of Aggregates).
 ///
@@ -88,6 +95,7 @@ pub(super) fn sroa_variant_returns(module: &mut WirPackage) {
 }
 
 /// Information about a variant-return SROA candidate function.
+#[derive(Clone)]
 struct SroaCandidate {
     /// Index into `module.functions`.
     func_array_idx: usize,
@@ -113,12 +121,11 @@ struct SroaCandidate {
 }
 
 /// Additional info needed for variant SROA.
+#[derive(Clone)]
 struct VariantSroaInfo {
     /// WIR type indices of the case struct types (index = case discriminant).
     case_type_indices: Vec<Option<u32>>,
-    /// Number of payload fields per case.
-    case_payload_counts: Vec<usize>,
-    /// Maximum payload count across all cases.
+    /// Total payload slot count in the multi-value result.
     max_payload_count: usize,
     /// Per-case payload slot offsets in the multi-value result.
     /// `case_slot_offsets[case_discriminant]` is the starting index (0-based)
@@ -141,47 +148,30 @@ struct VariantReplacement {
 
 /// Returns true if a `WirType` is a valid Wasm value type for multi-value returns.
 ///
-/// Primitive scalars (i32, i64, f32, f64) are always eligible.
-/// Concrete GC refs (`ref $T`, `ref null $T`) are also eligible: Wasm multi-value
-/// returns support any value type, including GC refs. This allows SROA of structs
-/// with GC ref fields, such as tuples containing String values.
-/// Abstract heap refs (`ref null struct`, etc.) are excluded as they lack
-/// the precise type information needed for `StructGet` replacement.
-pub(super) fn is_eligible_field_type(ty: &WirType) -> bool {
-    !matches!(ty, WirType::AbstractRef { .. } | WirType::Unit)
-}
-
-/// Structural equality for `WirType` (not derived because `WirTypeId` has no `PartialEq`).
-fn wir_types_equal(a: &WirType, b: &WirType) -> bool {
-    match (a, b) {
-        (WirType::I8, WirType::I8)
-        | (WirType::I16, WirType::I16)
-        | (WirType::I32, WirType::I32)
-        | (WirType::I64, WirType::I64)
-        | (WirType::U8, WirType::U8)
-        | (WirType::U16, WirType::U16)
-        | (WirType::U32, WirType::U32)
-        | (WirType::U64, WirType::U64)
-        | (WirType::F32, WirType::F32)
-        | (WirType::F64, WirType::F64)
-        | (WirType::Bool, WirType::Bool)
-        | (WirType::Char, WirType::Char)
-        | (WirType::Unit, WirType::Unit) => true,
-        (
-            WirType::Ref {
-                type_id: a_id,
-                nullable: a_null,
-            },
-            WirType::Ref {
-                type_id: b_id,
-                nullable: b_null,
-            },
-        ) => a_id.index() == b_id.index() && a_null == b_null,
-        (WirType::Enum { type_id: a_id }, WirType::Enum { type_id: b_id })
-        | (WirType::Flags { type_id: a_id }, WirType::Flags { type_id: b_id }) => {
-            a_id.index() == b_id.index()
-        }
-        _ => false,
+/// Whitelist: every type here has a Wasm value-type representation and a
+/// default padding value in [`default_value_for_type`]. Concrete GC refs are
+/// eligible (Wasm multi-value returns support any value type). Abstract heap
+/// refs are excluded as they lack the precise type information needed for
+/// `StructGet` replacement; `Unit` has no Wasm representation.
+fn is_eligible_field_type(ty: &WirType) -> bool {
+    match ty {
+        WirType::I8
+        | WirType::I16
+        | WirType::I32
+        | WirType::I64
+        | WirType::U8
+        | WirType::U16
+        | WirType::U32
+        | WirType::U64
+        | WirType::F32
+        | WirType::F64
+        | WirType::V128
+        | WirType::Bool
+        | WirType::Char
+        | WirType::Enum { .. }
+        | WirType::Flags { .. }
+        | WirType::Ref { .. } => true,
+        WirType::AbstractRef { .. } | WirType::Unit => false,
     }
 }
 
@@ -238,66 +228,110 @@ struct ReturnTempStats {
 /// from the surrounding `self.pos = __hfs_pos_X` HFS write-back, so they
 /// all pass these checks. `Call`-shaped values fail check (2) — a sub-call
 /// reordered past a `StructSet` could observe different state.
-fn reads_only_local_state(expr: &WirInstr) -> bool {
-    match expr {
-        // Loads from heap / memory / GC state.
+///
+/// Values that can *trap* (division, casts, truncations, …) still qualify:
+/// a trap depends only on the locally-read operands, not on heap state.
+/// [`find_paired_return`] separately forbids relocating a trap-capable
+/// value past intervening statements, where the reorder would move the
+/// trap across observable effects or control-flow exits.
+fn is_root_heap_read(expr: &WirInstr) -> bool {
+    matches!(
+        expr,
         WirInstr::StructGet { .. }
-        | WirInstr::ArrayGet { .. }
-        | WirInstr::ArrayGetS { .. }
-        | WirInstr::ArrayGetU { .. }
-        | WirInstr::ArrayLen(_)
-        | WirInstr::I32Load { .. }
-        | WirInstr::I32Load8U { .. }
-        | WirInstr::I32Load8S { .. }
-        | WirInstr::I32Load16U { .. }
-        | WirInstr::I32Load16S { .. }
-        | WirInstr::I64Load { .. }
-        | WirInstr::V128Load { .. }
-        | WirInstr::GlobalGet { .. }
-        | WirInstr::TableGet { .. }
-        // `memory.size` observes the post-growth size of linear memory;
-        // moving it past an intervening `memory.grow` would observe a
-        // different value.
-        | WirInstr::MemorySize => false,
-        // Calls — observable + might depend on intervening state.
-        WirInstr::Call { .. }
-        | WirInstr::CallIndirect { .. }
-        | WirInstr::CallRef { .. } => false,
-        // Stores — observable in the moving-past-intervening sense too:
-        // a relocated store would mutate state at a different program
-        // point. Reject conservatively.
-        WirInstr::GlobalSet { .. }
-        | WirInstr::StructSet { .. }
-        | WirInstr::ArraySet { .. }
-        | WirInstr::ArrayCopy { .. }
-        | WirInstr::ArrayFill { .. }
-        | WirInstr::TableSet { .. }
-        | WirInstr::I32Store { .. }
-        | WirInstr::I32Store8 { .. }
-        | WirInstr::I32Store16 { .. }
-        | WirInstr::I64Store { .. }
-        | WirInstr::V128Store { .. }
-        | WirInstr::MemoryGrow(_)
-        | WirInstr::MemoryFill { .. } => false,
-        // Control-flow exits embedded in a value would be bizarre — reject.
-        WirInstr::Return { .. }
-        | WirInstr::Br { .. }
-        | WirInstr::BrIf { .. }
-        | WirInstr::BrTable { .. }
-        | WirInstr::Unreachable => false,
-        // Anything else (constants, arithmetic, ref ops, `StructNew` and
-        // `ArrayNew*` allocations, `RefAsNonNull`, `RefCast`, `LocalGet`
-        // / `LocalSet` / `LocalTee` — the last three are tracked
-        // explicitly by `collect_local_io`) is fine to relocate provided
-        // its children are.
-        _ => {
-            let mut ok = true;
-            expr.for_each_child(&mut |child| {
-                if ok && !reads_only_local_state(child) {
-                    ok = false;
+            | WirInstr::ArrayGet { .. }
+            | WirInstr::ArrayGetS { .. }
+            | WirInstr::ArrayGetU { .. }
+            | WirInstr::ArrayLen(_)
+            | WirInstr::I32Load { .. }
+            | WirInstr::I32Load8U { .. }
+            | WirInstr::I32Load8S { .. }
+            | WirInstr::I32Load16U { .. }
+            | WirInstr::I32Load16S { .. }
+            | WirInstr::I64Load { .. }
+            | WirInstr::V128Load { .. }
+            | WirInstr::GlobalGet { .. }
+            | WirInstr::TableGet { .. }
+            // `memory.size` observes the post-growth size of linear memory;
+            // moving it past an intervening `memory.grow` would observe a
+            // different value.
+            | WirInstr::MemorySize
+    )
+}
+
+fn reads_only_local_state(expr: &WirInstr) -> bool {
+    // Internal `LocalSet` / `LocalTee` temps are fine: `collect_local_io`
+    // tracks their reads / writes for the disjointness check against
+    // intervening statements. Everything else observable at the root
+    // (calls, stores, control-flow exits, traps-as-statements) or reading
+    // non-local state pins the value to its original program point.
+    if !matches!(expr, WirInstr::LocalSet { .. } | WirInstr::LocalTee { .. })
+        && (is_root_observable(expr) || is_root_heap_read(expr))
+    {
+        return false;
+    }
+    let mut ok = true;
+    expr.for_each_child(&mut |child| {
+        if ok && !reads_only_local_state(child) {
+            ok = false;
+        }
+    });
+    ok
+}
+
+/// Trap capability of a value that already passed
+/// [`reads_only_local_state`] (so heap reads, calls, stores, and
+/// control-flow exits are absent). A local refinement of
+/// [`util::may_trap`](super::util::may_trap): `array.new_data` is treated
+/// as non-trapping because WIR only ever carries literal-lowered segments
+/// with a zero offset and the segment's exact length
+/// (`wir_build::primitive_ops::translate_packed_array`,
+/// `wir_optimize::array::promote_constant_arrays_to_data`) — `may_trap`
+/// stays conservative for its `Drop`-preservation duty, where a false
+/// positive is harmless, but here it would block eliding every
+/// `Err("<literal beyond the inline threshold>")` return past HFS
+/// write-backs. Candidate for consolidation into `util`.
+fn relocated_value_may_trap(expr: &WirInstr) -> bool {
+    match expr {
+        WirInstr::ArrayNewData { offset, len, .. } => {
+            relocated_value_may_trap(offset) || relocated_value_may_trap(len)
+        }
+        // Operand-aware refinements, mirroring `may_trap`.
+        WirInstr::RefAsNonNull(inner) => {
+            relocated_value_may_trap(inner) || !inner.is_nonnull_result()
+        }
+        WirInstr::RefCast { type_id, expr, .. } => match expr.as_ref() {
+            WirInstr::StructNew {
+                type_id: src_type, ..
+            } if src_type == type_id => relocated_value_may_trap(expr),
+            _ => true,
+        },
+        // Integer divide / remainder trap on a zero divisor (and signed
+        // MIN / -1); non-saturating float-to-int truncation traps on
+        // out-of-range values.
+        WirInstr::I32DivS(_, _)
+        | WirInstr::I32DivU(_, _)
+        | WirInstr::I32RemS(_, _)
+        | WirInstr::I32RemU(_, _)
+        | WirInstr::I64DivS(_, _)
+        | WirInstr::I64DivU(_, _)
+        | WirInstr::I64RemS(_, _)
+        | WirInstr::I64RemU(_, _)
+        | WirInstr::I32TruncF32S(_)
+        | WirInstr::I32TruncF32U(_)
+        | WirInstr::I32TruncF64S(_)
+        | WirInstr::I32TruncF64U(_)
+        | WirInstr::I64TruncF32S(_)
+        | WirInstr::I64TruncF32U(_)
+        | WirInstr::I64TruncF64S(_)
+        | WirInstr::I64TruncF64U(_) => true,
+        other => {
+            let mut trap = false;
+            other.for_each_child(&mut |child| {
+                if !trap && relocated_value_may_trap(child) {
+                    trap = true;
                 }
             });
-            ok
+            trap
         }
     }
 }
@@ -320,8 +354,9 @@ fn collect_local_io(expr: &WirInstr, reads: &mut IndexSet<String>, writes: &mut 
     }
 }
 fn elide_return_only_temps(module: &mut WirPackage, pinned: &IndexSet<u32>) {
+    let defined_func_base = module.defined_func_base;
     for (i, func) in module.functions.iter_mut().enumerate() {
-        let func_id_index = crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
+        let func_id_index = defined_func_base + u32::try_from(i).unwrap();
         // Pinned functions (exports, RefFunc'd, element-table entries) are
         // SROA-ineligible anyway; skipping them limits the blast radius of
         // any bug in this peephole to functions that the rest of the pass
@@ -398,9 +433,6 @@ fn scan_return_temp_stats(
     }
 }
 
-/// Maximum distance the relocation peephole will look ahead from a
-/// `LocalSet` to find a matching `Return(LocalGet)`. Pragmatic upper bound;
-/// HFS-emitted patterns put the write-back stmt right before the `Return`.
 /// Maximum number of intervening statements between the `LocalSet(temp, X)`
 /// and its paired `Return(LocalGet(temp))`. HFS write-back sequences sit
 /// here; nested struct deserializers can emit several restore-and-store
@@ -415,6 +447,12 @@ const RETURN_TEMP_INTERVENING_BUDGET: usize = 32;
 ///   - don't write any local that `value` reads, and
 ///   - don't read any local that `value` writes.
 ///
+/// A trap-capable `value` pairs only with the *adjacent* `Return`
+/// (`start_idx + 1`): relocating a trap past intervening statements would
+/// reorder it across their effects — in particular past a conditional
+/// `return` / `br` exit, on whose path the trap would then be lost
+/// entirely (`t = a / b; if c { return OTHER; } return t;`).
+///
 /// Returns `None` when no such return exists within
 /// [`RETURN_TEMP_INTERVENING_BUDGET`] stmts.
 fn find_paired_return(
@@ -426,6 +464,7 @@ fn find_paired_return(
     let mut x_reads: IndexSet<String> = IndexSet::default();
     let mut x_writes: IndexSet<String> = IndexSet::default();
     collect_local_io(value, &mut x_reads, &mut x_writes);
+    let value_may_trap = relocated_value_may_trap(value);
 
     let end = (start_idx + 1 + RETURN_TEMP_INTERVENING_BUDGET).min(instrs.len());
     for j in (start_idx + 1)..end {
@@ -433,6 +472,9 @@ fn find_paired_return(
             && let WirInstr::LocalGet { name: rn, .. } = rv.as_ref()
             && rn == name
         {
+            if value_may_trap && j > start_idx + 1 {
+                return None;
+            }
             return Some(j);
         }
         // Intervening stmt — verify it doesn't reference `name` and is
@@ -620,17 +662,19 @@ struct PotentialCandidate {
 ///    variant. This stage does not look at the function body's return shapes.
 /// 2. Fix-point: accept a function when every `Return` in its body is either
 ///    a `StructNew` of a variant case type, an `Unreachable`, or a
-///    `Return { Some(Call(c)) }` where `c` is already accepted *and* shares
-///    the same variant return type. The seed round runs with an empty
-///    "already accepted" set, so it only accepts the leaf functions whose
-///    returns are direct `StructNew`s. Each subsequent round can then pick
-///    up callers whose tail calls now target accepted callees.
+///    `Return { Some(Call(c)) }` where `c` is also accepted *and* shares
+///    the same variant return type. The fix-point is optimistic
+///    (assume-then-refute): every layout-eligible function starts accepted
+///    and a round removes those whose return shapes don't hold against the
+///    current set. Unlike a pessimistic grow-from-leaves seed, this accepts
+///    mutually (and self) tail-recursive candidate groups — each member's
+///    tail call targets another member, which stays assumed unless refuted.
 fn find_sroa_candidates(module: &WirPackage, pinned: &IndexSet<u32>) -> Vec<(u32, SroaCandidate)> {
     // Stage 1: collect potential candidates with layout info.
     let mut potentials: Vec<PotentialCandidate> = Vec::new();
 
     for (i, func) in module.functions.iter().enumerate() {
-        let func_id_index = crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
+        let func_id_index = module.defined_func_base + u32::try_from(i).unwrap();
 
         if pinned.contains(&func_id_index) {
             continue;
@@ -672,15 +716,15 @@ fn find_sroa_candidates(module: &WirPackage, pinned: &IndexSet<u32>) -> Vec<(u32
         return Vec::new();
     }
 
-    // Stage 2: fix-point. A function is accepted when its return shapes are
-    // all StructNew/Unreachable, optionally with `Return { Some(Call(c)) }`
-    // tail-calls to already-accepted candidates with the same variant type.
-    let mut accepted: IndexSet<u32> = IndexSet::default();
+    // Stage 2: optimistic fix-point. A function stays accepted while its
+    // return shapes are all StructNew/Unreachable, optionally with
+    // `Return { Some(Call(c)) }` tail-calls to still-accepted candidates
+    // with the same variant type (same variant -> same multi-value sig, so
+    // swapping ABI is sound). Refutation only shrinks the set, so the loop
+    // terminates; at the fixed point every member's tail calls target
+    // members, which is exactly the property `apply_sroa` relies on.
+    let mut accepted: IndexSet<u32> = potentials.iter().map(|p| p.func_id_index).collect();
     loop {
-        // Group accepted candidates by variant_type_idx so the tail-call
-        // check can constrain matches to functions returning the same
-        // variant. Same variant -> same multi-value sig, so swapping
-        // ABI is sound.
         let mut accepted_by_variant: crate::hashmap::IndexMap<u32, IndexSet<u32>> =
             crate::hashmap::IndexMap::default();
         for p in &potentials {
@@ -692,9 +736,9 @@ fn find_sroa_candidates(module: &WirPackage, pinned: &IndexSet<u32>) -> Vec<(u32
             }
         }
 
-        let mut changed = false;
+        let mut refuted: Vec<u32> = Vec::new();
         for p in &potentials {
-            if accepted.contains(&p.func_id_index) {
+            if !accepted.contains(&p.func_id_index) {
                 continue;
             }
             let body = module.functions[p.candidate.func_array_idx]
@@ -705,13 +749,16 @@ fn find_sroa_candidates(module: &WirPackage, pinned: &IndexSet<u32>) -> Vec<(u32
             let tail_call_set = accepted_by_variant
                 .get(&p.variant_type_idx)
                 .unwrap_or(&empty);
-            if all_returns_are_variant_struct_new(body, &p.valid_case_type_indices, tail_call_set) {
-                accepted.insert(p.func_id_index);
-                changed = true;
+            if !all_returns_are_variant_struct_new(body, &p.valid_case_type_indices, tail_call_set)
+            {
+                refuted.push(p.func_id_index);
             }
         }
-        if !changed {
+        if refuted.is_empty() {
             break;
+        }
+        for id in refuted {
+            accepted.swap_remove(&id);
         }
     }
 
@@ -731,8 +778,9 @@ fn find_sroa_candidates(module: &WirPackage, pinned: &IndexSet<u32>) -> Vec<(u32
 /// re-used across the fix-point's rounds without touching the body.
 ///
 /// A variant is eligible (layout-wise) if:
-/// - All payload types across all cases are eligible scalar types
-/// - Max payload count across all cases is ≤ 3 (so total fields ≤ 4: disc + 3 payloads)
+/// - All payload types across all cases are eligible value types
+/// - The result vector fits [`MAX_SHARED_RESULT_FIELDS`] (shared layout) or
+///   [`MAX_PER_CASE_RESULT_FIELDS`] (per-case layout)
 /// - Case type indices can be resolved via `variant_case_info`
 fn analyze_variant_layout(
     module: &WirPackage,
@@ -742,7 +790,6 @@ fn analyze_variant_layout(
 ) -> Option<(SroaCandidate, IndexSet<u32>)> {
     // Collect per-case info: case type index and payload count
     let mut case_type_indices: Vec<Option<u32>> = Vec::with_capacity(variant_type.cases.len());
-    let mut case_payload_counts: Vec<usize> = Vec::with_capacity(variant_type.cases.len());
     let mut max_payload_count: usize = 0;
 
     // Build a mapping of case_wir_type_idx for this variant from variant_case_info
@@ -756,7 +803,6 @@ fn analyze_variant_layout(
 
     for case in &variant_type.cases {
         let payload_count = case.payload.len();
-        case_payload_counts.push(payload_count);
         if payload_count > max_payload_count {
             max_payload_count = payload_count;
         }
@@ -779,7 +825,7 @@ fn analyze_variant_layout(
 
     // Total multi-value fields: discriminant + max_payload_count
     let field_count = 1 + max_payload_count;
-    if field_count > 4 {
+    if field_count > MAX_SHARED_RESULT_FIELDS {
         return None;
     }
 
@@ -790,7 +836,7 @@ fn analyze_variant_layout(
         for case in &variant_type.cases {
             if let Some(ty) = case.payload.get(pos) {
                 if let Some(existing) = found {
-                    if !wir_types_equal(existing, ty) {
+                    if existing != ty {
                         homogeneous = false;
                         break;
                     }
@@ -842,8 +888,8 @@ fn analyze_variant_layout(
             }
         }
         let fc = ft.len();
-        if fc > 8 {
-            return None; // too many multi-value returns
+        if fc > MAX_PER_CASE_RESULT_FIELDS {
+            return None;
         }
         (ft, fn_, fc, Some(offsets))
     };
@@ -871,7 +917,6 @@ fn analyze_variant_layout(
             field_names,
             variant_info: VariantSroaInfo {
                 case_type_indices,
-                case_payload_counts,
                 max_payload_count: total_payload_slots,
                 case_slot_offsets,
             },
@@ -1100,7 +1145,7 @@ fn block_fallthrough_is_variant_compatible(
 /// is strictly tighter — only the bare top-level `Call` shape produces
 /// a candidate via tail-call propagation. The asymmetry is intentional:
 /// the validator's prefix scan
-/// (`find_candidate_calls_in_block_prefix` → `validate_call_sites_in_body`)
+/// (`validate_wrapper_prefixes` → `validate_call_sites_in_body`)
 /// reuses the standard call-site logic on the wrapper's prefix, so an
 /// inner `LocalSet(temp, Call(g))` with valid variant-access uses is
 /// accepted instead of being over-invalidated.
@@ -1203,6 +1248,66 @@ fn all_br_variant_values_are_struct_new(
     true
 }
 
+/// Per-function local def/use counts, computed in one walk. Replaces the
+/// per-site whole-body rescans (`count_local_set_in_body` /
+/// `count_local_get` per temp) that made validation O(n²).
+#[derive(Default)]
+struct LocalDefUse {
+    /// `LocalSet` + `LocalTee` writes per local name.
+    sets: crate::hashmap::IndexMap<String, usize>,
+    /// `LocalGet` reads per local name.
+    gets: crate::hashmap::IndexMap<String, usize>,
+}
+
+impl LocalDefUse {
+    fn of_body(body: &[WirInstr]) -> Self {
+        let mut index = Self::default();
+        for instr in body {
+            index.scan(instr);
+        }
+        index
+    }
+
+    fn scan(&mut self, instr: &WirInstr) {
+        match instr {
+            WirInstr::LocalGet { name, .. } => {
+                *self.gets.entry(name.clone()).or_default() += 1;
+            }
+            WirInstr::LocalSet { name, .. } | WirInstr::LocalTee { name, .. } => {
+                *self.sets.entry(name.clone()).or_default() += 1;
+            }
+            _ => {}
+        }
+        instr.for_each_child(&mut |child| self.scan(child));
+    }
+
+    fn set_count(&self, name: &str) -> usize {
+        self.sets.get(name).copied().unwrap_or(0)
+    }
+
+    fn get_count(&self, name: &str) -> usize {
+        self.gets.get(name).copied().unwrap_or(0)
+    }
+}
+
+/// Read-only context shared by the call-site validation walk over one
+/// function body.
+struct CallSiteCtx<'a> {
+    /// The full function body — temp-local uses are validated across it.
+    root_body: &'a [WirInstr],
+    candidate_ids: &'a IndexSet<u32>,
+    /// Per candidate, the WIR type indices of its payload-bearing case
+    /// structs — the only type ids the call-site rewriter's
+    /// `case_disc_values` / `field_to_local` maps carry, hence the only
+    /// ids a `RefTest` / `RefCast` on the temp may name.
+    case_types_by_candidate: &'a crate::hashmap::IndexMap<u32, IndexSet<u32>>,
+    /// Def/use counts over `root_body`.
+    def_use: &'a LocalDefUse,
+    /// True when the function being validated is itself a candidate; only
+    /// then is `Return { Some(Call(candidate)) }` a valid (tail-call) shape.
+    caller_is_candidate: bool,
+}
+
 /// Phase 2: validate that all call sites of candidate functions are SROA-compatible.
 ///
 /// A call site is compatible if:
@@ -1218,6 +1323,32 @@ fn validate_call_sites(
     candidates: &[(u32, SroaCandidate)],
 ) -> Vec<(u32, SroaCandidate)> {
     let mut candidate_ids: IndexSet<u32> = candidates.iter().map(|(id, _)| *id).collect();
+
+    let case_types_by_candidate: crate::hashmap::IndexMap<u32, IndexSet<u32>> = candidates
+        .iter()
+        .map(|(id, c)| {
+            let case_types: IndexSet<u32> = c
+                .variant_info
+                .case_type_indices
+                .iter()
+                .flatten()
+                .copied()
+                .collect();
+            (*id, case_types)
+        })
+        .collect();
+
+    // Def/use indexes are loop-invariant: validation never mutates bodies.
+    let def_use_by_func: Vec<LocalDefUse> = module
+        .functions
+        .iter()
+        .map(|func| {
+            func.body
+                .as_deref()
+                .map(LocalDefUse::of_body)
+                .unwrap_or_default()
+        })
+        .collect();
 
     // Iterate to a fix-point. Two kinds of cascade need to converge:
     //
@@ -1242,16 +1373,17 @@ fn validate_call_sites(
         let mut round_invalid: IndexSet<u32> = IndexSet::default();
 
         for (i, func) in module.functions.iter().enumerate() {
-            let func_id_index = crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
+            let func_id_index = module.defined_func_base + u32::try_from(i).unwrap();
             let caller_is_candidate = candidate_ids.contains(&func_id_index);
             if let Some(body) = &func.body {
-                validate_call_sites_in_body(
-                    body,
-                    body,
-                    &candidate_ids,
-                    &mut round_invalid,
+                let ctx = CallSiteCtx {
+                    root_body: body,
+                    candidate_ids: &candidate_ids,
+                    case_types_by_candidate: &case_types_by_candidate,
+                    def_use: &def_use_by_func[i],
                     caller_is_candidate,
-                );
+                };
+                validate_call_sites_in_body(body, &ctx, &mut round_invalid);
             }
         }
 
@@ -1311,59 +1443,27 @@ fn validate_call_sites(
     candidates
         .iter()
         .filter(|(id, _)| !invalid.contains(id))
-        .map(|(id, c)| {
-            (
-                *id,
-                SroaCandidate {
-                    func_array_idx: c.func_array_idx,
-                    struct_type_idx: c.struct_type_idx,
-                    valid_case_type_indices: c.valid_case_type_indices.clone(),
-                    field_types: c.field_types.clone(),
-                    field_count: c.field_count,
-                    field_names: c.field_names.clone(),
-                    variant_info: VariantSroaInfo {
-                        case_type_indices: c.variant_info.case_type_indices.clone(),
-                        case_payload_counts: c.variant_info.case_payload_counts.clone(),
-                        max_payload_count: c.variant_info.max_payload_count,
-                        case_slot_offsets: c.variant_info.case_slot_offsets.clone(),
-                    },
-                },
-            )
-        })
+        .map(|(id, c)| (*id, c.clone()))
         .collect()
 }
 
 /// Validate call sites of candidate functions within a flat instruction list.
 ///
-/// `root_body` is the top-level function body — used when checking that the temp local
-/// is only accessed via valid patterns across all scopes, not just the current scope.
-/// This prevents SROA when a call site is inside a nested block (If/Block) but the temp
-/// local is used in the outer scope in a non-StructGet context (e.g. `return temp`).
-///
-/// `caller_is_candidate` is true when the function being validated is itself
-/// a candidate. Only then does `Return { Some(Call(candidate)) }` count as a
-/// valid call site shape: the caller's signature is being rewritten to
-/// multi-value in the same pass, so the callee's multi-value results
-/// propagate through naturally. Inside a non-candidate caller, the same
-/// shape would mismatch the (still single-value) caller signature.
+/// `ctx.root_body` is the top-level function body — used when checking that
+/// the temp local is only accessed via valid patterns across all scopes, not
+/// just the current scope. This prevents SROA when a call site is inside a
+/// nested block (If/Block) but the temp local is used in the outer scope in
+/// a non-StructGet context (e.g. `return temp`).
 fn validate_call_sites_in_body(
     instrs: &[WirInstr],
-    root_body: &[WirInstr],
-    candidate_ids: &IndexSet<u32>,
+    ctx: &CallSiteCtx,
     invalid: &mut IndexSet<u32>,
-    caller_is_candidate: bool,
 ) {
     for instr in instrs {
         // Recurse into nested statement-level blocks
         match instr {
             WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
-                validate_call_sites_in_body(
-                    body,
-                    root_body,
-                    candidate_ids,
-                    invalid,
-                    caller_is_candidate,
-                );
+                validate_call_sites_in_body(body, ctx, invalid);
             }
             WirInstr::If {
                 condition,
@@ -1371,33 +1471,14 @@ fn validate_call_sites_in_body(
                 else_body,
                 ..
             } => {
-                // Check condition expression for invalid calls (not in nested block scope)
-                find_nested_candidate_calls(condition, candidate_ids, invalid);
-                validate_call_sites_in_body(
-                    then_body,
-                    root_body,
-                    candidate_ids,
-                    invalid,
-                    caller_is_candidate,
-                );
+                validate_expr_context(condition, ctx, invalid);
+                validate_call_sites_in_body(then_body, ctx, invalid);
                 if let Some(eb) = else_body {
-                    validate_call_sites_in_body(
-                        eb,
-                        root_body,
-                        candidate_ids,
-                        invalid,
-                        caller_is_candidate,
-                    );
+                    validate_call_sites_in_body(eb, ctx, invalid);
                 }
             }
             WirInstr::Seq(body) => {
-                validate_call_sites_in_body(
-                    body,
-                    root_body,
-                    candidate_ids,
-                    invalid,
-                    caller_is_candidate,
-                );
+                validate_call_sites_in_body(body, ctx, invalid);
             }
             // `Return { Some(<Seq | Block | If>) }` — descend into the body
             // and validate it as if it were a nested statement list.
@@ -1422,7 +1503,7 @@ fn validate_call_sites_in_body(
             // that path's args / block-prefix scan runs (and so we don't
             // accidentally double-recurse on the call itself).
             WirInstr::Return { value: Some(v) }
-                if unwrap_to_candidate_call(v, candidate_ids).is_none()
+                if unwrap_to_candidate_call(v, ctx.candidate_ids).is_none()
                     && matches!(
                         v.as_ref(),
                         WirInstr::Seq(_) | WirInstr::Block { .. } | WirInstr::If { .. }
@@ -1430,13 +1511,7 @@ fn validate_call_sites_in_body(
             {
                 match v.as_ref() {
                     WirInstr::Seq(body) | WirInstr::Block { body, .. } => {
-                        validate_call_sites_in_body(
-                            body,
-                            root_body,
-                            candidate_ids,
-                            invalid,
-                            caller_is_candidate,
-                        );
+                        validate_call_sites_in_body(body, ctx, invalid);
                     }
                     WirInstr::If {
                         condition,
@@ -1444,26 +1519,10 @@ fn validate_call_sites_in_body(
                         else_body,
                         ..
                     } => {
-                        // Check the condition for any nested candidate calls
-                        // (a Call inside the condition isn't a tail call
-                        // — it gets invalidated normally), then recurse
-                        // into both arms as statement lists.
-                        find_nested_candidate_calls(condition, candidate_ids, invalid);
-                        validate_call_sites_in_body(
-                            then_body,
-                            root_body,
-                            candidate_ids,
-                            invalid,
-                            caller_is_candidate,
-                        );
+                        validate_expr_context(condition, ctx, invalid);
+                        validate_call_sites_in_body(then_body, ctx, invalid);
                         if let Some(eb) = else_body {
-                            validate_call_sites_in_body(
-                                eb,
-                                root_body,
-                                candidate_ids,
-                                invalid,
-                                caller_is_candidate,
-                            );
+                            validate_call_sites_in_body(eb, ctx, invalid);
                         }
                     }
                     _ => unreachable!(),
@@ -1471,13 +1530,7 @@ fn validate_call_sites_in_body(
             }
             // For non-block instructions, check for invalid call uses at this level
             _ => {
-                check_invalid_call_uses(
-                    instr,
-                    root_body,
-                    candidate_ids,
-                    invalid,
-                    caller_is_candidate,
-                );
+                check_invalid_call_uses(instr, ctx, invalid);
             }
         }
     }
@@ -1488,95 +1541,44 @@ fn validate_call_sites_in_body(
     // body) to catch uses of the temp local in outer scopes.
     for instr in instrs {
         if let WirInstr::LocalSet { name, value } = instr
-            && let Some(func_id_idx) = unwrap_to_candidate_call(value, candidate_ids)
+            && let Some(func_id_idx) = unwrap_to_candidate_call(value, ctx.candidate_ids)
         {
             // Reject when the local has more than one definition: SROA assumes
             // the temp is exclusively defined by this call. With mutable locals
             // (e.g. `let mut s: String;` assigned in multiple branches), the
             // other definitions would be silently dropped, producing wrong code.
-            if count_local_set_in_body(root_body, name) > 1 {
+            if ctx.def_use.set_count(name) > 1 {
                 invalid.insert(func_id_idx);
                 continue;
             }
-            if !all_uses_are_variant_access(root_body, name) {
+            // The rewriter replaces the temp's accesses only within the
+            // statement list holding the bind (and its subtrees). A use in
+            // an outer scope would survive the rewrite and read the deleted
+            // temp — reject unless every read is contained in this list.
+            let reads_here: usize = instrs.iter().map(|i| count_local_get(i, name)).sum();
+            if reads_here != ctx.def_use.get_count(name) {
+                invalid.insert(func_id_idx);
+                continue;
+            }
+            let case_types = &ctx.case_types_by_candidate[&func_id_idx];
+            if !all_uses_are_variant_access(ctx.root_body, name, case_types, ctx.def_use) {
                 invalid.insert(func_id_idx);
             }
         }
     }
 }
 
-/// Count `LocalSet { name, .. }` and `LocalTee { name, .. }` for `local_name`
-/// across the entire instruction tree.
-fn count_local_set_in_body(instrs: &[WirInstr], local_name: &str) -> usize {
-    let mut total = 0;
-    for instr in instrs {
-        total += count_local_set_in_instr(instr, local_name);
-    }
-    total
-}
-
-fn count_local_set_in_instr(instr: &WirInstr, local_name: &str) -> usize {
-    let mut count = match instr {
-        WirInstr::LocalSet { name, .. } | WirInstr::LocalTee { name, .. } if name == local_name => {
-            1
-        }
-        _ => 0,
-    };
-    instr.for_each_child(&mut |child| {
-        count += count_local_set_in_instr(child, local_name);
-    });
-    count
-}
-
-/// Check that every reference to `local_name` is a valid variant access pattern:
-/// - `RefTest { expr: LocalGet(name) }` — discriminant test
-/// - `StructGet { expr: RefCast { expr: LocalGet(name) } }` — payload access
-fn all_uses_are_variant_access(instrs: &[WirInstr], local_name: &str) -> bool {
-    for instr in instrs {
-        if !check_uses_are_variant_access(instr, local_name, VariantAccessCtx::None) {
-            return false;
-        }
-    }
-    true
-}
-
-/// Context for checking variant access patterns.
-#[derive(Clone, Copy)]
-enum VariantAccessCtx {
-    /// Not inside any variant access pattern.
-    None,
-    /// Inside `RefTest` or `RefCast` — `LocalGet` is valid here.
-    InsideRefTestOrCast,
-}
-
-fn check_uses_are_variant_access(
-    instr: &WirInstr,
-    local_name: &str,
-    ctx: VariantAccessCtx,
-) -> bool {
-    match instr {
-        WirInstr::LocalGet { name, .. } if name == local_name => {
-            matches!(ctx, VariantAccessCtx::InsideRefTestOrCast)
-        }
-        WirInstr::LocalSet { name, value } if name == local_name => {
-            // The original assignment — check value subtree
-            check_variant_uses_in_subtree(value, local_name)
-        }
-        WirInstr::LocalTee { name, .. } if name == local_name => false,
-        WirInstr::RefTest { expr, .. } | WirInstr::RefCast { expr, .. } => {
-            check_uses_are_variant_access(expr, local_name, VariantAccessCtx::InsideRefTestOrCast)
-        }
-        WirInstr::StructGet { expr, .. } => {
-            // StructGet can wrap RefCast which wraps LocalGet — check the chain
-            check_uses_are_variant_access(expr, local_name, ctx)
-        }
-        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
-            for child in body {
-                if !check_uses_are_variant_access(child, local_name, VariantAccessCtx::None) {
-                    return false;
-                }
-            }
-            true
+/// Validation mirror of `recurse_rewrite_call_sites` for expression
+/// positions (`If` conditions and similar operand contexts): the rewriter
+/// treats `Block` / `Loop` / `Seq` bodies and `If` arms found there as full
+/// statement lists, so validation must too — a `?`-desugared
+/// `Seq([__m = call(...), if ref.test(__m) ...])` condition is a normal
+/// call site, not grounds for invalidation. Any candidate call at a
+/// position the rewriter leaves untouched is invalidated.
+fn validate_expr_context(expr: &WirInstr, ctx: &CallSiteCtx, invalid: &mut IndexSet<u32>) {
+    match expr {
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+            validate_call_sites_in_body(body, ctx, invalid);
         }
         WirInstr::If {
             condition,
@@ -1584,146 +1586,266 @@ fn check_uses_are_variant_access(
             else_body,
             ..
         } => {
-            if !check_uses_are_variant_access(condition, local_name, VariantAccessCtx::None) {
-                return false;
-            }
-            for child in then_body {
-                if !check_uses_are_variant_access(child, local_name, VariantAccessCtx::None) {
-                    return false;
-                }
-            }
+            validate_expr_context(condition, ctx, invalid);
+            validate_call_sites_in_body(then_body, ctx, invalid);
             if let Some(eb) = else_body {
-                for child in eb {
-                    if !check_uses_are_variant_access(child, local_name, VariantAccessCtx::None) {
-                        return false;
-                    }
-                }
+                validate_call_sites_in_body(eb, ctx, invalid);
             }
-            true
         }
-        WirInstr::Seq(body) => {
-            for child in body {
-                if !check_uses_are_variant_access(child, local_name, VariantAccessCtx::None) {
-                    return false;
-                }
-            }
-            true
-        }
-        _ => check_variant_uses_in_subtree(instr, local_name),
-    }
-}
-
-fn check_variant_uses_in_subtree(instr: &WirInstr, local_name: &str) -> bool {
-    let mut ok = true;
-    instr.for_each_child(&mut |child| {
-        if ok && !check_uses_are_variant_access(child, local_name, VariantAccessCtx::None) {
-            ok = false;
-        }
-    });
-    ok
-}
-
-/// Look through `ValueCopy`, trivial `Block` wrappers, and other transparent
-/// expressions to find a `Call` to a candidate function. Returns the `func_id`
-/// index if found.
-///
-/// Also looks through `Seq` whose last instruction is the value-producing one.
-/// `LocalSet`-from-`Call` site-effects are *always* wrapped in a `Seq` in WIR —
-/// e.g. `LocalSet(name, Seq([prefix..., Call(f)]))` — even when the unparser
-/// flattens the prefix into separate statements. Without `Seq` unwrapping,
-/// `find_nested_candidate_calls` would mis-classify every such site as a
-/// "nested candidate call" and invalidate `f`, even though the pattern is the
-/// idiomatic LocalSet-bound call we want to support.
-fn unwrap_to_candidate_call(instr: &WirInstr, candidate_ids: &IndexSet<u32>) -> Option<u32> {
-    match instr {
-        WirInstr::Call { func_id, .. } if candidate_ids.contains(&func_id.index()) => {
-            Some(func_id.index())
-        }
-        // Trivial block from inlining: the block's result value is either:
-        // 1. The last instruction in body (implicit value)
-        // 2. A Seq([..., value, Br]) pattern (break-with-value)
-        WirInstr::Block { body, .. } => extract_block_result_call(body, candidate_ids),
-        // Seq's value is the last instruction; preceding items are side
-        // effects evaluated before the call.
-        WirInstr::Seq(body) => body
-            .last()
-            .and_then(|last| unwrap_to_candidate_call(last, candidate_ids)),
-        _ => None,
-    }
-}
-
-/// Extract a candidate call from the result position of a block body.
-/// Handles both implicit block results and explicit `Seq([value, Br])` patterns.
-///
-/// Returns `None` if the prefix instructions (everything before the result)
-/// contain `Br` instructions that target the block itself.  Removing the block
-/// wrapper in that case would corrupt those branch depths.
-fn extract_block_result_call(body: &[WirInstr], candidate_ids: &IndexSet<u32>) -> Option<u32> {
-    // Skip trailing Unreachable — translate_stmts_as_value appends Unreachable after
-    // break-with-value statements so the Wasm validator sees no fallthrough value.
-    // That trailing Unreachable is dead code and must not prevent SROA.
-    let effective_body = if matches!(body.last(), Some(WirInstr::Unreachable)) {
-        &body[..body.len() - 1]
-    } else {
-        body
-    };
-    let body = effective_body;
-    let last = body.last()?;
-
-    // Check prefix instructions for branches targeting this block.
-    // Any `Br` in the prefix that targets this block (at relative depth 0
-    // from the block scope, accounting for nested if/block/loop) would become
-    // invalid once the block wrapper is removed.
-    let prefix = &body[..body.len() - 1];
-    if instrs_have_br_at_depth(prefix, 0) {
-        return None;
-    }
-
-    match last {
-        // Block ends with Seq([..., value, Br { depth }]) — break-with-value
-        WirInstr::Seq(seq) => {
-            if let Some((WirInstr::Br { .. }, rest)) = seq.split_last()
-                && let Some((val, _)) = rest.split_last()
+        other => {
+            if let WirInstr::Call { func_id, .. } = other
+                && ctx.candidate_ids.contains(&func_id.index())
             {
-                // Also check Seq items before the value for branches targeting the block.
-                let seq_prefix = &rest[..rest.len() - 1];
-                if instrs_have_br_at_depth(seq_prefix, 0) {
-                    return None;
-                }
-                return unwrap_to_candidate_call(val, candidate_ids);
+                invalid.insert(func_id.index());
             }
-            None
+            other.for_each_child(&mut |child| validate_expr_context(child, ctx, invalid));
         }
-        // Block ends with the value directly (no explicit br)
-        other => unwrap_to_candidate_call(other, candidate_ids),
     }
 }
 
-/// Check if any instruction in the slice contains a `Br` that targets the block
-/// at `target_depth` levels above the current nesting position.
+/// Count `LocalGet(name)` occurrences in an instruction tree (all positions).
+fn count_local_get(instr: &WirInstr, name: &str) -> usize {
+    let mut n = 0;
+    if let WirInstr::LocalGet { name: g, .. } = instr
+        && g == name
+    {
+        n += 1;
+    }
+    instr.for_each_child(&mut |c| n += count_local_get(c, name));
+    n
+}
+
+/// Check that every reference to `local_name` is a shape the call-site
+/// rewriter (`replace_variant_accesses` / `collect_refcast_aliases`)
+/// replaces:
+/// - `RefTest { type_id ∈ case_types, expr: LocalGet(name) }` — discriminant test
+/// - `StructGet { expr: RefCast { type_id ∈ case_types, expr: LocalGet(name) } }` — payload access
+/// - `LocalSet(alias, RefCast { type_id ∈ case_types, expr: LocalGet(name) })` —
+///   cast-alias binding, provided the alias is single-def and read only via
+///   `StructGet(LocalGet(alias))`.
 ///
-/// `target_depth` is 0 when checking from directly inside the block.
-/// Nested `if`/`block`/`loop` increase the depth by 1 for their bodies.
-fn instrs_have_br_at_depth(instrs: &[WirInstr], target_depth: u32) -> bool {
+/// The type-id constraint matters: the rewriter's `case_disc_values` /
+/// `field_to_local` maps are keyed by the candidate's payload-bearing case
+/// types, so an access naming any other type would survive the rewrite and
+/// read the deleted temp.
+fn all_uses_are_variant_access(
+    instrs: &[WirInstr],
+    local_name: &str,
+    case_types: &IndexSet<u32>,
+    def_use: &LocalDefUse,
+) -> bool {
     instrs
         .iter()
-        .any(|instr| instr_has_br_at_depth(instr, target_depth))
+        .all(|instr| check_uses_are_variant_access(instr, local_name, case_types, instrs, def_use))
 }
 
-fn instr_has_br_at_depth(instr: &WirInstr, target_depth: u32) -> bool {
+fn check_uses_are_variant_access(
+    instr: &WirInstr,
+    local_name: &str,
+    case_types: &IndexSet<u32>,
+    root: &[WirInstr],
+    def_use: &LocalDefUse,
+) -> bool {
+    // Discriminant test: `RefTest { case_type, LocalGet(temp) }`.
+    if let WirInstr::RefTest { type_id, expr, .. } = instr
+        && let WirInstr::LocalGet { name, .. } = expr.as_ref()
+        && name == local_name
+    {
+        return case_types.contains(&type_id.index());
+    }
+    // Payload read: `StructGet { RefCast { case_type, LocalGet(temp) } }`.
+    if let WirInstr::StructGet { expr, .. } = instr
+        && let WirInstr::RefCast {
+            type_id,
+            expr: rc_expr,
+            ..
+        } = expr.as_ref()
+        && let WirInstr::LocalGet { name, .. } = rc_expr.as_ref()
+        && name == local_name
+    {
+        return case_types.contains(&type_id.index());
+    }
+    // Cast-alias binding: `LocalSet(alias, RefCast { case_type, LocalGet(temp) })`.
+    // `collect_refcast_aliases` Nops the definition and resolves later
+    // `StructGet(LocalGet(alias))` reads through the alias map, so the alias
+    // must have no other definition and no other kind of use.
+    if let WirInstr::LocalSet { name: alias, value } = instr
+        && let WirInstr::RefCast {
+            type_id,
+            expr: rc_expr,
+            ..
+        } = value.as_ref()
+        && let WirInstr::LocalGet { name, .. } = rc_expr.as_ref()
+        && name == local_name
+        && alias != local_name
+    {
+        return case_types.contains(&type_id.index())
+            && def_use.set_count(alias) == 1
+            && instrs_alias_uses_are_struct_get(root, alias);
+    }
+    // Any other read or re-definition of the temp disqualifies it. The
+    // defining `LocalSet(temp, <call>)` reaches the recursion below, which
+    // rejects any use of the temp inside its own RHS.
     match instr {
-        WirInstr::Br { depth } => *depth == target_depth,
+        WirInstr::LocalGet { name, .. } | WirInstr::LocalTee { name, .. } if name == local_name => {
+            false
+        }
+        other => {
+            let mut ok = true;
+            other.for_each_child(&mut |child| {
+                if ok
+                    && !check_uses_are_variant_access(child, local_name, case_types, root, def_use)
+                {
+                    ok = false;
+                }
+            });
+            ok
+        }
+    }
+}
+
+/// Check that every read of `alias` is `StructGet { expr: LocalGet(alias) }`
+/// (the shape `replace_variant_accesses` resolves through the alias map).
+fn instrs_alias_uses_are_struct_get(instrs: &[WirInstr], alias: &str) -> bool {
+    instrs.iter().all(|i| alias_uses_are_struct_get(i, alias))
+}
+
+fn alias_uses_are_struct_get(instr: &WirInstr, alias: &str) -> bool {
+    if let WirInstr::StructGet { expr, .. } = instr
+        && let WirInstr::LocalGet { name, .. } = expr.as_ref()
+        && name == alias
+    {
+        return true;
+    }
+    match instr {
+        WirInstr::LocalGet { name, .. } | WirInstr::LocalTee { name, .. } if name == alias => false,
+        other => {
+            let mut ok = true;
+            other.for_each_child(&mut |child| {
+                if ok && !alias_uses_are_struct_get(child, alias) {
+                    ok = false;
+                }
+            });
+            ok
+        }
+    }
+}
+
+/// One step of the path from a wrapped call-site value to its result leaf.
+/// `value_idx` is the index of the value-producing element in the wrapper's
+/// instruction list; earlier elements are prefix statements the rewriter
+/// hoists out of the wrapper.
+#[derive(Clone, Copy)]
+enum ResultStep {
+    /// `Seq(body)`: value is `body[value_idx]` (the last element).
+    Seq { value_idx: usize },
+    /// `Block { body }`: value is `body[value_idx]` (the effective last
+    /// element after trimming a trailing `Unreachable`).
+    Block { value_idx: usize },
+    /// A `Seq([.., value, Br(0)])` break-with-value at a `Block`'s result
+    /// position: value is `seq[value_idx]` (`seq.len() - 2`).
+    BreakValue { value_idx: usize },
+}
+
+/// Resolve the value-producing leaf of a call-site RHS through `Block` /
+/// `Seq` wrappers, verifying that stripping the wrappers is sound. The one
+/// shape definition shared by validation (`unwrap_to_candidate_call`,
+/// `unwrap_to_inner_call`, `validate_wrapper_prefixes`) and the
+/// rewriter (`take_call_from_local_set`), so accept and rewrite cannot
+/// diverge.
+///
+/// Soundness of stripping requires:
+/// - No prefix statement may branch to *any* `Block` frame being stripped
+///   — not just the innermost one: a `BrIf { depth: 1 }` in a nested
+///   block's prefix targeting the outer block would dangle once both
+///   wrappers are removed.
+/// - A break-with-value `Br` must target the block it exits (`depth == 0`);
+///   a deeper target carries the value elsewhere.
+/// - A trailing `Unreachable` after a break-with-value (appended by
+///   `translate_stmts_as_value` so the Wasm validator sees no fallthrough
+///   value) is dead code — skipped in `Block` bodies only; a `Seq` has no
+///   such emitter convention, so its trailing `Unreachable` means "then
+///   trap" and blocks unwrapping.
+fn resolve_wrapped_result(instr: &WirInstr) -> Option<(Vec<ResultStep>, &WirInstr)> {
+    let mut steps = Vec::new();
+    let leaf = resolve_wrapped_result_inner(instr, 0, &mut steps)?;
+    Some((steps, leaf))
+}
+
+fn resolve_wrapped_result_inner<'a>(
+    instr: &'a WirInstr,
+    stripped_blocks: u32,
+    steps: &mut Vec<ResultStep>,
+) -> Option<&'a WirInstr> {
+    match instr {
+        WirInstr::Seq(body) => {
+            let (last, prefix) = body.split_last()?;
+            if any_branch_targets_enclosing(prefix, stripped_blocks) {
+                return None;
+            }
+            steps.push(ResultStep::Seq {
+                value_idx: body.len() - 1,
+            });
+            resolve_wrapped_result_inner(last, stripped_blocks, steps)
+        }
+        WirInstr::Block { body, .. } => {
+            let effective_len = if matches!(body.last(), Some(WirInstr::Unreachable)) {
+                body.len() - 1
+            } else {
+                body.len()
+            };
+            let value_idx = effective_len.checked_sub(1)?;
+            if any_branch_targets_enclosing(&body[..value_idx], stripped_blocks + 1) {
+                return None;
+            }
+            steps.push(ResultStep::Block { value_idx });
+            let last = &body[value_idx];
+            if let WirInstr::Seq(seq) = last
+                && let Some((WirInstr::Br { depth }, rest)) = seq.split_last()
+            {
+                if *depth != 0 {
+                    return None;
+                }
+                let value_idx = rest.len().checked_sub(1)?;
+                if any_branch_targets_enclosing(&rest[..value_idx], stripped_blocks + 1) {
+                    return None;
+                }
+                steps.push(ResultStep::BreakValue { value_idx });
+                return resolve_wrapped_result_inner(&rest[value_idx], stripped_blocks + 1, steps);
+            }
+            resolve_wrapped_result_inner(last, stripped_blocks + 1, steps)
+        }
+        other => Some(other),
+    }
+}
+
+/// True when any instruction in `instrs` branches to one of the `frame_count`
+/// innermost enclosing block frames (relative depths `0..frame_count` at this
+/// position; nested control frames shift the window by one per level).
+fn any_branch_targets_enclosing(instrs: &[WirInstr], frame_count: u32) -> bool {
+    if frame_count == 0 {
+        return false;
+    }
+    instrs
+        .iter()
+        .any(|instr| instr_branches_into_range(instr, 0, frame_count))
+}
+
+fn instr_branches_into_range(instr: &WirInstr, base: u32, count: u32) -> bool {
+    let in_range = |d: u32| d >= base && d - base < count;
+    match instr {
+        WirInstr::Br { depth } => in_range(*depth),
         WirInstr::BrIf { depth, condition } => {
-            *depth == target_depth || instr_has_br_at_depth(condition, target_depth)
+            in_range(*depth) || instr_branches_into_range(condition, base, count)
         }
         WirInstr::BrTable {
             index,
             targets,
             default,
         } => {
-            targets.contains(&target_depth)
-                || *default == target_depth
-                || instr_has_br_at_depth(index, target_depth)
+            targets.iter().copied().any(in_range)
+                || in_range(*default)
+                || instr_branches_into_range(index, base, count)
         }
         WirInstr::If {
             condition,
@@ -1731,16 +1853,21 @@ fn instr_has_br_at_depth(instr: &WirInstr, target_depth: u32) -> bool {
             else_body,
             ..
         } => {
-            instr_has_br_at_depth(condition, target_depth)
-                || instrs_have_br_at_depth(then_body, target_depth + 1)
-                || else_body
-                    .as_ref()
-                    .is_some_and(|eb| instrs_have_br_at_depth(eb, target_depth + 1))
+            instr_branches_into_range(condition, base, count)
+                || then_body
+                    .iter()
+                    .any(|i| instr_branches_into_range(i, base + 1, count))
+                || else_body.as_ref().is_some_and(|eb| {
+                    eb.iter()
+                        .any(|i| instr_branches_into_range(i, base + 1, count))
+                })
         }
-        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
-            instrs_have_br_at_depth(body, target_depth + 1)
-        }
-        WirInstr::Seq(items) => instrs_have_br_at_depth(items, target_depth),
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => body
+            .iter()
+            .any(|i| instr_branches_into_range(i, base + 1, count)),
+        WirInstr::Seq(items) => items
+            .iter()
+            .any(|i| instr_branches_into_range(i, base, count)),
         // Other instructions cannot introduce a label, but their operands can
         // still embed control flow (e.g. a `BranchHint`-wrapped condition or a
         // labeled block in value position), so recurse at the same depth — the
@@ -1748,34 +1875,44 @@ fn instr_has_br_at_depth(instr: &WirInstr, target_depth: u32) -> bool {
         other => {
             let mut found = false;
             other.for_each_child(&mut |child| {
-                found = found || instr_has_br_at_depth(child, target_depth);
+                found = found || instr_branches_into_range(child, base, count);
             });
             found
         }
     }
 }
 
+/// Look through trivial `Block` / `Seq` wrappers to find a `Call` to a
+/// candidate function at the result position. Returns the `func_id` index.
+///
+/// `LocalSet`-from-`Call` site-effects are often wrapped in a `Seq` in WIR —
+/// e.g. `LocalSet(name, Seq([prefix..., Call(f)]))` — and inlining wraps
+/// results in labeled `Block`s. Without unwrapping,
+/// `find_nested_candidate_calls` would mis-classify every such site as a
+/// "nested candidate call" and invalidate `f`, even though the pattern is the
+/// idiomatic LocalSet-bound call we want to support.
+fn unwrap_to_candidate_call(instr: &WirInstr, candidate_ids: &IndexSet<u32>) -> Option<u32> {
+    match resolve_wrapped_result(instr)?.1 {
+        WirInstr::Call { func_id, .. } if candidate_ids.contains(&func_id.index()) => {
+            Some(func_id.index())
+        }
+        _ => None,
+    }
+}
+
 /// Check if an instruction uses a candidate call result in an invalid way.
 /// Invalid: Call to candidate as a nested expression (not direct child of
 /// `LocalSet` or `Return` in a candidate caller).
-fn check_invalid_call_uses(
-    instr: &WirInstr,
-    root_body: &[WirInstr],
-    candidate_ids: &IndexSet<u32>,
-    invalid: &mut IndexSet<u32>,
-    caller_is_candidate: bool,
-) {
+fn check_invalid_call_uses(instr: &WirInstr, ctx: &CallSiteCtx, invalid: &mut IndexSet<u32>) {
     match instr {
         // LocalSet { value: <wrapper>(Call) } is valid — handled separately
         WirInstr::LocalSet { value, .. }
-            if unwrap_to_candidate_call(value, candidate_ids).is_some() =>
+            if unwrap_to_candidate_call(value, ctx.candidate_ids).is_some() =>
         {
             // Check args of the underlying call for nested candidate calls
-            if let Some(call) = unwrap_to_inner_call(value)
-                && let WirInstr::Call { args, .. } = call
-            {
+            if let Some(WirInstr::Call { args, .. }) = unwrap_to_inner_call(value) {
                 for arg in args {
-                    find_nested_candidate_calls(arg, candidate_ids, invalid);
+                    find_nested_candidate_calls(arg, ctx.candidate_ids, invalid);
                 }
             }
             // Also check prefix instructions in any block wrapper.
@@ -1784,13 +1921,7 @@ fn check_invalid_call_uses(
             // `LocalSet(temp, Call(candidate))` shapes that should be accepted,
             // not invalidated. The prefix walk reuses the standard call-site
             // validator so those patterns are recognised.
-            find_candidate_calls_in_block_prefix(
-                value,
-                root_body,
-                candidate_ids,
-                invalid,
-                caller_is_candidate,
-            );
+            validate_wrapper_prefixes(value, ctx, invalid);
         }
         // `Return { Some(<wrapper>(Call(candidate))) }` is the tail-call
         // shape accepted by the fix-point candidate discovery. After the
@@ -1802,22 +1933,15 @@ fn check_invalid_call_uses(
         // arguments and any block prefix for nested candidate calls that the
         // rewrite cannot reach.
         WirInstr::Return { value: Some(v) }
-            if caller_is_candidate && unwrap_to_candidate_call(v, candidate_ids).is_some() =>
+            if ctx.caller_is_candidate
+                && unwrap_to_candidate_call(v, ctx.candidate_ids).is_some() =>
         {
-            if let Some(call) = unwrap_to_inner_call(v)
-                && let WirInstr::Call { args, .. } = call
-            {
+            if let Some(WirInstr::Call { args, .. }) = unwrap_to_inner_call(v) {
                 for arg in args {
-                    find_nested_candidate_calls(arg, candidate_ids, invalid);
+                    find_nested_candidate_calls(arg, ctx.candidate_ids, invalid);
                 }
             }
-            find_candidate_calls_in_block_prefix(
-                v,
-                root_body,
-                candidate_ids,
-                invalid,
-                caller_is_candidate,
-            );
+            validate_wrapper_prefixes(v, ctx, invalid);
         }
         // A `LocalSet`/`LocalTee` whose value is a compound `Seq`/`Block`/`If`,
         // and whose result is not itself a candidate call (the first arm
@@ -1838,13 +1962,7 @@ fn check_invalid_call_uses(
         {
             match value.as_ref() {
                 WirInstr::Seq(body) | WirInstr::Block { body, .. } => {
-                    validate_call_sites_in_body(
-                        body,
-                        root_body,
-                        candidate_ids,
-                        invalid,
-                        caller_is_candidate,
-                    );
+                    validate_call_sites_in_body(body, ctx, invalid);
                 }
                 WirInstr::If {
                     condition,
@@ -1852,22 +1970,10 @@ fn check_invalid_call_uses(
                     else_body,
                     ..
                 } => {
-                    find_nested_candidate_calls(condition, candidate_ids, invalid);
-                    validate_call_sites_in_body(
-                        then_body,
-                        root_body,
-                        candidate_ids,
-                        invalid,
-                        caller_is_candidate,
-                    );
+                    validate_expr_context(condition, ctx, invalid);
+                    validate_call_sites_in_body(then_body, ctx, invalid);
                     if let Some(eb) = else_body {
-                        validate_call_sites_in_body(
-                            eb,
-                            root_body,
-                            candidate_ids,
-                            invalid,
-                            caller_is_candidate,
-                        );
+                        validate_call_sites_in_body(eb, ctx, invalid);
                     }
                 }
                 _ => unreachable!(),
@@ -1875,80 +1981,44 @@ fn check_invalid_call_uses(
         }
         // Any other instruction that contains a Call to a candidate is invalid
         _ => {
-            find_nested_candidate_calls(instr, candidate_ids, invalid);
+            find_nested_candidate_calls(instr, ctx.candidate_ids, invalid);
         }
     }
 }
 
-/// Scan prefix instructions in `Block` / `Seq` wrappers for invalid candidate
-/// call sites. When a `LocalSet { value: Block { body } }` or
-/// `LocalSet { value: Seq(body) }` wraps a candidate call as its result, the
-/// prefix instructions in the wrapper's body form their own statement-list
-/// scope and may themselves contain SROA-compatible call sites.
-///
-/// Rather than unconditionally invalidating every candidate call in the
-/// prefix, recurse into [`validate_call_sites_in_body`] so prefix items that
-/// match `LocalSet(temp, Call(candidate))` with variant-access uses of `temp`
-/// across `root_body` are accepted. The matching rewriter recurses through
-/// `take_call_from_local_set` → `rewrite_call_sites` on the extracted prefix
-/// so those accepted sites get rewritten.
-fn find_candidate_calls_in_block_prefix(
-    instr: &WirInstr,
-    root_body: &[WirInstr],
-    candidate_ids: &IndexSet<u32>,
-    invalid: &mut IndexSet<u32>,
-    caller_is_candidate: bool,
-) {
-    // The trailing-Unreachable trim is Block-specific:
-    // `translate_stmts_as_value` appends `Unreachable` after a
-    // break-with-value statement so the Wasm validator sees no
-    // fallthrough value, and that `Unreachable` is dead code that must
-    // not be treated as the result. `Seq` has no equivalent emitter
-    // convention, so a trailing `Unreachable` inside `Seq([..., Call, Unreachable])`
-    // is meant as "execute the Call then trap" — `Call` is genuinely
-    // the prefix that needs scanning. Don't drop the Unreachable there.
-    let (body, drop_trailing_unreachable) = match instr {
-        WirInstr::Block { body, .. } => (body.as_slice(), true),
-        WirInstr::Seq(body) => (body.as_slice(), false),
-        _ => return,
+/// Validate the prefix statements of every `Block` / `Seq` wrapper level on
+/// the path to a call-site result. The prefixes form their own
+/// statement-list scopes and may themselves contain SROA-compatible
+/// `LocalSet(temp, Call(candidate))` sites; the matching rewriter
+/// (`take_call_from_local_set` → `rewrite_call_sites` on the extracted
+/// prefix) hoists and rewrites exactly these slices, so validating them with
+/// the standard call-site validator keeps accept and rewrite aligned.
+fn validate_wrapper_prefixes(instr: &WirInstr, ctx: &CallSiteCtx, invalid: &mut IndexSet<u32>) {
+    let Some((steps, _)) = resolve_wrapped_result(instr) else {
+        return;
     };
-    let effective_body =
-        if drop_trailing_unreachable && matches!(body.last(), Some(WirInstr::Unreachable)) {
-            &body[..body.len() - 1]
-        } else {
-            body
+    let mut current = instr;
+    for step in steps {
+        let (list, value_idx) = match (step, current) {
+            (
+                ResultStep::Seq { value_idx } | ResultStep::BreakValue { value_idx },
+                WirInstr::Seq(body),
+            )
+            | (ResultStep::Block { value_idx }, WirInstr::Block { body, .. }) => (body, value_idx),
+            _ => unreachable!("resolve_wrapped_result path mismatch"),
         };
-    if let Some((_, prefix)) = effective_body.split_last() {
-        validate_call_sites_in_body(
-            prefix,
-            root_body,
-            candidate_ids,
-            invalid,
-            caller_is_candidate,
-        );
+        validate_call_sites_in_body(&list[..value_idx], ctx, invalid);
+        current = &list[value_idx];
     }
 }
 
-/// Unwrap through `Block` or `Seq` to find the inner `Call` instruction (for
-/// arg checking).
+/// Unwrap through `Block` / `Seq` wrappers to the inner `Call` instruction
+/// (for arg checking). Shares [`resolve_wrapped_result`] with the candidate
+/// check and the rewriter, so it sees exactly the call they see — including
+/// through a trailing `Unreachable` after a break-with-value.
 fn unwrap_to_inner_call(instr: &WirInstr) -> Option<&WirInstr> {
-    match instr {
-        WirInstr::Call { .. } => Some(instr),
-        WirInstr::Seq(body) => body.last().and_then(unwrap_to_inner_call),
-        WirInstr::Block { body, .. } => {
-            let last = body.last()?;
-            match last {
-                WirInstr::Seq(seq) => {
-                    if let Some((WirInstr::Br { .. }, rest)) = seq.split_last()
-                        && let Some((val, _)) = rest.split_last()
-                    {
-                        return unwrap_to_inner_call(val);
-                    }
-                    None
-                }
-                other => unwrap_to_inner_call(other),
-            }
-        }
+    match resolve_wrapped_result(instr) {
+        Some((_, call @ WirInstr::Call { .. })) => Some(call),
         _ => None,
     }
 }
@@ -1967,13 +2037,14 @@ fn find_nested_candidate_calls(
     instr.for_each_child(&mut |child| find_nested_candidate_calls(child, candidate_ids, invalid));
 }
 
-/// Check that every reference to `local_name` in the instruction list is a
-/// `StructGet { expr: LocalGet(local_name) }` — i.e., the local is never used
-/// directly, only for field extraction.
+/// Phase 3: rewrite confirmed functions to the multi-value ABI — new func
+/// types and signatures, `Return` bodies lowered to flat result vectors,
+/// and every call site rebound through `MultiValueLocalBind`.
 fn apply_sroa(module: &mut WirPackage, confirmed: &[(u32, SroaCandidate)]) {
     // Build a lookup from func_id_index → candidate info
     let candidate_map: crate::hashmap::IndexMap<u32, &SroaCandidate> =
         confirmed.iter().map(|(id, c)| (*id, c)).collect();
+    let candidate_ids: IndexSet<u32> = candidate_map.keys().copied().collect();
 
     // Step A: Create new func types and rewrite function signatures + bodies.
     for (_func_id_index, candidate) in confirmed {
@@ -2019,7 +2090,7 @@ fn apply_sroa(module: &mut WirPackage, confirmed: &[(u32, SroaCandidate)]) {
     for i in 0..module.functions.len() {
         if module.functions[i].body.is_some() {
             let body = module.functions[i].body.as_mut().unwrap();
-            rewrite_call_sites(body, &candidate_map, &module.types);
+            rewrite_call_sites(body, &candidate_map, &candidate_ids, &module.types);
         }
     }
 }
@@ -2107,8 +2178,9 @@ fn rewrite_variant_returns_to_multi_value(
                     );
                 }
             }
-            // For all other instructions (LocalSet, ValueCopy, etc.),
-            // recurse into any nested children that might contain Return.
+            // For all other instructions (LocalSet, Drop-wrapped values,
+            // etc.), recurse into any nested children that might contain
+            // Return.
             other => {
                 other.for_each_boxed_child_mut(&mut |child| {
                     rewrite_variant_returns_to_multi_value(
@@ -2152,7 +2224,14 @@ fn clear_result_types_on_divergent(instr: &mut WirInstr) {
             for child in body.iter_mut() {
                 clear_result_types_on_divergent(child);
             }
-            if body.iter().any(WirInstr::always_diverges) {
+            // A statement that diverges kills the fallthrough value, but a
+            // `Br(0)` still delivers the block's typed value via a
+            // `[value, Br(0)]` exit pair (`always_diverges` deliberately
+            // never treats `Block` as divergent for the same reason).
+            // Clear the result only when no branch targets this block.
+            if body.iter().any(WirInstr::always_diverges)
+                && !any_branch_targets_enclosing(body, 1)
+            {
                 *result = None;
             }
         }
@@ -2398,7 +2477,10 @@ fn rewrite_variant_struct_new_br_to_return(
     }
 }
 
-/// Produce a default (zero) value for a given WIR type.
+/// Produce a default (zero) value for a given WIR type, used to pad the
+/// result-vector slots a variant case leaves unused. Exhaustive over every
+/// type [`is_eligible_field_type`] admits — a wrong-typed pad is invalid
+/// Wasm, so an unpaddable type is a bug in the eligibility whitelist.
 fn default_value_for_type(ty: &WirType) -> WirInstr {
     match ty {
         WirType::I32
@@ -2414,10 +2496,11 @@ fn default_value_for_type(ty: &WirType) -> WirInstr {
         WirType::I64 | WirType::U64 => WirInstr::I64Const(0),
         WirType::F32 => WirInstr::F32Const(0.0),
         WirType::F64 => WirInstr::F64Const(0.0),
+        WirType::V128 => WirInstr::V128Const(0),
         WirType::Ref { .. } | WirType::AbstractRef { .. } => WirInstr::RefNull {
             heap_type: crate::wir::WirAbstractHeapType::None,
         },
-        _ => WirInstr::I32Const(0), // fallback
+        WirType::Unit => panic!("variant SROA cannot pad a unit-typed result slot"),
     }
 }
 
@@ -2431,6 +2514,7 @@ fn default_value_for_type(ty: &WirType) -> WirInstr {
 fn rewrite_call_sites(
     instrs: &mut Vec<WirInstr>,
     candidate_map: &crate::hashmap::IndexMap<u32, &SroaCandidate>,
+    candidate_ids: &IndexSet<u32>,
     types: &[WirTypeDef],
 ) {
     // Variant replacements: temp_name → VariantReplacement
@@ -2445,7 +2529,7 @@ fn rewrite_call_sites(
         // Skip optional DeclareLocal before the LocalSet
         let set_idx = match &instrs[i] {
             WirInstr::DeclareLocal { name: dn, .. } if i + 1 < instrs.len() => {
-                if is_candidate_call_set(&instrs[i + 1], dn, candidate_map) {
+                if is_candidate_call_set(&instrs[i + 1], dn, candidate_ids) {
                     i + 1
                 } else {
                     result.push(std::mem::replace(&mut instrs[i], WirInstr::Nop));
@@ -2458,7 +2542,7 @@ fn rewrite_call_sites(
 
         // Check if this is a LocalSet wrapping a Call to a candidate
         let Some((func_id_idx, temp_name)) =
-            extract_candidate_call_info(&instrs[set_idx], candidate_map)
+            extract_candidate_call_info(&instrs[set_idx], candidate_ids)
         else {
             result.push(std::mem::replace(&mut instrs[i], WirInstr::Nop));
             i += 1;
@@ -2582,12 +2666,12 @@ fn rewrite_call_sites(
         // Recursively rewrite the prefix so any nested
         // `LocalSet(temp, Call(candidate))` shapes it contains are also
         // turned into `MultiValueLocalBind` (and their variant-access
-        // sites replaced). The validator's
-        // `find_candidate_calls_in_block_prefix` accepts these patterns,
-        // so the rewriter must follow through — otherwise the inner
-        // candidate's signature would be multi-value while its call site
-        // stays single-value, causing a Wasm arity mismatch.
-        rewrite_call_sites(&mut prefix_instrs, candidate_map, types);
+        // sites replaced). The validator's `validate_wrapper_prefixes`
+        // accepts these patterns, so the rewriter must follow through —
+        // otherwise the inner candidate's signature would be multi-value
+        // while its call site stays single-value, causing a Wasm arity
+        // mismatch.
+        rewrite_call_sites(&mut prefix_instrs, candidate_map, candidate_ids, types);
         // Emit prefix instructions (e.g. local initialization from inlined blocks)
         result.extend(prefix_instrs);
         result.push(WirInstr::MultiValueLocalBind {
@@ -2603,7 +2687,7 @@ fn rewrite_call_sites(
     if variant_replacements.is_empty() {
         // Recurse into nested blocks even if no replacements at this level
         for instr in instrs.iter_mut() {
-            recurse_rewrite_call_sites(instr, candidate_map, types);
+            recurse_rewrite_call_sites(instr, candidate_map, candidate_ids, types);
         }
         return;
     }
@@ -2625,19 +2709,23 @@ fn rewrite_call_sites(
 
     // Recurse into nested blocks
     for instr in instrs.iter_mut() {
-        recurse_rewrite_call_sites(instr, candidate_map, types);
+        recurse_rewrite_call_sites(instr, candidate_map, candidate_ids, types);
     }
 }
 
 /// Recurse into nested instruction bodies for call site rewriting.
+/// [`validate_expr_context`] is the validation mirror of this walk — keep
+/// the two in sync so accept and rewrite agree on which positions are
+/// statement lists.
 fn recurse_rewrite_call_sites(
     instr: &mut WirInstr,
     candidate_map: &crate::hashmap::IndexMap<u32, &SroaCandidate>,
+    candidate_ids: &IndexSet<u32>,
     types: &[WirTypeDef],
 ) {
     match instr {
         WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
-            rewrite_call_sites(body, candidate_map, types);
+            rewrite_call_sites(body, candidate_map, candidate_ids, types);
         }
         WirInstr::If {
             condition,
@@ -2645,18 +2733,18 @@ fn recurse_rewrite_call_sites(
             else_body,
             ..
         } => {
-            recurse_rewrite_call_sites(condition, candidate_map, types);
-            rewrite_call_sites(then_body, candidate_map, types);
+            recurse_rewrite_call_sites(condition, candidate_map, candidate_ids, types);
+            rewrite_call_sites(then_body, candidate_map, candidate_ids, types);
             if let Some(eb) = else_body {
-                rewrite_call_sites(eb, candidate_map, types);
+                rewrite_call_sites(eb, candidate_map, candidate_ids, types);
             }
         }
         WirInstr::Seq(body) => {
-            rewrite_call_sites(body, candidate_map, types);
+            rewrite_call_sites(body, candidate_map, candidate_ids, types);
         }
         _ => {
             instr.for_each_boxed_child_mut(&mut |child| {
-                recurse_rewrite_call_sites(child, candidate_map, types);
+                recurse_rewrite_call_sites(child, candidate_map, candidate_ids, types);
             });
         }
     }
@@ -2860,7 +2948,7 @@ fn replace_variant_accesses(
 fn is_candidate_call_set(
     instr: &WirInstr,
     expected_name: &str,
-    candidate_map: &crate::hashmap::IndexMap<u32, &SroaCandidate>,
+    candidate_ids: &IndexSet<u32>,
 ) -> bool {
     let WirInstr::LocalSet { name, value } = instr else {
         return false;
@@ -2868,128 +2956,57 @@ fn is_candidate_call_set(
     if name != expected_name {
         return false;
     }
-    let candidate_ids: IndexSet<u32> = candidate_map.keys().copied().collect();
-    unwrap_to_candidate_call(value, &candidate_ids).is_some()
+    unwrap_to_candidate_call(value, candidate_ids).is_some()
 }
 
-/// Extract (`func_id_index`, `temp_name`) from a candidate call `LocalSet`.
-/// Handles calls wrapped in `ValueCopy` or trivial inlined `Block`.
+/// Extract (`func_id_index`, `temp_name`) from a candidate call `LocalSet`,
+/// unwrapping trivial `Block` / `Seq` wrappers left by inlining.
 fn extract_candidate_call_info(
     instr: &WirInstr,
-    candidate_map: &crate::hashmap::IndexMap<u32, &SroaCandidate>,
+    candidate_ids: &IndexSet<u32>,
 ) -> Option<(u32, String)> {
     let WirInstr::LocalSet { name, value } = instr else {
         return None;
     };
-    let candidate_ids: IndexSet<u32> = candidate_map.keys().copied().collect();
-    unwrap_to_candidate_call(value, &candidate_ids).map(|idx| (idx, name.clone()))
+    unwrap_to_candidate_call(value, candidate_ids).map(|idx| (idx, name.clone()))
 }
 
-/// Take the Call instruction out of a `LocalSet`, unwrapping through
-/// `ValueCopy` and trivial `Block` wrappers. Replaces the instruction with Nop.
-/// Returns `(prefix_instrs, call_instr)` where prefix instructions are statements
-/// from inside Block wrappers that must be emitted before the call (e.g. initialization
-/// of locals used as call arguments).
+/// Take the Call instruction out of a `LocalSet`, unwrapping trivial
+/// `Block` / `Seq` wrappers. Replaces the instruction with Nop. Returns
+/// `(prefix_instrs, call_instr)` where prefix instructions are statements
+/// from inside the wrappers that must be emitted before the call (e.g.
+/// initialization of locals used as call arguments). Consumes the same
+/// [`resolve_wrapped_result`] path validation used, so the two cannot
+/// disagree on where the call and its prefixes live.
 fn take_call_from_local_set(instr: &mut WirInstr) -> (Vec<WirInstr>, Box<WirInstr>) {
     let WirInstr::LocalSet { value, .. } = std::mem::replace(instr, WirInstr::Nop) else {
         unreachable!()
     };
+    let (steps, _) = resolve_wrapped_result(&value)
+        .unwrap_or_else(|| unreachable!("SROA call-site take on a shape validation rejected"));
     let mut prefix = Vec::new();
-    let call = unwrap_and_take_call(*value, &mut prefix);
-    (prefix, Box::new(call))
-}
-
-/// Recursively unwrap `Block` / `Seq` wrappers to extract the `Call`
-/// instruction. Collects any non-result instructions from the wrappers into
-/// `prefix` so they can be emitted before the call. Mirrors the
-/// `unwrap_to_candidate_call` recognition path used during validation.
-fn unwrap_and_take_call(instr: WirInstr, prefix: &mut Vec<WirInstr>) -> WirInstr {
-    let mut current = instr;
-    loop {
-        match current {
-            WirInstr::Call { .. } => return current,
-            WirInstr::Block { ref mut body, .. } => {
-                // Extract the call from the block's result position,
-                // and collect all preceding statements as prefix.
-                if let Some(call) = take_block_result_call(body, prefix) {
-                    current = *call;
-                } else {
-                    unreachable!("expected call in SROA block unwrap");
-                }
-            }
-            WirInstr::Seq(mut body) => {
-                if body.is_empty() {
-                    unreachable!("expected non-empty Seq in SROA call unwrap");
-                }
-                let last_idx = body.len() - 1;
-                for item in &mut body[..last_idx] {
-                    let taken = std::mem::replace(item, WirInstr::Nop);
-                    if !matches!(taken, WirInstr::Nop) {
-                        prefix.push(taken);
-                    }
-                }
-                let last = std::mem::replace(&mut body[last_idx], WirInstr::Nop);
-                current = last;
-            }
-            _ => unreachable!("unexpected instruction in SROA call unwrap"),
-        }
-    }
-}
-
-/// Take the call instruction from the result position of a block body.
-/// Preceding statements in the block are moved into `prefix`.
-fn take_block_result_call(
-    body: &mut [WirInstr],
-    prefix: &mut Vec<WirInstr>,
-) -> Option<Box<WirInstr>> {
-    if body.is_empty() {
-        return None;
-    }
-
-    // Skip trailing Unreachable — translate_stmts_as_value may append one after a
-    // break-with-value; it is dead code and must not be treated as the result value.
-    let effective_len = if matches!(body.last(), Some(WirInstr::Unreachable)) {
-        body.len() - 1
-    } else {
-        body.len()
-    };
-    if effective_len == 0 {
-        return None;
-    }
-    let last_idx = effective_len - 1;
-
-    // Move all statements before the last (result-producing) instruction to prefix
-    for item in &mut body[..last_idx] {
-        let taken = std::mem::replace(item, WirInstr::Nop);
-        if !matches!(taken, WirInstr::Nop) {
-            prefix.push(taken);
-        }
-    }
-
-    let last = &mut body[last_idx];
-    match last {
-        // Seq([..., value, Br]) — take the value before Br, move others to prefix
-        WirInstr::Seq(seq) => {
-            if seq.len() >= 2 && matches!(seq.last(), Some(WirInstr::Br { .. })) {
-                let val_idx = seq.len() - 2;
-                // Move any statements before the value expression to prefix
-                for item in &mut seq[..val_idx] {
-                    let taken = std::mem::replace(item, WirInstr::Nop);
-                    if !matches!(taken, WirInstr::Nop) {
-                        prefix.push(taken);
-                    }
-                }
-                let taken = std::mem::replace(&mut seq[val_idx], WirInstr::Nop);
-                Some(Box::new(taken))
-            } else {
-                None
+    let mut current = *value;
+    for step in steps {
+        let (mut list, value_idx) = match (step, current) {
+            (
+                ResultStep::Seq { value_idx } | ResultStep::BreakValue { value_idx },
+                WirInstr::Seq(body),
+            )
+            | (ResultStep::Block { value_idx }, WirInstr::Block { body, .. }) => (body, value_idx),
+            _ => unreachable!("resolve_wrapped_result path mismatch"),
+        };
+        for item in list.drain(..value_idx) {
+            if !matches!(item, WirInstr::Nop) {
+                prefix.push(item);
             }
         }
-        // Last instruction is the value directly
-        other => {
-            let taken = std::mem::replace(other, WirInstr::Nop);
-            Some(Box::new(taken))
-        }
+        // The value now sits at index 0; the rest (a break `Br`, a trailing
+        // `Unreachable`) is dropped with the wrapper.
+        current = list.swap_remove(0);
+    }
+    match current {
+        call @ WirInstr::Call { .. } => (prefix, Box::new(call)),
+        _ => unreachable!("expected Call at SROA call-site result leaf"),
     }
 }
 
@@ -3172,14 +3189,14 @@ fn all_returns_decompose(
 fn nested_slot_candidates(module: &WirPackage, pinned: &IndexSet<u32>) -> Vec<NestedSlotCand> {
     let mut out = Vec::new();
     for (i, func) in module.functions.iter().enumerate() {
-        let func_id_index = crate::wir_build::DEFINED_FUNC_BASE + u32::try_from(i).unwrap();
+        let func_id_index = module.defined_func_base + u32::try_from(i).unwrap();
         if pinned.contains(&func_id_index) || func.body.is_none() {
             continue;
         }
         let Some(WirTypeDef::Func(ft)) = module.types.get(func.type_id.index() as usize) else {
             continue;
         };
-        if ft.results.len() < 2 || ft.results.len() + 1 > 8 {
+        if ft.results.len() < 2 || ft.results.len() + 1 > MAX_PER_CASE_RESULT_FIELDS {
             continue;
         }
         for slot in 0..ft.results.len() {
@@ -3225,8 +3242,11 @@ enum SlotConsumer {
 /// `RefAsNonNull` wrappers. `rewrite_unwrap_to_guard` discards the whole
 /// then-arm, so anything richer (a side-effecting prefix statement, a branch, a
 /// second definition of the temp) must be rejected or a needed statement would
-/// be silently dropped.
-fn then_is_pure_slot_copy(then_body: &[WirInstr], slot_local: &str) -> bool {
+/// be silently dropped. For the two-statement form the copy temp `t` must
+/// have no reads outside the discarded pair (`def_use.get_count(t) == 1` —
+/// the pair's own `LocalGet`): a read elsewhere would observe a local whose
+/// only definition was dropped.
+fn then_is_pure_slot_copy(then_body: &[WirInstr], slot_local: &str, def_use: &LocalDefUse) -> bool {
     fn is_slot_extraction(e: &WirInstr, slot: &str) -> bool {
         match e {
             WirInstr::RefAsNonNull(inner) => is_slot_extraction(inner, slot),
@@ -3239,16 +3259,30 @@ fn then_is_pure_slot_copy(then_body: &[WirInstr], slot_local: &str) -> bool {
         [
             WirInstr::LocalSet { name: t, value },
             WirInstr::LocalGet { name: g, .. },
-        ] => g == t && is_slot_extraction(value, slot_local),
+        ] => {
+            g == t
+                && is_slot_extraction(value, slot_local)
+                && def_use.get_count(t) == 1
+                && def_use.set_count(t) == 1
+        }
         _ => false,
     }
 }
 
 /// Find the unique `?`-unwrap `LocalSet(alias, If {...})` whose then-arm copies
 /// `slot_local` out and whose else-arm diverges. Returns the alias name.
-fn find_unwrap_alias(body: &[WirInstr], slot_local: &str) -> Option<String> {
+fn find_unwrap_alias(
+    body: &[WirInstr],
+    slot_local: &str,
+    def_use: &LocalDefUse,
+) -> Option<String> {
     let mut found = None;
-    fn walk(body: &[WirInstr], slot_local: &str, found: &mut Option<String>) {
+    fn walk(
+        body: &[WirInstr],
+        slot_local: &str,
+        def_use: &LocalDefUse,
+        found: &mut Option<String>,
+    ) {
         for instr in body {
             if let WirInstr::LocalSet { name, value } = instr
                 && let WirInstr::If {
@@ -3257,7 +3291,7 @@ fn find_unwrap_alias(body: &[WirInstr], slot_local: &str) -> Option<String> {
                     ..
                 } = value.as_ref()
                 && eb.iter().any(WirInstr::always_diverges)
-                && then_is_pure_slot_copy(then_body, slot_local)
+                && then_is_pure_slot_copy(then_body, slot_local, def_use)
             {
                 *found = Some(name.clone());
             }
@@ -3265,52 +3299,47 @@ fn find_unwrap_alias(body: &[WirInstr], slot_local: &str) -> Option<String> {
                 WirInstr::Block { body, .. }
                 | WirInstr::Loop { body, .. }
                 | WirInstr::Seq(body) => {
-                    walk(body, slot_local, found);
+                    walk(body, slot_local, def_use, found);
                 }
                 WirInstr::If {
                     then_body,
                     else_body,
                     ..
                 } => {
-                    walk(then_body, slot_local, found);
+                    walk(then_body, slot_local, def_use, found);
                     if let Some(eb) = else_body {
-                        walk(eb, slot_local, found);
+                        walk(eb, slot_local, def_use, found);
                     }
                 }
                 _ => {}
             }
         }
     }
-    walk(body, slot_local, &mut found);
+    walk(body, slot_local, def_use, &mut found);
     found
 }
 
-/// Count `LocalGet(name)` occurrences in a body (recursively, all positions).
-fn count_local_get(instr: &WirInstr, name: &str) -> usize {
-    let mut n = 0;
-    if let WirInstr::LocalGet { name: g, .. } = instr
-        && g == name
-    {
-        n += 1;
-    }
-    instr.for_each_child(&mut |c| n += count_local_get(c, name));
-    n
-}
-
 /// Classify the consumer of `slot_local` in `body`, or `None` if not cleanly
-/// rewritable.
-fn classify_slot_consumer(body: &[WirInstr], slot_local: &str) -> Option<SlotConsumer> {
-    if all_uses_are_variant_access(body, slot_local) {
+/// rewritable. `case_types` is the inner variant's payload-bearing case set
+/// (the only type the nested rewrite's `VariantReplacement` maps carry).
+fn classify_slot_consumer(
+    body: &[WirInstr],
+    slot_local: &str,
+    case_types: &IndexSet<u32>,
+    def_use: &LocalDefUse,
+) -> Option<SlotConsumer> {
+    if all_uses_are_variant_access(body, slot_local, case_types, def_use) {
         return Some(SlotConsumer::Direct);
     }
     // Otherwise the only use must be a single `?`-unwrap copy whose alias is
     // itself consumed only via variant access.
-    let total: usize = body.iter().map(|i| count_local_get(i, slot_local)).sum();
-    if total != 1 {
+    if def_use.get_count(slot_local) != 1 {
         return None;
     }
-    let alias = find_unwrap_alias(body, slot_local)?;
-    if count_local_set_in_body(body, &alias) == 1 && all_uses_are_variant_access(body, &alias) {
+    let alias = find_unwrap_alias(body, slot_local, def_use)?;
+    if def_use.set_count(&alias) == 1
+        && all_uses_are_variant_access(body, &alias, case_types, def_use)
+    {
         Some(SlotConsumer::Unwrap { alias })
     } else {
         None
@@ -3319,13 +3348,26 @@ fn classify_slot_consumer(body: &[WirInstr], slot_local: &str) -> Option<SlotCon
 
 /// Phase 2: keep candidates whose every call site consumes the slot cleanly.
 fn validate_nested_sites(module: &WirPackage, cands: Vec<NestedSlotCand>) -> Vec<NestedSlotCand> {
+    let def_use_by_func: Vec<LocalDefUse> = module
+        .functions
+        .iter()
+        .map(|func| {
+            func.body
+                .as_deref()
+                .map(LocalDefUse::of_body)
+                .unwrap_or_default()
+        })
+        .collect();
     cands
         .into_iter()
         .filter(|cand| {
+            let case_types: IndexSet<u32> =
+                std::iter::once(cand.info.some_case_type_idx).collect();
             let mut saw_call = false;
             let mut all_ok = true;
-            for func in &module.functions {
+            for (i, func) in module.functions.iter().enumerate() {
                 let Some(body) = &func.body else { continue };
+                let def_use = &def_use_by_func[i];
                 // Every reference to the candidate must be a multi-value bind we
                 // can rewrite. A `Return(Call(f))` tail call (or any other raw
                 // call) would keep the old arity after we widen the signature,
@@ -3340,7 +3382,9 @@ fn validate_nested_sites(module: &WirPackage, cands: Vec<NestedSlotCand>) -> Vec
                     mvbind_calls += 1;
                     match locals.get(cand.slot).and_then(|o| o.as_ref()) {
                         Some(slot_local) => {
-                            if classify_slot_consumer(body, slot_local).is_none() {
+                            if classify_slot_consumer(body, slot_local, &case_types, def_use)
+                                .is_none()
+                            {
                                 all_ok = false;
                             }
                         }
@@ -3538,8 +3582,9 @@ fn rewrite_nested_call_sites(
         crate::hashmap::IndexMap::default();
     {
         let root: &[WirInstr] = body;
+        let def_use = LocalDefUse::of_body(root);
         for instr in root {
-            plan_nested_call_sites(instr, root, by_func, &mut plans);
+            plan_nested_call_sites(instr, root, by_func, &def_use, &mut plans);
         }
     }
     if plans.is_empty() {
@@ -3570,6 +3615,7 @@ fn plan_nested_call_sites(
     instr: &WirInstr,
     root: &[WirInstr],
     by_func: &crate::hashmap::IndexMap<u32, &NestedSlotCand>,
+    def_use: &LocalDefUse,
     plans: &mut crate::hashmap::IndexMap<String, SlotConsumer>,
 ) {
     if let WirInstr::MultiValueLocalBind {
@@ -3579,11 +3625,13 @@ fn plan_nested_call_sites(
         && let Some(WirInstr::Call { func_id, .. }) = unwrap_to_inner_call(call)
         && let Some(cand) = by_func.get(&func_id.index())
         && let Some(Some(slot_local)) = locals.get(cand.slot)
-        && let Some(consumer) = classify_slot_consumer(root, slot_local)
     {
-        plans.insert(slot_local.clone(), consumer);
+        let case_types: IndexSet<u32> = std::iter::once(cand.info.some_case_type_idx).collect();
+        if let Some(consumer) = classify_slot_consumer(root, slot_local, &case_types, def_use) {
+            plans.insert(slot_local.clone(), consumer);
+        }
     }
-    instr.for_each_child(&mut |c| plan_nested_call_sites(c, root, by_func, plans));
+    instr.for_each_child(&mut |c| plan_nested_call_sites(c, root, by_func, def_use, plans));
 }
 
 /// Mutation pass: at each candidate bind, split the slot local into

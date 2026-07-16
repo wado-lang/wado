@@ -1,0 +1,28 @@
+// Regression: a mutating call nested inside a statement's subexpression
+// (`pop(&mut a)` lowered into the scrutinee binding of `matches`) must
+// invalidate the list's field facts. Only top-level call statements were
+// invalidated before, so `a.len()` folded to the stale literal length 3
+// once the stores-aware alias refinement stopped marking `a` aliased.
+
+use { println, Stdout } from "core:cli";
+
+#[inline("never")]
+fn f() -> i32 with Stdout {
+    let mut a: List<i32> = [1, 2, 3];
+    if a.pop() matches { Some(_) } {
+        println(`popped`);
+    }
+    return a.len();
+}
+
+export fn run() with Stdout {
+    println(`{f()}`);
+}
+
+__DATA__
+{
+    "stdout": "popped\n2\n",
+    "wir_not_expect:O2": [
+        "return 3;"
+    ]
+}

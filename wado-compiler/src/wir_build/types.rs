@@ -1113,9 +1113,13 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
                     continue;
                 }
 
+                // Unit params are erased from the canonical signature, matching
+                // the function-signature convention (unit has no Wasm
+                // representation); every canonical-key site filters identically.
                 let param_wirs: Vec<WirType> = params
                     .iter()
                     .map(|p| ctx.type_id_to_wir_type(type_table, *p))
+                    .filter(|t| !matches!(t, WirType::Unit))
                     .collect();
                 let result_wirs: Vec<WirType> = if *return_type == crate::tir::TypeTable::UNIT
                     || *return_type == crate::tir::TypeTable::NEVER

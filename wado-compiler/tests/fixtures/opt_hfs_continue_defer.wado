@@ -1,0 +1,47 @@
+// HFS `continue` back-edge: a call-clean (deferred, ScalarOnly-entry)
+// candidate must not pay a field write-back on `continue` — the back-edge
+// target is the loop's entry state, same as the fall-through. Write-back
+// still lands at the loop's escape points (the `break` and the implicit
+// while-exit).
+
+struct Cursor {
+    data: ByteList,
+    pos: i32,
+}
+
+impl Cursor {
+    fn skip_run(&mut self) -> i32 {
+        let mut seen = 0;
+        while self.pos < self.data.len() {
+            let b = self.data[self.pos] as i32;
+            if b > 64 {
+                break;
+            }
+            if b == 32 {
+                self.pos += 1;
+                continue;
+            }
+            self.pos += 1;
+            seen += 1;
+        }
+        return seen;
+    }
+}
+
+export fn run() {
+    let bytes: ByteList = [32, 48, 32, 49, 65, 32] as ByteList;
+    let mut c = Cursor { data: bytes, pos: 0 };
+    let seen = c.skip_run();
+    assert seen == 2, `expected 2, got {seen}`;
+    assert c.pos == 4, `expected 4, got {c.pos}`;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "self.pos = __hfs_pos_16;\n                break",
+        "__hfs_pos_16 = __hfs_pos_16 + 1;\n                continue"
+    ],
+    "wir_not_expect:O2": ["self.pos = __hfs_pos_16;\n                continue"]
+}

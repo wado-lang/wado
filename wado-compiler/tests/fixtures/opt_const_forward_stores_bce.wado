@@ -1,0 +1,48 @@
+// Optimization: stores-aware alias refinement enables constant-index
+// bounds-check elimination for a mutable (non-globalized) list that is
+// later passed to a callee without `stores`. `sum(&arr)` cannot retain
+// the reference, so `arr` is not aliased: the `used: 3` fact from the
+// list literal forwards into every constant-index check before the
+// call, folding each `N >= used` comparison away.
+//
+// `__b` is the WIR builder's name for the list temp, pinned as a
+// snapshot (like the `__const_obj_N` names in the array_bounds_elim
+// fixtures); the `0 >= __v1`-style patterns below are the pre-fold
+// bounds-check shape that must not survive.
+
+use { println, Stdout } from "core:cli";
+
+#[inline("never")]
+fn sum(xs: &List<i32>) -> i32 {
+    let mut total = 0;
+    for let x of *xs {
+        total += x;
+    }
+    return total;
+}
+
+export fn run() with Stdout {
+    let mut arr: List<i32> = [10, 20, 30];
+    arr[2] = 31;
+    let first = arr[0];
+    let second = arr[1];
+    let third = arr[2];
+    let s = sum(&arr);
+    println(`{first} {second} {third} {s}`);
+}
+
+__DATA__
+{
+    "stdout": "10 20 31 61\n",
+    "wir_expect:O2": [
+        "builtin::array_get<i32>(__b.repr, 0)",
+        "builtin::array_get<i32>(__b.repr, 1)",
+        "builtin::array_get<i32>(__b.repr, 2)",
+        "builtin::array_set<i32>(__b.repr, 2, 31)"
+    ],
+    "wir_not_expect:O2": [
+        "0 >= __v1",
+        "1 >= __v1",
+        "2 >= __v1"
+    ]
+}

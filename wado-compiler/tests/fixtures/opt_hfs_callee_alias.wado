@@ -1,0 +1,36 @@
+// HFS callee field-usage analysis: `sneaky` shares its `&mut Counter` param
+// into `r` (the conditional keeps copy_prop from erasing the alias) and
+// doubles `x` through it. The bare value-position read of the param must
+// mark it conservative, so the caller syncs `x` around the call.
+
+struct Counter {
+    x: i32,
+    y: i32,
+}
+
+#[inline(never)]
+fn sneaky(c: &mut Counter) {
+    c.y += 1;
+    let r = if c.y > 0 { c } else { c };
+    r.x = r.x * 2;
+}
+
+export fn run() {
+    let mut c = Counter { x: 1, y: 0 };
+    let mut total = 0;
+    for let mut i = 0; i < 3; i += 1 {
+        c.x += 1;
+        sneaky(&mut c);
+        total += c.x;
+        total += c.x;
+    }
+    assert total == 72, `expected 72, got {total}`;
+    assert c.x == 22, `expected 22, got {c.x}`;
+    assert c.y == 3, `expected 3, got {c.y}`;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["__hfs_x"]
+}
