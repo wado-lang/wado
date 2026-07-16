@@ -1,0 +1,19 @@
+// `String::push_display<T: Display>` now genuinely requires `T: Display`, so a
+// struct without a `Display` impl is rejected at the bound — it no longer
+// silently writes debug output.
+use { PushDisplay } from "core:prelude/format.wado";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+test "push_display rejects a non-Display type" {
+    let p = Point { x: 1, y: 2 };
+    let mut s = "";
+    s.push_display(&p);
+    assert s == "";
+}
+
+__DATA__
+{"test": {}, "compile_error": "does not implement trait 'Display'"}

@@ -576,6 +576,7 @@ Derived from `wado.toml` when present:
 
 ## References
 
+- [Effect Reconstruction from CM Component Imports](./wep-2026-07-15-cm-import-effect-reconstruction.md)
 - [Component Model WIT specification](https://component-model.bytecodealliance.org/design/wit.html)
 - [wit-component crate](https://crates.io/crates/wit-component)
 - [Component Model Issue #321: Pure annotation](https://github.com/WebAssembly/component-model/issues/321)

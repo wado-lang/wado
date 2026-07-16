@@ -386,6 +386,10 @@ pub enum TypeError {
     UnsupportedSynthesisTrait {
         trait_name: String,
         type_name: String,
+        /// `true` when `trait_name` is the compiler's prelude `Display` (resolved
+        /// scope-aware at the marker site, so a same-name user trait does not
+        /// match) — gates the `Display`-specific "use `{x:?}`" hint.
+        is_display: bool,
         span: Span,
     },
 
@@ -848,14 +852,22 @@ impl TypeError {
             TypeError::UnsupportedSynthesisTrait {
                 trait_name,
                 type_name,
+                is_display,
                 span,
-            } => (
-                Code::TypeMismatch,
-                format!(
-                    "cannot synthesize trait `{trait_name}` for `{type_name}`: only `From`, `Serialize`, `Deserialize`, `Eq`, and `Ord` support `impl Trait for Type;`"
-                ),
-                *span,
-            ),
+            } => {
+                let hint = if *is_display {
+                    " `Display` is never auto-derived (plain enums display their bare case name automatically); write a manual `impl Display`, or use `{x:?}` for debug output"
+                } else {
+                    ""
+                };
+                (
+                    Code::TypeMismatch,
+                    format!(
+                        "cannot synthesize trait `{trait_name}` for `{type_name}`: `impl Trait for Type;` is supported for `From`, `Serialize`, `Deserialize`, `Eq`, `Ord`, `Default`, `Inspect`, `InspectAlt`, and `DisplayAlt`.{hint}"
+                    ),
+                    *span,
+                )
+            }
             TypeError::DefaultInTraitImpl {
                 method,
                 param,

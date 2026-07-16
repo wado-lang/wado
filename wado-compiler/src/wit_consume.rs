@@ -11,13 +11,18 @@
 use crate::ast::{AstId, AstIdSpace};
 use crate::ast::{
     AttrArg, Attribute, CmBoundary, CmImport, EnumCase, EnumDecl, FlagsDecl, FlagsVariant,
-    GenericType, InterfaceDecl, InterfaceMethod, Item, Module, NamedType, Newtype, Param, SelfKind,
-    StructDecl, StructField, Type, VariantCase, VariantDecl, Visibility,
+    GenericType, InnerAttribute, InterfaceDecl, InterfaceMethod, Item, Module, NamedType, Newtype,
+    Param, SelfKind, StructDecl, StructField, Type, VariantCase, VariantDecl, Visibility,
 };
 use crate::token::Span;
 use crate::wit_emit::CmShape;
 use heck::{ToSnakeCase, ToUpperCamelCase};
 use wit_parser::{Resolve, Type as WitType, TypeDefKind, TypeId, TypeOwner, WorldId, WorldItem};
+
+/// Inner-attribute name carrying a component's host-leaf import FQs on its
+/// synthesized module, so effect reconstruction can recover them from the AST
+/// alone (see [Effect Reconstruction from CM Component Imports]).
+pub const CM_HOST_IMPORTS_ATTR: &str = "cm_host_imports";
 
 /// The Wado bindings synthesized from one decoded imported component.
 pub struct ComponentBindings {
@@ -25,6 +30,33 @@ pub struct ComponentBindings {
     pub module: Module,
     /// FQ names of every exported interface (drives import-plan classification).
     pub interface_fqs: Vec<String>,
+    /// FQ names of the interfaces the component itself imports — its host-leaf
+    /// capabilities (WASI, etc.). Effect reconstruction maps these onto the
+    /// consumer's effects; a purely-computational component imports none.
+    pub host_leaf_imports: Vec<String>,
+}
+
+/// Read the host-leaf import FQs a component-binding module carries in its
+/// [`CM_HOST_IMPORTS_ATTR`] inner attribute. Empty for a non-component module
+/// or a component that imports nothing.
+pub fn module_host_leaf_imports(module: &Module) -> Vec<String> {
+    module
+        .inner_attributes
+        .iter()
+        .find(|a| a.name == CM_HOST_IMPORTS_ATTR)
+        .map(|a| {
+            a.args
+                .iter()
+                .filter_map(|arg| {
+                    if let AttrArg::Str(s) = arg {
+                        Some(s.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Build a Wado AST module from a component's decoded `Resolve` + target world.
@@ -64,9 +96,38 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
         return Err(b.errors.join("; "));
     }
 
+    // The component's own imports are its host-leaf capabilities. Collect every
+    // imported interface FQ so effect reconstruction can map them onto the
+    // consumer's effects; imported world-level functions/types are not a v1
+    // effect surface and are ignored.
+    let host_leaf_imports: Vec<String> = resolve.worlds[world]
+        .imports
+        .iter()
+        .filter_map(|(_, item)| match item {
+            WorldItem::Interface { id, .. } => Some(interface_fq(resolve, *id)),
+            WorldItem::Function(_) | WorldItem::Type { .. } => None,
+        })
+        .collect();
+
+    // Carry the host-leaf set on the synthesized module so the registration
+    // path (`fold_component_interfaces`) recovers it from the AST alone.
+    let inner_attributes = if host_leaf_imports.is_empty() {
+        Vec::new()
+    } else {
+        vec![InnerAttribute {
+            name: CM_HOST_IMPORTS_ATTR.to_string(),
+            args: host_leaf_imports
+                .iter()
+                .cloned()
+                .map(AttrArg::Str)
+                .collect(),
+            span: syn(),
+        }]
+    };
+
     let module = Module::with_metadata(
         b.items,
-        Vec::new(),
+        inner_attributes,
         None,
         None,
         crate::hashmap::IndexSet::default(),
@@ -77,6 +138,7 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
     Ok(ComponentBindings {
         module,
         interface_fqs,
+        host_leaf_imports,
     })
 }
 
@@ -508,7 +570,17 @@ mod tests {
         let b = build_bindings(&resolve, world).expect("build bindings");
         assert_eq!(
             b.interface_fqs,
-            vec!["wado-lang:cm-catalog/cm-catalog@0.1.0"]
+            vec!["wado-lang:cm-catalog/cm-catalog@0.0.16"]
+        );
+        // cm-catalog performs no I/O, so the ambient panic path imports nothing
+        // (`log_stderr` rides an existing stderr import or traps — see
+        // `provides_ambient_stdio_sink`). Its one host-leaf import is
+        // `wasi:cli/types`, the shared error-code the future/stream results of
+        // its async exports carry — a genuine capability of the async surface,
+        // not an ambient effect.
+        assert_eq!(
+            b.host_leaf_imports,
+            vec!["wasi:cli/types@0.3.0".to_string()]
         );
 
         let mut iface = None;
@@ -530,7 +602,10 @@ mod tests {
         // A primitive identity and a named-type identity, with cm metadata.
         let id_u32 = iface.methods.iter().find(|m| m.name == "id_u32").unwrap();
         let cm = id_u32.attrs[0].as_cm_import().unwrap();
-        assert_eq!(cm.interface_path(), "wado-lang:cm-catalog/cm-catalog@0.1.0");
+        assert_eq!(
+            cm.interface_path(),
+            "wado-lang:cm-catalog/cm-catalog@0.0.16"
+        );
         assert_eq!(cm.function.as_deref(), Some("id-u32"));
 
         let id_record = iface
@@ -543,7 +618,7 @@ mod tests {
                 assert_eq!(n.name, "Point");
                 assert_eq!(
                     n.source_interface.as_deref(),
-                    Some("wado-lang:cm-catalog/cm-catalog@0.1.0")
+                    Some("wado-lang:cm-catalog/cm-catalog@0.0.16")
                 );
             }
             other => panic!("expected Named Point, got {other:?}"),
@@ -565,7 +640,7 @@ mod tests {
                 assert_eq!(n.name, "Meters");
                 assert_eq!(
                     n.source_interface.as_deref(),
-                    Some("wado-lang:cm-catalog/cm-catalog@0.1.0")
+                    Some("wado-lang:cm-catalog/cm-catalog@0.0.16")
                 );
             }
             other => panic!("expected Named Meters, got {other:?}"),

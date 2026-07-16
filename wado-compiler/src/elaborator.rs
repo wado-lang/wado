@@ -883,11 +883,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 span: impl_block.span,
             });
         } else {
+            let is_display = trait_type
+                .head_base_name()
+                .is_some_and(|base| self.tysys.is_display_trait(&self.type_lookup(), base));
             let _ = self
                 .logger
                 .error(types::TypeError::UnsupportedSynthesisTrait {
                     trait_name: self.get_type_name_full(trait_type),
                     type_name: struct_name.to_string(),
+                    is_display,
                     span: impl_block.span,
                 });
         }

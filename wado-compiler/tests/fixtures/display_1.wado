@@ -277,10 +277,8 @@ fn test_template_specifiers_inspect() with Stdout {
     assert `{with_newline:?}` == "\"line1\\nline2\"";
     let some_i32: Option<i32> = Option::<i32>::Some(42);
     assert `{some_i32:?}` == "Option::Some(42)";
-    assert `{some_i32}` == "Option::Some(42)";
     let none_i32: Option<i32> = null;
     assert `{none_i32:?}` == "Option::None";
-    assert `{none_i32}` == "Option::None";
     let some_str: Option<String> = Option::<String>::Some("world");
     assert `{some_str:?}` == "Option::Some(\"world\")";
     let some_some: Option<Option<i32>> = Option::<Option<i32>>::Some(Option::<i32>::Some(7));
@@ -289,7 +287,6 @@ fn test_template_specifiers_inspect() with Stdout {
     assert `{some_none:?}` == "Option::Some(Option::None)";
     let ok_val: Result<i32, String> = Result::<i32, String>::Ok(42);
     assert `{ok_val:?}` == "Result::Ok(42)";
-    assert `{ok_val}` == "Result::Ok(42)";
     let err_val: Result<i32, String> = Result::<i32, String>::Err("fail");
     assert `{err_val:?}` == "Result::Err(\"fail\")";
     let err_int: Result<String, i32> = Result::<String, i32>::Err(-1);

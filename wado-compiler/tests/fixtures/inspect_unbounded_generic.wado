@@ -1,7 +1,9 @@
-// Regression: a template string formatting an *unbounded* type param must
-// still work. The format traits are total, so `{v:?}` over `T` type-checks
+// Regression: a template string formatting an *unbounded* type param with
+// `{v:?}` must still work. `Inspect` is total, so `{v:?}` over `T` type-checks
 // with no written bound, and the concrete `P^Inspect` body (generated eagerly)
-// resolves once monomorphize substitutes `T` → `P`.
+// resolves once monomorphize substitutes `T` → `P`. (`{v}` / `Display` is not
+// total and would require a `T: Display` bound — see
+// display_no_autoderive_unbounded_generic.wado.)
 struct P {
     x: i32,
 }
@@ -20,10 +22,6 @@ fn show<T>(v: &T) -> String {
     return `{v:?}`;
 }
 
-fn show_display<T>(v: &T) -> String {
-    return `{v}`;
-}
-
 fn indirect<U>(v: &U) -> String {
     return show(v);
 }
@@ -31,7 +29,6 @@ fn indirect<U>(v: &U) -> String {
 test "unbounded generic inspect discovered at monomorphize" {
     let p = P { x: 7 };
     assert show(&p) == "P { x: 7 }";
-    assert show_display(&p) == "P { x: 7 }";
     assert show(&E::A) == "E::A";
     assert show(&V::Leaf(3)) == "V::Leaf(3)";
 }

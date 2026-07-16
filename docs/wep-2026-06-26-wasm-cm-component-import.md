@@ -33,6 +33,12 @@ parsed WIT".
   (`Interface::method`, populated from effect usage), so a function-bearing WIT
   interface maps onto a Wado `interface` exactly like WASI. This reuses the
   whole pipeline; only codegen's _satisfaction_ of the import differs.
+  - Superseded by
+    [Effect Reconstruction from CM Component Imports](./wep-2026-07-15-cm-import-effect-reconstruction.md):
+    the imported interface is no
+    longer unconditionally effectful. Its effects are reconstructed from the
+    component's own host-leaf imports (empty → no `with`), so a pure component
+    maps to a namespace, not an effect.
 
 ## Design
 

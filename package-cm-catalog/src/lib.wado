@@ -32,6 +32,12 @@ pub struct Point {
     y: f64,
 }
 
+// A record that flattens to a single core value (`[i64]`), so the canonical
+// ABI returns it flat rather than through an outptr — unlike `Point`.
+pub struct Single {
+    value: u64,
+}
+
 pub enum Color {
     Red,
     Green,
@@ -144,6 +150,9 @@ export fn id_result_unit(v: Result<(), ()>) -> Result<(), ()> {
 // --- Named value types ---
 
 export fn id_record(v: Point) -> Point {
+    return v;
+}
+export fn id_record_flat(v: Single) -> Single {
     return v;
 }
 export fn id_enum(v: Color) -> Color {

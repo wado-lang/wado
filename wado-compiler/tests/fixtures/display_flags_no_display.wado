@@ -1,0 +1,15 @@
+// `flags` do NOT auto-derive `Display`: unlike a plain enum's single case name,
+// a bitmask's human-facing string form is not obvious (which separator? which
+// members when several bits are set?). Debug output is available via `{x:?}`.
+flags Perms {
+    Read,
+    Write,
+}
+
+test "flags are not displayable without a manual impl" {
+    let p = Perms::Read;
+    assert `{p}` == "x";
+}
+
+__DATA__
+{"test": {}, "compile_error": "does not implement trait `Display`"}
