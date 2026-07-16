@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784210781504,
+  "lastUpdate": 1784212495688,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -40933,6 +40933,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/729472e390224378aab70410efaaf81710b87dbb"
         },
         "date": 1784210780747,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16233,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 259842,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c4d4fd17d7a92f5fbc461a5b527c42e45643a099",
+          "message": "Merge pull request #1595 from wado-lang/claude/wasm-browser-execution-bponl9\n\nfeat(playground): run Wado entirely in the browser (compiler + jco as wasm)",
+          "timestamp": "2026-07-16T23:24:08+09:00",
+          "tree_id": "a66be7dc79ac72259e8b1617a0972a27efe187cf",
+          "url": "https://github.com/wado-lang/wado/commit/c4d4fd17d7a92f5fbc461a5b527c42e45643a099"
+        },
+        "date": 1784212494932,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
