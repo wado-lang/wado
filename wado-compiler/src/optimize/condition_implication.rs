@@ -20,7 +20,10 @@
 //!   between) re-check is dropped — a forward walk in execution order harvesting
 //!   guard facts and refuting dominated re-checks (`rbce_walk`), which needs no
 //!   source-level guard, only a first access. This is what removes the doubled
-//!   `arr[i]`/`arr[j]` checks in an `if arr[i] > arr[j] { arr[j] = arr[i] }`.
+//!   `arr[i]`/`arr[j]` checks in an `if arr[i] > arr[j] { arr[j] = arr[i] }`;
+//! - last-element: `arr[arr.len() - k]` (k >= 1) is always in bounds — a length
+//!   is non-negative, so `used - k < used` — so its guard is dropped outright
+//!   (`is_last_element_index`, the top-of-stack / `arr.last()` idiom).
 //!
 //! Matching is **syntactic over the skeleton plus the value pool**, never the
 //! `value_of` side-table: a guard's `var` / `bound` are compared by structure
@@ -1322,6 +1325,52 @@ fn invalidate(engine: &Engine, node: NodeRef, facts: &mut Vec<ProvenLt>) {
     facts.retain(|&(v, _, b)| !node_modifies(engine, node, v, b));
 }
 
+/// The `(minuend, k)` of a `<expr> - k` (skeleton or promoted), if any.
+fn sub_const(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Operand, i64)> {
+    let (a, b) = match resolve(engine, binds, op) {
+        Operand::Expr(e) => match &engine.body.exprs[e].kind {
+            ExprKind::Binary {
+                left,
+                op: NirBinaryOp::Sub,
+                right,
+            } => (*left, *right),
+            _ => return None,
+        },
+        Operand::Value(v) => match engine.body.values.kind(v) {
+            ValueKind::Binary {
+                op: NirBinaryOp::Sub,
+                lhs,
+                rhs,
+                ..
+            } => (Operand::Value(*lhs), Operand::Value(*rhs)),
+            _ => return None,
+        },
+    };
+    parse_const_i64(engine, binds, b).map(|k| (a, k))
+}
+
+/// A bounds-check `idx >= bound` where `idx` is `bound - k` (k >= 1) over the
+/// *same length field* — the `arr[arr.len() - k]` last-element / top-of-stack
+/// idiom. Always false: `bound` is a panic-guard array length, hence
+/// non-negative, so `bound - k < bound` with no signed wrap (`bound >= 0` ⇒
+/// `bound - k > i32::MIN` for any in-range `k`). Restricted to a `Field` bound
+/// so the non-negativity holds; a bare-local bound is not provably a length.
+fn is_last_element_index(engine: &Engine, binds: &Binds, cond: Operand) -> bool {
+    let Some((left, right)) = ge_check_operands(engine, binds, cond) else {
+        return false;
+    };
+    let Some(bound) = parse_bound(engine, binds, right) else {
+        return false;
+    };
+    if !matches!(bound, BoundKey::Field(..)) {
+        return false;
+    }
+    let Some((minuend, k)) = sub_const(engine, binds, left) else {
+        return false;
+    };
+    k >= 1 && parse_bound(engine, binds, minuend) == Some(bound)
+}
+
 /// A panic-guard `if <check> { panic }` (no else, `then` a panic block): the
 /// implicit bounds check every `arr[i]` lowers to. Returns its check condition.
 fn panic_guard_check(engine: &Engine, node: NodeRef) -> Option<Operand> {
@@ -1403,6 +1452,11 @@ fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, bind
     // plain comparison (no nested guards) and its `then` diverges, so neither is
     // walked.
     if let Some(cond) = panic_guard_check(engine, node) {
+        // `arr[arr.len() - k]` last-element access is unconditionally in bounds.
+        if is_last_element_index(engine, binds, cond) {
+            eliminate_condition(engine, node, cond);
+            return true;
+        }
         if let Some((var, off, bound)) = parse_check(engine, binds, cond) {
             if facts_refute(facts, var, off, bound) {
                 eliminate_condition(engine, node, cond);

@@ -1,0 +1,34 @@
+// Last-element bounds-check elimination: `arr[arr.len() - k]` (k >= 1) is
+// unconditionally in bounds because a length is non-negative, so the guard is
+// dropped (see the WIR count in `tests/redundant_bce.rs`). This fixture pins
+// the runtime behavior: the elimination must not change results, and an
+// out-of-bounds access on an empty list (guarded here) must not be reached.
+#[inline(never)]
+fn top(stack: &List<i32>) -> i32 {
+    if stack.len() > 0 {
+        return stack[stack.len() - 1];
+    }
+    return -1;
+}
+
+#[inline(never)]
+fn second_last(stack: &List<i32>) -> i32 {
+    if stack.len() > 1 {
+        return stack[stack.len() - 2];
+    }
+    return -1;
+}
+
+export fn run() {
+    let s: List<i32> = [3, 7, 4];
+    assert top(&s) == 4;
+    assert second_last(&s) == 7;
+    let e: List<i32> = [];
+    assert top(&e) == -1;
+    assert second_last(&e) == -1;
+}
+
+__DATA__
+{
+    "stdout": ""
+}
