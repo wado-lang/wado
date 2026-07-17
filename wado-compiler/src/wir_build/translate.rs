@@ -2935,6 +2935,10 @@ mod tests {
         raw.insert(10, "e_2".to_string());
         let out = resolve_local_names(&raw, &[]);
         let unique: IndexSet<&str> = out.values().map(String::as_str).collect();
-        assert_eq!(unique.len(), out.len(), "resolved names must be unique: {out:?}");
+        assert_eq!(
+            unique.len(),
+            out.len(),
+            "resolved names must be unique: {out:?}"
+        );
     }
 }
