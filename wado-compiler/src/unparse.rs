@@ -1666,21 +1666,9 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_matches(&mut self, m: &crate::ast::MatchesExpr) {
-        // The scrutinee is postfix-level; a lower-precedence one needs parens
-        // or it reparses wrong, e.g. `(!x) matches {P}` → `!x matches {P}` =
-        // `!(x matches {P})`. Same rule as a method-call receiver.
-        let needs_parens = matches!(
-            &m.expr,
-            Expr::Unary(_)
-                | Expr::Binary(_)
-                | Expr::Cast(_)
-                | Expr::Assign(_)
-                | Expr::CompoundAssign(_)
-                | Expr::ComparisonChain(_)
-                | Expr::Range(_)
-                | Expr::Closure(_)
-        );
-        self.with_parens_if(needs_parens, |s| s.unparse_expr(&m.expr));
+        self.with_parens_if(matches_scrutinee_needs_parens(&m.expr), |s| {
+            s.unparse_expr(&m.expr);
+        });
         self.output.push_str(" matches { ");
         self.unparse_pattern(&m.pattern);
         if let Some(guard) = &m.guard {
@@ -1908,14 +1896,20 @@ impl<'a> Unparser<'a> {
             self.output.push(' ');
         }
 
-        let needs_parens = matches!(
-            &u.expr,
+        // `matches` and logical `!` bind looser than the value-producing unary
+        // operators, so a value-unary parent must parenthesize them. `!` itself
+        // binds looser than `matches` and is right-associative, so `!x matches
+        // { P }` and `!!x` need no parens.
+        let needs_parens = match &u.expr {
             Expr::Binary(_)
-                | Expr::Assign(_)
-                | Expr::CompoundAssign(_)
-                | Expr::ComparisonChain(_)
-                | Expr::Cast(_)
-        );
+            | Expr::Assign(_)
+            | Expr::CompoundAssign(_)
+            | Expr::ComparisonChain(_)
+            | Expr::Cast(_) => true,
+            Expr::Matches(_) => u.op != UnaryOp::Not,
+            Expr::Unary(inner) => inner.op == UnaryOp::Not && u.op != UnaryOp::Not,
+            _ => false,
+        };
         self.with_parens_if(needs_parens, |s| s.unparse_expr(&u.expr));
     }
 
@@ -1988,6 +1982,7 @@ impl<'a> Unparser<'a> {
                 | Expr::CompoundAssign(_)
                 | Expr::ComparisonChain(_)
                 | Expr::Range(_)
+                | Expr::Matches(_)
         );
         self.with_parens_if(needs_parens, |s| s.unparse_expr(&c.callee));
         self.unparse_turbofish(&c.type_args);
@@ -2008,6 +2003,7 @@ impl<'a> Unparser<'a> {
                 | Expr::Assign(_)
                 | Expr::CompoundAssign(_)
                 | Expr::Range(_)
+                | Expr::Matches(_)
         );
         self.with_parens_if(needs_parens, |s| s.unparse_expr(&m.receiver));
         self.output.push('.');
@@ -2107,7 +2103,9 @@ impl<'a> Unparser<'a> {
     /// Prefix unary ops (*, -, !, &, ~) bind looser than postfix ops ([], ., ()),
     /// so `(*p)[i]` must keep parens — `*p[i]` would mean `*(p[i])`.
     fn unparse_postfix_base(&mut self, expr: &Expr) {
-        self.with_parens_if(matches!(expr, Expr::Unary(_)), |s| s.unparse_expr(expr));
+        self.with_parens_if(matches!(expr, Expr::Unary(_) | Expr::Matches(_)), |s| {
+            s.unparse_expr(expr);
+        });
     }
 
     fn unparse_block_expr(&mut self, b: &Block) {
@@ -2975,6 +2973,25 @@ fn collect_logical_chain_expr<'a>(expr: &'a Expr, op: BinaryOp, parts: &mut Vec<
     }
 }
 
+/// Whether a `matches` scrutinee needs parentheses to re-parse as the same
+/// tree. `matches` binds looser than every binary, `as`, and value-producing
+/// unary operator (which therefore stay bare) and tighter than logical `!`,
+/// comparison, `&&`/`||`, range, and assignment (which must be parenthesized).
+/// A closure body greedily consumes the trailing `matches`, so it needs parens
+/// too.
+fn matches_scrutinee_needs_parens(expr: &Expr) -> bool {
+    match expr {
+        Expr::Unary(u) => u.op == UnaryOp::Not,
+        Expr::Binary(b) => binary_op_precedence(b.op) <= 4,
+        Expr::ComparisonChain(_)
+        | Expr::Range(_)
+        | Expr::Assign(_)
+        | Expr::CompoundAssign(_)
+        | Expr::Closure(_) => true,
+        _ => false,
+    }
+}
+
 /// Whether `expr` unparses to a form whose final surface token is a bare `as
 /// T` cast — which, immediately left of `<`, re-parses as `T<...>` generic
 /// args. Follows the right spine only where the unparser renders the operand
@@ -3029,6 +3046,11 @@ fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
         // Range expressions have lower precedence than all binary operators,
         // so they always need parentheses when nested inside a binary expression.
         Expr::Range(_) => true,
+        // `matches` and logical `!` bind looser than the arithmetic, shift, and
+        // bitwise operators (precedence >= 5 here) but tighter than comparison
+        // and logical `&&`/`||`, so they need parens only inside the former.
+        Expr::Matches(_) => binary_op_precedence(parent_op) >= 5,
+        Expr::Unary(u) if u.op == UnaryOp::Not => binary_op_precedence(parent_op) >= 5,
         // The `is_left && parent_op == Lt` cast guard is handled up front (see
         // `ends_in_trailing_cast`), covering both a bare cast and a nested one.
         _ => false,

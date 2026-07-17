@@ -3082,20 +3082,7 @@ impl Parser {
     // Expression parsing with precedence climbing
 
     fn parse_expr(&mut self) -> ParseResult<Expr> {
-        let expr = self.parse_assignment_expr()?;
-        // A `matches` left over after a full expression means a lower-precedence
-        // scrutinee (`x as T`, `-x`, `a + b`) that postfix `matches` can't bind.
-        // Suggest parens instead of a bare "expected `;`".
-        if self.check(&TokenKind::Matches) {
-            return Err(ParseError {
-                message: "`matches` binds tighter than unary, `as`, and binary \
-                          operators; parenthesize the scrutinee: \
-                          `(expr) matches { pattern }`"
-                    .to_owned(),
-                span: self.peek().span,
-            });
-        }
-        Ok(expr)
+        self.parse_assignment_expr()
     }
 
     /// Parse assignment expression: `target = value` or `target op= value`
@@ -3270,7 +3257,7 @@ impl Parser {
     /// - `==` can only chain with `==`
     /// - `!=` cannot be chained at all
     fn parse_comparison_expr(&mut self) -> ParseResult<Expr> {
-        let first = self.parse_bitor_expr()?;
+        let first = self.parse_not_expr()?;
 
         // Check if we have a comparison operator
         let first_op = match self.peek_kind() {
@@ -3292,7 +3279,7 @@ impl Parser {
         let first_op_span = self.peek().span;
         let first_span = first.span();
         self.advance();
-        let second = self.parse_bitor_expr()?;
+        let second = self.parse_not_expr()?;
 
         // Collect comparisons
         let mut comparisons = vec![ChainedComparison {
@@ -3352,7 +3339,7 @@ impl Parser {
             }
 
             self.advance();
-            let right = self.parse_bitor_expr()?;
+            let right = self.parse_not_expr()?;
 
             comparisons.push(ChainedComparison {
                 op: next_op,
@@ -3395,6 +3382,41 @@ impl Parser {
             BinaryOp::NotEq => ComparisonChainGroup::NotEqual,
             _ => unreachable!("not a comparison operator"),
         }
+    }
+
+    /// Parse logical NOT (`!expr`). It sits just below `matches` and just above
+    /// comparison, so `!x matches { P }` parses as `!(x matches { P })` — the
+    /// "does not match" idiom — while a value-producing scrutinee (`*x`,
+    /// `x as T`, `a + b`) binds into `matches` without parentheses. Wado's
+    /// logical `!` is distinct from bitwise `~`, so it needs no tight unary
+    /// precedence. Right-associative (`!!x` = `!(!x)`).
+    fn parse_not_expr(&mut self) -> ParseResult<Expr> {
+        if *self.peek_kind() == TokenKind::Not {
+            let start_span = self.peek().span;
+            self.advance();
+            let expr = self.parse_not_expr()?;
+            let span = start_span.merge(&expr.span());
+            let id = self.alloc_ast_id();
+            return Ok(Expr::Unary(Box::new(UnaryExpr {
+                id,
+                op: UnaryOp::Not,
+                expr,
+                span,
+            })));
+        }
+        self.parse_matches_level_expr()
+    }
+
+    /// Parse the `matches` level: a scrutinee drawn from the binary/unary
+    /// levels, optionally followed by one or more `matches { pattern }` tests
+    /// (left-associative). `matches` binds looser than every binary, `as`, and
+    /// the value-producing unary operators, and tighter than logical `!`.
+    fn parse_matches_level_expr(&mut self) -> ParseResult<Expr> {
+        let mut expr = self.parse_bitor_expr()?;
+        while self.check(&TokenKind::Matches) {
+            expr = self.parse_matches_expr(expr)?;
+        }
+        Ok(expr)
     }
 
     fn parse_bitor_expr(&mut self) -> ParseResult<Expr> {
@@ -3479,9 +3501,10 @@ impl Parser {
             return Ok(Expr::Unary(Box::new(UnaryExpr { id, op, expr, span })));
         }
 
+        // Logical `!` is handled at `parse_not_expr` (looser than `matches`),
+        // not here — see the operator-precedence WEP.
         let op = match self.peek_kind() {
             TokenKind::Minus => Some(UnaryOp::Neg),
-            TokenKind::Not => Some(UnaryOp::Not),
             TokenKind::Tilde => Some(UnaryOp::BitNot),
             TokenKind::Star => Some(UnaryOp::Deref),
             _ => None,
@@ -3705,9 +3728,6 @@ impl Parser {
                         index,
                         span: merged_span,
                     }));
-                }
-                TokenKind::Matches => {
-                    expr = self.parse_matches_expr(expr)?;
                 }
                 TokenKind::Question => {
                     let start_span = expr.span();
@@ -6156,21 +6176,82 @@ mod tests {
         (module, errors)
     }
 
-    /// A `matches` on a lower-precedence scrutinee (`x as i32`) should suggest
-    /// parentheses, not emit a bare "expected `;`".
+    /// Extract the sole `return` expression from `fn r() -> bool { return EXPR; }`.
+    fn return_expr(src: &str) -> Expr {
+        let module = parse(src).unwrap();
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected a function");
+        };
+        let body = func.body.as_ref().expect("function body");
+        let Some(Stmt::Return(ret)) = body.stmts.first() else {
+            panic!("expected a return statement");
+        };
+        ret.value.clone().expect("return value")
+    }
+
+    /// A value-producing scrutinee (`*x`, `x as T`, `a + b`, `flags & MASK`)
+    /// binds into `matches` without parentheses: `matches` is looser than the
+    /// unary, `as`, and binary operators.
     #[test]
-    fn test_matches_on_low_precedence_scrutinee_suggests_parens() {
+    fn test_matches_binds_looser_than_value_operators() {
+        // `*x matches { P }` → `(*x) matches { P }`
+        let e = return_expr("fn r() -> bool { return *x matches { 0 }; }");
+        let Expr::Matches(m) = e else {
+            panic!("expected Matches at the top, got {e:?}");
+        };
+        assert!(
+            matches!(&m.expr, Expr::Unary(u) if u.op == UnaryOp::Deref),
+            "scrutinee should be the deref, got {:?}",
+            m.expr
+        );
+
+        // `x as i32 matches { P }`, `a + b matches { P }`, `f & M matches { P }`
         for src in [
             "fn r() -> bool { return x as i32 matches { 0 }; }",
-            "fn r() -> bool { return x as i32 matches { 0 } }",
+            "fn r() -> bool { return a + b matches { 0 }; }",
+            "fn r() -> bool { return f & m matches { 0 }; }",
         ] {
-            let err = parse(src).unwrap_err();
             assert!(
-                err.message.contains("parenthe"),
-                "expected a parenthesization hint, got: {}",
-                err.message
+                matches!(return_expr(src), Expr::Matches(_)),
+                "expected Matches at the top for `{src}`"
             );
         }
+    }
+
+    /// `!x matches { P }` stays "does not match": `matches` binds tighter than
+    /// logical `!`, so the `!` wraps the whole `matches`.
+    #[test]
+    fn test_not_match_idiom_preserved() {
+        let e = return_expr("fn r() -> bool { return !x matches { 0 }; }");
+        let Expr::Unary(u) = e else {
+            panic!("expected a `!` unary at the top, got {e:?}");
+        };
+        assert_eq!(u.op, UnaryOp::Not);
+        assert!(
+            matches!(&u.expr, Expr::Matches(_)),
+            "`!` should wrap the matches, got {:?}",
+            u.expr
+        );
+    }
+
+    /// `!!x matches { P }` is right-associative on `!` and tighter on `matches`:
+    /// `!(!(x matches { P }))`.
+    #[test]
+    fn test_double_not_matches() {
+        let e = return_expr("fn r() -> bool { return !!x matches { 0 }; }");
+        let Expr::Unary(outer) = e else {
+            panic!("expected outer `!`, got {e:?}");
+        };
+        assert_eq!(outer.op, UnaryOp::Not);
+        let Expr::Unary(inner) = &outer.expr else {
+            panic!("expected inner `!`, got {:?}", outer.expr);
+        };
+        assert_eq!(inner.op, UnaryOp::Not);
+        assert!(
+            matches!(&inner.expr, Expr::Matches(_)),
+            "innermost should be matches, got {:?}",
+            inner.expr
+        );
     }
 
     #[test]

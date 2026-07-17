@@ -1,0 +1,88 @@
+// `matches` binds looser than the value-producing prefix/binary operators
+// (deref, ref, neg, bitnot, cast, arithmetic, bitwise) but tighter than
+// logical `!`, so a computed scrutinee parses paren-free while the
+// `!x matches { P }` = "does not match" idiom is preserved.
+
+fn is_kw(m: &String) -> bool {
+    return *m matches { "text" | "int" };
+}
+
+fn neg_is_five(n: i32) -> bool {
+    return -n matches { -5 };
+}
+
+fn bitnot_is_zero(n: i32) -> bool {
+    return ~n matches { 0 };
+}
+
+fn cast_is_42(x: i64) -> bool {
+    return x as i32 matches { 42 };
+}
+
+fn sum_is_ten(a: i32, b: i32) -> bool {
+    return a + b matches { 10 };
+}
+
+fn low_nibble_is_a(flags: u32) -> bool {
+    return flags & 0x0F matches { 0x0A };
+}
+
+test "deref scrutinee" {
+    let s: String = "text";
+    assert is_kw(&s);
+    let t: String = "other";
+    assert !is_kw(&t);
+}
+
+test "neg scrutinee" {
+    assert neg_is_five(5);
+    assert !neg_is_five(3);
+}
+
+test "bitnot scrutinee" {
+    assert bitnot_is_zero(-1);
+    assert !bitnot_is_zero(0);
+}
+
+test "cast scrutinee" {
+    assert cast_is_42(42);
+    assert !cast_is_42(43);
+}
+
+test "arithmetic scrutinee" {
+    assert sum_is_ten(4, 6);
+    assert !sum_is_ten(1, 2);
+}
+
+test "bitwise scrutinee" {
+    assert low_nibble_is_a(0xFA);
+    assert !low_nibble_is_a(0xFB);
+}
+
+test "not-match idiom preserved" {
+    let none: Option<i32> = null;
+    assert !none matches { Some(_) };
+
+    let some: Option<i32> = Option::Some(1);
+    assert some matches { Some(_) };
+}
+
+test "not combined with deref" {
+    let m: &i32 = &5;
+    assert !*m matches { 6 };
+    assert *m matches { 5 };
+}
+
+test "explicit parens still work" {
+    let m: &i32 = &7;
+    assert (*m) matches { 7 };
+}
+
+test "matches in boolean chain" {
+    let a: Option<i32> = Option::Some(1);
+    let b: Option<i32> = null;
+    assert a matches { Some(_) } && b matches { None };
+}
+
+__DATA__
+{"test": {}}

@@ -2700,3 +2700,40 @@ fn foo() -> i32 {
         "expected exactly one newline between match `{{` and first arm:\n{formatted}",
     );
 }
+
+// `matches` binds looser than binary/`as`/value-unary and tighter than logical
+// `!`, so the formatter must (a) leave a value-producing scrutinee bare, (b)
+// keep `!x matches` as the not-match idiom, and (c) parenthesize a `matches`
+// nested inside a tighter operator or a postfix position.
+#[test]
+fn test_format_matches_precedence_roundtrips() {
+    let source = "\
+fn run() {
+    let a = *x matches { 0 };
+    let b = x as i32 matches { 0 };
+    let c = p + q matches { 0 };
+    let d = f & m matches { 0 };
+    let e = !x matches { Some(_) };
+    let g = !*x matches { 0 };
+    let h = (p == q) matches { true };
+    let i = x matches { Some(_) } && y matches { None };
+    let j = -(x matches { 0 });
+    let k = (x matches { 0 }) + 1;
+    let l = (x matches { 0 }).foo();
+    let m = (x matches { 0 }).bar;
+}
+";
+    assert_format_preserves_ast(source);
+    let formatted = wado_compiler::format(source).expect("format failed");
+    let reformatted = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, reformatted, "format should be idempotent");
+    // The idiom stays bare; the value scrutinee stays bare.
+    assert!(
+        formatted.contains("!x matches { Some(_) }"),
+        "not-match idiom lost its shape:\n{formatted}"
+    );
+    assert!(
+        formatted.contains("*x matches { 0 }"),
+        "deref scrutinee should not be parenthesized:\n{formatted}"
+    );
+}
