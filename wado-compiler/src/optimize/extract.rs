@@ -13,23 +13,23 @@
 //!
 //! [`extract_const`] is the shared materialization primitive, used in
 //! production by `store_load_forward`. [`ExtractLiteralRule`] (the worklist
-//! rule form) is exercised by unit tests until the first value-rewrite pass
-//! wires it into a combined session.
-#![allow(dead_code)]
+//! rule form) is a test-only vehicle exercising the same primitive.
 
 use crate::nir_arena::{ExprId, ExprKind, NodeRef, StmtKind};
-use crate::nir_engine::{Engine, Rule};
+use crate::nir_engine::Engine;
 use crate::nir_value_graph::{ValueId, ValueKind};
 
 /// Rewrite a pure expression whose `ValueGraph` representative is a literal into
 /// that literal. Idempotent: an expression already holding the target literal
 /// is left untouched, so the worklist retry terminates.
+#[cfg(test)]
 pub(super) struct ExtractLiteralRule;
 
-impl Rule for ExtractLiteralRule {
+#[cfg(test)]
+impl crate::nir_engine::Rule for ExtractLiteralRule {
     fn apply_expr(&self, e: &mut Engine, id: ExprId) -> bool {
         // An assign target is a place, not a value — never materialize it.
-        if is_assign_target(e, id) {
+        if e.is_assign_target(id) {
             return false;
         }
         let Some(vid) = e.value(id) else {
@@ -349,112 +349,30 @@ pub(super) fn freeze_pure_arith(
         // graph's recurrence state stale until the next query and read as a
         // spurious over-merge; deciding up front avoids that — and the
         // post-edit graph is not consumed, this being the last pass.)
+        let ctx = FreezeCtx {
+            type_table: &type_table,
+            mut_escaped_leaf: &mut_escaped_leaf,
+            mut_locals: &mut_locals,
+            address_taken: &address_taken,
+            param_set: &param_set,
+            early,
+            include_fields,
+        };
         let candidates: Vec<ExprId> = engine.body.exprs.keys().collect();
         let mut to_freeze: Vec<(ExprId, ValueId)> = Vec::new();
         for id in candidates {
-            if is_assign_target(&engine, id) || is_let_value(&engine, id) {
-                continue;
-            }
-            // Constant-leaf promotion (early only, clean graph). A value-position
-            // `Local` / `FieldAccess` read whose graph value is a constant literal
-            // is frozen to that literal: context-free, width-correct (the kind
-            // carries its own `TypeId`), and — born before any pass — never
-            // re-contextualized. `is_place_read` excludes lvalue positions
-            // (`&mut x`, a `.field` / method receiver, an assign target) where the
-            // storage, not the value, is needed. The root local must not be
-            // `mut_escaped`: a write through a retained `&mut` (ref_1's
-            // `set_bool(&mut c, …)`) makes the constant point-specific in a way the
-            // build-once graph cannot keep across the structural passes (over-merge
-            // vs a fresh build). An *immutable*-`&`-escaped root (licm's `&config`)
-            // is stable — the callee cannot write through `&Config` — so its field
-            // constant freezes soundly; that is the in-loop `FieldAccess` recovery.
-            let leaf_root_stable = match &engine.body.exprs[id].kind {
-                ExprKind::Local { index, .. } => !mut_escaped_leaf.contains(index),
-                ExprKind::FieldAccess { .. } => super::arena_query::storage_root(engine.body, id)
-                    .is_none_or(|root| !mut_escaped_leaf.contains(&root)),
-                _ => false,
-            };
-            if early
-                && leaf_root_stable
-                && !is_place_read(&engine, id)
-                && let Some(vid) = engine.value(id)
-                && crate::nir_value_graph::builder::is_const_value(&engine.body.values, vid)
-            {
-                to_freeze.push((id, vid));
-                continue;
-            }
-            if !is_pure_arith(&engine, id, include_fields) {
-                continue;
-            }
-            if let Some(rep) = engine.value(id) {
-                // A standalone `FieldAccess` is reemittable when its receiver is
-                // (it materialises via the source-point path). For every other
-                // value, `FieldAccess` is non-reemittable (it cannot be inlined),
-                // so `value_fully_reemittable_locally` rejects any value nesting
-                // one — keeping arith-over-`FieldAccess` from inline promotion.
-                let reemittable = match engine.body.values.kind(rep) {
-                    ValueKind::FieldAccess { receiver, .. } => {
-                        let recv = *receiver;
-                        // Two gates make a `FieldAccess` materialisation sound (WEP P2).
-                        // (1) Field-value-type gate: only a **scalar** field — a
-                        // primitive copy is value-independent, so pinning + sharing it
-                        // is sound; an aggregate / reference field (`List.repr`, a
-                        // nested struct) aliases a mutable backing the `heap_ver` does
-                        // not pin (the `array_index_1` null-ref trap).
-                        let scalar_field =
-                            type_table.is_primitive_like(engine.body.exprs[id].type_id);
-                        // (2) Receiver-stability gate. A **param** is entry-defined
-                        // (dominates every point) and by-value (no alias). A **non-param
-                        // local** must be owned (non-reference), non-`mut` (single
-                        // assignment), not address-taken, not `&mut`-escaped — *and*
-                        // its def must dominate the materialisation point, checked in
-                        // the apply phase (`def_dominates`), since the value's receiver
-                        // `Opaque(Local i)` can differ from a use's syntactic local.
-                        let recv_src = match engine.body.values.kind(recv) {
-                            ValueKind::Opaque(o) => Some(*o),
-                            _ => None,
-                        }
-                        .and_then(|o| engine.body.values.opaque_source(o));
-                        let recv_stable = match recv_src {
-                            Some(crate::nir_value_graph::OpaqueSource::Local(i)) => {
-                                param_set.contains(&i)
-                                    || (!mut_locals.contains(&i)
-                                        && !address_taken.contains(&i)
-                                        && !mut_escaped_leaf.contains(&i)
-                                        && !matches!(
-                                            type_table.get(engine.locals()[i as usize].type_id),
-                                            crate::tir::ResolvedType::Ref(_)
-                                                | crate::tir::ResolvedType::MutRef(_)
-                                        ))
-                            }
-                            _ => false,
-                        };
-                        scalar_field
-                            && recv_stable
-                            && engine
-                                .body
-                                .values
-                                .value_fully_reemittable_locally(recv, &mut_locals)
-                    }
-                    _ => engine
-                        .body
-                        .values
-                        .value_fully_reemittable_locally(rep, &mut_locals),
-                };
-                if reemittable && !engine.body.values.extraction_duplicates_work(rep) {
-                    to_freeze.push((id, rep));
-                }
+            if let Some(entry) = classify_candidate(&mut engine, &ctx, id) {
+                to_freeze.push(entry);
             }
         }
+
         // Phase 2: apply. No further graph queries. Group by representative so a
         // value used by several slots can be **materialised once** (availability
         // extraction, WEP P2) — a single pre-header `let _av = <value>` whose uses
         // read `local.get _av` — instead of re-emitting the computation at each
-        // use. Materialisation is limited to values whose leaves are all
-        // non-`mut` parameters: those are available and unchanged at function
-        // entry, where the `let` is inserted, so it dominates every use soundly.
-        // Other values redirect inline as before. `record_value_tree_types` stamps
-        // the tree's width and skips a width-conflicting value.
+        // use. `record_value_tree_types` stamps the tree's width and skips a
+        // width-conflicting value; the two apply strategies then diverge on whether
+        // the representative is a `FieldAccess`.
         let mut by_rep: crate::hashmap::IndexMap<ValueId, Vec<ExprId>> =
             crate::hashmap::IndexMap::default();
         for (id, rep) in to_freeze {
@@ -465,90 +383,238 @@ pub(super) fn freeze_pure_arith(
             if !record_value_tree_types(&mut engine, rep, id_ty) {
                 continue;
             }
-            // Materialise a `FieldAccess`: pin the load in a `let _av = <value>`
-            // at a statement dominating its uses and rewrite each use to a
-            // **skeleton** `Local _av` read, so receiver-position passes see an
-            // ordinary local (materialiser-first, WEP P2). A `FieldAccess` is never
-            // inline-reemittable (re-emitting a load at an arbitrary slot is
-            // unsound once a pass moves the operand), so this is its only promotion
-            // path. Single-use places at the use's own statement; multi-use shares
-            // one load at the nearest common dominator of every use (`materialise_point`),
-            // including cross-block uses (placed before the deepest common `if`/loop).
             let is_field = matches!(engine.body.values.kind(rep), ValueKind::FieldAccess { .. });
             if is_field {
-                if let Some((s, b)) = materialise_point(&engine, &ids)
-                    && receiver_available_at(&engine, rep, s, &param_set)
-                {
-                    let span = engine.body.exprs[ids[0]].span;
-                    let name = format!("_av_{}", engine.locals().len());
-                    let av = engine.alloc_local(name.clone(), id_ty, /* is_mut */ false);
-                    let let_stmt = engine.alloc_stmt(
-                        crate::nir_arena::StmtKind::Let {
-                            name: name.clone(),
-                            local_index: av,
-                            is_mut: false,
-                            is_reactive: false,
-                            type_id: id_ty,
-                            value: crate::nir_arena::Operand::Value(rep),
-                            skip_value_copy: true,
-                        },
-                        span,
-                    );
-                    let mut stmts = engine.body.blocks[b].stmts.clone();
-                    let pos = stmts.iter().position(|&x| x == s).unwrap_or(0);
-                    stmts.insert(pos, let_stmt);
-                    engine.set_block_stmts(b, stmts);
-                    for id in ids {
-                        let span = engine.body.exprs[id].span;
-                        let lread = engine.alloc_expr(
-                            ExprKind::Local {
-                                index: av,
-                                name: name.clone(),
-                            },
-                            id_ty,
-                            span,
-                        );
-                        changed |= engine.redirect_expr(id, crate::nir_arena::Operand::Expr(lread));
-                    }
-                }
-                continue;
+                changed |= apply_field_materialise(&mut engine, rep, &ids, id_ty, &param_set);
+            } else {
+                changed |= apply_value_freeze(&mut engine, rep, &ids, id_ty, &param_set);
             }
-            let mut leaves = crate::hashmap::IndexSet::default();
-            engine.body.values.collect_opaque_locals(rep, &mut leaves);
-            let materialize =
-                ids.len() > 1 && !leaves.is_empty() && leaves.iter().all(|l| param_set.contains(l));
-            if materialize {
-                let name = format!("_av_{}", engine.locals().len());
-                let av = engine.alloc_local(name.clone(), id_ty, /* is_mut */ false);
-                let read = engine
+        }
+    }
+    changed
+}
+
+/// Per-function analysis inputs consumed by the freeze decision. Borrowed sets
+/// computed once in [`freeze_pure_arith`]'s setup; the decision reads them and
+/// never mutates the skeleton.
+struct FreezeCtx<'a> {
+    type_table: &'a crate::tir::TypeTable,
+    /// Locals a call may mutate through a retained `&mut` escape — a constant
+    /// read of one is point-specific and unstable across the structural passes.
+    mut_escaped_leaf: &'a crate::hashmap::IndexSet<u32>,
+    /// Reassignable locals: a frozen value's `local.get idx` must read the
+    /// opaque's version, which only holds for single-assignment locals.
+    mut_locals: &'a crate::hashmap::IndexSet<u32>,
+    /// `&x` / `&mut x` locals — excluded as `FieldAccess` receivers.
+    address_taken: &'a crate::hashmap::IndexSet<u32>,
+    /// Parameter locals — entry-defined and available at every point.
+    param_set: &'a crate::hashmap::IndexSet<u32>,
+    early: bool,
+    include_fields: bool,
+}
+
+/// Decide whether the value at `id` should be frozen, and to which
+/// representative. `None` leaves it in the skeleton. Two admission paths: an
+/// early constant-leaf promotion, and the pure-arith reemittability gate.
+fn classify_candidate(
+    engine: &mut Engine,
+    ctx: &FreezeCtx,
+    id: ExprId,
+) -> Option<(ExprId, ValueId)> {
+    if engine.is_assign_target(id) || is_let_value(engine, id) {
+        return None;
+    }
+    // Constant-leaf promotion (early only, clean graph). A value-position
+    // `Local` / `FieldAccess` read whose graph value is a constant literal is
+    // frozen to that literal: context-free, width-correct (the kind carries its
+    // own `TypeId`), and — born before any pass — never re-contextualized.
+    // `is_place_read` excludes lvalue positions (`&mut x`, a `.field` / method
+    // receiver, an assign target) where the storage, not the value, is needed.
+    // The root local must not be `mut_escaped`: a write through a retained `&mut`
+    // (ref_1's `set_bool(&mut c, …)`) makes the constant point-specific in a way
+    // the build-once graph cannot keep across the structural passes (over-merge
+    // vs a fresh build). An *immutable*-`&`-escaped root (licm's `&config`) is
+    // stable — the callee cannot write through `&Config` — so its field constant
+    // freezes soundly; that is the in-loop `FieldAccess` recovery.
+    let leaf_root_stable = match &engine.body.exprs[id].kind {
+        ExprKind::Local { index, .. } => !ctx.mut_escaped_leaf.contains(index),
+        ExprKind::FieldAccess { .. } => super::arena_query::storage_root(engine.body, id)
+            .is_none_or(|root| !ctx.mut_escaped_leaf.contains(&root)),
+        _ => false,
+    };
+    if ctx.early
+        && leaf_root_stable
+        && !is_place_read(engine, id)
+        && let Some(vid) = engine.value(id)
+        && crate::nir_value_graph::builder::is_const_value(&engine.body.values, vid)
+    {
+        return Some((id, vid));
+    }
+    if !is_pure_arith(engine, id, ctx.include_fields) {
+        return None;
+    }
+    let rep = engine.value(id)?;
+    // A standalone `FieldAccess` is reemittable when its receiver is (it
+    // materialises via the source-point path). For every other value,
+    // `FieldAccess` is non-reemittable (it cannot be inlined), so
+    // `value_fully_reemittable_locally` rejects any value nesting one — keeping
+    // arith-over-`FieldAccess` from inline promotion.
+    let reemittable = match engine.body.values.kind(rep) {
+        ValueKind::FieldAccess { receiver, .. } => {
+            let recv = *receiver;
+            // Two gates make a `FieldAccess` materialisation sound (WEP P2).
+            // (1) Field-value-type gate: only a **scalar** field — a primitive copy
+            // is value-independent, so pinning + sharing it is sound; an aggregate /
+            // reference field (`List.repr`, a nested struct) aliases a mutable
+            // backing the `heap_ver` does not pin (the `array_index_1` null-ref trap).
+            let scalar_field = ctx
+                .type_table
+                .is_primitive_like(engine.body.exprs[id].type_id);
+            // (2) Receiver-stability gate. A **param** is entry-defined (dominates
+            // every point) and by-value (no alias). A **non-param local** must be
+            // owned (non-reference), non-`mut` (single assignment), not
+            // address-taken, not `&mut`-escaped — *and* its def must dominate the
+            // materialisation point, checked in the apply phase (`def_dominates`),
+            // since the value's receiver `Opaque(Local i)` can differ from a use's
+            // syntactic local.
+            let recv_src = match engine.body.values.kind(recv) {
+                ValueKind::Opaque(o) => Some(*o),
+                _ => None,
+            }
+            .and_then(|o| engine.body.values.opaque_source(o));
+            let recv_stable = match recv_src {
+                Some(crate::nir_value_graph::OpaqueSource::Local(i)) => {
+                    ctx.param_set.contains(&i)
+                        || (!ctx.mut_locals.contains(&i)
+                            && !ctx.address_taken.contains(&i)
+                            && !ctx.mut_escaped_leaf.contains(&i)
+                            && !matches!(
+                                ctx.type_table.get(engine.locals()[i as usize].type_id),
+                                crate::tir::ResolvedType::Ref(_)
+                                    | crate::tir::ResolvedType::MutRef(_)
+                            ))
+                }
+                _ => false,
+            };
+            scalar_field
+                && recv_stable
+                && engine
                     .body
                     .values
-                    .fresh_opaque_with_source(crate::nir_value_graph::OpaqueSource::Local(av));
-                engine.body.values.set_type(read, id_ty);
-                let let_stmt = engine.alloc_stmt(
-                    crate::nir_arena::StmtKind::Let {
-                        name,
-                        local_index: av,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id: id_ty,
-                        value: crate::nir_arena::Operand::Value(rep),
-                        skip_value_copy: true,
-                    },
-                    crate::token::Span::default(),
-                );
-                let root = engine.body.root;
-                let mut stmts = engine.body.blocks[root].stmts.clone();
-                stmts.insert(0, let_stmt);
-                engine.set_block_stmts(root, stmts);
-                for id in ids {
-                    changed |= engine.redirect_expr(id, crate::nir_arena::Operand::Value(read));
-                }
-            } else {
-                for id in ids {
-                    changed |= engine.redirect_expr(id, crate::nir_arena::Operand::Value(rep));
-                }
-            }
+                    .value_fully_reemittable_locally(recv, ctx.mut_locals)
+        }
+        _ => engine
+            .body
+            .values
+            .value_fully_reemittable_locally(rep, ctx.mut_locals),
+    };
+    (reemittable && !engine.body.values.extraction_duplicates_work(rep)).then_some((id, rep))
+}
+
+/// Apply strategy for a `FieldAccess` representative: pin the load in a `let _av
+/// = <value>` at a statement dominating its uses and rewrite each use to a
+/// **skeleton** `Local _av` read, so receiver-position passes see an ordinary
+/// local (materialiser-first, WEP P2). A `FieldAccess` is never inline-reemittable
+/// (re-emitting a load at an arbitrary slot is unsound once a pass moves the
+/// operand), so this is its only promotion path. Single-use places at the use's
+/// own statement; multi-use shares one load at the nearest common dominator of
+/// every use (`materialise_point`), including cross-block uses.
+fn apply_field_materialise(
+    engine: &mut Engine,
+    rep: ValueId,
+    ids: &[ExprId],
+    id_ty: crate::tir::TypeId,
+    param_set: &crate::hashmap::IndexSet<u32>,
+) -> bool {
+    let Some((s, b)) = materialise_point(engine, ids) else {
+        return false;
+    };
+    if !receiver_available_at(engine, rep, s, param_set) {
+        return false;
+    }
+    let span = engine.body.exprs[ids[0]].span;
+    let name = format!("_av_{}", engine.locals().len());
+    let av = engine.alloc_local(name.clone(), id_ty, /* is_mut */ false);
+    let let_stmt = engine.alloc_stmt(
+        crate::nir_arena::StmtKind::Let {
+            name: name.clone(),
+            local_index: av,
+            is_mut: false,
+            is_reactive: false,
+            type_id: id_ty,
+            value: crate::nir_arena::Operand::Value(rep),
+            skip_value_copy: true,
+        },
+        span,
+    );
+    let mut stmts = engine.body.blocks[b].stmts.clone();
+    let pos = stmts.iter().position(|&x| x == s).unwrap_or(0);
+    stmts.insert(pos, let_stmt);
+    engine.set_block_stmts(b, stmts);
+    let mut changed = false;
+    for &id in ids {
+        let span = engine.body.exprs[id].span;
+        let lread = engine.alloc_expr(
+            ExprKind::Local {
+                index: av,
+                name: name.clone(),
+            },
+            id_ty,
+            span,
+        );
+        changed |= engine.redirect_expr(id, crate::nir_arena::Operand::Expr(lread));
+    }
+    changed
+}
+
+/// Apply strategy for a non-`FieldAccess` (pure-arith / constant) representative.
+/// A value used by several slots whose leaves are all non-`mut` parameters is
+/// **materialised once** — a single entry `let _av = <value>` all uses read via
+/// `local.get _av`, available and unchanged at function entry where the `let` is
+/// inserted, so it dominates every use soundly. Every other case redirects each
+/// use to the pooled representative inline.
+fn apply_value_freeze(
+    engine: &mut Engine,
+    rep: ValueId,
+    ids: &[ExprId],
+    id_ty: crate::tir::TypeId,
+    param_set: &crate::hashmap::IndexSet<u32>,
+) -> bool {
+    let mut leaves = crate::hashmap::IndexSet::default();
+    engine.body.values.collect_opaque_locals(rep, &mut leaves);
+    let materialize =
+        ids.len() > 1 && !leaves.is_empty() && leaves.iter().all(|l| param_set.contains(l));
+    let mut changed = false;
+    if materialize {
+        let name = format!("_av_{}", engine.locals().len());
+        let av = engine.alloc_local(name.clone(), id_ty, /* is_mut */ false);
+        let read = engine
+            .body
+            .values
+            .fresh_opaque_with_source(crate::nir_value_graph::OpaqueSource::Local(av));
+        engine.body.values.set_type(read, id_ty);
+        let let_stmt = engine.alloc_stmt(
+            crate::nir_arena::StmtKind::Let {
+                name,
+                local_index: av,
+                is_mut: false,
+                is_reactive: false,
+                type_id: id_ty,
+                value: crate::nir_arena::Operand::Value(rep),
+                skip_value_copy: true,
+            },
+            crate::token::Span::default(),
+        );
+        let root = engine.body.root;
+        let mut stmts = engine.body.blocks[root].stmts.clone();
+        stmts.insert(0, let_stmt);
+        engine.set_block_stmts(root, stmts);
+        for &id in ids {
+            changed |= engine.redirect_expr(id, crate::nir_arena::Operand::Value(read));
+        }
+    } else {
+        for &id in ids {
+            changed |= engine.redirect_expr(id, crate::nir_arena::Operand::Value(rep));
         }
     }
     changed
@@ -576,42 +642,12 @@ pub(super) fn extract_const(
     crate::nir_value_graph::value_kind_to_const(&vk, prim)
 }
 
-/// True when `expr` is a **place**, not a value read: the inner of a
-/// `Ref` / `MutRef` / `Deref`. A `FieldAccess` here (`&mut obj.field`) addresses
-/// the slot, so promoting it to a value would lose the place — exclude it. (The
-/// direct `Assign` target is handled by [`is_assign_target`].)
-fn is_ref_place(e: &Engine, expr: ExprId) -> bool {
-    let Some(NodeRef::Expr(parent)) = e.parent_of(NodeRef::Expr(expr)) else {
-        return false;
-    };
-    matches!(
-        &e.body.exprs[parent].kind,
-        ExprKind::Unary {
-            op: crate::nir::NirUnaryOp::Ref
-                | crate::nir::NirUnaryOp::MutRef
-                | crate::nir::NirUnaryOp::Deref,
-            ..
-        }
-    )
-}
-
-/// True when `expr`'s immediate parent is an `Assign` and `expr` is its target.
-fn is_assign_target(e: &Engine, expr: ExprId) -> bool {
-    let Some(NodeRef::Expr(parent)) = e.parent_of(NodeRef::Expr(expr)) else {
-        return false;
-    };
-    matches!(
-        &e.body.exprs[parent].kind,
-        ExprKind::Assign { target, .. } if *target == expr
-    )
-}
-
 /// Whether `expr` sits in a **place** (lvalue / reference) position, where its
 /// storage location — not its value — is what's used: a constant-leaf read here
 /// must not be frozen. Covers the `&` / `&mut` / deref referent, a `.field` /
 /// `[index]` / method receiver, and an `Assign` LHS. Conservative (a by-value
 /// receiver is also rejected), which only forgoes a promotion, never miscompiles.
-fn is_place_read(e: &Engine, expr: ExprId) -> bool {
+pub(super) fn is_place_read(e: &Engine, expr: ExprId) -> bool {
     let Some(NodeRef::Expr(parent)) = e.parent_of(NodeRef::Expr(expr)) else {
         return false;
     };
@@ -636,7 +672,7 @@ mod tests {
     use super::*;
     use crate::nir::{NirBinaryOp, NirLocal};
     use crate::nir_arena::{BlockNode, Body, ExprNode, StmtKind, StmtNode};
-    use crate::nir_engine::EngineBuffers;
+    use crate::nir_engine::{EngineBuffers, Rule};
     use crate::tir::TypeTable;
     use crate::token::Span;
 

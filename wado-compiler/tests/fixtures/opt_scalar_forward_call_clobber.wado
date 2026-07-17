@@ -1,0 +1,52 @@
+// A single-use pure scalar `let i = b.used` (a field read) must not forward past
+// a mutating call in its use statement. `sink(advance(r), i)` evaluates
+// `advance(r)` — which writes `b.used` through the bare `&mut Buf` local `r` —
+// before the `i` argument, so forwarding `b.used` into that slot reads the
+// post-call value. The mutation goes through a ref-typed local, so no `Assign` /
+// `MutRef` node marks it syntactically; the reorder-hazard check must summarise
+// the earlier-evaluated `advance(r)` call via `ModRef` and reject the fold.
+//
+// `#[inline(never)]` keeps the call from being inlined away, and using `r` twice
+// (`reset` then `advance`) keeps copy-prop from collapsing `r` into `&mut b` (a
+// `MutRef` node the syntactic check would have caught anyway) — so the bare
+// ref-local escape actually survives to `scalar_forward`.
+use { println, Stdout } from "core:cli";
+
+struct Buf {
+    used: i32,
+    cap: i32,
+}
+
+#[inline(never)]
+fn make(seed: i32) -> Buf {
+    return Buf { used: seed, cap: 100 }
+}
+
+#[inline(never)]
+fn reset(r: &mut Buf) {
+    r.used = 1;
+}
+
+#[inline(never)]
+fn advance(r: &mut Buf) -> i32 {
+    r.used = r.used + 10;
+    return r.used
+}
+
+#[inline(never)]
+fn sink(a: i32, b: i32) with Stdout {
+    println(`{a}:{b}`);
+}
+
+export fn run() with Stdout {
+    let mut b = make(99);
+    let r = &mut b;
+    reset(r);
+    let i = b.used;
+    sink(advance(r), i);
+}
+
+__DATA__
+{
+    "stdout": "11:1\n"
+}

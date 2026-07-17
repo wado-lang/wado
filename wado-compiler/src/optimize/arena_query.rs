@@ -100,13 +100,6 @@ pub(super) fn is_place_prefix(q: &Place, p: &Place) -> bool {
     q.0 == p.0 && q.1.len() <= p.1.len() && q.1 == p.1[..q.1.len()]
 }
 
-/// Whether two places overlap — one is a prefix of the other — so a write to
-/// either may change a read of the other (`a.b` overlaps `a`, `a.b`, and
-/// `a.b.c`, but not the sibling `a.c`).
-pub(super) fn place_overlaps(a: &Place, b: &Place) -> bool {
-    is_place_prefix(a, b) || is_place_prefix(b, a)
-}
-
 /// The local whose interior storage `expr` reaches, seeing through the
 /// projections that share it: field access, indexing, variant payload, a
 /// transparent cast, and `&`/`&mut`/`*`. Arithmetic unaries produce fresh

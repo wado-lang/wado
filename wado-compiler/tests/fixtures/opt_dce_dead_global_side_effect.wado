@@ -1,0 +1,28 @@
+// A dead global's initializer may still carry observable effects; DCE removes
+// the `GlobalVarSet` for the dead global but must preserve the initializer's
+// effect. `DEAD`'s initializer calls `build()`, which mutates the live, printed
+// global `LIVE`. `build` also runs from `run`, so it keeps a body; the dead
+// global's `DEAD = build()` is one extra invocation. Deleting that statement
+// wholesale (as the old `never`-only side-effect predicate did — a non-`never`
+// call read as pure) silently drops the write, printing `1` instead of `2`.
+use { println, Stdout } from "core:cli";
+
+global mut LIVE: i32 = 0;
+
+fn build() -> i32 {
+    LIVE = LIVE + 1;
+    return 7;
+}
+
+global mut DEAD: i32 = build();
+
+export fn run() with Stdout {
+    let _ = build();
+    println(`{LIVE}`);
+}
+
+__DATA__
+{
+    "stdout": "2\n",
+    "warnings_contains": ["global `DEAD` is never used"]
+}

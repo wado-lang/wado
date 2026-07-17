@@ -398,7 +398,7 @@ fn transform_instr(
                 expr: inner,
                 ..
             } = lhs.as_ref()
-                && field_name == "discriminant"
+                && field_name == crate::name::VARIANT_DISCRIMINANT_FIELD
                 && let Some(&(payload_case, _)) = nullable_map.get(&type_id.index())
                 && let WirInstr::I32Const(case_idx) = rhs.as_ref()
             {
@@ -428,7 +428,7 @@ fn transform_instr(
             expr,
             result_ty,
         } => {
-            if field_name.starts_with("payload_")
+            if crate::name::is_variant_payload_field(field_name)
                 && let Some(&(variant_idx, case_idx)) = vci.get(&type_id.index())
                 && let Some(&(payload_case, _)) = nullable_map.get(&variant_idx)
                 && case_idx == payload_case

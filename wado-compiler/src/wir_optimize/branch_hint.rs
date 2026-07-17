@@ -263,12 +263,16 @@ fn br_only_arm(body: &[WirInstr]) -> Option<u32> {
 }
 
 /// True when an `if` has no meaningful `else` — either no else block, or one
-/// whose only instructions are `nop`s (the `if let` / `while let` desugaring
-/// shape).
+/// whose only instructions are no-op markers (`Nop`, or a `ColdPath` marker
+/// that emits nothing). Mirrors `br_only_arm`'s marker tolerance so `br_if`
+/// selection is not blocked asymmetrically when a cold-path marker lands in
+/// the else arm (the `if let` / `while let` desugaring shape).
 fn else_is_empty(else_body: &Option<Vec<WirInstr>>) -> bool {
     match else_body {
         None => true,
-        Some(body) => body.iter().all(|i| matches!(i, WirInstr::Nop)),
+        Some(body) => body
+            .iter()
+            .all(|i| matches!(i, WirInstr::Nop | WirInstr::ColdPath)),
     }
 }
 
@@ -534,6 +538,20 @@ mod tests {
             local_get("c"),
             vec![WirInstr::Br { depth: 1 }],
             Some(vec![WirInstr::Nop]),
+        );
+        select_in_instr(&mut instr);
+        assert!(matches!(instr, WirInstr::BrIf { depth: 0, .. }));
+    }
+
+    #[test]
+    fn select_allows_cold_path_marker_in_else() {
+        // A `ColdPath` marker emits nothing, so an else made only of markers is
+        // still empty — `br_if` selection must not be blocked asymmetrically
+        // (`br_only_arm` already tolerates the same markers in the then arm).
+        let mut instr = if_instr(
+            local_get("c"),
+            vec![WirInstr::Br { depth: 1 }],
+            Some(vec![WirInstr::ColdPath, WirInstr::Nop]),
         );
         select_in_instr(&mut instr);
         assert!(matches!(instr, WirInstr::BrIf { depth: 0, .. }));

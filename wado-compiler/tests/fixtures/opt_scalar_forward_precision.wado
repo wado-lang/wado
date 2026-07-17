@@ -1,0 +1,36 @@
+// Precision: scalar_forward now sinks a trap-free pure scalar into a sub-block
+// of the adjacent statement (`let t = a + b; if c { sink(t) }` folds `a + b`
+// into the conditional — sound because the value is used only there and cannot
+// trap), and forwards `/` `%` whose divisor is a provably-safe constant (a
+// positive `i32`-range literal never divides by zero). `seed` / `sink` are
+// `#[inline(never)]` so `a` stays a non-constant local and the folds are the
+// pass's own, not const-folding's.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn seed(n: i32) -> i32 {
+    return n
+}
+
+#[inline(never)]
+fn sink(x: i32) with Stdout {
+    println(`{x}`);
+}
+
+export fn run() with Stdout {
+    let a = seed(20);
+    let b = seed(6);
+    let t = a + b;
+    if a > 0 {
+        sink(t);
+    }
+    let d = a / 2;
+    sink(d);
+    let m = a % 7;
+    sink(m);
+}
+
+__DATA__
+{
+    "stdout": "26\n10\n6\n"
+}

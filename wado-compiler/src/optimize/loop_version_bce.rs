@@ -475,7 +475,7 @@ fn eliminate_checks_in_fast(engine: &mut Engine, binds: &Binds, plan: &Plan, fas
         if b != plan.check_bound {
             continue;
         }
-        constify_check_temp(engine, cond, fast_body);
+        constify_check_temp(engine, cond, plan.var, fast_body);
         eliminate_condition(engine, holder, cond);
     }
 }
@@ -484,7 +484,14 @@ fn eliminate_checks_in_fast(engine: &mut Engine, binds: &Binds, plan: &Plan, fas
 /// replace that temp's initializer in the fast clone with the constant the
 /// comparison provably evaluates to there (`!c` panics ⇒ `c` is `true`;
 /// `c` panics ⇒ `c` is `false`), deleting the per-iteration compare.
-fn constify_check_temp(engine: &mut Engine, cond: Operand, fast_body: BlockId) {
+///
+/// The matched `let` is overwritten only when its initializer structurally
+/// **is** the eliminated bounds comparison over `var` ([`is_check_comparison`]).
+/// Locals are function-scoped slots, so a temp index can be re-bound; blindly
+/// constifying the first `let` for that slot would corrupt an unrelated
+/// initializer. The scan therefore skips non-comparison bindings and keeps
+/// looking for the comparison `let`.
+fn constify_check_temp(engine: &mut Engine, cond: Operand, var: u32, fast_body: BlockId) {
     let Operand::Expr(ce) = cond else {
         return;
     };
@@ -499,7 +506,7 @@ fn constify_check_temp(engine: &mut Engine, cond: Operand, fast_body: BlockId) {
         ExprKind::Local { index, .. } => (*index, false),
         _ => return,
     };
-    // Find the temp's `let` inside the fast clone and overwrite its value.
+    // Find the temp's comparison `let` inside the fast clone and overwrite it.
     let mut stack = vec![NodeRef::Block(fast_body)];
     while let Some(n) = stack.pop() {
         if let NodeRef::Stmt(s) = n
@@ -508,6 +515,7 @@ fn constify_check_temp(engine: &mut Engine, cond: Operand, fast_body: BlockId) {
             } = &engine.body.stmts[s].kind
             && *local_index == temp
             && super::arena_query::is_pure_operand(engine.body, *value)
+            && is_check_comparison(engine, *value, var)
         {
             let v = engine
                 .body
@@ -520,6 +528,49 @@ fn constify_check_temp(engine: &mut Engine, cond: Operand, fast_body: BlockId) {
             return;
         }
         engine.body.for_each_child(n, |c| stack.push(c));
+    }
+}
+
+/// Whether `value` is a bounds-check comparison over `var` — a relational
+/// operator (`<`, `<=`, `>`, `>=`) with `var` as one operand — in either the
+/// skeleton (`ExprKind::Binary`) or promoted-operand (`ValueKind::Binary`)
+/// form. The eliminated check's condition is exactly such a comparison, so this
+/// confirms the `let` being constified is that comparison and not an unrelated
+/// binding reusing the temp's local slot.
+fn is_check_comparison(engine: &Engine, value: Operand, var: u32) -> bool {
+    let is_relational = |op: NirBinaryOp| {
+        matches!(
+            op,
+            NirBinaryOp::Lt | NirBinaryOp::LtEq | NirBinaryOp::Gt | NirBinaryOp::GtEq
+        )
+    };
+    match value {
+        Operand::Expr(e) => match &engine.body.exprs[e].kind {
+            ExprKind::Binary { left, op, right } => {
+                is_relational(*op)
+                    && (operand_reads_local(engine, *left, var)
+                        || operand_reads_local(engine, *right, var))
+            }
+            _ => false,
+        },
+        Operand::Value(v) => match engine.body.values.kind(v) {
+            ValueKind::Binary { op, lhs, rhs, .. } => {
+                is_relational(*op)
+                    && (opaque_local(engine, *lhs) == Some(var)
+                        || opaque_local(engine, *rhs) == Some(var))
+            }
+            _ => false,
+        },
+    }
+}
+
+/// Whether `op` is a direct read of local `var`, in either operand form.
+fn operand_reads_local(engine: &Engine, op: Operand, var: u32) -> bool {
+    match op {
+        Operand::Expr(e) => {
+            matches!(&engine.body.exprs[e].kind, ExprKind::Local { index, .. } if *index == var)
+        }
+        Operand::Value(v) => opaque_local(engine, v) == Some(var),
     }
 }
 
