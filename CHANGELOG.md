@@ -1,5 +1,23 @@
 # Changelog
 
+## [v0.0.18](https://github.com/wado-lang/wado/compare/v0.0.17...v0.0.18) - 2026-07-17
+
+- refactor(compiler): identify value-copy helpers by canonical type mangle by @gfx in https://github.com/wado-lang/wado/pull/1589
+- feat: benchmark Gale against ANTLR4 and oracle-pin real grammars by @gfx in https://github.com/wado-lang/wado/pull/1591
+- feat(gale): execute lexer actions in generated parsers by @gfx in https://github.com/wado-lang/wado/pull/1592
+- perf(optimizer): eliminate redundant and last-element array bounds checks by @gfx in https://github.com/wado-lang/wado/pull/1593
+- refactor(compiler): move all CM canonical synthesis into the synthesis phase by @gfx in https://github.com/wado-lang/wado/pull/1594
+- feat(playground): run Wado entirely in the browser (compiler + jco as wasm) by @gfx in https://github.com/wado-lang/wado/pull/1595
+- feat(compiler): compiler-synthesized Reflect — sealed trait, Reflect::<T>:: metadata by @gfx in https://github.com/wado-lang/wado/pull/1597
+- feat(playground): browser LSP host and site-consumable runtime by @gfx in https://github.com/wado-lang/wado/pull/1600
+- fix(gale): match ANTLR4 on scan-tournament ties and childless-node rendering by @gfx in https://github.com/wado-lang/wado/pull/1599
+- fix(format): preserve doc comments on trait associated types by @gfx in https://github.com/wado-lang/wado/pull/1601
+- fix(diagnostics): attribute diagnostics from the emitter's module, not ambient logger state by @gfx in https://github.com/wado-lang/wado/pull/1602
+- perf(marl): speed up the Markdown formatter by @gfx in https://github.com/wado-lang/wado/pull/1603
+- refactor(compiler): clean up CM binding synthesis and fix the smells it exposed by @gfx in https://github.com/wado-lang/wado/pull/1605
+- feat(parser): let value scrutinees bind into `matches` without parentheses by @gfx in https://github.com/wado-lang/wado/pull/1604
+- feat(playground): publish the runtime as a tagged-release asset by @gfx in https://github.com/wado-lang/wado/pull/1606
+
 ## [v0.0.17](https://github.com/wado-lang/wado/compare/v0.0.16...v0.0.17) - 2026-07-15
 
 - fix(compiler): resolve newtypes correctly at the Component Model boundary by @gfx in https://github.com/wado-lang/wado/pull/1581
