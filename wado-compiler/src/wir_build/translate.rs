@@ -1301,14 +1301,8 @@ impl FunctionTranslator<'_, '_> {
             .map(|f| (f.name.clone(), f.ty.clone()))
             .collect();
 
-        // WIR-unique prefix: the lower path names its statement-position
-        // deref-assign temps `__deref_ref_{nir_idx}` / `__deref_val_{nir_idx}`
-        // from independent NIR local indices. codegen dedups `DeclareLocal` by
-        // name, so a bare `__deref_ref_{counter}` here could collide with a
-        // lower-path temp of the same number in a function that has both a
-        // statement- and an expression-position aggregate deref-assign —
-        // aliasing two distinct locals into one slot (a type-mismatch ICE, or a
-        // silent shared-storage miscompile when the types match).
+        // WIR-unique prefix: codegen dedups `DeclareLocal` by name, so this must
+        // not clash with the lower path's `__deref_ref_{nir_idx}` temps.
         self.local_counter += 1;
         let ref_local = format!("__expr_deref_ref_{}", self.local_counter);
         let val_local = format!("__expr_deref_val_{}", self.local_counter);

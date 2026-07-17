@@ -117,12 +117,6 @@ fn collect_and_validate(
     let type_table = project.type_table.borrow();
     let single_field = build_single_field_index(project);
     let struct_fields = build_struct_fields_index(project);
-    // A mutable-global write the callee can reach — directly, through a helper,
-    // or as an in-place `Assign` into a global's field — may change a reference
-    // param's pointee under a call-time value snapshot. Summarised once for
-    // every function (the write is often several calls deep), then type-filtered
-    // per candidate so an unrelated global write (e.g. the allocator's
-    // `heap_offset`, reached by every allocation) never blocks the unwrap.
     let global_writes = transitive_global_writes(project);
     let global_types = global_type_index(project);
 
@@ -366,19 +360,14 @@ fn type_transitively_contains(
     }
 }
 
-/// A conservative summary of the mutable globals a function may write when
-/// executed, including transitively through its callees.
 #[derive(Clone)]
 enum GlobalWrites {
-    /// May write an unknown set of globals — an indirect call whose target
-    /// cannot be resolved, so any global is possible.
+    /// An indirect call whose target cannot be resolved: any global is possible.
     Any,
-    /// Writes exactly these globals, by `(module, name)` identity.
     Known(IndexSet<(ModuleSource, String)>),
 }
 
 impl GlobalWrites {
-    /// Fold `other` into `self`; returns whether `self` grew.
     fn absorb(&mut self, other: &GlobalWrites) -> bool {
         match (&mut *self, other) {
             (GlobalWrites::Any, _) => false,
@@ -397,11 +386,8 @@ impl GlobalWrites {
     }
 }
 
-/// The global a write-target place is rooted at, or `None` when it roots at a
-/// local. Sees through the projections that share a location — field / index /
-/// variant-payload access, a transparent cast, and deref — so an in-place
-/// `G.field = …` is recognised as a write to `G`, not just a whole-global
-/// `GlobalVarSet`.
+/// The global a write-target place is rooted at, seeing through projections, so
+/// an in-place `G.field = …` counts as a write to `G`, not only a `GlobalVarSet`.
 fn global_place_root(body: &Body, target: ExprId) -> Option<(ModuleSource, String)> {
     match &body.exprs[target].kind {
         ExprKind::GlobalVarGet {
@@ -420,11 +406,9 @@ fn global_place_root(body: &Body, target: ExprId) -> Option<(ModuleSource, Strin
     }
 }
 
-/// Per-function transitive mutable-global-write summary, indexed by function
-/// position. A caller inherits every global its callees may write, so a write
-/// reached several calls deep is captured; an unresolved indirect call widens
-/// the summary to [`GlobalWrites::Any`]. Solved as a monotone worklist over the
-/// reverse call graph — a caller is re-examined only when a callee's set grows.
+/// Per-function global-write summary (indexed by function position): a caller
+/// inherits every global its callees may write. A monotone worklist over the
+/// reverse call graph.
 fn transitive_global_writes(project: &NirPackage) -> Vec<GlobalWrites> {
     let n = project.functions.len();
     let mut writes: Vec<GlobalWrites> = Vec::with_capacity(n);
@@ -481,7 +465,6 @@ fn transitive_global_writes(project: &NirPackage) -> Vec<GlobalWrites> {
     writes
 }
 
-/// Map each global's `(module, name)` identity to its declared type.
 fn global_type_index(project: &NirPackage) -> IndexMap<(ModuleSource, String), TypeId> {
     let mut out: IndexMap<(ModuleSource, String), TypeId> = IndexMap::default();
     for g in &project.globals {

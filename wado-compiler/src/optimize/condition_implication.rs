@@ -893,9 +893,8 @@ fn apply_dominating_if(engine: &mut Engine, s: StmtId, binds: &Binds) -> bool {
     let Some((var, k, bound, op)) = parse_cmp(engine, binds, cond) else {
         return false;
     };
-    // Only `<` proves `var + k < bound`; a later `var + j >= bound` is then
-    // refuted only for `j == k` (see `eliminate_checks_in_node`). Wado add wraps,
-    // so `j < k` need not imply `var + j <= var + k` and cannot be refuted.
+    // `<` proves `var + k < bound`; a later `var + j >= bound` is refuted only
+    // for `j == k`, since Wado add wraps (`j < k` need not shrink the index).
     if op != NirBinaryOp::Lt || k < 0 {
         return false;
     }
@@ -1165,13 +1164,9 @@ fn index_upper_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64>
     else {
         return None;
     };
-    // Both clamp arms (and the clamp condition) must be pure AND non-trapping.
-    // Eliminating the dominated bounds check sets its condition to `false` and
-    // lets `const_branch_prune` delete the branch; when the clamp sits inline in
-    // that condition, an effectful *or trapping* arm would be dropped with it —
-    // erasing a trap the unoptimised program takes. `is_pure_nontrapping_expr`
-    // is the deletion predicate for exactly this reason; `is_pure_expr` is
-    // trap-agnostic and would admit a droppable `arr[i]` / `x.f` clamp value.
+    // The eliminated bounds check drops this inline clamp with its branch, so a
+    // trapping (or effectful) arm would erase a trap the program takes: the
+    // deletion predicate must be non-trapping, not just pure.
     if !super::arena_query::is_pure_nontrapping_expr(engine.body, e) {
         return None;
     }
