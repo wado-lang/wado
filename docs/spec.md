@@ -296,55 +296,40 @@ See [WEP: Range Object](./wep-2026-03-03-range-object.md) for the full design.
 
 **Design Note**: Bitwise operators (`&`, `|`, `^`) have **higher** precedence than comparison operators, fixing C's well-known design flaw. This means `flags & MASK == EXPECTED` correctly parses as `(flags & MASK) == EXPECTED`.
 
-Between comparison (4) and bitwise OR (5) sit logical NOT and the `matches` operator:
-
-| Precedence | Operators             | Description  | Associativity          |
-| ---------- | --------------------- | ------------ | ---------------------- |
-| 4.33       | `!`                   | Logical NOT  | Right                  |
-| 4.66       | `matches { pattern }` | Pattern test | Left (self-delimiting) |
-
-Logical `!` is a distinct operator from bitwise NOT (`~`), so it does not need
-tight unary precedence; placing it just above comparison keeps `!x matches { P }`
-= "does not match" (see below).
-
-**Unary Operators** (value-producing prefixes):
+**Unary Operators**:
 
 | Operator | Description |
 | -------- | ----------- |
 | `-`      | Negation    |
+| `!`      | Logical NOT |
 | `~`      | Bitwise NOT |
 | `&`      | Reference   |
 | `&mut`   | Mut ref     |
 | `*`      | Dereference |
 
-Logical NOT (`!`) is **not** in this group; it binds looser than `matches` (see
-the table above).
+**Postfix Operators**:
 
-**Postfix Operators** (highest precedence):
+| Operator              | Description       |
+| --------------------- | ----------------- |
+| `.`                   | Field access      |
+| `[]`                  | Index access      |
+| `()`                  | Function call     |
+| `::`                  | Namespace access  |
+| `matches { pattern }` | Pattern test      |
+| `as Type`             | Type cast         |
+| `?`                   | Error propagation |
 
-| Operator    | Description       |
-| ----------- | ----------------- |
-| `.`         | Field access      |
-| `[]`        | Index access      |
-| `()`        | Function call     |
-| `::`        | Namespace access  |
-| `as Type`   | Type cast         |
-| `?`         | Error propagation |
+**`matches` and `!` binding:**
 
-**`matches` Precedence:**
+These tables group operators by form, not by binding strength. `matches` binds
+looser than the binary operators, `as`, and the value-producing unary operators
+(`-`, `~`, `&`, `&mut`, `*`), but tighter than logical `!`:
 
-The `matches` operator binds looser than every binary operator, `as`, and the
-value-producing unary operators (`-`, `~`, `&`, `&mut`, `*`), but tighter than
-logical `!`. Two consequences:
-
-- `!x matches { Some(_) }` parses as `!(x matches { Some(_) })` — i.e. "`x` does
-  **not** match `Some(_)`". This is the common intent, so it is the default; to
-  test the negated value, write `(!x) matches { ... }`.
-- A value-producing scrutinee — a deref, cast, arithmetic, or bitwise
-  expression — binds into `matches` without parentheses: `*x matches { "kw" }`,
-  `x as i32 matches { 0 }`, `a + b matches { 10 }`, `flags & MASK matches { 0 }`.
-  Only a comparison, range, or assignment scrutinee needs parentheses:
-  `(a == b) matches { true }`.
+- `!x matches { Some(_) }` is `!(x matches { Some(_) })` — "`x` does **not** match
+  `Some(_)`".
+- `*x matches { "kw" }`, `x as i32 matches { 0 }`, `a + b matches { 10 }`, and
+  `flags & MASK matches { 0 }` need no parentheses. A comparison, range, or
+  assignment scrutinee does: `(a == b) matches { true }`.
 
 **Prohibited Operators**:
 
