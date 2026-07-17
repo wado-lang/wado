@@ -45,11 +45,6 @@ internal struct OpenTok {
     internal keep_asterisk: bool,
 }
 
-internal struct Frame {
-    internal parent: List<Node>,
-    internal open: OpenTok,
-}
-
 pub fn parse_inline(text: &String, refs: &RefTable) -> List<Node> {
     let chars = text.to_chars();
     return parse_inline_chars(StrCursor::over(&chars), refs);
@@ -285,40 +280,54 @@ fn get_delim_unchecked(toks: &List<InlineTok>, idx: i32) -> DelimTok {
 // --- flat token stream -> tree ---
 
 fn build_tree(toks: &List<InlineTok>) -> List<Node> {
-    let mut stack: List<Frame> = [];
-    let mut current: List<Node> = [];
-    for let tok of toks {
-        match tok {
-            InlineTok::TextRun(s) => current.push(Node::Text(*s)),
-            InlineTok::Resolved(n) => current.push(*n),
+    let mut out: List<Node> = [];
+    build_seq(toks, 0, true, &mut out);
+    return out;
+}
+
+/// Builds one nesting level of the inline tree into `current`, starting at
+/// `start` and returning the index just past the `Close` that ended the level
+/// (or the end of the stream, which wraps any still-open construct). Recursing
+/// per `Open` keeps each level's growing sibling list on the call stack and
+/// appends to it in amortized O(1). An explicit `Frame` stack instead copied
+/// the whole accumulated sibling list on every open and close — quadratic in
+/// the number of inline constructs per paragraph. `top` distinguishes the
+/// outermost level, where an unmatched `Close` is dropped rather than ending a
+/// level.
+fn build_seq(toks: &List<InlineTok>, start: i32, top: bool, current: &mut List<Node>) -> i32 {
+    let n = toks.len();
+    let mut i = start;
+    while i < n {
+        match toks.get_unchecked(i) {
+            InlineTok::TextRun(s) => {
+                current.push(Node::Text(s));
+                i += 1;
+            },
+            InlineTok::Resolved(node) => {
+                current.push(node);
+                i += 1;
+            },
             InlineTok::Delim(d) => {
                 if d.count > 0 {
                     current.push(Node::Text(repeat_char(d.ch, d.count)));
                 }
+                i += 1;
             },
             InlineTok::Open(o) => {
-                stack.push(Frame { parent: current, open: *o });
-                current = [];
+                let mut children: List<Node> = [];
+                i = build_seq(toks, i + 1, false, &mut children);
+                current.push(wrap(&o, children));
             },
             InlineTok::Close => {
-                match stack.pop() {
-                    Some(frame) => {
-                        let node = wrap(&frame.open, current);
-                        current = frame.parent;
-                        current.push(node);
-                    },
-                    None => {
-                    },
+                if top {
+                    i += 1;
+                } else {
+                    return i + 1;
                 }
             },
         }
     }
-    while let Some(frame) = stack.pop() {
-        let node = wrap(&frame.open, current);
-        current = frame.parent;
-        current.push(node);
-    }
-    return current;
+    return i;
 }
 
 fn wrap(open: &OpenTok, children: List<Node>) -> Node {
