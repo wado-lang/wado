@@ -6,6 +6,12 @@
 //!   N > 1 fields where each field is accessed exactly once.
 //! - **Flatten seq assignments**: canonicalizes `LocalSet(x, Seq([preamble, final]))`.
 //!
+//! Both elision passes substitute the initializer at the use site (or drop an
+//! unread one), so beyond `is_pure_for_elision` they require the initializer
+//! to be trap-free (`util::may_trap`) and the def-to-use span to be safe
+//! ([`DefUseSafety`]): the def dominates every use and no initializer input
+//! (local / global / linear memory) is written in between.
+//!
 //! Both elision passes share a single-traversal stats collector that records, per
 //! local name: total `LocalGet` count, `StructGet(LocalGet(name), _)` use count,
 //! def count (`LocalSet` + `LocalTee`), and per-field use counts. Validation then
@@ -27,6 +33,7 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirInstr, WirPackage, WirTypeDef};
+use crate::wir_optimize::util::may_trap;
 use crate::wir_visitor::WirMutVisitor;
 
 #[derive(Default)]
@@ -135,9 +142,10 @@ fn collect_stats(
     }
 }
 
-/// Returns `true` when `instr` is safe to re-evaluate at a different program
-/// point (i.e. it is referentially transparent between its definition and any
-/// use site).
+/// Returns `true` when `instr` has no effect and no GC-heap read, so it can be
+/// re-evaluated at a different program point *provided* its remaining inputs
+/// (locals, globals, linear memory) are unchanged between the definition and
+/// the use — [`DefUseSafety`] checks that second half per candidate.
 ///
 /// Heap reads (`StructGet`, `ArrayGet*`) and calls are rejected because the
 /// underlying GC object or array element might have been mutated between the
@@ -202,6 +210,265 @@ fn inner_refs_any_candidate(
     found
 }
 
+/// The inputs a candidate's initializer reads. Substitution re-evaluates the
+/// initializer at the use site, so every input must be invariant between the
+/// def and the use ([`DefUseSafety`]).
+#[derive(Default)]
+struct InitDeps {
+    /// Locals read via `LocalGet`.
+    locals: IndexSet<String>,
+    /// Reads any global (`GlobalGet`).
+    globals: bool,
+    /// Reads linear memory or a table (loads / `table.get`).
+    memory: bool,
+}
+
+impl InitDeps {
+    fn collect(&mut self, instr: &WirInstr) {
+        match instr {
+            WirInstr::LocalGet { name, .. } => {
+                self.locals.insert(name.clone());
+            }
+            WirInstr::GlobalGet { .. } => self.globals = true,
+            WirInstr::I32Load { .. }
+            | WirInstr::I32Load8U { .. }
+            | WirInstr::I32Load8S { .. }
+            | WirInstr::I32Load16U { .. }
+            | WirInstr::I32Load16S { .. }
+            | WirInstr::I64Load { .. }
+            | WirInstr::V128Load { .. }
+            | WirInstr::TableGet { .. } => self.memory = true,
+            _ => {}
+        }
+        instr.for_each_child(&mut |child| self.collect(child));
+    }
+}
+
+/// Per-loop event record for the back-edge invariance check: a use and a
+/// clobber inside the same loop interleave across iterations (use, …,
+/// clobber, back edge, use) even when the linear walk sees the use first —
+/// unless the def is also re-executed inside that loop before the use.
+#[derive(Default)]
+struct LoopFrame {
+    used: IndexSet<String>,
+    clobbered: IndexSet<String>,
+    defined: IndexSet<String>,
+}
+
+/// Structural def-to-use safety walk over one function body, the
+/// `check_dominance_in_body` discipline from `peephole.rs` extended with
+/// initializer-input invariance. A candidate survives only when:
+///
+/// - its def structurally dominates every use — a use reached before the def
+///   would otherwise stop trapping on the null default and yield the
+///   initializer's value instead;
+/// - no input of its initializer is written between the def and any use
+///   (including across a loop back edge): a `LocalSet`/`LocalTee`/bind of a
+///   read local, a `GlobalSet` or call for a global-reading initializer, a
+///   store / `memory.grow` / `memory.fill` / `table.set` or call for a
+///   memory-reading one.
+///
+/// Evaluation order is respected where the child order diverges from it:
+/// `Select` evaluates both arms before its condition.
+struct DefUseSafety<'a> {
+    /// Candidate name → its initializer's inputs.
+    deps: &'a IndexMap<String, InitDeps>,
+    /// Candidates whose def dominates the current point (mark + truncate on
+    /// scope exit, as in `peephole::check_dominance_in_body`).
+    dominating: Vec<String>,
+    /// Candidates with an input written since their def executed.
+    clobbered: IndexSet<String>,
+    loop_frames: Vec<LoopFrame>,
+    disqualified: IndexSet<String>,
+}
+
+impl<'a> DefUseSafety<'a> {
+    fn disqualified_in(
+        body: &[WirInstr],
+        deps: &'a IndexMap<String, InitDeps>,
+    ) -> IndexSet<String> {
+        let mut walk = DefUseSafety {
+            deps,
+            dominating: Vec::new(),
+            clobbered: IndexSet::default(),
+            loop_frames: Vec::new(),
+            disqualified: IndexSet::default(),
+        };
+        walk.check_body(body);
+        walk.disqualified
+    }
+
+    fn check_body(&mut self, body: &[WirInstr]) {
+        for instr in body {
+            self.check_instr(instr);
+        }
+    }
+
+    fn check_instr(&mut self, instr: &WirInstr) {
+        if let WirInstr::StructGet { expr, .. } = instr
+            && let WirInstr::LocalGet { name, .. } = expr.as_ref()
+            && self.deps.contains_key(name)
+        {
+            self.record_use(name);
+            return;
+        }
+        match instr {
+            WirInstr::LocalSet { name, value } => {
+                self.check_instr(value);
+                self.clobber_local(name);
+                if self.deps.contains_key(name) {
+                    self.record_def(name);
+                }
+            }
+            WirInstr::LocalTee { name, value } => {
+                self.check_instr(value);
+                self.clobber_local(name);
+            }
+            WirInstr::MultiValueLocalBind { instr, locals } => {
+                self.check_instr(instr);
+                for local in locals.iter().flatten() {
+                    self.clobber_local(local);
+                }
+            }
+            WirInstr::Block { body, .. } => {
+                let mark = self.dominating.len();
+                self.check_body(body);
+                self.dominating.truncate(mark);
+            }
+            WirInstr::Loop { body, .. } => {
+                let mark = self.dominating.len();
+                self.loop_frames.push(LoopFrame::default());
+                self.check_body(body);
+                self.close_loop_frame();
+                self.dominating.truncate(mark);
+            }
+            WirInstr::Seq(body) => {
+                self.check_body(body);
+            }
+            WirInstr::If {
+                condition,
+                then_body,
+                else_body,
+                ..
+            } => {
+                self.check_instr(condition);
+                let mark = self.dominating.len();
+                self.check_body(then_body);
+                self.dominating.truncate(mark);
+                if let Some(eb) = else_body {
+                    self.check_body(eb);
+                    self.dominating.truncate(mark);
+                }
+            }
+            WirInstr::Select {
+                condition,
+                if_true,
+                if_false,
+                ..
+            } => {
+                self.check_instr(if_true);
+                self.check_instr(if_false);
+                self.check_instr(condition);
+            }
+            other => {
+                other.for_each_child(&mut |child| self.check_instr(child));
+                self.apply_own_clobber(other);
+            }
+        }
+    }
+
+    /// The clobber a node's *own* operation performs after its operands have
+    /// evaluated. `LocalSet`/`LocalTee`/`MultiValueLocalBind` are handled in
+    /// [`Self::check_instr`]; this covers the rest.
+    fn apply_own_clobber(&mut self, instr: &WirInstr) {
+        match instr {
+            WirInstr::GlobalSet { .. } => self.clobber(|d| d.globals),
+            WirInstr::Call { .. } | WirInstr::CallIndirect { .. } | WirInstr::CallRef { .. } => {
+                self.clobber(|d| d.globals || d.memory);
+            }
+            WirInstr::I32Store { .. }
+            | WirInstr::I32Store8 { .. }
+            | WirInstr::I32Store16 { .. }
+            | WirInstr::I64Store { .. }
+            | WirInstr::V128Store { .. }
+            | WirInstr::MemoryFill { .. }
+            | WirInstr::MemoryGrow(_)
+            | WirInstr::TableSet { .. } => self.clobber(|d| d.memory),
+            _ => {}
+        }
+    }
+
+    fn clobber_local(&mut self, written: &str) {
+        self.clobber(|d| d.locals.contains(written));
+    }
+
+    fn clobber(&mut self, affects: impl Fn(&InitDeps) -> bool) {
+        let all_deps = self.deps;
+        for (name, deps) in all_deps {
+            if affects(deps) {
+                self.clobbered.insert(name.clone());
+                if let Some(frame) = self.loop_frames.last_mut() {
+                    frame.clobbered.insert(name.clone());
+                }
+            }
+        }
+    }
+
+    fn record_def(&mut self, name: &str) {
+        self.dominating.push(name.to_string());
+        self.clobbered.swap_remove(name);
+        if let Some(frame) = self.loop_frames.last_mut() {
+            frame.defined.insert(name.to_string());
+        }
+    }
+
+    fn record_use(&mut self, name: &str) {
+        if !self.dominating.iter().any(|n| n == name) || self.clobbered.contains(name) {
+            self.disqualified.insert(name.to_string());
+        }
+        if let Some(frame) = self.loop_frames.last_mut() {
+            frame.used.insert(name.to_string());
+        }
+    }
+
+    /// A candidate both used and clobbered inside a loop whose def is outside
+    /// it reads a different value on the iteration after the clobber.
+    /// A def inside the loop re-captures per iteration, and an
+    /// intra-iteration clobber between it and the use is already caught by
+    /// the linear walk, so those candidates are exempt.
+    fn close_loop_frame(&mut self) {
+        let frame = self.loop_frames.pop().expect("balanced loop frames");
+        for name in &frame.used {
+            if frame.clobbered.contains(name) && !frame.defined.contains(name) {
+                self.disqualified.insert(name.clone());
+            }
+        }
+        if let Some(parent) = self.loop_frames.last_mut() {
+            parent.used.extend(frame.used);
+            parent.clobbered.extend(frame.clobbered);
+            parent.defined.extend(frame.defined);
+        }
+    }
+}
+
+/// Drop candidates whose def-to-use span is unsafe ([`DefUseSafety`]).
+/// `deps_of` yields the initializer expression(s) of one candidate.
+fn retain_safe_candidates<V>(
+    body: &[WirInstr],
+    valid: &mut IndexMap<String, V>,
+    deps_of: impl Fn(&V) -> InitDeps,
+) {
+    if valid.is_empty() {
+        return;
+    }
+    let deps: IndexMap<String, InitDeps> = valid
+        .iter()
+        .map(|(name, v)| (name.clone(), deps_of(v)))
+        .collect();
+    let disqualified = DefUseSafety::disqualified_in(body, &deps);
+    valid.retain(|name, _| !disqualified.contains(name));
+}
+
 /// One pass: collect stats, validate candidates, rewrite. Returns `true` if anything changed.
 fn elide_struct_locals_one_pass(body: &mut [WirInstr]) -> bool {
     let mut stats: IndexMap<String, LocalStats> = IndexMap::default();
@@ -219,7 +486,7 @@ fn elide_struct_locals_one_pass(body: &mut [WirInstr]) -> bool {
     //   - exactly one StructGet(LocalGet(name), _) use
     //   - every LocalGet(name) is wrapped by StructGet
     //   - inner value doesn't reference another candidate
-    let valid: IndexMap<String, WirInstr> = candidates
+    let mut valid: IndexMap<String, WirInstr> = candidates
         .into_iter()
         .filter_map(|(name, cand)| {
             let s = stats.get(&name)?;
@@ -239,9 +506,25 @@ fn elide_struct_locals_one_pass(body: &mut [WirInstr]) -> bool {
             if !is_pure_for_elision(&inner) {
                 return None;
             }
+            // The use may sit in a conditionally-executed position (dominance
+            // does not imply post-dominance), so relocating a trap-capable
+            // initializer there could skip a trap the def always fired.
+            // `elide_adjacent_box_locals` still handles the trap-capable case
+            // under its unconditional-adjacency discipline.
+            if may_trap(&inner) {
+                return None;
+            }
             Some((name, inner))
         })
         .collect();
+
+    // The remaining hazard is positional: the def must dominate the use and
+    // the initializer's inputs must be unwritten in between.
+    retain_safe_candidates(body, &mut valid, |inner| {
+        let mut deps = InitDeps::default();
+        deps.collect(inner);
+        deps
+    });
 
     if valid.is_empty() {
         return false;
@@ -293,9 +576,9 @@ fn elide_multi_field_struct_locals_one_pass(
     // Filter: candidate is valid when each accessed field is read exactly
     // once and every field initializer is pure. Unaccessed fields are
     // permitted (the partial-use case from `let [_rx, tx] = …`): since
-    // every initializer is pure, the unread initialiser just gets dropped
-    // along with the eliminated `LocalSet`.
-    let valid: IndexMap<String, IndexMap<String, WirInstr>> = candidates
+    // every initializer is pure and trap-free, the unread initialiser just
+    // gets dropped along with the eliminated `LocalSet`.
+    let mut valid: IndexMap<String, IndexMap<String, WirInstr>> = candidates
         .into_iter()
         .filter_map(|(name, cand)| {
             let s = stats.get(&name)?;
@@ -336,6 +619,12 @@ fn elide_multi_field_struct_locals_one_pass(
                 if !is_pure_for_elision(inner) {
                     return None;
                 }
+                // A trap-capable initializer can neither be dropped (an
+                // unread field's trap would vanish) nor moved to a use that
+                // may execute conditionally.
+                if may_trap(inner) {
+                    return None;
+                }
             }
             let subst: IndexMap<String, WirInstr> = struct_field_names
                 .iter()
@@ -345,6 +634,16 @@ fn elide_multi_field_struct_locals_one_pass(
             Some((name, subst))
         })
         .collect();
+
+    // Positional safety: every field use must be dominated by the def with
+    // the union of all field initializers' inputs unwritten in between.
+    retain_safe_candidates(body, &mut valid, |fields| {
+        let mut deps = InitDeps::default();
+        for inner in fields.values() {
+            deps.collect(inner);
+        }
+        deps
+    });
 
     if valid.is_empty() {
         return false;
@@ -650,6 +949,234 @@ fn substitute_box_use(instr: &mut WirInstr, name: &str, field: &str, inner: &Wir
         }
     });
     done
+}
+
+#[cfg(test)]
+mod def_use_safety_tests {
+    use super::*;
+    use crate::wir::{WirFuncId, WirName, WirType, WirTypeId};
+    use std::rc::Rc;
+
+    fn tid() -> WirTypeId {
+        WirTypeId::new(0, Rc::from("Box"))
+    }
+    fn lget(name: &str) -> WirInstr {
+        WirInstr::LocalGet {
+            name: name.to_string(),
+            result_ty: WirType::I32,
+        }
+    }
+    fn lset(name: &str, value: WirInstr) -> WirInstr {
+        WirInstr::LocalSet {
+            name: name.to_string(),
+            value: Box::new(value),
+        }
+    }
+    fn box_def(name: &str, inner: WirInstr) -> WirInstr {
+        lset(
+            name,
+            WirInstr::StructNew {
+                type_id: tid(),
+                fields: vec![inner],
+            },
+        )
+    }
+    fn box_use(name: &str) -> WirInstr {
+        WirInstr::Drop(Box::new(WirInstr::StructGet {
+            type_id: tid(),
+            field_name: "value".to_string(),
+            expr: Box::new(lget(name)),
+            result_ty: WirType::I32,
+        }))
+    }
+    fn call() -> WirInstr {
+        WirInstr::Call {
+            func_id: WirFuncId::new(0, Rc::from("f")),
+            args: vec![],
+        }
+    }
+
+    /// Baseline precision: def then use with nothing in between elides.
+    #[test]
+    fn clean_def_use_elides() {
+        let mut body = vec![box_def("b", lget("v")), box_use("b")];
+        assert!(elide_struct_locals_one_pass(&mut body));
+        assert!(matches!(body[0], WirInstr::Nop));
+        let WirInstr::Drop(inner) = &body[1] else {
+            panic!("expected Drop");
+        };
+        assert!(matches!(inner.as_ref(), WirInstr::LocalGet { name, .. } if name == "v"));
+    }
+
+    /// An intervening write to the initializer's source local blocks the
+    /// substitution: `b = S{v}; v = 9; use b.value` must keep reading the
+    /// value captured at the def.
+    #[test]
+    fn intervening_local_write_blocks() {
+        let mut body = vec![
+            box_def("b", lget("v")),
+            lset("v", WirInstr::I32Const(9)),
+            box_use("b"),
+        ];
+        assert!(!elide_struct_locals_one_pass(&mut body));
+        assert!(matches!(body[0], WirInstr::LocalSet { .. }));
+    }
+
+    /// A use reached before the def would trade the null-receiver trap for
+    /// the initializer's value; the dominance walk must reject it.
+    #[test]
+    fn use_before_def_blocks() {
+        let mut body = vec![box_use("b"), box_def("b", WirInstr::I32Const(1))];
+        assert!(!elide_struct_locals_one_pass(&mut body));
+    }
+
+    /// A def inside one `if` arm does not dominate a use after the `if`.
+    #[test]
+    fn conditional_def_blocks() {
+        let mut body = vec![
+            WirInstr::If {
+                condition: Box::new(lget("c")),
+                result: None,
+                then_body: vec![box_def("b", WirInstr::I32Const(1))],
+                else_body: None,
+            },
+            box_use("b"),
+        ];
+        assert!(!elide_struct_locals_one_pass(&mut body));
+    }
+
+    /// Loop back edge: def before the loop, use and source-write inside it —
+    /// iteration 2's use would read the clobbered source.
+    #[test]
+    fn loop_back_edge_clobber_blocks() {
+        let mut body = vec![
+            box_def("b", lget("v")),
+            WirInstr::Loop {
+                label: None,
+                body: vec![box_use("b"), lset("v", WirInstr::I32Const(9))],
+            },
+        ];
+        assert!(!elide_struct_locals_one_pass(&mut body));
+    }
+
+    /// Precision: a def *inside* the loop re-captures per iteration, so a
+    /// write after the use in the same iteration is harmless.
+    #[test]
+    fn loop_local_def_after_use_write_elides() {
+        let mut body = vec![WirInstr::Loop {
+            label: None,
+            body: vec![
+                box_def("b", lget("v")),
+                box_use("b"),
+                lset("v", WirInstr::I32Const(9)),
+            ],
+        }];
+        assert!(elide_struct_locals_one_pass(&mut body));
+    }
+
+    /// A call between the def and the use clobbers a global-reading
+    /// initializer (the callee may write the global) …
+    #[test]
+    fn call_clobbers_global_reader() {
+        let g = WirInstr::GlobalGet {
+            name: WirName {
+                fq: "g".to_string(),
+            },
+            result_ty: WirType::I32,
+        };
+        let mut body = vec![box_def("b", g.clone()), call(), box_use("b")];
+        assert!(!elide_struct_locals_one_pass(&mut body));
+        // … but with nothing in between the same initializer elides.
+        let mut body = vec![box_def("b", g), box_use("b")];
+        assert!(elide_struct_locals_one_pass(&mut body));
+    }
+
+    /// A call never writes locals, so it does not clobber a `LocalGet`
+    /// initializer (precision guard for the `sroa_param` call-site shape).
+    #[test]
+    fn call_does_not_clobber_local_reader() {
+        let mut body = vec![box_def("b", lget("v")), call(), box_use("b")];
+        assert!(elide_struct_locals_one_pass(&mut body));
+    }
+
+    /// `Select` evaluates its arms before its condition: a def in the
+    /// condition runs after a use in an arm, so it must not count as
+    /// dominating.
+    #[test]
+    fn select_arm_use_with_condition_def_blocks() {
+        let use_expr = WirInstr::StructGet {
+            type_id: tid(),
+            field_name: "value".to_string(),
+            expr: Box::new(lget("b")),
+            result_ty: WirType::I32,
+        };
+        let def_then_cond = WirInstr::Seq(vec![
+            box_def("b", WirInstr::I32Const(1)),
+            WirInstr::I32Const(0),
+        ]);
+        let mut body = vec![WirInstr::Drop(Box::new(WirInstr::Select {
+            condition: Box::new(def_then_cond),
+            if_true: Box::new(use_expr),
+            if_false: Box::new(WirInstr::I32Const(7)),
+            ty: None,
+        }))];
+        assert!(!elide_struct_locals_one_pass(&mut body));
+    }
+
+    /// A trap-capable initializer must not be relocated by the strict pass
+    /// (the adjacency pass still covers it under its own discipline).
+    #[test]
+    fn trapping_initializer_blocks() {
+        let div = WirInstr::I32DivS(Box::new(lget("x")), Box::new(lget("y")));
+        let mut body = vec![box_def("b", div), box_use("b")];
+        assert!(!elide_struct_locals_one_pass(&mut body));
+    }
+
+    /// The multi-field pass must not drop an unread trapping initializer.
+    #[test]
+    fn multi_field_unread_trapping_initializer_blocks() {
+        let div = WirInstr::I32DivS(Box::new(lget("x")), Box::new(lget("y")));
+        let mut body = vec![
+            lset(
+                "p",
+                WirInstr::StructNew {
+                    type_id: tid(),
+                    fields: vec![div, WirInstr::I32Const(7)],
+                },
+            ),
+            WirInstr::Drop(Box::new(WirInstr::StructGet {
+                type_id: tid(),
+                field_name: "b".to_string(),
+                expr: Box::new(lget("p")),
+                result_ty: WirType::I32,
+            })),
+        ];
+        let field_names = vec![Some(vec!["a".to_string(), "b".to_string()])];
+        assert!(!elide_multi_field_struct_locals_one_pass(
+            &mut body,
+            &field_names
+        ));
+        // Trap-free initializers with the same shape still elide.
+        let mut body = vec![
+            lset(
+                "p",
+                WirInstr::StructNew {
+                    type_id: tid(),
+                    fields: vec![lget("x"), WirInstr::I32Const(7)],
+                },
+            ),
+            WirInstr::Drop(Box::new(WirInstr::StructGet {
+                type_id: tid(),
+                field_name: "b".to_string(),
+                expr: Box::new(lget("p")),
+                result_ty: WirType::I32,
+            })),
+        ];
+        assert!(elide_multi_field_struct_locals_one_pass(
+            &mut body,
+            &field_names
+        ));
+    }
 }
 
 #[cfg(test)]

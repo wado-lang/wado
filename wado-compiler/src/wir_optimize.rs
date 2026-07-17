@@ -225,9 +225,12 @@ pub fn optimize_wir(
     }
     profiler.span_end("wir/phase7_global_cleanup");
 
-    // Phase 8: mark functions/types orphaned by earlier passes dead, then compact.
+    // Phase 8: mark functions/types/globals orphaned by earlier passes dead,
+    // then compact. Globals are marked after functions so a global read only by
+    // an already-dead function is itself pruned.
     profiler.span_start("wir/phase8_dce_compact");
     dce::mark_unreachable_defined_functions(module);
+    dce::mark_unreferenced_globals(module);
     dce_unreachable_types(module);
     dce::compact_dead_items(module);
     profiler.span_end("wir/phase8_dce_compact");

@@ -1,0 +1,54 @@
+// Soundness regression: the loop-body CSE (licm's `cse_loop_body`) splits
+// occurrences of a repeated arith tree into runs at each statement that
+// assigns a leaf. The assignment scan must see writes nested in expression-
+// level blocks (an if-expression arm) and in nested loop bodies — both were
+// missed, so the two `x + y` below shared one `__cse` temp and the second
+// occurrence read the pre-decrement value (156 instead of 153).
+
+use { println, Stdout } from "core:cli";
+
+// `x` is decremented between the two `x + y` inside an if-expression arm.
+#[inline(never)]
+fn accumulate_if_assign(y: i32, start: i32) -> i32 {
+    let mut x = start;
+    let mut total = 0;
+    for let mut i = 0; i < 3; i += 1 {
+        let a = x + y;
+        let b = if x > 0 {
+            x = x - 1;
+            x + y
+        } else {
+            0
+        };
+        total += a + b;
+    }
+    return total;
+}
+
+// `x` is decremented in a nested loop between the two `x + y`.
+#[inline(never)]
+fn accumulate_nested_loop_assign(y: i32, start: i32) -> i32 {
+    let mut x = start;
+    let mut total = 0;
+    for let mut i = 0; i < 3; i += 1 {
+        let a = x + y;
+        for let mut j = 0; j < 1; j += 1 {
+            x = x - 1;
+        }
+        let b = x + y;
+        total += a + b;
+    }
+    return total;
+}
+
+export fn run() with Stdout {
+    // i=0: a=27, x=19, b=26; i=1: a=26, x=18, b=25; i=2: a=25, x=17, b=24.
+    println(`{accumulate_if_assign(7, 20)}`);
+    println(`{accumulate_nested_loop_assign(7, 20)}`);
+}
+
+__DATA__
+{
+    "stdout": "153\n153\n",
+    "wir_not_expect:O2": ["__cse_"]
+}

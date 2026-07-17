@@ -1,0 +1,53 @@
+// Escape analysis through the value-flow chain: hoisting must NOT fire when
+// the template result escapes the iteration *indirectly* — moved through an
+// alias `let` (or an `if`/`match`/block result tail) into an escaping
+// position. Before the chain-following fix, `let t = s; out.push(t)` was
+// invisible to the escape walk: `s` only appeared as a `let` value, `t` was
+// moved (no defensive copy — `s` is fresh and this is its last use), and
+// every pushed element aliased one hoisted buffer that was reset each
+// iteration, printing the last item three times.
+//
+// The second loop pins the precision side: an alias `let` whose target does
+// NOT escape must still hoist (wir_expect __tmpl_buf_).
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Escapes via alias let + push (moved, no copy): must NOT be hoisted.
+    let mut out: List<String> = [];
+    for let mut i = 0; i < 3; i += 1 {
+        let s = `item {i}`;
+        let t = s;
+        out.push(t);
+    }
+    assert out[0] == "item 0";
+    assert out[1] == "item 1";
+    assert out[2] == "item 2";
+
+    // Escapes only through an if-merge consumed by push. Today the merge
+    // carries a defensive deep copy, so the buffer itself never leaves the
+    // iteration; the outputs pin correctness whether or not the hoist fires.
+    let mut picked: List<String> = [];
+    let other = "other";
+    for let mut i = 0; i < 3; i += 1 {
+        let s = `pick {i}`;
+        picked.push(if i == 1 { other } else { s });
+    }
+    assert picked[0] == "pick 0";
+    assert picked[1] == "other";
+    assert picked[2] == "pick 2";
+
+    // Alias let that stays inside the iteration: still hoisted.
+    let mut total = 0;
+    for let mut i = 0; i < 3; i += 1 {
+        let s = `len {i}`;
+        let u = s;
+        total += u.len();
+    }
+    println(`total={total}`);
+}
+
+__DATA__
+{
+    "stdout": "total=15\n",
+    "wir_expect:O2": ["__tmpl_buf_"]
+}

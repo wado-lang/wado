@@ -11,7 +11,9 @@
 //! wildcard / binding pattern, so nothing reads `__match_scrut_N`).
 //!
 //! This pass cleans those up after `wir_build`. For each `LocalSet(x,
-//! v)` whose `x` is never read in the function body, the assignment is
+//! v)` whose `x` is never read in the function body — reads inside this
+//! store's own `v` don't count, so a self-referencing dead store
+//! `x = x + 1` with no other reads still elides — the assignment is
 //! rewritten:
 //!
 //! - `v` has no observable side effects → drop the whole `LocalSet`.
@@ -27,11 +29,11 @@
 //! not subsume copy propagation or constant propagation; it's a narrow
 //! cleanup pass for write-only locals only.
 
-use crate::hashmap::IndexSet;
+use crate::hashmap::IndexMap;
 use crate::wir::{WirInstr, WirPackage};
 use crate::wir_visitor::WirMutVisitor;
 
-use super::util::{collect_local_gets_deep, is_side_effect_free, may_trap};
+use super::util::{count_local_gets, is_side_effect_free, may_trap};
 
 pub(super) fn elide_write_only_locals(module: &mut WirPackage) {
     for func in &mut module.functions {
@@ -42,13 +44,13 @@ pub(super) fn elide_write_only_locals(module: &mut WirPackage) {
 }
 
 fn elide_write_only_locals_in_body(body: &mut [WirInstr]) -> bool {
-    let mut read_locals: IndexSet<String> = IndexSet::default();
+    let mut read_counts: IndexMap<String, u32> = IndexMap::default();
     for instr in body.iter() {
-        collect_local_gets_deep(instr, &mut read_locals);
+        count_local_gets(instr, &mut read_counts);
     }
 
     let mut visitor = ElideWriteOnly {
-        read_locals: &read_locals,
+        read_counts: &read_counts,
         changed: false,
     };
     for instr in body.iter_mut() {
@@ -58,14 +60,33 @@ fn elide_write_only_locals_in_body(body: &mut [WirInstr]) -> bool {
 }
 
 struct ElideWriteOnly<'a> {
-    read_locals: &'a IndexSet<String>,
+    /// Whole-body `LocalGet` counts, collected before this sweep. Elisions
+    /// during the sweep only remove reads, so a stale count over-approximates
+    /// — a store can be kept a round too long, never wrongly elided; the
+    /// fixed-point loop converges the leftovers.
+    read_counts: &'a IndexMap<String, u32>,
     changed: bool,
+}
+
+impl ElideWriteOnly<'_> {
+    /// Is `name` read anywhere outside `own_value` (this store's RHS)?
+    /// A store whose only reads sit in its own RHS is still write-only:
+    /// dropping it drops those reads with it.
+    fn is_read_elsewhere(&self, name: &str, own_value: &WirInstr) -> bool {
+        let total = self.read_counts.get(name).copied().unwrap_or(0);
+        if total == 0 {
+            return false;
+        }
+        let mut own_counts: IndexMap<String, u32> = IndexMap::default();
+        count_local_gets(own_value, &mut own_counts);
+        total > own_counts.get(name).copied().unwrap_or(0)
+    }
 }
 
 impl WirMutVisitor for ElideWriteOnly<'_> {
     fn visit_instr(&mut self, instr: &mut WirInstr) {
         if let WirInstr::LocalSet { name, value } = instr
-            && !self.read_locals.contains(name.as_str())
+            && !self.is_read_elsewhere(name, value)
         {
             let value_expr = std::mem::replace(value.as_mut(), WirInstr::Nop);
             // Preserve `may_trap` sub-trees (OOB array/memory reads,
@@ -103,24 +124,89 @@ impl WirMutVisitor for ElideWriteOnly<'_> {
             self.changed = true;
             return;
         }
-        // Only recurse into bodies (Block/Loop/If/Seq), not expression
-        // children. `LocalSet` only appears at body level, so descending
-        // through expression operands wastes work.
-        match instr {
-            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
-                self.visit_body(body);
-            }
-            WirInstr::If {
-                then_body,
-                else_body,
-                ..
-            } => {
-                self.visit_body(then_body);
-                if let Some(eb) = else_body {
-                    self.visit_body(eb);
-                }
-            }
-            _ => {}
+        // Full recursion: statement lists also hide in value positions (an
+        // if-expression arm inside a `LocalSet` value, a `Seq` inside a call
+        // argument), and a write-only `LocalSet` there is just as dead.
+        self.walk_instr(instr);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::wir::WirType;
+
+    fn lget(name: &str) -> WirInstr {
+        WirInstr::LocalGet {
+            name: name.to_string(),
+            result_ty: WirType::I32,
         }
+    }
+    fn lset(name: &str, value: WirInstr) -> WirInstr {
+        WirInstr::LocalSet {
+            name: name.to_string(),
+            value: Box::new(value),
+        }
+    }
+    fn increment(name: &str) -> WirInstr {
+        lset(
+            name,
+            WirInstr::I32Add(Box::new(lget(name)), Box::new(WirInstr::I32Const(1))),
+        )
+    }
+
+    /// `x = x + 1` with no other reads of `x` is a dead store even though its
+    /// own RHS reads `x`.
+    #[test]
+    fn self_referencing_dead_store_elides() {
+        let mut body = vec![increment("x")];
+        assert!(elide_write_only_locals_in_body(&mut body));
+        assert!(matches!(body[0], WirInstr::Nop));
+    }
+
+    /// A read outside the store's own RHS keeps it.
+    #[test]
+    fn externally_read_store_is_kept() {
+        let mut body = vec![increment("x"), lset("sink", lget("x"))];
+        assert!(elide_write_only_locals_in_body(&mut body));
+        assert!(
+            matches!(&body[0], WirInstr::LocalSet { name, .. } if name == "x"),
+            "x is read by the sink copy and must survive: {:?}",
+            body[0]
+        );
+        // The sink itself is write-only and goes.
+        assert!(matches!(body[1], WirInstr::Nop));
+    }
+
+    /// A write-only local buried in a value-position statement list (an
+    /// if-expression arm) is reachable and elided.
+    #[test]
+    fn write_only_local_in_if_expression_arm_elides() {
+        let mut body = vec![
+            lset(
+                "z",
+                WirInstr::If {
+                    condition: Box::new(lget("c")),
+                    result: Some(WirType::I32),
+                    then_body: vec![lset("w", WirInstr::I32Const(5)), WirInstr::I32Const(1)],
+                    else_body: Some(vec![WirInstr::I32Const(2)]),
+                },
+            ),
+            WirInstr::Return {
+                value: Some(Box::new(lget("z"))),
+            },
+        ];
+        assert!(elide_write_only_locals_in_body(&mut body));
+        let WirInstr::LocalSet { value, .. } = &body[0] else {
+            panic!("z is read by the return and must survive");
+        };
+        let WirInstr::If { then_body, .. } = value.as_ref() else {
+            panic!("expected if-expression value");
+        };
+        assert!(
+            matches!(then_body[0], WirInstr::Nop),
+            "write-only w inside the arm must elide: {:?}",
+            then_body[0]
+        );
     }
 }
