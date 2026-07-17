@@ -20,9 +20,15 @@ use {
 use { RefTable, ref_table_get, parse_dest_and_title } from "./fmt_links.wado";
 use { StrCursor } from "./str_cursor.wado";
 
+/// A flat inline token. Resolved nodes (text runs, code spans, links, images,
+/// breaks) live in a separate arena and are referenced here by index, so the
+/// token itself stays small: `process_emphasis`'s random-access scans and its
+/// `insert`-driven shifts, plus `build_seq`'s scrutinee reads, copy tokens by
+/// value, and embedding a `Node`/`String` here would deep-copy a whole subtree
+/// on every such read. The arena node is copied out exactly once, in
+/// `build_seq`.
 internal variant InlineTok {
-    TextRun(String),
-    Resolved(Node),
+    Node(i32),
     Delim(DelimTok),
     Open(OpenTok),
     Close,
@@ -45,11 +51,6 @@ internal struct OpenTok {
     internal keep_asterisk: bool,
 }
 
-internal struct Frame {
-    internal parent: List<Node>,
-    internal open: OpenTok,
-}
-
 pub fn parse_inline(text: &String, refs: &RefTable) -> List<Node> {
     let chars = text.to_chars();
     return parse_inline_chars(StrCursor::over(&chars), refs);
@@ -57,12 +58,13 @@ pub fn parse_inline(text: &String, refs: &RefTable) -> List<Node> {
 
 internal fn parse_inline_chars(cursor: StrCursor, refs: &RefTable) -> List<Node> {
     let mut toks: List<InlineTok> = [];
-    tokenize(cursor, refs, &mut toks);
+    let mut nodes: List<Node> = [];
+    tokenize(cursor, refs, &mut toks, &mut nodes);
     process_emphasis(&mut toks);
-    return build_tree(&toks);
+    return build_tree(&toks, &nodes);
 }
 
-fn tokenize(cursor: StrCursor, refs: &RefTable, toks: &mut List<InlineTok>) {
+fn tokenize(cursor: StrCursor, refs: &RefTable, toks: &mut List<InlineTok>, nodes: &mut List<Node>) {
     let mut cur = cursor;
     let mut buf = String::new();
     while !cur.eof() {
@@ -80,13 +82,13 @@ fn tokenize(cursor: StrCursor, refs: &RefTable, toks: &mut List<InlineTok>) {
                 cur.set_position(i + 2);
             },
             '\\' && cur.is_at(i + 1, '\n') => {
-                flush_text(&mut buf, toks);
-                toks.push(InlineTok::Resolved(Node::HardBreak));
+                flush_text(&mut buf, toks, nodes);
+                push_node(Node::HardBreak, toks, nodes);
                 cur.set_position(i + 2);
             },
             '\n' => {
-                flush_text(&mut buf, toks);
-                toks.push(InlineTok::Resolved(Node::SoftBreak));
+                flush_text(&mut buf, toks, nodes);
+                push_node(Node::SoftBreak, toks, nodes);
                 cur.set_position(i + 1);
             },
             ' ' | '\t' => {
@@ -112,22 +114,22 @@ fn tokenize(cursor: StrCursor, refs: &RefTable, toks: &mut List<InlineTok>) {
                 cur.set_position(j);
             },
             '`' => {
-                cur.set_position(push_construct(try_code_span(&cur, i), c, i, &mut buf, toks));
+                cur.set_position(push_construct(try_code_span(&cur, i), c, i, &mut buf, toks, nodes));
             },
             '<' => {
-                cur.set_position(push_construct(try_angle_construct(&cur, i), c, i, &mut buf, toks));
+                cur.set_position(push_construct(try_angle_construct(&cur, i), c, i, &mut buf, toks, nodes));
             },
             'h' => {
-                cur.set_position(push_construct(try_bare_autolink(&cur, i), c, i, &mut buf, toks));
+                cur.set_position(push_construct(try_bare_autolink(&cur, i), c, i, &mut buf, toks, nodes));
             },
             '!' && cur.is_at(i + 1, '[') => {
-                cur.set_position(push_construct(try_image(&cur, i + 1, refs), c, i, &mut buf, toks));
+                cur.set_position(push_construct(try_image(&cur, i + 1, refs), c, i, &mut buf, toks, nodes));
             },
             '[' => {
-                cur.set_position(push_construct(try_link(&cur, i, refs), c, i, &mut buf, toks));
+                cur.set_position(push_construct(try_link(&cur, i, refs), c, i, &mut buf, toks, nodes));
             },
             '*' | '_' | '~' => {
-                flush_text(&mut buf, toks);
+                flush_text(&mut buf, toks, nodes);
                 cur.set_position(push_delim(&cur, i, c, toks));
             },
             _ => {
@@ -136,7 +138,7 @@ fn tokenize(cursor: StrCursor, refs: &RefTable, toks: &mut List<InlineTok>) {
             },
         }
     }
-    flush_text(&mut buf, toks);
+    flush_text(&mut buf, toks, nodes);
 }
 
 fn char_at(cur: &StrCursor, idx: i32) -> char {
@@ -153,20 +155,34 @@ fn is_escapable(cur: &StrCursor, idx: i32) -> bool {
     };
 }
 
-fn flush_text(buf: &mut String, toks: &mut List<InlineTok>) {
+/// Appends `node` to the arena and pushes a token referencing it.
+fn push_node(node: Node, toks: &mut List<InlineTok>, nodes: &mut List<Node>) {
+    let idx = nodes.len();
+    nodes.push(node);
+    toks.push(InlineTok::Node(idx));
+}
+
+fn flush_text(buf: &mut String, toks: &mut List<InlineTok>, nodes: &mut List<Node>) {
     if buf.len() == 0 {
         return;
     }
     let text = *buf;
     *buf = String::new();
-    toks.push(InlineTok::TextRun(text));
+    push_node(Node::Text(text), toks, nodes);
 }
 
-fn push_construct(result: Option<[Node, i32]>, c: char, i: i32, buf: &mut String, toks: &mut List<InlineTok>) -> i32 {
+fn push_construct(
+    result: Option<[Node, i32]>,
+    c: char,
+    i: i32,
+    buf: &mut String,
+    toks: &mut List<InlineTok>,
+    nodes: &mut List<Node>,
+) -> i32 {
     match result {
         Some([node, next]) => {
-            flush_text(buf, toks);
-            toks.push(InlineTok::Resolved(node));
+            flush_text(buf, toks, nodes);
+            push_node(node, toks, nodes);
             return next;
         },
         None => {
@@ -284,41 +300,90 @@ fn get_delim_unchecked(toks: &List<InlineTok>, idx: i32) -> DelimTok {
 
 // --- flat token stream -> tree ---
 
-fn build_tree(toks: &List<InlineTok>) -> List<Node> {
-    let mut stack: List<Frame> = [];
-    let mut current: List<Node> = [];
-    for let tok of toks {
-        match tok {
-            InlineTok::TextRun(s) => current.push(Node::Text(*s)),
-            InlineTok::Resolved(n) => current.push(*n),
+/// Recursion cap for `build_seq`. Well beyond any real document's inline
+/// nesting, but bounded so adversarially deep emphasis can't exhaust the wasm
+/// call stack; past it a construct is flattened iteratively instead.
+global MAX_INLINE_NESTING: i32 = 256;
+
+fn build_tree(toks: &List<InlineTok>, nodes: &List<Node>) -> List<Node> {
+    let mut out: List<Node> = [];
+    build_seq(toks, nodes, 0, true, 0, &mut out);
+    return out;
+}
+
+/// Builds one nesting level of the inline tree into `current`, consuming tokens
+/// from `start` and returning the index just past the `Close` that ends the
+/// level (or the end of the stream, which wraps any still-open construct).
+/// `top` marks the outermost level, where an unmatched `Close` is dropped
+/// rather than ending a level. `depth` bounds recursion: past
+/// `MAX_INLINE_NESTING` a construct is flattened rather than recursed into, so
+/// pathological nesting can't overflow the stack.
+fn build_seq(
+    toks: &List<InlineTok>,
+    nodes: &List<Node>,
+    start: i32,
+    top: bool,
+    depth: i32,
+    current: &mut List<Node>,
+) -> i32 {
+    let n = toks.len();
+    let mut i = start;
+    while i < n {
+        match toks.get_unchecked(i) {
+            InlineTok::Node(idx) => {
+                current.push(nodes.get_unchecked(idx));
+                i += 1;
+            },
+            InlineTok::Delim(d) => {
+                if d.count > 0 {
+                    current.push(Node::Text(repeat_char(d.ch, d.count)));
+                }
+                i += 1;
+            },
+            InlineTok::Open(o) => {
+                if depth >= MAX_INLINE_NESTING {
+                    i = flatten_construct(toks, nodes, i + 1, current);
+                } else {
+                    let mut children: List<Node> = [];
+                    i = build_seq(toks, nodes, i + 1, false, depth + 1, &mut children);
+                    current.push(wrap(&o, children));
+                }
+            },
+            InlineTok::Close => {
+                if top {
+                    i += 1;
+                } else {
+                    return i + 1;
+                }
+            },
+        }
+    }
+    return i;
+}
+
+/// Consumes the balanced `Open`..`Close` range beginning at `start` (the token
+/// after an `Open`) without recursing, appending its inner leaf nodes to
+/// `current` un-wrapped. Used only past `MAX_INLINE_NESTING`, where degenerate
+/// nesting is flattened to keep the stack bounded; returns the index past the
+/// matching `Close`.
+fn flatten_construct(toks: &List<InlineTok>, nodes: &List<Node>, start: i32, current: &mut List<Node>) -> i32 {
+    let n = toks.len();
+    let mut i = start;
+    let mut nesting = 1;
+    while i < n && nesting > 0 {
+        match toks.get_unchecked(i) {
+            InlineTok::Open(_) => nesting += 1,
+            InlineTok::Close => nesting -= 1,
+            InlineTok::Node(idx) => current.push(nodes.get_unchecked(idx)),
             InlineTok::Delim(d) => {
                 if d.count > 0 {
                     current.push(Node::Text(repeat_char(d.ch, d.count)));
                 }
             },
-            InlineTok::Open(o) => {
-                stack.push(Frame { parent: current, open: *o });
-                current = [];
-            },
-            InlineTok::Close => {
-                match stack.pop() {
-                    Some(frame) => {
-                        let node = wrap(&frame.open, current);
-                        current = frame.parent;
-                        current.push(node);
-                    },
-                    None => {
-                    },
-                }
-            },
         }
+        i += 1;
     }
-    while let Some(frame) = stack.pop() {
-        let node = wrap(&frame.open, current);
-        current = frame.parent;
-        current.push(node);
-    }
-    return current;
+    return i;
 }
 
 fn wrap(open: &OpenTok, children: List<Node>) -> Node {
@@ -527,8 +592,12 @@ fn try_link(cur: &StrCursor, open: i32, refs: &RefTable) -> Option<[Node, i32]> 
     let raw_label = cur.slice(open + 1, close);
     return match ref_table_get(refs, &raw_label) {
         Some(_) => {
-            let children = parse_inline_chars(cur.sub(open + 1, close), refs);
-            Option::Some([Node::ShortcutLink(ReferenceLinkNode { children, label: raw_label.trim() }), close + 1]);
+            Option::Some([
+                Node::ShortcutLink(ReferenceLinkNode {
+                    children: parse_inline_chars(cur.sub(open + 1, close), refs),
+                    label: raw_label.trim(),
+                }), close + 1,
+            ]);
         },
         None => null,
     };
@@ -585,10 +654,14 @@ fn try_inline_link_tail(cur: &StrCursor, open: i32, close: i32, refs: &RefTable)
     if pclose < 0 {
         return null;
     }
-    let dest_raw = cur.slice(close + 2, pclose);
-    let [url, title] = parse_dest_and_title(&dest_raw);
-    let children = parse_inline_chars(cur.sub(open + 1, close), refs);
-    return Option::Some([Node::InlineLink(LinkNode { children, url, title }), pclose + 1]);
+    let [url, title] = parse_dest_and_title(&cur.slice(close + 2, pclose));
+    return Option::Some([
+        Node::InlineLink(LinkNode {
+            children: parse_inline_chars(cur.sub(open + 1, close), refs),
+            url,
+            title,
+        }), pclose + 1,
+    ]);
 }
 
 /// The label of a `[label]` (or `[]`) pair starting at `open`, or `-1` for
@@ -619,9 +692,11 @@ fn try_reference_link(cur: &StrCursor, open: i32, close: i32, refs: &RefTable) -
     let raw_label = if inner.trim().len() == 0 { cur.slice(open + 1, close) } else { inner };
     return match ref_table_get(refs, &raw_label) {
         Some(_) => {
-            let children = parse_inline_chars(cur.sub(open + 1, close), refs);
             Option::Some([
-                Node::ReferenceLink(ReferenceLinkNode { children, label: raw_label.trim() }), second_close + 1,
+                Node::ReferenceLink(ReferenceLinkNode {
+                    children: parse_inline_chars(cur.sub(open + 1, close), refs),
+                    label: raw_label.trim(),
+                }), second_close + 1,
             ]);
         },
         None => null,

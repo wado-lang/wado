@@ -700,9 +700,6 @@ pub async fn compile_with_options<H: CompilerHost>(
     let log_level = options.log_level.unwrap_or_default();
     let logger = Logger::new(host, log_level);
     let filename = filename.map(String::from);
-    if let Some(ref f) = filename {
-        logger.set_file(f);
-    }
 
     // === Phase 1: Load all modules ===
     // Loader performs: lex → parse → bind for each module, and preserves
@@ -844,12 +841,8 @@ fn compile_after_load<H: CompilerHost>(
     // through the host without bailing: a malformed descriptor does not
     // fail the whole compile, so the driver's provisional fallback still
     // produces a valid cache key.
-    // A kiln generator is any target world that imports `KilnHost` — the same
-    // structural signal cm_binding and codegen use, so all three agree (a
-    // string match on `core:kiln/generator` would miss a future generator
-    // world with a different FQ).
     let is_kiln_generator = match (options.target_world.as_deref(), sem.world_registry()) {
-        (Some(tw), Some(reg)) => reg.world_imports_interface(tw, "KilnHost"),
+        (Some(tw), Some(reg)) => reg.is_generator_world(tw),
         _ => false,
     };
 
@@ -1242,6 +1235,7 @@ fn compile_after_load<H: CompilerHost>(
             &mut flat,
             &options.param_overrides,
             &options.param_policy,
+            &entry_filename,
             logger,
         )?;
     }
@@ -1448,9 +1442,15 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
 ) -> Result<DumpResult, Bail> {
     let logger = Logger::new(host, compiler_host::LogLevel::default());
     let filename = filename.map(String::from);
-    if let Some(ref f) = filename {
-        logger.set_file(f);
-    }
+    // Attribution target for the standalone bind/lex/parse phases below;
+    // load_all mints the real entry source only at Phase 4.
+    let entry_source = {
+        let mut interner = module_source::ModuleSourceInterner::new();
+        match &filename {
+            Some(f) => interner.entry_point(f),
+            None => ModuleSource::entry_point_stdin(),
+        }
+    };
 
     // === Phase 1: Lexer ===
     let mut lex_result = {
@@ -1461,7 +1461,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // Batch path is fail-fast: report any recovered lex error before parsing
     // so the wire format keeps the `lexer error: …` prefix.
     if !lex_result.errors.is_empty() {
-        let _ = logger.error(lex_result.errors.remove(0));
+        let _ = logger.error_in(&entry_source, lex_result.errors.remove(0));
         return Err(Bail);
     }
 
@@ -1471,7 +1471,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         let mut parser = Parser::from_lex(lex_result);
         let ast = parser.parse();
         if let Some(e) = parser.take_errors().into_iter().next() {
-            let _ = logger.error(e);
+            let _ = logger.error_in(&entry_source, e);
             return Err(Bail);
         }
         let mut trivia = parser.take_trivia();
@@ -1483,7 +1483,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // === Phase 3: Bind ===
     {
         let _span = logger.span("bind");
-        let mut binder = Binder::new(&logger);
+        let mut binder = Binder::new(&logger, &entry_source);
         binder.bind_module(&ast)?;
     }
 
@@ -1679,6 +1679,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                     &mut flat,
                     param_overrides,
                     &param_policy,
+                    &entry_source.source_path(),
                     &logger,
                 )?;
             }

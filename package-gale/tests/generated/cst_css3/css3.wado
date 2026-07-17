@@ -761,10 +761,11 @@ impl CstStore {
     }
 
     /// ANTLR4-style S-expression for the subtree at row `i`: `(name child ...)`,
-    /// tokens as their text. `rule_names[kind]` names rule nodes (`K_ERROR`
-    /// renders `<error>`); `token_names[kind]` names missing terminals. Real
-    /// terminals with empty text (e.g. EOF) are omitted; missing/skipped
-    /// terminals render markers.
+    /// tokens as their text; a childless node renders as its bare name, no
+    /// parens (ANTLR4's `Trees.toStringTree`). `rule_names[kind]` names rule
+    /// nodes (`K_ERROR` renders `<error>`); `token_names[kind]` names missing
+    /// terminals. Real terminals with empty text (e.g. EOF) are omitted;
+    /// missing/skipped terminals render markers.
     pub fn to_string_tree(
         &self,
         i: i32,
@@ -786,12 +787,13 @@ fn cst_to_string_tree_impl(
     rule_names: &List<String>,
     token_names: &List<String>,
 ) {
-    out.push_str(&"(");
-    if s.a[i] == K_ERROR as i32 {
-        out.push_str(&"<error>");
-    } else {
-        out.push_str(&rule_names[s.a[i]]);
+    let name = if s.a[i] == K_ERROR as i32 { "<error>" } else { rule_names[s.a[i]] };
+    if i + 1 >= s.tag.len() || s.tag[i + 1] matches { Close } {
+        out.push_str(&name);
+        return;
     }
+    out.push_str(&"(");
+    out.push_str(&name);
     let mut c = i + 1;
     while c < s.next[i] {
         match s.tag[c] {
@@ -1113,12 +1115,16 @@ fn render_builder_node(
     rule_names: &List<String>,
     token_names: &List<String>,
 ) -> i32 {
-    out.push_str(&"(");
-    if a[i] == K_ERROR as i32 {
-        out.push_str(&"<error>");
-    } else {
-        out.push_str(&rule_names[a[i]]);
+    let name = if a[i] == K_ERROR as i32 { "<error>" } else { rule_names[a[i]] };
+    if i + 1 >= tag.len() || tag[i + 1] matches { Close } {
+        out.push_str(&name);
+        if i + 1 < tag.len() {
+            return i + 2;
+        }
+        return i + 1;
     }
+    out.push_str(&"(");
+    out.push_str(&name);
     let mut c = i + 1;
     while c < tag.len() {
         match tag[c] {
@@ -34019,14 +34025,37 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
         let grp_kind = p.peek_kind();
         if _kind_set_10(grp_kind) {
             let mut gd_winner: i32 = -1;
-            gd_dispatch: {
+            let mut gd_best: i32 = -1;
+            gd_tourney: {
+                let mut gd_end: i32 = -1;
                 gd_scan: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
                     pos = scan_type_selector(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { break gd_scan; }
+                    gd_end = pos;
+                }
+                if gd_end > gd_best {
+                    gd_best = gd_end;
                     gd_winner = 0;
-                    break gd_dispatch;
+                }
+                if gd_best >= p.kinds.len() {
+                    break gd_tourney;
+                }
+                let mut gd_end_2: i32 = -1;
+                gd_scan_2: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    pos = scan_universal(tokens, pos, &EMPTY_FOLLOW, 0);
+                    if pos < 0 { break gd_scan_2; }
+                    gd_end_2 = pos;
+                }
+                if gd_end_2 > gd_best {
+                    gd_best = gd_end_2;
+                    gd_winner = 1;
+                }
+                if gd_best >= p.kinds.len() {
+                    break gd_tourney;
                 }
             }
             if gd_winner == 0 {
@@ -34889,13 +34918,13 @@ fn _parse_ruleset__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
             let _sd_p_0 = _parse_ruleset__inner_scan_0(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
-            if _sd_p_1 > _sd_best_p {
-                _sd_best_p = _sd_p_1;
-                _sd_best_i = 1;
-            }
             if _sd_p_0 > _sd_best_p {
                 _sd_best_p = _sd_p_0;
                 _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
             }
             if _sd_best_i == 1 {
                 return _parse_ruleset__inner_alt_1(p, follow);
@@ -36008,63 +36037,114 @@ fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
         let grp_kind = p.peek_kind();
         if _kind_set_28(grp_kind) {
             let mut gd_winner: i32 = -1;
-            gd_dispatch: {
+            let mut gd_best: i32 = -1;
+            gd_tourney: {
+                let mut gd_end: i32 = -1;
                 gd_scan: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    if pos >= tokens.len() || tokens[pos] != TK_AtKeyword { break gd_scan; }
-                    pos += 1;
-                    pos = scan_ws(tokens, pos, follow, 0);
+                    pos = scan_declaration_list(tokens, pos, follow, 0);
                     if pos < 0 { break gd_scan; }
-                    gd_winner = 0;
-                    break gd_dispatch;
+                    gd_end = pos;
                 }
+                if gd_end > gd_best {
+                    gd_best = gd_end;
+                    gd_winner = 0;
+                }
+                if gd_best >= p.kinds.len() {
+                    break gd_tourney;
+                }
+                let mut gd_end_2: i32 = -1;
                 gd_scan_2: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break gd_scan_2; }
-                    pos += 1;
-                    pos = scan_ws(tokens, pos, follow, 0);
+                    pos = scan_nested_statement(tokens, pos, follow, 0);
                     if pos < 0 { break gd_scan_2; }
-                    gd_winner = 1;
-                    break gd_dispatch;
+                    gd_end_2 = pos;
                 }
+                if gd_end_2 > gd_best {
+                    gd_best = gd_end_2;
+                    gd_winner = 1;
+                }
+                if gd_best >= p.kinds.len() {
+                    break gd_tourney;
+                }
+                let mut gd_end_3: i32 = -1;
                 gd_scan_3: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    pos = scan_declaration_list(tokens, pos, follow, 0);
+                    pos = scan_any_(tokens, pos, follow, 0);
                     if pos < 0 { break gd_scan_3; }
-                    gd_winner = 2;
-                    break gd_dispatch;
+                    gd_end_3 = pos;
                 }
+                if gd_end_3 > gd_best {
+                    gd_best = gd_end_3;
+                    gd_winner = 2;
+                }
+                if gd_best >= p.kinds.len() {
+                    break gd_tourney;
+                }
+                let mut gd_end_4: i32 = -1;
                 gd_scan_4: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    pos = scan_nested_statement(tokens, pos, follow, 0);
+                    pos = scan_block(tokens, pos, follow, 0);
                     if pos < 0 { break gd_scan_4; }
-                    gd_winner = 3;
-                    break gd_dispatch;
+                    gd_end_4 = pos;
                 }
+                if gd_end_4 > gd_best {
+                    gd_best = gd_end_4;
+                    gd_winner = 3;
+                }
+                if gd_best >= p.kinds.len() {
+                    break gd_tourney;
+                }
+                let mut gd_end_5: i32 = -1;
                 gd_scan_5: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    pos = scan_any_(tokens, pos, follow, 0);
+                    if pos >= tokens.len() || tokens[pos] != TK_AtKeyword { break gd_scan_5; }
+                    pos += 1;
+                    pos = scan_ws(tokens, pos, follow, 0);
                     if pos < 0 { break gd_scan_5; }
+                    gd_end_5 = pos;
+                }
+                if gd_end_5 > gd_best {
+                    gd_best = gd_end_5;
                     gd_winner = 4;
-                    break gd_dispatch;
+                }
+                if gd_best >= p.kinds.len() {
+                    break gd_tourney;
+                }
+                let mut gd_end_6: i32 = -1;
+                gd_scan_6: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break gd_scan_6; }
+                    pos += 1;
+                    pos = scan_ws(tokens, pos, follow, 0);
+                    if pos < 0 { break gd_scan_6; }
+                    gd_end_6 = pos;
+                }
+                if gd_end_6 > gd_best {
+                    gd_best = gd_end_6;
+                    gd_winner = 5;
+                }
+                if gd_best >= p.kinds.len() {
+                    break gd_tourney;
                 }
             }
-            if gd_winner == 0 {
+            if gd_winner == 4 {
                 let atkeyword = p.expect(TK_AtKeyword, &SYNC_0);
                 let ws = _parse_ws(p, follow);
-            } else if gd_winner == 1 {
+            } else if gd_winner == 5 {
                 let semicolon = p.expect(TK_LIT_SEMI, &SYNC_0);
                 let ws = _parse_ws(p, follow);
-            } else if gd_winner == 2 {
+            } else if gd_winner == 0 {
                 let declaration_list = _parse_declaration_list(p, follow);
-            } else if gd_winner == 3 {
+            } else if gd_winner == 1 {
                 let nested_statement = _parse_nested_statement(p, follow);
-            } else if gd_winner == 4 {
+            } else if gd_winner == 2 {
                 let any_ = _parse_any_(p, follow);
             } else {
                 let block = _parse_block(p, follow);

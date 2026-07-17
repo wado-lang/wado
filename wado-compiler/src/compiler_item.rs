@@ -120,6 +120,9 @@ pub enum CompilerItem {
     // ── Traits ────────────────────────────────────────────────────────
     /// `Default` — `Default::default()` synthesis anchor.
     Default,
+    /// `Reflect` — compile-time struct-introspection anchor; the
+    /// per-struct `impl Reflect for S` synthesis points at it.
+    Reflect,
     /// `Eq` — anchor for synthesised `==` / `!=` lowering and the
     /// auto-derive checks that decide whether a compound type
     /// (struct, variant, generic instance) implements `Eq`.
@@ -261,6 +264,15 @@ pub enum CompilerItem {
     /// `List::new` + a sequence of `.push(...)` calls into
     /// `array.new_fixed`.
     ListPush,
+    /// `List::from_tuple` — collects a homogeneous tuple into a `List<T>`;
+    /// synthesized `Reflect::field_names` calls it.
+    ListFromTuple,
+    /// `Reflect::fields` — the per-struct field-value tuple projection.
+    ReflectFields,
+    /// `Reflect::field_names` — the per-struct source-name list.
+    ReflectFieldNames,
+    /// `Reflect::type_name` — the per-struct type name.
+    ReflectTypeName,
     /// `String::push_str` — recognised by the WIR optimiser for
     /// string-building inlining.
     StringPushStr,
@@ -398,6 +410,7 @@ impl CompilerItem {
         Self::Result,
         Self::Ordering,
         Self::Default,
+        Self::Reflect,
         Self::Eq,
         Self::Ord,
         Self::From,
@@ -447,6 +460,10 @@ impl CompilerItem {
         Self::AlignmentCenter,
         Self::AlignmentRight,
         Self::ListPush,
+        Self::ListFromTuple,
+        Self::ReflectFields,
+        Self::ReflectFieldNames,
+        Self::ReflectTypeName,
         Self::StringPushStr,
         Self::StringPushChar,
         Self::StringGetByteUnchecked,
@@ -514,6 +531,7 @@ impl CompilerItem {
             Self::Result => "result",
             Self::Ordering => "ordering",
             Self::Default => "default",
+            Self::Reflect => "reflect",
             Self::Eq => "eq",
             Self::Ord => "ord",
             Self::From => "from",
@@ -563,6 +581,10 @@ impl CompilerItem {
             Self::AlignmentCenter => "alignment_center",
             Self::AlignmentRight => "alignment_right",
             Self::ListPush => "list_push",
+            Self::ListFromTuple => "list_from_tuple",
+            Self::ReflectFields => "reflect_fields",
+            Self::ReflectFieldNames => "reflect_field_names",
+            Self::ReflectTypeName => "reflect_type_name",
             Self::StringPushStr => "string_push_str",
             Self::StringPushChar => "string_push_char",
             Self::StringGetByteUnchecked => "string_get_byte_unchecked",
@@ -647,10 +669,15 @@ impl CompilerItem {
             | Self::Result
             | Self::Ordering
             | Self::Default
+            | Self::Reflect
             | Self::Eq
             | Self::Ord
             | Self::From
             | Self::ListPush
+            | Self::ListFromTuple
+            | Self::ReflectFields
+            | Self::ReflectFieldNames
+            | Self::ReflectTypeName
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringGetByteUnchecked
@@ -773,6 +800,7 @@ impl CompilerItem {
             Self::SerializeErrorKind | Self::DeserializeErrorKind => CompilerItemKind::Enum,
             Self::Formatter => CompilerItemKind::Struct,
             Self::Default
+            | Self::Reflect
             | Self::Eq
             | Self::Ord
             | Self::From
@@ -802,6 +830,10 @@ impl CompilerItem {
             | Self::LowerExp
             | Self::UpperExp => CompilerItemKind::Trait,
             Self::ListPush
+            | Self::ListFromTuple
+            | Self::ReflectFields
+            | Self::ReflectFieldNames
+            | Self::ReflectTypeName
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringGetByteUnchecked

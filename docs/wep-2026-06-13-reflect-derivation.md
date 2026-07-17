@@ -81,8 +81,8 @@ impl<T, ..F: SomeTrait> SomeTrait for T
 where T: Reflect<Fields = [..F]>
 {
     fn method(&self) -> R {
-        let meta = T::field_meta();        // value-level per-field metadata
-        let parts = [..F::method_of()];    // type-level, value-free, per field type
+        let meta = Reflect::<T>::field_meta();   // value-level per-field metadata
+        let parts = [..F::method_of()];          // type-level, value-free, per field type
         // combine meta + parts …
     }
 }
@@ -99,11 +99,37 @@ where T: Reflect<Fields = [..F]>
   **value-free**: `schema_for::<T>()` has no instance, yet `[..F::json_schema()]`
   still expands per field type.
 
+### 1a. API surface: a sealed trait, called as `Reflect::<T>::…`
+
+`Reflect` is a **sealed trait** — the compiler synthesizes `impl Reflect for S`
+for every eligible struct, and a user `impl Reflect for T` is a compile error.
+Sealing is what lets a derivation trust the projection: a program cannot forge a
+type's reflection. `Reflect` stays a trait (not a struct or a builtin type)
+because the derivation mechanism binds it as `where T: Reflect<Fields = [..F]>`
+(§1) — only a trait can carry that bound and its associated `Fields` pack.
+
+Its members are reached **only** through the trait-qualified form, with the
+subject type as a turbofish on the trait:
+
+```wado
+Reflect::<Point>::type_name()     // "Point"
+Reflect::<Point>::field_names()   // ["x", "y"]
+Reflect::<Point>::fields(&p)      // [p.x, p.y]
+```
+
+The trait-qualified form is the only spelling: the metadata is introspection
+_about_ a type, not part of the type's own API, so it lives in the `Reflect`
+namespace and never appears among a struct's own methods (a struct's method
+namespace is entirely the author's). In generic code the same form applies to a
+type parameter — `Reflect::<T>::field_names()`.
+
 ### 2. Extend `Reflect` with derivation metadata
 
 The extension is **purely additive** over the §10 signature — `type Fields`,
-`fields(&self)`, `field_names()`, and `type_name()` are retained verbatim (so
-the §11 struct-`Inspect` example keeps compiling), and two members are added:
+`fields(&self)`, `field_names()`, and `type_name()` carry over unchanged, and
+two members are added. `Reflect` is a sealed, compiler-only trait, so it is
+`internal` and anchored — trait and each callable member — through the
+compiler-item registry:
 
 ```wado
 pub struct FieldMeta {
@@ -115,14 +141,17 @@ pub struct FieldMeta {
     secret: bool,            // field is #[secret]; its Fields slot is Secret<F_k>
 }
 
-#[comp_feature("reflect")]
-pub trait Reflect {
-    type Fields;                       // [F_0, F_1, …]  — type-level pack  (§10)
-    fn fields(&self) -> Self::Fields;  // value tuple (when an instance exists)  (§10)
-    fn field_names() -> List<String>;  // source names  (§10)
-    fn type_name() -> String;          // (§10)
-    fn field_meta() -> List<FieldMeta>;  // added: wire name, default, doc, validate
-    fn type_doc() -> String;             // added: /// on the type itself
+#[compiler_item("reflect")]
+internal trait Reflect {
+    type Fields;                          // [F_0, F_1, …]  — type-level pack  (§10)
+    #[compiler_item("reflect_fields")]
+    fn fields(&self) -> Self::Fields;     // value tuple (§10)
+    #[compiler_item("reflect_field_names")]
+    fn field_names() -> List<String>;     // source names  (§10)
+    #[compiler_item("reflect_type_name")]
+    fn type_name() -> String;             // (§10)
+    fn field_meta() -> List<FieldMeta>;   // added: wire name, default, doc, validate
+    fn type_doc() -> String;              // added: /// on the type itself
 }
 ```
 
@@ -140,10 +169,13 @@ monomorphized contexts.
 
 `Reflect` as designed is struct-only. Sum and bitmask types get analogous
 compile-time introspection so a derivation can lower a `variant` to JSON
-Schema `oneOf`, an `enum` to a string `enum`, and `flags` to its bit set:
+Schema `oneOf`, an `enum` to a string `enum`, and `flags` to its bit set. These
+follow §1a: each is a sealed `internal` trait reached only as
+`ReflectVariant::<T>::…` (never a bare `T::case_meta()`):
 
 ```wado
-pub trait ReflectVariant {
+#[compiler_item("reflect_variant")]
+internal trait ReflectVariant {
     type Cases;                          // payload types as a pack ([P_0, P_1, …])
     fn case_meta() -> List<CaseMeta>;    // name, wire_name, discriminant, is_unit, doc
     fn type_name() -> String;
@@ -222,8 +254,14 @@ code.
 Ordered so each step is independently testable; Layer-B-of-Jade is unblocked
 after the first three.
 
-- [ ] `Reflect` per-struct synthesis — `Fields`, `fields`, `field_names`,
-      `type_name` (the unbuilt item from WEP 2026-03-14 §10).
+- [x] Sealed trait + `Reflect::<T>::` trait-qualified dispatch (§1a): a user
+      `impl Reflect` is a compile error; there is no bare `T::method()` spelling,
+      so struct namespaces stay clean.
+- [x] `Reflect` per-struct synthesis of `type_name()` / `field_names()` — the
+      value-free string metadata. `field_names()` collects a homogeneous string
+      tuple through the general `List::from_tuple` constructor.
+- [ ] `Reflect` per-struct synthesis of `fields(&self)` and the `Fields`
+      associated tuple (the remaining §10 members).
 - [ ] `where`-clause pack binding `T: Reflect<Fields = [..F]>` (the unbuilt
       item from WEP 2026-03-14 §11).
 - [ ] `Reflect` metadata extension — `field_meta()` (`wire_name`,

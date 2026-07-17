@@ -15,7 +15,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::ast::Type;
+use crate::ast::{NamedType, Type};
 use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry};
 use crate::hashmap::IndexSet;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
@@ -26,9 +26,9 @@ use crate::tir::{
 };
 
 use crate::synthesis::common::{
-    alloc_local, assign, binary, block, break_stmt, builtin_call, cast, cm_raw_call, expr_stmt,
-    generic_method_call, i32_const, i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
-    local_ref, loop_stmt, null_expr, return_stmt, synth_span,
+    alloc_local, assign, binary, block, break_stmt, builtin_call, cm_raw_call, expr_stmt,
+    generic_method_call, i32_const, if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref,
+    loop_stmt, null_expr, return_stmt, split_packed_ptr_len, synth_span,
 };
 
 use super::lift::{materialize_if_needed, synthesize_lift, try_lift_wasi_variant_or_enum};
@@ -39,8 +39,8 @@ use super::lower::{
     synthesize_lower_wasi_variant_to_memory,
 };
 use super::types::{
-    LiftContext, binary_add, cm_param_align, cm_param_size, cm_param_store_plan,
-    cm_type_to_type_id, cm_val_type_to_type_id, flatten_param_type, needs_flat_result_lifting,
+    CmStdlibNames, LiftContext, LowerContext, binary_add, cm_param_store_plan, cm_type_to_type_id,
+    cm_val_type_to_type_id, flatten_param_type, needs_flat_result_lifting,
 };
 
 /// Build the binding function name for a WASI import.
@@ -340,6 +340,53 @@ fn synthesize_async_lift_function(
     )
 }
 
+/// Build the `AsyncCall<T>` struct literal returned by async import paths.
+/// Field order and indices mirror the stdlib `AsyncCall` declaration.
+fn make_async_call_literal(
+    subtask_type: TypeId,
+    packed: TirExpr,
+    outptr: TirExpr,
+    size: TirExpr,
+    align: TirExpr,
+    lift: TirExpr,
+) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::StructLiteral {
+            struct_type: subtask_type,
+            struct_name: "AsyncCall".to_string(),
+            fields: vec![
+                TirStructField {
+                    name: "__cm_packed".to_string(),
+                    value: packed,
+                    field_index: 0,
+                },
+                TirStructField {
+                    name: "__cm_outptr".to_string(),
+                    value: outptr,
+                    field_index: 1,
+                },
+                TirStructField {
+                    name: "__cm_size".to_string(),
+                    value: size,
+                    field_index: 2,
+                },
+                TirStructField {
+                    name: "__cm_align".to_string(),
+                    value: align,
+                    field_index: 3,
+                },
+                TirStructField {
+                    name: "__cm_lift".to_string(),
+                    value: lift,
+                    field_index: 4,
+                },
+            ],
+        },
+        subtask_type,
+        synth_span(),
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 fn synthesize_async_wrap_function(
     name: String,
@@ -349,8 +396,7 @@ fn synthesize_async_wrap_function(
     outptr_size: u32,
     outptr_align: u32,
     lift_fn_ref: TirExpr,
-    cm_interface_registry: &CmInterfaceRegistry,
-    type_table: &RefCell<TypeTable>,
+    ctx: &LowerContext<'_>,
 ) -> Rc<RefCell<TirFunction>> {
     let span = synth_span();
     let mut next_local: u32 = 0;
@@ -406,49 +452,20 @@ fn synthesize_async_wrap_function(
             local_ref(outptr_local, "__outptr", TypeTable::I32),
             &mut next_local,
             &mut locals,
-            cm_interface_registry,
-            &func_info.package,
-            type_table,
+            ctx,
         ));
         local_ref(outptr_local, "__outptr", TypeTable::I32)
     } else {
         i32_const(0)
     };
 
-    let completed = TirExpr::new(
-        TirExprKind::StructLiteral {
-            struct_type: subtask_type,
-            struct_name: "AsyncCall".to_string(),
-            fields: vec![
-                TirStructField {
-                    name: "__cm_packed".to_string(),
-                    value: i32_const(0),
-                    field_index: 0,
-                },
-                TirStructField {
-                    name: "__cm_outptr".to_string(),
-                    value: outptr_expr,
-                    field_index: 1,
-                },
-                TirStructField {
-                    name: "__cm_size".to_string(),
-                    value: i32_const(outptr_size as i32),
-                    field_index: 2,
-                },
-                TirStructField {
-                    name: "__cm_align".to_string(),
-                    value: i32_const(outptr_align as i32),
-                    field_index: 3,
-                },
-                TirStructField {
-                    name: "__cm_lift".to_string(),
-                    value: lift_fn_ref,
-                    field_index: 4,
-                },
-            ],
-        },
+    let completed = make_async_call_literal(
         subtask_type,
-        span,
+        i32_const(0),
+        outptr_expr,
+        i32_const(outptr_size as i32),
+        i32_const(outptr_align as i32),
+        lift_fn_ref,
     );
     body_stmts.push(return_stmt(Some(completed)));
 
@@ -462,23 +479,6 @@ fn synthesize_async_wrap_function(
     )
 }
 
-/// Synthesize a CM binding function for a WASI import.
-///
-/// The binding function:
-/// 1. Accepts the same parameter types as the WASI function
-/// 2. Lowers parameters to flat CM ABI (String → ptr/len, etc.)
-/// 3. Calls the lowered WASI function via `CmRawCall`
-/// 4. Lifts the result from flat CM ABI back to Wado types
-/// 5. Returns the Wado-typed result
-///
-/// The binding's Wado-level return type matches the WASI function declaration.
-/// All return types are lifted inline using `synthesize_lift` — no per-type
-/// converter functions are needed.
-///
-/// For async imports the adapter additionally emits a sibling
-/// [`synthesize_async_lift_function`]; both are returned via
-/// [`AdapterArtifacts`].
-///
 /// Lift a CM record that flattens to a single core value. The value is spilled
 /// into a scratch buffer and lifted from that canonical memory image (the sole
 /// non-unit leaf sits at offset 0), then the buffer is freed once the result is
@@ -553,6 +553,22 @@ fn lift_flat_struct_return(
     lifted
 }
 
+/// Synthesize a CM binding function for a WASI import.
+///
+/// The binding function:
+/// 1. Accepts the same parameter types as the WASI function
+/// 2. Lowers parameters to flat CM ABI (String → ptr/len, etc.)
+/// 3. Calls the lowered WASI function via `CmRawCall`
+/// 4. Lifts the result from flat CM ABI back to Wado types
+/// 5. Returns the Wado-typed result
+///
+/// The binding's Wado-level return type matches the WASI function declaration.
+/// All return types are lifted inline using `synthesize_lift` — no per-type
+/// converter functions are needed.
+///
+/// For async imports the adapter additionally emits a sibling
+/// [`synthesize_async_lift_function`]; both are returned via
+/// [`AdapterArtifacts`].
 pub(super) fn synthesize_adapter(
     func_info: &CmFunctionInfo,
     cm_interface_registry: &CmInterfaceRegistry,
@@ -561,1010 +577,917 @@ pub(super) fn synthesize_adapter(
     owner_module: &ModuleSource,
     entry_source: &ModuleSource,
 ) -> AdapterArtifacts {
-    let names =
-        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
-    let name = binding_func_name(&func_info.interface_name, &func_info.method_name);
-    let local_name = func_info.local_alias_name();
+    let lower_ctx = LowerContext {
+        cm_interface_registry,
+        type_table,
+        wasi_package: &func_info.package,
+        names: CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items()),
+    };
+    let mut builder = AdapterBuilder {
+        func_info,
+        lower_ctx,
+        interner,
+        entry_source,
+        next_local: 0,
+        params: Vec::new(),
+        locals: Vec::new(),
+        body_stmts: Vec::new(),
+        flat_args: Vec::new(),
+        auxiliary: Vec::new(),
+    };
 
-    // For `async fn ... -> AsyncCall<T>` imports, `func_info.return_type` already
-    // stores the CM-ABI `T` (the registry strips `AsyncCall<T>` at registration);
-    // the wrapper is re-applied below for the Wado-visible adapter return type.
-    let cm_return_type: Option<Type> = func_info.return_type.clone();
-    let needs_outptr = cm_return_type.as_ref().is_some_and(|rt| {
-        crate::component_model::cm_return_needs_outptr(rt, cm_interface_registry)
-    });
-    let pkg = Some(func_info.package.as_str());
-    let outptr_alloc = if needs_outptr {
-        cm_return_type.as_ref().map(|rt| {
-            // WASI variants need their registry-computed size/align, not the generic cm_size
-            if let Type::Named(named) = rt
-                && let Some(sa) = crate::component_model::cm_variant_size_align_scoped(
-                    named,
-                    cm_interface_registry,
-                    pkg,
-                )
-            {
-                return sa;
-            }
-            // Use registry-aware size/align for WASI structs and other complex types
-            (
-                crate::component_model::cm_size_with_registry_scoped(
-                    rt,
-                    cm_interface_registry,
-                    pkg,
-                ),
-                crate::component_model::cm_align_with_registry_scoped(
-                    rt,
-                    cm_interface_registry,
-                    pkg,
-                ),
-            )
-        })
+    let plans = builder.plan_params();
+    builder.emit_param_lowering(&plans);
+
+    let async_outptr = if func_info.is_async {
+        builder.prepare_async_args(&plans)
     } else {
         None
     };
+    let sync_outptr = if func_info.is_async {
+        None
+    } else {
+        builder.alloc_sync_outptr()
+    };
 
-    let mut next_local: u32 = 0;
-    let mut params = Vec::new();
-    let mut locals: Vec<TirLocal> = Vec::new();
-    let mut body_stmts: Vec<TirStmt> = Vec::new();
-    let mut flat_args: Vec<TirExpr> = Vec::new();
-    // Per-import lift function returned alongside the adapter for CM
-    // `async func` imports. The adapter writes a `FuncRef` to it into the
-    // emitted `AsyncCall<T>`'s `__cm_lift` field; the caller is responsible
-    // for adding it to the entry module.
-    let mut auxiliary: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
+    let raw_call_return_type = wasi_return_type_id(func_info, cm_interface_registry);
+    let raw_call = cm_raw_call(
+        &func_info.local_alias_name(),
+        std::mem::take(&mut builder.flat_args),
+        raw_call_return_type,
+    );
 
-    // ---- Pass 1: Allocate all parameter locals (contiguous) ----
-    // Wasm requires params at indices [0..n-1], so allocate them first.
-    //
-    // For types that the binding lowers internally (String, List<u8>), we create
-    // a single placeholder param. The binding body will lower them to flat CM args.
-    //
-    // For other types (handles, Option<T>, etc.), we create flat params matching
-    // the CM ABI directly. The call site must flatten args before passing them.
-    //
-    // Track (start_param_idx, param_count) per WASI param for Pass 2 indexing.
-    let mut param_mapping: Vec<(usize, usize)> = Vec::new();
-    for (param_name, _, param_type) in &func_info.params {
-        let flat_tys = flatten_param_type(param_type, cm_interface_registry, &names);
-        if flat_tys.is_empty() {
-            continue; // unit param, skip
-        }
-        let start = params.len();
-        match param_type {
-            // String: single placeholder param (binding body lowers to ptr+len)
-            Type::Named(n) if n.name == names.string => {
-                params.push(TirParam {
-                    name: param_name.clone(),
-                    type_id: TypeTable::I32,
-                    local_index: next_local,
-                    is_mut: false,
-                    is_mut_ref: false,
-                    span: synth_span(),
-                });
-                locals.push(TirLocal::synth(next_local, TypeTable::I32, false));
-                next_local += 1;
-                param_mapping.push((start, 1));
-            }
-            // List<u8>: single placeholder param (binding body lowers to ptr+len)
-            Type::Generic(g)
-                if g.name == names.array
-                    && g.args.len() == 1
-                    && matches!(&g.args[0], Type::Named(n) if n.name == "u8") =>
-            {
-                params.push(TirParam {
-                    name: param_name.clone(),
-                    type_id: TypeTable::I32,
-                    local_index: next_local,
-                    is_mut: false,
-                    is_mut_ref: false,
-                    span: synth_span(),
-                });
-                locals.push(TirLocal::synth(next_local, TypeTable::I32, false));
-                next_local += 1;
-                param_mapping.push((start, 1));
-            }
-            // General List<T>: single placeholder param (binding body lowers to ptr+len)
-            Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
-                params.push(TirParam {
-                    name: param_name.clone(),
-                    type_id: TypeTable::I32,
-                    local_index: next_local,
-                    is_mut: false,
-                    is_mut_ref: false,
-                    span: synth_span(),
-                });
-                locals.push(TirLocal::synth(next_local, TypeTable::I32, false));
-                next_local += 1;
-                param_mapping.push((start, 1));
-            }
-            // Struct (record) param: single GC reference, binding extracts fields
-            Type::Named(n)
-                if n.source_interface.as_deref().is_some_and(|s| {
-                    cm_interface_registry
-                        .get_struct_fields_by_source(s, &n.name)
-                        .is_some()
-                }) =>
-            {
-                let struct_type_id = {
-                    let mut tt = type_table.borrow_mut();
-                    cm_type_to_type_id(
-                        param_type,
-                        &mut tt,
-                        cm_interface_registry,
-                        &func_info.package,
-                    )
-                };
-                params.push(TirParam {
-                    name: param_name.clone(),
-                    type_id: struct_type_id,
-                    local_index: next_local,
-                    is_mut: false,
-                    is_mut_ref: false,
-                    span: synth_span(),
-                });
-                locals.push(TirLocal::synth(next_local, struct_type_id, false));
-                next_local += 1;
-                param_mapping.push((start, 1));
-            }
-            // Variant param: single GC reference, binding lowers to flat args
-            Type::Named(n)
-                if n.source_interface.as_deref().is_some_and(|s| {
-                    cm_interface_registry
-                        .get_variant_cases_by_source(s, &n.name)
-                        .is_some()
-                }) =>
-            {
-                let variant_type_id = {
-                    let mut tt = type_table.borrow_mut();
-                    cm_type_to_type_id(
-                        param_type,
-                        &mut tt,
-                        cm_interface_registry,
-                        &func_info.package,
-                    )
-                };
-                params.push(TirParam {
-                    name: param_name.clone(),
-                    type_id: variant_type_id,
-                    local_index: next_local,
-                    is_mut: false,
-                    is_mut_ref: false,
-                    span: synth_span(),
-                });
-                locals.push(TirLocal::synth(next_local, variant_type_id, false));
-                next_local += 1;
-                param_mapping.push((start, 1));
-            }
-            // Option<T>: single GC ref param (binding body lowers to discriminant + payload)
-            Type::Generic(g) if g.name == "Option" && g.args.len() == 1 => {
-                let option_type_id = {
-                    let mut tt = type_table.borrow_mut();
-                    cm_type_to_type_id(
-                        param_type,
-                        &mut tt,
-                        cm_interface_registry,
-                        &func_info.package,
-                    )
-                };
-                params.push(TirParam {
-                    name: param_name.clone(),
-                    type_id: option_type_id,
-                    local_index: next_local,
-                    is_mut: false,
-                    is_mut_ref: false,
-                    span: synth_span(),
-                });
-                locals.push(TirLocal::synth(next_local, option_type_id, false));
-                next_local += 1;
-                param_mapping.push((start, 1));
-            }
-            Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
-                let result_type_id = {
-                    let mut tt = type_table.borrow_mut();
-                    cm_type_to_type_id(
-                        param_type,
-                        &mut tt,
-                        cm_interface_registry,
-                        &func_info.package,
-                    )
-                };
-                params.push(TirParam {
-                    name: param_name.clone(),
-                    type_id: result_type_id,
-                    local_index: next_local,
-                    is_mut: false,
-                    is_mut_ref: false,
-                    span: synth_span(),
-                });
-                locals.push(TirLocal::synth(next_local, result_type_id, false));
-                next_local += 1;
-                param_mapping.push((start, 1));
-            }
-            // Tuple param: single GC tuple, binding body lowers to flat args.
-            Type::Tuple(elems) if !elems.is_empty() => {
-                let tuple_type_id = {
-                    let mut tt = type_table.borrow_mut();
-                    cm_type_to_type_id(
-                        param_type,
-                        &mut tt,
-                        cm_interface_registry,
-                        &func_info.package,
-                    )
-                };
-                params.push(TirParam {
-                    name: param_name.clone(),
-                    type_id: tuple_type_id,
-                    local_index: next_local,
-                    is_mut: false,
-                    is_mut_ref: false,
-                    span: synth_span(),
-                });
-                locals.push(TirLocal::synth(next_local, tuple_type_id, false));
-                next_local += 1;
-                param_mapping.push((start, 1));
-            }
-            // All other types: create flat params matching CM ABI
-            _ => {
-                for (j, flat_ty) in flat_tys.iter().enumerate() {
-                    let name = if flat_tys.len() == 1 {
-                        param_name.clone()
-                    } else {
-                        format!("{param_name}_flat{j}")
-                    };
-                    params.push(TirParam {
-                        name,
-                        type_id: *flat_ty,
-                        local_index: next_local,
-                        is_mut: false,
-                        is_mut_ref: false,
-                        span: synth_span(),
-                    });
-                    locals.push(TirLocal::synth(next_local, *flat_ty, false));
-                    next_local += 1;
-                }
-                param_mapping.push((start, flat_tys.len()));
-            }
-        }
+    let adapter_return_type = if func_info.is_async {
+        builder.emit_async_result(raw_call, async_outptr)
+    } else if let Some(outptr) = sync_outptr {
+        builder.emit_outptr_result(raw_call, outptr)
+    } else if let Some(return_type) = &func_info.return_type {
+        builder.emit_flat_result(raw_call, raw_call_return_type, return_type)
+    } else {
+        builder.body_stmts.push(expr_stmt(raw_call));
+        TypeTable::UNIT
+    };
+
+    let binding = make_binding_function(
+        binding_func_name(&func_info.interface_name, &func_info.method_name),
+        builder.params,
+        adapter_return_type,
+        block(builder.body_stmts),
+        builder.next_local,
+        builder.locals,
+    );
+    // Resources and effects are unified at the effect-system level: every
+    // operation on `<E>` (whether `<E>` is declared as `effect` or `resource`)
+    // requires the caller to hold `with <E>`. The binding for a CM-imported
+    // operation therefore carries its owning name as its single concrete
+    // effect. The propagation closure (built in `effect_check`) walks
+    // operation signatures separately, so additional resources reachable
+    // through `<E>`'s operations are admitted without listing them here.
+    binding.borrow_mut().effects.push(EffectRef::Concrete {
+        name: func_info.interface_name.clone(),
+        module_source: owner_module.clone(),
+    });
+    AdapterArtifacts {
+        adapter: binding,
+        auxiliary: builder.auxiliary,
     }
+}
 
-    // ---- Pass 2: Generate parameter lowering code ----
-    // Intermediate locals (packed i64, etc.) are allocated after all params.
-    let mut mapping_idx = 0usize;
-    for (param_name, _, param_type) in &func_info.params {
-        let flat_tys = flatten_param_type(param_type, cm_interface_registry, &names);
-        if flat_tys.is_empty() {
-            continue; // unit param, skip
-        }
-        let (start_idx, count) = param_mapping[mapping_idx];
-        mapping_idx += 1;
-        let param_local = params[start_idx].local_index;
+/// How one WASI parameter reaches the flat CM ABI call. Classified once per
+/// parameter by [`classify_param`]; both the adapter's parameter list and the
+/// lowering code derive from the resulting [`ParamPlan`].
+#[derive(Clone, Copy)]
+enum ParamLowering<'a> {
+    /// Flattens to no slots: no adapter param, nothing to lower.
+    Unit,
+    /// String / List<u8>: a single placeholder param; the stdlib `helper`
+    /// packs (ptr, len) into an i64 that is split into two flat args.
+    PackedPtrLen { helper: &'static str },
+    /// General List<T>: single placeholder param; elements are lowered into a
+    /// realloc'd linear-memory buffer passed as (ptr, len).
+    ListBuffer { elem: &'a Type },
+    /// WASI record: single GC-ref param; fields flatten into flat slots.
+    RecordFlatten { named: &'a NamedType },
+    /// WASI variant: single GC-ref param. Async passes the ref through (it is
+    /// memory-lowered by the indirect params buffer); sync flattens it.
+    Variant { named: &'a NamedType },
+    /// Option<T>: single GC-ref param. Async passes the ref through; sync
+    /// flattens to discriminant + payload slots.
+    OptionValue { payload: &'a Type },
+    /// Result<T, E>: single GC-ref param, flattened (sync only).
+    ResultValue { ok: &'a Type, err: &'a Type },
+    /// Non-empty tuple: single GC-ref param, flattened (sync only).
+    TupleFlatten,
+    /// Scalars/handles: flat params matching the CM ABI, forwarded unchanged.
+    Direct,
+}
 
-        match param_type {
-            // String param: accept Wado String, lower to (ptr, len) pair
-            Type::Named(n) if n.name == names.string => {
-                // Call cm_lower_string → packed i64
-                let packed_local = next_local;
-                let packed = internal_call(
-                    "cm_lower_string",
-                    vec![local_ref(param_local, param_name, TypeTable::I32)],
-                    TypeTable::I64,
-                );
-                body_stmts.push(let_stmt(
-                    &format!("__{param_name}_packed"),
-                    packed_local,
-                    TypeTable::I64,
-                    packed,
-                ));
-                locals.push(TirLocal::synth(next_local, TypeTable::I64, false));
-                next_local += 1;
+/// Lowering plan for one WASI parameter. `first_param`/`param_count` locate
+/// its adapter params (allocated during planning, so param locals stay
+/// contiguous at indices [0..n-1] as Wasm requires).
+struct ParamPlan<'a> {
+    name: &'a str,
+    ty: &'a Type,
+    first_param: usize,
+    param_count: usize,
+    lowering: ParamLowering<'a>,
+}
 
-                // ptr = packed as i32 (low 32 bits)
-                flat_args.push(cast(
-                    local_ref(
-                        packed_local,
-                        &format!("__{param_name}_packed"),
-                        TypeTable::I64,
-                    ),
-                    TypeTable::I32,
-                ));
-                // len = (packed >> 32) as i32 (high 32 bits)
-                flat_args.push(cast(
-                    binary(
-                        TirBinaryOp::Shr,
-                        local_ref(
-                            packed_local,
-                            &format!("__{param_name}_packed"),
-                            TypeTable::I64,
-                        ),
-                        i64_const(32),
-                        TypeTable::I64,
-                    ),
-                    TypeTable::I32,
-                ));
-            }
-
-            // List<u8> param: accept Wado List<u8>, lower to (ptr, len) pair
-            Type::Generic(g)
-                if g.name == names.array
-                    && g.args.len() == 1
-                    && matches!(&g.args[0], Type::Named(n) if n.name == "u8") =>
-            {
-                // Call cm_lower_array_u8 → packed i64
-                let packed_local = next_local;
-                let packed = internal_call(
-                    "cm_lower_array_u8",
-                    vec![local_ref(param_local, param_name, TypeTable::I32)],
-                    TypeTable::I64,
-                );
-                body_stmts.push(let_stmt(
-                    &format!("__{param_name}_packed"),
-                    packed_local,
-                    TypeTable::I64,
-                    packed,
-                ));
-                locals.push(TirLocal::synth(next_local, TypeTable::I64, false));
-                next_local += 1;
-
-                // Split packed i64 → (ptr, len)
-                flat_args.push(cast(
-                    local_ref(
-                        packed_local,
-                        &format!("__{param_name}_packed"),
-                        TypeTable::I64,
-                    ),
-                    TypeTable::I32,
-                ));
-                flat_args.push(cast(
-                    binary(
-                        TirBinaryOp::Shr,
-                        local_ref(
-                            packed_local,
-                            &format!("__{param_name}_packed"),
-                            TypeTable::I64,
-                        ),
-                        i64_const(32),
-                        TypeTable::I64,
-                    ),
-                    TypeTable::I32,
-                ));
-            }
-
-            // General List<T> param: lower to (ptr, len) in linear memory
-            Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
-                let elem_type = &g.args[0];
-                // Use registry-aware layout so named WASI struct/variant/enum/flags
-                // element types walk at their true CM stride/alignment instead of
-                // the i32-handle fallback in `cm_abi::cm_size`/`cm_align`.
-                let elem_size = crate::component_model::cm_size_with_registry_scoped(
-                    elem_type,
-                    cm_interface_registry,
-                    Some(&func_info.package),
-                ) as i32;
-                let elem_align = crate::component_model::cm_align_with_registry_scoped(
-                    elem_type,
-                    cm_interface_registry,
-                    Some(&func_info.package),
-                ) as i32;
-
-                // Resolve proper TypeIds for the element and array types
-                let (elem_type_id, array_type_id) = {
-                    let mut tt = type_table.borrow_mut();
-                    let elem_tid = cm_type_to_type_id(
-                        elem_type,
-                        &mut tt,
-                        cm_interface_registry,
-                        &func_info.package,
-                    );
-                    let list_tid = tt.make_list(elem_tid);
-                    (elem_tid, list_tid)
-                };
-
-                // __len = List<T>::len(param)
-                let len_local = alloc_local(&mut next_local, &mut locals, TypeTable::I32);
-                body_stmts.push(let_stmt(
-                    &format!("__{param_name}_len"),
-                    len_local,
-                    TypeTable::I32,
-                    generic_method_call(
-                        local_ref(param_local, param_name, array_type_id),
-                        &names.array,
-                        "len",
-                        ModuleSource::list(),
-                        vec![],
-                        TypeTable::I32,
-                    ),
-                ));
-
-                // __base = realloc(0, 0, align, __len * elem_size)
-                let base_local = alloc_local(&mut next_local, &mut locals, TypeTable::I32);
-                body_stmts.push(let_stmt(
-                    &format!("__{param_name}_base"),
-                    base_local,
-                    TypeTable::I32,
-                    builtin_call(
-                        "realloc",
-                        vec![
-                            i32_const(0),
-                            i32_const(0),
-                            i32_const(elem_align),
-                            binary(
-                                TirBinaryOp::Mul,
-                                local_ref(
-                                    len_local,
-                                    &format!("__{param_name}_len"),
-                                    TypeTable::I32,
-                                ),
-                                i32_const(elem_size),
-                                TypeTable::I32,
-                            ),
-                        ],
-                        TypeTable::I32,
-                    ),
-                ));
-
-                // __i = 0; loop { if __i >= __len { break; } lower elem[__i]; __i += 1; }
-                let i_local = alloc_local(&mut next_local, &mut locals, TypeTable::I32);
-                body_stmts.push(let_mut_stmt(
-                    &format!("__{param_name}_i"),
-                    i_local,
-                    TypeTable::I32,
-                    i32_const(0),
-                ));
-
-                let mut loop_body = Vec::new();
-                // break if __i >= __len
-                loop_body.push(if_stmt(
-                    binary(
-                        TirBinaryOp::GtEq,
-                        local_ref(i_local, &format!("__{param_name}_i"), TypeTable::I32),
-                        local_ref(len_local, &format!("__{param_name}_len"), TypeTable::I32),
-                        TypeTable::BOOL,
-                    ),
-                    block(vec![break_stmt()]),
-                    None,
-                ));
-                // __addr = __base + __i * elem_size
-                let addr_local = alloc_local(&mut next_local, &mut locals, TypeTable::I32);
-                loop_body.push(let_stmt(
-                    &format!("__{param_name}_addr"),
-                    addr_local,
-                    TypeTable::I32,
-                    binary(
-                        TirBinaryOp::Add,
-                        local_ref(base_local, &format!("__{param_name}_base"), TypeTable::I32),
-                        binary(
-                            TirBinaryOp::Mul,
-                            local_ref(i_local, &format!("__{param_name}_i"), TypeTable::I32),
-                            i32_const(elem_size),
-                            TypeTable::I32,
-                        ),
-                        TypeTable::I32,
-                    ),
-                ));
-                // __elem = param[__i] (IndexValue trait method)
-                let elem_local = alloc_local(&mut next_local, &mut locals, elem_type_id);
-                let iv_info = LocalMethodName::new(
-                    names.array.clone(),
-                    Some("IndexValue<i32>".to_string()),
-                    "index_value".to_string(),
-                );
-                let iv_mangled = iv_info.to_mangled_name();
-                loop_body.push(let_stmt(
-                    &format!("__{param_name}_elem"),
-                    elem_local,
-                    elem_type_id,
-                    TirExpr::new(
-                        TirExprKind::method_call(
-                            Box::new(local_ref(param_local, param_name, array_type_id)),
-                            FunctionRef {
-                                module_source: ModuleSource::list(),
-                                name: iv_mangled,
-                                monomorph_info: None,
-                                method_info: Some(iv_info),
-                            },
-                            vec![],
-                            vec![CallArg::new(
-                                local_ref(i_local, &format!("__{param_name}_i"), TypeTable::I32),
-                                false,
-                            )],
-                        ),
-                        elem_type_id,
-                        synth_span(),
-                    ),
-                ));
-                // Use the full memory lowerer so aggregate elements lay out their
-                // payload correctly instead of being stored as an i32.
-                let elem_ref = local_ref(elem_local, &format!("__{param_name}_elem"), elem_type_id);
-                let addr_ref =
-                    local_ref(addr_local, &format!("__{param_name}_addr"), TypeTable::I32);
-                let lower_stmts = synthesize_lower_wasi_type_to_memory(
-                    elem_type,
-                    elem_ref,
-                    addr_ref,
-                    &mut next_local,
-                    &mut locals,
-                    cm_interface_registry,
-                    &func_info.package,
-                    type_table,
-                );
-                loop_body.extend(lower_stmts);
-                // __i += 1
-                loop_body.push(expr_stmt(assign(
-                    local_ref(i_local, &format!("__{param_name}_i"), TypeTable::I32),
-                    binary(
-                        TirBinaryOp::Add,
-                        local_ref(i_local, &format!("__{param_name}_i"), TypeTable::I32),
-                        i32_const(1),
-                        TypeTable::I32,
-                    ),
-                )));
-                body_stmts.push(loop_stmt(block(loop_body)));
-
-                // Push (base, len) as flat args
-                flat_args.push(local_ref(
-                    base_local,
-                    &format!("__{param_name}_base"),
-                    TypeTable::I32,
-                ));
-                flat_args.push(local_ref(
-                    len_local,
-                    &format!("__{param_name}_len"),
-                    TypeTable::I32,
-                ));
-            }
-
-            // Struct (record) param: extract fields as flat args
-            Type::Named(n)
-                if n.source_interface.as_deref().is_some_and(|s| {
-                    cm_interface_registry
-                        .get_struct_fields_by_source(s, &n.name)
-                        .is_some()
-                }) =>
-            {
-                let struct_type_id = params[start_idx].type_id;
-                let source = n
-                    .source_interface
-                    .as_deref()
-                    .expect("wasi struct source_interface present");
-                let wado_fields = cm_interface_registry
-                    .get_struct_fields_with_wado_names_by_source(source, &n.name)
-                    .expect("struct fields_with_wado_names present when fields are");
-                // Flatten each field through the shared helper so a String /
-                // Option / nested-record / enum field expands to its own flat
-                // slots, matching the import's flattened signature.
-                flatten_cm_record_fields(
-                    wado_fields,
-                    param_local,
-                    param_name,
-                    struct_type_id,
-                    &format!("__{param_name}"),
-                    &mut next_local,
-                    &mut body_stmts,
-                    &mut locals,
-                    &mut flat_args,
-                    cm_interface_registry,
-                    &func_info.package,
-                    type_table,
-                );
-            }
-            // Variant param: for async, pass GC ref (lowered in Step 3 indirect params);
-            // for sync, flatten directly to flat i32 args.
-            Type::Named(n)
-                if n.source_interface.as_deref().is_some_and(|s| {
-                    cm_interface_registry
-                        .get_variant_cases_by_source(s, &n.name)
-                        .is_some()
-                }) =>
-            {
-                if func_info.is_async {
-                    let variant_type_id = params[start_idx].type_id;
-                    flat_args.push(local_ref(param_local, param_name, variant_type_id));
-                } else {
-                    synthesize_flatten_value_to_flat_args(
-                        param_type,
-                        local_ref(param_local, param_name, params[start_idx].type_id),
-                        &format!("__{param_name}"),
-                        &mut next_local,
-                        &mut body_stmts,
-                        &mut locals,
-                        &mut flat_args,
-                        cm_interface_registry,
-                        &func_info.package,
-                        type_table,
-                    );
-                }
-            }
-            // Option<T>: for async, pass GC ref (lowered in Step 3 indirect params);
-            // for sync, flatten directly to flat args.
-            Type::Generic(g) if g.name == "Option" && g.args.len() == 1 => {
-                if func_info.is_async {
-                    let option_type_id = params[start_idx].type_id;
-                    flat_args.push(local_ref(param_local, param_name, option_type_id));
-                } else {
-                    synthesize_flatten_option_to_flat_args(
-                        &g.args[0],
-                        local_ref(param_local, param_name, params[start_idx].type_id),
-                        &format!("__{param_name}"),
-                        &mut next_local,
-                        &mut body_stmts,
-                        &mut locals,
-                        &mut flat_args,
-                        cm_interface_registry,
-                        &func_info.package,
-                        type_table,
-                    );
-                }
-            }
-            Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
-                // The async params-to-memory lowering for `Result` is unbuilt
-                // (no async CM import needs it yet); fail loud instead.
-                assert!(
-                    !func_info.is_async,
-                    "CM import '{}#{}' takes a `Result` parameter on an async \
-                     function; async Result-param lowering is not yet implemented",
-                    func_info.interface_name, func_info.method_name
-                );
-                synthesize_flatten_result_to_flat_args(
-                    &g.args[0],
-                    &g.args[1],
-                    local_ref(param_local, param_name, params[start_idx].type_id),
-                    &format!("__{param_name}"),
-                    &mut next_local,
-                    &mut body_stmts,
-                    &mut locals,
-                    &mut flat_args,
-                    cm_interface_registry,
-                    &func_info.package,
-                    type_table,
-                );
-            }
-            Type::Tuple(elems) if !elems.is_empty() => {
-                assert!(
-                    !func_info.is_async,
-                    "CM import '{}#{}' takes a tuple parameter on an async \
-                     function; async tuple-param lowering is not yet implemented",
-                    func_info.interface_name, func_info.method_name
-                );
-                synthesize_flatten_value_to_flat_args(
-                    param_type,
-                    local_ref(param_local, param_name, params[start_idx].type_id),
-                    &format!("__{param_name}"),
-                    &mut next_local,
-                    &mut body_stmts,
-                    &mut locals,
-                    &mut flat_args,
-                    cm_interface_registry,
-                    &func_info.package,
-                    type_table,
-                );
-            }
-            // All other types: flat params passed through directly
-            _ => {
-                for j in 0..count {
-                    let p = &params[start_idx + j];
-                    flat_args.push(local_ref(p.local_index, &p.name, p.type_id));
-                }
+fn classify_param<'t>(
+    param_type: &'t Type,
+    registry: &CmInterfaceRegistry,
+    names: &CmStdlibNames,
+) -> ParamLowering<'t> {
+    match param_type {
+        Type::Named(n) if n.name == names.string => ParamLowering::PackedPtrLen {
+            helper: "cm_lower_string",
+        },
+        Type::Generic(g)
+            if g.name == names.array
+                && g.args.len() == 1
+                && matches!(&g.args[0], Type::Named(n) if n.name == "u8") =>
+        {
+            ParamLowering::PackedPtrLen {
+                helper: "cm_lower_array_u8",
             }
         }
-    }
-
-    // ---- Handle outptr for async or complex returns ----
-    // Track async outptr allocation info for later freeing.
-    let mut async_outptr_info: Option<(u32, u32, u32)> = None; // (local_index, size, align)
-    // Only truly async imports use canon lower async (callback-style).
-    // Non-async imports with stream/future params use sync lower.
-    let needs_async_lower = func_info.is_async;
-    if needs_async_lower {
-        // Callback-style async (not used by Wado):
-        // - MAX_FLAT_ASYNC_PARAMS = 4 flat params before switching to indirect.
-        // - If flat_args exceeds 4, all params are passed via a single params_ptr
-        //   (pointer to a linear-memory buffer with all lowered params).
-        // - Per CM spec flatten_functype: the results_ptr is only added when
-        //   len(flat_results) > 0 (i.e., when there IS a return type).
-        // - Async void functions have no results_ptr.
-        const MAX_FLAT_ASYNC_PARAMS: usize = 4;
-
-        // The CM-level result type (for layout) is the inner `T` of
-        // `AsyncCall<T>` for async imports; the `func_info.return_type`
-        // itself is the Wado-visible `AsyncCall<T>` wrapper.
-        let has_results = cm_return_type.is_some();
-
-        // Allocate the async results buffer via realloc (only when there are results).
-        if has_results {
-            let pkg = Some(func_info.package.as_str());
-            let (async_result_size, async_result_align) = if let Some(return_type) = &cm_return_type
-            {
-                if let Type::Named(named) = return_type
-                    && let Some(sa) = crate::component_model::cm_variant_size_align_scoped(
-                        named,
-                        cm_interface_registry,
-                        pkg,
-                    )
-                {
-                    sa
-                } else {
-                    (
-                        crate::component_model::cm_size_with_registry_scoped(
-                            return_type,
-                            cm_interface_registry,
-                            pkg,
-                        ),
-                        crate::component_model::cm_align_with_registry_scoped(
-                            return_type,
-                            cm_interface_registry,
-                            pkg,
-                        ),
-                    )
-                }
-            } else {
-                unreachable!()
-            };
-            let async_outptr_local = next_local;
-            body_stmts.push(let_stmt(
-                "__async_outptr",
-                async_outptr_local,
-                TypeTable::I32,
-                builtin_call(
-                    "realloc",
-                    vec![
-                        i32_const(0),
-                        i32_const(0),
-                        i32_const(async_result_align as i32),
-                        i32_const(async_result_size as i32),
-                    ],
-                    TypeTable::I32,
-                ),
-            ));
-            locals.push(TirLocal::synth(next_local, TypeTable::I32, false));
-            next_local += 1;
-            async_outptr_info = Some((async_outptr_local, async_result_size, async_result_align));
+        Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
+            ParamLowering::ListBuffer { elem: &g.args[0] }
         }
-
-        // Force indirect path when variant or Option params are present
-        // (they need memory lowering, not direct flat passing).
-        let has_variant_params = func_info.params.iter().any(|(_, _, ty)| {
-            matches!(ty, Type::Named(n) if n
-                .source_interface
+        Type::Named(n)
+            if n.source_interface
                 .as_deref()
-                .is_some_and(|s| cm_interface_registry
-                    .get_variant_cases_by_source(s, &n.name)
-                    .is_some()))
-                || matches!(ty, Type::Generic(g) if g.name == "Option" && g.args.len() == 1)
-        });
-
-        if flat_args.len() > MAX_FLAT_ASYNC_PARAMS || has_variant_params {
-            // Indirect calling: write all params to a memory buffer using CM layout.
-            // The buffer layout follows the Component Model Canonical ABI spec,
-            // which uses component-level type sizes (e.g., flags with ≤8 labels = 1 byte,
-            // enums with ≤256 cases = 1 byte), NOT flat type sizes (all i32 = 4 bytes).
-
-            // Step 1: Compute buffer layout using CM component-level param types.
-            let mut buf_offset = 0u32;
-            let mut buf_max_align = 1u32;
-            let mut param_offsets: Vec<u32> = Vec::with_capacity(func_info.params.len());
-            for (_, _, ty) in &func_info.params {
-                let sz = cm_param_size(ty, cm_interface_registry);
-                let al = cm_param_align(ty, cm_interface_registry);
-                buf_offset = (buf_offset + al - 1) & !(al - 1);
-                param_offsets.push(buf_offset);
-                buf_offset += sz;
-                buf_max_align = buf_max_align.max(al);
-            }
-            let buf_total_size = (buf_offset + buf_max_align - 1) & !(buf_max_align - 1);
-
-            // Step 2: Allocate the params buffer.
-            let params_buf_local = next_local;
-            body_stmts.push(let_stmt(
-                "__params_buf",
-                params_buf_local,
-                TypeTable::I32,
-                builtin_call(
-                    "realloc",
-                    vec![
-                        i32_const(0),
-                        i32_const(0),
-                        i32_const(buf_max_align as i32),
-                        i32_const(buf_total_size as i32),
-                    ],
-                    TypeTable::I32,
-                ),
-            ));
-            locals.push(TirLocal::synth(next_local, TypeTable::I32, false));
-            next_local += 1;
-
-            // Step 3: Write each param's values to the buffer at CM-computed offsets.
-            let mut flat_idx = 0;
-            for (param_idx, (_, _, ty)) in func_info.params.iter().enumerate() {
-                let base_offset = param_offsets[param_idx];
-                // WASI variants: lower directly to the buffer using registry-aware layout
-                if let Type::Named(n) = ty
-                    && let Some(source) = n.source_interface.as_deref()
-                    && cm_interface_registry
-                        .get_variant_cases_by_source(source, &n.name)
-                        .is_some()
-                {
-                    let buf_addr = if base_offset == 0 {
-                        local_ref(params_buf_local, "__params_buf", TypeTable::I32)
-                    } else {
-                        binary_add(
-                            local_ref(params_buf_local, "__params_buf", TypeTable::I32),
-                            i32_const(base_offset as i32),
-                        )
-                    };
-                    // flat_args has one entry for this variant (the GC ref from Pass 2)
-                    let variant_value = flat_args[flat_idx].clone();
-                    flat_idx += 1;
-                    synthesize_lower_wasi_variant_to_memory(
-                        n,
-                        source,
-                        variant_value,
-                        buf_addr,
-                        &mut next_local,
-                        &mut body_stmts,
-                        &mut locals,
-                        cm_interface_registry,
-                        &func_info.package,
-                        type_table,
-                    );
-                    continue;
-                }
-                // Option<T>: lower directly to the buffer
-                if let Type::Generic(g) = ty
-                    && g.name == "Option"
-                    && g.args.len() == 1
-                {
-                    let buf_addr = if base_offset == 0 {
-                        local_ref(params_buf_local, "__params_buf", TypeTable::I32)
-                    } else {
-                        binary_add(
-                            local_ref(params_buf_local, "__params_buf", TypeTable::I32),
-                            i32_const(base_offset as i32),
-                        )
-                    };
-                    let option_value = flat_args[flat_idx].clone();
-                    flat_idx += 1;
-                    synthesize_lower_option_to_memory(
-                        &g.args[0],
-                        option_value,
-                        buf_addr,
-                        &mut next_local,
-                        &mut body_stmts,
-                        &mut locals,
-                        cm_interface_registry,
-                        &func_info.package,
-                        type_table,
-                    );
-                    continue;
-                }
-                let stores = cm_param_store_plan(ty, cm_interface_registry, &names);
-                for (sub_offset, store_name) in &stores {
-                    let offset = base_offset + sub_offset;
-                    let addr = if offset == 0 {
-                        local_ref(params_buf_local, "__params_buf", TypeTable::I32)
-                    } else {
-                        binary(
-                            TirBinaryOp::Add,
-                            local_ref(params_buf_local, "__params_buf", TypeTable::I32),
-                            i32_const(offset as i32),
-                            TypeTable::I32,
-                        )
-                    };
-                    body_stmts.push(expr_stmt(builtin_call(
-                        store_name,
-                        vec![addr, flat_args[flat_idx].clone()],
-                        TypeTable::UNIT,
-                    )));
-                    flat_idx += 1;
-                }
-            }
-
-            // Replace flat_args with params_buf (+ async_outptr if results exist).
-            flat_args = vec![local_ref(params_buf_local, "__params_buf", TypeTable::I32)];
-            if let Some((outptr_local, _, _)) = async_outptr_info {
-                flat_args.push(local_ref(outptr_local, "__async_outptr", TypeTable::I32));
-            }
-        } else {
-            // Direct calling: params fit within MAX_FLAT_ASYNC_PARAMS.
-            // Only add outptr if there are results.
-            if let Some((outptr_local, _, _)) = async_outptr_info {
-                flat_args.push(local_ref(outptr_local, "__async_outptr", TypeTable::I32));
+                .is_some_and(|s| registry.get_struct_fields_by_source(s, &n.name).is_some()) =>
+        {
+            ParamLowering::RecordFlatten { named: n }
+        }
+        Type::Named(n)
+            if n.source_interface
+                .as_deref()
+                .is_some_and(|s| registry.get_variant_cases_by_source(s, &n.name).is_some()) =>
+        {
+            ParamLowering::Variant { named: n }
+        }
+        Type::Generic(g) if g.name == names.option && g.args.len() == 1 => {
+            ParamLowering::OptionValue {
+                payload: &g.args[0],
             }
         }
-    } else if let Some((size, align)) = outptr_alloc {
-        // Allocate outptr via realloc
-        let outptr_local = next_local;
-        let outptr_alloc = builtin_call(
-            "realloc",
-            vec![
-                i32_const(0),            // old_ptr
-                i32_const(0),            // old_size
-                i32_const(align as i32), // align
-                i32_const(size as i32),  // new_size
-            ],
+        Type::Generic(g) if g.name == names.result && g.args.len() == 2 => {
+            ParamLowering::ResultValue {
+                ok: &g.args[0],
+                err: &g.args[1],
+            }
+        }
+        Type::Tuple(elems) if !elems.is_empty() => ParamLowering::TupleFlatten,
+        // Scalars, plain enums/flags, and resource handles are a single flat
+        // param forwarded unchanged; likewise `&self`/`&mut self` receivers
+        // and the async/handle generics, all i32 handles. A `Named` here has
+        // no registered struct/variant source (the arms above caught those),
+        // so it is a scalar/enum/flags/resource — all Direct.
+        Type::Named(_) | Type::Reference(_) | Type::MutReference(_) => ParamLowering::Direct,
+        Type::Generic(g) if matches!(g.name.as_str(), "Stream" | "Future" | "Own" | "Borrow") => {
+            ParamLowering::Direct
+        }
+        Type::Tuple(elems) if elems.is_empty() => ParamLowering::Direct,
+        other => panic!("unsupported param type shape for CM import lowering: {other:?}"),
+    }
+}
+
+/// A realloc'd result buffer: the local holding its address plus the
+/// allocation's size/align (needed again to free it or to embed it in an
+/// `AsyncCall<T>`).
+#[derive(Clone, Copy)]
+struct OutptrBuffer {
+    local: u32,
+    size: u32,
+    align: u32,
+}
+
+/// CM Canonical ABI (size, align) of an import's return type, using the
+/// registry-computed layout for named WASI variants (their generic `cm_size`
+/// would be wrong) and registry-aware layout for structs and other complex
+/// types.
+fn cm_return_size_align(
+    return_type: &Type,
+    registry: &CmInterfaceRegistry,
+    pkg: Option<&str>,
+) -> (u32, u32) {
+    if let Type::Named(named) = return_type
+        && let Some(sa) = crate::component_model::cm_variant_size_align_scoped(named, registry, pkg)
+    {
+        return sa;
+    }
+    (
+        crate::component_model::cm_size_with_registry_scoped(return_type, registry, pkg),
+        crate::component_model::cm_align_with_registry_scoped(return_type, registry, pkg),
+    )
+}
+
+fn params_buf_addr(params_buf_local: u32, offset: u32) -> TirExpr {
+    let base = local_ref(params_buf_local, "__params_buf", TypeTable::I32);
+    if offset == 0 {
+        base
+    } else {
+        binary_add(base, i32_const(offset as i32))
+    }
+}
+
+/// Accumulates the adapter function under construction: locals, params, body
+/// statements, the flat CM call args, and auxiliary sibling functions.
+struct AdapterBuilder<'a> {
+    func_info: &'a CmFunctionInfo,
+    lower_ctx: LowerContext<'a>,
+    interner: &'a RefCell<ModuleSourceInterner>,
+    entry_source: &'a ModuleSource,
+    next_local: u32,
+    params: Vec<TirParam>,
+    locals: Vec<TirLocal>,
+    body_stmts: Vec<TirStmt>,
+    flat_args: Vec<TirExpr>,
+    auxiliary: Vec<Rc<RefCell<TirFunction>>>,
+}
+
+impl<'a> AdapterBuilder<'a> {
+    fn registry(&self) -> &'a CmInterfaceRegistry {
+        self.lower_ctx.cm_interface_registry
+    }
+
+    fn lift_ctx(&self) -> LiftContext<'a> {
+        let func_info = self.func_info;
+        LiftContext {
+            cm_interface_registry: self.lower_ctx.cm_interface_registry,
+            type_table: self.lower_ctx.type_table,
+            cm_package: &func_info.package,
+            interner: self.interner,
+        }
+    }
+
+    fn cm_type_id(&self, ty: &Type) -> TypeId {
+        let mut tt = self.lower_ctx.type_table.borrow_mut();
+        cm_type_to_type_id(
+            ty,
+            &mut tt,
+            self.lower_ctx.cm_interface_registry,
+            &self.func_info.package,
+        )
+    }
+
+    fn push_param(&mut self, name: String, type_id: TypeId) {
+        self.params.push(TirParam {
+            name,
+            type_id,
+            local_index: self.next_local,
+            is_mut: false,
+            is_mut_ref: false,
+            span: synth_span(),
+        });
+        self.locals
+            .push(TirLocal::synth(self.next_local, type_id, false));
+        self.next_local += 1;
+    }
+
+    /// Classify every WASI parameter once and allocate its adapter params.
+    /// String/List params get a single i32 placeholder (the body lowers them
+    /// to flat CM args); records/variants/options/results/tuples get a single
+    /// GC-ref param; everything else gets flat params matching the CM ABI.
+    fn plan_params(&mut self) -> Vec<ParamPlan<'a>> {
+        let func_info = self.func_info;
+        let mut plans = Vec::with_capacity(func_info.params.len());
+        for (param_name, _, param_type) in &func_info.params {
+            let flat_tys = flatten_param_type(
+                param_type,
+                self.lower_ctx.cm_interface_registry,
+                &self.lower_ctx.names,
+            );
+            let lowering = if flat_tys.is_empty() {
+                ParamLowering::Unit
+            } else {
+                classify_param(
+                    param_type,
+                    self.lower_ctx.cm_interface_registry,
+                    &self.lower_ctx.names,
+                )
+            };
+            let first_param = self.params.len();
+            match lowering {
+                ParamLowering::Unit => {}
+                ParamLowering::PackedPtrLen { .. } | ParamLowering::ListBuffer { .. } => {
+                    self.push_param(param_name.clone(), TypeTable::I32);
+                }
+                ParamLowering::RecordFlatten { .. }
+                | ParamLowering::Variant { .. }
+                | ParamLowering::OptionValue { .. }
+                | ParamLowering::ResultValue { .. }
+                | ParamLowering::TupleFlatten => {
+                    let type_id = self.cm_type_id(param_type);
+                    self.push_param(param_name.clone(), type_id);
+                }
+                ParamLowering::Direct => {
+                    for (j, flat_ty) in flat_tys.iter().enumerate() {
+                        let name = if flat_tys.len() == 1 {
+                            param_name.clone()
+                        } else {
+                            format!("{param_name}_flat{j}")
+                        };
+                        self.push_param(name, *flat_ty);
+                    }
+                }
+            }
+            plans.push(ParamPlan {
+                name: param_name,
+                ty: param_type,
+                first_param,
+                param_count: self.params.len() - first_param,
+                lowering,
+            });
+        }
+        plans
+    }
+
+    /// Emit the per-parameter lowering code that turns adapter params into
+    /// flat CM args. Intermediate locals land after all param locals.
+    fn emit_param_lowering(&mut self, plans: &[ParamPlan<'a>]) {
+        let func_info = self.func_info;
+        for plan in plans {
+            match plan.lowering {
+                ParamLowering::Unit => {}
+                ParamLowering::PackedPtrLen { helper } => {
+                    let param_local = self.params[plan.first_param].local_index;
+                    self.emit_packed_ptr_len(plan.name, param_local, helper);
+                }
+                ParamLowering::ListBuffer { elem } => {
+                    let param_local = self.params[plan.first_param].local_index;
+                    self.emit_list_buffer(plan.name, param_local, elem);
+                }
+                ParamLowering::RecordFlatten { named } => {
+                    let source = named
+                        .source_interface
+                        .as_deref()
+                        .expect("wasi struct source_interface present");
+                    let wado_fields = self
+                        .lower_ctx
+                        .cm_interface_registry
+                        .get_struct_fields_with_wado_names_by_source(source, &named.name)
+                        .expect("struct fields_with_wado_names present when fields are");
+                    let param = &self.params[plan.first_param];
+                    let (param_local, struct_type_id) = (param.local_index, param.type_id);
+                    // Flatten each field through the shared helper so a String /
+                    // Option / nested-record / enum field expands to its own flat
+                    // slots, matching the import's flattened signature.
+                    flatten_cm_record_fields(
+                        wado_fields,
+                        param_local,
+                        plan.name,
+                        struct_type_id,
+                        &format!("__{}", plan.name),
+                        &mut self.next_local,
+                        &mut self.body_stmts,
+                        &mut self.locals,
+                        &mut self.flat_args,
+                        &self.lower_ctx,
+                    );
+                }
+                ParamLowering::Variant { .. } => {
+                    let param = &self.params[plan.first_param];
+                    let param_ref = local_ref(param.local_index, plan.name, param.type_id);
+                    if func_info.is_async {
+                        // Async: pass the GC ref through; the indirect params
+                        // buffer memory-lowers it.
+                        self.flat_args.push(param_ref);
+                    } else {
+                        synthesize_flatten_value_to_flat_args(
+                            plan.ty,
+                            param_ref,
+                            &format!("__{}", plan.name),
+                            &mut self.next_local,
+                            &mut self.body_stmts,
+                            &mut self.locals,
+                            &mut self.flat_args,
+                            &self.lower_ctx,
+                        );
+                    }
+                }
+                ParamLowering::OptionValue { payload } => {
+                    let param = &self.params[plan.first_param];
+                    let param_ref = local_ref(param.local_index, plan.name, param.type_id);
+                    if func_info.is_async {
+                        // Async: pass the GC ref through; the indirect params
+                        // buffer memory-lowers it.
+                        self.flat_args.push(param_ref);
+                    } else {
+                        synthesize_flatten_option_to_flat_args(
+                            payload,
+                            param_ref,
+                            &format!("__{}", plan.name),
+                            &mut self.next_local,
+                            &mut self.body_stmts,
+                            &mut self.locals,
+                            &mut self.flat_args,
+                            &self.lower_ctx,
+                        );
+                    }
+                }
+                ParamLowering::ResultValue { ok, err } => {
+                    // The async params-to-memory lowering for `Result` is unbuilt
+                    // (no async CM import needs it yet); fail loud instead.
+                    assert!(
+                        !func_info.is_async,
+                        "CM import '{}#{}' takes a `Result` parameter on an async \
+                         function; async Result-param lowering is not yet implemented",
+                        func_info.interface_name, func_info.method_name
+                    );
+                    let param = &self.params[plan.first_param];
+                    let param_ref = local_ref(param.local_index, plan.name, param.type_id);
+                    synthesize_flatten_result_to_flat_args(
+                        ok,
+                        err,
+                        param_ref,
+                        &format!("__{}", plan.name),
+                        &mut self.next_local,
+                        &mut self.body_stmts,
+                        &mut self.locals,
+                        &mut self.flat_args,
+                        &self.lower_ctx,
+                    );
+                }
+                ParamLowering::TupleFlatten => {
+                    assert!(
+                        !func_info.is_async,
+                        "CM import '{}#{}' takes a tuple parameter on an async \
+                         function; async tuple-param lowering is not yet implemented",
+                        func_info.interface_name, func_info.method_name
+                    );
+                    let param = &self.params[plan.first_param];
+                    let param_ref = local_ref(param.local_index, plan.name, param.type_id);
+                    synthesize_flatten_value_to_flat_args(
+                        plan.ty,
+                        param_ref,
+                        &format!("__{}", plan.name),
+                        &mut self.next_local,
+                        &mut self.body_stmts,
+                        &mut self.locals,
+                        &mut self.flat_args,
+                        &self.lower_ctx,
+                    );
+                }
+                ParamLowering::Direct => {
+                    let range = plan.first_param..plan.first_param + plan.param_count;
+                    for param in &self.params[range] {
+                        let arg = local_ref(param.local_index, &param.name, param.type_id);
+                        self.flat_args.push(arg);
+                    }
+                }
+            }
+        }
+    }
+
+    /// String / List<u8>: call the packing helper (→ packed i64) and split it
+    /// into (ptr, len) flat args.
+    fn emit_packed_ptr_len(&mut self, param_name: &str, param_local: u32, helper: &str) {
+        let packed_name = format!("__{param_name}_packed");
+        let packed_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I64);
+        let packed = internal_call(
+            helper,
+            vec![local_ref(param_local, param_name, TypeTable::I32)],
+            TypeTable::I64,
+        );
+        self.body_stmts
+            .push(let_stmt(&packed_name, packed_local, TypeTable::I64, packed));
+
+        let (ptr, len) =
+            split_packed_ptr_len(local_ref(packed_local, &packed_name, TypeTable::I64));
+        self.flat_args.push(ptr);
+        self.flat_args.push(len);
+    }
+
+    /// General List<T>: lower each element into a realloc'd linear-memory
+    /// buffer and pass (base, len) as flat args.
+    fn emit_list_buffer(&mut self, param_name: &str, param_local: u32, elem_type: &Type) {
+        let registry = self.lower_ctx.cm_interface_registry;
+        let pkg = Some(self.func_info.package.as_str());
+        // Use registry-aware layout so named WASI struct/variant/enum/flags
+        // element types walk at their true CM stride/alignment instead of
+        // the i32-handle fallback in `cm_abi::cm_size`/`cm_align`.
+        let elem_size =
+            crate::component_model::cm_size_with_registry_scoped(elem_type, registry, pkg) as i32;
+        let elem_align =
+            crate::component_model::cm_align_with_registry_scoped(elem_type, registry, pkg) as i32;
+
+        let (elem_type_id, array_type_id) = {
+            let mut tt = self.lower_ctx.type_table.borrow_mut();
+            let elem_tid =
+                cm_type_to_type_id(elem_type, &mut tt, registry, &self.func_info.package);
+            let list_tid = tt.make_list(elem_tid);
+            (elem_tid, list_tid)
+        };
+
+        // __len = List<T>::len(param)
+        let len_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
+        let len_expr = generic_method_call(
+            local_ref(param_local, param_name, array_type_id),
+            &self.lower_ctx.names.array,
+            "len",
+            ModuleSource::list(),
+            vec![],
             TypeTable::I32,
         );
-        body_stmts.push(let_stmt(
-            "__outptr",
-            outptr_local,
+        self.body_stmts.push(let_stmt(
+            &format!("__{param_name}_len"),
+            len_local,
             TypeTable::I32,
-            outptr_alloc,
+            len_expr,
         ));
-        locals.push(TirLocal::synth(next_local, TypeTable::I32, false));
-        next_local += 1;
 
-        flat_args.push(local_ref(outptr_local, "__outptr", TypeTable::I32));
+        // __base = realloc(0, 0, align, __len * elem_size)
+        let base_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
+        self.body_stmts.push(let_stmt(
+            &format!("__{param_name}_base"),
+            base_local,
+            TypeTable::I32,
+            builtin_call(
+                "realloc",
+                vec![
+                    i32_const(0),
+                    i32_const(0),
+                    i32_const(elem_align),
+                    binary(
+                        TirBinaryOp::Mul,
+                        local_ref(len_local, &format!("__{param_name}_len"), TypeTable::I32),
+                        i32_const(elem_size),
+                        TypeTable::I32,
+                    ),
+                ],
+                TypeTable::I32,
+            ),
+        ));
+
+        // __i = 0; loop { if __i >= __len { break; } lower elem[__i]; __i += 1; }
+        let i_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
+        self.body_stmts.push(let_mut_stmt(
+            &format!("__{param_name}_i"),
+            i_local,
+            TypeTable::I32,
+            i32_const(0),
+        ));
+
+        let mut loop_body = Vec::new();
+        loop_body.push(if_stmt(
+            binary(
+                TirBinaryOp::GtEq,
+                local_ref(i_local, &format!("__{param_name}_i"), TypeTable::I32),
+                local_ref(len_local, &format!("__{param_name}_len"), TypeTable::I32),
+                TypeTable::BOOL,
+            ),
+            block(vec![break_stmt()]),
+            None,
+        ));
+        // __addr = __base + __i * elem_size
+        let addr_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
+        loop_body.push(let_stmt(
+            &format!("__{param_name}_addr"),
+            addr_local,
+            TypeTable::I32,
+            binary(
+                TirBinaryOp::Add,
+                local_ref(base_local, &format!("__{param_name}_base"), TypeTable::I32),
+                binary(
+                    TirBinaryOp::Mul,
+                    local_ref(i_local, &format!("__{param_name}_i"), TypeTable::I32),
+                    i32_const(elem_size),
+                    TypeTable::I32,
+                ),
+                TypeTable::I32,
+            ),
+        ));
+        // __elem = param[__i] (IndexValue trait method)
+        let elem_local = alloc_local(&mut self.next_local, &mut self.locals, elem_type_id);
+        let iv_info = LocalMethodName::new(
+            self.lower_ctx.names.array.clone(),
+            Some("IndexValue<i32>".to_string()),
+            "index_value".to_string(),
+        );
+        let iv_mangled = iv_info.to_mangled_name();
+        loop_body.push(let_stmt(
+            &format!("__{param_name}_elem"),
+            elem_local,
+            elem_type_id,
+            TirExpr::new(
+                TirExprKind::method_call(
+                    Box::new(local_ref(param_local, param_name, array_type_id)),
+                    FunctionRef {
+                        module_source: ModuleSource::list(),
+                        name: iv_mangled,
+                        monomorph_info: None,
+                        method_info: Some(iv_info),
+                    },
+                    vec![],
+                    vec![CallArg::new(
+                        local_ref(i_local, &format!("__{param_name}_i"), TypeTable::I32),
+                        false,
+                    )],
+                ),
+                elem_type_id,
+                synth_span(),
+            ),
+        ));
+        // Use the full memory lowerer so aggregate elements lay out their
+        // payload correctly instead of being stored as an i32.
+        let elem_ref = local_ref(elem_local, &format!("__{param_name}_elem"), elem_type_id);
+        let addr_ref = local_ref(addr_local, &format!("__{param_name}_addr"), TypeTable::I32);
+        let lower_stmts = synthesize_lower_wasi_type_to_memory(
+            elem_type,
+            elem_ref,
+            addr_ref,
+            &mut self.next_local,
+            &mut self.locals,
+            &self.lower_ctx,
+        );
+        loop_body.extend(lower_stmts);
+        // __i += 1
+        loop_body.push(expr_stmt(assign(
+            local_ref(i_local, &format!("__{param_name}_i"), TypeTable::I32),
+            binary(
+                TirBinaryOp::Add,
+                local_ref(i_local, &format!("__{param_name}_i"), TypeTable::I32),
+                i32_const(1),
+                TypeTable::I32,
+            ),
+        )));
+        self.body_stmts.push(loop_stmt(block(loop_body)));
+
+        self.flat_args.push(local_ref(
+            base_local,
+            &format!("__{param_name}_base"),
+            TypeTable::I32,
+        ));
+        self.flat_args.push(local_ref(
+            len_local,
+            &format!("__{param_name}_len"),
+            TypeTable::I32,
+        ));
     }
 
-    // ---- Build CmRawCall ----
-    let raw_call_return_type = wasi_return_type_id(func_info, cm_interface_registry);
-    let raw_call_expr = cm_raw_call(&local_name, flat_args, raw_call_return_type);
+    /// Async canon lower argument setup: allocate the results buffer (only
+    /// when the import returns a value — per CM `flatten_functype` the
+    /// `results_ptr` exists only then) and switch to a single indirect params
+    /// buffer when the flat params exceed the limit or need memory lowering.
+    fn prepare_async_args(&mut self, plans: &[ParamPlan<'a>]) -> Option<OutptrBuffer> {
+        // Callback-style async: MAX_FLAT_ASYNC_PARAMS flat params before
+        // all params are passed via a single params_ptr.
+        const MAX_FLAT_ASYNC_PARAMS: usize = 4;
 
-    // ---- Handle result ----
-    // The binding's return type to the Wado caller:
-    let adapter_return_type;
+        let async_outptr = self.alloc_async_outptr();
 
-    // Async/streaming path: functions lowered with `async` canon option.
-    // This covers both truly async functions (func_info.is_async) and sync
-    // functions with streaming params (Stream/Future) that require async lowering.
-    // Non-async functions with streaming params complete synchronously (RETURNED
-    // status), so wait_for_subtask is a no-op. The result is always written to the
-    // outptr and lifted via synthesize_lift based on the return type metadata.
-    if needs_async_lower {
-        // WASI P3 async calling convention: the lowered function returns a
-        // packed subtask handle/status `(subtask_handle << 4) | status`. The
-        // result (if any) is written to the async outptr buffer when the
-        // subtask eventually reaches `Status::Returned`.
-        //
-        // For Wado-level `async fn foo(...) -> AsyncCall<T>` imports, the
-        // adapter does NOT wait for the subtask or lift the result here.
-        // Instead it packages `(packed_handle, outptr, size, align,
-        // __cm_lift_fn)` into an `AsyncCall<T>` struct and returns it
-        // immediately, letting the caller interleave stream-parameter
-        // writes with the host subtask before explicitly `.wait()`-ing.
-        // `AsyncCall<T>::wait` then performs the wait + free; the lift
-        // itself runs in the per-import `__cm_lift__*` function emitted
-        // alongside this adapter and reached through `__cm_lift`.
-        let subtask_local = next_local;
-        locals.push(TirLocal::synth(next_local, TypeTable::I32, false));
-        next_local += 1;
-        body_stmts.push(let_stmt(
+        // Variant and Option params force the indirect path: they need
+        // memory lowering, not direct flat passing.
+        let needs_indirect = self.flat_args.len() > MAX_FLAT_ASYNC_PARAMS
+            || plans.iter().any(|p| {
+                matches!(
+                    p.lowering,
+                    ParamLowering::Variant { .. } | ParamLowering::OptionValue { .. }
+                )
+            });
+        if needs_indirect {
+            self.emit_indirect_params_buffer(plans, async_outptr);
+        } else if let Some(outptr) = async_outptr {
+            self.flat_args
+                .push(local_ref(outptr.local, "__async_outptr", TypeTable::I32));
+        }
+        async_outptr
+    }
+
+    /// Allocate the async results buffer. For `async fn ... -> AsyncCall<T>`
+    /// imports `func_info.return_type` already stores the CM-ABI `T` (the
+    /// registry strips `AsyncCall<T>` at registration), so its layout is the
+    /// buffer layout.
+    fn alloc_async_outptr(&mut self) -> Option<OutptrBuffer> {
+        let return_type = self.func_info.return_type.as_ref()?;
+        let (size, align) = cm_return_size_align(
+            return_type,
+            self.lower_ctx.cm_interface_registry,
+            Some(self.func_info.package.as_str()),
+        );
+        let local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
+        self.body_stmts.push(let_stmt(
+            "__async_outptr",
+            local,
+            TypeTable::I32,
+            builtin_call(
+                "realloc",
+                vec![
+                    i32_const(0),
+                    i32_const(0),
+                    i32_const(align as i32),
+                    i32_const(size as i32),
+                ],
+                TypeTable::I32,
+            ),
+        ));
+        Some(OutptrBuffer { local, size, align })
+    }
+
+    /// Indirect async calling: write all params to one linear-memory buffer
+    /// and replace the flat args with (`params_ptr`[, `results_ptr`]).
+    ///
+    /// The buffer layout follows the Component Model Canonical ABI spec,
+    /// which uses component-level type sizes (e.g., flags with ≤8 labels =
+    /// 1 byte, enums with ≤256 cases = 1 byte), NOT flat type sizes.
+    fn emit_indirect_params_buffer(
+        &mut self,
+        plans: &[ParamPlan<'a>],
+        async_outptr: Option<OutptrBuffer>,
+    ) {
+        let registry = self.lower_ctx.cm_interface_registry;
+
+        // Size the buffer with the same package-scoped layout the writes below
+        // use (via `self.lower_ctx`), so a same-named type resolved under the
+        // package hint cannot make the allocation disagree with the bytes
+        // written. `layout_tuple_*` lays a param sequence out exactly like the
+        // buffer: each param aligned then placed, padded to the max align.
+        let param_types: Vec<Type> = plans.iter().map(|plan| plan.ty.clone()).collect();
+        let layout = crate::cm_abi::layout_tuple_with_registry_scoped(
+            &param_types,
+            registry,
+            Some(self.lower_ctx.wasi_package),
+        );
+        let param_offsets = layout.offsets;
+        let buf_max_align = layout.align;
+        let buf_total_size = layout.size;
+
+        let params_buf_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
+        self.body_stmts.push(let_stmt(
+            "__params_buf",
+            params_buf_local,
+            TypeTable::I32,
+            builtin_call(
+                "realloc",
+                vec![
+                    i32_const(0),
+                    i32_const(0),
+                    i32_const(buf_max_align as i32),
+                    i32_const(buf_total_size as i32),
+                ],
+                TypeTable::I32,
+            ),
+        ));
+
+        // Write each param's values to the buffer at CM-computed offsets.
+        let mut flat_idx = 0usize;
+        for (plan, base_offset) in plans.iter().zip(param_offsets) {
+            match plan.lowering {
+                // WASI variants: lower directly to the buffer using
+                // registry-aware layout. flat_args has one entry (the GC ref).
+                ParamLowering::Variant { named } => {
+                    let source = named
+                        .source_interface
+                        .as_deref()
+                        .expect("classified WASI variant has a source interface");
+                    let variant_value = self.flat_args[flat_idx].clone();
+                    flat_idx += 1;
+                    synthesize_lower_wasi_variant_to_memory(
+                        named,
+                        source,
+                        variant_value,
+                        params_buf_addr(params_buf_local, base_offset),
+                        &mut self.next_local,
+                        &mut self.body_stmts,
+                        &mut self.locals,
+                        &self.lower_ctx,
+                    );
+                }
+                ParamLowering::OptionValue { payload } => {
+                    let option_value = self.flat_args[flat_idx].clone();
+                    flat_idx += 1;
+                    synthesize_lower_option_to_memory(
+                        payload,
+                        option_value,
+                        params_buf_addr(params_buf_local, base_offset),
+                        &mut self.next_local,
+                        &mut self.body_stmts,
+                        &mut self.locals,
+                        &self.lower_ctx,
+                    );
+                }
+                ParamLowering::Unit
+                | ParamLowering::PackedPtrLen { .. }
+                | ParamLowering::ListBuffer { .. }
+                | ParamLowering::RecordFlatten { .. }
+                | ParamLowering::ResultValue { .. }
+                | ParamLowering::TupleFlatten
+                | ParamLowering::Direct => {
+                    let stores = cm_param_store_plan(plan.ty, registry, &self.lower_ctx.names);
+                    for (sub_offset, store_name) in &stores {
+                        let addr = params_buf_addr(params_buf_local, base_offset + sub_offset);
+                        let value = self.flat_args[flat_idx].clone();
+                        flat_idx += 1;
+                        self.body_stmts.push(expr_stmt(builtin_call(
+                            store_name,
+                            vec![addr, value],
+                            TypeTable::UNIT,
+                        )));
+                    }
+                }
+            }
+        }
+
+        self.flat_args = vec![local_ref(params_buf_local, "__params_buf", TypeTable::I32)];
+        if let Some(outptr) = async_outptr {
+            self.flat_args
+                .push(local_ref(outptr.local, "__async_outptr", TypeTable::I32));
+        }
+    }
+
+    /// Sync imports whose return needs an outptr: allocate the buffer and
+    /// append its address as the last flat arg.
+    fn alloc_sync_outptr(&mut self) -> Option<OutptrBuffer> {
+        let return_type = self.func_info.return_type.as_ref()?;
+        if !crate::component_model::cm_return_needs_outptr(
+            return_type,
+            self.lower_ctx.cm_interface_registry,
+        ) {
+            return None;
+        }
+        let (size, align) = cm_return_size_align(
+            return_type,
+            self.lower_ctx.cm_interface_registry,
+            Some(self.func_info.package.as_str()),
+        );
+        let local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
+        self.body_stmts.push(let_stmt(
+            "__outptr",
+            local,
+            TypeTable::I32,
+            builtin_call(
+                "realloc",
+                vec![
+                    i32_const(0),
+                    i32_const(0),
+                    i32_const(align as i32),
+                    i32_const(size as i32),
+                ],
+                TypeTable::I32,
+            ),
+        ));
+        self.flat_args
+            .push(local_ref(local, "__outptr", TypeTable::I32));
+        Some(OutptrBuffer { local, size, align })
+    }
+
+    /// Async result strategy.
+    ///
+    /// WASI P3 async calling convention: the lowered function returns a
+    /// packed subtask handle/status `(subtask_handle << 4) | status`. The
+    /// result (if any) is written to the async outptr buffer when the
+    /// subtask eventually reaches `Status::Returned`.
+    ///
+    /// For Wado-level `async fn foo(...) -> AsyncCall<T>` imports, the
+    /// adapter does NOT wait for the subtask or lift the result here.
+    /// Instead it packages `(packed_handle, outptr, size, align,
+    /// __cm_lift_fn)` into an `AsyncCall<T>` struct and returns it
+    /// immediately, letting the caller interleave stream-parameter
+    /// writes with the host subtask before explicitly `.wait()`-ing.
+    /// `AsyncCall<T>::wait` then performs the wait + free; the lift
+    /// itself runs in the per-import `__cm_lift__*` function emitted
+    /// alongside this adapter and reached through `__cm_lift`.
+    fn emit_async_result(
+        &mut self,
+        raw_call: TirExpr,
+        async_outptr: Option<OutptrBuffer>,
+    ) -> TypeId {
+        let func_info = self.func_info;
+        let subtask_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
+        self.body_stmts.push(let_stmt(
             "__subtask_packed",
             subtask_local,
             TypeTable::I32,
-            raw_call_expr,
+            raw_call,
         ));
 
-        // Assemble the AsyncCall<T> struct fields.
-        let (outptr_expr, size_expr, align_expr) =
-            if let Some((outptr_local, outptr_size, outptr_align)) = async_outptr_info {
-                (
-                    local_ref(outptr_local, "__async_outptr", TypeTable::I32),
-                    i32_const(outptr_size as i32),
-                    i32_const(outptr_align as i32),
-                )
-            } else {
-                // Void async import: no outptr. Carry zeroes so the struct
-                // layout is uniform; `AsyncCall<()>::wait` is a no-op.
-                (i32_const(0), i32_const(0), i32_const(0))
-            };
+        let (outptr_expr, size_expr, align_expr) = match async_outptr {
+            Some(outptr) => (
+                local_ref(outptr.local, "__async_outptr", TypeTable::I32),
+                i32_const(outptr.size as i32),
+                i32_const(outptr.align as i32),
+            ),
+            // Void async import: no outptr. Carry zeroes so the struct
+            // layout is uniform; `AsyncCall<()>::wait` is a no-op.
+            None => (i32_const(0), i32_const(0), i32_const(0)),
+        };
 
-        // Determine the type argument T for AsyncCall<T>. The CM-level
-        // result type (inner T) was computed in `cm_return_type`; for
-        // void async we use `()`.
-        let inner_type_id = if let Some(return_type) = &cm_return_type {
-            let resolved = cm_interface_registry.resolve_type(return_type);
-            cm_type_to_type_id(
-                &resolved,
-                &mut type_table.borrow_mut(),
-                cm_interface_registry,
-                &func_info.package,
-            )
+        // The type argument T for AsyncCall<T> is the CM-level result type
+        // (`func_info.return_type` stores the inner T); `()` for void async.
+        let inner_type_id = if let Some(return_type) = &func_info.return_type {
+            let resolved = self.registry().resolve_type(return_type);
+            self.cm_type_id(&resolved)
         } else {
             TypeTable::UNIT
         };
-        let subtask_type = type_table.borrow_mut().make_async_call(inner_type_id);
+        let subtask_type = self
+            .lower_ctx
+            .type_table
+            .borrow_mut()
+            .make_async_call(inner_type_id);
 
         // Per-import lift function: `AsyncCall<T>::wait` calls back
         // through this `FuncRef` to materialise the result.
@@ -1573,11 +1496,11 @@ pub(super) fn synthesize_adapter(
             lift_fn_name.clone(),
             func_info,
             inner_type_id,
-            cm_interface_registry,
-            type_table,
-            interner,
+            self.registry(),
+            self.lower_ctx.type_table,
+            self.interner,
         );
-        let lift_fn_type = type_table.borrow_mut().make_function(
+        let lift_fn_type = self.lower_ctx.type_table.borrow_mut().make_function(
             vec![TypeTable::I32],
             inner_type_id,
             Vec::new(),
@@ -1585,7 +1508,7 @@ pub(super) fn synthesize_adapter(
         );
         let lift_fn_ref = TirExpr::new(
             TirExprKind::FuncRef {
-                module_source: entry_source.clone(),
+                module_source: self.entry_source.clone(),
                 name: lift_fn_name,
                 type_args: Vec::new(),
             },
@@ -1593,234 +1516,161 @@ pub(super) fn synthesize_adapter(
             synth_span(),
         );
 
-        let subtask_struct = TirExpr::new(
-            TirExprKind::StructLiteral {
-                struct_type: subtask_type,
-                struct_name: "AsyncCall".to_string(),
-                fields: vec![
-                    TirStructField {
-                        name: "__cm_packed".to_string(),
-                        value: local_ref(subtask_local, "__subtask_packed", TypeTable::I32),
-                        field_index: 0,
-                    },
-                    TirStructField {
-                        name: "__cm_outptr".to_string(),
-                        value: outptr_expr,
-                        field_index: 1,
-                    },
-                    TirStructField {
-                        name: "__cm_size".to_string(),
-                        value: size_expr,
-                        field_index: 2,
-                    },
-                    TirStructField {
-                        name: "__cm_align".to_string(),
-                        value: align_expr,
-                        field_index: 3,
-                    },
-                    TirStructField {
-                        name: "__cm_lift".to_string(),
-                        value: lift_fn_ref,
-                        field_index: 4,
-                    },
-                ],
-            },
+        let subtask_struct = make_async_call_literal(
             subtask_type,
-            synth_span(),
+            local_ref(subtask_local, "__subtask_packed", TypeTable::I32),
+            outptr_expr,
+            size_expr,
+            align_expr,
+            lift_fn_ref.clone(),
         );
-        body_stmts.push(return_stmt(Some(subtask_struct)));
-        adapter_return_type = subtask_type;
-        auxiliary.push(lift_fn);
+        self.body_stmts.push(return_stmt(Some(subtask_struct)));
+        self.auxiliary.push(lift_fn);
 
-        if func_info.is_async {
-            let (wrap_size, wrap_align) = match async_outptr_info {
-                Some((_, size, align)) => (size, align),
-                None => (0, 0),
-            };
-            let wrap_lift_ref = TirExpr::new(
-                TirExprKind::FuncRef {
-                    module_source: entry_source.clone(),
-                    name: lift_func_name(&func_info.interface_name, &func_info.method_name),
-                    type_args: Vec::new(),
-                },
-                lift_fn_type,
-                synth_span(),
-            );
-            auxiliary.push(synthesize_async_wrap_function(
-                crate::name::cm_wrap_async_func_name(
-                    &func_info.interface_name,
-                    &func_info.method_name,
-                ),
-                func_info,
-                inner_type_id,
-                subtask_type,
-                wrap_size,
-                wrap_align,
-                wrap_lift_ref,
-                cm_interface_registry,
-                type_table,
-            ));
-        }
-    } else if let Some((alloc_size, alloc_align)) = outptr_alloc {
-        body_stmts.push(expr_stmt(raw_call_expr));
-        let outptr_local = next_local - 1;
+        let (wrap_size, wrap_align) = match async_outptr {
+            Some(outptr) => (outptr.size, outptr.align),
+            None => (0, 0),
+        };
+        self.auxiliary.push(synthesize_async_wrap_function(
+            crate::name::cm_wrap_async_func_name(&func_info.interface_name, &func_info.method_name),
+            func_info,
+            inner_type_id,
+            subtask_type,
+            wrap_size,
+            wrap_align,
+            lift_fn_ref,
+            &self.lower_ctx,
+        ));
 
-        let return_type = func_info.return_type.as_ref().unwrap();
-        let resolved = cm_interface_registry.resolve_type(return_type);
+        subtask_type
+    }
+
+    /// Outptr result strategy: the raw call returns void; lift the result
+    /// from the outptr buffer, then free it.
+    fn emit_outptr_result(&mut self, raw_call: TirExpr, outptr: OutptrBuffer) -> TypeId {
+        self.body_stmts.push(expr_stmt(raw_call));
+
+        let return_type = self
+            .func_info
+            .return_type
+            .as_ref()
+            .expect("outptr result implies a return type");
+        let resolved = self.registry().resolve_type(return_type);
 
         // Inline lifting for all types, including list<T> which uses
         // List::<T>::with_capacity() and .push() with proper monomorphization info.
-        let lift_ctx = LiftContext {
-            cm_interface_registry,
-            type_table,
-            cm_package: &func_info.package,
-            interner,
-        };
+        let lift_ctx = self.lift_ctx();
         let lifted = synthesize_lift(
             &resolved,
-            local_ref(outptr_local, "__outptr", TypeTable::I32),
-            &mut next_local,
-            &mut body_stmts,
-            &mut locals,
+            local_ref(outptr.local, "__outptr", TypeTable::I32),
+            &mut self.next_local,
+            &mut self.body_stmts,
+            &mut self.locals,
             &lift_ctx,
         );
 
         // Materialize the lifted value into a local before freeing if it
         // contains a bare memory load (e.g., i32.load from the outptr buffer).
         // Complex types are already materialized into locals by synthesize_lift.
-        let lifted = materialize_if_needed(lifted, &mut next_local, &mut body_stmts, &mut locals);
+        let lifted = materialize_if_needed(
+            lifted,
+            &mut self.next_local,
+            &mut self.body_stmts,
+            &mut self.locals,
+        );
 
-        // Free the outptr
-        body_stmts.push(expr_stmt(builtin_call(
+        self.body_stmts.push(expr_stmt(builtin_call(
             "realloc",
             vec![
-                local_ref(outptr_local, "__outptr", TypeTable::I32),
-                i32_const(alloc_size as i32),
-                i32_const(alloc_align as i32),
+                local_ref(outptr.local, "__outptr", TypeTable::I32),
+                i32_const(outptr.size as i32),
+                i32_const(outptr.align as i32),
                 i32_const(0),
             ],
             TypeTable::I32,
         )));
 
         let lifted_type_id = lifted.type_id;
-        body_stmts.push(return_stmt(Some(lifted)));
-        adapter_return_type = lifted_type_id; // real type, fixed up at call site if needed
-    } else if let Some(return_type) = &func_info.return_type {
-        let resolved = cm_interface_registry.resolve_type(return_type);
-        let return_flat = cm_interface_registry.cm_flatten(&resolved);
+        self.body_stmts.push(return_stmt(Some(lifted)));
+        lifted_type_id // real type, fixed up at call site if needed
+    }
+
+    /// Flat result strategy: the raw call returns the value on the stack.
+    /// A `Result<(), E>` discriminant is rebuilt into its GC variant, a
+    /// record flattening to one core value is rebuilt into its GC struct,
+    /// and everything else passes through.
+    fn emit_flat_result(
+        &mut self,
+        raw_call: TirExpr,
+        raw_call_type: TypeId,
+        return_type: &Type,
+    ) -> TypeId {
+        let registry = self.registry();
+        let resolved = registry.resolve_type(return_type);
+        let return_flat = registry.cm_flatten(&resolved);
         // Enums/newtypes flatten to a scalar and pass through; only a struct
         // that flattens to one core value must be rebuilt into its GC form.
         let is_flat_struct = return_flat.len() == 1
             && matches!(&resolved, Type::Named(n)
-            if cm_interface_registry
-                .resolve_cm_source_for(n, Some(func_info.package.as_str()))
+            if registry
+                .resolve_cm_source_for(n, Some(self.func_info.package.as_str()))
                 .is_some_and(|s| {
-                    cm_interface_registry
-                        .get_struct_fields_by_source(s, &n.name)
-                        .is_some()
+                    registry.get_struct_fields_by_source(s, &n.name).is_some()
                 }));
-        if needs_flat_result_lifting(&resolved) {
+        if needs_flat_result_lifting(&resolved, &self.lower_ctx.names) {
             // Flat return with complex type (e.g., Result<(), ()>): the raw call returns
             // an i32 discriminant on the stack, but the binding needs to return a GC struct.
             // Synthesize VariantConstruct from the discriminant.
-            let disc_local = alloc_local(&mut next_local, &mut locals, TypeTable::I32);
-            body_stmts.push(let_stmt(
-                "__disc",
-                disc_local,
-                TypeTable::I32,
-                raw_call_expr,
-            ));
+            let disc_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
+            self.body_stmts
+                .push(let_stmt("__disc", disc_local, TypeTable::I32, raw_call));
 
             // Resolve the concrete `Result<T, E>` TypeId so the binding's
             // intermediate local and `VariantConstruct` exprs match the
             // declared return type. Without this, the local was declared as
             // `TypeTable::I32` and back-patched later by `type_fixup`,
             // which produced invalid TIR if any consumer ran first.
-            let result_type_id = {
-                let mut tt = type_table.borrow_mut();
-                cm_type_to_type_id(
-                    &resolved,
-                    &mut tt,
-                    cm_interface_registry,
-                    &func_info.package,
-                )
-            };
-            let result_local = alloc_local(&mut next_local, &mut locals, result_type_id);
-            body_stmts.push(let_mut_stmt(
+            let result_type_id = self.cm_type_id(&resolved);
+            let result_local = alloc_local(&mut self.next_local, &mut self.locals, result_type_id);
+            self.body_stmts.push(let_mut_stmt(
                 "__result_val",
                 result_local,
                 result_type_id,
                 null_expr(result_type_id),
             ));
 
-            let lift_ctx = LiftContext {
-                cm_interface_registry,
-                type_table,
-                cm_package: &func_info.package,
-                interner,
-            };
+            let lift_ctx = self.lift_ctx();
             let lifted = synthesize_lift_flat_result(
                 &resolved,
                 local_ref(disc_local, "__disc", TypeTable::I32),
                 result_local,
                 result_type_id,
-                &mut next_local,
-                &mut body_stmts,
-                &mut locals,
+                &mut self.next_local,
+                &mut self.body_stmts,
+                &mut self.locals,
                 &lift_ctx,
             );
             let lifted_type_id = lifted.type_id;
-            body_stmts.push(return_stmt(Some(lifted)));
-            adapter_return_type = lifted_type_id;
+            self.body_stmts.push(return_stmt(Some(lifted)));
+            lifted_type_id
         } else if is_flat_struct {
-            let lift_ctx = LiftContext {
-                cm_interface_registry,
-                type_table,
-                cm_package: &func_info.package,
-                interner,
-            };
+            let lift_ctx = self.lift_ctx();
             let lifted = lift_flat_struct_return(
                 &resolved,
                 return_flat[0],
-                raw_call_expr,
-                raw_call_return_type,
-                &mut next_local,
-                &mut body_stmts,
-                &mut locals,
+                raw_call,
+                raw_call_type,
+                &mut self.next_local,
+                &mut self.body_stmts,
+                &mut self.locals,
                 &lift_ctx,
             );
-            adapter_return_type = lifted.type_id;
-            body_stmts.push(return_stmt(Some(lifted)));
+            let lifted_type_id = lifted.type_id;
+            self.body_stmts.push(return_stmt(Some(lifted)));
+            lifted_type_id
         } else {
-            body_stmts.push(return_stmt(Some(raw_call_expr)));
-            adapter_return_type = raw_call_return_type;
+            self.body_stmts.push(return_stmt(Some(raw_call)));
+            raw_call_type
         }
-    } else {
-        // No return: just call
-        body_stmts.push(expr_stmt(raw_call_expr));
-        adapter_return_type = TypeTable::UNIT;
-    }
-
-    let body = block(body_stmts);
-
-    let binding =
-        make_binding_function(name, params, adapter_return_type, body, next_local, locals);
-    // Resources and effects are unified at the effect-system level: every
-    // operation on `<E>` (whether `<E>` is declared as `effect` or `resource`)
-    // requires the caller to hold `with <E>`. The binding for a CM-imported
-    // operation therefore carries its owning name as its single concrete
-    // effect. The propagation closure (built in `effect_check`) walks
-    // operation signatures separately, so additional resources reachable
-    // through `<E>`'s operations are admitted without listing them here.
-    {
-        let mut b = binding.borrow_mut();
-        b.effects.push(EffectRef::Concrete {
-            name: func_info.interface_name.clone(),
-            module_source: owner_module.clone(),
-        });
-    }
-    AdapterArtifacts {
-        adapter: binding,
-        auxiliary,
     }
 }

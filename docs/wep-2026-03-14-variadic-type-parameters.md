@@ -210,12 +210,14 @@ update spread (`..p`) and the general "spread a sequence" meaning of `..`.
 
 ### 10. Reflect: Struct Metadata as a Typed Tuple
 
-`Reflect` is a **compiler-synthesized** language feature — it cannot be implemented in
-user code. It exposes a struct's field types and names at compile time via a trait:
+`Reflect` is a **compiler-synthesized**, sealed language feature — it cannot be implemented
+in user code. It exposes a struct's field types and names at compile time via a trait, and
+its members are reached only as `Reflect::<T>::field_names()` (see
+[Reflect Derivation §1a](./wep-2026-06-13-reflect-derivation.md)):
 
 ```wado
-#[comp_feature("reflect")]
-pub trait Reflect {
+#[compiler_item("reflect")]
+internal trait Reflect {
     type Fields;
     fn fields(&self) -> Self::Fields;
     fn field_names() -> List<String>;
@@ -235,9 +237,9 @@ struct with fields `f_0: F_0, f_1: F_1, …`:
 type specific to each struct. Without `any`, the compiler must generate the implementation
 at compile time for each struct individually.
 
-**Why only in monomorphized contexts**: `T::field_names()` and `T::type_name()` are only
-callable when `T` is a concrete struct type, because the implementation is generated per
-struct, not for a generic `T`.
+**Why only in monomorphized contexts**: `Reflect::<T>::field_names()` and
+`Reflect::<T>::type_name()` are only callable when `T` is a concrete struct type, because
+the implementation is generated per struct, not for a generic `T`.
 
 ### 11. `where` Clause — Type Pack Pattern Matching
 
@@ -248,13 +250,13 @@ impl<T, ..F: Inspect> Inspect for T
 where T: Reflect<Fields = [..F]>
 {
     fn inspect(&self) -> String {
-        let names = T::field_names();
-        let values: [..F] = self.fields();
+        let names = Reflect::<T>::field_names();
+        let values: [..F] = Reflect::<T>::fields(self);
         let mut parts: List<String> = [];
         for let [i, v] of values.enumerate() {
             parts.push(`{names[i]}: {v.inspect()}`);
         }
-        return `{T::type_name()} \{ {parts.join(", ")} \}`;
+        return `{Reflect::<T>::type_name()} \{ {parts.join(", ")} \}`;
     }
 }
 ```
@@ -373,13 +375,13 @@ impl<T, ..F: Inspect> Inspect for T
 where T: Reflect<Fields = [..F]>
 {
     fn inspect(&self) -> String {
-        let names = T::field_names();
-        let values: [..F] = self.fields();
+        let names = Reflect::<T>::field_names();
+        let values: [..F] = Reflect::<T>::fields(self);
         let mut parts: List<String> = [];
         for let [i, v] of values.enumerate() {
             parts.push(`{names[i]}: {v.inspect()}`);
         }
-        return `{T::type_name()} \{ {parts.join(", ")} \}`;
+        return `{Reflect::<T>::type_name()} \{ {parts.join(", ")} \}`;
     }
 }
 ```

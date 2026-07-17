@@ -92,6 +92,37 @@ pub fn strip_local_item_id(name: &str) -> &str {
     name.split(LOCAL_ITEM_ID_SEP).next().unwrap_or(name)
 }
 
+/// Replace every occurrence of the type name `old` inside a mangled function
+/// name (`List<Old>::with_capacity`, `Map<Old, Other>.insert`) with `new`,
+/// matching only at type-name boundaries. A raw substring replace would also
+/// rewrite names that merely contain `old` as a fragment (`Old` inside
+/// `OldExtended`); a boundary match cannot.
+pub fn replace_type_name_in_mangled(mangled: &str, old: &str, new: &str) -> String {
+    fn is_boundary(c: Option<char>) -> bool {
+        match c {
+            None => true,
+            Some(c) => !(c.is_alphanumeric() || c == '_'),
+        }
+    }
+    let mut out = String::with_capacity(mangled.len());
+    let mut rest = mangled;
+    while let Some(pos) = rest.find(old) {
+        out.push_str(&rest[..pos]);
+        // Left context comes from everything emitted so far — `rest` alone
+        // loses it once a previous match consumed the preceding characters.
+        let before = out.chars().next_back();
+        let after = rest[pos + old.len()..].chars().next();
+        if is_boundary(before) && is_boundary(after) {
+            out.push_str(new);
+        } else {
+            out.push_str(old);
+        }
+        rest = &rest[pos + old.len()..];
+    }
+    out.push_str(rest);
+    out
+}
+
 /// The name of the synthesized deep-copy helper for a value type, identified
 /// by its module-qualified structural mangle
 /// (`TypeTable::mangle_type_arg_for_generic`). The mangle is a stable,
@@ -1542,6 +1573,43 @@ pub fn test_function_name(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn replace_type_name_in_mangled_matches_boundaries_only() {
+        // Type-argument positions rewrite.
+        assert_eq!(
+            replace_type_name_in_mangled("List<Old>::with_capacity", "Old", "New"),
+            "List<New>::with_capacity"
+        );
+        assert_eq!(
+            replace_type_name_in_mangled("Map<Old, Old>.insert", "Old", "New"),
+            "Map<New, New>.insert"
+        );
+        // Nested generic old names rewrite as a unit.
+        assert_eq!(
+            replace_type_name_in_mangled(
+                "List<Tuple<String, List<u8>>>::push",
+                "Tuple<String, List<u8>>",
+                "Pair"
+            ),
+            "List<Pair>::push"
+        );
+        // A name merely containing the old name as a fragment is untouched.
+        assert_eq!(
+            replace_type_name_in_mangled("List<OldExtended>::push", "Old", "New"),
+            "List<OldExtended>::push"
+        );
+        assert_eq!(
+            replace_type_name_in_mangled("List<VeryOld>::push", "Old", "New"),
+            "List<VeryOld>::push"
+        );
+        // Consecutive occurrences forming one identifier stay untouched: the
+        // left context must survive across matches.
+        assert_eq!(
+            replace_type_name_in_mangled("List<OldOld>::push", "Old", "New"),
+            "List<OldOld>::push"
+        );
+    }
 
     #[test]
     fn bare_dep_resolves_only_for_consumer_not_inside_dependency() {

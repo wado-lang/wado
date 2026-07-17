@@ -154,8 +154,48 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  playground-web:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # mise-action may hit the GitHub API to resolve tool versions.
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+
+      - name: Set up mise and install tools
+        uses: jdx/mise-action@v2
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-playground-web
+
+      # wasm32-unknown-unknown / wasm32-wasip1 come from rust-toolchain.toml.
+      # The version-stamped manifest.json feeds the site's cache-busting.
+      - name: Package the playground runtime
+        env:
+          WADO_PLAYGROUND_VERSION: ${{ needs.validate.outputs.tag }}
+          OUT: dist/wado-playground-web.tar.gz
+        run: |
+          mkdir -p dist
+          mise trust
+          mise run playground-web-package
+
+      - uses: actions/upload-artifact@v7
+        with:
+          # The `release` job downloads every `dist-*` artifact into dist/,
+          # where wado-playground-web.tar.gz is picked up by the same
+          # `wado-*` globs as the CLI archives (asset, attestation, checksum).
+          name: dist-playground-web
+          path: dist/wado-playground-web.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
   release:
-    needs: [validate, build]
+    needs: [validate, build, playground-web]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:

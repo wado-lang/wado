@@ -167,6 +167,14 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A `flags` declaration with more members than the CM ABI's single-word
+    /// bitmask can represent (at most 32).
+    FlagsTooManyMembers {
+        name: String,
+        count: usize,
+        span: Span,
+    },
+
     /// A by-value `self` receiver on a non-resource type. Only resources are
     /// move-only (WEP 2026-05-21); value types borrow with `&self`.
     SelfByValueOnNonResource {
@@ -336,6 +344,13 @@ pub enum TypeError {
     /// the current package; use a trait for cross-package extension.
     InherentImplOnForeignType {
         self_type_name: String,
+        span: Span,
+    },
+
+    /// A sealed, compiler-synthesized trait (`Reflect`) cannot be implemented
+    /// in user code — the compiler provides its impl for every eligible type.
+    SealedTraitImpl {
+        trait_name: String,
         span: Span,
     },
 
@@ -613,6 +628,14 @@ impl TypeError {
             TypeError::UnknownType { name, span } => {
                 (Code::UnknownType, format!("unknown type '{name}'"), *span)
             }
+            TypeError::FlagsTooManyMembers { name, count, span } => (
+                Code::UnsupportedFeature,
+                format!(
+                    "flags `{name}` has {count} members; at most 32 are supported \
+                     (a flags value is a single 32-bit word at the Component Model boundary)"
+                ),
+                *span,
+            ),
             TypeError::SelfByValueOnNonResource { type_name, span } => (
                 Code::TypeMismatch,
                 format!(
@@ -787,6 +810,13 @@ impl TypeError {
                 Code::OrphanRule,
                 format!(
                     "coherence violation: cannot define an inherent `impl` on foreign type `{self_type_name}` (defined in another package); use a trait to extend it"
+                ),
+                *span,
+            ),
+            TypeError::SealedTraitImpl { trait_name, span } => (
+                Code::OrphanRule,
+                format!(
+                    "cannot implement `{trait_name}`: it is a sealed, compiler-synthesized trait provided automatically for every eligible type"
                 ),
                 *span,
             ),

@@ -762,10 +762,11 @@ impl CstStore {
     }
 
     /// ANTLR4-style S-expression for the subtree at row `i`: `(name child ...)`,
-    /// tokens as their text. `rule_names[kind]` names rule nodes (`K_ERROR`
-    /// renders `<error>`); `token_names[kind]` names missing terminals. Real
-    /// terminals with empty text (e.g. EOF) are omitted; missing/skipped
-    /// terminals render markers.
+    /// tokens as their text; a childless node renders as its bare name, no
+    /// parens (ANTLR4's `Trees.toStringTree`). `rule_names[kind]` names rule
+    /// nodes (`K_ERROR` renders `<error>`); `token_names[kind]` names missing
+    /// terminals. Real terminals with empty text (e.g. EOF) are omitted;
+    /// missing/skipped terminals render markers.
     pub fn to_string_tree(
         &self,
         i: i32,
@@ -787,12 +788,13 @@ fn cst_to_string_tree_impl(
     rule_names: &List<String>,
     token_names: &List<String>,
 ) {
-    out.push_str(&"(");
-    if s.a[i] == K_ERROR as i32 {
-        out.push_str(&"<error>");
-    } else {
-        out.push_str(&rule_names[s.a[i]]);
+    let name = if s.a[i] == K_ERROR as i32 { "<error>" } else { rule_names[s.a[i]] };
+    if i + 1 >= s.tag.len() || s.tag[i + 1] matches { Close } {
+        out.push_str(&name);
+        return;
     }
+    out.push_str(&"(");
+    out.push_str(&name);
     let mut c = i + 1;
     while c < s.next[i] {
         match s.tag[c] {
@@ -1114,12 +1116,16 @@ fn render_builder_node(
     rule_names: &List<String>,
     token_names: &List<String>,
 ) -> i32 {
-    out.push_str(&"(");
-    if a[i] == K_ERROR as i32 {
-        out.push_str(&"<error>");
-    } else {
-        out.push_str(&rule_names[a[i]]);
+    let name = if a[i] == K_ERROR as i32 { "<error>" } else { rule_names[a[i]] };
+    if i + 1 >= tag.len() || tag[i + 1] matches { Close } {
+        out.push_str(&name);
+        if i + 1 < tag.len() {
+            return i + 2;
+        }
+        return i + 1;
     }
+    out.push_str(&"(");
+    out.push_str(&name);
     let mut c = i + 1;
     while c < tag.len() {
         match tag[c] {
@@ -7054,13 +7060,13 @@ fn _parse_delegate_grammar__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             let _sd_p_0 = _parse_delegate_grammar__inner_scan_0(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
-            if _sd_p_1 > _sd_best_p {
-                _sd_best_p = _sd_p_1;
-                _sd_best_i = 1;
-            }
             if _sd_p_0 > _sd_best_p {
                 _sd_best_p = _sd_p_0;
                 _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
             }
             if _sd_best_i == 1 {
                 return _parse_delegate_grammar__inner_alt_1(p, follow);
@@ -8176,13 +8182,13 @@ fn _parse_lexer_command__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             let _sd_p_0 = _parse_lexer_command__inner_scan_0(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
-            if _sd_p_1 > _sd_best_p {
-                _sd_best_p = _sd_p_1;
-                _sd_best_i = 1;
-            }
             if _sd_p_0 > _sd_best_p {
                 _sd_best_p = _sd_p_0;
                 _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
             }
             if _sd_best_i == 1 {
                 return _parse_lexer_command__inner_alt_1(p, follow);

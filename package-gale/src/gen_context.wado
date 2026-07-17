@@ -1223,17 +1223,13 @@ impl GenContext {
     ///
     /// Left-recursive (LR) rules have faithful `scan_X_atom` / `scan_X_prec` /
     /// `scan_X_lr_N` generated for them so nested scans can recurse through
-    /// them correctly. The cost concern that previously forced a top-level
-    /// LR gate here — exhaustive longest-match tournaments running every
-    /// candidate's full LR scan even when an earlier alt already matched —
-    /// is addressed at the dispatch sites: the group dispatchers
-    /// (`gen_group_scan_dispatch`, `gen_general_group_scan_dispatch`,
-    /// `gen_rule_ref_group_scan_dispatch`) commit on first success in
-    /// `sort_group_by_element_count` order (longest-first, so the most
-    /// specific candidate is tried first), and `gen_scan_partition_body`
-    /// runs a real longest-match tournament per partition. Either way the
-    /// per-candidate LR scan is bounded, not run exhaustively for already-
-    /// matched alts.
+    /// them correctly. The dispatch sites all run a real longest-match
+    /// tournament (`gen_scan_winner_tournament` for the group dispatchers,
+    /// `gen_scan_partition_body` per partition): every candidate scans once
+    /// from the decision point and the greatest end wins, with ties resolved
+    /// to the first grammar alt. Each per-candidate LR scan is bounded by
+    /// the scan-helper structure, so the tournament stays linear in the
+    /// candidate count.
     pub fn is_rule_scannable(&mut self, name: &String, visiting: &mut List<String>) -> bool {
         let mut min_cycle = i32::MAX;
         return self.is_rule_scannable_at(name, visiting, &mut min_cycle);

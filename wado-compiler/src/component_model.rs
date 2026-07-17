@@ -775,6 +775,15 @@ fn find_unique_source_in<'a, V>(
 /// A source string without a trailing `.wado` suffix or `@version` tag, so a
 /// loader identity (`wasi:http/types.wado`) and its CM registration key
 /// (`wasi:http/types@0.3.0`) reduce to the same stem.
+/// The `wasi:<package>/...` package segment of a CM interface FQ, e.g.
+/// `"filesystem"` from `"wasi:filesystem/types@0.3.0"`. `None` for a
+/// non-`wasi:` source.
+fn wasi_package_from_source(source: &str) -> Option<&str> {
+    let after_scheme = source.strip_prefix("wasi:")?;
+    let without_version = after_scheme.split('@').next().unwrap_or(after_scheme);
+    without_version.split('/').next()
+}
+
 fn interface_stem(source: &str) -> &str {
     let source = source.strip_suffix(".wado").unwrap_or(source);
     source.split_once('@').map_or(source, |(base, _)| base)
@@ -3933,110 +3942,12 @@ pub fn cm_return_needs_outptr(ty: &Type, registry: &CmInterfaceRegistry) -> bool
 /// Resolves WASI structs (records), enums, flags, and variants through the registry
 /// to compute their true CM layout size, instead of defaulting to 4 (i32 handle).
 pub fn cm_size_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> u32 {
-    match ty {
-        Type::Named(named) => {
-            let Some(source) = registry.resolve_cm_source_for(named, None) else {
-                return crate::cm_abi::cm_size(ty);
-            };
-            if let Some(resolved) = registry.get_newtype_by_source(source, &named.name) {
-                return cm_size_with_registry(resolved, registry);
-            }
-            if let Some(fields) = registry.get_struct_fields_by_source(source, &named.name) {
-                let resolved_fields: Vec<Type> = fields
-                    .iter()
-                    .map(|(_, ty)| registry.resolve_type(ty))
-                    .collect();
-                let mut offset = 0u32;
-                let mut max_align = 1u32;
-                for field_ty in &resolved_fields {
-                    let fa = cm_align_with_registry(field_ty, registry);
-                    let fs = cm_size_with_registry(field_ty, registry);
-                    offset = crate::cm_abi::align_to(offset, fa);
-                    offset += fs;
-                    max_align = max_align.max(fa);
-                }
-                return crate::cm_abi::align_to(offset, max_align);
-            }
-            if let Some(sa) = cm_variant_size_align(named, registry) {
-                return sa.0;
-            }
-            if let Some(variants) = registry.get_enum_variants_by_source(source, &named.name) {
-                return crate::synthesis::cm_binding::cm_enum_byte_size(variants.len());
-            }
-            if let Some(members) = registry.get_flags_members_by_source(source, &named.name) {
-                return crate::synthesis::cm_binding::cm_flags_byte_size(members.len());
-            }
-            crate::cm_abi::cm_size(ty)
-        }
-        Type::Generic(g) => match g.name.as_str() {
-            "Option" if g.args.len() == 1 => {
-                let inner = &g.args[0];
-                let payload_align = cm_align_with_registry(inner, registry);
-                let payload_size = cm_size_with_registry(inner, registry);
-                let payload_offset = crate::cm_abi::align_to(1, payload_align);
-                let overall_align = 1u32.max(payload_align);
-                crate::cm_abi::align_to(payload_offset + payload_size, overall_align)
-            }
-            "Result" if g.args.len() == 2 => {
-                let ok_size = cm_size_with_registry(&g.args[0], registry);
-                let err_size = cm_size_with_registry(&g.args[1], registry);
-                let payload_size = ok_size.max(err_size);
-                let payload_align = cm_align_with_registry(&g.args[0], registry)
-                    .max(cm_align_with_registry(&g.args[1], registry));
-                let payload_offset = crate::cm_abi::align_to(1, payload_align);
-                let overall_align = 1u32.max(payload_align);
-                crate::cm_abi::align_to(payload_offset + payload_size, overall_align)
-            }
-            _ => crate::cm_abi::cm_size(ty),
-        },
-        Type::Tuple(elems) if !elems.is_empty() => {
-            crate::cm_abi::layout_tuple_with_registry(elems, registry).size
-        }
-        _ => crate::cm_abi::cm_size(ty),
-    }
+    cm_size_with_registry_scoped(ty, registry, None)
 }
 
 /// Registry-aware CM canonical ABI alignment for a type.
 pub fn cm_align_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> u32 {
-    match ty {
-        Type::Named(named) => {
-            let Some(source) = registry.resolve_cm_source_for(named, None) else {
-                return crate::cm_abi::cm_align(ty);
-            };
-            if let Some(resolved) = registry.get_newtype_by_source(source, &named.name) {
-                return cm_align_with_registry(resolved, registry);
-            }
-            if let Some(fields) = registry.get_struct_fields_by_source(source, &named.name) {
-                let mut max_align = 1u32;
-                for (_, field_ty) in fields {
-                    let resolved = registry.resolve_type(field_ty);
-                    max_align = max_align.max(cm_align_with_registry(&resolved, registry));
-                }
-                return max_align;
-            }
-            if let Some(sa) = cm_variant_size_align(named, registry) {
-                return sa.1;
-            }
-            if let Some(variants) = registry.get_enum_variants_by_source(source, &named.name) {
-                return crate::synthesis::cm_binding::cm_enum_byte_size(variants.len());
-            }
-            if let Some(members) = registry.get_flags_members_by_source(source, &named.name) {
-                return crate::synthesis::cm_binding::cm_flags_byte_align(members.len());
-            }
-            crate::cm_abi::cm_align(ty)
-        }
-        Type::Generic(g) => match g.name.as_str() {
-            "Option" if g.args.len() == 1 => 1u32.max(cm_align_with_registry(&g.args[0], registry)),
-            "Result" if g.args.len() == 2 => 1u32
-                .max(cm_align_with_registry(&g.args[0], registry))
-                .max(cm_align_with_registry(&g.args[1], registry)),
-            _ => crate::cm_abi::cm_align(ty),
-        },
-        Type::Tuple(elems) if !elems.is_empty() => {
-            crate::cm_abi::layout_tuple_with_registry(elems, registry).align
-        }
-        _ => crate::cm_abi::cm_align(ty),
-    }
+    cm_align_with_registry_scoped(ty, registry, None)
 }
 
 /// Compute the CM canonical-ABI size and alignment for a WASI variant type.
@@ -4069,14 +3980,19 @@ pub fn cm_variant_size_align_scoped(
     if !cases.iter().any(|case| case.payload.is_some()) {
         return None; // no payload cases — not outptr
     }
+    // Payload type names are written in the variant's own defining interface,
+    // so anchor the payload recursion to the variant's package, not the
+    // caller's hint — otherwise a bare name shared across packages could
+    // resolve to the caller's package instead of the variant's.
+    let payload_package = wasi_package_from_source(source).or(wasi_package);
     let mut max_payload_size = 0u32;
     let mut max_payload_align = 1u32;
     for case in cases {
         if let Some(ty) = &case.payload {
             max_payload_size =
-                max_payload_size.max(cm_size_with_registry_scoped(ty, registry, None));
+                max_payload_size.max(cm_size_with_registry_scoped(ty, registry, payload_package));
             max_payload_align =
-                max_payload_align.max(cm_align_with_registry_scoped(ty, registry, None));
+                max_payload_align.max(cm_align_with_registry_scoped(ty, registry, payload_package));
         }
     }
     let disc_size = 1u32; // u8 for n ≤ 256 cases
@@ -4097,7 +4013,7 @@ pub fn cm_size_with_registry_scoped(
 ) -> u32 {
     match ty {
         Type::Named(named) => {
-            let Some(source) = registry.resolve_cm_source_for(named, None) else {
+            let Some(source) = registry.resolve_cm_source_for(named, wasi_package) else {
                 return crate::cm_abi::cm_size(ty);
             };
             if let Some(resolved) = registry.get_newtype_by_source(source, &named.name) {
@@ -4108,25 +4024,21 @@ pub fn cm_size_with_registry_scoped(
                     .iter()
                     .map(|(_, ty)| registry.resolve_type(ty))
                     .collect();
-                let mut offset = 0u32;
-                let mut max_align = 1u32;
-                for field_ty in &resolved_fields {
-                    let fa = cm_align_with_registry_scoped(field_ty, registry, wasi_package);
-                    let fs = cm_size_with_registry_scoped(field_ty, registry, wasi_package);
-                    offset = crate::cm_abi::align_to(offset, fa);
-                    offset += fs;
-                    max_align = max_align.max(fa);
-                }
-                return crate::cm_abi::align_to(offset, max_align);
+                return crate::cm_abi::layout_record_with_registry_scoped(
+                    &resolved_fields,
+                    registry,
+                    wasi_package,
+                )
+                .size;
             }
             if let Some(sa) = cm_variant_size_align_scoped(named, registry, wasi_package) {
                 return sa.0;
             }
             if let Some(variants) = registry.get_enum_variants_by_source(source, &named.name) {
-                return crate::synthesis::cm_binding::cm_enum_byte_size(variants.len());
+                return crate::cm_abi::cm_enum_byte_size(variants.len());
             }
             if let Some(members) = registry.get_flags_members_by_source(source, &named.name) {
-                return crate::synthesis::cm_binding::cm_flags_byte_size(members.len());
+                return crate::cm_abi::cm_flags_byte_size(members.len());
             }
             crate::cm_abi::cm_size(ty)
         }
@@ -4168,32 +4080,35 @@ pub fn cm_align_with_registry_scoped(
 ) -> u32 {
     match ty {
         Type::Named(named) => {
-            let Some(source) = registry.resolve_cm_source_for(named, None) else {
+            let Some(source) = registry.resolve_cm_source_for(named, wasi_package) else {
                 return crate::cm_abi::cm_align(ty);
             };
             if let Some(resolved) = registry.get_newtype_by_source(source, &named.name) {
                 return cm_align_with_registry_scoped(resolved, registry, wasi_package);
             }
             if let Some(fields) = registry.get_struct_fields_by_source(source, &named.name) {
-                let mut max_align = 1u32;
-                for (_, field_ty) in fields {
-                    let resolved = registry.resolve_type(field_ty);
-                    max_align = max_align.max(cm_align_with_registry_scoped(
-                        &resolved,
-                        registry,
-                        wasi_package,
-                    ));
-                }
-                return max_align;
+                // Single-source the record layout with the size arm above:
+                // both go through the same `layout_record` helper so alignment
+                // and size can never diverge.
+                let resolved_fields: Vec<Type> = fields
+                    .iter()
+                    .map(|(_, ty)| registry.resolve_type(ty))
+                    .collect();
+                return crate::cm_abi::layout_record_with_registry_scoped(
+                    &resolved_fields,
+                    registry,
+                    wasi_package,
+                )
+                .align;
             }
             if let Some(sa) = cm_variant_size_align_scoped(named, registry, wasi_package) {
                 return sa.1;
             }
             if let Some(variants) = registry.get_enum_variants_by_source(source, &named.name) {
-                return crate::synthesis::cm_binding::cm_enum_byte_size(variants.len());
+                return crate::cm_abi::cm_enum_byte_size(variants.len());
             }
             if let Some(members) = registry.get_flags_members_by_source(source, &named.name) {
-                return crate::synthesis::cm_binding::cm_flags_byte_align(members.len());
+                return crate::cm_abi::cm_flags_byte_align(members.len());
             }
             crate::cm_abi::cm_align(ty)
         }

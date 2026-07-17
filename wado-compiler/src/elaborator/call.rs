@@ -214,7 +214,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if is_mut_ref {
             return;
         }
-        let _ = self.logger.error(TypeError::ClosureMutBindingRequired {
+        let _ = self.emit(TypeError::ClosureMutBindingRequired {
             name: root.name.clone(),
             span: root.span,
         });
@@ -334,7 +334,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // not-callable diagnostic, not the misleading "unknown
                 // function 'x'" from the named-function lookup below.
                 let type_name = self.tysys.type_table.borrow().type_name(value_ty);
-                let _ = self.logger.error(TypeError::CalleeNotCallable {
+                let _ = self.emit(TypeError::CalleeNotCallable {
                     type_name,
                     span: call.callee.span(),
                 });
@@ -381,7 +381,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // don't pile a second diagnostic on top of the first.
             if callee_type != TypeTable::ERROR {
                 let type_name = self.tysys.type_table.borrow().type_name(callee_type);
-                let _ = self.logger.error(TypeError::CalleeNotCallable {
+                let _ = self.emit(TypeError::CalleeNotCallable {
                     type_name,
                     span: call.callee.span(),
                 });
@@ -791,7 +791,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let expected_args = usize::from(!payload_is_unit);
 
                     if args.len() != expected_args {
-                        let _ = self.logger.error(TypeError::ArgumentCountMismatch {
+                        let _ = self.emit(TypeError::ArgumentCountMismatch {
                             expected: expected_args,
                             found: args.len(),
                             span: call.span,
@@ -882,14 +882,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             )
                             .type_id;
                     }
-                    let _ = self.logger.error(TypeError::UnknownFunction {
+                    let _ = self.emit(TypeError::UnknownFunction {
                         name: format!("{prefix}::{suffix}"),
                         span: call.span,
                     });
                     return TypeTable::ERROR;
                 } else {
                     // Unknown case name
-                    let _ = self.logger.error(TypeError::UnknownFunction {
+                    let _ = self.emit(TypeError::UnknownFunction {
                         name: format!("{prefix}::{suffix}"),
                         span: call.span,
                     });
@@ -899,7 +899,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // If prefix is a known type (struct/enum/newtype/flags) with no matching
             // static method, emit a compile error.
             else if self.tysys.is_known_type_name(prefix) {
-                let _ = self.logger.error(TypeError::UnknownFunction {
+                let _ = self.emit(TypeError::UnknownFunction {
                     name: format!("{prefix}::{suffix}"),
                     span: call.span,
                 });
@@ -936,7 +936,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             );
                             let expected_args = usize::from(!payload_is_unit);
                             if args.len() != expected_args {
-                                let _ = self.logger.error(TypeError::ArgumentCountMismatch {
+                                let _ = self.emit(TypeError::ArgumentCountMismatch {
                                     expected: expected_args,
                                     found: args.len(),
                                     span: call.span,
@@ -1207,7 +1207,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let callee = if let Some(c) = callee_opt {
             c
         } else {
-            let _ = self.logger.error(TypeError::UnknownFunction {
+            let _ = self.emit(TypeError::UnknownFunction {
                 name: display_name.clone(),
                 span: call.span,
             });
@@ -1300,7 +1300,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
         if !check_param_types.is_empty() && args.len() != check_param_types.len() {
-            let _ = self.logger.error(TypeError::ArgumentCountMismatch {
+            let _ = self.emit(TypeError::ArgumentCountMismatch {
                 expected: check_param_types.len(),
                 found: args.len(),
                 span: call.span,
@@ -1397,7 +1397,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         if args.len() != fn_params.len() {
-            let _ = self.logger.error(TypeError::ArgumentCountMismatch {
+            let _ = self.emit(TypeError::ArgumentCountMismatch {
                 expected: fn_params.len(),
                 found: args.len(),
                 span: call.span,
@@ -1936,7 +1936,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect::<Vec<_>>()
             .join(", ");
         let func_name = callee.name.as_str();
-        let _ = self.logger.error(TypeError::CannotInferType {
+        let _ = self.emit(TypeError::CannotInferType {
             message: format!(
                 "cannot infer type parameter {names} of function `{func_name}`; \
                  add a turbofish (`{func_name}::<...>()`) or a type annotation"
@@ -2055,7 +2055,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             format!("`{prefix}::{suffix}::<...>()`")
         };
-        let _ = self.logger.error(TypeError::CannotInferType {
+        let _ = self.emit(TypeError::CannotInferType {
             message: format!(
                 "cannot infer type parameter {joined} of `{prefix}::{suffix}`; \
                  add a turbofish ({turbofish}) or a type annotation"
@@ -2774,7 +2774,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return final_return_type;
         }
 
-        let _ = self.logger.error(TypeError::UnknownFunction {
+        let _ = self.emit(TypeError::UnknownFunction {
             name: format!("{type_param_name}::{method_name}"),
             span: call.span,
         });

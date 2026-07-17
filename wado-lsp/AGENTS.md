@@ -6,6 +6,7 @@ Language service engine for the Wado compiler toolchain.
 
 - Types follow LSP semantics (0-based positions, standard severity levels).
 - See [LSP Architecture WEP](../docs/wep-2026-04-18-lsp-architecture.md) for crate scope and build targets. The WEP supersedes earlier rules about this crate being IO-free, `wasm32-unknown-unknown`-only, or protocol-agnostic.
+- The crate still compiles for `wasm32-unknown-unknown` (CI-enforced: `cargo check -p wado-lsp --target wasm32-unknown-unknown`), keeping the `Engine` and query path OS-independent so the browser playground can run the language service without a WASI host. Runtime I/O (filesystem source loading) is delegated to the host — `wado-cli` on the desktop, an in-memory host in the browser.
 
 ## Architecture
 

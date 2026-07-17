@@ -73,7 +73,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn reject_closure_defaults(&mut self, closure: &ast::ClosureExpr) {
         for param in &closure.params {
             if let Some(default) = &param.default {
-                let _ = self.logger.error(TypeError::DefaultInClosure {
+                let _ = self.emit(TypeError::DefaultInClosure {
                     param: param.name.clone(),
                     span: default.span(),
                 });
@@ -201,7 +201,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         && body_type != t
                         && body_type != TypeTable::NEVER
                     {
-                        let _ = self.logger.error(TypeError::MissingReturn {
+                        let _ = self.emit(TypeError::MissingReturn {
                             return_type: self.tysys.type_table.borrow().type_name(t),
                             span: closure.span,
                         });
@@ -210,7 +210,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 None if body_type == TypeTable::UNIT || body_type == TypeTable::NEVER => body_type,
                 None => {
-                    let _ = self.logger.error(TypeError::MissingReturn {
+                    let _ = self.emit(TypeError::MissingReturn {
                         return_type: self.tysys.type_table.borrow().type_name(body_type),
                         span: closure.span,
                     });

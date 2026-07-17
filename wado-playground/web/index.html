@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Wado Playground</title>
+    <style>
+      body { font: 14px/1.5 system-ui, sans-serif; margin: 0; padding: 1rem; }
+      h1 { font-size: 1.1rem; }
+      textarea { width: 100%; height: 12rem; font-family: ui-monospace, monospace; }
+      button { padding: 0.4rem 1rem; font-size: 1rem; }
+      pre { background: #111; color: #eee; padding: 0.75rem; overflow: auto; min-height: 3rem; white-space: pre-wrap; }
+      .err { color: #ff6b6b; }
+    </style>
+  </head>
+  <body>
+    <h1>Wado Playground — compile &amp; run in the browser</h1>
+    <p>Compiler and jco both run as WebAssembly, entirely client-side. Needs a JSPI-capable browser (Chrome/Chromium 137+).</p>
+    <textarea id="src">use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    println("Hello from a browser-side Wado compiler!");
+}
+</textarea>
+    <p><button id="run">Run</button> <span id="status"></span></p>
+    <pre id="out"></pre>
+
+    <script type="module">
+      import { run } from "./playground.js";
+
+      const $ = (id) => document.getElementById(id);
+      const status = (t) => ($("status").textContent = t);
+
+      async function go() {
+        $("out").textContent = "";
+        $("out").classList.remove("err");
+        status("running…");
+        try {
+          const t0 = performance.now();
+          const { stdout, stderr } = await run($("src").value);
+          const ms = Math.round(performance.now() - t0);
+          $("out").textContent = (stdout + (stderr ? "\n[stderr]\n" + stderr : "")) || "(no output)";
+          status(`done in ${ms} ms`);
+        } catch (e) {
+          $("out").textContent = String(e.message ?? e);
+          $("out").classList.add("err");
+          status("error");
+        }
+      }
+
+      $("run").addEventListener("click", go);
+
+      // Test hook: lets Playwright drive a run and read the result.
+      globalThis.__wadoRun = (source) => run(source ?? $("src").value);
+    </script>
+  </body>
+</html>

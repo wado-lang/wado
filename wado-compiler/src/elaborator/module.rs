@@ -310,6 +310,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
                 Item::Flags(flags_decl) => {
+                    // >32 members has no single-word bitmask representation;
+                    // the diagnostic is emitted in the batch type-collection
+                    // pass (`annotate_modules`). Skip here to avoid the
+                    // `1 << i` overflow while keeping this fact-walk panic-free.
+                    if flags_decl.flags.len() > 32 {
+                        continue;
+                    }
                     // Create a distinct Flags type (not a newtype over u32)
                     let flags_type = self
                         .tysys

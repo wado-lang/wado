@@ -28,14 +28,18 @@ use super::types::{FunctionContext, TypeError};
 pub(super) fn extract_compiler_item<H: CompilerHost>(
     attrs: &[crate::ast::Attribute],
     decl_span: Span,
+    module_source: &ModuleSource,
     logger: &Logger<'_, H>,
 ) -> Option<CompilerItem> {
     let (items, unknown) = parse_compiler_item_attrs(attrs);
     for raw in unknown {
-        let _ = logger.error(TypeError::CompilerItemAttr {
-            message: format!("unknown compiler item `{raw}`"),
-            span: decl_span,
-        });
+        let _ = logger.error_in(
+            module_source,
+            TypeError::CompilerItemAttr {
+                message: format!("unknown compiler item `{raw}`"),
+                span: decl_span,
+            },
+        );
     }
     items.into_iter().next()
 }
@@ -89,11 +93,19 @@ fn placeholder_function(name: String, span: Span) -> TirFunction {
 /// stdlib bug (two declarations claiming the same anchor); kind
 /// mismatches are reported by [`check_kind`] before reaching this
 /// path, so the error surface here is small.
-fn report_register_error<H: CompilerHost>(err: RegisterError, span: Span, logger: &Logger<'_, H>) {
-    let _ = logger.error(TypeError::CompilerItemAttr {
-        message: err.to_string(),
-        span,
-    });
+fn report_register_error<H: CompilerHost>(
+    err: RegisterError,
+    span: Span,
+    module_source: &ModuleSource,
+    logger: &Logger<'_, H>,
+) {
+    let _ = logger.error_in(
+        module_source,
+        TypeError::CompilerItemAttr {
+            message: err.to_string(),
+            span,
+        },
+    );
 }
 
 /// Run the per-attribute validation that applies to every kind:
@@ -112,25 +124,31 @@ fn check_compiler_item_placement<H: CompilerHost>(
     logger: &Logger<'_, H>,
 ) -> bool {
     if !module_source.is_core() {
-        let _ = logger.error(TypeError::CompilerItemAttr {
-            message: format!(
-                "`#[compiler_item(\"{name}\")]` is only valid inside `core::*` modules",
-                name = item.attr_name(),
-            ),
-            span,
-        });
+        let _ = logger.error_in(
+            module_source,
+            TypeError::CompilerItemAttr {
+                message: format!(
+                    "`#[compiler_item(\"{name}\")]` is only valid inside `core::*` modules",
+                    name = item.attr_name(),
+                ),
+                span,
+            },
+        );
         return false;
     }
     if item.expected_kind() != actual_kind {
-        let _ = logger.error(TypeError::CompilerItemAttr {
-            message: format!(
-                "`#[compiler_item(\"{name}\")]` expects a {expected}, but it is attached to a {actual}",
-                name = item.attr_name(),
-                expected = item.expected_kind(),
-                actual = actual_kind,
-            ),
-            span,
-        });
+        let _ = logger.error_in(
+            module_source,
+            TypeError::CompilerItemAttr {
+                message: format!(
+                    "`#[compiler_item(\"{name}\")]` expects a {expected}, but it is attached to a {actual}",
+                    name = item.attr_name(),
+                    expected = item.expected_kind(),
+                    actual = actual_kind,
+                ),
+                span,
+            },
+        );
         return false;
     }
     true
@@ -145,7 +163,7 @@ pub(super) fn register_struct_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs, span, logger) else {
+    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
         return;
     };
     if !check_compiler_item_placement(item, CompilerItemKind::Struct, module_source, span, logger) {
@@ -160,7 +178,7 @@ pub(super) fn register_struct_compiler_item<H: CompilerHost>(
         .compiler_items_mut()
         .register(item, resolved)
     {
-        report_register_error(err, span, logger);
+        report_register_error(err, span, module_source, logger);
     }
 }
 
@@ -173,7 +191,7 @@ pub(super) fn register_variant_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs, span, logger) else {
+    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
         return;
     };
     if !check_compiler_item_placement(item, CompilerItemKind::Variant, module_source, span, logger)
@@ -189,7 +207,7 @@ pub(super) fn register_variant_compiler_item<H: CompilerHost>(
         .compiler_items_mut()
         .register(item, resolved)
     {
-        report_register_error(err, span, logger);
+        report_register_error(err, span, module_source, logger);
     }
 }
 
@@ -202,7 +220,7 @@ pub(super) fn register_enum_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs, span, logger) else {
+    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
         return;
     };
     if !check_compiler_item_placement(item, CompilerItemKind::Enum, module_source, span, logger) {
@@ -217,7 +235,7 @@ pub(super) fn register_enum_compiler_item<H: CompilerHost>(
         .compiler_items_mut()
         .register(item, resolved)
     {
-        report_register_error(err, span, logger);
+        report_register_error(err, span, module_source, logger);
     }
 }
 
@@ -238,7 +256,7 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs, span, logger) else {
+    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
         return;
     };
     if !check_compiler_item_placement(item, CompilerItemKind::Trait, module_source, span, logger) {
@@ -275,7 +293,7 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
         .compiler_items_mut()
         .register(item, resolved)
     {
-        report_register_error(err, span, logger);
+        report_register_error(err, span, module_source, logger);
     }
 }
 
@@ -289,7 +307,7 @@ pub(super) fn register_method_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs, span, logger) else {
+    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
         return;
     };
     if !check_compiler_item_placement(item, CompilerItemKind::Method, module_source, span, logger) {
@@ -305,7 +323,7 @@ pub(super) fn register_method_compiler_item<H: CompilerHost>(
         .compiler_items_mut()
         .register(item, resolved)
     {
-        report_register_error(err, span, logger);
+        report_register_error(err, span, module_source, logger);
     }
 }
 
@@ -325,7 +343,7 @@ pub(super) fn register_variant_case_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs, span, logger) else {
+    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
         return;
     };
     if !check_compiler_item_placement(
@@ -348,7 +366,7 @@ pub(super) fn register_variant_case_compiler_item<H: CompilerHost>(
         .compiler_items_mut()
         .register(item, resolved)
     {
-        report_register_error(err, span, logger);
+        report_register_error(err, span, module_source, logger);
     }
 }
 
@@ -365,7 +383,7 @@ pub(super) fn register_enum_case_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs, span, logger) else {
+    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
         return;
     };
     if !check_compiler_item_placement(
@@ -388,7 +406,7 @@ pub(super) fn register_enum_case_compiler_item<H: CompilerHost>(
         .compiler_items_mut()
         .register(item, resolved)
     {
-        report_register_error(err, span, logger);
+        report_register_error(err, span, module_source, logger);
     }
 }
 
@@ -400,7 +418,7 @@ pub(super) fn register_tuple_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs, span, logger) else {
+    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
         return;
     };
     if !check_compiler_item_placement(
@@ -420,7 +438,7 @@ pub(super) fn register_tuple_compiler_item<H: CompilerHost>(
         .compiler_items_mut()
         .register(item, resolved)
     {
-        report_register_error(err, span, logger);
+        report_register_error(err, span, module_source, logger);
     }
 }
 
@@ -436,7 +454,7 @@ pub(super) fn register_builtin_type_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = extract_compiler_item(attrs, span, logger) else {
+    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
         return;
     };
     if !check_compiler_item_placement(
@@ -457,7 +475,7 @@ pub(super) fn register_builtin_type_compiler_item<H: CompilerHost>(
         .compiler_items_mut()
         .register(item, resolved)
     {
-        report_register_error(err, span, logger);
+        report_register_error(err, span, module_source, logger);
     }
 }
 
@@ -559,7 +577,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .find(|a| a.name == "serde" && a.has_arg("default"))
             {
-                let _ = scope.logger.error(TypeError::SerdeDefaultAttr {
+                let _ = scope.emit(TypeError::SerdeDefaultAttr {
                     field: field.name.clone(),
                     span: serde_default.span,
                 });
@@ -748,7 +766,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .as_async_call(return_type)
                     .is_none()
             {
-                let _ = scope.logger.error(TypeError::AsyncOpMustReturnAsyncCall {
+                let _ = scope.emit(TypeError::AsyncOpMustReturnAsyncCall {
                     op_name: method.name.clone(),
                     span: method.span,
                 });
@@ -914,7 +932,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         | crate::tir::ResolvedType::TypeParam { .. }
                 ) {
                     let type_name = tt.type_name(param.type_id);
-                    let _ = self.logger.error(TypeError::InvalidStores {
+                    let _ = self.emit(TypeError::InvalidStores {
                         message: format!(
                             "stores[{store_name}]: parameter '{store_name}' has type '{type_name}', \
                              but only reference parameters (&T or &mut T) or type parameters can be stored"
@@ -923,7 +941,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                 }
             } else {
-                let _ = self.logger.error(TypeError::InvalidStores {
+                let _ = self.emit(TypeError::InvalidStores {
                     message: format!("stores[{store_name}]: no parameter named '{store_name}'"),
                     span,
                 });
@@ -1066,7 +1084,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // to a phantom `EffectRef::Concrete`.
         let effect_params: Vec<_> = func.type_params.iter().filter(|p| p.is_effect).collect();
         if effect_params.len() > 1 {
-            let _ = scope.logger.error(TypeError::InvalidLiteral {
+            let _ = scope.emit(TypeError::InvalidLiteral {
                 message: "multiple effect parameters are not allowed; use a single effect parameter instead".to_string(),
                 span: effect_params[1].span,
             });
@@ -1146,7 +1164,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let type_id = scope.resolve_type(&param.ty);
             // Closures cannot cross the Component Model boundary.
             if crosses_cm_boundary && scope.type_contains_closure(type_id) {
-                let _ = scope.logger.error(TypeError::ClosureAtCmBoundary {
+                let _ = scope.emit(TypeError::ClosureAtCmBoundary {
                     function: func.name.clone(),
                     position: format!("parameter '{}'", param.name),
                     span: param.span,
@@ -1157,7 +1175,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // resolved TIR is discarded — reify re-emits it from the AST.
             if let Some(default_ast) = &param.default {
                 if func.is_export {
-                    let _ = scope.logger.error(TypeError::DefaultInExportFn {
+                    let _ = scope.emit(TypeError::DefaultInExportFn {
                         function: func.name.clone(),
                         param: param.name.clone(),
                         span: default_ast.span(),
@@ -1188,7 +1206,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Closures cannot cross the CM boundary in return position either.
         if crosses_cm_boundary && scope.type_contains_closure(return_type) {
-            let _ = scope.logger.error(TypeError::ClosureAtCmBoundary {
+            let _ = scope.emit(TypeError::ClosureAtCmBoundary {
                 function: func.name.clone(),
                 position: "return type".to_string(),
                 span: func.span,
@@ -1594,7 +1612,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Set effect params in scope (for resolving effect names in function types)
         let effect_params: Vec<_> = func.type_params.iter().filter(|p| p.is_effect).collect();
         if effect_params.len() > 1 {
-            let _ = scope.logger.error(TypeError::InvalidLiteral {
+            let _ = scope.emit(TypeError::InvalidLiteral {
                 message: "multiple effect parameters are not allowed; use a single effect parameter instead".to_string(),
                 span: effect_params[1].span,
             });
@@ -1819,7 +1837,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // aggregates resolve to `GenericInstance`, not a concrete
                     // value type, so they are already permitted here.
                     if is_concrete_value && !is_resource && !scope.tysys.carries_resource(self_ty) {
-                        let _ = scope.logger.error(TypeError::SelfByValueOnNonResource {
+                        let _ = scope.emit(TypeError::SelfByValueOnNonResource {
                             type_name,
                             span: param.span,
                         });
@@ -1846,7 +1864,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if trait_name.is_some()
                 && let Some(default_ast) = &param.default
             {
-                let _ = scope.logger.error(TypeError::DefaultInTraitImpl {
+                let _ = scope.emit(TypeError::DefaultInTraitImpl {
                     method: func.name.clone(),
                     param: param.name.clone(),
                     span: default_ast.span(),

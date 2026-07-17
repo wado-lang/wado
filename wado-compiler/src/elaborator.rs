@@ -167,6 +167,15 @@ pub struct Elaborator<'a, H: CompilerHost> {
 }
 
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
+    /// Emit a `TypeError` attributed to `current_module_source` — the channel
+    /// for every diagnostic raised during item/body resolution.
+    pub(super) fn emit(
+        &self,
+        err: impl Into<crate::compiler_host::Diagnostic>,
+    ) -> Result<(), crate::logger::Bail> {
+        self.logger.error_in(&self.current_module_source, err)
+    }
+
     /// Construct a [`TypeLookup`] view over the elaborator's current import
     /// context and shared `all_*` tables. Use this for any type-name
     /// resolution; never reach into `all_*` directly.

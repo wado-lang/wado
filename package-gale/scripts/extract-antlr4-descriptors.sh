@@ -45,8 +45,10 @@ fi
 
 # ----- Phase 1: Wado extract.
 echo "==> Phase 1/3: Wado extract"
+# Everything after the input file is forwarded to the guest as-is (no
+# `--` separator — it would reach the guest as a literal argument).
 cargo run --quiet --bin wado -- run \
-    package-gale/scripts/extract_antlr4_descriptors.wado -- "${categories[@]}"
+    package-gale/scripts/extract_antlr4_descriptors.wado "${categories[@]}"
 
 # ----- Phase 2: Stage B′ oracle invocation.
 echo "==> Phase 2/3: Stage B′ oracle invocation"
@@ -157,5 +159,5 @@ if [ -f "$oracle_version_cache" ]; then
     export ORACLE_VERSION
 fi
 cargo run --quiet --bin wado -- run \
-    package-gale/scripts/extract_antlr4_descriptors.wado -- \
+    package-gale/scripts/extract_antlr4_descriptors.wado \
     --finalize-stage-b-oracle

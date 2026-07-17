@@ -526,7 +526,7 @@ impl TraitEnv {
         interner: &mut ModuleSourceInterner,
         entry_module: Option<&ModuleSource>,
         invocations: &InvocationIndex,
-    ) -> (Arc<Self>, Vec<TypeError>) {
+    ) -> (Arc<Self>, Vec<(ModuleSource, TypeError)>) {
         // Pre-compute every module's `use`-derived import scope so dispatch
         // queries read it instead of rebuilding from the module AST.
         let mut module_import_scopes: IndexMap<ModuleSource, ModuleImportScope> =
@@ -1255,12 +1255,13 @@ fn check_orphan_rfc2451(impl_block: &ast::ImplBlock, local_type_names: &IndexSet
 }
 
 /// Check orphan rules for all trait impl blocks across all modules.
-/// Only impl blocks in local (user) modules are checked.
+/// Only impl blocks in local (user) modules are checked. Each violation is
+/// paired with the offending impl's [`ModuleSource`] for file attribution.
 fn check_all_orphan_rules(
     modules: &IndexMap<ModuleSource, Module>,
     decl_index: &TraitDeclIndex,
     type_decl_index: &IndexMap<DeclKey, ModuleSource>,
-) -> Vec<TypeError> {
+) -> Vec<(ModuleSource, TypeError)> {
     let mut violations = Vec::new();
 
     // Project all (`DeclKey`, `ModuleSource`) entries down to bare names of
@@ -1309,10 +1310,13 @@ fn check_all_orphan_rules(
                 if let PositionKind::ForeignType =
                     classify_position(&impl_block.ty, &type_params, &local_type_names)
                 {
-                    violations.push(TypeError::InherentImplOnForeignType {
-                        self_type_name: get_type_name_static(&impl_block.ty),
-                        span: impl_block.span,
-                    });
+                    violations.push((
+                        module_source.clone(),
+                        TypeError::InherentImplOnForeignType {
+                            self_type_name: get_type_name_static(&impl_block.ty),
+                            span: impl_block.span,
+                        },
+                    ));
                 }
                 continue;
             };
@@ -1327,11 +1331,14 @@ fn check_all_orphan_rules(
             // Foreign trait: apply RFC 2451 sequence check
             if !check_orphan_rfc2451(impl_block, &local_type_names) {
                 let self_type_name = get_type_name_static(&impl_block.ty);
-                violations.push(TypeError::OrphanViolation {
-                    trait_name,
-                    self_type_name,
-                    span: impl_block.span,
-                });
+                violations.push((
+                    module_source.clone(),
+                    TypeError::OrphanViolation {
+                        trait_name,
+                        self_type_name,
+                        span: impl_block.span,
+                    },
+                ));
             }
         }
     }

@@ -1,0 +1,15 @@
+// A recursive type cannot cross the Component Model boundary: WIT has no
+// recursive types, and lift/lower synthesis would otherwise recurse forever
+// generating inline code for one. Exporting it is a compile error.
+
+struct Tree {
+    value: i32,
+    children: List<Tree>,
+}
+
+export fn run() -> Tree {
+    return Tree { value: 1, children: [] };
+}
+
+__DATA__
+{"compile_error": "recursive type `Tree` cannot cross the Component Model boundary"}

@@ -1,0 +1,17 @@
+// A stream's payload is lifted/lowered by value on read/write, so a
+// recursive payload type is just as unrepresentable as a recursive
+// export type: WIT has no recursive types. The boundary check recurses
+// into Stream/Future type arguments and rejects it.
+
+struct Node {
+    value: i32,
+    rest: List<Node>,
+}
+
+export fn run() -> Stream<Node> {
+    let [rx, _tx] = Stream::<Node>::new();
+    return rx;
+}
+
+__DATA__
+{"compile_error": "recursive type `Node` cannot cross the Component Model boundary"}

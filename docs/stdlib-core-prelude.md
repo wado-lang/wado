@@ -3854,6 +3854,10 @@ _Fields are private._
 
 #### `pub fn filled(n: i32, element: T) -> List<T>`
 
+#### `pub fn from_tuple<..Elems>(elements: [..Elems]) -> List<T>`
+
+Collect a homogeneous tuple `[T, T, ...]` into a `List<T>`.
+
 #### `pub fn len(&self) -> i32`
 
 #### `pub fn is_empty(&self) -> bool`
