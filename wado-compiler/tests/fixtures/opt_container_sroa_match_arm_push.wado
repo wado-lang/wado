@@ -1,0 +1,77 @@
+// Test: Container SROA (P0a) — a writer call (`push` / `index_assign`) on a
+// decomposed `List<Tuple>` candidate that lands at an *expression* position
+// (a bare match-arm / if-branch body, `Operand::Expr`) must be expanded into a
+// unit-valued block of per-field statements. The escape analysis whitelists
+// writers at any position, so the rewriter has to handle the non-statement
+// case too — otherwise the candidate `let` is removed while the push still
+// references it, reading an uninitialized slot (null-reference trap at O2).
+use { println, Stdout } from "core:cli";
+
+// Force List<i32> methods to monomorphize so per-field rewrites have targets.
+#[inline("never")]
+fn _force_array_i32_monomorphization() -> i32 {
+    let mut x: List<i32> = List::<i32>::with_capacity(4);
+    x.push(1);
+    x.push(2);
+    x[0] = 10;
+    let first = x[0];
+    let len = x.len();
+    return first + len;
+}
+
+// Push in a bare match-arm body (Operand::Expr, not a statement).
+#[inline("never")]
+fn match_arm_push(c: i32) -> i32 {
+    let mut v: List<[i32, i32]> = [];
+    match c {
+        0 => v.push([1, 2]),
+        _ => v.push([3, 4]),
+    }
+    return v[0].0 + v[0].1;
+}
+
+// Push in a bare if-expression-statement branch body.
+#[inline("never")]
+fn if_arm_push(c: bool) -> i32 {
+    let mut v: List<[i32, i32]> = [];
+    if c {
+        v.push([10, 20])
+    } else {
+        v.push([30, 40])
+    }
+    return v[0].0 + v[0].1;
+}
+
+// index_assign in a bare match-arm body.
+#[inline("never")]
+fn match_arm_index_assign(c: i32) -> i32 {
+    let mut v: List<[i32, i32]> = [];
+    v.push([0, 0]);
+    match c {
+        0 => v[0] = [5, 6],
+        _ => v[0] = [7, 8],
+    }
+    return v[0].0 + v[0].1;
+}
+
+export fn run() with Stdout {
+    assert _force_array_i32_monomorphization() == 12;
+    assert match_arm_push(0) == 3;
+    assert match_arm_push(5) == 7;
+    assert if_arm_push(true) == 30;
+    assert if_arm_push(false) == 70;
+    assert match_arm_index_assign(0) == 11;
+    assert match_arm_index_assign(9) == 15;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_expect:O0": [
+        "struct.new \"tuple//[i32, i32]\""
+    ],
+    "wir_not_expect:O2": [
+        "struct.new \"tuple//[i32, i32]\""
+    ]
+}

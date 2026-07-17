@@ -32,7 +32,7 @@ use crate::hashmap::IndexSet;
 use crate::nir::NirFunction;
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{
-    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, StmtId, StmtKind,
+    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -42,56 +42,113 @@ use crate::niri::{
 };
 use crate::tir::{PrimitiveType, TypeId, TypeTable};
 
+/// The three whole-program maps [`fold_constants`] feeds its interpreter. Each
+/// is a fresh-per-build allocation ([`build_callee_map`] walks every function,
+/// [`build_global_field_env`] every global *and* every function body), so
+/// rebuilding them on every fixed-point iteration is pure overhead when nothing
+/// they depend on changed. [`ConstFoldCache`] reuses them across iterations.
+struct FoldMaps {
+    callees: CalleeMap,
+    globals: GlobalEnv,
+    global_fields: GlobalFieldEnv,
+}
+
+fn build_fold_maps(project: &NirPackage, type_table: &TypeTable) -> FoldMaps {
+    // The CalleeMap holds Rc handles aliased with `project.functions`. The
+    // interpreter reads callee bodies via `try_borrow`, which bails cleanly when
+    // the visitor already holds `borrow_mut` on the same function (a self-call
+    // inside the function being walked). Because the Rc points at the live cell,
+    // a callee's body edit is visible without rebuilding the map — only its
+    // *membership* (the ctfe-eligible function set) can go stale.
+    let callees = build_callee_map(project);
+    // Every immutable global whose initializer reduces to a `Const(_)` becomes a
+    // `GlobalVarGet` rewrite target; mutable globals are recorded as `NonConst`.
+    let globals = build_global_env(project, type_table, &callees);
+    // Known constant fields of immutable globals — the `SeqField::Len` length of
+    // sequence globals, so a `global:X.used` read folds and the bounds-check /
+    // branch passes can drop the checks they eliminate on the pre-hoist local.
+    let global_fields = build_global_field_env(project);
+    FoldMaps {
+        callees,
+        globals,
+        global_fields,
+    }
+}
+
+/// Cross-iteration cache for [`FoldMaps`], owned by the fixed-point loop and
+/// threaded into each gated [`fold_constants`] call.
+///
+/// The maps depend only on the set of functions and globals, not on function
+/// *body* content: the [`CalleeMap`]'s `Rc` handles track body edits
+/// automatically, the [`GlobalEnv`] reads only global initializers (untouched by
+/// the function-scoped loop passes), and the [`GlobalFieldEnv`]'s body scan finds
+/// inline `GlobalVarSet`s to immutable globals — a shape only
+/// `const_object_globalization` (a post-loop
+/// pass) produces, so it contributes nothing during the loop. Hence the cache is
+/// valid while the function and global counts are unchanged; `value_copy_demote`
+/// appending a specialization (function count grows) or DCE around the loop
+/// (global count changes) invalidates it, forcing a rebuild.
+pub(super) struct ConstFoldCache {
+    funcs_len: usize,
+    globals_len: usize,
+    maps: FoldMaps,
+}
+
 /// Apply constant folding to all functions in the project.
 /// Flow-sensitive constant folding, gated: skips functions unchanged since this
-/// pass last ran. Used in the fixed-point loop.
-pub fn fold_constants(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    fold_constants_impl(project, Some(gate))
-}
-
-/// Ungated variant: folds every function. Used by the post-globalization
-/// cleanup, which runs to its own fixed point outside the gated loop.
-pub fn fold_constants_all(project: &mut NirPackage) -> bool {
-    fold_constants_impl(project, None)
-}
-
-fn fold_constants_impl(project: &mut NirPackage, gate: Option<&mut FunctionGate>) -> bool {
+/// pass last ran. Used in the fixed-point loop, reusing `cache`'s [`FoldMaps`]
+/// unless the function/global counts changed since they were built.
+pub fn fold_constants(
+    project: &mut NirPackage,
+    gate: &mut FunctionGate,
+    cache: &mut Option<ConstFoldCache>,
+) -> bool {
     let type_table = project.type_table.borrow();
-    // Build the CalleeMap once per pass with Rc handles aliased with
-    // `project.functions`. The interpreter reads callee bodies via
-    // `try_borrow`, which bails cleanly when the visitor already
-    // holds `borrow_mut` on the same function (the case where we'd
-    // try to fold a self-call inside the function being walked).
-    let callees = build_callee_map(project);
-    // Build the GlobalEnv once per pass: every immutable global whose
-    // initializer reduces to a `Const(_)` becomes a `GlobalVarGet`
-    // rewrite target; mutable globals are recorded as `NonConst`.
-    let globals = build_global_env(project, &type_table, &callees);
-    // Known constant fields of immutable globals — currently the `SeqField::Len`
-    // length of sequence globals hoisted by body globalization, so a
-    // `global:X.used` read folds and the bounds-check / branch passes can drop
-    // the checks they eliminate on the pre-hoist local form.
-    let global_fields = build_global_field_env(project);
-    let mut visitor = ConstFoldVisitor {
-        interpreter: Interpreter::new(&type_table),
-    };
-    visitor.interpreter.with_callees(&callees);
-    visitor.interpreter.with_globals(&globals);
-    visitor.interpreter.with_global_fields(&global_fields);
-    let mut buffers = EngineBuffers::default();
-    if let Some(gate) = gate {
-        let len = project.functions.len();
-        gate.run_gated(GatedPass::ConstFold, len, |fid| {
-            fold_function(&project.functions[fid.index()], &mut visitor, &mut buffers)
-        })
-    } else {
-        // Ungated: post-globalization cleanup folds every function.
-        let mut changed = false;
-        for func_rc in &project.functions {
-            changed |= fold_function(func_rc, &mut visitor, &mut buffers);
-        }
-        changed
+    let funcs_len = project.functions.len();
+    let globals_len = project.globals.len();
+    let stale = cache
+        .as_ref()
+        .is_none_or(|c| c.funcs_len != funcs_len || c.globals_len != globals_len);
+    if stale {
+        *cache = Some(ConstFoldCache {
+            funcs_len,
+            globals_len,
+            maps: build_fold_maps(project, &type_table),
+        });
     }
+    let maps = &cache.as_ref().expect("just populated").maps;
+    let mut visitor = new_visitor(&type_table, maps);
+    let mut buffers = EngineBuffers::default();
+    let len = project.functions.len();
+    gate.run_gated(GatedPass::ConstFold, len, |fid| {
+        fold_function(&project.functions[fid.index()], &mut visitor, &mut buffers)
+    })
+}
+
+/// Ungated variant: folds every function, rebuilding the maps each call. Used by
+/// the post-globalization cleanup, whose bodies carry the inline `GlobalVarSet`s
+/// globalization emits — so its [`GlobalFieldEnv`] is body-dependent and must not
+/// be cached across the caller's fixed point.
+pub fn fold_constants_all(project: &mut NirPackage) -> bool {
+    let type_table = project.type_table.borrow();
+    let maps = build_fold_maps(project, &type_table);
+    let mut visitor = new_visitor(&type_table, &maps);
+    let mut buffers = EngineBuffers::default();
+    let mut changed = false;
+    for func_rc in &project.functions {
+        changed |= fold_function(func_rc, &mut visitor, &mut buffers);
+    }
+    changed
+}
+
+fn new_visitor<'a>(type_table: &'a TypeTable, maps: &'a FoldMaps) -> ConstFoldVisitor<'a> {
+    let mut visitor = ConstFoldVisitor {
+        interpreter: Interpreter::new(type_table),
+    };
+    visitor.interpreter.with_callees(&maps.callees);
+    visitor.interpreter.with_globals(&maps.globals);
+    visitor.interpreter.with_global_fields(&maps.global_fields);
+    visitor
 }
 
 fn fold_function(
@@ -304,12 +361,17 @@ fn const_seq_len_a(body: &Body, e: ExprId) -> Option<i32> {
                 return Some(len);
             }
             let index = tail_local_a(body, tail)?;
-            rest.iter().rev().find_map(|&s| match &body.stmts[s].kind {
-                StmtKind::Let {
-                    local_index, value, ..
-                } if *local_index == index => const_seq_len_operand_a(body, *value),
-                _ => None,
-            })
+            // Stop at the nearest (last) `let` of `index`: it shadows any earlier
+            // binding. If that binding is non-const, the length is unknown —
+            // scanning past it to an earlier const `let` would return a stale
+            // length for a value the nearest binding already replaced.
+            let nearest = rest.iter().rev().find(|&&s| {
+                matches!(&body.stmts[s].kind, StmtKind::Let { local_index, .. } if *local_index == index)
+            })?;
+            let StmtKind::Let { value, .. } = &body.stmts[*nearest].kind else {
+                unreachable!("`nearest` matched a `let` of `index` above")
+            };
+            const_seq_len_operand_a(body, *value)
         }
         ExprKind::StructLiteral { fields, .. } => fields.iter().find_map(|f| {
             if f.name == SeqField::Len.field_name()
@@ -726,6 +788,24 @@ impl ConstFoldVisitor<'_> {
                 value,
                 ..
             } => (*local_index, *is_mut, *value),
+            // A destructure can rebind an index a prior `let` recorded — index
+            // reuse is real (`labeled_block_fusion` producing a `LetDestructure`,
+            // see `const_object_globalization`'s `locals_declared_once` note). The
+            // interpreter tracks no lattice value for a destructured binding, so
+            // drop the stale entry for every local the pattern binds; otherwise a
+            // reused index keeps the earlier `let`'s constant.
+            StmtKind::LetDestructure { pattern, .. } => {
+                let mut stack = vec![NodeRef::Pat(*pattern)];
+                while let Some(node) = stack.pop() {
+                    if let NodeRef::Pat(p) = node
+                        && let PatKind::Binding { local_index, .. } = &body.pats[p].kind
+                    {
+                        self.interpreter.invalidate_local(*local_index);
+                    }
+                    body.for_each_child(node, |c| stack.push(c));
+                }
+                return;
+            }
             _ => return,
         };
         let lat = if is_mut {

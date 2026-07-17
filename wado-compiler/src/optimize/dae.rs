@@ -24,8 +24,12 @@
 //! - Allocator entry points (`allocator_tag.is_some()`) — wired raw into
 //!   the canonical ABI as `realloc`, with no `is_cm_export` wrapper to
 //!   absorb a shrunken signature.
-//! - Trait methods (`method_info.trait_name.is_some()`) — sibling impls and
-//!   the trait declaration share a signature contract.
+//! - Closure `__call` functors (`is_closure_call`) — their function-table
+//!   wrapper snapshots the signature. Concrete trait-impl methods are NOT
+//!   pinned: after monomorphization they are plain functions whose call sites
+//!   all carry a resolved `func_id` (matching `sroa_param`'s relaxation), so a
+//!   dead parameter is dropped soundly. The closure-functor `^Inspect` /
+//!   `^InspectAlt` impls are the relaxed exception even among `__call`s.
 //! - Functions whose pointer is taken via `FuncRef` anywhere in the project.
 //!
 //! `is_export` is NOT a pin: every user `export fn` reaches the world
@@ -68,7 +72,6 @@ use crate::nir::FuncId;
 pub(super) type FnKey = FuncId;
 
 pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    let pinned = collect_pinned(project);
     let closure_call_keys = collect_closure_call_keys(project);
 
     // Phase 1: identify candidate (function, dead positions) pairs.
@@ -77,7 +80,7 @@ pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGat
         let func = project.functions[fid.index()].borrow();
         let Some(key) = func.id else { continue };
         let is_closure_dae_relaxed = closure_call_keys.contains(&key);
-        if !is_eligible(&func, &pinned, is_closure_dae_relaxed) {
+        if !is_eligible(&func, is_closure_dae_relaxed) {
             continue;
         }
         let dead = find_dead_params(&func);
@@ -166,7 +169,7 @@ fn collect_closure_call_keys(project: &NirPackage) -> IndexSet<FnKey> {
     keys
 }
 
-fn is_eligible(func: &NirFunction, pinned: &IndexSet<FnKey>, is_closure_dae_relaxed: bool) -> bool {
+fn is_eligible(func: &NirFunction, is_closure_dae_relaxed: bool) -> bool {
     if func.body.is_none() {
         return false;
     }
@@ -187,20 +190,22 @@ fn is_eligible(func: &NirFunction, pinned: &IndexSet<FnKey>, is_closure_dae_rela
     if func.allocator_tag.is_some() {
         return false;
     }
-    // Trait methods share a signature contract with sibling impls and the
-    // trait declaration; the closure-functor `^Inspect` / `^InspectAlt`
-    // impls are the relaxed exception.
-    if !is_closure_dae_relaxed
-        && func
-            .method_info
-            .as_ref()
-            .is_some_and(|mi| mi.trait_name.is_some())
-    {
+    // A concrete trait-impl method is a plain function after monomorphization:
+    // Wado has no dynamic dispatch, every call site carries the resolved
+    // `func_id`, and `apply_dae` rewrites all of them — so dropping a dead
+    // parameter (and its call-site arguments) is sound, exactly as `sroa_param`
+    // relaxed the same pin. The only trait-shaped functions with a signature
+    // contract dae cannot see are the closure functors, whose function-table
+    // wrapper adapts to the surviving `call_method.params` and is therefore
+    // relaxed (`is_closure_dae_relaxed`); a closure `__call` not covered by that
+    // relaxation stays pinned.
+    if !is_closure_dae_relaxed && func.is_closure_call() {
         return false;
     }
-    if func.id.is_some_and(|id| pinned.contains(&id)) {
-        return false;
-    }
+    // No explicit pin set: `FuncRef` is lowered into a `Closure` literal (functor
+    // struct) by `lower::plan::closure` before NIR is built, so there is no bare
+    // function reference left to pin against. Closure functor `__call`s adapt via
+    // their function-table wrapper (see `collect_closure_call_keys`).
     true
 }
 
@@ -232,20 +237,6 @@ fn find_dead_params(func: &NirFunction) -> Vec<bool> {
         dead.push(!(is_read || is_kept || is_aliased || in_stores));
     }
     dead
-}
-
-pub(super) fn collect_pinned(_project: &NirPackage) -> IndexSet<FnKey> {
-    // `FuncRef` is lowered into a `Closure` literal (functor struct) by
-    // `lower::plan::closure` before NIR is constructed, so there is no bare
-    // function reference left to pin. Closure functor `__call` methods are
-    // NOT pinned wholesale either — `wir_build::register_closure_wrappers`
-    // derives the function-table wrapper's external signature from
-    // `ClosureFunctor::canonical_user_params` / `canonical_return`, a
-    // snapshot taken at functor creation that DAE never mutates, and the
-    // wrapper body adapts to whichever `call_method.params` survive.
-    // Trait-shaped `__call`s (`^Inspect::inspect` / `^InspectAlt`) are
-    // skipped separately by `is_eligible`'s `trait_name` check.
-    IndexSet::default()
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

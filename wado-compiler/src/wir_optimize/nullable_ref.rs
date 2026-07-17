@@ -143,100 +143,38 @@ fn substitute_type(ty: &mut WirType, nullable_map: &IndexMap<u32, (u32, WirType)
     }
 }
 
-/// Apply type substitution across all type definitions and global variable types.
+/// Apply type substitution across all type definitions and global variable
+/// types. `substitute_type` is a no-op on any `WirType` outside the nullable
+/// map, so it is called unconditionally on every contained type.
+///
+/// Variant case payloads are substituted too, so `build_variant_subtypes` in
+/// `emit.rs` emits the correct case-struct field types (e.g.
+/// `Option<FieldSizePayload>` → `ref null FieldSizePayload`).
 fn update_type_definitions(module: &mut WirPackage, nullable_map: &IndexMap<u32, (u32, WirType)>) {
-    for i in 0..module.types.len() {
-        match &module.types[i] {
-            WirTypeDef::Struct(_) => {
-                // Collect field indices whose types need updating
-                let field_count = if let WirTypeDef::Struct(s) = &module.types[i] {
-                    s.fields.len()
-                } else {
-                    0
-                };
-                for field_idx in 0..field_count {
-                    let needs_update = if let WirTypeDef::Struct(s) = &module.types[i] {
-                        if let WirType::Ref { type_id, .. } = &s.fields[field_idx].ty {
-                            nullable_map.contains_key(&type_id.index())
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    };
-                    if needs_update && let WirTypeDef::Struct(s) = &mut module.types[i] {
-                        substitute_type(&mut s.fields[field_idx].ty, nullable_map);
-                    }
+    for typedef in &mut module.types {
+        match typedef {
+            WirTypeDef::Struct(s) => {
+                for field in &mut s.fields {
+                    substitute_type(&mut field.ty, nullable_map);
                 }
             }
-            WirTypeDef::Func(_) => {
-                let param_count = if let WirTypeDef::Func(ft) = &module.types[i] {
-                    ft.params.len()
-                } else {
-                    0
-                };
-                let result_count = if let WirTypeDef::Func(ft) = &module.types[i] {
-                    ft.results.len()
-                } else {
-                    0
-                };
-                for j in 0..param_count {
-                    let needs_update = if let WirTypeDef::Func(ft) = &module.types[i] {
-                        if let WirType::Ref { type_id, .. } = &ft.params[j] {
-                            nullable_map.contains_key(&type_id.index())
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    };
-                    if needs_update && let WirTypeDef::Func(ft) = &mut module.types[i] {
-                        substitute_type(&mut ft.params[j], nullable_map);
-                    }
+            WirTypeDef::Func(ft) => {
+                for param in &mut ft.params {
+                    substitute_type(param, nullable_map);
                 }
-                for j in 0..result_count {
-                    let needs_update = if let WirTypeDef::Func(ft) = &module.types[i] {
-                        if let WirType::Ref { type_id, .. } = &ft.results[j] {
-                            nullable_map.contains_key(&type_id.index())
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    };
-                    if needs_update && let WirTypeDef::Func(ft) = &mut module.types[i] {
-                        substitute_type(&mut ft.results[j], nullable_map);
-                    }
+                for result in &mut ft.results {
+                    substitute_type(result, nullable_map);
                 }
             }
-            WirTypeDef::Array(_) => {
-                let needs_update = if let WirTypeDef::Array(a) = &module.types[i] {
-                    if let WirType::Ref { type_id, .. } = &a.element_type {
-                        nullable_map.contains_key(&type_id.index())
-                    } else {
-                        false
+            WirTypeDef::Array(a) => substitute_type(&mut a.element_type, nullable_map),
+            WirTypeDef::Variant(v) => {
+                for case in &mut v.cases {
+                    for payload_ty in &mut case.payload {
+                        substitute_type(payload_ty, nullable_map);
                     }
-                } else {
-                    false
-                };
-                if needs_update && let WirTypeDef::Array(a) = &mut module.types[i] {
-                    substitute_type(&mut a.element_type, nullable_map);
                 }
             }
             _ => {}
-        }
-    }
-
-    // Also update case payload types inside variant definitions.
-    // This is critical so that build_variant_subtypes in emit.rs emits the correct
-    // field types for case structs (e.g., `Option<FieldSizePayload>` → `ref null FieldSizePayload`).
-    for typedef in &mut module.types {
-        if let WirTypeDef::Variant(v) = typedef {
-            for case in &mut v.cases {
-                for payload_ty in &mut case.payload {
-                    substitute_type(payload_ty, nullable_map);
-                }
-            }
         }
     }
 

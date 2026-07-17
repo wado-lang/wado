@@ -119,15 +119,22 @@ fn expr_has_break_to(body: &Body, expr: ExprId, label: &str) -> bool {
 /// sequence of collapses (e.g. C3 → `{ expr; }` → `expr`) still runs to a
 /// local fixed point.
 fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
-    // `{ expr; }` → `expr` (single-expression unlabeled block)
+    // `{ expr; }` → `expr` (single-expression unlabeled block). The tail
+    // statement may carry a promoted `Operand::Value` (e.g. a value-graph-frozen
+    // pure RHS) rather than a skeleton subtree; collapse that via `redirect_expr`
+    // just as the labeled-block rules below do, instead of leaving the wrapper.
     if let ExprKind::Block(block) = &engine.body.exprs[id].kind {
         let block = *block;
         if engine.body.blocks[block].stmts.len() == 1
-            && let StmtKind::Expr(Operand::Expr(inner)) =
-                engine.body.stmts[engine.body.blocks[block].stmts[0]].kind
+            && let StmtKind::Expr(op) = engine.body.stmts[engine.body.blocks[block].stmts[0]].kind
         {
-            engine.become_expr(id, inner);
-            return true;
+            match op {
+                Operand::Expr(inner) => {
+                    engine.become_expr(id, inner);
+                    return true;
+                }
+                Operand::Value(_) => return engine.redirect_expr(id, op),
+            }
         }
     }
 

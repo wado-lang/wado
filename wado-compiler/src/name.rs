@@ -103,6 +103,12 @@ pub fn value_copy_helper_name(mangled_type: &str) -> String {
     format!("$value_copy${mangled_type}")
 }
 
+/// The name of the shallow-copy sibling `value_copy_demote` synthesizes for a
+/// deep value-copy helper: the deep helper's name with a `$shallow` suffix.
+pub fn shallow_copy_helper_name(deep_name: &str) -> String {
+    format!("{deep_name}$shallow")
+}
+
 /// Convert a Wado identifier (`snake_case` / `PascalCase` / `camelCase`) to
 /// Component Model kebab-case (`my-api`, `http-server`, `error-code`).
 ///

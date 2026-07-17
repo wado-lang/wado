@@ -1,0 +1,37 @@
+// `value_copy_demote` soundness regression: a by-value argument is a MOVE.
+//
+// `sorted` is a deep value-copy of `*tokens`. Its only use is a by-value
+// argument to `poke`, which last-use lowering turns into a MOVE — so `poke`
+// operates on the copy's own storage while sharing its element objects. `poke`
+// mutates an *element* (`v[0].push_str`), so a demoted shallow spine copy —
+// sharing the `String` element objects with `tokens` — would corrupt
+// `tokens[0]`.
+//
+// The demote must NOT fire: `ElementClean::visit_call_arg` treats a by-value
+// bare-`Local` argument as element-clean only when the callee cannot mutate that
+// parameter's elements. `wir_expect:O2 ["array_clone_deep"]` asserts the copy
+// stays deep; stdout catches the corruption directly (`tokens[0]` stays "a").
+
+use { println, Stdout } from "core:cli";
+
+fn poke(mut v: List<String>) {
+    v[0].push_str(&"!");
+}
+
+fn process(tokens: &List<String>) with Stdout {
+    let sorted = *tokens;
+    poke(sorted);
+    println(tokens[0]);
+    assert tokens[0] == "a";
+}
+
+export fn run() with Stdout {
+    let data: List<String> = ["a", "b"];
+    process(&data);
+}
+
+__DATA__
+{
+    "stdout": "a\n",
+    "wir_expect:O2": ["array_clone_deep"]
+}

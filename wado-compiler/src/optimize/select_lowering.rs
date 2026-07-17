@@ -20,6 +20,7 @@ use crate::nir::{FunctionRef, NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
+use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 /// Run select lowering on all functions, driven by the rewrite engine.
@@ -99,11 +100,11 @@ impl Rule for SelectLoweringRule<'_> {
                         is_mut: false,
                     },
                     ArenaCallArg {
-                        expr: true_val.into(),
+                        expr: true_val,
                         is_mut: false,
                     },
                     ArenaCallArg {
-                        expr: false_val.into(),
+                        expr: false_val,
                         is_mut: false,
                     },
                 ],
@@ -114,19 +115,50 @@ impl Rule for SelectLoweringRule<'_> {
 }
 
 /// A branch is select-able when it is a single `Expr` statement whose value is
-/// select-eligible; returns that value's id.
-fn arm_select_value(body: &Body, block: BlockId, type_table: &TypeTable) -> Option<ExprId> {
+/// select-eligible; returns that value as an operand. A skeleton tail
+/// (`Operand::Expr`) is checked structurally; a born-as-operand scalar leaf
+/// (`Operand::Value`, e.g. the `1` / `2` of `if c { 1 } else { 2 }`, or a bare
+/// local read) is accepted directly — it is a pure, non-trapping, duplicable
+/// leaf that the value pool already holds.
+fn arm_select_value(body: &Body, block: BlockId, type_table: &TypeTable) -> Option<Operand> {
     let stmts = &body.blocks[block].stmts;
     if stmts.len() != 1 {
         return None;
     }
-    if let StmtKind::Expr(Operand::Expr(e)) = &body.stmts[stmts[0]].kind {
-        let e = *e;
-        if is_select_eligible(body, e, type_table) {
-            return Some(e);
+    match &body.stmts[stmts[0]].kind {
+        StmtKind::Expr(Operand::Expr(e)) => {
+            let e = *e;
+            is_select_eligible(body, e, type_table).then_some(Operand::Expr(e))
         }
+        StmtKind::Expr(Operand::Value(v)) => {
+            let v = *v;
+            is_select_eligible_value(body, v).then_some(Operand::Value(v))
+        }
+        _ => None,
     }
-    None
+}
+
+/// A promoted pure value is select-eligible when it is a scalar constant leaf or
+/// a local read: both are duplicable and cannot trap, so evaluating it in both
+/// `select` operand positions is observation-free.
+fn is_select_eligible_value(body: &Body, v: ValueId) -> bool {
+    match body.values.kind(v) {
+        ValueKind::Int(..)
+        | ValueKind::Float(..)
+        | ValueKind::Bool(_)
+        | ValueKind::Char(_)
+        | ValueKind::Null
+        | ValueKind::Unit => true,
+        ValueKind::Opaque(oid) => {
+            matches!(body.values.opaque_source(*oid), Some(OpaqueSource::Local(_)))
+        }
+        ValueKind::Binary { .. }
+        | ValueKind::Unary { .. }
+        | ValueKind::Cast { .. }
+        | ValueKind::Select { .. }
+        | ValueKind::LoopPhi { .. }
+        | ValueKind::FieldAccess { .. } => false,
+    }
 }
 
 /// True when `id` is eligible to appear as a `builtin::select` arm: a

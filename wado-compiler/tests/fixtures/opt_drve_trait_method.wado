@@ -1,0 +1,43 @@
+// Concrete trait-impl methods are no longer pinned by DAE / DRVE. After
+// monomorphization a trait-impl method is a plain function whose every call site
+// carries a resolved `func_id`, so `drve` can void a return that is dropped at
+// every call site — exactly as `sroa_param` already relaxed the same pin.
+//
+// `Factory^Maker::make` returns a heap `Pair`, but its only call site drops the
+// result. Before the relaxation the `trait_name.is_some()` pin blocked it and
+// the method kept returning `Pair`; now DRVE voids the return.
+
+use { println, Stdout } from "core:cli";
+
+struct Pair { a: i32, b: i32 }
+
+trait Maker {
+    fn make(&self, x: i32) -> Pair;
+}
+
+struct Factory { seed: i32 }
+
+impl Maker for Factory {
+    #[inline(never)]
+    fn make(&self, x: i32) -> Pair {
+        return Pair { a: x + 1, b: x + 2 };
+    }
+}
+
+#[inline(never)]
+fn opaque(x: i32) -> i32 {
+    return x;
+}
+
+export fn run() with Stdout {
+    let f = Factory { seed: opaque(3) };
+    f.make(opaque(1));
+    println("done");
+}
+
+__DATA__
+{
+    "stdout": "done\n",
+    "wir_expect:O2": ["Maker::make\" = fn(ref \"opt_drve_trait_method.wado//Factory\", i32);"],
+    "wir_not_expect:O2": ["Maker::make\" = fn(ref \"opt_drve_trait_method.wado//Factory\", i32) -> ref"]
+}

@@ -1,0 +1,46 @@
+// Verify that `select_lowering` accepts arms that are born as `Operand::Value`
+// — a scalar literal constant (`1` / `2` in `if c { 1 } else { 2 }`) or a bare
+// local read (`x` in `if c { x } else { 0 }`) — not just skeleton `Operand::Expr`
+// tails. Operand promotion ("born as operands") puts a pure scalar leaf's value
+// straight in the operand, so before the fix these shapes never lowered to
+// `builtin::select` and survived as `if` expressions.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn opaque_bool(x: i32) -> bool {
+    return x > 0;
+}
+
+#[inline(never)]
+fn opaque_i(x: i32) -> i32 {
+    return x;
+}
+
+export fn run() with Stdout {
+    let c = opaque_bool(1);
+    let x = opaque_i(7);
+
+    // Literal-constant arms (both born as `Operand::Value`).
+    let a = if c { 1 } else { 2 };
+
+    // Local-read then-arm, literal-constant else-arm.
+    let b = if c { x } else { 0 };
+
+    // Literal-constant then-arm, local-read else-arm.
+    let d = if c { 0 } else { x };
+
+    assert a == 1;
+    assert b == 7;
+    assert d == 0;
+    println(`{a} {b} {d}`);
+}
+
+__DATA__
+{
+    "stdout": "1 7 0\n",
+    "wir_expect:O2": [
+        "select i32(c, 1, 2)",
+        "select i32(c, x, 0)"
+    ]
+}

@@ -1,0 +1,51 @@
+// Soundness regression for single-field-parameter SROA (`sroa_param`).
+//
+// `M` is a single-field struct, so `sroa_param` is tempted to rewrite the
+// read-only `p: &M` parameter to a by-value `i32`, turning `f(&s.m, &mut s)`
+// into a call-time SNAPSHOT of `s.m.value`. But the sibling `q: &mut S`, with
+// `S { m: M }`, aliases the same object: the callee writes `s.m` through `q`
+// before reading `p`, so the snapshot would be stale (returns 1 not 101). The
+// old guard only rejected an *identically-typed* `&mut S` sibling; it must
+// reject any `&mut` sibling whose pointee transitively contains the wrapper `M`.
+//
+// The aliased call is compared without `assert`, since power-assert captures
+// `&s.m` as a temporary and would break the aliasing under test.
+use { println, Stdout } from "core:cli";
+
+struct M { value: i32 }
+struct S { m: M }
+
+#[inline("never")]
+fn f(p: &M, q: &mut S) -> i32 {
+    q.m.value = q.m.value + 100;   // write through q mutates s.m
+    return p.value;                // read through p aliases s.m
+}
+
+// A same-type `&mut` sibling — the case the original guard already rejected;
+// kept so the transitive extension does not regress it.
+#[inline("never")]
+fn g(a: &M, b: &mut M) -> i32 {
+    b.value = b.value + 10;
+    return a.value;
+}
+
+export fn run() with Stdout {
+    let mut s = S { m: M { value: 1 } };
+    let sibling = f(&s.m, &mut s);
+    if sibling != 101 {
+        panic(`sibling alias: expected 101, got {sibling}`);
+    }
+
+    let mut m = M { value: 5 };
+    let same = g(&m, &mut m);
+    if same != 15 {
+        panic(`same-type alias: expected 15, got {same}`);
+    }
+
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n"
+}

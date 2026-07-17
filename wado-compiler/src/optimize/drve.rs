@@ -47,13 +47,12 @@ use crate::nir::FuncId;
 type FnKey = dae::FnKey;
 
 pub fn eliminate_dead_return_values(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    let pinned = collect_pinned(project);
     let type_table = project.type_table.borrow();
 
     let mut candidates: IndexSet<FnKey> = IndexSet::default();
     for fid in gate.dirty_funcs(GatedPass::Drve, project.functions.len()) {
         let func = project.functions[fid.index()].borrow();
-        if !is_eligible(&func, &pinned, &type_table) {
+        if !is_eligible(&func, &type_table) {
             continue;
         }
         if let Some(body) = &func.body
@@ -83,7 +82,7 @@ pub fn eliminate_dead_return_values(project: &mut NirPackage, gate: &mut Functio
     true
 }
 
-fn is_eligible(func: &NirFunction, pinned: &IndexSet<FnKey>, type_table: &TypeTable) -> bool {
+fn is_eligible(func: &NirFunction, type_table: &TypeTable) -> bool {
     if func.body.is_none() {
         return false;
     }
@@ -113,18 +112,19 @@ fn is_eligible(func: &NirFunction, pinned: &IndexSet<FnKey>, type_table: &TypeTa
     if !is_heap_alloc_return(func.return_type, type_table) {
         return false;
     }
-    // Trait methods share a signature contract with sibling impls and the
-    // trait declaration; rewriting their return type breaks dispatch.
-    if func
-        .method_info
-        .as_ref()
-        .is_some_and(|mi| mi.trait_name.is_some())
-    {
+    // A concrete trait-impl method is a plain function after monomorphization:
+    // Wado has no dynamic dispatch, every call site carries the resolved
+    // `func_id`, and `apply_drve` retypes all of them — so voiding a
+    // uniformly-dropped return is sound, exactly as `sroa_param` relaxed the
+    // same pin. Only closure `__call` functors stay pinned (their function-table
+    // wrapper snapshots the return type); closure `^Inspect` / `^InspectAlt`
+    // impls return unit and are already excluded by the heap-return check above.
+    if func.is_closure_call() {
         return false;
     }
-    if func.id.is_some_and(|id| pinned.contains(&id)) {
-        return false;
-    }
+    // No explicit pin set (see `dae::is_eligible`): `FuncRef` is lowered into a
+    // closure functor before NIR is built, so there is no bare function
+    // reference left to pin against.
     true
 }
 
@@ -170,10 +170,6 @@ fn has_only_pure_returns_with_explicit_tail(body: &Body) -> bool {
         body.for_each_child(node, |c| stack.push(c));
     }
     true
-}
-
-fn collect_pinned(project: &NirPackage) -> IndexSet<FnKey> {
-    dae::collect_pinned(project)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

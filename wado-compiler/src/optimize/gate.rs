@@ -49,7 +49,15 @@ use crate::nir_package::NirPackage;
 /// variant when a pass becomes gate-aware; `COUNT` sizes the watermark table.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum GatedPass {
-    Peephole,
+    /// Pre-inline peephole run (hosts `MatchToSwitchRule`, `string_push`, …).
+    /// Kept on a separate watermark column from the post-inline run: the two
+    /// invocations apply different rule sets, so a function quiescent for the
+    /// pre-inline run must still be revisited by the post-inline run (which
+    /// hosts `RefElimRule` / `ElideBoxLocalRule` / `LabeledBlockFusionRule` /
+    /// `array_literal`), and vice versa.
+    PeepholePre,
+    /// Post-inline peephole run.
+    PeepholePost,
     CopyProp,
     ConstFold,
     Sroa,
@@ -65,7 +73,7 @@ pub enum GatedPass {
 }
 
 impl GatedPass {
-    const COUNT: usize = 13;
+    const COUNT: usize = 14;
 }
 
 /// Static call graph over [`FuncId`]s, built once at loop start.
@@ -243,7 +251,8 @@ mod tests {
     #[test]
     fn gated_pass_count_matches_variants() {
         let all = [
-            GatedPass::Peephole,
+            GatedPass::PeepholePre,
+            GatedPass::PeepholePost,
             GatedPass::CopyProp,
             GatedPass::ConstFold,
             GatedPass::Sroa,
@@ -259,7 +268,8 @@ mod tests {
         ];
         for p in all {
             match p {
-                GatedPass::Peephole
+                GatedPass::PeepholePre
+                | GatedPass::PeepholePost
                 | GatedPass::CopyProp
                 | GatedPass::ConstFold
                 | GatedPass::Sroa
@@ -297,7 +307,7 @@ mod tests {
     fn fresh_gate_needs_every_function() {
         let mut gate = gate_with_graph(3, &[]);
         for i in 0..3 {
-            assert!(gate.needs(GatedPass::Peephole, FuncId::new(i)));
+            assert!(gate.needs(GatedPass::PeepholePre, FuncId::new(i)));
         }
     }
 
@@ -305,28 +315,42 @@ mod tests {
     fn seen_clears_need_until_next_change() {
         let mut gate = gate_with_graph(2, &[]);
         let f = FuncId::new(0);
-        gate.seen(GatedPass::Peephole, f);
-        assert!(!gate.needs(GatedPass::Peephole, f));
+        gate.seen(GatedPass::PeepholePre, f);
+        assert!(!gate.needs(GatedPass::PeepholePre, f));
         // Another pass is unaffected by Peephole catching up.
         assert!(gate.needs(GatedPass::CopyProp, f));
         gate.mark_changed(f);
-        assert!(gate.needs(GatedPass::Peephole, f));
+        assert!(gate.needs(GatedPass::PeepholePre, f));
     }
 
     #[test]
     fn mark_changed_propagates_one_hop_both_directions() {
         // 0 -> 1 -> 2 (0 calls 1, 1 calls 2).
         let mut gate = gate_with_graph(3, &[(0, 1), (1, 2)]);
-        for p in [GatedPass::Peephole, GatedPass::CopyProp] {
+        for p in [GatedPass::PeepholePre, GatedPass::CopyProp] {
             for i in 0..3 {
                 gate.seen(p, FuncId::new(i));
             }
         }
         // Changing the middle function dirties its caller (0) and callee (2).
         gate.mark_changed(FuncId::new(1));
-        assert!(gate.needs(GatedPass::Peephole, FuncId::new(0)));
-        assert!(gate.needs(GatedPass::Peephole, FuncId::new(1)));
-        assert!(gate.needs(GatedPass::Peephole, FuncId::new(2)));
+        assert!(gate.needs(GatedPass::PeepholePre, FuncId::new(0)));
+        assert!(gate.needs(GatedPass::PeepholePre, FuncId::new(1)));
+        assert!(gate.needs(GatedPass::PeepholePre, FuncId::new(2)));
+    }
+
+    #[test]
+    fn peephole_pre_and_post_are_independent_columns() {
+        // The pre- and post-inline peephole runs apply different rule sets, so
+        // each owns its own watermark column. After the pre-inline run catches
+        // up on a function, the post-inline run must still process it — with a
+        // shared column it would have been wrongly skipped, never applying the
+        // post-inline-only rules (ref_elim / elide_box_local / labeled_block_fusion).
+        let mut gate = gate_with_graph(1, &[]);
+        let f = FuncId::new(0);
+        gate.seen(GatedPass::PeepholePre, f);
+        assert!(!gate.needs(GatedPass::PeepholePre, f));
+        assert!(gate.needs(GatedPass::PeepholePost, f));
     }
 
     #[test]
@@ -334,10 +358,10 @@ mod tests {
         // 0 -> 1; function 2 is unrelated.
         let mut gate = gate_with_graph(3, &[(0, 1)]);
         for i in 0..3 {
-            gate.seen(GatedPass::Peephole, FuncId::new(i));
+            gate.seen(GatedPass::PeepholePre, FuncId::new(i));
         }
         gate.mark_changed(FuncId::new(0));
-        assert!(!gate.needs(GatedPass::Peephole, FuncId::new(2)));
+        assert!(!gate.needs(GatedPass::PeepholePre, FuncId::new(2)));
     }
 
     #[test]

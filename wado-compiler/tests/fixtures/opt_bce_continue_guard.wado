@@ -1,0 +1,35 @@
+// Precision: a `continue` guard establishes a fall-through fact. The guard
+// `if i >= arr.len() { i += 1; continue }` skips the rest of the iteration, so
+// on the fall-through path `i < arr.len()` holds and `arr[i]` needs no check.
+// `block_always_exits` must count `continue` (not just `return`/`break`) for the
+// fact to be collected.
+
+use { println, Stdout } from "core:cli";
+
+#[inline("never")]
+fn scan(arr: List<i32>, n: i32) -> i32 {
+    let mut sum = 0;
+    let mut i = 0;
+    while i < n {
+        if i >= arr.len() {
+            i += 1;
+            continue;
+        }
+        sum += arr[i];
+        i += 1;
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    let arr: List<i32> = [10, 20, 30, 40, 50];
+    println(`{scan(arr, 8)}`);
+}
+
+__DATA__
+{
+    "stdout": "150\n",
+    "wir_not_expect:O2": [
+        "index out of bounds"
+    ]
+}

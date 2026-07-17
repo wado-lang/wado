@@ -124,6 +124,19 @@ fn arm_always_traps(instrs: &[WirInstr]) -> bool {
             {
                 return true;
             }
+            // A labeled block/loop whose body reaches a trap before escaping it
+            // traps the arm. `br 0` inside targets the block's own end (a Block:
+            // fall-through past it; a Loop: re-entry), which `arm_always_traps`
+            // treats as an escape (returning `false`) — conservative for the
+            // loop case, so a hint is only inferred when the trap is unavoidable.
+            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
+                if arm_always_traps(body) {
+                    return true;
+                }
+                if may_transfer_out(instr, 0) {
+                    return false;
+                }
+            }
             other => {
                 if may_transfer_out(other, 0) {
                     return false;
@@ -360,6 +373,23 @@ mod tests {
         )];
         infer_in_body(&mut body);
         assert_eq!(hint_of(&body[0]), None);
+    }
+
+    #[test]
+    fn non_escaping_trap_inside_block_is_hinted() {
+        // The trap sits inside a labeled block that nothing branches out of;
+        // control still unavoidably reaches it, so the arm is cold.
+        let mut body = vec![if_instr(
+            local_get("c"),
+            vec![WirInstr::Block {
+                label: None,
+                result: None,
+                body: vec![WirInstr::Unreachable],
+            }],
+            None,
+        )];
+        infer_in_body(&mut body);
+        assert_eq!(hint_of(&body[0]), Some(false));
     }
 
     #[test]

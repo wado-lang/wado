@@ -47,8 +47,6 @@ type FnKey = crate::nir::FuncId;
 struct SroaInfo {
     /// Canonical struct identity — `(struct_name, module_source)`.
     struct_key: (String, ModuleSource),
-    #[allow(dead_code)]
-    struct_type_id: TypeId,
     /// Type of the wrapper's sole field — the new scalar parameter type.
     inner_type_id: TypeId,
     /// Field name of the wrapper struct's sole field.
@@ -118,6 +116,7 @@ fn collect_and_validate(
 ) -> IndexMap<(FnKey, usize), SroaInfo> {
     let type_table = project.type_table.borrow();
     let single_field = build_single_field_index(project);
+    let struct_fields = build_struct_fields_index(project);
 
     let mut candidates: IndexMap<(FnKey, usize), SroaInfo> = IndexMap::default();
     for fid in gate.dirty_funcs(GatedPass::SroaParam, project.functions.len()) {
@@ -127,6 +126,12 @@ fn collect_and_validate(
         }
         let Some(key) = func.id else { continue };
         let is_trait_method = func.is_trait_method();
+        // A mutable-global write in the callee can reach a reference param's
+        // pointee (if that pointee lives in the global), so a call-time value
+        // snapshot of the read-only param would be stale. Computed once per
+        // callee; only reference candidates are affected (a by-value struct
+        // param is already a copy).
+        let writes_global = body_writes_mutable_global(func.body.as_ref().unwrap());
         for (pi, param) in func.params.iter().enumerate() {
             // A trait method's `self` receiver stays pinned. Scalarizing a
             // single-field-struct receiver (e.g. a `SequenceLiteralBuilder`
@@ -149,7 +154,14 @@ fn collect_and_validate(
             let Some(info) = candidate_info_for(param.type_id, &type_table, &single_field) else {
                 continue;
             };
-            if param_may_alias_sibling(&func, pi, &info.struct_key, &type_table) {
+            if param_snapshot_unsound(
+                &func,
+                pi,
+                &info.struct_key,
+                &type_table,
+                &struct_fields,
+                writes_global,
+            ) {
                 continue;
             }
             candidates.insert((key, pi), info);
@@ -210,7 +222,6 @@ fn candidate_info_for(
     }
     Some(SroaInfo {
         struct_key: key,
-        struct_type_id,
         inner_type_id,
         field_name,
     })
@@ -244,11 +255,25 @@ fn reference_param_struct_key(
     }
 }
 
-fn param_may_alias_sibling(
+/// Reject a reference candidate whose call-time value snapshot could be
+/// invalidated during the callee's execution — because some other access path
+/// the callee holds can mutate the pointee `*p`:
+///
+/// - a mutable-global write (the pointee may live in a global), or
+/// - a `&mut` sibling param whose pointee type *transitively contains* the
+///   wrapper struct (a write through it can reach a wrapper-typed location that
+///   the same call site may have aliased with `p`, e.g. `f(&s.m, &mut s)` where
+///   `S { m: M }`). This subsumes the same-type sibling case (`X == W` contains
+///   `W` trivially).
+///
+/// A by-value struct candidate is already a copy, so it is never affected.
+fn param_snapshot_unsound(
     func: &NirFunction,
     pi: usize,
     struct_key: &(String, ModuleSource),
     type_table: &TypeTable,
+    struct_fields: &StructFieldsIndex,
+    writes_global: bool,
 ) -> bool {
     let candidate_is_ref = func
         .params
@@ -258,11 +283,86 @@ fn param_may_alias_sibling(
     if !candidate_is_ref {
         return false;
     }
+    if writes_global {
+        return true;
+    }
     func.params.iter().enumerate().any(|(pj, other)| {
-        pj != pi
-            && matches!(type_table.get(other.type_id), ResolvedType::MutRef(_))
-            && reference_param_struct_key(other.type_id, type_table).as_ref() == Some(struct_key)
+        if pj == pi {
+            return false;
+        }
+        let ResolvedType::MutRef(inner) = type_table.get(other.type_id) else {
+            return false;
+        };
+        let mut visited = IndexSet::default();
+        type_transitively_contains(*inner, struct_key, type_table, struct_fields, &mut visited)
     })
+}
+
+/// Map a struct's identity → its field types, for transitive-containment queries.
+type StructFieldsIndex = IndexMap<(String, ModuleSource), Vec<TypeId>>;
+
+fn build_struct_fields_index(project: &NirPackage) -> StructFieldsIndex {
+    let mut out: StructFieldsIndex = IndexMap::default();
+    for s in &project.structs {
+        out.insert(
+            (s.name.clone(), s.module_source.clone()),
+            s.fields.iter().map(|f| f.type_id).collect(),
+        );
+    }
+    out
+}
+
+/// Whether `ty` can reach a location of the `target` struct type — directly, or
+/// transitively through fields, references, newtypes, arrays, or generic type
+/// arguments. `visited` breaks cycles over recursive types.
+fn type_transitively_contains(
+    ty: TypeId,
+    target: &(String, ModuleSource),
+    type_table: &TypeTable,
+    struct_fields: &StructFieldsIndex,
+    visited: &mut IndexSet<TypeId>,
+) -> bool {
+    if !visited.insert(ty) {
+        return false;
+    }
+    match type_table.get(ty) {
+        ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } => {
+            let key = (name.clone(), module_source.clone());
+            if &key == target {
+                return true;
+            }
+            let Some(fields) = struct_fields.get(&key) else {
+                return false;
+            };
+            fields.iter().any(|&ft| {
+                type_transitively_contains(ft, target, type_table, struct_fields, visited)
+            })
+        }
+        ResolvedType::Ref(inner)
+        | ResolvedType::MutRef(inner)
+        | ResolvedType::Reactive(inner)
+        | ResolvedType::BuiltinArray(inner)
+        | ResolvedType::Newtype {
+            base_type: inner, ..
+        } => type_transitively_contains(*inner, target, type_table, struct_fields, visited),
+        ResolvedType::GenericInstance { type_args, .. }
+        | ResolvedType::GenericResource { type_args, .. } => type_args
+            .iter()
+            .any(|&t| type_transitively_contains(t, target, type_table, struct_fields, visited)),
+        _ => false,
+    }
+}
+
+/// Whether the body writes any mutable global (a `GlobalVarSet`). Scans every
+/// expression node; an orphaned node only over-approximates, which is sound.
+fn body_writes_mutable_global(body: &Body) -> bool {
+    body.exprs
+        .values()
+        .any(|e| matches!(&e.kind, ExprKind::GlobalVarSet { .. }))
 }
 
 // -----------------------------------------------------------------------
@@ -394,11 +494,11 @@ fn rewrite_callees(
     for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
         let Some(key) = func.id else { continue };
-        let mut affected: Vec<(u32, String)> = Vec::new();
+        let mut affected: Vec<u32> = Vec::new();
         for pi in 0..func.params.len() {
             if let Some(info) = candidates.get(&(key, pi)) {
                 let local_index = func.params[pi].local_index;
-                affected.push((local_index, info.field_name.clone()));
+                affected.push(local_index);
                 func.params[pi].type_id = info.inner_type_id;
                 if let Some(local) = func.locals.get_mut(local_index as usize) {
                     local.type_id = info.inner_type_id;
@@ -416,20 +516,23 @@ fn rewrite_callees(
     }
 }
 
-/// Pre-order: replace `FieldAccess(Local(idx), field)` for a SROA'd `(idx,
-/// field)` with the bare scalar `Local`, before children are reshaped.
-fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[(u32, String)]) {
+/// Pre-order: replace `FieldAccess(Local(idx), field_index: 0)` for a SROA'd
+/// param `idx` with the bare scalar `Local`, before children are reshaped. The
+/// wrapper is a single-field struct, so its sole field is index 0 — matching by
+/// index (not name) avoids over-stripping a same-named field of the inner type
+/// (e.g. `b.value.value` where the inner `.value` belongs to a different struct).
+fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[u32]) {
     if let NodeRef::Expr(id) = node {
         // The SROA'd field access whose inner `Local` should replace it, if any.
         let local_inner = if let ExprKind::FieldAccess {
             expr: inner,
-            field_name,
+            field_index: 0,
             ..
         } = &body.exprs[id].kind
         {
             inner.as_expr().filter(|&e| {
                 matches!(&body.exprs[e].kind, ExprKind::Local { index, .. }
-                if affected.iter().any(|(li, fname)| li == index && fname == field_name))
+                if affected.contains(index))
             })
         } else {
             None

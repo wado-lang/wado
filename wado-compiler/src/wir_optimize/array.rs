@@ -75,7 +75,7 @@ impl WirMutVisitor for PromoteConstantArrays<'_> {
                 && let Some(bytes) = try_pack_constant_elements(elem_type, elements)
             {
                 let data_index = u32::try_from(self.data.len()).expect("too many data segments");
-                let len = i32::try_from(elements.len()).unwrap_or(0);
+                let len = i32::try_from(elements.len()).expect("array length fits i32");
                 self.data.push(WirData {
                     bytes,
                     offset: None, // passive segment
@@ -182,6 +182,15 @@ const ARRAY_NEW_FIXED_LIMIT: usize = 256;
 ///
 /// Walks all function bodies and rewrites any `ArrayNewFixed` with more than
 /// [`ARRAY_NEW_FIXED_LIMIT`] elements. Uses a module-level counter for unique local names.
+///
+/// Unlike `promote_constant_arrays_to_data`, this deliberately skips global
+/// initializers: the split form is a `Seq` of `DeclareLocal` / `LocalSet` /
+/// `ArraySet` / `LocalGet`, none of which is a valid Wasm constant instruction,
+/// so it cannot serve as an eager const-global init. A large *dynamic* array
+/// literal is instead extracted to the `__initialize_module` function body by
+/// lowering, where this pass reaches it; a large *const* array literal that
+/// stays an eager global init keeps `array.new_fixed` (the JIT-time concern is a
+/// runtime code path, not one-time module init).
 pub(super) fn split_large_array_literals(module: &mut WirPackage) {
     let mut visitor = SplitLargeArrays { counter: 0 };
     for func in &mut module.functions {
@@ -223,7 +232,7 @@ fn rewrite_large_array_new_fixed(instr: &mut WirInstr, counter: &mut u32) {
 
     *counter += 1;
     let arr_local = format!("__wir_arr_init_{counter}");
-    let len = i32::try_from(elements.len()).unwrap_or(0);
+    let len = i32::try_from(elements.len()).expect("array length fits i32");
     let raw_ref_type = WirType::Ref {
         type_id: type_id.clone(),
         nullable: true,
@@ -248,7 +257,9 @@ fn rewrite_large_array_new_fixed(instr: &mut WirInstr, counter: &mut u32) {
                 name: arr_local.clone(),
                 result_ty: raw_ref_type.clone(),
             }),
-            index: Box::new(WirInstr::I32Const(i32::try_from(i).unwrap_or(0))),
+            index: Box::new(WirInstr::I32Const(
+                i32::try_from(i).expect("array index fits i32"),
+            )),
             value: Box::new(elem),
         });
     }

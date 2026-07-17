@@ -1,0 +1,47 @@
+// Regression: `const_object_globalization` must NOT hoist a `let` whose
+// aggregate initializer carries a runtime-dependent value promoted to an
+// `Operand::Value` (e.g. `depth * 2`, frozen by `promote_pure_values_early`).
+//
+// A hoisted global is shared across every activation of a recursive function.
+// If the initializer depends on the activation's parameter, each recursive call
+// re-initializes the one shared global, so after the recursion returns the
+// outer frame reads the innermost activation's value instead of its own.
+//
+// `sum` is `#[inline(never)]` so `xs` stays a heap aggregate passed by `&`
+// (read-only), the exact shape the globalization gate matches — but its
+// initializer `[depth * 2, 7]` is not a closed constant and must be rejected.
+//
+// recur(3) correct = 40:
+//   recur(0): xs=[0,7] sum=7                 -> 7
+//   recur(1): xs=[2,7] sum=9  + recur(0)=7   -> 16
+//   recur(2): xs=[4,7] sum=11 + recur(1)=16  -> 27
+//   recur(3): xs=[6,7] sum=13 + recur(2)=27  -> 40
+// A wrongly-shared global yields 28 (every frame reads the innermost [0,7]).
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn sum(xs: &List<i32>) -> i32 {
+    let mut s = 0;
+    let mut i = 0;
+    while i < xs.len() {
+        s = s + xs[i];
+        i = i + 1;
+    }
+    return s;
+}
+
+fn recur(depth: i32) -> i32 {
+    let xs: List<i32> = [depth * 2, 7];
+    let deeper = if depth > 0 { recur(depth - 1) } else { 0 };
+    return sum(&xs) + deeper;
+}
+
+export fn run() with Stdout {
+    println(`{recur(3)}`);
+}
+
+__DATA__
+{
+    "stdout": "40\n"
+}

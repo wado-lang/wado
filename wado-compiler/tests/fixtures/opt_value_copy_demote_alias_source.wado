@@ -1,0 +1,33 @@
+// `value_copy_demote` soundness regression: a `None` storage root is NOT fresh.
+//
+// `demote_candidate` treated a value-copy argument with no storage root as a
+// freshly-owned rvalue. But `rows[0]` lowers to an `index_value` MethodCall,
+// whose `storage_root` is `None` while it still *aliases* `rows`'s element. `x`
+// is a value-copy of that aliasing element; demoting it to a shallow spine copy
+// would share the inner `String` objects with `rows[0]`.
+//
+// `rows[0][0].push_str` then mutates that shared element through the (still-live)
+// source. A deep copy keeps `x[0]` at "a"; a wrongly-demoted shallow copy would
+// observe the mutation as "a!". The demote must NOT fire — an unrooted rvalue is
+// clean only when provably fresh. `wir_expect:O2 ["array_clone_deep"]` asserts
+// the copy stays deep.
+
+use { println, Stdout } from "core:cli";
+
+fn snap(rows: &mut List<List<String>>) with Stdout {
+    let x = rows[0];
+    rows[0][0].push_str(&"!");
+    println(x[0]);
+    assert x[0] == "a";
+}
+
+export fn run() with Stdout {
+    let mut data: List<List<String>> = [["a", "b"], ["c", "d"]];
+    snap(&mut data);
+}
+
+__DATA__
+{
+    "stdout": "a\n",
+    "wir_expect:O2": ["array_clone_deep"]
+}

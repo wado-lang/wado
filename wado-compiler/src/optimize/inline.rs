@@ -111,7 +111,12 @@ fn count_stmt(
         StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
             count_block_exprs(body, *b, type_table, descriptors)
         }
-        StmtKind::Break { .. } | StmtKind::Continue => 0,
+        // A `break L: <expr>` carries a value just like a `return`; cost it so
+        // labeled-block-valued callees are not systematically undercounted.
+        StmtKind::Break { value, .. } => {
+            value.map_or(0, |v| count_operand(body, v, type_table, descriptors))
+        }
+        StmtKind::Continue => 0,
     }
 }
 
@@ -437,7 +442,7 @@ fn find_recursive_functions(
         if let Some(caller_idx) = name_to_idx.get(&full_name) {
             let mut callee_names: IndexSet<String> = IndexSet::default();
             if let Some(body) = &func.body {
-                collect_callees_from_block(body, descriptors, body.root, &mut callee_names);
+                collect_callees(body, descriptors, &mut callee_names);
             }
             let callees: Vec<usize> = callee_names
                 .iter()
@@ -447,254 +452,93 @@ fn find_recursive_functions(
         }
     }
 
-    // Phase 3: Find functions that can reach themselves using index-based DFS
-    let mut recursive = IndexSet::default();
-    let mut visited = vec![false; n];
+    // Phase 3: a function is recursive iff it lies on a call cycle — i.e. it is a
+    // member of a non-trivial strongly-connected component, or has a self-edge.
+    // One iterative Tarjan pass computes every SCC in O(V + E), versus the old
+    // per-function reachability DFS at O(V·(V + E)).
+    let recursive_idx = recursive_scc_members(&call_graph);
+    (0..n)
+        .filter(|&i| recursive_idx[i])
+        .map(|i| idx_to_name[i].clone())
+        .collect()
+}
 
-    for func_idx in 0..n {
-        visited.fill(false);
-        if can_reach_idx(&call_graph, func_idx, func_idx, &mut visited) {
-            recursive.insert(idx_to_name[func_idx].clone());
+/// Iterative Tarjan SCC. Returns one bool per node: `true` when the node lies on
+/// a call cycle (a non-singleton SCC member, or a node with a self-edge).
+fn recursive_scc_members(call_graph: &[Vec<usize>]) -> Vec<bool> {
+    let n = call_graph.len();
+    const UNVISITED: usize = usize::MAX;
+    let mut index_of = vec![UNVISITED; n];
+    let mut lowlink = vec![0usize; n];
+    let mut on_stack = vec![false; n];
+    let mut scc_stack: Vec<usize> = Vec::new();
+    let mut recursive = vec![false; n];
+    let mut next_index = 0usize;
+    // Explicit DFS stack: (node, next child position).
+    let mut work: Vec<(usize, usize)> = Vec::new();
+
+    for start in 0..n {
+        if index_of[start] != UNVISITED {
+            continue;
+        }
+        work.push((start, 0));
+        while let Some(&(v, ci)) = work.last() {
+            if ci == 0 {
+                index_of[v] = next_index;
+                lowlink[v] = next_index;
+                next_index += 1;
+                scc_stack.push(v);
+                on_stack[v] = true;
+            }
+            if ci < call_graph[v].len() {
+                let w = call_graph[v][ci];
+                work.last_mut().unwrap().1 += 1;
+                if index_of[w] == UNVISITED {
+                    work.push((w, 0));
+                } else if on_stack[w] {
+                    lowlink[v] = lowlink[v].min(index_of[w]);
+                }
+                continue;
+            }
+            // All of `v`'s children are done. If `v` roots an SCC, pop it.
+            if lowlink[v] == index_of[v] {
+                let mut size = 0usize;
+                loop {
+                    let w = scc_stack.pop().unwrap();
+                    on_stack[w] = false;
+                    recursive[w] = true;
+                    size += 1;
+                    if w == v {
+                        break;
+                    }
+                }
+                // A singleton SCC is only recursive through a self-edge.
+                if size == 1 && !call_graph[v].contains(&v) {
+                    recursive[v] = false;
+                }
+            }
+            work.pop();
+            if let Some(&(parent, _)) = work.last() {
+                lowlink[parent] = lowlink[parent].min(lowlink[v]);
+            }
         }
     }
-
     recursive
 }
 
-fn can_reach_idx(
-    call_graph: &[Vec<usize>],
-    start: usize,
-    target: usize,
-    visited: &mut [bool],
-) -> bool {
-    if visited[start] {
-        return false;
-    }
-    visited[start] = true;
-
-    for &callee in &call_graph[start] {
-        if callee == target {
-            return true;
+/// Collect the inline key of every `Call` / `MethodCall` callee reachable in
+/// `body`, via the shared `for_each_child` walk (order is irrelevant — the
+/// result is a set feeding the recursion call graph).
+fn collect_callees(body: &Body, descriptors: &[FunctionRef], callees: &mut IndexSet<String>) {
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(id) = node
+            && let ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } =
+                &body.exprs[id].kind
+        {
+            callees.insert(func_ref_inline_key(callee_descriptor(descriptors, *func_id)));
         }
-        if can_reach_idx(call_graph, callee, target, visited) {
-            return true;
-        }
-    }
-
-    false
-}
-
-fn collect_callees_from_block(
-    body: &Body,
-    descriptors: &[FunctionRef],
-    block: BlockId,
-    callees: &mut IndexSet<String>,
-) {
-    for i in 0..body.blocks[block].stmts.len() {
-        let sid = body.blocks[block].stmts[i];
-        collect_callees_from_stmt(body, descriptors, sid, callees);
-    }
-}
-
-fn collect_callees_from_stmt(
-    body: &Body,
-    descriptors: &[FunctionRef],
-    stmt: StmtId,
-    callees: &mut IndexSet<String>,
-) {
-    match &body.stmts[stmt].kind {
-        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            collect_callees_from_operand(body, descriptors, *value, callees);
-        }
-        StmtKind::Expr(value) => {
-            if let Some(e) = value.as_expr() {
-                collect_callees_from_expr(body, descriptors, e, callees);
-            }
-        }
-        StmtKind::Return { value } => {
-            if let Some(expr) = *value {
-                collect_callees_from_operand(body, descriptors, expr, callees);
-            }
-        }
-        StmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-            collect_callees_from_operand(body, descriptors, condition, callees);
-            collect_callees_from_block(body, descriptors, then_block, callees);
-            if let Some(else_blk) = else_block {
-                collect_callees_from_block(body, descriptors, else_blk, callees);
-            }
-        }
-        StmtKind::Loop { body: b } => {
-            collect_callees_from_block(body, descriptors, *b, callees);
-        }
-        StmtKind::LabeledBlock { block, .. } => {
-            collect_callees_from_block(body, descriptors, *block, callees);
-        }
-        StmtKind::Break { .. } | StmtKind::Continue => {}
-    }
-}
-
-fn collect_callees_from_operand(
-    body: &Body,
-    descriptors: &[FunctionRef],
-    op: Operand,
-    callees: &mut IndexSet<String>,
-) {
-    if let Some(e) = op.as_expr() {
-        collect_callees_from_expr(body, descriptors, e, callees);
-    }
-}
-
-fn collect_callees_from_expr(
-    body: &Body,
-    descriptors: &[FunctionRef],
-    id: ExprId,
-    callees: &mut IndexSet<String>,
-) {
-    match &body.exprs[id].kind {
-        ExprKind::Call { func_id, args, .. } => {
-            callees.insert(func_ref_inline_key(callee_descriptor(
-                descriptors,
-                *func_id,
-            )));
-            for aid in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
-                collect_callees_from_operand(body, descriptors, aid, callees);
-            }
-        }
-        ExprKind::MethodCall {
-            receiver,
-            func_id,
-            args,
-            ..
-        } => {
-            callees.insert(func_ref_inline_key(callee_descriptor(
-                descriptors,
-                *func_id,
-            )));
-            let receiver = *receiver;
-            let arg_ids: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-            collect_callees_from_operand(body, descriptors, receiver, callees);
-            for aid in arg_ids {
-                collect_callees_from_operand(body, descriptors, aid, callees);
-            }
-        }
-        ExprKind::Binary { left, right, .. } => {
-            let (left, right) = (*left, *right);
-            collect_callees_from_operand(body, descriptors, left, callees);
-            collect_callees_from_operand(body, descriptors, right, callees);
-        }
-        ExprKind::Unary { expr, .. } => {
-            collect_callees_from_operand(body, descriptors, *expr, callees);
-        }
-        ExprKind::Assign { target, value } => {
-            let (target, value) = (*target, *value);
-            collect_callees_from_expr(body, descriptors, target, callees);
-            collect_callees_from_operand(body, descriptors, value, callees);
-        }
-        ExprKind::Cast { expr, .. } => {
-            collect_callees_from_operand(body, descriptors, *expr, callees);
-        }
-        ExprKind::FieldAccess { expr, .. } => {
-            collect_callees_from_operand(body, descriptors, *expr, callees);
-        }
-        ExprKind::Index { expr, index } => {
-            let (expr, index) = (*expr, *index);
-            collect_callees_from_operand(body, descriptors, expr, callees);
-            collect_callees_from_operand(body, descriptors, index, callees);
-        }
-        ExprKind::Block(block) => {
-            collect_callees_from_block(body, descriptors, *block, callees);
-        }
-        ExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
-            collect_callees_from_operand(body, descriptors, condition, callees);
-            collect_callees_from_block(body, descriptors, then_branch, callees);
-            if let Some(else_blk) = else_branch {
-                collect_callees_from_block(body, descriptors, else_blk, callees);
-            }
-        }
-        ExprKind::StructLiteral { fields, .. } => {
-            for fid in fields.iter().map(|f| f.value).collect::<Vec<_>>() {
-                collect_callees_from_operand(body, descriptors, fid, callees);
-            }
-        }
-        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-            for eid in elements.clone() {
-                collect_callees_from_operand(body, descriptors, eid, callees);
-            }
-        }
-        ExprKind::IndirectCall { callee, args } => {
-            let callee = *callee;
-            let arg_ids = args.clone();
-            collect_callees_from_operand(body, descriptors, callee, callees);
-            for aid in arg_ids {
-                collect_callees_from_operand(body, descriptors, aid, callees);
-            }
-        }
-        ExprKind::ClosureToCanonical { functor, .. } => {
-            collect_callees_from_operand(body, descriptors, *functor, callees);
-        }
-        ExprKind::CmRawCall { args, .. } => {
-            for aid in args.clone() {
-                collect_callees_from_operand(body, descriptors, aid, callees);
-            }
-        }
-        ExprKind::Match { expr, arms } => {
-            let expr = *expr;
-            let arms = arms.clone();
-            collect_callees_from_operand(body, descriptors, expr, callees);
-            for arm in &arms {
-                if let Some(guard) = arm.guard {
-                    collect_callees_from_operand(body, descriptors, guard, callees);
-                }
-                collect_callees_from_operand(body, descriptors, arm.body, callees);
-            }
-        }
-        ExprKind::VariantConstruct { payload, .. } => {
-            if let Some(payload_expr) = *payload {
-                collect_callees_from_operand(body, descriptors, payload_expr, callees);
-            }
-        }
-        ExprKind::LabeledBlock { block, .. } => {
-            collect_callees_from_block(body, descriptors, *block, callees);
-        }
-        ExprKind::GlobalVarSet { value, .. } => {
-            collect_callees_from_operand(body, descriptors, *value, callees);
-        }
-        ExprKind::VariantTag { expr }
-        | ExprKind::VariantTest { expr, .. }
-        | ExprKind::VariantPayload { expr, .. } => {
-            collect_callees_from_operand(body, descriptors, *expr, callees);
-        }
-        ExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            let scrutinee = *scrutinee;
-            let default = *default;
-            let arms = arms.clone();
-            collect_callees_from_operand(body, descriptors, scrutinee, callees);
-            for arm in arms {
-                collect_callees_from_block(body, descriptors, arm, callees);
-            }
-            collect_callees_from_block(body, descriptors, default, callees);
-        }
-        // Leaf nodes
-        ExprKind::PackedArray(_)
-        | ExprKind::Dead
-        | ExprKind::Local { .. }
-        | ExprKind::GlobalVarGet { .. }
-        | ExprKind::EnumConstruct { .. } => {}
+        body.for_each_child(node, |c| stack.push(c));
     }
 }
 
@@ -1135,91 +979,16 @@ fn inline_top_level(
 fn inline_expr_children(body: &Body, e: ExprId) -> (Vec<ExprId>, Vec<BlockId>) {
     let mut exprs = Vec::new();
     let mut blocks = Vec::new();
-    let push_op = |exprs: &mut Vec<ExprId>, o: Operand| {
-        if let Some(x) = o.as_expr() {
-            exprs.push(x);
-        }
-    };
-    match &body.exprs[e].kind {
-        ExprKind::Binary { left, right, .. }
-        | ExprKind::Index {
-            expr: left,
-            index: right,
-        } => {
-            push_op(&mut exprs, *left);
-            push_op(&mut exprs, *right);
-        }
-        ExprKind::Assign { target, value } => {
-            exprs.push(*target);
-            push_op(&mut exprs, *value);
-        }
-        ExprKind::Unary { expr: inner, .. }
-        | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::FieldAccess { expr: inner, .. }
-        | ExprKind::ClosureToCanonical { functor: inner, .. }
-        | ExprKind::GlobalVarSet { value: inner, .. }
-        | ExprKind::VariantTag { expr: inner }
-        | ExprKind::VariantTest { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. } => push_op(&mut exprs, *inner),
-        ExprKind::CmRawCall { args, .. } => {
-            for a in args {
-                push_op(&mut exprs, *a);
-            }
-        }
-        ExprKind::IndirectCall { callee, args } => {
-            push_op(&mut exprs, *callee);
-            for a in args {
-                push_op(&mut exprs, *a);
-            }
-        }
-        ExprKind::StructLiteral { fields, .. } => {
-            for f in fields {
-                push_op(&mut exprs, f.value);
-            }
-        }
-        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-            for el in elements {
-                push_op(&mut exprs, *el);
-            }
-        }
-        ExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = payload {
-                push_op(&mut exprs, *p);
-            }
-        }
-        ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => blocks.push(*block),
-        ExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            push_op(&mut exprs, *condition);
-            blocks.push(*then_branch);
-            if let Some(eb) = else_branch {
-                blocks.push(*eb);
-            }
-        }
-        ExprKind::Match { expr, arms } => {
-            push_op(&mut exprs, *expr);
-            for arm in arms {
-                if let Some(g) = arm.guard {
-                    push_op(&mut exprs, g);
-                }
-                push_op(&mut exprs, arm.body);
-            }
-        }
-        ExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            push_op(&mut exprs, *scrutinee);
-            blocks.extend(arms.iter().copied());
-            blocks.push(*default);
-        }
-        _ => {}
-    }
+    // `for_each_child` yields expression children before block children for every
+    // `ExprKind` (`If`/`Switch` emit condition/scrutinee ahead of their blocks),
+    // so splitting into two ordered vecs preserves the exact visitation order the
+    // splice's label / local numbering depends on. Pattern / statement children
+    // carry no inlinable call in this walk and are skipped.
+    body.for_each_child(NodeRef::Expr(e), |c| match c {
+        NodeRef::Expr(x) => exprs.push(x),
+        NodeRef::Block(b) => blocks.push(b),
+        NodeRef::Stmt(_) | NodeRef::Pat(_) => {}
+    });
     (exprs, blocks)
 }
 
