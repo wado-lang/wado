@@ -1667,7 +1667,7 @@ impl<'a> Unparser<'a> {
 
     fn unparse_matches(&mut self, m: &crate::ast::MatchesExpr) {
         self.with_parens_if(matches_scrutinee_needs_parens(&m.expr), |s| {
-            s.unparse_expr(&m.expr)
+            s.unparse_expr(&m.expr);
         });
         self.output.push_str(" matches { ");
         self.unparse_pattern(&m.pattern);
@@ -2104,7 +2104,7 @@ impl<'a> Unparser<'a> {
     /// so `(*p)[i]` must keep parens — `*p[i]` would mean `*(p[i])`.
     fn unparse_postfix_base(&mut self, expr: &Expr) {
         self.with_parens_if(matches!(expr, Expr::Unary(_) | Expr::Matches(_)), |s| {
-            s.unparse_expr(expr)
+            s.unparse_expr(expr);
         });
     }
 
