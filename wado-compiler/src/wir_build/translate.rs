@@ -100,17 +100,26 @@ fn resolve_local_names(raw: &IndexMap<u32, String>, params: &[NirParam]) -> Inde
     }
 
     let mut out = IndexMap::default();
+    let mut used: IndexSet<String> = IndexSet::default();
     for (idx, name) in raw {
         let needs_suffix = if param_indices.contains(idx) {
             param_per_name.get(name.as_str()).copied().unwrap_or(0) > 1
         } else {
             total_per_name.get(name.as_str()).copied().unwrap_or(0) > 1
         };
-        let final_name = if needs_suffix {
+        let mut final_name = if needs_suffix {
             format!("{name}_{idx}")
         } else {
             name.clone()
         };
+        // The `_{idx}` suffix is not collision-free: it can equal another local's
+        // literal name (`e` at index 2 -> `e_2`, colliding with a source `e_2`).
+        // Codegen keys locals by name, so a duplicate silently merges two
+        // differently-typed slots into one. Extend with the unique index until
+        // the name is free.
+        while !used.insert(final_name.clone()) {
+            final_name = format!("{final_name}_{idx}");
+        }
         out.insert(*idx, final_name);
     }
     out
@@ -2907,5 +2916,25 @@ fn rewrite_struct_new_br_to_return(instrs: &mut [WirInstr], target_depth: u32) {
         *last = WirInstr::Return {
             value: Some(Box::new(WirInstr::Seq(fields))),
         };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_local_names_are_globally_unique() {
+        // Two `e` locals force the `_{idx}` suffix (`e` at index 2 -> `e_2`),
+        // which must not collide with a distinct local literally named `e_2`.
+        // Codegen keys locals by name, so a collision silently merges two
+        // differently-typed slots into one (an invalid-Wasm ICE at -O3).
+        let mut raw: IndexMap<u32, String> = IndexMap::default();
+        raw.insert(2, "e".to_string());
+        raw.insert(5, "e".to_string());
+        raw.insert(10, "e_2".to_string());
+        let out = resolve_local_names(&raw, &[]);
+        let unique: IndexSet<&str> = out.values().map(String::as_str).collect();
+        assert_eq!(unique.len(), out.len(), "resolved names must be unique: {out:?}");
     }
 }
