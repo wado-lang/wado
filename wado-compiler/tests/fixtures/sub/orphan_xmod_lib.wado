@@ -1,0 +1,14 @@
+// Helper module carrying an orphan-rule violation, imported by
+// `orphan_xmod_entry.wado`. The `impl Eq for String` lives HERE, so the
+// diagnostic must be attributed to this submodule — not the importing entry
+// module (#1596: phase-boundary diagnostics are attributed per-module).
+
+pub fn helper() -> i32 {
+    return 1;
+}
+
+impl Eq for String {
+    fn eq(&self, other: &Self) -> bool {
+        return true;
+    }
+}

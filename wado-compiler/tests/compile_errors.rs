@@ -587,6 +587,29 @@ fn test_orphan_error_attributed_to_user_file() {
 }
 
 #[test]
+fn test_orphan_error_attributed_to_the_submodule_that_defines_it() {
+    // The offending impl lives in ./sub/orphan_xmod_lib.wado, imported by the
+    // entry fixture. The diagnostic's file must be that submodule — a result
+    // the entry-filename fallback in `bail_to_compile_error` could never
+    // produce — so this pins per-module attribution (#1596).
+    let path = Path::new("tests/fixtures/orphan_xmod_entry.wado");
+    let err = common::compile_file(path).expect_err("expected a compile error");
+    match err {
+        CompileError::Analyzer {
+            filename, message, ..
+        } => {
+            assert!(message.contains("orphan rule"), "unexpected: {message}");
+            let filename = filename.expect("diagnostic must carry a source file");
+            assert!(
+                filename.ends_with("orphan_xmod_lib.wado"),
+                "expected the submodule that defines the impl, got: {filename}"
+            );
+        }
+        other => panic!("expected Analyzer error, got: {other}"),
+    }
+}
+
+#[test]
 fn test_sealed_reflect_error_attributed_to_user_file() {
     let filename = analyzer_filename(
         "struct Point { x: i32, y: i32 }\n\nimpl Reflect for Point {\n    type Fields = [i32, i32];\n    fn fields(&self) -> Self::Fields { return [self.x, self.y]; }\n    fn field_names() -> List<String> { return [\"a\", \"b\"]; }\n    fn type_name() -> String { return \"forged\"; }\n}\n\nexport fn run() {}\n",
