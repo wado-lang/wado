@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784294820558,
+  "lastUpdate": 1784331071527,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -41241,6 +41241,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a01010cfdf91aaa770302b6feb27963c32508cc8"
         },
         "date": 1784294819808,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16233,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265299,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1ac19df7fa7ada406333d4235161602e12e7620e",
+          "message": "Merge pull request #1608 from wado-lang/gfx/update-cargo-deps-jul-18\n\nchore: cargo update",
+          "timestamp": "2026-07-18T08:18:20+09:00",
+          "tree_id": "d21a2cf3519079e4ecae49334807adadf104da8c",
+          "url": "https://github.com/wado-lang/wado/commit/1ac19df7fa7ada406333d4235161602e12e7620e"
+        },
+        "date": 1784331070782,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
