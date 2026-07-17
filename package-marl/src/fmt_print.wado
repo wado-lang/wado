@@ -102,7 +102,7 @@ fn print_block(node: &Node, out: &mut String) {
             out.push_str(&delim);
         },
         Node::Heading(h) => print_heading(h, out),
-        Node::Paragraph(p) => out.push_str(&print_inline_seq(&p.children)),
+        Node::Paragraph(p) => print_inline_seq(&p.children, out),
         Node::BlockQuote(children) => print_blockquote(children, out),
         Node::CodeBlock(cb) => print_code_block(cb, out),
         Node::List(list) => print_list(list, out),
@@ -117,7 +117,7 @@ fn print_block(node: &Node, out: &mut String) {
 fn print_heading(h: &Heading, out: &mut String) {
     out.push_str(&"#".repeat(h.level));
     out.push(' ');
-    out.push_str(&print_inline_seq(&h.children));
+    print_inline_seq(&h.children, out);
 }
 
 fn print_blockquote(children: &List<Node>, out: &mut String) {
@@ -299,7 +299,9 @@ fn row_texts(row: &MdTableRow, ncol: i32) -> List<String> {
     let mut out: List<String> = [];
     for let c of 0..<ncol {
         let text = if c < row.cells.len() {
-            print_inline_seq(&row.cells[c])
+            let mut s = String::new();
+            print_inline_seq(&row.cells[c], &mut s);
+            s
         } else {
             ""
         };
@@ -379,12 +381,10 @@ fn print_delimiter_row(widths: &List<i32>, align: &List<ColumnAlign>, out: &mut 
 
 // --- inline ---
 
-pub fn print_inline_seq(nodes: &List<Node>) -> String {
-    let mut out = String::new();
+fn print_inline_seq(nodes: &List<Node>, out: &mut String) {
     for let node of nodes {
-        print_inline_node(node, &mut out);
+        print_inline_node(node, out);
     }
-    return out;
 }
 
 fn print_inline_node(node: &Node, out: &mut String) {
@@ -395,12 +395,12 @@ fn print_inline_node(node: &Node, out: &mut String) {
         Node::Emphasis(em) => print_emphasis(em, out),
         Node::Strong(children) => {
             out.push_str(&"**");
-            out.push_str(&print_inline_seq(children));
+            print_inline_seq(children, out);
             out.push_str(&"**");
         },
         Node::Strikethrough(children) => {
             out.push_str(&"~~");
-            out.push_str(&print_inline_seq(children));
+            print_inline_seq(children, out);
             out.push_str(&"~~");
         },
         Node::Code(s) => print_code_span(s, out),
@@ -426,7 +426,7 @@ fn print_inline_node(node: &Node, out: &mut String) {
 fn print_emphasis(em: &EmphasisNode, out: &mut String) {
     let marker = if em.keep_asterisk { "*" } else { "_" };
     out.push_str(&marker);
-    out.push_str(&print_inline_seq(&em.children));
+    print_inline_seq(&em.children, out);
     out.push_str(&marker);
 }
 
@@ -458,14 +458,14 @@ fn print_dest_and_title(url: &String, title: &String, out: &mut String) {
 
 fn print_inline_link(link: &LinkNode, out: &mut String) {
     out.push('[');
-    out.push_str(&print_inline_seq(&link.children));
+    print_inline_seq(&link.children, out);
     out.push(']');
     print_dest_and_title(&link.url, &link.title, out);
 }
 
 fn print_reference_link(link: &ReferenceLinkNode, out: &mut String) {
     out.push('[');
-    out.push_str(&print_inline_seq(&link.children));
+    print_inline_seq(&link.children, out);
     out.push_str(&"][");
     out.push_str(&link.label);
     out.push(']');
@@ -473,7 +473,7 @@ fn print_reference_link(link: &ReferenceLinkNode, out: &mut String) {
 
 fn print_shortcut_link(link: &ReferenceLinkNode, out: &mut String) {
     out.push('[');
-    out.push_str(&print_inline_seq(&link.children));
+    print_inline_seq(&link.children, out);
     out.push(']');
 }
 
