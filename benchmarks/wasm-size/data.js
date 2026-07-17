@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784288543810,
+  "lastUpdate": 1784292002009,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -41153,6 +41153,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7c54a6cc80950924a633c80c8c247ddba4fbb4a5"
         },
         "date": 1784288543046,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16233,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265299,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ad1d19a7e6a63c20fb4f7312df147826fe366ffb",
+          "message": "Merge pull request #1606 from wado-lang/claude/wado-playground-page-2rphhv\n\nfeat(playground): publish the runtime as a tagged-release asset",
+          "timestamp": "2026-07-17T21:28:19+09:00",
+          "tree_id": "40d2d913164bb5bad16e67c829856799d3f5d37c",
+          "url": "https://github.com/wado-lang/wado/commit/ad1d19a7e6a63c20fb4f7312df147826fe366ffb"
+        },
+        "date": 1784292001477,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
