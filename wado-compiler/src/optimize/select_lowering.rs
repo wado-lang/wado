@@ -16,7 +16,7 @@
 
 use crate::lower::plan::value_copy::needs_value_copy;
 use crate::module_source::ModuleSource;
-use crate::nir::{FunctionRef, NirBinaryOp, NirFunction, NirUnaryOp};
+use crate::nir::{FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -178,7 +178,11 @@ fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {
                 && is_select_eligible_operand(body, *inner, type_table)
         }
         ExprKind::Binary { op, left, right } => {
-            !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
+            // Both operands are duplicated into the `select`; a trapping op
+            // (`Div` / `Mod`) must not be lowered, since a `select` evaluates
+            // both arms unconditionally. The trap taxonomy is shared with
+            // `arena_query` so it cannot drift from the other trap consumers.
+            !super::arena_query::binary_op_may_trap(*op)
                 && left
                     .as_expr()
                     .is_none_or(|e| is_select_eligible(body, e, type_table))
@@ -200,6 +204,14 @@ fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {
 /// True when an `as` cast from `src` to `dst` lowers to a trapping Wasm
 /// instruction (only `f32`/`f64` → integer traps; everything else is a
 /// wrap / extend / convert / identity).
+///
+/// Intentionally finer than the shared `arena_query::expr_node_may_trap`
+/// taxonomy (which, like `mod_ref`, marks every `Cast` conservatively
+/// trap-capable): a `select` arm is a single duplicable leaf, so refining the
+/// cast test here recovers non-trapping widening / reinterpret casts that the
+/// conservative predicate would reject. Kept local because widening this
+/// refinement into the shared taxonomy would change the other consumers'
+/// classification.
 fn is_trapping_cast(src: TypeId, dst: TypeId, type_table: &TypeTable) -> bool {
     matches!(
         (type_table.get(src), type_table.get(dst)),

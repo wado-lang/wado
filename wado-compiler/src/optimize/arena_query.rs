@@ -5,7 +5,7 @@
 //! need no `Body ↔ tree` bridge.
 
 use crate::hashmap::IndexSet;
-use crate::nir::NirUnaryOp;
+use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
@@ -340,6 +340,85 @@ fn is_pure_block(body: &Body, block: BlockId) -> bool {
             StmtKind::Let { value, .. } => is_pure_operand(body, *value),
             _ => false,
         })
+}
+
+// ---------------------------------------------------------------------------
+// Per-node trap taxonomy
+// ---------------------------------------------------------------------------
+//
+// The single listing of *which operation traps*, shared by every pass that
+// reasons about trap preservation so they cannot drift apart (an earlier
+// trap-deletion P0 was exactly such a drift). It mirrors, at per-node
+// granularity, the trap dimension `mod_ref::ModRef::may_trap` accumulates
+// recursively — `mod_ref` stays the recursive trap authority (its inline
+// `Div | Mod` / `Deref` / `Cast` / heap-projection classification is the
+// reference these helpers reproduce). Consumers: `elide_box_local`'s
+// leftmost-side-effect walk (`expr_node_may_trap`) and `select_lowering`'s
+// arm-eligibility gate (`binary_op_may_trap`).
+
+/// Whether a [`NirBinaryOp`] may trap at runtime, independent of its operands.
+/// Integer `Div` / `Mod` trap on a zero divisor (and `INT_MIN / -1`); every
+/// other binary op is total.
+pub(super) fn binary_op_may_trap(op: NirBinaryOp) -> bool {
+    matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
+}
+
+/// Whether a [`NirUnaryOp`] may trap, independent of its operand. `Deref`
+/// traps on a null reference; `Ref` / `MutRef` / `Neg` / `Not` / `BitNot`
+/// are total.
+pub(super) fn unary_op_may_trap(op: NirUnaryOp) -> bool {
+    matches!(op, NirUnaryOp::Deref)
+}
+
+/// Whether the expression *node* at `id` — its own operation only, not its
+/// children — may trap. The recursive trap of a whole subtree is
+/// `mod_ref::ModRef::of_expr(..).may_trap`; this is the per-node contribution
+/// a walker consults while it recurses itself.
+///
+/// `Cast` is conservatively trap-capable here (matching `mod_ref`); a consumer
+/// needing the finer "only float→int truncation traps" refinement keeps its own
+/// check (see `select_lowering::is_trapping_cast`).
+pub(super) fn expr_node_may_trap(body: &Body, id: ExprId) -> bool {
+    match &body.exprs[id].kind {
+        ExprKind::Binary { op, .. } => binary_op_may_trap(*op),
+        ExprKind::Unary { op, .. } => unary_op_may_trap(*op),
+        // Numeric narrowing / `ref.cast`, and heap projections on a
+        // possibly-null (or case-mismatched) receiver.
+        ExprKind::Cast { .. }
+        | ExprKind::FieldAccess { .. }
+        | ExprKind::Index { .. }
+        | ExprKind::VariantTag { .. }
+        | ExprKind::VariantTest { .. }
+        | ExprKind::VariantPayload { .. } => true,
+        // A callee may trap (`panic`, OOB index, division, `unreachable`).
+        ExprKind::Call { .. }
+        | ExprKind::MethodCall { .. }
+        | ExprKind::IndirectCall { .. }
+        | ExprKind::CmRawCall { .. } => true,
+        // A store through a projection traps on a null / OOB / mismatched
+        // receiver; a bare-local rebind does not, but classify the node
+        // conservatively — its sole consumer routes `Assign` through a
+        // dedicated arm, so this value never decides an elision.
+        ExprKind::Assign { .. } => true,
+        // Pure value ops, constructors, constant leaves, global reads/writes,
+        // and control-flow (whose sub-trees carry their own traps).
+        ExprKind::GlobalVarGet { .. }
+        | ExprKind::GlobalVarSet { .. }
+        | ExprKind::Local { .. }
+        | ExprKind::PackedArray(_)
+        | ExprKind::EnumConstruct { .. }
+        | ExprKind::StructLiteral { .. }
+        | ExprKind::TupleLiteral { .. }
+        | ExprKind::ArrayLiteral { .. }
+        | ExprKind::VariantConstruct { .. }
+        | ExprKind::ClosureToCanonical { .. }
+        | ExprKind::Block(_)
+        | ExprKind::LabeledBlock { .. }
+        | ExprKind::If { .. }
+        | ExprKind::Match { .. }
+        | ExprKind::Switch { .. }
+        | ExprKind::Dead => false,
+    }
 }
 
 // ---------------------------------------------------------------------------

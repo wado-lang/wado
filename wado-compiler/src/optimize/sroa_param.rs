@@ -29,7 +29,7 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{FunctionKind, NirFunction, NirUnaryOp};
+use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -121,7 +121,7 @@ fn collect_and_validate(
     let mut candidates: IndexMap<(FnKey, usize), SroaInfo> = IndexMap::default();
     for fid in gate.dirty_funcs(GatedPass::SroaParam, project.functions.len()) {
         let func = project.functions[fid.index()].borrow();
-        if !is_eligible(&func) || func.body.is_none() {
+        if !is_eligible(&func) {
             continue;
         }
         let Some(key) = func.id else { continue };
@@ -793,38 +793,18 @@ fn lookup_function<'a>(
     project.functions.get(key.index())
 }
 
-/// Pinning rules close to DAE's (`optimize::dae::is_eligible`), but — unlike
-/// DAE — concrete trait-impl methods are NOT pinned here: rewriting a
-/// single-field-struct parameter and its call sites is sound after
-/// monomorphization (see the note by the `is_closure_call` guard).
+/// Pinning rules, shared with DAE via [`super::dae::is_dae_sroa_eligible`].
+/// `relax_closure_call = false` keeps closure `__call` functors pinned (their
+/// function-table wrapper snapshots the signature); unlike DAE there is no
+/// relaxation here. `sroa_param` adds one pin the shared predicate does not
+/// carry — a `$value_copy$T` helper is never a rewrite target.
+///
+/// Concrete trait-impl methods are eligible: after monomorphization every call
+/// site carries a resolved `func_id` and `rewrite_call_sites` rewrites them all,
+/// so scalarizing a single-field-struct parameter (and its call-site
+/// allocation) is sound. This unwraps the `Box<Scalar>` that `&T` reference
+/// parameters box the value into — e.g. every scalar `serde` field / element
+/// (`SerializeStruct::field<i32>`, `SerializeSeq::element<f64>`).
 fn is_eligible(func: &NirFunction) -> bool {
-    if func.is_cm_export || func.is_cm_binding || func.is_dispatch_wrapper || func.is_ambient {
-        return false;
-    }
-    if !matches!(func.kind, FunctionKind::Regular) {
-        return false;
-    }
-    if func.module_source.is_core_builtin() || func.module_source.is_wasm_asset() {
-        return false;
-    }
-    if func.allocator_tag.is_some() {
-        return false;
-    }
-    // A concrete trait-impl method is a plain function after monomorphization:
-    // Wado has no dynamic dispatch, every call site carries the resolved
-    // `func_id`, and `rewrite_call_sites` rewrites all of them, so scalarizing a
-    // single-field-struct parameter (and its call-site allocation) is sound.
-    // This unwraps the `Box<Scalar>` that `&T` reference parameters box the
-    // value into — e.g. every scalar `serde` field/element (`SerializeStruct::
-    // field<i32>`, `SerializeSeq::element<f64>`). The genuinely-pinned shapes —
-    // closure `__call` functors (their function-table wrapper snapshots the
-    // signature), CM bindings, dispatch wrappers, non-`Regular` kinds — are
-    // still excluded by the checks above and below.
-    if func.is_closure_call() {
-        return false;
-    }
-    if func.is_value_copy() {
-        return false;
-    }
-    true
+    super::dae::is_dae_sroa_eligible(func, false) && !func.is_value_copy()
 }

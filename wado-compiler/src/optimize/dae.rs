@@ -57,6 +57,7 @@
 
 use cranelift_entity::EntityRef;
 
+use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionKind, NirFunction};
@@ -80,7 +81,7 @@ pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGat
         let func = project.functions[fid.index()].borrow();
         let Some(key) = func.id else { continue };
         let is_closure_dae_relaxed = closure_call_keys.contains(&key);
-        if !is_eligible(&func, is_closure_dae_relaxed) {
+        if !is_dae_sroa_eligible(&func, is_closure_dae_relaxed) {
             continue;
         }
         let dead = find_dead_params(&func);
@@ -146,17 +147,27 @@ fn collect_closure_call_keys(project: &NirPackage) -> IndexSet<FnKey> {
     // Sweep the function list for synthesised
     // `__Closure_N^{Inspect,InspectAlt}::{inspect,inspect_alt}` impls.
     // These don't have a direct field on `ClosureFunctor`, so we
-    // discriminate by `(struct_name == __Closure_N, trait_name in
-    // {Inspect, InspectAlt})`.
+    // discriminate by `(struct_name == __Closure_N, trait is Inspect /
+    // InspectAlt)`. The trait is matched against the canonical names in
+    // the compiler-item registry — the same source
+    // `generate_functor_format_methods` stamps into these impls'
+    // `trait_name` — so a stdlib rename of either trait flows through
+    // instead of a bare-literal `"Inspect"` match a user trait could
+    // shadow. (`base_trait_module` is left `None` on these synthesis-
+    // derived impls, so the registry name is the exact-identity anchor.)
+    let type_table = project.type_table.borrow();
+    let items = type_table.compiler_items();
+    let inspect_name = items.trait_name(CompilerItem::Inspect);
+    let inspect_alt_name = items.trait_name(CompilerItem::InspectAlt);
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         let Some(mi) = &func.method_info else {
             continue;
         };
-        let Some(trait_name) = &mi.trait_name else {
+        let Some(trait_name) = mi.trait_name.as_deref() else {
             continue;
         };
-        if trait_name != "Inspect" && trait_name != "InspectAlt" {
+        if trait_name != inspect_name && trait_name != inspect_alt_name {
             continue;
         }
         if !functor_struct_names.contains(&(func.module_source.clone(), mi.struct_name.clone())) {
@@ -169,13 +180,30 @@ fn collect_closure_call_keys(project: &NirPackage) -> IndexSet<FnKey> {
     keys
 }
 
-fn is_eligible(func: &NirFunction, is_closure_dae_relaxed: bool) -> bool {
+/// Shared pinning predicate for the two interprocedural signature-rewriting
+/// passes, `dae` and `sroa_param` (which calls this via `super::dae`). Both
+/// refuse the same world-boundary and ABI-fixed shapes — bodyless imports, CM
+/// bridges, non-`Regular` kinds, builtin / wasm-asset modules, and allocator
+/// entry points wired raw into the canonical ABI — and both treat a concrete
+/// trait-impl method as eligible (after monomorphization it is a plain function
+/// whose every call site carries a resolved `func_id`, so the rewrite reaches
+/// them all). They diverge only on the closure `__call` functor policy, carried
+/// by `relax_closure_call`:
+///
+/// - `false` (`sroa_param`, and `dae` for any `__call` not covered by its
+///   relaxation): a closure `__call` stays pinned — its function-table wrapper
+///   snapshots the signature.
+/// - `true` (`dae`, for the closure-functor `^Inspect` / `^InspectAlt` /
+///   `__call` impls whose wrapper adapts to the shrunken signature): the closure
+///   pin is lifted.
+///
+/// `is_export` / `is_async` are intentionally *not* pins — both describe
+/// user source-level intent, not a real call-shape constraint (see the module
+/// doc). `sroa_param` layers its one extra pin (`is_value_copy`) on top of this.
+pub(super) fn is_dae_sroa_eligible(func: &NirFunction, relax_closure_call: bool) -> bool {
     if func.body.is_none() {
         return false;
     }
-    // `is_export` and `is_async` are intentionally absent — both describe
-    // user source-level intent, not a real call-shape constraint (see the
-    // module doc).
     if func.is_cm_export || func.is_cm_binding || func.is_dispatch_wrapper || func.is_ambient {
         return false;
     }
@@ -185,27 +213,15 @@ fn is_eligible(func: &NirFunction, is_closure_dae_relaxed: bool) -> bool {
     if func.module_source.is_core_builtin() || func.module_source.is_wasm_asset() {
         return false;
     }
-    // Allocator entry points are wired straight into the canonical ABI as
-    // `realloc`; their signature must survive verbatim.
     if func.allocator_tag.is_some() {
         return false;
     }
-    // A concrete trait-impl method is a plain function after monomorphization:
-    // Wado has no dynamic dispatch, every call site carries the resolved
-    // `func_id`, and `apply_dae` rewrites all of them — so dropping a dead
-    // parameter (and its call-site arguments) is sound, exactly as `sroa_param`
-    // relaxed the same pin. The only trait-shaped functions with a signature
-    // contract dae cannot see are the closure functors, whose function-table
-    // wrapper adapts to the surviving `call_method.params` and is therefore
-    // relaxed (`is_closure_dae_relaxed`); a closure `__call` not covered by that
-    // relaxation stays pinned.
-    if !is_closure_dae_relaxed && func.is_closure_call() {
+    if !relax_closure_call && func.is_closure_call() {
         return false;
     }
     // No explicit pin set: `FuncRef` is lowered into a `Closure` literal (functor
     // struct) by `lower::plan::closure` before NIR is built, so there is no bare
-    // function reference left to pin against. Closure functor `__call`s adapt via
-    // their function-table wrapper (see `collect_closure_call_keys`).
+    // function reference left to pin against.
     true
 }
 
