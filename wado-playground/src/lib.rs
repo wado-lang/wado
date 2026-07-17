@@ -13,6 +13,16 @@
 //! len)` once per compiler phase (`parse`, `monomorphize`, `codegen`, …) so a
 //! slow client — a phone especially — can show live progress instead of a
 //! frozen button. This is the compiler's `--log-level debug` phase stream.
+//!
+//! The same cdylib also hosts the language server (`wado_lsp_*`), so the
+//! browser gets the LSP engine without a second copy of the compiler. It drives
+//! `wado_lsp::Engine` directly as a library — no WASI, no stdio loop — via:
+//!
+//! - `wado_lsp_new()` creates a session (document state + lifecycle).
+//! - `wado_lsp_send(session, ptr, len)` feeds one JSON-RPC message (freeing the
+//!   input) and returns an owned `[len:u32 LE][framed reply bytes…]` buffer of
+//!   zero or more `Content-Length`-framed LSP messages (response + notifications).
+//! - `wado_lsp_close(session)` frees the session.
 
 use std::alloc::{Layout, alloc, dealloc};
 use std::future::Future;
@@ -20,6 +30,10 @@ use std::task::{Context, Poll, Waker};
 
 use wado_compiler::compiler_host::{CompilerHost, Diagnostic, InMemoryCompilerHost, SourceError};
 use wado_compiler::{Code, CompilerOptions, LogLevel, OptLevel, Severity, compile_with_options};
+use wado_lsp::Engine;
+use wado_lsp::server::dispatch::{Lifecycle, dispatch};
+use wado_lsp::server::rpc::{JsonRpcRequest, error_codes};
+use wado_lsp::server::transport;
 
 // Host-supplied progress import, called once per compiler phase with the phase
 // name (`parse`, `codegen`, …) as a UTF-8 slice into this module's memory.
@@ -158,17 +172,100 @@ fn encode(status: u32, payload: &[u8]) -> *const u8 {
     out
 }
 
-/// Poll a future to completion. `InMemoryCompilerHost` resolves every
-/// `load_source` immediately, so one poll suffices; a `Pending` means that
-/// invariant broke — panic rather than spin forever.
+/// Poll a future to completion. Every host here (`InMemoryCompilerHost`, the
+/// LSP's `FilesystemCompilerHost`) resolves each `load_source` synchronously, so
+/// one poll suffices; a `Pending` means that invariant broke — panic rather than
+/// spin forever.
 fn block_on<F: Future>(fut: F) -> F::Output {
     let waker = Waker::noop();
     let mut cx = Context::from_waker(waker);
     let mut fut = Box::pin(fut);
     let Poll::Ready(v) = fut.as_mut().poll(&mut cx) else {
-        panic!("compile future suspended, but InMemoryCompilerHost never yields");
+        panic!("future suspended, but the compiler host never yields");
     };
     v
+}
+
+/// A live language-server session: document state plus LSP lifecycle, persisted
+/// across `wado_lsp_send` calls. The compiler host is built per request inside
+/// `dispatch`, so nothing here is tied to a filesystem.
+pub struct LspSession {
+    engine: Engine,
+    lifecycle: Lifecycle,
+}
+
+/// Create an LSP session. Free it with [`wado_lsp_close`].
+#[unsafe(no_mangle)]
+pub extern "C" fn wado_lsp_new() -> *mut LspSession {
+    Box::into_raw(Box::new(LspSession {
+        engine: Engine::new(),
+        lifecycle: Lifecycle::default(),
+    }))
+}
+
+/// Free a session created by [`wado_lsp_new`].
+///
+/// # Safety
+/// `session` must come from [`wado_lsp_new`] and not have been closed already.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn wado_lsp_close(session: *mut LspSession) {
+    drop(unsafe { Box::from_raw(session) });
+}
+
+/// Feed one JSON-RPC message (`ptr..ptr+len`, consumed/freed) to `session` and
+/// return an owned `[len:u32 LE][framed reply bytes…]` buffer — zero or more
+/// `Content-Length`-framed LSP messages. Free it with `wado_free(ptr, 4 + len)`.
+///
+/// # Safety
+/// `ptr..ptr+len` must be a valid buffer from [`wado_alloc`] filled with `len`
+/// bytes, and `session` must come from [`wado_lsp_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn wado_lsp_send(
+    session: *mut LspSession,
+    ptr: *mut u8,
+    len: usize,
+) -> *const u8 {
+    let message =
+        unsafe { String::from_utf8_lossy(std::slice::from_raw_parts(ptr, len)).into_owned() };
+    unsafe { wado_free(ptr, len) };
+    let session = unsafe { &mut *session };
+
+    let mut out = Vec::<u8>::new();
+    match serde_json::from_str::<JsonRpcRequest>(&message) {
+        // `exit` is a stdio-server concept (`std::process::exit`); the browser
+        // drops the session instead, so swallow it rather than aborting the wasm.
+        Ok(request) if request.method == "exit" => {}
+        Ok(request) => {
+            let _ = block_on(dispatch(
+                &mut session.engine,
+                &mut out,
+                &mut session.lifecycle,
+                request,
+            ));
+        }
+        Err(err) => {
+            // JSON-RPC 2.0 §5.1: malformed request → ParseError with id null.
+            let _ = transport::send_error(
+                &mut out,
+                &serde_json::Value::Null,
+                error_codes::PARSE_ERROR,
+                err.to_string(),
+            );
+        }
+    }
+    encode_bytes(&out)
+}
+
+/// Allocate and fill an owned `[len:u32 LE][payload…]` buffer.
+fn encode_bytes(payload: &[u8]) -> *const u8 {
+    let total = 4 + payload.len();
+    let out = wado_alloc(total);
+    unsafe {
+        let buf = std::slice::from_raw_parts_mut(out, total);
+        buf[0..4].copy_from_slice(&(payload.len() as u32).to_le_bytes());
+        buf[4..].copy_from_slice(payload);
+    }
+    out
 }
 
 #[cfg(test)]
@@ -256,5 +353,85 @@ mod tests {
         assert_eq!(status, 0);
         let text = std::str::from_utf8(&payload).unwrap();
         assert!(!text.contains("debug:"), "no debug lines in errors: {text}");
+    }
+
+    /// Drive one JSON-RPC message through the LSP C ABI and return the framed
+    /// reply bytes, exercising the exact alloc → send → free path the worker uses.
+    fn lsp_send(session: *mut LspSession, msg: &serde_json::Value) -> Vec<u8> {
+        let bytes = serde_json::to_vec(msg).unwrap();
+        let ptr = wado_alloc(bytes.len());
+        unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr, bytes.len()) };
+
+        let out = unsafe { wado_lsp_send(session, ptr, bytes.len()) };
+        let len = u32::from_le_bytes(
+            unsafe { std::slice::from_raw_parts(out, 4) }
+                .try_into()
+                .unwrap(),
+        ) as usize;
+        let payload = unsafe { std::slice::from_raw_parts(out.add(4), len).to_vec() };
+        unsafe { wado_free(out.cast_mut(), 4 + len) };
+        payload
+    }
+
+    /// The bundled LSP answers a full initialize → didOpen → hover round-trip
+    /// through the same C ABI the browser worker drives, with no WASI host.
+    #[test]
+    fn lsp_round_trip_over_the_abi() {
+        let session = wado_lsp_new();
+
+        let init = lsp_send(
+            session,
+            &serde_json::json!({
+                "jsonrpc": "2.0", "id": 1, "method": "initialize",
+                "params": { "processId": null, "rootUri": null, "capabilities": {} },
+            }),
+        );
+        let init = String::from_utf8(init).unwrap();
+        assert!(
+            init.contains("\"name\":\"wado-lsp\""),
+            "initialize result: {init}"
+        );
+
+        // Notifications produce no response to the client but must not error.
+        lsp_send(
+            session,
+            &serde_json::json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }),
+        );
+
+        let uri = "file:///playground.wado";
+        let diags = lsp_send(
+            session,
+            &serde_json::json!({
+                "jsonrpc": "2.0", "method": "textDocument/didOpen",
+                "params": { "textDocument": { "uri": uri, "languageId": "wado", "version": 1, "text": HELLO } },
+            }),
+        );
+        let diags = String::from_utf8(diags).unwrap();
+        assert!(
+            diags.contains("textDocument/publishDiagnostics"),
+            "didOpen publishes diagnostics: {diags}"
+        );
+
+        let hover = lsp_send(
+            session,
+            &serde_json::json!({
+                "jsonrpc": "2.0", "id": 2, "method": "textDocument/hover",
+                "params": { "textDocument": { "uri": uri }, "position": { "line": 3, "character": 4 } },
+            }),
+        );
+        let hover = String::from_utf8(hover).unwrap();
+        assert!(hover.contains("println"), "hover over println: {hover}");
+
+        unsafe { wado_lsp_close(session) };
+    }
+
+    /// A malformed JSON-RPC message yields a framed `ParseError`, not a panic.
+    #[test]
+    fn lsp_reports_parse_error() {
+        let session = wado_lsp_new();
+        let reply =
+            String::from_utf8(lsp_send(session, &serde_json::json!("not a request"))).unwrap();
+        assert!(reply.contains("-32700"), "ParseError code present: {reply}");
+        unsafe { wado_lsp_close(session) };
     }
 }

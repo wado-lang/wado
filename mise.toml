@@ -699,8 +699,9 @@ VERSION="${WADO_PLAYGROUND_VERSION:-$(git rev-parse --short HEAD)}"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 # Keep this file set in sync with the site's `playground-runtime` mise task.
+# wado-playground.wasm bundles the LSP engine, so there is no separate LSP wasm.
 cp "$WEB"/playground.js "$WEB"/runner-worker.js "$WEB"/lsp-worker.js "$WEB"/lsp-client.js \\
-   "$WEB"/wado-playground.wasm "$WEB"/wado-lsp.wasm "$WEB"/examples.json "$STAGE/"
+   "$WEB"/wado-playground.wasm "$WEB"/examples.json "$STAGE/"
 cp -r "$WEB"/vendor "$WEB"/shims "$STAGE/"
 printf '{ "version": "%s" }\\n' "$VERSION" > "$STAGE/manifest.json"
 tar czf "$OUT" -C "$STAGE" .
