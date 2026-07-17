@@ -277,13 +277,13 @@ From highest to lowest precedence:
   - `!=` cannot be chained
   - Rust rejects all comparison chaining at parse level
 
-**`matches` (Level 11) and logical `!` (Level 12):**
+#### `matches` (Level 11) and logical `!` (Level 12)
 
 `matches` binds looser than the binary operators, `as`, and the value-producing
 unary operators, and tighter than logical `!`. Its `{ pattern }` right-hand side
 is self-delimiting; the scrutinee side is left-associative.
 
-- `!x matches { P }` is `!(x matches { P })` — "`x` does **not** match `P`".
+- `!x matches { P }` is `!(x matches { P })` — "`x` does not match `P`".
 - `*x matches { P }`, `x as T matches { P }`, `a + b matches { P }`, and
   `flags & MASK matches { P }` need no parentheses; a comparison, range, or
   assignment scrutinee does (`(a == b) matches { P }`).

@@ -296,7 +296,7 @@ See [WEP: Range Object](./wep-2026-03-03-range-object.md) for the full design.
 
 **Design Note**: Bitwise operators (`&`, `|`, `^`) have **higher** precedence than comparison operators, fixing C's well-known design flaw. This means `flags & MASK == EXPECTED` correctly parses as `(flags & MASK) == EXPECTED`.
 
-**Unary Operators**:
+#### Unary Operators
 
 | Operator | Description |
 | -------- | ----------- |
@@ -307,7 +307,7 @@ See [WEP: Range Object](./wep-2026-03-03-range-object.md) for the full design.
 | `&mut`   | Mut ref     |
 | `*`      | Dereference |
 
-**Postfix Operators**:
+#### Postfix Operators
 
 | Operator              | Description       |
 | --------------------- | ----------------- |
@@ -319,13 +319,13 @@ See [WEP: Range Object](./wep-2026-03-03-range-object.md) for the full design.
 | `as Type`             | Type cast         |
 | `?`                   | Error propagation |
 
-**`matches` and `!` binding:**
+#### `matches` and `!` binding
 
 These tables group operators by form, not by binding strength. `matches` binds
 looser than the binary operators, `as`, and the value-producing unary operators
 (`-`, `~`, `&`, `&mut`, `*`), but tighter than logical `!`:
 
-- `!x matches { Some(_) }` is `!(x matches { Some(_) })` — "`x` does **not** match
+- `!x matches { Some(_) }` is `!(x matches { Some(_) })` — "`x` does not match
   `Some(_)`".
 - `*x matches { "kw" }`, `x as i32 matches { 0 }`, `a + b matches { 10 }`, and
   `flags & MASK matches { 0 }` need no parentheses. A comparison, range, or
