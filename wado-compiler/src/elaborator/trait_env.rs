@@ -1255,11 +1255,8 @@ fn check_orphan_rfc2451(impl_block: &ast::ImplBlock, local_type_names: &IndexSet
 }
 
 /// Check orphan rules for all trait impl blocks across all modules.
-/// Only impl blocks in local (user) modules are checked.
-///
-/// Each violation is paired with the [`ModuleSource`] of the offending impl
-/// block: the `TypeError` carries only a bare `Span`, so the emitter needs the
-/// owning module to attribute the diagnostic to the user's file (issue #1596).
+/// Only impl blocks in local (user) modules are checked. Each violation is
+/// paired with the offending impl's [`ModuleSource`] for file attribution.
 fn check_all_orphan_rules(
     modules: &IndexMap<ModuleSource, Module>,
     decl_index: &TraitDeclIndex,

@@ -855,8 +855,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 &invocations,
             )
         };
-        // Each violation is attributed to the module of the offending impl
-        // block, which `check_all_orphan_rules` pairs with the error (#1596).
         for (module_source, violation) in orphan_violations {
             let _ = logger.error_in(&module_source, violation);
         }
@@ -1879,8 +1877,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             if stdlib_set.contains(module_source) {
                 continue;
             }
-            // Bind the logger to this module so every validator diagnostic is
-            // attributed to its file; shadows the raw logger for the loop body.
+            // Shadow with a module-bound logger so validator diagnostics
+            // attribute to this module.
             let logger = &logger.in_module(module_source);
 
             // Build per-module known names: global names + import aliases + trait names

@@ -553,11 +553,8 @@ fn test_error_display_analyzer_without_filename() {
     assert!(display.contains("analysis error"));
 }
 
-/// Diagnostics emitted at the `trait_env` build phase (orphan / coherence /
-/// sealed-`Reflect`) carry a bare `Span` with no owning-module identity, so
-/// before the fix the printer mis-attributed the source file to a stdlib
-/// module (`core:libm.wat`). The offending impl block is in the user's file,
-/// and the diagnostic must point there. Regression test for issue #1596.
+/// Orphan / coherence / sealed-`Reflect` errors must point at the user's file,
+/// not a stdlib module (`core:libm.wat` before the fix). Regression for #1596.
 fn analyzer_filename(source: &str) -> String {
     let path = Path::new("orphan_phase_diag.wado");
     let err = common::compile_source_with_opts(path, source, OptLevel::default())
@@ -588,10 +585,8 @@ fn test_orphan_error_attributed_to_user_file() {
 
 #[test]
 fn test_orphan_error_attributed_to_the_submodule_that_defines_it() {
-    // The offending impl lives in ./sub/orphan_xmod_lib.wado, imported by the
-    // entry fixture. The diagnostic's file must be that submodule — a result
-    // the entry-filename fallback in `bail_to_compile_error` could never
-    // produce — so this pins per-module attribution (#1596).
+    // The impl lives in the imported submodule, so the file must be that
+    // submodule — never the entry — which pins per-module attribution (#1596).
     let path = Path::new("tests/fixtures/orphan_xmod_entry.wado");
     let err = common::compile_file(path).expect_err("expected a compile error");
     match err {

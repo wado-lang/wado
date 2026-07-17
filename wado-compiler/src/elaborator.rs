@@ -167,12 +167,8 @@ pub struct Elaborator<'a, H: CompilerHost> {
 }
 
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
-    /// Emit a compilation error attributed to the module currently being
-    /// resolved. This is the single channel for `TypeError`s raised during
-    /// item/body resolution: the file comes from `current_module_source`,
-    /// which is maintained structurally (including across
-    /// [`Self::with_module_perspective`]), so there is no ambient file
-    /// context for a phase to forget to set.
+    /// Emit a `TypeError` attributed to `current_module_source` — the channel
+    /// for every diagnostic raised during item/body resolution.
     pub(super) fn emit(
         &self,
         err: impl Into<crate::compiler_host::Diagnostic>,

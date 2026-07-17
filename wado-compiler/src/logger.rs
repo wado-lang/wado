@@ -63,12 +63,10 @@ impl std::error::Error for Bail {}
 ///
 /// # File Attribution
 ///
-/// A diagnostic's file is stamped at emit time from the module the caller
-/// already holds — `error_in(module, err)` / `error_at(file, err)` — never
-/// from ambient logger state. The logger keeps no "current file": there is
-/// nothing a phase can forget to set, so a diagnostic can't be silently
-/// mis-attributed to a stale module. `error(err)` emits a diagnostic that
-/// already carries its own location (parser/lexer errors) or has none.
+/// A diagnostic's file is stamped from the module the caller holds
+/// (`error_in` / `error_at`), never from ambient logger state — so no phase
+/// can forget to set it. `error(err)` is for diagnostics that already carry
+/// their own location.
 ///
 /// # Example
 ///
@@ -140,10 +138,6 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     }
 
     /// Report a compilation error attributed to `module`'s source file.
-    ///
-    /// The file is taken from the module the caller already holds — the
-    /// only supported way to attribute a `Span`-carrying diagnostic to a
-    /// file. Returns `Err(Bail)` if the error count reaches `MAX_ERRORS`.
     pub fn error_in(
         &self,
         module: &ModuleSource,
@@ -152,15 +146,14 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         self.error_at(&module.source_path(), err)
     }
 
-    /// Report a compilation error attributed to the file path `file`. Prefer
-    /// [`Self::error_in`] when a [`ModuleSource`] is in hand; this variant is
-    /// for callers that only have a display filename (the entry driver).
+    /// Like [`Self::error_in`], for callers that hold a display filename
+    /// rather than a [`ModuleSource`].
     pub fn error_at(&self, file: &str, err: impl Into<Diagnostic>) -> Result<(), Bail> {
         self.emit_error(Self::with_file(err.into(), file))
     }
 
-    /// Report a compilation error whose diagnostic already carries its own
-    /// location (parser/lexer errors) or has none. No file is stamped.
+    /// Report an error whose diagnostic already carries its own location
+    /// (parser/lexer errors) or has none.
     pub fn error(&self, err: impl Into<Diagnostic>) -> Result<(), Bail> {
         self.emit_error(err.into())
     }
@@ -379,12 +372,9 @@ impl<H: CompilerHost> SpanEmitter for Logger<'_, H> {
     }
 }
 
-/// A [`Logger`] bound to one module's source file.
-///
-/// Diagnostics emitted through it are attributed to that module, so a
-/// recursive validator family that threads a single `logger` value never
-/// also has to thread a [`ModuleSource`]. Obtain one with
-/// [`Logger::in_module`].
+/// A [`Logger`] bound to one module, so code threading a single `logger`
+/// value (recursive validators) need not also thread a [`ModuleSource`].
+/// Obtain one with [`Logger::in_module`].
 pub struct ModuleDiag<'l, 'a, H: CompilerHost> {
     logger: &'l Logger<'a, H>,
     module: &'l ModuleSource,

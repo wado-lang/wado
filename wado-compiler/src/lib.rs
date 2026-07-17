@@ -1446,8 +1446,8 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
 ) -> Result<DumpResult, Bail> {
     let logger = Logger::new(host, compiler_host::LogLevel::default());
     let filename = filename.map(String::from);
-    // The entry module the standalone bind/lex/parse phases below attribute
-    // their diagnostics to (load_all mints the real one only at Phase 4).
+    // Attribution target for the standalone bind/lex/parse phases below;
+    // load_all mints the real entry source only at Phase 4.
     let entry_source = {
         let mut interner = module_source::ModuleSourceInterner::new();
         match &filename {

@@ -838,9 +838,8 @@ fn parse_bind_stdlib(label: &str, source: &str) -> Module {
     {
         let bind_host = crate::compiler_host::InMemoryCompilerHost::new();
         let bind_logger = Logger::new(&bind_host, LogLevel::Off);
-        // A bind failure here is a bundled-stdlib bug: the panic message below
-        // formats each diagnostic against `label`, so the source's file
-        // attribution is never read — a label-named source keeps it honest.
+        // Only used for (unread) file attribution: a bind failure here is a
+        // bundled-stdlib bug and the panic below formats against `label`.
         let module_source = crate::module_source::ModuleSourceInterner::new().entry_point(label);
         bind::bind_module(&ast, &module_source, &bind_logger).unwrap_or_else(|_| {
             let diags = bind_host.diagnostics();

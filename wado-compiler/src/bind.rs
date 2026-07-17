@@ -1212,8 +1212,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         is_reactive: bool,
         span: Span,
     ) -> Result<(), Bail> {
-        // Check for duplicate in the same scope. Read the prior span through a
-        // shared borrow so it ends before `emit` takes `&self`.
+        // Shared borrow (not `last_mut`) so it ends before `emit` takes `&self`.
         if let Some(first) = self
             .scopes
             .last()
