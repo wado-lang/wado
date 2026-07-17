@@ -687,6 +687,27 @@ description = "Build the client-side browser playground assets into wado-playgro
 depends = ["jco-deps"]
 run = "wado-playground/web/build.sh"
 
+[tasks.playground-web-package]
+description = "Package the built playground runtime into wado-playground/web/wado-playground-web.tar.gz (the site consumes this release asset)"
+depends = ["playground-web-build"]
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+WEB="wado-playground/web"
+OUT="${OUT:-$WEB/wado-playground-web.tar.gz}"
+VERSION="${WADO_PLAYGROUND_VERSION:-$(git rev-parse --short HEAD)}"
+STAGE="$(mktemp -d)"
+trap 'rm -rf "$STAGE"' EXIT
+# Keep this file set in sync with the site's `playground-runtime` mise task.
+cp "$WEB"/playground.js "$WEB"/runner-worker.js "$WEB"/lsp-worker.js "$WEB"/lsp-client.js \\
+   "$WEB"/wado-playground.wasm "$WEB"/wado-lsp.wasm "$WEB"/examples.json "$STAGE/"
+cp -r "$WEB"/vendor "$WEB"/shims "$STAGE/"
+printf '{ "version": "%s" }\\n' "$VERSION" > "$STAGE/manifest.json"
+tar czf "$OUT" -C "$STAGE" .
+echo "packaged $OUT (version $VERSION)"
+tar tzf "$OUT"
+"""
+
 [tasks.playground-web-serve]
 description = "Serve the browser playground on http://127.0.0.1:8088 (run playground-web-build first)"
 run = "cd wado-playground/web && python3 -m http.server 8088"
