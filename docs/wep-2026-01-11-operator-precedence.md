@@ -257,13 +257,13 @@ From highest to lowest precedence:
 | 10    | `\|`                                                                | Left-to-right          | Bitwise OR             |
 | 11    | `matches { pattern }`                                               | Left (self-delimiting) | Pattern test (postfix) |
 | 12    | `!`                                                                 | Right-to-left          | Logical NOT (unary)    |
-| 13    | `==`, `<`, `>`, `<=`, `>=` (left-assoc with rules), `!=` (no chain) | **Restricted**         | Comparison             |
+| 13    | `==`, `<`, `>`, `<=`, `>=` (left-assoc with rules), `!=` (no chain) | Restricted             | Comparison             |
 | 14    | `&&`                                                                | Left-to-right          | Logical AND            |
 | 15    | `\|\|`                                                              | Left-to-right          | Logical OR             |
 | 16    | `..<`, `..=`                                                        | N/A                    | Range operators        |
 | 17    | `=`, `+=`, `-=`, etc.                                               | Right-to-left          | Assignment             |
 
-**Key differences from Rust**:
+#### Key Differences from Rust
 
 - Level 3: `~` is bitwise NOT (Rust uses `!` for both). Logical `!` is a separate
   operator at Level 12, looser than the other unary operators.

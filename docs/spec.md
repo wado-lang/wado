@@ -266,7 +266,9 @@ fn example() {
 
 ### Operators
 
-**Binary Operators** (in order of precedence, lowest to highest):
+#### Binary Operators
+
+In order of precedence, lowest to highest:
 
 | Precedence | Operators                        | Description    | Associativity |
 | ---------- | -------------------------------- | -------------- | ------------- |
@@ -294,7 +296,9 @@ Between assignment (1) and logical OR (2), the range operators sit at precedence
 
 See [WEP: Range Object](./wep-2026-03-03-range-object.md) for the full design.
 
-**Design Note**: Bitwise operators (`&`, `|`, `^`) have **higher** precedence than comparison operators, fixing C's well-known design flaw. This means `flags & MASK == EXPECTED` correctly parses as `(flags & MASK) == EXPECTED`.
+#### Design Note
+
+Bitwise operators (`&`, `|`, `^`) have higher precedence than comparison operators, fixing C's well-known design flaw. This means `flags & MASK == EXPECTED` correctly parses as `(flags & MASK) == EXPECTED`.
 
 #### Unary Operators
 
@@ -331,14 +335,14 @@ looser than the binary operators, `as`, and the value-producing unary operators
   `flags & MASK matches { 0 }` need no parentheses. A comparison, range, or
   assignment scrutinee does: `(a == b) matches { true }`.
 
-**Prohibited Operators**:
+#### Prohibited Operators
 
 Wado intentionally omits certain operators found in other languages:
 
-- **No `++`/`--`**: Use `x += 1` and `x -= 1` instead. These operators cause undefined behavior in C/C++ and add unnecessary complexity.
-- **No `**`power operator**: Use`pow(x, y)`function instead. The`**`operator has counterintuitive precedence in languages that have it (e.g., Python's`-1**2 = -1`).
+- No `++`/`--`: use `x += 1` and `x -= 1` instead. These operators cause undefined behavior in C/C++ and add unnecessary complexity.
+- No `**` power operator: use the `pow(x, y)` function instead. `**` has counterintuitive precedence in languages that have it (e.g., Python's `-1**2 = -1`).
 
-**Type Cast (`as`):**
+#### Type Cast (`as`)
 
 The `as` operator performs explicit type conversion between primitive types:
 
@@ -354,7 +358,7 @@ let x = 10 as f64 as i32 as f64;
 let result = (a as f64) + b;
 ```
 
-**Parentheses for Grouping:**
+#### Parentheses for Grouping
 
 Parentheses `()` can be used to override operator precedence:
 
@@ -366,7 +370,7 @@ let c = 3 | 4 & 6;      // 7 (& has higher precedence than |)
 let d = (3 | 4) & 6;    // 6 (| first due to parentheses)
 ```
 
-**Comparison Chaining:**
+#### Comparison Chaining
 
 Wado supports mathematical comparison chaining similar to Python, allowing natural range expressions:
 
@@ -389,12 +393,12 @@ a == b < c      // Error: mixing == and inequality
 a != b != c     // Error: != chaining not allowed
 ```
 
-**Chaining Rules:**
+Chaining rules:
 
-1. **Same-direction inequality**: `<`/`<=` can only chain with `<`/`<=`, and `>`/`>=` can only chain with `>`/`>=`
-2. **Equality chaining**: `==` can only chain with `==`
-3. **No `!=` chaining**: `!=` cannot be chained (the meaning of `a != b != c` is ambiguous)
-4. **No mixing**: Cannot mix equality operators with inequality operators
+1. Same-direction inequality: `<`/`<=` can only chain with `<`/`<=`, and `>`/`>=` can only chain with `>`/`>=`
+2. Equality chaining: `==` can only chain with `==`
+3. No `!=` chaining: `!=` cannot be chained (the meaning of `a != b != c` is ambiguous)
+4. No mixing: cannot mix equality operators with inequality operators
 
 See `docs/wep-2026-01-11-operator-precedence.md` for detailed rationale.
 
