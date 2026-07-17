@@ -540,6 +540,17 @@ pub(super) fn check_cm_boundary_representable(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     visited: &mut Vec<TypeId>,
 ) -> Result<(), String> {
+    let names = CmStdlibNames::from_compiler_items(type_table.compiler_items());
+    check_cm_boundary_representable_inner(type_id, type_table, tir_modules, &names, visited)
+}
+
+fn check_cm_boundary_representable_inner(
+    type_id: TypeId,
+    type_table: &TypeTable,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    names: &CmStdlibNames,
+    visited: &mut Vec<TypeId>,
+) -> Result<(), String> {
     use crate::tir::{PrimitiveType, ResolvedType as R};
 
     if visited.contains(&type_id) {
@@ -557,7 +568,7 @@ pub(super) fn check_cm_boundary_representable(
     // Container shapes resolve through the type-table accessors regardless of
     // their declaring module, keeping this free of source-prefix branching.
     let recurse = |tid, visited: &mut Vec<TypeId>| {
-        check_cm_boundary_representable(tid, type_table, tir_modules, visited)
+        check_cm_boundary_representable_inner(tid, type_table, tir_modules, names, visited)
     };
     let result = (|visited: &mut Vec<TypeId>| {
         if let Some(inner) = type_table.as_option(type_id) {
@@ -601,7 +612,6 @@ pub(super) fn check_cm_boundary_representable(
                 Ok(())
             }
             R::Struct { name, .. } => {
-                let names = CmStdlibNames::from_compiler_items(type_table.compiler_items());
                 if name == &names.string {
                     return Ok(());
                 }

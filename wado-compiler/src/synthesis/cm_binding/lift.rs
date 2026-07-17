@@ -322,9 +322,8 @@ fn try_lift_wasi_struct(
         .iter()
         .map(|(fname, fty)| (fname.clone(), ctx.cm_interface_registry.resolve_type(fty)))
         .collect();
-    let field_types: Vec<Type> = resolved_fields.iter().map(|(_, ty)| ty.clone()).collect();
-    let offsets = cm_abi::layout_record_with_registry_scoped(
-        &field_types,
+    let offsets = cm_abi::layout_fields_with_registry_scoped(
+        resolved_fields.iter().map(|(_, ty)| ty),
         ctx.cm_interface_registry,
         Some(ctx.cm_package),
     )

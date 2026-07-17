@@ -106,51 +106,63 @@ fn lookup_effect_owner(
     fallback
 }
 
-/// Witness that [`reject_unresolvable_record_payloads`] ran while the TIR
-/// still carried the pristine `future-new`/`stream-new` call shape its scan
-/// matches. [`rewrite_async_primitives`] consumes it by value, so reordering
-/// the validation after the rewrites fails to compile.
-struct RecordPayloadsValidated;
+use record_payload_validation::{RecordPayloadsValidated, reject_unresolvable_record_payloads};
 
-/// Reject a user record used as a `future`/`stream` payload when its fields are
-/// not registered in the CM interface registry. Such a record has no CM type to
-/// lower against, so the lower would silently mis-treat it as an i32 handle and
-/// emit an invalid component. Records are registered only for `--lib` components
-/// (under the package default interface); in any other world a user record has
-/// no CM home, so `get_struct_fields` returns `None` and the use is rejected.
-///
-/// The scan is scoped to functions reachable from the active world's export
-/// bindings — the resolvability condition, not the world, decides — so a record
-/// future in code the world drops (e.g. the non-`test` exports of a
-/// library-shaped source like `cm_catalog.wado` compiled for the test world) is
-/// never reached and never flagged.
-fn reject_unresolvable_record_payloads(
-    project: &Package,
-) -> Result<RecordPayloadsValidated, String> {
-    let reachable = reachable_from_export_bindings(project);
-    for (module_source, module) in &project.tir_modules {
-        let tt = module.type_table.borrow();
-        for func_rc in &module.functions {
-            let func = func_rc.borrow();
-            if !reachable.contains(&(module_source.clone(), func.name.clone())) {
-                continue;
-            }
-            let Some(body) = &func.body else { continue };
-            let mut finder = NamedPayloadFinder {
-                tt: &tt,
-                registry: project.cm_interface_registry.as_ref(),
-                found: None,
-            };
-            finder.visit_block(body);
-            if let Some(name) = finder.found {
-                return Err(format!(
-                    "record type `{name}` is used as a `future` / `stream` payload, \
-                     which is only supported in library (`--lib`) components"
-                ));
+/// The record-payload scan and its witness, together in one module so the
+/// witness's private field can only be minted by the scan — a caller elsewhere
+/// cannot fabricate the `RecordPayloadsValidated` proof to skip the scan.
+mod record_payload_validation {
+    use crate::package::Package;
+    use crate::tir_visitor::TirRefVisitor;
+
+    /// Witness that [`reject_unresolvable_record_payloads`] ran while the TIR
+    /// still carried the pristine `future-new`/`stream-new` call shape its scan
+    /// matches. [`super::rewrite_async_primitives`] consumes it by value, so
+    /// reordering the validation after the rewrites fails to compile. The
+    /// private field makes the scan the only place that can mint one.
+    pub(in crate::synthesis::cm_binding) struct RecordPayloadsValidated(());
+
+    /// Reject a user record used as a `future`/`stream` payload when its fields
+    /// are not registered in the CM interface registry. Such a record has no CM
+    /// type to lower against, so the lower would silently mis-treat it as an i32
+    /// handle and emit an invalid component. Records are registered only for
+    /// `--lib` components (under the package default interface); in any other
+    /// world a user record has no CM home, so `get_struct_fields` returns `None`
+    /// and the use is rejected.
+    ///
+    /// The scan is scoped to functions reachable from the active world's export
+    /// bindings — the resolvability condition, not the world, decides — so a
+    /// record future in code the world drops (e.g. the non-`test` exports of a
+    /// library-shaped source like `cm_catalog.wado` compiled for the test world)
+    /// is never reached and never flagged.
+    pub(in crate::synthesis::cm_binding) fn reject_unresolvable_record_payloads(
+        project: &Package,
+    ) -> Result<RecordPayloadsValidated, String> {
+        let reachable = super::reachable_from_export_bindings(project);
+        for (module_source, module) in &project.tir_modules {
+            let tt = module.type_table.borrow();
+            for func_rc in &module.functions {
+                let func = func_rc.borrow();
+                if !reachable.contains(&(module_source.clone(), func.name.clone())) {
+                    continue;
+                }
+                let Some(body) = &func.body else { continue };
+                let mut finder = super::NamedPayloadFinder {
+                    tt: &tt,
+                    registry: project.cm_interface_registry.as_ref(),
+                    found: None,
+                };
+                finder.visit_block(body);
+                if let Some(name) = finder.found {
+                    return Err(format!(
+                        "record type `{name}` is used as a `future` / `stream` payload, \
+                         which is only supported in library (`--lib`) components"
+                    ));
+                }
             }
         }
+        Ok(RecordPayloadsValidated(()))
     }
-    Ok(RecordPayloadsValidated)
 }
 
 /// Module-qualified identity of a TIR function before link: the owning

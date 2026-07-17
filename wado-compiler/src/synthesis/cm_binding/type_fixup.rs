@@ -35,7 +35,8 @@ use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::synthesis::common::{cast, i32_const, option_none, synth_span};
 
 use super::types::{
-    cm_type_to_type_id, flatten_param_type, is_gc_passthrough_param, is_wasm_flat_type,
+    CmStdlibNames, cm_type_to_type_id, flatten_param_type, is_gc_passthrough_param,
+    is_wasm_flat_type,
 };
 
 /// Recursively replace WASI-derived types with user types in the binding.
@@ -613,12 +614,17 @@ pub(super) fn rewrite_calls_in_block(
     type_table: &Rc<RefCell<TypeTable>>,
     applied_returns: &mut IndexMap<usize, TypeId>,
 ) {
+    // The stdlib-name snapshot is invariant across the whole walk; build it
+    // once here instead of once per expression node in `rewrite_calls_in_expr`.
+    let names =
+        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
     CallRewriteWalker {
         adapters,
         entry_source,
         cm_interface_registry,
         type_table,
         applied_returns,
+        names: &names,
     }
     .visit_block(block);
 }
@@ -637,6 +643,7 @@ struct CallRewriteWalker<'a> {
     cm_interface_registry: &'a CmInterfaceRegistry,
     type_table: &'a Rc<RefCell<TypeTable>>,
     applied_returns: &'a mut IndexMap<usize, TypeId>,
+    names: &'a CmStdlibNames,
 }
 
 impl TirMutVisitor for CallRewriteWalker<'_> {
@@ -666,6 +673,7 @@ impl TirMutVisitor for CallRewriteWalker<'_> {
             self.cm_interface_registry,
             self.type_table,
             self.applied_returns,
+            self.names,
         );
     }
 }
@@ -868,9 +876,8 @@ fn rewrite_calls_in_expr(
     cm_interface_registry: &CmInterfaceRegistry,
     type_table: &Rc<RefCell<TypeTable>>,
     applied_returns: &mut IndexMap<usize, TypeId>,
+    names: &CmStdlibNames,
 ) {
-    let names =
-        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
     // Check if this is an effect-like Call that should be rewritten
     let is_effect_call = matches!(&expr.kind, TirExprKind::Call { func, .. }
         if func.module_source.clone().is_effect_like() && func.module_source.clone().interface_name().is_some());
@@ -915,7 +922,7 @@ fn rewrite_calls_in_expr(
                             && is_gc_passthrough_param(
                                 &f.params[i].2,
                                 cm_interface_registry,
-                                &names,
+                                names,
                             )
                     });
                     fixup_adapter_param_from_call_site(
@@ -958,6 +965,7 @@ fn rewrite_calls_in_expr(
                     cm_interface_registry,
                     type_table,
                     applied_returns,
+                    names,
                 );
             }
             return;
@@ -1036,7 +1044,7 @@ fn rewrite_calls_in_expr(
                             && is_gc_passthrough_param(
                                 &f.params[wasi_param_idx].2,
                                 cm_interface_registry,
-                                &names,
+                                names,
                             )
                     });
                     fixup_adapter_param_from_call_site(
@@ -1081,7 +1089,7 @@ fn rewrite_calls_in_expr(
                     true,
                     cm_interface_registry,
                     type_table,
-                    &names,
+                    names,
                 ),
                 None => taken_exprs,
             };
@@ -1110,6 +1118,7 @@ fn rewrite_calls_in_expr(
                         cm_interface_registry,
                         type_table,
                         applied_returns,
+                        names,
                     );
                 }
             }
@@ -1175,7 +1184,7 @@ fn rewrite_calls_in_expr(
                             flat_idx += 1;
                         } else {
                             let flat_tys =
-                                flatten_param_type(param_type, cm_interface_registry, &names);
+                                flatten_param_type(param_type, cm_interface_registry, names);
                             flat_idx += flat_tys.len().max(1);
                         }
                     }
@@ -1208,7 +1217,7 @@ fn rewrite_calls_in_expr(
                     false,
                     cm_interface_registry,
                     type_table,
-                    &names,
+                    names,
                 )
             } else {
                 // No WASI function info: pass args as-is (fallback)
@@ -1235,6 +1244,7 @@ fn rewrite_calls_in_expr(
                         cm_interface_registry,
                         type_table,
                         applied_returns,
+                        names,
                     );
                 }
             }
@@ -1251,6 +1261,7 @@ fn rewrite_calls_in_expr(
         cm_interface_registry,
         type_table,
         applied_returns,
+        names,
     }
     .walk_expr(expr);
 }

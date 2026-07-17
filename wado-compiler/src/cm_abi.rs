@@ -266,10 +266,22 @@ pub fn layout_tuple_with_registry_scoped(
     registry: &crate::component_model::CmInterfaceRegistry,
     wasi_package: Option<&str>,
 ) -> CmLayout {
+    layout_fields_with_registry_scoped(elements.iter(), registry, wasi_package)
+}
+
+/// Package-scoped registry-aware layout over an iterator of field/element type
+/// references. The by-reference core behind [`layout_tuple_with_registry_scoped`]
+/// and [`layout_record_with_registry_scoped`]; callers that already hold the
+/// resolved types pass them without cloning into a `Vec`.
+pub fn layout_fields_with_registry_scoped<'a>(
+    fields: impl Iterator<Item = &'a Type>,
+    registry: &crate::component_model::CmInterfaceRegistry,
+    wasi_package: Option<&str>,
+) -> CmLayout {
     let mut offset: u32 = 0;
     let mut max_align: u32 = 1;
-    let mut offsets = Vec::with_capacity(elements.len());
-    for ty in elements {
+    let mut offsets = Vec::new();
+    for ty in fields {
         let field_align =
             crate::component_model::cm_align_with_registry_scoped(ty, registry, wasi_package);
         let field_size =
@@ -294,7 +306,7 @@ pub fn layout_record_with_registry_scoped(
     registry: &crate::component_model::CmInterfaceRegistry,
     wasi_package: Option<&str>,
 ) -> CmLayout {
-    layout_tuple_with_registry_scoped(field_types, registry, wasi_package)
+    layout_fields_with_registry_scoped(field_types.iter(), registry, wasi_package)
 }
 
 /// Package-scoped payload offset for a variant: the payload of every case
