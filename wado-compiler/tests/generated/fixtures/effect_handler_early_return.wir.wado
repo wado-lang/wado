@@ -114,9 +114,9 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(44)
 
-type "functype//effect_handler_early_return.wado/__Closure_2::__call" = fn() -> i32;  // TypeId(45)
+type "functype//effect_handler_early_return.wado/__Closure_2::__call" = fn(ref "effect_handler_early_return.wado//__Closure_2") -> i32;  // TypeId(45)
 
-type "functype//effect_handler_early_return.wado/__Closure_3::__call" = fn() -> i32;  // TypeId(46)
+type "functype//effect_handler_early_return.wado/__Closure_3::__call" = fn(ref "effect_handler_early_return.wado//__Closure_3") -> i32;  // TypeId(46)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(47)
 
@@ -561,20 +561,24 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "effect_handler_early_return.wado/__Closure_2::__call"() {
-    return 2;
+fn "effect_handler_early_return.wado/__Closure_2::__call"(self) {
+    return drop(self.__capture_0), 2;
 }
 
-fn "effect_handler_early_return.wado/__Closure_3::__call"() {
-    return 1;
+fn "effect_handler_early_return.wado/__Closure_3::__call"(self) {
+    return drop(self.__capture_0), 1;
 }
 
 fn "closure/effect_handler_early_return.wado/__closure_wrapper_0"(__env) {
-    return "effect_handler_early_return.wado/__Closure_2::__call"();
+    let __typed_env: ref "effect_handler_early_return.wado//__Closure_2";
+    __typed_env = ref.cast "effect_handler_early_return.wado//__Closure_2"(__env);
+    return "effect_handler_early_return.wado/__Closure_2::__call"(__typed_env);
 }
 
 fn "closure/effect_handler_early_return.wado/__closure_wrapper_1"(__env) {
-    return "effect_handler_early_return.wado/__Closure_3::__call"();
+    let __typed_env: ref "effect_handler_early_return.wado//__Closure_3";
+    __typed_env = ref.cast "effect_handler_early_return.wado//__Closure_3"(__env);
+    return "effect_handler_early_return.wado/__Closure_3::__call"(__typed_env);
 }
 
 export fn "effect_handler_early_return.wado/__cm_export__run" as "run"

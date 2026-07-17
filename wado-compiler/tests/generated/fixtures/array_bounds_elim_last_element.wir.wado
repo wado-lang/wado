@@ -134,15 +134,17 @@ global global:array_bounds_elim_last_element.wado::__const_obj_13: ref null "cor
 global global:array_bounds_elim_last_element.wado::__const_obj_16: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(3, 7, 4)), used: 3 };
 
 fn "array_bounds_elim_last_element.wado/top"(stack) {
+    let index_3: i32;
     if stack.used > 0 {
-        return builtin::array_get<i32>(stack.repr, stack.used - 1);
+        return index_3 = stack.used - 1, drop(stack.used), builtin::array_get<i32>(stack.repr, index_3);
     }
     return -1;
 }
 
 fn "array_bounds_elim_last_element.wado/second_last"(stack) {
+    let index_3: i32;
     if stack.used > 1 {
-        return builtin::array_get<i32>(stack.repr, stack.used - 2);
+        return index_3 = stack.used - 2, drop(stack.used), builtin::array_get<i32>(stack.repr, index_3);
     }
     return -1;
 }

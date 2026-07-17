@@ -168,7 +168,7 @@ fn "monomorphize_for_of_closure_local.wado/__test_0_closure_with_internal_let_in
         unreachable;
     }
     __sroa___sroa_het_1_repr = array.new_fixed<u8>(120);
-    __v0_4 = "monomorphize_for_of_closure_local.wado/monomorphize_for_of_closure_local.wado/sum_with_closure<[i32,core:prelude/string.wado/String]>"(struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: 5, 1: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__sroa___sroa_het_1_repr); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __sroa___sroa_het_1_repr, 0, __array_clone_len_2); __array_clone_dst_2), used: 1 } });
+    __v0_4 = "monomorphize_for_of_closure_local.wado/monomorphize_for_of_closure_local.wado/sum_with_closure<[i32,core:prelude/string.wado/String]>"(struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: 5, 1: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__sroa___sroa_het_1_repr); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __sroa___sroa_het_1_repr, 0, __array_clone_len_1); __array_clone_dst_1), used: 1 } });
     if @unlikely(__v0_4 != 107) {
         cold_path;
         "core:rt/panic"(__local_8 = "core:prelude/string.wado/String::with_capacity"(154); "core:prelude/string.wado/String::push_str"(__local_8, global:monomorphize_for_of_closure_local.wado::__const_obj_4); "core:prelude/string.wado/String::push_str"(__local_8, global:monomorphize_for_of_closure_local.wado::__const_obj_3); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push"(__local_8, 97); "core:prelude/string.wado/String::push"(__local_8, 116); "core:prelude/string.wado/String::push"(__local_8, 32); "core:prelude/string.wado/String::push_str"(__local_8, global:monomorphize_for_of_closure_local.wado::__const_obj_2); "core:prelude/string.wado/String::push"(__local_8, 58); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 47 }, __local_9); "core:prelude/string.wado/String::push_str"(__local_8, global:monomorphize_for_of_closure_local.wado::__const_obj_1); "core:prelude/string.wado/String::push_str"(__local_8, global:monomorphize_for_of_closure_local.wado::__const_obj_0); __local_9 = "core:prelude/format.wado/Formatter::new"(__local_8); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_4 }, __local_9); "core:prelude/string.wado/String::push"(__local_8, 10); __local_8);
@@ -221,7 +221,12 @@ fn "monomorphize_for_of_closure_local.wado/__cm_export____test_1_closure_capturi
 
 fn "monomorphize_for_of_closure_local.wado/monomorphize_for_of_closure_local.wado/sum_capturing<[i32,core:prelude/string.wado/String,bool]>"(items) {
     let acc: i32;
-    return local.tee acc(local.tee acc(local.tee acc(0 + items.0) + 100) + 1);
+    acc = 0;
+    acc = 0 + items.0;
+    drop(items.1);
+    acc = acc + 100;
+    drop(items.2);
+    return local.tee acc(acc + 1);
 }
 
 fn "monomorphize_for_of_closure_local.wado/monomorphize_for_of_closure_local.wado/sum_capturing<[i32,i32,i32]>"(items) {
@@ -232,8 +237,11 @@ fn "monomorphize_for_of_closure_local.wado/monomorphize_for_of_closure_local.wad
 fn "monomorphize_for_of_closure_local.wado/monomorphize_for_of_closure_local.wado/sum_with_closure<[i32,core:prelude/string.wado/String]>"(items) {
     let acc: i32;
     let v_5: i32;
+    acc = 0;
     v_5 = items.0;
-    return local.tee acc(local.tee acc(0 + (v_5 + 1)) + 101);
+    acc = 0 + (v_5 + 1);
+    drop(items.1);
+    return local.tee acc(acc + 101);
 }
 
 fn "monomorphize_for_of_closure_local.wado/monomorphize_for_of_closure_local.wado/sum_with_closure<[i32,i32,i32]>"(items) {

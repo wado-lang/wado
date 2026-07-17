@@ -123,6 +123,7 @@ fn "newtype_wasi.wado/newtype_wasi_multiple"() with Stdout, MonotonicClock {
     let start: u64;
     let res: u64;
     let end: u64;
+    let elapsed: u64;
     start = "newtype_wasi.wado/__cm_binding__MonotonicClock_now"();
     res = "newtype_wasi.wado/__cm_binding__MonotonicClock_get_resolution"();
     if (if start >u 0_i64 -> i32 {
@@ -132,8 +133,8 @@ fn "newtype_wasi.wado/newtype_wasi_multiple"() with Stdout, MonotonicClock {
     }) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("both newtypes have positive values"), used: 34 });
     }
-    end = "newtype_wasi.wado/__cm_binding__MonotonicClock_now"();
-    if (end - start) >=u 0_i64 {
+    elapsed = local.tee end("newtype_wasi.wado/__cm_binding__MonotonicClock_now"()) - start;
+    if elapsed >=u 0_i64 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("elapsed time is non-negative"), used: 28 });
     }
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("multiple wasi newtype tests passed"), used: 34 });

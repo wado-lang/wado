@@ -26,8 +26,7 @@ fn grow_memory(new_offset: i32) {
     } else {
         normal_grow;
     };
-    let grow_pages: i32 = ((grow_bytes + 65535) / 65536);
-    core::builtin::memory_grow(grow_pages);
+    core::builtin::memory_grow(((grow_bytes + 65535) / 65536));
 }
 
 pub export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
@@ -67,11 +66,7 @@ pub export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32)
 fn fl_push(block: i32, size: i32) {
     let k: i32 = {
         let k: i32 = ((size - 32) >> 4);
-        if (k < 32) {
-            k;
-        } else {
-            32;
-        };
+        core::builtin::select::<i32>((k < 32), k, 32);
     };
     let head: i32 = core::builtin::i32_load((8 + (k * 4)));
     core::builtin::i32_store((block + 8), head);
@@ -92,11 +87,7 @@ fn fl_unlink(block: i32) {
                 core::builtin::i32_and(tag, -8);
             };
             let k: i32 = ((size - 32) >> 4);
-            if (k < 32) {
-                k;
-            } else {
-                32;
-            };
+            core::builtin::select::<i32>((k < 32), k, 32);
         };
         core::builtin::i32_store((8 + (k * 4)), next);
     } else {
@@ -166,11 +157,7 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
     let size: i32 = (core::builtin::i32_and((newsize + 15), -16) + 16);
     let mut j: i32 = {
         let k: i32 = ((size - 32) >> 4);
-        if (k < 32) {
-            k;
-        } else {
-            32;
-        };
+        core::builtin::select::<i32>((k < 32), k, 32);
     };
     loop {
         if !(j < 32) {
@@ -256,6 +243,8 @@ export fn __cm_export__run() {
 }
 
 pub fn __initialize_module() {
+    let mut __b: List<u64> = [1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000, 10000000000, 100000000000, 1000000000000, 10000000000000, 100000000000000, 1000000000000000, 10000000000000000, 100000000000000000, 1000000000000000000, 10000000000000000000];
+    *__b;
 }
 
 fn array_fill();

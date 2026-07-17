@@ -94,7 +94,9 @@ fn "stream_cm_stdin_pipe.wado/__cm_export__run"() {
         global:stream_cm_stdin_pipe.wado::__modules_initialized = 1;
     };
     __pattern_temp_0 = "stream_cm_stdin_pipe.wado/__cm_binding__Stdin_read_via_stream"();
-    drop("stream_cm_stdin_pipe.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"(local.tee subtask("stream_cm_stdin_pipe.wado/__cm_binding__Stdout_write_via_stream"(local.tee stdin_stream(__pattern_temp_0.0)))));
+    stdin_stream = __pattern_temp_0.0;
+    drop(__pattern_temp_0.1);
+    drop("stream_cm_stdin_pipe.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"(local.tee subtask("stream_cm_stdin_pipe.wado/__cm_binding__Stdout_write_via_stream"(stdin_stream))));
     "wasi/task-return"(0);
 }
 

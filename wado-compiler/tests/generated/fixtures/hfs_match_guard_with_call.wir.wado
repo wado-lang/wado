@@ -117,6 +117,7 @@ fn "hfs_match_guard_with_call.wado/run"() with Stdout {
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
     let __hfs_v_11: i32;
+    let __hfs_call_12: bool;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:hfs_match_guard_with_call.wado::__modules_initialized);
         cold_path;
@@ -131,8 +132,10 @@ fn "hfs_match_guard_with_call.wado/run"() with Stdout {
             break_if b0 i >= 4;
             __hfs_v_11 = local.tee __hfs_v_11(__hfs_v_11 + 0) + 0;
             b.v = __hfs_v_11;
-            if "hfs_match_guard_with_call.wado/probe"(b) > 0 {
-                __hfs_v_11 = local.tee __hfs_v_11(b.v) + 1;
+            __hfs_call_12 = "hfs_match_guard_with_call.wado/probe"(b) > 0;
+            __hfs_v_11 = b.v;
+            if __hfs_call_12 {
+                __hfs_v_11 = __hfs_v_11 + 1;
             } else {
             }
             __hfs_v_11 = __hfs_v_11 + 0;

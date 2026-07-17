@@ -9,49 +9,47 @@ struct core:prelude/string.wado//String {  // TypeId(1)
     mut used: i32,
 }
 
-enum enum_match_basic.wado//enum:Color { Red = 0, Green = 1, Blue = 2 };  // TypeId(2)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(2)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(3)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(3)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(4)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(4)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(5)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(5)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(6)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(6)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(7)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
+type "functype//enum_match_basic.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(10)
 
-type "functype//enum_match_basic.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(11)
+type "functype//enum_match_basic.wado/__cm_export__run" = fn();  // TypeId(11)
 
-type "functype//enum_match_basic.wado/__cm_export__run" = fn();  // TypeId(12)
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(12)
 
-type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(13)
+type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(13)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(14)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(14)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(15)
+type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(15)
 
-type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(16)
+type "functype//core:rt/wait_for_blocked" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//core:rt/wait_for_blocked" = fn(i32) -> i32;  // TypeId(17)
+type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(17)
 
-type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(18)
+type "functype//core:rt/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(18)
 
-type "functype//core:rt/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(19)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(19)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(20)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(21)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(22)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(23)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(22)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -73,9 +71,6 @@ fn "enum_match_basic.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdo
 }
 
 fn "enum_match_basic.wado/__cm_export__run"() {
-    let c_0: "enum_match_basic.wado//enum:Color";
-    let c_1: "enum_match_basic.wado//enum:Color";
-    let c_2: "enum_match_basic.wado//enum:Color";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:enum_match_basic.wado::__modules_initialized);
         cold_path;
@@ -88,27 +83,19 @@ fn "enum_match_basic.wado/__cm_export__run"() {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:enum_match_basic.wado::__modules_initialized = 1;
     };
-    "core:cli/println"(c_0 = 0; (if c_0 == 0 -> ref "core:prelude/string.wado//String" {
+    "core:cli/println"(block -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 100), used: 3 };
-    } else if c_0 == 1 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("green"), used: 5 };
-    } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 108, 117, 101), used: 4 };
-    }));
-    "core:cli/println"(c_1 = 1; (if c_1 == 0 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 100), used: 3 };
-    } else if c_1 == 1 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("green"), used: 5 };
-    } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 108, 117, 101), used: 4 };
-    }));
-    "core:cli/println"(c_2 = 2; (if c_2 == 0 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 100), used: 3 };
-    } else if c_2 == 1 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("green"), used: 5 };
-    } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 108, 117, 101), used: 4 };
-    }));
+    });
+    "core:cli/println"(block -> ref "core:prelude/string.wado//String" {
+        block -> ref "core:prelude/string.wado//String" {
+            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("green"), used: 5 };
+        };
+    });
+    "core:cli/println"(block -> ref "core:prelude/string.wado//String" {
+        block -> ref "core:prelude/string.wado//String" {
+            struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 108, 117, 101), used: 4 };
+        };
+    });
     "wasi/task-return"(0);
 }
 
@@ -142,12 +129,12 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b7: block {
-        l8: loop {
-            break_if b7 i >= len;
+    b6: block {
+        l7: loop {
+            break_if b6 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l8;
+            continue l7;
         };
     };
 }
@@ -177,20 +164,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b9: block {
-        l10: loop {
-            break_if b9 offset >= count;
+    b8: block {
+        l9: loop {
+            break_if b8 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/wait_for_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b9 (if (result >> 4) == 0 -> i32 {
+            break_if b8 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l10;
+            continue l9;
         };
     };
 }

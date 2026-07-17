@@ -120,7 +120,6 @@ global global:integer_2.wado::__const_obj_11: ref null "core:prelude/string.wado
 fn "integer_2.wado/test_i8_overflow"() with Stdout {
     let min: i8;
     let sub: i8;
-    let neg: i8;
     let __local_11: ref "core:prelude/string.wado//String";
     let __local_12: ref "core:prelude/format.wado//Formatter";
     let __local_13: ref "core:prelude/string.wado//String";
@@ -139,8 +138,7 @@ fn "integer_2.wado/test_i8_overflow"() with Stdout {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sub is positive: false"), used: 22 });
     }
     "core:cli/println"(__local_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_15, global:integer_2.wado::__const_obj_1); __local_16 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_15 }; "core:prelude/primitive.wado/i32::fmt_decimal"(-2, __local_16); __local_15);
-    neg = builtin::i32_extend8_s(0 - min);
-    "core:cli/println"(__local_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_17, global:integer_2.wado::__const_obj_0); __local_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_17 }; "core:prelude/primitive.wado/i32::fmt_decimal"(neg, __local_18); __local_17);
+    "core:cli/println"(__local_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_17, global:integer_2.wado::__const_obj_0); __local_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_17 }; "core:prelude/primitive.wado/i32::fmt_decimal"(builtin::i32_extend8_s(0 - min), __local_18); __local_17);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("100 + 100 < 0: true"), used: 19 });
 }
 
