@@ -611,7 +611,7 @@ pub(super) fn rewrite_calls_in_block(
     entry_source: &ModuleSource,
     cm_interface_registry: &CmInterfaceRegistry,
     type_table: &Rc<RefCell<TypeTable>>,
-    applied_returns: &mut IndexMap<String, TypeId>,
+    applied_returns: &mut IndexMap<usize, TypeId>,
 ) {
     CallRewriteWalker {
         adapters,
@@ -636,7 +636,7 @@ struct CallRewriteWalker<'a> {
     entry_source: &'a ModuleSource,
     cm_interface_registry: &'a CmInterfaceRegistry,
     type_table: &'a Rc<RefCell<TypeTable>>,
-    applied_returns: &'a mut IndexMap<String, TypeId>,
+    applied_returns: &'a mut IndexMap<usize, TypeId>,
 }
 
 impl TirMutVisitor for CallRewriteWalker<'_> {
@@ -677,20 +677,22 @@ impl TirMutVisitor for CallRewriteWalker<'_> {
 /// The adapter is shared by every call site of the import, so all sites must
 /// agree on its return type; `applied_returns` records what each adapter was
 /// typed to, and a disagreeing site is an ICE rather than a silent
-/// last-write-wins overwrite of the earlier site's typing.
+/// last-write-wins overwrite of the earlier site's typing. The map is keyed by
+/// the adapter's `Rc` identity (`adapter_key`) — not its name, which is a
+/// non-injective `interface_method` join — so two distinct adapters can never
+/// collide.
 fn fixup_adapter_return_from_call_site(
     adapter: &mut TirFunction,
+    adapter_key: usize,
     call_site_type: TypeId,
     is_streaming: bool,
     type_table: &RefCell<TypeTable>,
-    applied_returns: &mut IndexMap<String, TypeId>,
+    applied_returns: &mut IndexMap<usize, TypeId>,
 ) {
     if is_streaming {
         return;
     }
-    if let Some(&prev) = applied_returns.get(&adapter.name)
-        && prev != call_site_type
-    {
+    if let Some(prev) = record_applied_return(applied_returns, adapter_key, call_site_type) {
         let tt = type_table.borrow();
         panic!(
             "call sites disagree on the return type of shared CM binding `{}`: \
@@ -700,13 +702,60 @@ fn fixup_adapter_return_from_call_site(
             tt.type_name(call_site_type)
         );
     }
-    applied_returns.insert(adapter.name.clone(), call_site_type);
     if adapter.return_type == call_site_type {
         return;
     }
     let old_return_type = adapter.return_type;
     adapter.return_type = call_site_type;
     fixup_return_type_in_body(adapter, old_return_type, call_site_type);
+}
+
+/// Record `call_site_type` as the applied return for `adapter_key`. Returns
+/// `Some(prev)` — leaving the map unchanged — when a different type was already
+/// recorded (a shared-adapter conflict the caller turns into an ICE); returns
+/// `None` on the first record or a matching re-record.
+fn record_applied_return(
+    applied_returns: &mut IndexMap<usize, TypeId>,
+    adapter_key: usize,
+    call_site_type: TypeId,
+) -> Option<TypeId> {
+    match applied_returns.get(&adapter_key) {
+        Some(&prev) if prev != call_site_type => Some(prev),
+        _ => {
+            applied_returns.insert(adapter_key, call_site_type);
+            None
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::record_applied_return;
+    use crate::hashmap::IndexMap;
+    use crate::tir::TypeId;
+
+    #[test]
+    fn record_applied_return_first_and_matching_are_ok() {
+        let mut m: IndexMap<usize, TypeId> = IndexMap::default();
+        assert_eq!(record_applied_return(&mut m, 1, TypeId(10)), None);
+        // Same key, same type re-records without conflict.
+        assert_eq!(record_applied_return(&mut m, 1, TypeId(10)), None);
+        // A distinct adapter key is independent.
+        assert_eq!(record_applied_return(&mut m, 2, TypeId(20)), None);
+    }
+
+    #[test]
+    fn record_applied_return_detects_conflict() {
+        let mut m: IndexMap<usize, TypeId> = IndexMap::default();
+        assert_eq!(record_applied_return(&mut m, 1, TypeId(10)), None);
+        // Same key, different type → the earlier type is reported and the map
+        // is left unchanged so the caller can ICE with both names.
+        assert_eq!(
+            record_applied_return(&mut m, 1, TypeId(11)),
+            Some(TypeId(10))
+        );
+        assert_eq!(m.get(&1), Some(&TypeId(10)));
+    }
 }
 
 /// Retype one adapter param (and its local slot) from a call-site arg.
@@ -818,7 +867,7 @@ fn rewrite_calls_in_expr(
     entry_source: &ModuleSource,
     cm_interface_registry: &CmInterfaceRegistry,
     type_table: &Rc<RefCell<TypeTable>>,
-    applied_returns: &mut IndexMap<String, TypeId>,
+    applied_returns: &mut IndexMap<usize, TypeId>,
 ) {
     let names =
         super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
@@ -849,9 +898,11 @@ fn rewrite_calls_in_expr(
 
             // Fix up binding function types from the call site
             {
+                let adapter_key = Rc::as_ptr(adapter_rc) as usize;
                 let mut adapter = adapter_rc.borrow_mut();
                 fixup_adapter_return_from_call_site(
                     &mut adapter,
+                    adapter_key,
                     expr.type_id,
                     is_streaming,
                     type_table,
@@ -957,9 +1008,11 @@ fn rewrite_calls_in_expr(
             // Fix up binding function types from the call site
             // The binding params include self as the first param
             {
+                let adapter_key = Rc::as_ptr(adapter_rc) as usize;
                 let mut adapter = adapter_rc.borrow_mut();
                 fixup_adapter_return_from_call_site(
                     &mut adapter,
+                    adapter_key,
                     expr.type_id,
                     is_streaming,
                     type_table,
@@ -1085,9 +1138,11 @@ fn rewrite_calls_in_expr(
 
             // Fix up adapter return type and param types from the call site
             {
+                let adapter_key = Rc::as_ptr(adapter_rc) as usize;
                 let mut adapter = adapter_rc.borrow_mut();
                 fixup_adapter_return_from_call_site(
                     &mut adapter,
+                    adapter_key,
                     expr.type_id,
                     false,
                     type_table,
