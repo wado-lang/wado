@@ -138,11 +138,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     }
 
     /// Report a compilation error attributed to `module`'s source file.
-    pub fn error_in(
-        &self,
-        module: &ModuleSource,
-        err: impl Into<Diagnostic>,
-    ) -> Result<(), Bail> {
+    pub fn error_in(&self, module: &ModuleSource, err: impl Into<Diagnostic>) -> Result<(), Bail> {
         self.error_at(&module.source_path(), err)
     }
 

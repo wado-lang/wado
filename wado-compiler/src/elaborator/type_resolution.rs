@@ -505,14 +505,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                             type_arg,
                                             bound,
                                         );
-                                        let _ =
-                                            self.emit(TypeError::TraitBoundNotSatisfied {
-                                                type_name,
-                                                trait_name: bound.clone(),
-                                                param_name: param_name.clone(),
-                                                reason,
-                                                span,
-                                            });
+                                        let _ = self.emit(TypeError::TraitBoundNotSatisfied {
+                                            type_name,
+                                            trait_name: bound.clone(),
+                                            param_name: param_name.clone(),
+                                            reason,
+                                            span,
+                                        });
                                     }
                                 }
                             }

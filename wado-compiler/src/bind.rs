@@ -1300,7 +1300,11 @@ mod tests {
     fn bind_and_check(module: &Module) -> (bool, Vec<crate::compiler_host::Diagnostic>) {
         let host = InMemoryCompilerHost::new();
         let logger = Logger::new(&host, LogLevel::Error);
-        let result = bind_module(module, &crate::module_source::ModuleSource::default(), &logger);
+        let result = bind_module(
+            module,
+            &crate::module_source::ModuleSource::default(),
+            &logger,
+        );
         (result.is_ok(), host.diagnostics())
     }
 

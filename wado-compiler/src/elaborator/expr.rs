@@ -3992,13 +3992,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // per field.
                         elem_types.extend(inner_elems);
                     } else {
-                        let _ = self.emit(
-                            crate::elaborator::types::TypeError::InvalidLiteral {
-                                message: "spread operator `..` can only be used with tuple types"
-                                    .to_string(),
-                                span: elem.span(),
-                            },
-                        );
+                        let _ = self.emit(crate::elaborator::types::TypeError::InvalidLiteral {
+                            message: "spread operator `..` can only be used with tuple types"
+                                .to_string(),
+                            span: elem.span(),
+                        });
                         elem_types.push(spread_type_id);
                     }
                 }

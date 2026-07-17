@@ -330,11 +330,14 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         span: Span,
     ) -> Option<crate::ast::AstId> {
         if let Some(first) = self.symbols.defined_span_in_module(module_source, name) {
-            let _ = self.logger.error_in(module_source, AnalyzeError::DuplicateDefinition {
-                name: name.to_string(),
-                span,
-                first,
-            });
+            let _ = self.logger.error_in(
+                module_source,
+                AnalyzeError::DuplicateDefinition {
+                    name: name.to_string(),
+                    span,
+                    first,
+                },
+            );
             return None;
         }
         Some(
@@ -684,10 +687,13 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 _ => continue,
             };
             if self.symbols.is_prelude_type(name) {
-                let _ = self.logger.error_in(module_source, AnalyzeError::PreludeTypeCollision {
-                    name: name.clone(),
-                    span,
-                });
+                let _ = self.logger.error_in(
+                    module_source,
+                    AnalyzeError::PreludeTypeCollision {
+                        name: name.clone(),
+                        span,
+                    },
+                );
             }
         }
     }
@@ -869,12 +875,15 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
             return Ok(());
         };
         if !self.import_reachable(from_module_source, target_module, visibility) {
-            self.logger.error_in(from_module_source, AnalyzeError::SymbolNotVisible {
-                name: name.to_string(),
-                module_source: target_module.clone(),
-                visibility,
-                span,
-            })?;
+            self.logger.error_in(
+                from_module_source,
+                AnalyzeError::SymbolNotVisible {
+                    name: name.to_string(),
+                    module_source: target_module.clone(),
+                    visibility,
+                    span,
+                },
+            )?;
         }
         Ok(())
     }
@@ -894,11 +903,14 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 if !is_wasm_asset_use_decl(use_decl)
                     && let Err(message) = validate_module_path(&use_decl.source)
                 {
-                    self.logger.error_in(from_module_source, AnalyzeError::InvalidModulePath {
-                        path: use_decl.source.clone(),
-                        message,
-                        span: use_decl.span,
-                    })?;
+                    self.logger.error_in(
+                        from_module_source,
+                        AnalyzeError::InvalidModulePath {
+                            path: use_decl.source.clone(),
+                            message,
+                            span: use_decl.span,
+                        },
+                    )?;
                     continue;
                 }
 
@@ -911,22 +923,28 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     Some(&self.entry_module_source),
                     &self.invocations,
                 ) else {
-                    self.logger.error_in(from_module_source, AnalyzeError::InvalidModulePath {
-                        path: use_decl.source.clone(),
-                        message: "wasm asset paths must be relative (`./` or `../`); \
+                    self.logger.error_in(
+                        from_module_source,
+                        AnalyzeError::InvalidModulePath {
+                            path: use_decl.source.clone(),
+                            message: "wasm asset paths must be relative (`./` or `../`); \
                              absolute namespace-qualified paths are not supported here"
-                            .to_string(),
-                        span: use_decl.span,
-                    })?;
+                                .to_string(),
+                            span: use_decl.span,
+                        },
+                    )?;
                     continue;
                 };
 
                 // Check the module exists in pre-loaded modules
                 if !all_modules.contains_key(&module_source) {
-                    self.logger.error_in(from_module_source, AnalyzeError::ModuleNotFound {
-                        module_source: module_source.clone(),
-                        span: use_decl.span,
-                    })?;
+                    self.logger.error_in(
+                        from_module_source,
+                        AnalyzeError::ModuleNotFound {
+                            module_source: module_source.clone(),
+                            span: use_decl.span,
+                        },
+                    )?;
                     continue;
                 }
 
@@ -948,11 +966,14 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                 self.symbols
                                     .register_import(from_module_source, import_name, key);
                             } else {
-                                self.logger.error_in(from_module_source, AnalyzeError::ImportNotFound {
-                                    module_source: module_source.clone(),
-                                    name: name.clone(),
-                                    span: use_decl.span,
-                                })?;
+                                self.logger.error_in(
+                                    from_module_source,
+                                    AnalyzeError::ImportNotFound {
+                                        module_source: module_source.clone(),
+                                        name: name.clone(),
+                                        span: use_decl.span,
+                                    },
+                                )?;
                             }
                         }
                         UseItem::InterfaceFunctions {
@@ -979,11 +1000,14 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                         key,
                                     );
                                 } else {
-                                    self.logger.error_in(from_module_source, AnalyzeError::ImportNotFound {
-                                        module_source: module_source.clone(),
-                                        name: lookup_name,
-                                        span: use_decl.span,
-                                    })?;
+                                    self.logger.error_in(
+                                        from_module_source,
+                                        AnalyzeError::ImportNotFound {
+                                            module_source: module_source.clone(),
+                                            name: lookup_name,
+                                            span: use_decl.span,
+                                        },
+                                    )?;
                                 }
                             }
                         }
