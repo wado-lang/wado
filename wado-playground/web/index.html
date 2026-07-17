@@ -31,24 +31,49 @@ export fn run() with Stdout {
       const $ = (id) => document.getElementById(id);
       const status = (t) => ($("status").textContent = t);
 
-      async function go() {
+      // Run in a worker so the (potentially slow, on mobile) compile does not
+      // freeze the page: the main thread stays free to paint each progress
+      // message the worker streams back.
+      function runInWorker(source, onEvent) {
+        const worker = new Worker("./runner-worker.js", { type: "module" });
+        const out = { stdout: "", stderr: "" };
+        return new Promise((resolve, reject) => {
+          worker.onmessage = (e) => {
+            const m = e.data;
+            if (m.type === "stdout" || m.type === "stderr") out[m.type] += m.text;
+            else onEvent?.(m);
+            if (m.type === "done") resolve({ ...out, ms: m.ms });
+            if (m.type === "error") reject(new Error(m.text));
+          };
+          worker.onerror = (e) => reject(new Error(e.message || "worker error"));
+          worker.postMessage({ type: "run", source });
+        }).finally(() => worker.terminate());
+      }
+
+      async function go(source) {
         $("out").textContent = "";
         $("out").classList.remove("err");
-        status("running…");
-        try {
-          const t0 = performance.now();
-          const { stdout, stderr } = await run($("src").value);
-          const ms = Math.round(performance.now() - t0);
-          $("out").textContent = (stdout + (stderr ? "\n[stderr]\n" + stderr : "")) || "(no output)";
-          status(`done in ${ms} ms`);
-        } catch (e) {
+        // Coarse stage (compiling/transpiling/running) plus the current
+        // fine-grained compiler phase, shown as one live progress line.
+        let stage = "compiling";
+        status("compiling…");
+        const result = await runInWorker(source, (m) => {
+          if (m.type === "status") { stage = m.phase; status(`${stage}…`); }
+          else if (m.type === "phase") status(`${stage}… (${m.name})`);
+        });
+        $("out").textContent =
+          (result.stdout + (result.stderr ? "\n[stderr]\n" + result.stderr : "")) || "(no output)";
+        status(`done in ${result.ms} ms`);
+        return result;
+      }
+
+      $("run").addEventListener("click", () =>
+        go($("src").value).catch((e) => {
           $("out").textContent = String(e.message ?? e);
           $("out").classList.add("err");
           status("error");
-        }
-      }
-
-      $("run").addEventListener("click", go);
+        }),
+      );
 
       // Test hook: lets Playwright drive a run and read the result.
       globalThis.__wadoRun = (source) => run(source ?? $("src").value);

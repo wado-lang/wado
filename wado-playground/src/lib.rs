@@ -8,13 +8,88 @@
 //!   an owned result buffer `[status:u32 LE][len:u32 LE][payload…]` — `status 1`
 //!   payload is the component Wasm, `status 0` payload is UTF-8 diagnostics.
 //! - `wado_free(ptr, len)` releases a buffer (result buffers: `len == 8 + payload`).
+//!
+//! While compiling, the wrapper calls the host-supplied import `wado_phase(ptr,
+//! len)` once per compiler phase (`parse`, `monomorphize`, `codegen`, …) so a
+//! slow client — a phone especially — can show live progress instead of a
+//! frozen button. This is the compiler's `--log-level debug` phase stream.
 
 use std::alloc::{Layout, alloc, dealloc};
 use std::future::Future;
 use std::task::{Context, Poll, Waker};
 
-use wado_compiler::compiler_host::InMemoryCompilerHost;
-use wado_compiler::{CompilerOptions, OptLevel, compile_with_options};
+use wado_compiler::compiler_host::{CompilerHost, Diagnostic, InMemoryCompilerHost, SourceError};
+use wado_compiler::{Code, CompilerOptions, LogLevel, OptLevel, Severity, compile_with_options};
+
+// Host-supplied progress import, called once per compiler phase with the phase
+// name (`parse`, `codegen`, …) as a UTF-8 slice into this module's memory.
+// Only wired up in the browser; native (test) builds report to nothing.
+#[cfg(target_arch = "wasm32")]
+#[link(wasm_import_module = "env")]
+unsafe extern "C" {
+    fn wado_phase(ptr: *const u8, len: usize);
+}
+
+/// Forward a phase name to the browser's `wado_phase` import. A no-op off wasm.
+fn report_phase(name: &str) {
+    #[cfg(target_arch = "wasm32")]
+    unsafe {
+        wado_phase(name.as_ptr(), name.len());
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = name;
+}
+
+/// A [`CompilerHost`] that streams phase progress while collecting diagnostics.
+///
+/// The compiler emits a `SpanStart` debug diagnostic when it enters a phase; we
+/// forward those names to `on_phase` for live UI feedback and drop the rest of
+/// the debug chatter (`SpanEnd`, timing logs), so `inner` collects only the
+/// real errors and warnings that make up the failure text.
+struct ProgressHost<F: Fn(&str) + Send + Sync> {
+    inner: InMemoryCompilerHost,
+    on_phase: F,
+}
+
+impl<F: Fn(&str) + Send + Sync> ProgressHost<F> {
+    fn new(on_phase: F) -> Self {
+        Self {
+            inner: InMemoryCompilerHost::new(),
+            on_phase,
+        }
+    }
+
+    fn diagnostics(&self) -> Vec<Diagnostic> {
+        self.inner.diagnostics()
+    }
+}
+
+impl<F: Fn(&str) + Send + Sync> CompilerHost for ProgressHost<F> {
+    async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
+        self.inner.load_source(path).await
+    }
+
+    fn emit_diagnostic(&self, diagnostic: Diagnostic) {
+        if diagnostic.code == Code::SpanStart {
+            (self.on_phase)(&diagnostic.message);
+        } else if diagnostic.severity != Severity::Debug {
+            self.inner.emit_diagnostic(diagnostic);
+        }
+    }
+}
+
+/// Compiler options shared by the browser entry point and the tests, so the
+/// playground and its coverage stay in lockstep. `Debug` log level turns on the
+/// per-phase `SpanStart` stream that drives progress reporting.
+fn playground_options() -> CompilerOptions {
+    CompilerOptions {
+        opt_level: OptLevel::O2,
+        // V8/browsers do not implement the wide-arithmetic proposal.
+        codegen_flags: vec!["no-wide-arithmetic".to_string()],
+        log_level: Some(LogLevel::Debug),
+        ..CompilerOptions::default()
+    }
+}
 
 /// Exact byte-buffer layout. `len == 0` is rounded to 1 so alloc never sees a
 /// zero size; `wado_free` applies the same rounding, so the layouts match.
@@ -49,15 +124,14 @@ pub unsafe extern "C" fn wado_compile(ptr: *mut u8, len: usize) -> *const u8 {
         unsafe { String::from_utf8_lossy(std::slice::from_raw_parts(ptr, len)).into_owned() };
     unsafe { wado_free(ptr, len) };
 
-    let host = InMemoryCompilerHost::new();
-    let options = CompilerOptions {
-        opt_level: OptLevel::O2,
-        // V8/browsers do not implement the wide-arithmetic proposal.
-        codegen_flags: vec!["no-wide-arithmetic".to_string()],
-        ..CompilerOptions::default()
-    };
+    let host = ProgressHost::new(report_phase);
 
-    let fut = compile_with_options(&source, &host, Some("playground.wado"), options);
+    let fut = compile_with_options(
+        &source,
+        &host,
+        Some("playground.wado"),
+        playground_options(),
+    );
     if let Ok(result) = block_on(fut) {
         encode(1, &result.wasm)
     } else {
@@ -100,6 +174,9 @@ fn block_on<F: Future>(fut: F) -> F::Output {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Mutex};
+
+    const HELLO: &str = "use { println, Stdout } from \"core:cli\";\n\nexport fn run() with Stdout {\n    println(\"hi\");\n}\n";
 
     /// Round-trip a source string through the C ABI, exercising the exact
     /// alloc → compile → free path the browser uses.
@@ -119,8 +196,7 @@ mod tests {
 
     #[test]
     fn compiles_hello_to_a_component() {
-        let src = "use { println, Stdout } from \"core:cli\";\n\nexport fn run() with Stdout {\n    println(\"hi\");\n}\n";
-        let (status, payload) = compile_str(src);
+        let (status, payload) = compile_str(HELLO);
         assert_eq!(status, 1, "expected success");
         assert_eq!(&payload[0..4], b"\0asm", "Wasm magic");
         assert_eq!(&payload[6..8], &[0x01, 0x00], "component layer");
@@ -141,5 +217,44 @@ mod tests {
     fn handles_empty_source() {
         let (status, _) = compile_str("");
         assert_eq!(status, 0, "empty source is an error, not a crash");
+    }
+
+    /// A successful compile streams the compiler's phase names to `on_phase`, so
+    /// the browser can show progress mid-compile. `parse` and `codegen` bracket
+    /// the pipeline, so both must appear.
+    #[test]
+    fn streams_phase_progress() {
+        let phases = Arc::new(Mutex::new(Vec::<String>::new()));
+        let sink = Arc::clone(&phases);
+        let host = ProgressHost::new(move |name: &str| sink.lock().unwrap().push(name.to_string()));
+
+        let result = block_on(compile_with_options(
+            HELLO,
+            &host,
+            Some("playground.wado"),
+            playground_options(),
+        ));
+        assert!(result.is_ok(), "hello compiles");
+
+        let phases = phases.lock().unwrap();
+        assert!(
+            phases.iter().any(|p| p.starts_with("parse")),
+            "saw parse: {phases:?}"
+        );
+        assert!(
+            phases.iter().any(|p| p == "codegen"),
+            "saw codegen: {phases:?}"
+        );
+    }
+
+    /// Phase names are progress, not diagnostics: the debug stream (`SpanStart`
+    /// / `SpanEnd` / timing logs, all `Severity::Debug`) must not leak into the
+    /// error text a failed compile returns.
+    #[test]
+    fn debug_stream_stays_out_of_error_text() {
+        let (status, payload) = compile_str("this is not valid wado");
+        assert_eq!(status, 0);
+        let text = std::str::from_utf8(&payload).unwrap();
+        assert!(!text.contains("debug:"), "no debug lines in errors: {text}");
     }
 }

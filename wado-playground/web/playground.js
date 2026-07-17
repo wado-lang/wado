@@ -8,26 +8,50 @@ import { postprocess } from "./vendor/postprocess.js";
 const BASE = new URL(".", import.meta.url);
 
 let _compilerInstance = null;
+// Set for the duration of one wado_compile call; the wasm `wado_phase` import
+// forwards phase names here so a slow (mobile) compile shows live progress.
+let _onPhase = null;
 
 async function loadCompiler() {
   if (_compilerInstance) return _compilerInstance;
   const wasmUrl = new URL("./wado-playground.wasm", BASE);
   const resp = await fetch(wasmUrl);
   if (!resp.ok) throw new Error(`failed to load ${wasmUrl}: HTTP ${resp.status}`);
-  const { instance } = await WebAssembly.instantiateStreaming(resp, {});
+  // The compiler calls env.wado_phase(ptr, len) once per phase while compiling.
+  const imports = {
+    env: {
+      wado_phase: (ptr, len) => {
+        if (!_onPhase) return;
+        const mem = _compilerInstance.exports.memory;
+        const name = new TextDecoder().decode(new Uint8Array(mem.buffer, ptr, len));
+        _onPhase(name);
+      },
+    },
+  };
+  const { instance } = await WebAssembly.instantiateStreaming(resp, imports);
   _compilerInstance = instance;
   return instance;
 }
 
-/** Compile Wado source → Component Model Wasm bytes (or throw with diagnostics). */
-export async function compile(source) {
+/**
+ * Compile Wado source → Component Model Wasm bytes (or throw with diagnostics).
+ * `onPhase(name)`, if given, is called synchronously for each compiler phase
+ * (`parse`, `monomorphize`, `codegen`, …) as compilation progresses.
+ */
+export async function compile(source, onPhase) {
   const { memory, wado_alloc, wado_compile, wado_free } = (await loadCompiler()).exports;
   const src = new TextEncoder().encode(source);
   const inPtr = wado_alloc(src.length);
   new Uint8Array(memory.buffer, inPtr, src.length).set(src);
 
   // wado_compile frees inPtr and returns an owned result buffer; copy, then free.
-  const outPtr = wado_compile(inPtr, src.length);
+  _onPhase = onPhase ?? null;
+  let outPtr;
+  try {
+    outPtr = wado_compile(inPtr, src.length);
+  } finally {
+    _onPhase = null;
+  }
   const header = new DataView(memory.buffer, outPtr, 8);
   const status = header.getUint32(0, true);
   const len = header.getUint32(4, true);
@@ -77,15 +101,18 @@ export async function transpileToModule(componentBytes, name = "program") {
 
 let _running = false;
 
-/** Compile + transpile + run, returning captured stdout/stderr text. */
-export async function run(source) {
+/**
+ * Compile + transpile + run, returning captured stdout/stderr text.
+ * `onPhase(name)`, if given, receives each compiler phase name as it runs.
+ */
+export async function run(source, onPhase) {
   if (_running) throw new Error("a program is already running");
   _running = true;
   const out = { stdout: "", stderr: "" };
   const prevWrite = globalThis._wadoWrite;
   globalThis._wadoWrite = (kind, text) => { out[kind] += text; };
   try {
-    const component = await compile(source);
+    const component = await compile(source, onPhase);
     const moduleUrl = await transpileToModule(component);
     try {
       const mod = await import(moduleUrl);
