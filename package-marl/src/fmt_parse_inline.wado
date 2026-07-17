@@ -596,8 +596,7 @@ fn try_link(cur: &StrCursor, open: i32, refs: &RefTable) -> Option<[Node, i32]> 
                 Node::ShortcutLink(ReferenceLinkNode {
                     children: parse_inline_chars(cur.sub(open + 1, close), refs),
                     label: raw_label.trim(),
-                }),
-                close + 1,
+                }), close + 1,
             ]);
         },
         None => null,
@@ -661,8 +660,7 @@ fn try_inline_link_tail(cur: &StrCursor, open: i32, close: i32, refs: &RefTable)
             children: parse_inline_chars(cur.sub(open + 1, close), refs),
             url,
             title,
-        }),
-        pclose + 1,
+        }), pclose + 1,
     ]);
 }
 
@@ -698,8 +696,7 @@ fn try_reference_link(cur: &StrCursor, open: i32, close: i32, refs: &RefTable) -
                 Node::ReferenceLink(ReferenceLinkNode {
                     children: parse_inline_chars(cur.sub(open + 1, close), refs),
                     label: raw_label.trim(),
-                }),
-                second_close + 1,
+                }), second_close + 1,
             ]);
         },
         None => null,
