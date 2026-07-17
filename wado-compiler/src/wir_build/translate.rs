@@ -1301,16 +1301,32 @@ impl FunctionTranslator<'_, '_> {
             .map(|f| (f.name.clone(), f.ty.clone()))
             .collect();
 
+        // WIR-unique prefix: the lower path names its statement-position
+        // deref-assign temps `__deref_ref_{nir_idx}` / `__deref_val_{nir_idx}`
+        // from independent NIR local indices. codegen dedups `DeclareLocal` by
+        // name, so a bare `__deref_ref_{counter}` here could collide with a
+        // lower-path temp of the same number in a function that has both a
+        // statement- and an expression-position aggregate deref-assign —
+        // aliasing two distinct locals into one slot (a type-mismatch ICE, or a
+        // silent shared-storage miscompile when the types match).
         self.local_counter += 1;
-        let ref_local = format!("__deref_ref_{}", self.local_counter);
-        let val_local = format!("__deref_val_{}", self.local_counter);
+        let ref_local = format!("__expr_deref_ref_{}", self.local_counter);
+        let val_local = format!("__expr_deref_val_{}", self.local_counter);
         let ref_ty = WirType::Ref {
             type_id: type_id.clone(),
             nullable: false,
         };
         let mut instrs = Vec::with_capacity(4 + fields.len());
-        instrs.extend(declare_and_set_local(ref_local.clone(), ref_ty.clone(), recv));
-        instrs.extend(declare_and_set_local(val_local.clone(), ref_ty.clone(), val));
+        instrs.extend(declare_and_set_local(
+            ref_local.clone(),
+            ref_ty.clone(),
+            recv,
+        ));
+        instrs.extend(declare_and_set_local(
+            val_local.clone(),
+            ref_ty.clone(),
+            val,
+        ));
         for (field_name, field_ty) in fields {
             let target = WirInstr::LocalGet {
                 name: ref_local.clone(),

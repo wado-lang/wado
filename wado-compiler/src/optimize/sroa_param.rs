@@ -117,6 +117,14 @@ fn collect_and_validate(
     let type_table = project.type_table.borrow();
     let single_field = build_single_field_index(project);
     let struct_fields = build_struct_fields_index(project);
+    // A mutable-global write the callee can reach — directly, through a helper,
+    // or as an in-place `Assign` into a global's field — may change a reference
+    // param's pointee under a call-time value snapshot. Summarised once for
+    // every function (the write is often several calls deep), then type-filtered
+    // per candidate so an unrelated global write (e.g. the allocator's
+    // `heap_offset`, reached by every allocation) never blocks the unwrap.
+    let global_writes = transitive_global_writes(project);
+    let global_types = global_type_index(project);
 
     let mut candidates: IndexMap<(FnKey, usize), SroaInfo> = IndexMap::default();
     for fid in gate.dirty_funcs(GatedPass::SroaParam, project.functions.len()) {
@@ -126,12 +134,6 @@ fn collect_and_validate(
         }
         let Some(key) = func.id else { continue };
         let is_trait_method = func.is_trait_method();
-        // A mutable-global write in the callee can reach a reference param's
-        // pointee (if that pointee lives in the global), so a call-time value
-        // snapshot of the read-only param would be stale. Computed once per
-        // callee; only reference candidates are affected (a by-value struct
-        // param is already a copy).
-        let writes_global = body_writes_mutable_global(func.body.as_ref().unwrap());
         for (pi, param) in func.params.iter().enumerate() {
             // A trait method's `self` receiver stays pinned. Scalarizing a
             // single-field-struct receiver (e.g. a `SequenceLiteralBuilder`
@@ -154,6 +156,13 @@ fn collect_and_validate(
             let Some(info) = candidate_info_for(param.type_id, &type_table, &single_field) else {
                 continue;
             };
+            let writes_global = writes_aliasing_global(
+                &global_writes[key.index()],
+                &info.struct_key,
+                &global_types,
+                &type_table,
+                &struct_fields,
+            );
             if param_snapshot_unsound(
                 &func,
                 pi,
@@ -357,12 +366,149 @@ fn type_transitively_contains(
     }
 }
 
-/// Whether the body writes any mutable global (a `GlobalVarSet`). Scans every
-/// expression node; an orphaned node only over-approximates, which is sound.
-fn body_writes_mutable_global(body: &Body) -> bool {
-    body.exprs
-        .values()
-        .any(|e| matches!(&e.kind, ExprKind::GlobalVarSet { .. }))
+/// A conservative summary of the mutable globals a function may write when
+/// executed, including transitively through its callees.
+#[derive(Clone)]
+enum GlobalWrites {
+    /// May write an unknown set of globals — an indirect call whose target
+    /// cannot be resolved, so any global is possible.
+    Any,
+    /// Writes exactly these globals, by `(module, name)` identity.
+    Known(IndexSet<(ModuleSource, String)>),
+}
+
+impl GlobalWrites {
+    /// Fold `other` into `self`; returns whether `self` grew.
+    fn absorb(&mut self, other: &GlobalWrites) -> bool {
+        match (&mut *self, other) {
+            (GlobalWrites::Any, _) => false,
+            (slot, GlobalWrites::Any) => {
+                *slot = GlobalWrites::Any;
+                true
+            }
+            (GlobalWrites::Known(acc), GlobalWrites::Known(more)) => {
+                let before = acc.len();
+                for g in more {
+                    acc.insert(g.clone());
+                }
+                acc.len() != before
+            }
+        }
+    }
+}
+
+/// The global a write-target place is rooted at, or `None` when it roots at a
+/// local. Sees through the projections that share a location — field / index /
+/// variant-payload access, a transparent cast, and deref — so an in-place
+/// `G.field = …` is recognised as a write to `G`, not just a whole-global
+/// `GlobalVarSet`.
+fn global_place_root(body: &Body, target: ExprId) -> Option<(ModuleSource, String)> {
+    match &body.exprs[target].kind {
+        ExprKind::GlobalVarGet {
+            module_source,
+            name,
+        } => Some((module_source.clone(), name.clone())),
+        ExprKind::FieldAccess { expr: inner, .. }
+        | ExprKind::Index { expr: inner, .. }
+        | ExprKind::VariantPayload { expr: inner, .. }
+        | ExprKind::Cast { expr: inner, .. }
+        | ExprKind::Unary {
+            op: NirUnaryOp::Deref,
+            expr: inner,
+        } => inner.as_expr().and_then(|e| global_place_root(body, e)),
+        _ => None,
+    }
+}
+
+/// Per-function transitive mutable-global-write summary, indexed by function
+/// position. A caller inherits every global its callees may write, so a write
+/// reached several calls deep is captured; an unresolved indirect call widens
+/// the summary to [`GlobalWrites::Any`]. Solved as a monotone worklist over the
+/// reverse call graph — a caller is re-examined only when a callee's set grows.
+fn transitive_global_writes(project: &NirPackage) -> Vec<GlobalWrites> {
+    let n = project.functions.len();
+    let mut writes: Vec<GlobalWrites> = Vec::with_capacity(n);
+    let mut callers: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for i in 0..n {
+        let func = project.functions[i].borrow();
+        let mut direct: IndexSet<(ModuleSource, String)> = IndexSet::default();
+        let mut indirect = false;
+        if let Some(body) = func.body.as_ref() {
+            for node in body.exprs.values() {
+                match &node.kind {
+                    ExprKind::GlobalVarSet {
+                        module_source,
+                        name,
+                        ..
+                    } => {
+                        direct.insert((module_source.clone(), name.clone()));
+                    }
+                    ExprKind::Assign { target, .. } => {
+                        if let Some(g) = global_place_root(body, *target) {
+                            direct.insert(g);
+                        }
+                    }
+                    ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => {
+                        let c = func_id.index();
+                        if c < n {
+                            callers[c].push(i);
+                        }
+                    }
+                    ExprKind::IndirectCall { .. } => indirect = true,
+                    _ => {}
+                }
+            }
+        }
+        writes.push(if indirect {
+            GlobalWrites::Any
+        } else {
+            GlobalWrites::Known(direct)
+        });
+    }
+    let mut queued = vec![true; n];
+    let mut work: Vec<usize> = (0..n).collect();
+    while let Some(c) = work.pop() {
+        queued[c] = false;
+        let callee_set = writes[c].clone();
+        for k in 0..callers[c].len() {
+            let caller = callers[c][k];
+            if writes[caller].absorb(&callee_set) && !queued[caller] {
+                queued[caller] = true;
+                work.push(caller);
+            }
+        }
+    }
+    writes
+}
+
+/// Map each global's `(module, name)` identity to its declared type.
+fn global_type_index(project: &NirPackage) -> IndexMap<(ModuleSource, String), TypeId> {
+    let mut out: IndexMap<(ModuleSource, String), TypeId> = IndexMap::default();
+    for g in &project.globals {
+        out.insert((g.module_source.clone(), g.name.clone()), g.ty);
+    }
+    out
+}
+
+/// Whether `writes` includes a global whose type can alias a `&target` pointee —
+/// the only writes that can stale a call-time snapshot of that reference param.
+fn writes_aliasing_global(
+    writes: &GlobalWrites,
+    target: &(String, ModuleSource),
+    global_types: &IndexMap<(ModuleSource, String), TypeId>,
+    type_table: &TypeTable,
+    struct_fields: &StructFieldsIndex,
+) -> bool {
+    match writes {
+        GlobalWrites::Any => true,
+        GlobalWrites::Known(set) => set.iter().any(|g| match global_types.get(g) {
+            Some(&ty) => {
+                let mut visited = IndexSet::default();
+                type_transitively_contains(ty, target, type_table, struct_fields, &mut visited)
+            }
+            None => true,
+        }),
+    }
 }
 
 // -----------------------------------------------------------------------

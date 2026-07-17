@@ -870,8 +870,7 @@ fn eliminate_le_checks_in_node(
         let Some((cvar, cj)) = parse_var_offset(engine, binds, left) else {
             return false;
         };
-        cvar == var
-            && bound_offset_over(engine, binds, right, gbound).is_some_and(|c| c > cj)
+        cvar == var && bound_offset_over(engine, binds, right, gbound).is_some_and(|c| c > cj)
     })
 }
 
@@ -894,8 +893,9 @@ fn apply_dominating_if(engine: &mut Engine, s: StmtId, binds: &Binds) -> bool {
     let Some((var, k, bound, op)) = parse_cmp(engine, binds, cond) else {
         return false;
     };
-    // Only `<` proves `var + j < bound`; `var + j >= bound` is then refuted for
-    // `0 <= j <= k`.
+    // Only `<` proves `var + k < bound`; a later `var + j >= bound` is then
+    // refuted only for `j == k` (see `eliminate_checks_in_node`). Wado add wraps,
+    // so `j < k` need not imply `var + j <= var + k` and cannot be refuted.
     if op != NirBinaryOp::Lt || k < 0 {
         return false;
     }
@@ -1165,12 +1165,14 @@ fn index_upper_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64>
     else {
         return None;
     };
-    // Both clamp arms (and the clamp condition) must be pure. Eliminating the
-    // dominated bounds check sets its condition to `false` and lets
-    // `const_branch_prune` delete the branch; when the clamp sits inline in that
-    // condition, an effectful arm would be dropped with it. `is_pure_expr`
-    // covers the whole `if` — condition plus both blocks.
-    if !super::arena_query::is_pure_expr(engine.body, e) {
+    // Both clamp arms (and the clamp condition) must be pure AND non-trapping.
+    // Eliminating the dominated bounds check sets its condition to `false` and
+    // lets `const_branch_prune` delete the branch; when the clamp sits inline in
+    // that condition, an effectful *or trapping* arm would be dropped with it —
+    // erasing a trap the unoptimised program takes. `is_pure_nontrapping_expr`
+    // is the deletion predicate for exactly this reason; `is_pure_expr` is
+    // trap-agnostic and would admit a droppable `arr[i]` / `x.f` clamp value.
+    if !super::arena_query::is_pure_nontrapping_expr(engine.body, e) {
         return None;
     }
     let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);

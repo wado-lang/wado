@@ -1,0 +1,31 @@
+// A function with both a statement-position `*ra = A{..}` (expanded at lower,
+// naming NIR temps `__deref_ref_{nir_idx}`) and an expression-position
+// `let u = (*rb = B{..})` (expanded in wir_build) of a different struct type.
+// The two synthetic-local namespaces must not collide under codegen's
+// name-based `DeclareLocal` dedup; the wir_build path uses a WIR-unique
+// `__expr_deref_*` prefix so the two never share a slot.
+use { println, Stdout } from "core:cli";
+
+struct A { x: i32, y: i32 }
+struct B { p: i32, q: i32, r: i32 }
+
+#[inline("never")]
+fn mutate(ra: &mut A, rb: &mut B) -> i32 {
+    // statement-position deref-assign (lower path): __deref_ref_{nir_idx}
+    *ra = A { x: 10, y: 20 };
+    // expression-position deref-assign (wir_build path): __deref_ref_{local_counter}
+    let u = (*rb = B { p: 1, q: 2, r: 3 });
+    return ra.x + ra.y + rb.p + rb.q + rb.r
+}
+
+export fn run() with Stdout {
+    let mut a = A { x: 0, y: 0 };
+    let mut b = B { p: 0, q: 0, r: 0 };
+    let total = mutate(&mut a, &mut b);
+    println(`{total}`);
+}
+
+__DATA__
+{
+    "stdout": "36\n"
+}
