@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784239656779,
+  "lastUpdate": 1784286217659,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -41041,6 +41041,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 259842,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5981d38ecffb50cc90a9c5d8c2e684d3d84dc23f",
+          "message": "Merge pull request #1602 from wado-lang/claude/diagnostic-message-bug-lnc1br\n\nfix(diagnostics): attribute diagnostics from the emitter's module, not ambient logger state",
+          "timestamp": "2026-07-17T19:53:48+09:00",
+          "tree_id": "0a32593c2afe96f938cc721237ba30b42a70789c",
+          "url": "https://github.com/wado-lang/wado/commit/5981d38ecffb50cc90a9c5d8c2e684d3d84dc23f"
+        },
+        "date": 1784286216893,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16233,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265299,
             "unit": "bytes"
           }
         ]
