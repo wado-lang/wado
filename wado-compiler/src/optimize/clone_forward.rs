@@ -254,7 +254,11 @@ fn stmt_disturbs_place(
 }
 
 /// Whether a `mut` call argument roots at the local place root.
-fn mut_arg_hits_root(body: &Body, args: &[crate::nir_arena::ArenaCallArg], root: &PlaceRoot) -> bool {
+fn mut_arg_hits_root(
+    body: &Body,
+    args: &[crate::nir_arena::ArenaCallArg],
+    root: &PlaceRoot,
+) -> bool {
     args.iter().any(|a| {
         a.is_mut
             && matches!(

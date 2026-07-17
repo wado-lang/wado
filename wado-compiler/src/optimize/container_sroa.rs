@@ -626,11 +626,7 @@ fn required_methods_available(
 /// The `SigKey` of a monomorphized `List<elem_ty>` method classified as `kind`,
 /// or `None` if no such method is monomorphized in this project. O(1) via the
 /// pre-built `(TypeId, ListMethodKind)` index.
-fn find_sig_key_for_kind(
-    sig: &MethodSig,
-    elem_ty: TypeId,
-    kind: ListMethodKind,
-) -> Option<SigKey> {
+fn find_sig_key_for_kind(sig: &MethodSig, elem_ty: TypeId, kind: ListMethodKind) -> Option<SigKey> {
     sig.kind_index.get(&(elem_ty, kind)).cloned()
 }
 

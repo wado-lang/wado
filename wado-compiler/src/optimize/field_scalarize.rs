@@ -1908,8 +1908,7 @@ fn walk_stmt(
             // mutation value is then discarded by the return. Hoist the
             // value into a temp local so the writeback can run between
             // the expression's evaluation and the return jump.
-            if let Some(return_value) = value.filter(|_| states.contains(&CanonState::ScalarOnly))
-            {
+            if let Some(return_value) = value.filter(|_| states.contains(&CanonState::ScalarOnly)) {
                 let (new_value, tmp_idx, tmp_type) =
                     hoist_operand_to_temp(body, return_value, out, ctx, span);
                 commit_scalar_for_escape(body, states, out, ctx, span);
@@ -1967,7 +1966,8 @@ fn walk_stmt(
                 // i.e. before the break value; if that value's walk
                 // transitioned a candidate to `ScalarOnly`, hoist it into a
                 // temp (same hazard as `Return`).
-                if let Some(break_value) = value.filter(|_| states.contains(&CanonState::ScalarOnly))
+                if let Some(break_value) =
+                    value.filter(|_| states.contains(&CanonState::ScalarOnly))
                 {
                     let (new_value, tmp_idx, tmp_type) =
                         hoist_operand_to_temp(body, break_value, out, ctx, span);
@@ -2182,9 +2182,7 @@ fn walk_nested_loop(
     let mut body_exit_states = states.clone();
     ctx.loop_entry_stack.push(entry_states.clone());
     walk_block(body, block, &mut body_exit_states, ctx);
-    ctx.loop_entry_stack
-        .pop()
-        .expect("loop entry pushed above");
+    ctx.loop_entry_stack.pop().expect("loop entry pushed above");
     // Snapshot for post-loop JOIN before we overwrite body_exit with
     // the body-end sync.
     let body_exit_pre_sync = body_exit_states.clone();
@@ -2452,11 +2450,9 @@ fn hoist_call_inputs(
             .enumerate()
             .map(|(i, a)| (Slot::Arg(i), a.expr))
             .collect(),
-        ExprKind::MethodCall { receiver, args, .. } => {
-            std::iter::once((Slot::Receiver, *receiver))
-                .chain(args.iter().enumerate().map(|(i, a)| (Slot::Arg(i), a.expr)))
-                .collect()
-        }
+        ExprKind::MethodCall { receiver, args, .. } => std::iter::once((Slot::Receiver, *receiver))
+            .chain(args.iter().enumerate().map(|(i, a)| (Slot::Arg(i), a.expr)))
+            .collect(),
         ExprKind::IndirectCall { callee, args, .. } => std::iter::once((Slot::Callee, *callee))
             .chain(args.iter().enumerate().map(|(i, a)| (Slot::Arg(i), *a)))
             .collect(),
@@ -2919,7 +2915,8 @@ fn insert_convergence_before_break(
     };
     let mut inserted: Vec<StmtId> = Vec::new();
     if let Some(v) = value {
-        let (new_value, tmp_idx, tmp_type) = hoist_operand_to_temp(body, v, &mut inserted, ctx, span);
+        let (new_value, tmp_idx, tmp_type) =
+            hoist_operand_to_temp(body, v, &mut inserted, ctx, span);
         inserted.extend(sync);
         body.stmts[record.stmt].kind = StmtKind::Break {
             value: Some(new_value),

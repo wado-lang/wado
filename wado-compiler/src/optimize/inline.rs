@@ -326,10 +326,7 @@ fn is_inline_eligible(
     // call, so an unconditional force would re-inline every fixed-point iteration
     // and expand without bound (a compiler stack overflow at higher iteration
     // counts).
-    if func
-        .id
-        .is_some_and(|id| recursive_functions.contains(&id))
-    {
+    if func.id.is_some_and(|id| recursive_functions.contains(&id)) {
         return false;
     }
 
@@ -971,7 +968,6 @@ pub(super) struct InlineRevalInfo {
     /// The original `Call` expr being inlined, keyed against `pure_calls`.
     pub call_expr: ExprId,
 }
-
 
 /// Core inlining routine: builds a labeled block (in the caller arena) that
 /// binds each prepared parameter value and executes the spliced callee body

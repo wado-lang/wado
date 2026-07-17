@@ -1057,13 +1057,7 @@ impl ElementImmutable<'_, '_, '_> {
                 expr: inner,
             } => {
                 let inner = *inner;
-                if is_self_derived_op(
-                    body,
-                    inner,
-                    &self.tainted,
-                    tt,
-                    self.analyzer.descriptors,
-                ) {
+                if is_self_derived_op(body, inner, &self.tainted, tt, self.analyzer.descriptors) {
                     crate::compiler_trace!("demote", "verify reject: &mut of self-derived");
                     self.clean = false;
                     return;
@@ -1081,15 +1075,10 @@ impl ElementImmutable<'_, '_, '_> {
                         let base = *base;
                         // A promoted base is never self-derived, so the guard
                         // short-circuits before the node lookup.
-                        is_self_derived_op(
-                            body,
-                            base,
-                            &self.tainted,
-                            tt,
-                            self.analyzer.descriptors,
-                        ) && base.as_expr().is_some_and(|be| {
-                            !matches!(&body.exprs[be].kind, ExprKind::Local { index: 0, .. })
-                        })
+                        is_self_derived_op(body, base, &self.tainted, tt, self.analyzer.descriptors)
+                            && base.as_expr().is_some_and(|be| {
+                                !matches!(&body.exprs[be].kind, ExprKind::Local { index: 0, .. })
+                            })
                     }
                     ExprKind::Index { expr: base, .. } => is_self_derived_op(
                         body,
@@ -1126,13 +1115,8 @@ impl ElementImmutable<'_, '_, '_> {
                 // unless the callee is known `&self` (cannot mutate) or a
                 // verified element-immutable `&mut self` method. An
                 // unresolvable callee is conservatively unsafe.
-                if is_self_derived_op(
-                    body,
-                    receiver,
-                    &self.tainted,
-                    tt,
-                    self.analyzer.descriptors,
-                ) {
+                if is_self_derived_op(body, receiver, &self.tainted, tt, self.analyzer.descriptors)
+                {
                     let ok = match self.analyzer.callee_mutates_self(callee) {
                         Some(false) => true,
                         Some(true) => self.analyzer.verify(callee, self.visiting),
@@ -1211,13 +1195,7 @@ impl ElementImmutable<'_, '_, '_> {
                 // its (unverified) body with access to `self`'s elements.
                 let callee = *callee;
                 let args = args.clone();
-                if is_self_derived_op(
-                    body,
-                    callee,
-                    &self.tainted,
-                    tt,
-                    self.analyzer.descriptors,
-                ) {
+                if is_self_derived_op(body, callee, &self.tainted, tt, self.analyzer.descriptors) {
                     crate::compiler_trace!(
                         "demote",
                         "verify reject: indirect call of self-capturing closure"

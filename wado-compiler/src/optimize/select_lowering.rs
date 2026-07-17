@@ -150,7 +150,10 @@ fn is_select_eligible_value(body: &Body, v: ValueId) -> bool {
         | ValueKind::Null
         | ValueKind::Unit => true,
         ValueKind::Opaque(oid) => {
-            matches!(body.values.opaque_source(*oid), Some(OpaqueSource::Local(_)))
+            matches!(
+                body.values.opaque_source(*oid),
+                Some(OpaqueSource::Local(_))
+            )
         }
         ValueKind::Binary { .. }
         | ValueKind::Unary { .. }

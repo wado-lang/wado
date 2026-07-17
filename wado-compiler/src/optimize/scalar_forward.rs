@@ -321,4 +321,3 @@ fn enclosing_stmt(engine: &Engine, expr: ExprId) -> Option<StmtId> {
         }
     }
 }
-

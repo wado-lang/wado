@@ -1963,7 +1963,11 @@ mod tests {
         let mut seen = Vec::new();
         for_each_chain_local_expr(&b, if_expr, &mut |l| seen.push(l));
         seen.sort_unstable();
-        assert_eq!(seen, vec![7, 8], "branch tails are the if's value; the condition is not");
+        assert_eq!(
+            seen,
+            vec![7, 8],
+            "branch tails are the if's value; the condition is not"
+        );
 
         let arg = local(&mut b, 7);
         let call = call_with(&mut b, arg);

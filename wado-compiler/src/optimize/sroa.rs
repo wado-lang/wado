@@ -300,7 +300,10 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
             let new_name = format!("__sroa_{}_{}", candidate.local_name, field_name);
             let new_index = engine.alloc_local(new_name.clone(), *field_type, candidate.is_mut);
             field_local_map.insert((candidate.local_index, field_index), new_index);
-            field_info_map.insert((candidate.local_index, field_index), (new_name, *field_type));
+            field_info_map.insert(
+                (candidate.local_index, field_index),
+                (new_name, *field_type),
+            );
         }
     }
 
@@ -737,13 +740,7 @@ impl SoftCtx<'_> {
         }
     }
 
-    fn expr_operand(
-        &self,
-        body: &Body,
-        op: Operand,
-        soft: bool,
-        hard_escaped: &mut IndexSet<u32>,
-    ) {
+    fn expr_operand(&self, body: &Body, op: Operand, soft: bool, hard_escaped: &mut IndexSet<u32>) {
         if let Some(e) = op.as_expr() {
             self.expr(body, e, soft, hard_escaped);
         }

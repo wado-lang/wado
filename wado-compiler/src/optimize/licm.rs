@@ -470,8 +470,7 @@ fn licm_loop(
             // `_licm_end - _licm_start` a scan loop recomputes in its guard
             // every iteration). Runs here, after field-hoisting, so the
             // `_licm_*` locals it created are visible as stable operands.
-            if hoist_invariant_arith(engine, loop_body, &modified_vars, &mut all_hoist_stmts, ctx)
-            {
+            if hoist_invariant_arith(engine, loop_body, &modified_vars, &mut all_hoist_stmts, ctx) {
                 continue;
             }
             break;

@@ -292,7 +292,13 @@ fn collect_aliased_in_instr(
     }
     // Recurse into children, propagating the suppression context.
     instr.for_each_child(&mut |child| {
-        collect_aliased_in_instr(child, aliased, functions, defined_func_base, in_non_stores_arg);
+        collect_aliased_in_instr(
+            child,
+            aliased,
+            functions,
+            defined_func_base,
+            in_non_stores_arg,
+        );
     });
 }
 
@@ -368,7 +374,9 @@ impl<'a> FieldKnowledge<'a> {
             // value". A def of that local in a later field expression makes
             // the recorded read stale — skip it.
             if let WirInstr::LocalGet { name: src, .. } = field_instr
-                && fields[i + 1..].iter().any(|later| contains_def_of(later, src))
+                && fields[i + 1..]
+                    .iter()
+                    .any(|later| contains_def_of(later, src))
             {
                 continue;
             }

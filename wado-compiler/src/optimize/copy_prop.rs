@@ -289,7 +289,15 @@ fn scan_node(
         let stmts = body.blocks[b].stmts.clone();
         for (i, &s) in stmts.iter().enumerate() {
             frames.push((b, i));
-            scan_node(body, NodeRef::Stmt(s), type_table, oracle, aliases, frames, scans);
+            scan_node(
+                body,
+                NodeRef::Stmt(s),
+                type_table,
+                oracle,
+                aliases,
+                frames,
+                scans,
+            );
             frames.pop();
         }
         return;
@@ -967,7 +975,13 @@ mod tests {
                     .values
                     .alloc_unshared(ValueKind::Int(0, TypeTable::I32), TypeTable::I32),
             );
-            let assign = self.expr(ExprKind::Assign { target, value: zero }, TypeTable::UNIT);
+            let assign = self.expr(
+                ExprKind::Assign {
+                    target,
+                    value: zero,
+                },
+                TypeTable::UNIT,
+            );
             self.body.stmts.push(StmtNode {
                 kind: StmtKind::Expr(assign.into()),
                 span: Span::default(),
@@ -993,8 +1007,7 @@ mod tests {
         fn analyze(&self) -> AnalysisResult {
             let param_mut = IndexMap::default();
             let oracle = MutationOracle::new(&param_mut);
-            let aliases =
-                MutRefAliases::of_body(&self.body, &self.locals, 0, &self.type_table);
+            let aliases = MutRefAliases::of_body(&self.body, &self.locals, 0, &self.type_table);
             let scans = scan_blocks(&self.body, &self.type_table, &oracle, &aliases);
             let ctx = AnalysisCtx {
                 type_table: &self.type_table,

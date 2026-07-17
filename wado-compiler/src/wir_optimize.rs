@@ -145,16 +145,26 @@ pub fn optimize_wir(
     // `StructNew List<T> { repr: array.new_fixed, used: N }`, so bounds-check
     // elimination keys on that shape.
     profiler.span_start("wir/phase3_data_flow");
-    wir_pass("wir/forward_struct_field_constants", module, profiler, |m| {
-        forward_struct_field_constants(m);
-    });
+    wir_pass(
+        "wir/forward_struct_field_constants",
+        module,
+        profiler,
+        |m| {
+            forward_struct_field_constants(m);
+        },
+    );
     profiler.span_end("wir/phase3_data_flow");
 
     // Phase 4: rewrite library call patterns into tighter instruction sequences.
     profiler.span_start("wir/phase4_lib_rewrites");
-    wir_pass("wir/promote_constant_arrays_to_data", module, profiler, |m| {
-        promote_constant_arrays_to_data(m);
-    });
+    wir_pass(
+        "wir/promote_constant_arrays_to_data",
+        module,
+        profiler,
+        |m| {
+            promote_constant_arrays_to_data(m);
+        },
+    );
     wir_pass("wir/split_large_array_literals", module, profiler, |m| {
         split_large_array_literals(m);
     });
@@ -175,9 +185,14 @@ pub fn optimize_wir(
     wir_pass("wir/flatten_seq_assignments", module, profiler, |m| {
         flatten_seq_assignments(m);
     });
-    wir_pass("wir/elide_multi_field_struct_locals", module, profiler, |m| {
-        elide_multi_field_struct_locals(m);
-    });
+    wir_pass(
+        "wir/elide_multi_field_struct_locals",
+        module,
+        profiler,
+        |m| {
+            elide_multi_field_struct_locals(m);
+        },
+    );
     // Re-run copy propagation: elision rewrote destructures into fresh
     // `LocalSet alias = LocalGet temp` copies the phase-1 run never saw.
     wir_pass(

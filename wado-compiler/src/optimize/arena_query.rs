@@ -280,7 +280,8 @@ pub(super) fn is_pure_nontrapping_expr(body: &Body, id: ExprId) -> bool {
 /// [`is_pure_nontrapping_expr`] for an operand: a promoted constant is pure and
 /// cannot trap.
 pub(super) fn is_pure_nontrapping_operand(body: &Body, op: Operand) -> bool {
-    op.as_expr().is_none_or(|e| is_pure_nontrapping_expr(body, e))
+    op.as_expr()
+        .is_none_or(|e| is_pure_nontrapping_expr(body, e))
 }
 
 /// True when the expression at `id` and every sub-expression has no observable

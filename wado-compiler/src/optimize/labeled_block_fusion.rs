@@ -77,7 +77,8 @@ impl Rule for LabeledBlockFusionRule {
             // (a later statement, another branch) would then read a deleted
             // local. Fuse only when every mention of the temp lives inside the
             // consumer statement.
-            let consumer_uses = count_local_uses_in_stmt(engine.body, stmts[i + 1], info.temp_local);
+            let consumer_uses =
+                count_local_uses_in_stmt(engine.body, stmts[i + 1], info.temp_local);
             if engine.local_reads(info.temp_local).len() != consumer_uses {
                 continue;
             }
@@ -503,25 +504,22 @@ fn find_break_case_index_for_name_in_expr(
                 else_branch
                     .and_then(|b| find_break_case_index_for_name(body, b, label, variant_name))
             }),
-        ExprKind::Match { expr: scrut, arms } => {
-            find_break_case_index_for_name_in_operand(body, *scrut, label, variant_name).or_else(
-                || {
-                    arms.iter().find_map(|arm| {
-                        find_break_case_index_for_name_in_operand(body, arm.body, label, variant_name)
-                            .or_else(|| {
-                                arm.guard.and_then(|g| {
-                                    find_break_case_index_for_name_in_operand(
-                                        body,
-                                        g,
-                                        label,
-                                        variant_name,
-                                    )
-                                })
-                            })
+        ExprKind::Match { expr: scrut, arms } => find_break_case_index_for_name_in_operand(
+            body,
+            *scrut,
+            label,
+            variant_name,
+        )
+        .or_else(|| {
+            arms.iter().find_map(|arm| {
+                find_break_case_index_for_name_in_operand(body, arm.body, label, variant_name)
+                    .or_else(|| {
+                        arm.guard.and_then(|g| {
+                            find_break_case_index_for_name_in_operand(body, g, label, variant_name)
+                        })
                     })
-                },
-            )
-        }
+            })
+        }),
         _ => None,
     }
 }
@@ -1580,7 +1578,6 @@ fn subst_variant_payload_in_expr(
         Walk::None => {}
     }
 }
-
 
 /// Returns `true` if `block` contains a "free" unlabeled `break;` or `continue`
 /// — one not nested inside a `loop {}` within the block itself.

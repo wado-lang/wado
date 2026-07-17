@@ -451,7 +451,8 @@ fn build_switch(
 /// Node count of an arm body operand, the per-clone cost the [`build_switch`]
 /// budget sums over every offset. A promoted `Operand::Value` is one node.
 fn arm_body_size(body: &Body, op: Operand) -> usize {
-    op.as_expr().map_or(1, |e| node_count(body, NodeRef::Expr(e)))
+    op.as_expr()
+        .map_or(1, |e| node_count(body, NodeRef::Expr(e)))
 }
 
 /// Total nodes in the subtree at `node` (the node itself plus every arena

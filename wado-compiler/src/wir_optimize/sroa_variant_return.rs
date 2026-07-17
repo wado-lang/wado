@@ -2229,8 +2229,7 @@ fn clear_result_types_on_divergent(instr: &mut WirInstr) {
             // `[value, Br(0)]` exit pair (`always_diverges` deliberately
             // never treats `Block` as divergent for the same reason).
             // Clear the result only when no branch targets this block.
-            if body.iter().any(WirInstr::always_diverges)
-                && !any_branch_targets_enclosing(body, 1)
+            if body.iter().any(WirInstr::always_diverges) && !any_branch_targets_enclosing(body, 1)
             {
                 *result = None;
             }
@@ -3271,11 +3270,7 @@ fn then_is_pure_slot_copy(then_body: &[WirInstr], slot_local: &str, def_use: &Lo
 
 /// Find the unique `?`-unwrap `LocalSet(alias, If {...})` whose then-arm copies
 /// `slot_local` out and whose else-arm diverges. Returns the alias name.
-fn find_unwrap_alias(
-    body: &[WirInstr],
-    slot_local: &str,
-    def_use: &LocalDefUse,
-) -> Option<String> {
+fn find_unwrap_alias(body: &[WirInstr], slot_local: &str, def_use: &LocalDefUse) -> Option<String> {
     let mut found = None;
     fn walk(
         body: &[WirInstr],
@@ -3361,8 +3356,7 @@ fn validate_nested_sites(module: &WirPackage, cands: Vec<NestedSlotCand>) -> Vec
     cands
         .into_iter()
         .filter(|cand| {
-            let case_types: IndexSet<u32> =
-                std::iter::once(cand.info.some_case_type_idx).collect();
+            let case_types: IndexSet<u32> = std::iter::once(cand.info.some_case_type_idx).collect();
             let mut saw_call = false;
             let mut all_ok = true;
             for (i, func) in module.functions.iter().enumerate() {
