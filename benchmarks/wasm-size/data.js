@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784286217659,
+  "lastUpdate": 1784287686647,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -41065,6 +41065,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5981d38ecffb50cc90a9c5d8c2e684d3d84dc23f"
         },
         "date": 1784286216893,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16233,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265299,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "de00f519865bf73e3c4d276064f43ce4cf5a376e",
+          "message": "Merge pull request #1603 from wado-lang/claude/markdown-formatter-perf-80uim9\n\nperf(marl): speed up the Markdown formatter",
+          "timestamp": "2026-07-17T19:54:02+09:00",
+          "tree_id": "95c909297a515aa73208da40eb4307e37b3e23a6",
+          "url": "https://github.com/wado-lang/wado/commit/de00f519865bf73e3c4d276064f43ce4cf5a376e"
+        },
+        "date": 1784287685886,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
