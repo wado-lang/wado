@@ -300,28 +300,38 @@ fn get_delim_unchecked(toks: &List<InlineTok>, idx: i32) -> DelimTok {
 
 // --- flat token stream -> tree ---
 
+/// Recursion cap for `build_seq`. Well beyond any real document's inline
+/// nesting, but bounded so adversarially deep emphasis can't exhaust the wasm
+/// call stack; past it a construct is flattened iteratively instead.
+global MAX_INLINE_NESTING: i32 = 256;
+
 fn build_tree(toks: &List<InlineTok>, nodes: &List<Node>) -> List<Node> {
     let mut out: List<Node> = [];
-    build_seq(toks, nodes, 0, true, &mut out);
+    build_seq(toks, nodes, 0, true, 0, &mut out);
     return out;
 }
 
-/// Builds one nesting level of the inline tree into `current`, starting at
-/// `start` and returning the index just past the `Close` that ended the level
-/// (or the end of the stream, which wraps any still-open construct). Recursing
-/// per `Open` keeps each level's growing sibling list on the call stack and
-/// appends to it in amortized O(1). An explicit `Frame` stack instead copied
-/// the whole accumulated sibling list on every open and close — quadratic in
-/// the number of inline constructs per paragraph. `top` distinguishes the
-/// outermost level, where an unmatched `Close` is dropped rather than ending a
-/// level.
-fn build_seq(toks: &List<InlineTok>, nodes: &List<Node>, start: i32, top: bool, current: &mut List<Node>) -> i32 {
+/// Builds one nesting level of the inline tree into `current`, consuming tokens
+/// from `start` and returning the index just past the `Close` that ends the
+/// level (or the end of the stream, which wraps any still-open construct).
+/// `top` marks the outermost level, where an unmatched `Close` is dropped
+/// rather than ending a level. `depth` bounds recursion: past
+/// `MAX_INLINE_NESTING` a construct is flattened rather than recursed into, so
+/// pathological nesting can't overflow the stack.
+fn build_seq(
+    toks: &List<InlineTok>,
+    nodes: &List<Node>,
+    start: i32,
+    top: bool,
+    depth: i32,
+    current: &mut List<Node>,
+) -> i32 {
     let n = toks.len();
     let mut i = start;
     while i < n {
-        match &toks[i] {
+        match toks.get_unchecked(i) {
             InlineTok::Node(idx) => {
-                current.push(nodes[*idx]);
+                current.push(nodes.get_unchecked(idx));
                 i += 1;
             },
             InlineTok::Delim(d) => {
@@ -331,9 +341,13 @@ fn build_seq(toks: &List<InlineTok>, nodes: &List<Node>, start: i32, top: bool, 
                 i += 1;
             },
             InlineTok::Open(o) => {
-                let mut children: List<Node> = [];
-                i = build_seq(toks, nodes, i + 1, false, &mut children);
-                current.push(wrap(o, children));
+                if depth >= MAX_INLINE_NESTING {
+                    i = flatten_construct(toks, nodes, i + 1, current);
+                } else {
+                    let mut children: List<Node> = [];
+                    i = build_seq(toks, nodes, i + 1, false, depth + 1, &mut children);
+                    current.push(wrap(&o, children));
+                }
             },
             InlineTok::Close => {
                 if top {
@@ -343,6 +357,31 @@ fn build_seq(toks: &List<InlineTok>, nodes: &List<Node>, start: i32, top: bool, 
                 }
             },
         }
+    }
+    return i;
+}
+
+/// Consumes the balanced `Open`..`Close` range beginning at `start` (the token
+/// after an `Open`) without recursing, appending its inner leaf nodes to
+/// `current` un-wrapped. Used only past `MAX_INLINE_NESTING`, where degenerate
+/// nesting is flattened to keep the stack bounded; returns the index past the
+/// matching `Close`.
+fn flatten_construct(toks: &List<InlineTok>, nodes: &List<Node>, start: i32, current: &mut List<Node>) -> i32 {
+    let n = toks.len();
+    let mut i = start;
+    let mut nesting = 1;
+    while i < n && nesting > 0 {
+        match toks.get_unchecked(i) {
+            InlineTok::Open(_) => nesting += 1,
+            InlineTok::Close => nesting -= 1,
+            InlineTok::Node(idx) => current.push(nodes.get_unchecked(idx)),
+            InlineTok::Delim(d) => {
+                if d.count > 0 {
+                    current.push(Node::Text(repeat_char(d.ch, d.count)));
+                }
+            },
+        }
+        i += 1;
     }
     return i;
 }
