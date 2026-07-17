@@ -6,7 +6,7 @@
 mod common;
 
 use std::path::Path;
-use wado_compiler::CompileError;
+use wado_compiler::{CompileError, OptLevel};
 
 #[test]
 fn test_io_error_file_not_found() {
@@ -551,4 +551,63 @@ fn test_error_display_analyzer_without_filename() {
     let display = format!("{err}");
     assert!(display.contains("type mismatch"));
     assert!(display.contains("analysis error"));
+}
+
+/// Orphan / coherence / sealed-`Reflect` errors must point at the user's file,
+/// not a stdlib module (`core:libm.wat` before the fix). Regression for #1596.
+fn analyzer_filename(source: &str) -> String {
+    let path = Path::new("orphan_phase_diag.wado");
+    let err = common::compile_source_with_opts(path, source, OptLevel::default())
+        .expect_err("expected a compile error");
+    match err {
+        CompileError::Analyzer { filename, .. } => {
+            filename.expect("diagnostic must carry a source file")
+        }
+        other => panic!("expected Analyzer error, got: {other}"),
+    }
+}
+
+#[test]
+fn test_coherence_error_attributed_to_user_file() {
+    let filename = analyzer_filename(
+        "impl i32 {\n    fn my_foo(&self) -> i32 { return 1; }\n}\n\nexport fn run() {}\n",
+    );
+    assert_eq!(filename, "orphan_phase_diag.wado");
+}
+
+#[test]
+fn test_orphan_error_attributed_to_user_file() {
+    let filename = analyzer_filename(
+        "impl Eq for String {\n    fn eq(&self, other: &Self) -> bool { return true; }\n}\n\nexport fn run() {}\n",
+    );
+    assert_eq!(filename, "orphan_phase_diag.wado");
+}
+
+#[test]
+fn test_orphan_error_attributed_to_the_submodule_that_defines_it() {
+    // The impl lives in the imported submodule, so the file must be that
+    // submodule — never the entry — which pins per-module attribution (#1596).
+    let path = Path::new("tests/fixtures/orphan_xmod_entry.wado");
+    let err = common::compile_file(path).expect_err("expected a compile error");
+    match err {
+        CompileError::Analyzer {
+            filename, message, ..
+        } => {
+            assert!(message.contains("orphan rule"), "unexpected: {message}");
+            let filename = filename.expect("diagnostic must carry a source file");
+            assert!(
+                filename.ends_with("orphan_xmod_lib.wado"),
+                "expected the submodule that defines the impl, got: {filename}"
+            );
+        }
+        other => panic!("expected Analyzer error, got: {other}"),
+    }
+}
+
+#[test]
+fn test_sealed_reflect_error_attributed_to_user_file() {
+    let filename = analyzer_filename(
+        "struct Point { x: i32, y: i32 }\n\nimpl Reflect for Point {\n    type Fields = [i32, i32];\n    fn fields(&self) -> Self::Fields { return [self.x, self.y]; }\n    fn field_names() -> List<String> { return [\"a\", \"b\"]; }\n    fn type_name() -> String { return \"forged\"; }\n}\n\nexport fn run() {}\n",
+    );
+    assert_eq!(filename, "orphan_phase_diag.wado");
 }

@@ -390,7 +390,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             info
         } else {
             let type_name = self.tysys.type_table.borrow().type_name(base_type_id);
-            let _ = self.logger.error(TypeError::MethodNotFound {
+            let _ = self.emit(TypeError::MethodNotFound {
                 type_name,
                 method_name: method_name.to_string(),
                 hint: String::new(),
@@ -519,7 +519,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // e.g., `obj.static_method()` should be `Type::static_method()` instead.
         if self_kind == ast::SelfKind::None {
             let type_name = self.tysys.type_table.borrow().type_name(base_type_id);
-            let _ = self.logger.error(TypeError::MethodNotFound {
+            let _ = self.emit(TypeError::MethodNotFound {
                 type_name: type_name.clone(),
                 method_name: method_name.to_string(),
                 hint: format!(
@@ -1250,7 +1250,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 match static_call.method.as_str() {
                     "none" => {
                         if !args.is_empty() {
-                            let _ = self.logger.error(TypeError::ArgumentCountMismatch {
+                            let _ = self.emit(TypeError::ArgumentCountMismatch {
                                 expected: 0,
                                 found: args.len(),
                                 span: static_call.span,
@@ -1261,7 +1261,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                     "all" => {
                         if !args.is_empty() {
-                            let _ = self.logger.error(TypeError::ArgumentCountMismatch {
+                            let _ = self.emit(TypeError::ArgumentCountMismatch {
                                 expected: 0,
                                 found: args.len(),
                                 span: static_call.span,
@@ -1298,7 +1298,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let expected_args = usize::from(!payload_is_unit);
 
                     if args.len() != expected_args {
-                        let _ = self.logger.error(TypeError::ArgumentCountMismatch {
+                        let _ = self.emit(TypeError::ArgumentCountMismatch {
                             expected: expected_args,
                             found: args.len(),
                             span: static_call.span,
@@ -1351,7 +1351,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let expected_args = usize::from(!payload_is_unit);
 
                     if args.len() != expected_args {
-                        let _ = self.logger.error(TypeError::ArgumentCountMismatch {
+                        let _ = self.emit(TypeError::ArgumentCountMismatch {
                             expected: expected_args,
                             found: args.len(),
                             span: static_call.span,
@@ -1668,7 +1668,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Emit a compile error if the static method was not found anywhere
         if return_type == TypeTable::UNKNOWN {
-            let _ = self.logger.error(TypeError::UnknownFunction {
+            let _ = self.emit(TypeError::UnknownFunction {
                 name: format!("{}::{}", struct_name, static_call.method),
                 span: static_call.span,
             });
@@ -2992,7 +2992,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let self_name = self.tysys.type_table.borrow().type_name(self_ty);
 
         if self.type_lookup().struct_fields(&self_name).is_none() {
-            let _ = self.logger.error(TypeError::UnknownFunction {
+            let _ = self.emit(TypeError::UnknownFunction {
                 name: format!("Reflect::<{self_name}>::{method}"),
                 span: static_call.span,
             });
@@ -3007,7 +3007,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for arg in &static_call.args {
                 self.resolve_expr(arg, ctx, None);
             }
-            let _ = self.logger.error(TypeError::ArgumentCountMismatch {
+            let _ = self.emit(TypeError::ArgumentCountMismatch {
                 expected: 0,
                 found: static_call.args.len(),
                 span: static_call.span,

@@ -1023,10 +1023,14 @@ pub async fn semantics_for_world<H: CompilerHost>(
         }
         Err(e) => {
             let logger = Logger::new(host, LogLevel::default());
-            if let Some(f) = filename {
-                logger.set_file(f);
+            match filename {
+                Some(f) => {
+                    let _ = logger.error_at(f, e);
+                }
+                None => {
+                    let _ = logger.error(e);
+                }
             }
-            let _ = logger.error(e);
             Semantics::empty()
         }
     }
@@ -1138,10 +1142,6 @@ pub fn semantics_of<H: CompilerHost>(
     build_tir: bool,
 ) -> Semantics {
     let logger = Logger::new(host, log_level);
-    let entry_filename = loaded.entry_module_source.source_path();
-    if !entry_filename.is_empty() {
-        logger.set_file(&entry_filename);
-    }
     semantics_with_logger(loaded, &logger, build_tir)
 }
 

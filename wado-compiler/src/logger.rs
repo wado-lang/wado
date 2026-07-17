@@ -16,18 +16,19 @@
 //!                              error counting + bail
 //! ```
 //!
-//! Each phase calls `logger.error(typed_error)?` which:
+//! Each phase calls `logger.error_in(module, typed_error)?` which:
 //! 1. Converts the typed error to a `Diagnostic` via `Into<Diagnostic>`
-//! 2. Applies file context (if set) to the diagnostic span
+//! 2. Stamps the module's file onto the span when it carries none
 //! 3. Emits the diagnostic to `CompilerHost::emit_diagnostic()`
 //! 4. Increments the error count
 //! 5. Returns `Err(Bail)` if the error limit is reached
 
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 
 use crate::compiler_host::{
     Code, CompilerHost, Diagnostic, DiagnosticSpan, LogLevel, Severity, SpanEmitter,
 };
+use crate::module_source::ModuleSource;
 
 /// Maximum number of errors before compilation is aborted
 pub const MAX_ERRORS: usize = 100;
@@ -60,21 +61,20 @@ impl std::error::Error for Bail {}
 /// The logger tracks how many errors have been emitted. When the count reaches
 /// `MAX_ERRORS`, `error()` returns `Err(Bail)` to stop compilation.
 ///
-/// # File Context
+/// # File Attribution
 ///
-/// Phases can set a file context via `set_file()`. This file name is
-/// automatically applied to diagnostic spans that don't already have one.
+/// A diagnostic's file is stamped from the module the caller holds
+/// (`error_in` / `error_at`), never from ambient logger state — so no phase
+/// can forget to set it. `error(err)` is for diagnostics that already carry
+/// their own location.
 ///
 /// # Example
 ///
 /// ```ignore
 /// let logger = Logger::new(&host, LogLevel::Debug);
 ///
-/// // Set file context for diagnostics
-/// logger.set_file("main.wado");
-///
-/// // Report compilation errors (counted, may bail)
-/// logger.error(TypeError::TypeMismatch { expected, found, span })?;
+/// // Report compilation errors attributed to a module (counted, may bail)
+/// logger.error_in(&module_source, TypeError::TypeMismatch { expected, found, span })?;
 ///
 /// // Fatal errors always bail
 /// logger.fatal(TypeError::TypeMismatch { ... })?; // always Err(Bail)
@@ -93,7 +93,6 @@ pub struct Logger<'a, H: CompilerHost> {
     host: &'a H,
     level: LogLevel,
     error_count: Cell<usize>,
-    current_file: RefCell<Option<String>>,
 }
 
 impl<'a, H: CompilerHost> Logger<'a, H> {
@@ -103,7 +102,6 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
             host,
             level,
             error_count: Cell::new(0),
-            current_file: RefCell::new(None),
         }
     }
 
@@ -114,29 +112,10 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         self.host
     }
 
-    // === File context ===
-
-    /// Set the current file context for diagnostics
-    ///
-    /// All subsequent diagnostics will have this file name in their span
-    /// (unless the span already has a file set).
-    pub fn set_file(&self, file: impl Into<String>) {
-        *self.current_file.borrow_mut() = Some(file.into());
-    }
-
-    /// Clear the current file context
-    pub fn clear_file(&self) {
-        *self.current_file.borrow_mut() = None;
-    }
-
     // === Compilation error methods (counted, may bail) ===
 
-    /// Report a compilation error.
-    ///
-    /// The error is immediately emitted to the `CompilerHost`.
-    /// Returns `Err(Bail)` if the error count reaches `MAX_ERRORS`.
-    pub fn error(&self, err: impl Into<Diagnostic>) -> Result<(), Bail> {
-        let diag = self.apply_file_context(err.into());
+    /// Count the diagnostic, emit it, and signal `Bail` at `MAX_ERRORS`.
+    fn emit_error(&self, diag: Diagnostic) -> Result<(), Bail> {
         let count = self.error_count.get() + 1;
         self.error_count.set(count);
         self.host.emit_diagnostic(diag);
@@ -147,13 +126,40 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         }
     }
 
+    /// Stamp `file` onto a diagnostic's span when the span carries no file of
+    /// its own, so a caller that knows its module wins over a bare `Span`.
+    fn with_file(mut diag: Diagnostic, file: &str) -> Diagnostic {
+        if let Some(span) = diag.span.as_mut()
+            && span.file.is_empty()
+        {
+            span.file = file.to_string();
+        }
+        diag
+    }
+
+    /// Report a compilation error attributed to `module`'s source file.
+    pub fn error_in(&self, module: &ModuleSource, err: impl Into<Diagnostic>) -> Result<(), Bail> {
+        self.error_at(&module.source_path(), err)
+    }
+
+    /// Like [`Self::error_in`], for callers that hold a display filename
+    /// rather than a [`ModuleSource`].
+    pub fn error_at(&self, file: &str, err: impl Into<Diagnostic>) -> Result<(), Bail> {
+        self.emit_error(Self::with_file(err.into(), file))
+    }
+
+    /// Report an error whose diagnostic already carries its own location
+    /// (parser/lexer errors) or has none.
+    pub fn error(&self, err: impl Into<Diagnostic>) -> Result<(), Bail> {
+        self.emit_error(err.into())
+    }
+
     /// Report a fatal compilation error. Always returns `Err(Bail)`.
     ///
     /// Use for errors that make it impossible to continue the current phase.
     pub fn fatal(&self, err: impl Into<Diagnostic>) -> Result<(), Bail> {
-        let diag = self.apply_file_context(err.into());
         self.error_count.set(self.error_count.get() + 1);
-        self.host.emit_diagnostic(diag);
+        self.host.emit_diagnostic(err.into());
         Err(Bail)
     }
 
@@ -232,18 +238,17 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
 
     /// Log a warning carrying a source span.
     ///
-    /// Used by span-bearing lints (unused diagnostics). The span's `file`
-    /// is taken as-is when set; otherwise the logger's current-file context
-    /// is applied, matching [`Self::error`].
+    /// Used by span-bearing lints (unused diagnostics). The caller builds the
+    /// `DiagnosticSpan` with its own file (`DiagnosticSpan::from_span(span,
+    /// Some(file))`); no file is stamped here.
     pub fn warn_at(&self, code: Code, message: impl Into<String>, span: DiagnosticSpan) {
         if self.should_log(Severity::Warning) {
-            let diag = self.apply_file_context(Diagnostic {
+            self.host.emit_diagnostic(Diagnostic {
                 severity: Severity::Warning,
                 code,
                 message: message.into(),
                 span: Some(span),
             });
-            self.host.emit_diagnostic(diag);
         }
     }
 
@@ -269,13 +274,12 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// message.
     pub fn remark(&self, message: impl Into<String>, span: DiagnosticSpan) {
         if self.should_log(Severity::Info) {
-            let diag = self.apply_file_context(Diagnostic {
+            self.host.emit_diagnostic(Diagnostic {
                 severity: Severity::Info,
                 code: Code::Remark,
                 message: format!("remark: {}", message.into()),
                 span: Some(span),
             });
-            self.host.emit_diagnostic(diag);
         }
     }
 
@@ -335,19 +339,6 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
             });
         }
     }
-
-    // === Internal helpers ===
-
-    /// Apply file context to a diagnostic's span if the span has no file set
-    fn apply_file_context(&self, mut diag: Diagnostic) -> Diagnostic {
-        if let Some(ref mut span) = diag.span
-            && span.file.is_empty()
-            && let Some(ref file) = *self.current_file.borrow()
-        {
-            span.file.clone_from(file);
-        }
-        diag
-    }
 }
 
 /// RAII guard for span tracking
@@ -374,6 +365,32 @@ impl<H: CompilerHost> SpanEmitter for Logger<'_, H> {
     }
     fn debug(&self, message: &str) {
         Logger::debug(self, message);
+    }
+}
+
+/// A [`Logger`] bound to one module, so code threading a single `logger`
+/// value (recursive validators) need not also thread a [`ModuleSource`].
+/// Obtain one with [`Logger::in_module`].
+pub struct ModuleDiag<'l, 'a, H: CompilerHost> {
+    logger: &'l Logger<'a, H>,
+    module: &'l ModuleSource,
+}
+
+impl<H: CompilerHost> ModuleDiag<'_, '_, H> {
+    /// Report a compilation error attributed to the bound module's file.
+    pub fn error(&self, err: impl Into<Diagnostic>) -> Result<(), Bail> {
+        self.logger.error_in(self.module, err)
+    }
+}
+
+impl<'a, H: CompilerHost> Logger<'a, H> {
+    /// Bind this logger to `module`, so diagnostics emitted through the
+    /// returned [`ModuleDiag`] are attributed to `module`'s file.
+    pub fn in_module<'l>(&'l self, module: &'l ModuleSource) -> ModuleDiag<'l, 'a, H> {
+        ModuleDiag {
+            logger: self,
+            module,
+        }
     }
 }
 
@@ -499,26 +516,53 @@ mod tests {
     }
 
     #[test]
-    fn test_file_context() {
+    fn test_error_at_stamps_empty_span_file() {
         let host = InMemoryCompilerHost::new();
         let logger = Logger::new(&host, LogLevel::Error);
 
-        logger.set_file("test.wado");
-        let _ = logger.error(Diagnostic {
-            severity: Severity::Error,
-            code: Code::TypeMismatch,
-            message: "error".to_string(),
-            span: Some(crate::compiler_host::DiagnosticSpan {
-                file: String::new(),
-                line: 10,
-                column: 5,
-                end_line: None,
-                end_column: None,
-            }),
-        });
+        let _ = logger.error_at(
+            "test.wado",
+            Diagnostic {
+                severity: Severity::Error,
+                code: Code::TypeMismatch,
+                message: "error".to_string(),
+                span: Some(crate::compiler_host::DiagnosticSpan {
+                    file: String::new(),
+                    line: 10,
+                    column: 5,
+                    end_line: None,
+                    end_column: None,
+                }),
+            },
+        );
 
         let diags = host.diagnostics();
         assert_eq!(diags[0].span.as_ref().unwrap().file, "test.wado");
+    }
+
+    #[test]
+    fn test_error_at_does_not_override_existing_file() {
+        let host = InMemoryCompilerHost::new();
+        let logger = Logger::new(&host, LogLevel::Error);
+
+        let _ = logger.error_at(
+            "outer.wado",
+            Diagnostic {
+                severity: Severity::Error,
+                code: Code::TypeMismatch,
+                message: "error".to_string(),
+                span: Some(crate::compiler_host::DiagnosticSpan {
+                    file: "inner.wado".to_string(),
+                    line: 10,
+                    column: 5,
+                    end_line: None,
+                    end_column: None,
+                }),
+            },
+        );
+
+        let diags = host.diagnostics();
+        assert_eq!(diags[0].span.as_ref().unwrap().file, "inner.wado");
     }
 
     #[test]

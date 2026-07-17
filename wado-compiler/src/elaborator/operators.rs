@@ -280,7 +280,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let left_name = type_table.type_name(left.type_id);
                     let right_name = type_table.type_name(right.type_id);
                     if left_name != right_name {
-                        let _ = self.logger.error(TypeError::TypeMismatch {
+                        let _ = self.emit(TypeError::TypeMismatch {
                             expected: left_name,
                             found: right_name,
                             span,
@@ -312,7 +312,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     BinaryOp::Or => "||",
                     _ => unreachable!(),
                 };
-                let _ = self.logger.error(TypeError::OperatorNotApplicable {
+                let _ = self.emit(TypeError::OperatorNotApplicable {
                     op: op_str.to_string(),
                     operands: vec![type_name],
                     note: None,
@@ -396,7 +396,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ) else {
                         let type_name = self.tysys.type_table.borrow().type_name(left.type_id);
                         let op_str = if op == BinaryOp::Eq { "==" } else { "!=" };
-                        let _ = self.logger.error(TypeError::OperatorNotApplicable {
+                        let _ = self.emit(TypeError::OperatorNotApplicable {
                             op: op_str.to_string(),
                             operands: vec![type_name],
                             note: Some("type does not implement `Eq`".to_string()),
@@ -444,7 +444,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             BinaryOp::GtEq => ">=",
                             _ => unreachable!(),
                         };
-                        let _ = self.logger.error(TypeError::OperatorNotApplicable {
+                        let _ = self.emit(TypeError::OperatorNotApplicable {
                             op: op_str.to_string(),
                             operands: vec![type_name],
                             note: Some("type does not implement `Ord`".to_string()),
@@ -764,7 +764,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     _ => unreachable!(),
                 };
                 let type_name = self.tysys.type_table.borrow().type_name(left.type_id);
-                let _ = self.logger.error(TypeError::OperatorNotApplicable {
+                let _ = self.emit(TypeError::OperatorNotApplicable {
                     op: op_char.to_string(),
                     operands: vec![type_name],
                     note: Some(
@@ -790,7 +790,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ResolvedType::Primitive(PrimitiveType::F32) => "f32",
                     _ => "f64",
                 };
-                let _ = self.logger.error(TypeError::OperatorNotApplicable {
+                let _ = self.emit(TypeError::OperatorNotApplicable {
                     op: "%".to_string(),
                     operands: vec![type_name.to_string()],
                     note: Some(format!("use `{type_name}::fmod(a, b)` instead")),
@@ -868,7 +868,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .to_string(),
                         _ => "?".to_string(),
                     };
-                    let _ = self.logger.error(TypeError::OperatorNotApplicable {
+                    let _ = self.emit(TypeError::OperatorNotApplicable {
                         op: op_char.to_string(),
                         operands: vec![left_name],
                         note: Some(format!("type does not implement `{trait_name}`")),
@@ -878,7 +878,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Mixed operand types that cannot combine under this
                     // operator (e.g. `i32 - List<i32>`). Reported the same
                     // way regardless of which operand is non-primitive.
-                    let _ = self.logger.error(TypeError::OperatorNotApplicable {
+                    let _ = self.emit(TypeError::OperatorNotApplicable {
                         op: op_char.to_string(),
                         operands: vec![left_name, right_name],
                         note: None,
@@ -906,7 +906,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let left_name = type_table.type_name(left.type_id);
             let right_name = type_table.type_name(right.type_id);
             if left_name != right_name {
-                let _ = self.logger.error(TypeError::TypeMismatch {
+                let _ = self.emit(TypeError::TypeMismatch {
                     expected: left_name,
                     found: right_name,
                     span,
@@ -959,7 +959,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(local) = ctx.lookup(&id.name)
             && !local.is_mut
         {
-            let _ = self.logger.error(TypeError::CannotAssign {
+            let _ = self.emit(TypeError::CannotAssign {
                 message: format!("cannot take &mut of immutable variable '{}'", id.name),
                 span: unary.span,
             });
@@ -982,7 +982,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 matches!(ty, ResolvedType::Primitive(_) | ResolvedType::Enum { .. })
             };
             if is_scalar_field(&field_type) || is_scalar_field(&base_type) {
-                let _ = self.logger.error(TypeError::CannotAssign {
+                let _ = self.emit(TypeError::CannotAssign {
                     message: "cannot take mutable reference to primitive struct field; use the struct reference directly".to_string(),
                     span: unary.span,
                 });
@@ -1065,7 +1065,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                     }
                     _ => {
-                        let _ = self.logger.error(TypeError::TypeMismatch {
+                        let _ = self.emit(TypeError::TypeMismatch {
                             expected: "reference type".to_string(),
                             found: self.tysys.type_table.borrow().type_name(expr_type),
                             span: unary.span,
@@ -1115,7 +1115,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|d| d.needs_deref);
         if let Some(needs_deref) = needs_deref {
             if needs_deref {
-                let _ = self.logger.error(TypeError::CannotAssign {
+                let _ = self.emit(TypeError::CannotAssign {
                     message: "cannot assign through immutable reference".to_string(),
                     span: index_expr.span,
                 });
@@ -1168,7 +1168,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Ref(_)
         );
         if is_immutable_ref {
-            let _ = self.logger.error(TypeError::CannotAssign {
+            let _ = self.emit(TypeError::CannotAssign {
                 message: "cannot assign through immutable reference".to_string(),
                 span,
             });
@@ -1202,7 +1202,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::Ref(_)
             ) || self.place_roots_at_immutable_ref(&index_expr.expr);
             if indexed_immutable {
-                let _ = self.logger.error(TypeError::CannotAssign {
+                let _ = self.emit(TypeError::CannotAssign {
                     message: "cannot assign through immutable reference".to_string(),
                     span: target_ast.span(),
                 });
@@ -1340,7 +1340,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         if let Some((name, is_mut)) = global_assign {
             if !is_mut {
-                let _ = self.logger.error(TypeError::CannotAssign {
+                let _ = self.emit(TypeError::CannotAssign {
                     message: format!("cannot assign to immutable global variable '{name}'"),
                     span: target_ast.span(),
                 });
@@ -1359,7 +1359,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // at an immutable reference.
             ast::Expr::FieldAccess(_) => {
                 if self.place_roots_at_immutable_ref(target_ast) {
-                    let _ = self.logger.error(TypeError::CannotAssign {
+                    let _ = self.emit(TypeError::CannotAssign {
                         message: "cannot assign through immutable reference".to_string(),
                         span: target_ast.span(),
                     });
@@ -1394,7 +1394,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         if through_mut_ref {
                             true
                         } else {
-                            let _ = self.logger.error(TypeError::CannotAssign {
+                            let _ = self.emit(TypeError::CannotAssign {
                                 message: "cannot assign through immutable reference".to_string(),
                                 span: target_ast.span(),
                             });
@@ -1409,7 +1409,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if !is_valid_lvalue {
             // Report error for invalid assignment target
-            let _ = self.logger.error(TypeError::CannotAssign {
+            let _ = self.emit(TypeError::CannotAssign {
                 message: "expression is not assignable".to_string(),
                 span: target_ast.span(),
             });
@@ -1634,7 +1634,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // resolve-site should always line up operand count with the
             // trait's arity.  Return ERROR so the rest of resolve recovers
             // gracefully, but flag it as a mismatch too so tests notice.
-            let _ = self.logger.error(TypeError::TypeMismatch {
+            let _ = self.emit(TypeError::TypeMismatch {
                 expected: format!("{} arg(s)", resolved.param_types.len()),
                 found: format!("{} arg(s)", args.len()),
                 span,

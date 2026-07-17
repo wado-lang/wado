@@ -1483,7 +1483,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 type_arg,
                 trait_name,
             );
-            let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
+            let _ = self.emit(TypeError::TraitBoundNotSatisfied {
                 type_name,
                 trait_name: trait_name.to_string(),
                 param_name: param_name.to_string(),

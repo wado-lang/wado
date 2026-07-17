@@ -1,0 +1,12 @@
+// The offending `impl Eq for String` lives in the imported submodule, so the
+// orphan-rule diagnostic must point at the submodule file — a per-module
+// attribution the entry-filename fallback could never produce (#1596).
+
+use { helper } from "./sub/orphan_xmod_lib.wado";
+
+export fn run() {
+    let _ = helper();
+}
+
+__DATA__
+{"compile_error": "orphan rule"}
