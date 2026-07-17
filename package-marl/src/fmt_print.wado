@@ -298,9 +298,10 @@ fn print_table(t: &MdTable, out: &mut String) {
 fn row_texts(row: &MdTableRow, ncol: i32) -> List<String> {
     let mut out: List<String> = [];
     for let c of 0..<ncol {
-        let text = match row.cells.get(c) {
-            Some(cell) => print_inline_seq(&cell),
-            None => "",
+        let text = if c < row.cells.len() {
+            print_inline_seq(&row.cells[c])
+        } else {
+            ""
         };
         out.push(text);
     }

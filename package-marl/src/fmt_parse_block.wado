@@ -48,14 +48,12 @@ pub fn parse_document(source: &String) -> Node {
 }
 
 fn build_document(lines: &List<String>, refs: &RefTable) -> Node {
-    let mut children: List<Node> = [];
-    let mut start = 0;
     if let Some([fm, consumed]) = try_front_matter(lines) {
-        children.push(Node::FrontMatter(fm));
-        start = consumed;
+        let mut children: List<Node> = [Node::FrontMatter(fm)];
+        children.extend(&parse_blocks(lines, consumed, lines.len(), refs));
+        return Node::Document(children);
     }
-    children.extend(&parse_blocks(lines, start, lines.len(), refs));
-    return Node::Document(children);
+    return Node::Document(parse_blocks(lines, 0, lines.len(), refs));
 }
 
 // --- link reference definitions (first pass) ---
@@ -522,8 +520,7 @@ fn parse_blockquote(lines: &List<String>, start: i32, end: i32, refs: &RefTable,
         inner.push(strip_blockquote_marker(&lines[k]));
         k += 1;
     }
-    let children = parse_blocks(&inner, 0, inner.len(), refs);
-    out.push(Node::BlockQuote(children));
+    out.push(Node::BlockQuote(parse_blocks(&inner, 0, inner.len(), refs)));
     return k;
 }
 
@@ -672,8 +669,7 @@ fn parse_list(lines: &List<String>, start: i32, end: i32, refs: &RefTable, out: 
             break;
         }
 
-        let children = parse_blocks(&inner, 0, inner.len(), refs);
-        items.push(MdItem { marker, children, loose });
+        items.push(MdItem { marker, children: parse_blocks(&inner, 0, inner.len(), refs), loose });
         k = j;
     }
 

@@ -319,9 +319,9 @@ fn build_seq(toks: &List<InlineTok>, nodes: &List<Node>, start: i32, top: bool, 
     let n = toks.len();
     let mut i = start;
     while i < n {
-        match toks.get_unchecked(i) {
+        match &toks[i] {
             InlineTok::Node(idx) => {
-                current.push(nodes.get_unchecked(idx));
+                current.push(nodes[*idx]);
                 i += 1;
             },
             InlineTok::Delim(d) => {
@@ -333,7 +333,7 @@ fn build_seq(toks: &List<InlineTok>, nodes: &List<Node>, start: i32, top: bool, 
             InlineTok::Open(o) => {
                 let mut children: List<Node> = [];
                 i = build_seq(toks, nodes, i + 1, false, &mut children);
-                current.push(wrap(&o, children));
+                current.push(wrap(o, children));
             },
             InlineTok::Close => {
                 if top {
@@ -553,8 +553,13 @@ fn try_link(cur: &StrCursor, open: i32, refs: &RefTable) -> Option<[Node, i32]> 
     let raw_label = cur.slice(open + 1, close);
     return match ref_table_get(refs, &raw_label) {
         Some(_) => {
-            let children = parse_inline_chars(cur.sub(open + 1, close), refs);
-            Option::Some([Node::ShortcutLink(ReferenceLinkNode { children, label: raw_label.trim() }), close + 1]);
+            Option::Some([
+                Node::ShortcutLink(ReferenceLinkNode {
+                    children: parse_inline_chars(cur.sub(open + 1, close), refs),
+                    label: raw_label.trim(),
+                }),
+                close + 1,
+            ]);
         },
         None => null,
     };
@@ -611,10 +616,15 @@ fn try_inline_link_tail(cur: &StrCursor, open: i32, close: i32, refs: &RefTable)
     if pclose < 0 {
         return null;
     }
-    let dest_raw = cur.slice(close + 2, pclose);
-    let [url, title] = parse_dest_and_title(&dest_raw);
-    let children = parse_inline_chars(cur.sub(open + 1, close), refs);
-    return Option::Some([Node::InlineLink(LinkNode { children, url, title }), pclose + 1]);
+    let [url, title] = parse_dest_and_title(&cur.slice(close + 2, pclose));
+    return Option::Some([
+        Node::InlineLink(LinkNode {
+            children: parse_inline_chars(cur.sub(open + 1, close), refs),
+            url,
+            title,
+        }),
+        pclose + 1,
+    ]);
 }
 
 /// The label of a `[label]` (or `[]`) pair starting at `open`, or `-1` for
@@ -645,9 +655,12 @@ fn try_reference_link(cur: &StrCursor, open: i32, close: i32, refs: &RefTable) -
     let raw_label = if inner.trim().len() == 0 { cur.slice(open + 1, close) } else { inner };
     return match ref_table_get(refs, &raw_label) {
         Some(_) => {
-            let children = parse_inline_chars(cur.sub(open + 1, close), refs);
             Option::Some([
-                Node::ReferenceLink(ReferenceLinkNode { children, label: raw_label.trim() }), second_close + 1,
+                Node::ReferenceLink(ReferenceLinkNode {
+                    children: parse_inline_chars(cur.sub(open + 1, close), refs),
+                    label: raw_label.trim(),
+                }),
+                second_close + 1,
             ]);
         },
         None => null,
