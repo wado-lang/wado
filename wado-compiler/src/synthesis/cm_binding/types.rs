@@ -1107,9 +1107,7 @@ fn flat_types_from_type_id_inner(
                 // flattening it as one i32 would emit a wrong-arity lowering for
                 // a multi-field record. Fail loudly rather than corrupt the
                 // component (the memory lowerer panics on the same condition).
-                panic!(
-                    "struct `{name}` has no TIR declaration; cannot compute its flat CM types"
-                );
+                panic!("struct `{name}` has no TIR declaration; cannot compute its flat CM types");
             }
         }
         ResolvedType::Resource { .. } => out.push(cm_abi::CmValType::I32),

@@ -27,8 +27,8 @@ use crate::tir::{
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, cm_raw_call, expr_stmt,
-    generic_method_call, i32_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
-    local_ref, loop_stmt, null_expr, return_stmt, split_packed_ptr_len, synth_span,
+    generic_method_call, i32_const, if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref,
+    loop_stmt, null_expr, return_stmt, split_packed_ptr_len, synth_span,
 };
 
 use super::lift::{materialize_if_needed, synthesize_lift, try_lift_wasi_variant_or_enum};

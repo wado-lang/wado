@@ -736,36 +736,6 @@ fn record_applied_return(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::record_applied_return;
-    use crate::hashmap::IndexMap;
-    use crate::tir::TypeId;
-
-    #[test]
-    fn record_applied_return_first_and_matching_are_ok() {
-        let mut m: IndexMap<usize, TypeId> = IndexMap::default();
-        assert_eq!(record_applied_return(&mut m, 1, TypeId(10)), None);
-        // Same key, same type re-records without conflict.
-        assert_eq!(record_applied_return(&mut m, 1, TypeId(10)), None);
-        // A distinct adapter key is independent.
-        assert_eq!(record_applied_return(&mut m, 2, TypeId(20)), None);
-    }
-
-    #[test]
-    fn record_applied_return_detects_conflict() {
-        let mut m: IndexMap<usize, TypeId> = IndexMap::default();
-        assert_eq!(record_applied_return(&mut m, 1, TypeId(10)), None);
-        // Same key, different type → the earlier type is reported and the map
-        // is left unchanged so the caller can ICE with both names.
-        assert_eq!(
-            record_applied_return(&mut m, 1, TypeId(11)),
-            Some(TypeId(10))
-        );
-        assert_eq!(m.get(&1), Some(&TypeId(10)));
-    }
-}
-
 /// Retype one adapter param (and its local slot) from a call-site arg.
 /// Skipped when the param is a flat wasm type whose adapter-side type is
 /// authoritative — the arg is cast at the call site instead — and for
@@ -919,11 +889,7 @@ fn rewrite_calls_in_expr(
                 for (i, arg) in args.iter().enumerate() {
                     let is_gc_passthrough = wasi_func.is_some_and(|f| {
                         i < f.params.len()
-                            && is_gc_passthrough_param(
-                                &f.params[i].2,
-                                cm_interface_registry,
-                                names,
-                            )
+                            && is_gc_passthrough_param(&f.params[i].2, cm_interface_registry, names)
                     });
                     fixup_adapter_param_from_call_site(
                         &mut adapter,
@@ -1356,5 +1322,35 @@ impl TirRefVisitor for EffectCallCollector<'_> {
             _ => {}
         }
         self.walk_expr(expr);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::record_applied_return;
+    use crate::hashmap::IndexMap;
+    use crate::tir::TypeId;
+
+    #[test]
+    fn record_applied_return_first_and_matching_are_ok() {
+        let mut m: IndexMap<usize, TypeId> = IndexMap::default();
+        assert_eq!(record_applied_return(&mut m, 1, TypeId(10)), None);
+        // Same key, same type re-records without conflict.
+        assert_eq!(record_applied_return(&mut m, 1, TypeId(10)), None);
+        // A distinct adapter key is independent.
+        assert_eq!(record_applied_return(&mut m, 2, TypeId(20)), None);
+    }
+
+    #[test]
+    fn record_applied_return_detects_conflict() {
+        let mut m: IndexMap<usize, TypeId> = IndexMap::default();
+        assert_eq!(record_applied_return(&mut m, 1, TypeId(10)), None);
+        // Same key, different type → the earlier type is reported and the map
+        // is left unchanged so the caller can ICE with both names.
+        assert_eq!(
+            record_applied_return(&mut m, 1, TypeId(11)),
+            Some(TypeId(10))
+        );
+        assert_eq!(m.get(&1), Some(&TypeId(10)));
     }
 }
