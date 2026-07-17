@@ -346,7 +346,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if util::is_float_only_literal(repr) {
                     // Must be float (has decimal point or negative exponent)
                     if let Err(message) = util::parse_float_literal(repr) {
-                        let _ = self.logger.error(TypeError::InvalidLiteral {
+                        let _ = self.emit(TypeError::InvalidLiteral {
                             message,
                             span: lit.span,
                         });
@@ -355,7 +355,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 } else {
                     // Can be integer (default to i32)
                     if let Err(message) = util::parse_u128_literal(repr) {
-                        let _ = self.logger.error(TypeError::InvalidLiteral {
+                        let _ = self.emit(TypeError::InvalidLiteral {
                             message,
                             span: lit.span,
                         });
@@ -366,7 +366,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Literal::Bool(_) => TypeTable::BOOL,
             Literal::Char(raw) => {
                 if let Err(message) = util::unescape_char(raw) {
-                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                    let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
                     });
@@ -376,7 +376,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Literal::String(raw) => {
                 let string_type = self.get_string_struct_type();
                 if let Err(message) = util::unescape_string(raw) {
-                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                    let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
                     });
@@ -386,7 +386,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Literal::Bytes(raw) => {
                 let array_u8_type = self.tysys.type_table.borrow_mut().make_list(TypeTable::U8);
                 if let Err(message) = util::unescape_bytes(raw) {
-                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                    let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
                     });
@@ -420,7 +420,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .cloned();
                 let string_type = self.get_string_struct_type();
                 if data.is_none() {
-                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                    let _ = self.emit(TypeError::InvalidLiteral {
                         message: "`#data` requires a `__DATA__` section in the source file"
                             .to_owned(),
                         span: lit.span,
@@ -433,13 +433,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let string_type = self.get_string_struct_type();
                 if let Some(bytes) = self.tysys.included_files.get(&key) {
                     if std::str::from_utf8(bytes).is_err() {
-                        let _ = self.logger.error(TypeError::InvalidLiteral {
+                        let _ = self.emit(TypeError::InvalidLiteral {
                             message: format!("file is not valid UTF-8: \"{raw_path}\""),
                             span: lit.span,
                         });
                     }
                 } else {
-                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                    let _ = self.emit(TypeError::InvalidLiteral {
                         message: format!("file not found: \"{raw_path}\""),
                         span: lit.span,
                     });
@@ -450,7 +450,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let key = [self.current_module_source.to_string(), raw_path.clone()];
                 let array_u8_type = self.tysys.type_table.borrow_mut().make_list(TypeTable::U8);
                 if !self.tysys.included_files.contains_key(&key) {
-                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                    let _ = self.emit(TypeError::InvalidLiteral {
                         message: format!("file not found: \"{raw_path}\""),
                         span: lit.span,
                     });
@@ -636,7 +636,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Unknown variable - report error
-        let _ = self.logger.error(TypeError::UnknownIdentifier {
+        let _ = self.emit(TypeError::UnknownIdentifier {
             name: ident.name.clone(),
             span: ident.span,
         });
@@ -739,7 +739,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ResolvedType::Unit
                 );
                 if !payload_is_unit {
-                    let _ = self.logger.error(TypeError::ArgumentCountMismatch {
+                    let _ = self.emit(TypeError::ArgumentCountMismatch {
                         expected: 1,
                         found: 0,
                         span: ident.span,
@@ -948,7 +948,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // (c) Generic, no usable type context: dedicated diagnostic.
-        let _ = self.logger.error(TypeError::BareGenericFunctionRef {
+        let _ = self.emit(TypeError::BareGenericFunctionRef {
             name: ident.name.clone(),
             span: ident.span,
         });
@@ -1184,7 +1184,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if index < type_args.len() {
                         return (index as u32, type_args[index]);
                     }
-                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                    let _ = self.emit(TypeError::InvalidLiteral {
                         message: format!(
                             "tuple index {} out of bounds, tuple has {} elements",
                             index,
@@ -1249,7 +1249,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(struct_info) = self.lookup_struct_fields_in(&struct_name, &module_source) {
             for (fname, _, vis) in &struct_info.fields {
                 if fname == field_name && !vis.reachable_from(same_package) {
-                    let _ = self.logger.error(TypeError::PrivateFieldAccess {
+                    let _ = self.emit(TypeError::PrivateFieldAccess {
                         struct_name: struct_name.clone(),
                         field_name: field_name.to_string(),
                         visibility: *vis,
@@ -1389,7 +1389,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let field_type = elements[idx];
                     return field_type;
                 } else {
-                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                    let _ = self.emit(TypeError::InvalidLiteral {
                         message: format!(
                             "tuple index {} out of bounds, tuple has {} elements",
                             idx,
@@ -1401,7 +1401,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             // Non-constant index on tuple
-            let _ = self.logger.error(TypeError::InvalidLiteral {
+            let _ = self.emit(TypeError::InvalidLiteral {
                 message: "tuple index must be a constant integer".to_string(),
                 span: index.span,
             });
@@ -1539,7 +1539,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Fallback: report error for unsupported indexing
         let type_name = self.tysys.type_table.borrow().type_name(expr_type);
-        let _ = self.logger.error(TypeError::MissingTraitImpl {
+        let _ = self.emit(TypeError::MissingTraitImpl {
             type_name,
             trait_name: "Index or IndexValue".to_string(),
             span: index.span,
@@ -1607,7 +1607,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else {
                         let chain_name = self.tysys.type_table.borrow().type_name(chain_type);
                         let else_name = self.tysys.type_table.borrow().type_name(else_type);
-                        let _ = self.logger.error(TypeError::TypeMismatch {
+                        let _ = self.emit(TypeError::TypeMismatch {
                             expected: chain_name,
                             found: else_name,
                             span: if_expr.else_block.as_ref().unwrap().span,
@@ -1729,7 +1729,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else if if_expr.else_block.is_none() {
                         if then_type != TypeTable::UNIT {
                             let type_name = self.tysys.type_table.borrow().type_name(then_type);
-                            let _ = self.logger.error(TypeError::TypeMismatch {
+                            let _ = self.emit(TypeError::TypeMismatch {
                                 expected: "()".to_string(),
                                 found: type_name,
                                 span: if_expr.then_block.span,
@@ -1739,7 +1739,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else {
                         let then_name = self.tysys.type_table.borrow().type_name(then_type);
                         let else_name = self.tysys.type_table.borrow().type_name(else_type);
-                        let _ = self.logger.error(TypeError::TypeMismatch {
+                        let _ = self.emit(TypeError::TypeMismatch {
                             expected: then_name,
                             found: else_name,
                             span: if_expr.else_block.as_ref().unwrap().span,
@@ -1830,7 +1830,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if matches!(result, TypeCheckResult::Incompatible) {
             let expected_name = self.tysys.type_table.borrow().type_name(expected);
             let found_name = self.tysys.type_table.borrow().type_name(actual);
-            let _ = self.logger.error(TypeError::TypeMismatch {
+            let _ = self.emit(TypeError::TypeMismatch {
                 expected: expected_name,
                 found: found_name,
                 span,
@@ -1852,7 +1852,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.tysys.type_table.borrow().contains_unknown(result_type) {
             return false;
         }
-        let _ = self.logger.error(TypeError::CannotInferType {
+        let _ = self.emit(TypeError::CannotInferType {
             message: format!("cannot infer the type of this {construct}; add a type annotation"),
             span,
         });
@@ -1866,7 +1866,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn report_unresolved_nulls(&mut self, unresolved: &[Span], result_type: TypeId) {
         for &span in unresolved {
             let expected = self.tysys.type_table.borrow().type_name(result_type);
-            let _ = self.logger.error(TypeError::TypeMismatch {
+            let _ = self.emit(TypeError::TypeMismatch {
                 expected,
                 found: "null".to_string(),
                 span,
@@ -2099,7 +2099,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if matches!(result, TypeCheckResult::Incompatible) {
                     let expected_name = self.tysys.type_table.borrow().type_name(type_id);
                     let found_name = self.tysys.type_table.borrow().type_name(arm_type);
-                    let _ = self.logger.error(TypeError::TypeMismatch {
+                    let _ = self.emit(TypeError::TypeMismatch {
                         expected: expected_name,
                         found: found_name,
                         span: arm_span,
@@ -2199,7 +2199,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if !missing.is_empty() {
                         let missing_names: Vec<String> =
                             missing.iter().map(|s| (*s).to_string()).collect();
-                        let _ = self.logger.error(TypeError::InvalidPattern {
+                        let _ = self.emit(TypeError::InvalidPattern {
                             message: format!(
                                 "non-exhaustive match: missing {}",
                                 Self::format_missing_cases(&missing_names),
@@ -2239,7 +2239,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if !has_false {
                         missing.push("false".to_string());
                     }
-                    let _ = self.logger.error(TypeError::InvalidPattern {
+                    let _ = self.emit(TypeError::InvalidPattern {
                         message: format!(
                             "non-exhaustive match: missing {}",
                             Self::format_missing_cases(&missing),
@@ -2584,7 +2584,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let missing: Vec<&&str> = all_cases.difference(&covered).collect();
             if !missing.is_empty() {
                 let missing_names: Vec<String> = missing.iter().map(|s| (*s).to_string()).collect();
-                let _ = self.logger.error(TypeError::InvalidPattern {
+                let _ = self.emit(TypeError::InvalidPattern {
                     message: format!(
                         "non-exhaustive match: missing {}",
                         Self::format_missing_cases(&missing_names),
@@ -2711,7 +2711,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check exhaustiveness: sort ranges and verify they cover [type_min, type_max]
         if all_ranges.is_empty() {
-            let _ = self.logger.error(TypeError::InvalidPattern {
+            let _ = self.emit(TypeError::InvalidPattern {
                 message: "non-exhaustive match: integer type requires a wildcard `_` or full range coverage".to_string(),
                 span,
             });
@@ -2736,7 +2736,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Check if merged ranges cover [type_min, type_max]
         let covers = merged.len() == 1 && merged[0].0 <= type_min && merged[0].1 >= type_max;
         if !covers {
-            let _ = self.logger.error(TypeError::InvalidPattern {
+            let _ = self.emit(TypeError::InvalidPattern {
                 message: "non-exhaustive match: not all values in the integer range are covered"
                     .to_string(),
                 span,
@@ -2763,7 +2763,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 for &(a_lo, a_hi) in &arm_ranges[i] {
                     for &(b_lo, b_hi) in &arm_ranges[j] {
                         if a_lo <= b_hi && b_lo <= a_hi {
-                            let _ = self.logger.error(TypeError::InvalidPattern {
+                            let _ = self.emit(TypeError::InvalidPattern {
                                 message: "overlapping range patterns in match arms".to_string(),
                                 span,
                             });
@@ -2840,7 +2840,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .type_id;
                     }
                     Err(_) => {
-                        let _ = self.logger.error(TypeError::InvalidLiteral {
+                        let _ = self.emit(TypeError::InvalidLiteral {
                             message: format!("invalid {name} literal: {repr}"),
                             span: lit.span,
                         });
@@ -2869,7 +2869,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     )
                     .type_id;
                 }
-                let _ = self.logger.error(TypeError::InvalidLiteral {
+                let _ = self.emit(TypeError::InvalidLiteral {
                     message: format!("invalid i128 literal: -{repr}"),
                     span: unary.span,
                 });
@@ -2953,7 +2953,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let from_name = tt.type_name(source_type);
                 let to_name = tt.type_name(target_type);
                 drop(tt);
-                let _ = self.logger.error(TypeError::InvalidCast {
+                let _ = self.emit(TypeError::InvalidCast {
                     from: from_name,
                     to: to_name,
                     hint: "i128/u128 can only be cast to numeric types".to_string(),
@@ -2979,7 +2979,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && source_base != TypeTable::U8
         {
             let from_name = self.tysys.type_table.borrow().type_name(source_type);
-            let _ = self.logger.error(TypeError::InvalidCast {
+            let _ = self.emit(TypeError::InvalidCast {
                 from: from_name,
                 to: "char".to_string(),
                 hint: "use char::from_u32() or char::from_i32() for checked conversion".to_string(),
@@ -2992,7 +2992,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && !self.tysys.type_table.borrow().is_integer(target_base)
         {
             let to_name = self.tysys.type_table.borrow().type_name(target_type);
-            let _ = self.logger.error(TypeError::InvalidCast {
+            let _ = self.emit(TypeError::InvalidCast {
                 from: "char".to_string(),
                 to: to_name,
                 hint: "char can only be cast to integer types".to_string(),
@@ -3046,7 +3046,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let crate::symbol::SymbolKind::Struct(_) = &symbol.kind {
                 (symbol.name.clone(), symbol.module_source().clone())
             } else {
-                let _ = self.logger.error(TypeError::UnknownType {
+                let _ = self.emit(TypeError::UnknownType {
                     name: name.clone(),
                     span: struct_lit.span,
                 });
@@ -3068,7 +3068,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `StructLiteral expected Ref WirType` panic. The fallback
             // module_source is still returned so subsequent passes have a
             // best-effort type; the error has already been logged.
-            let _ = self.logger.error(TypeError::UnknownType {
+            let _ = self.emit(TypeError::UnknownType {
                 name: name.clone(),
                 span: struct_lit.span,
             });
@@ -3101,7 +3101,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (or a second spread) is fully overwritten and unused.
         let named_spread = struct_lit.spreads.first();
         if let Some(second) = struct_lit.spreads.get(1) {
-            let _ = self.logger.error(TypeError::InvalidLiteral {
+            let _ = self.emit(TypeError::InvalidLiteral {
                 message: "a named struct literal allows at most one `..base` spread".to_string(),
                 span: second.span,
             });
@@ -3109,7 +3109,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(spread) = named_spread
             && spread.field_pos > 0
         {
-            let _ = self.logger.error(TypeError::InvalidLiteral {
+            let _ = self.emit(TypeError::InvalidLiteral {
                 message: "a field before `..base` is overwritten and never used; \
                           put `..base` first"
                     .to_string(),
@@ -3120,7 +3120,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(spread) = named_spread
             && struct_lit.fields.is_empty()
         {
-            let _ = self.logger.error(TypeError::InvalidLiteral {
+            let _ = self.emit(TypeError::InvalidLiteral {
                 message: "`{ ..base }` with no other fields just copies `base`; \
                           use `base` directly"
                     .to_string(),
@@ -3239,7 +3239,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !struct_field_types.iter().any(|(n, _)| n == &field.name)
                     && !struct_field_types.is_empty()
                 {
-                    let _ = self.logger.error(TypeError::ExtraField {
+                    let _ = self.emit(TypeError::ExtraField {
                         struct_name: struct_name.clone(),
                         field_name: field.name.clone(),
                         span: field.span,
@@ -3311,7 +3311,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         field_index: idx as u32,
                     });
                 } else {
-                    let _ = self.logger.error(TypeError::MissingField {
+                    let _ = self.emit(TypeError::MissingField {
                         struct_name: struct_name.clone(),
                         field_name: expected_name.clone(),
                         span: struct_lit.span,
@@ -3336,7 +3336,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let set_explicitly = provided_names.contains(fname);
                 let read_via_spread = !struct_lit.spreads.is_empty() && !set_explicitly;
                 if !vis.reachable_from(same_package) && (set_explicitly || read_via_spread) {
-                    let _ = self.logger.error(TypeError::PrivateFieldAccess {
+                    let _ = self.emit(TypeError::PrivateFieldAccess {
                         struct_name: struct_name.clone(),
                         field_name: fname.clone(),
                         visibility: *vis,
@@ -3451,7 +3451,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     type_arg,
                                     bound,
                                 );
-                                let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
+                                let _ = self.emit(TypeError::TraitBoundNotSatisfied {
                                     type_name,
                                     trait_name: bound.clone(),
                                     param_name: param_name.clone(),
@@ -3581,7 +3581,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .all(|n| members[i + 1..].iter().any(|(_, later)| later.contains(n)));
             if fully_shadowed {
-                let _ = self.logger.error(TypeError::InvalidLiteral {
+                let _ = self.emit(TypeError::InvalidLiteral {
                     message: "this member is fully overwritten by a later spread/field \
                               and has no effect"
                         .to_string(),
@@ -3617,7 +3617,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             };
             if !vis.reachable_from(same_package) {
-                let _ = self.logger.error(TypeError::PrivateFieldAccess {
+                let _ = self.emit(TypeError::PrivateFieldAccess {
                     struct_name: self.tysys.type_id_to_string(base_types[base_idx]),
                     field_name: name.clone(),
                     visibility: *vis,
@@ -3685,14 +3685,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if !base_errored {
             if is_copy {
-                let _ = self.logger.error(TypeError::InvalidLiteral {
+                let _ = self.emit(TypeError::InvalidLiteral {
                     message: "`{ ..base }` with no other members just copies `base`; \
                               use `base` directly"
                         .to_string(),
                     span: struct_lit.spreads[0].span,
                 });
             } else if has_spread && !compose_union && !is_kv_merge {
-                let _ = self.logger.error(TypeError::InvalidLiteral {
+                let _ = self.emit(TypeError::InvalidLiteral {
                     message: "a `..base` spread must be a struct value (composition) or a \
                               key-value map with a map-typed target; a non-struct base or a \
                               mix of struct and map spreads is not allowed"
@@ -3992,7 +3992,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // per field.
                         elem_types.extend(inner_elems);
                     } else {
-                        let _ = self.logger.error(
+                        let _ = self.emit(
                             crate::elaborator::types::TypeError::InvalidLiteral {
                                 message: "spread operator `..` can only be used with tuple types"
                                     .to_string(),
@@ -4081,7 +4081,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         drop(tt);
 
         if !is_option && !is_result {
-            let _ = self.logger.error(TypeError::InvalidQuestionMark {
+            let _ = self.emit(TypeError::InvalidQuestionMark {
                 message: format!("cannot use ? on type {type_name}"),
                 span: qm.span,
             });
@@ -4099,7 +4099,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         drop(tt);
 
         if is_option && !ret_is_option {
-            let _ = self.logger.error(TypeError::InvalidQuestionMark {
+            let _ = self.emit(TypeError::InvalidQuestionMark {
                 message: "cannot use ? on Option in a function returning Result".to_string(),
                 span: qm.span,
             });
@@ -4107,12 +4107,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         if is_result && !ret_is_result {
             if ret_is_option {
-                let _ = self.logger.error(TypeError::InvalidQuestionMark {
+                let _ = self.emit(TypeError::InvalidQuestionMark {
                     message: "cannot use ? on Result in a function returning Option".to_string(),
                     span: qm.span,
                 });
             } else {
-                let _ = self.logger.error(TypeError::InvalidQuestionMark {
+                let _ = self.emit(TypeError::InvalidQuestionMark {
                     message: "? requires function to return Result or Option".to_string(),
                     span: qm.span,
                 });
@@ -4432,7 +4432,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     RangeKind::Exclusive => "..<",
                     RangeKind::Inclusive => "..=",
                 };
-                let _ = self.logger.error(TypeError::TypeMismatch {
+                let _ = self.emit(TypeError::TypeMismatch {
                     expected: start_name,
                     found: format!(
                         "{end_name} (range `{op_str}` requires both operands to have the same type)"
@@ -4467,7 +4467,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 element_type,
                 &ord_trait_name,
             );
-            let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
+            let _ = self.emit(TypeError::TraitBoundNotSatisfied {
                 type_name,
                 trait_name: ord_trait_name,
                 param_name: "T".to_string(),
@@ -4487,7 +4487,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     RangeKind::Exclusive => "..<",
                     RangeKind::Inclusive => "..=",
                 };
-                let _ = self.logger.error(TypeError::InvalidLiteral {
+                let _ = self.emit(TypeError::InvalidLiteral {
                     message: format!(
                         "reversed range `{op_str}` is not supported (start must be less than end)"
                     ),

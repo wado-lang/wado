@@ -330,7 +330,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         span: Span,
     ) -> Option<crate::ast::AstId> {
         if let Some(first) = self.symbols.defined_span_in_module(module_source, name) {
-            let _ = self.logger.error(AnalyzeError::DuplicateDefinition {
+            let _ = self.logger.error_in(module_source, AnalyzeError::DuplicateDefinition {
                 name: name.to_string(),
                 span,
                 first,
@@ -345,7 +345,6 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
     /// Collect all definitions from a module into the symbol table
     fn collect_definitions(&mut self, module: &Module, module_source: &ModuleSource) {
-        self.logger.set_file(module_source.source_path());
         for item in &module.items {
             match item {
                 Item::Function(func) => {
@@ -674,7 +673,6 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         if module.has_no_prelude() {
             return;
         }
-        self.logger.set_file(module_source.source_path());
         for item in &module.items {
             let (name, span) = match item {
                 Item::Struct(d) => (&d.name, d.span),
@@ -686,7 +684,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 _ => continue,
             };
             if self.symbols.is_prelude_type(name) {
-                let _ = self.logger.error(AnalyzeError::PreludeTypeCollision {
+                let _ = self.logger.error_in(module_source, AnalyzeError::PreludeTypeCollision {
                     name: name.clone(),
                     span,
                 });
@@ -755,7 +753,6 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         modules: &crate::hashmap::IndexMap<ModuleSource, Module>,
     ) -> Result<(), Bail> {
         for (source, module) in modules {
-            self.logger.set_file(source.source_path());
             self.validate_imports(module, source, modules)?;
         }
         Ok(())
@@ -872,7 +869,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
             return Ok(());
         };
         if !self.import_reachable(from_module_source, target_module, visibility) {
-            self.logger.error(AnalyzeError::SymbolNotVisible {
+            self.logger.error_in(from_module_source, AnalyzeError::SymbolNotVisible {
                 name: name.to_string(),
                 module_source: target_module.clone(),
                 visibility,
@@ -897,7 +894,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 if !is_wasm_asset_use_decl(use_decl)
                     && let Err(message) = validate_module_path(&use_decl.source)
                 {
-                    self.logger.error(AnalyzeError::InvalidModulePath {
+                    self.logger.error_in(from_module_source, AnalyzeError::InvalidModulePath {
                         path: use_decl.source.clone(),
                         message,
                         span: use_decl.span,
@@ -914,7 +911,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     Some(&self.entry_module_source),
                     &self.invocations,
                 ) else {
-                    self.logger.error(AnalyzeError::InvalidModulePath {
+                    self.logger.error_in(from_module_source, AnalyzeError::InvalidModulePath {
                         path: use_decl.source.clone(),
                         message: "wasm asset paths must be relative (`./` or `../`); \
                              absolute namespace-qualified paths are not supported here"
@@ -926,7 +923,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
                 // Check the module exists in pre-loaded modules
                 if !all_modules.contains_key(&module_source) {
-                    self.logger.error(AnalyzeError::ModuleNotFound {
+                    self.logger.error_in(from_module_source, AnalyzeError::ModuleNotFound {
                         module_source: module_source.clone(),
                         span: use_decl.span,
                     })?;
@@ -951,7 +948,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                 self.symbols
                                     .register_import(from_module_source, import_name, key);
                             } else {
-                                self.logger.error(AnalyzeError::ImportNotFound {
+                                self.logger.error_in(from_module_source, AnalyzeError::ImportNotFound {
                                     module_source: module_source.clone(),
                                     name: name.clone(),
                                     span: use_decl.span,
@@ -982,7 +979,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                         key,
                                     );
                                 } else {
-                                    self.logger.error(AnalyzeError::ImportNotFound {
+                                    self.logger.error_in(from_module_source, AnalyzeError::ImportNotFound {
                                         module_source: module_source.clone(),
                                         name: lookup_name,
                                         span: use_decl.span,

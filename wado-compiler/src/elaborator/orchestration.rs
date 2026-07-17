@@ -32,7 +32,7 @@ use crate::ast::{self, Item, Module, Type};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_host::CompilerHost;
 use crate::component_model::CmInterfaceRegistry;
-use crate::logger::{Bail, Logger};
+use crate::logger::{Bail, Logger, ModuleDiag};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::symbol::SymbolTable;
 use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
@@ -855,29 +855,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 &invocations,
             )
         };
-        // These diagnostics are raised at the phase boundary (before the
-        // per-module resolution loop establishes a file context), and each
-        // `TypeError` carries only a bare `Span` with no owning-module
-        // identity. Derive the file from the offending impl block's `AstId`
-        // via the `AstIdSpace → ModuleSource` registry — the same mapping
-        // `Semantics::module_of_id` uses — so the printer attributes the
-        // location to the user's file instead of a stdlib module (#1596).
-        let space_modules: IndexMap<crate::ast::AstIdSpace, &ModuleSource> = modules
-            .iter()
-            .map(|(ms, m)| (m.ast_id_space(), ms))
-            .collect();
-        let emit_phase_diagnostic = |id: crate::ast::AstId, err: TypeError| {
-            let mut diag: crate::compiler_host::Diagnostic = err.into();
-            if let Some(module_source) = space_modules.get(&id.space())
-                && let Some(span) = diag.span.as_mut()
-                && span.file.is_empty()
-            {
-                span.file = module_source.source_path();
-            }
-            let _ = logger.error(diag);
-        };
-        for (id, violation) in orphan_violations {
-            emit_phase_diagnostic(id, violation);
+        // Each violation is attributed to the module of the offending impl
+        // block, which `check_all_orphan_rules` pairs with the error (#1596).
+        for (module_source, violation) in orphan_violations {
+            let _ = logger.error_in(&module_source, violation);
         }
 
         // Seal `Reflect`: compiler-synthesized, it may not be implemented in
@@ -908,10 +889,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             && let Some(trait_type) = &impl_block.trait_type
                             && super::trait_env::get_type_name_static(trait_type) == reflect_name
                         {
-                            // Same phase-boundary file attribution as the
-                            // orphan/coherence diagnostics above (#1596).
-                            emit_phase_diagnostic(
-                                impl_block.id,
+                            let _ = logger.error_in(
+                                module_source,
                                 TypeError::SealedTraitImpl {
                                     trait_name: reflect_name.clone(),
                                     span: impl_block.span,
@@ -1452,10 +1431,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let mut elaborator =
                 Self::module_elaborator(state, sem, symbols, modules, logger, &entry_module_source);
 
-            // Set file context so diagnostics emitted during resolution
-            // carry the correct module filename (not the entry module).
-            logger.set_file(module_source.source_path());
-
             let errors_before = logger.error_count();
             elaborator.annotate_module_decls(module, module_source.clone());
             if logger.error_count() > errors_before {
@@ -1521,7 +1496,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .expect("module_semantics is pre-populated by annotate_modules");
             let mut elaborator =
                 Self::module_elaborator(state, sem, symbols, modules, logger, &entry_module_source);
-            logger.set_file(module_source.source_path());
 
             let errors_before = logger.error_count();
             elaborator.annotate_module_bodies(module, module_source.clone());
@@ -1590,7 +1564,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     );
                 } else if reify_eligible.contains(module_source) {
                     let module = modules.get(module_source).expect("module should exist");
-                    logger.set_file(module_source.source_path());
                     let sem_ref = state
                         .module_semantics
                         .get(module_source)
@@ -1906,7 +1879,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             if stdlib_set.contains(module_source) {
                 continue;
             }
-            logger.set_file(module_source.source_path());
+            // Bind the logger to this module so every validator diagnostic is
+            // attributed to its file; shadows the raw logger for the loop body.
+            let logger = &logger.in_module(module_source);
 
             // Build per-module known names: global names + import aliases + trait names
             let mut module_known_names = known_type_names.clone();
@@ -2126,7 +2101,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
             }
         }
-        logger.clear_file();
         Ok(())
     }
 
@@ -2136,7 +2110,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         known_type_names: &IndexSet<String>,
         resource_type_names: &IndexSet<String>,
         type_params: &[&str],
-        logger: &Logger<'_, H>,
+        logger: &ModuleDiag<'_, '_, H>,
     ) -> Result<(), Bail> {
         // Local item declarations (`Stmt::Item`) are not in `known_type_names`
         // (a module-wide set built before any function body is walked), so a
@@ -2228,7 +2202,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         known_type_names: &IndexSet<String>,
         resource_type_names: &IndexSet<String>,
         type_params: &[&str],
-        logger: &Logger<'_, H>,
+        logger: &ModuleDiag<'_, '_, H>,
     ) -> Result<(), Bail> {
         match stmt {
             ast::Stmt::Let(let_stmt) => {
@@ -2438,7 +2412,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         known_type_names: &IndexSet<String>,
         resource_type_names: &IndexSet<String>,
         type_params: &[&str],
-        logger: &Logger<'_, H>,
+        logger: &ModuleDiag<'_, '_, H>,
     ) -> Result<(), Bail> {
         match condition {
             ast::Condition::Expr(expr) => {
@@ -2484,7 +2458,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         known_type_names: &IndexSet<String>,
         resource_type_names: &IndexSet<String>,
         type_params: &[&str],
-        logger: &Logger<'_, H>,
+        logger: &ModuleDiag<'_, '_, H>,
     ) -> Result<(), Bail> {
         match expr {
             ast::Expr::Cast(cast) => {
@@ -2954,7 +2928,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         known_type_names: &IndexSet<String>,
         resource_type_names: &IndexSet<String>,
         type_params: &[&str],
-        logger: &Logger<'_, H>,
+        logger: &ModuleDiag<'_, '_, H>,
     ) -> Result<(), Bail> {
         Self::validate_ast_type_names_inner(
             ty,
@@ -2971,7 +2945,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         known_type_names: &IndexSet<String>,
         resource_type_names: &IndexSet<String>,
         type_params: &[&str],
-        logger: &Logger<'_, H>,
+        logger: &ModuleDiag<'_, '_, H>,
         allow_infer: bool,
     ) -> Result<(), Bail> {
         match ty {
@@ -3081,7 +3055,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         known_type_names: &IndexSet<String>,
         resource_type_names: &IndexSet<String>,
         type_params: &[&str],
-        logger: &Logger<'_, H>,
+        logger: &ModuleDiag<'_, '_, H>,
     ) -> Result<(), Bail> {
         match ty {
             Type::Infer(_) => Ok(()),

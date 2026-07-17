@@ -149,7 +149,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let is_known_resource =
                         self.tysys.trait_env.resource_decl_index.contains_key(&key);
                     if !is_known_effect && !is_known_resource {
-                        let _ = self.logger.error(TypeError::NotAnEffect {
+                        let _ = self.emit(TypeError::NotAnEffect {
                             name: name.clone(),
                             span: effect_ty.span(),
                         });
@@ -202,7 +202,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ))
             {
                 let type_name = self.tysys.type_table.borrow().type_name(handler_type);
-                let _ = self.logger.error(TypeError::HandlerEffectNotImplemented {
+                let _ = self.emit(TypeError::HandlerEffectNotImplemented {
                     type_name,
                     interface_name: interface_name.clone(),
                     span: binding.span,

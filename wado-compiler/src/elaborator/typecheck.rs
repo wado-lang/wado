@@ -302,7 +302,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `TypeSystem` itself stays host-agnostic.
     pub(super) fn typecheck(&self, actual: TypeId, expected: TypeId, span: Span) {
         if let Err(payload) = self.tysys.typecheck(actual, expected) {
-            let _ = self.logger.error(TypeError::TypeMismatch {
+            let _ = self.emit(TypeError::TypeMismatch {
                 expected: payload.expected,
                 found: payload.found,
                 span,
@@ -316,7 +316,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// delegates to [`Self::typecheck`]'s emit path.
     pub(super) fn typecheck_return(&self, actual: TypeId, expected: TypeId, span: Span) {
         if let Err(payload) = self.tysys.typecheck_return(actual, expected) {
-            let _ = self.logger.error(TypeError::TypeMismatch {
+            let _ = self.emit(TypeError::TypeMismatch {
                 expected: payload.expected,
                 found: payload.found,
                 span,

@@ -56,7 +56,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && self.tysys.type_table.borrow().is_integer(target_type)
         {
             if util::is_float_only_literal(repr) {
-                let _ = self.logger.error(TypeError::InvalidLiteral {
+                let _ = self.emit(TypeError::InvalidLiteral {
                     message: format!(
                         "cannot use float literal '{repr}' as integer (has decimal point or negative exponent)"
                     ),
@@ -72,7 +72,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &self.tysys.type_table.borrow(),
                         repr,
                     ) {
-                        let _ = self.logger.error(TypeError::InvalidLiteral {
+                        let _ = self.emit(TypeError::InvalidLiteral {
                             message: err_msg,
                             span: lit.span,
                         });
@@ -80,7 +80,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     placeholder(target_type, lit.span)
                 }
                 Err(message) => {
-                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                    let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
                     });
@@ -97,7 +97,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && self.tysys.type_table.borrow().is_integer(target_type)
         {
             if util::is_float_only_literal(repr) {
-                let _ = self.logger.error(TypeError::InvalidLiteral {
+                let _ = self.emit(TypeError::InvalidLiteral {
                     message: format!(
                         "cannot use float literal '-{repr}' as integer (has decimal point or negative exponent)"
                     ),
@@ -113,7 +113,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &self.tysys.type_table.borrow(),
                         repr,
                     ) {
-                        let _ = self.logger.error(TypeError::InvalidLiteral {
+                        let _ = self.emit(TypeError::InvalidLiteral {
                             message: err_msg,
                             span: unary.span,
                         });
@@ -121,7 +121,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     placeholder(target_type, unary.span)
                 }
                 Err(message) => {
-                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                    let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
                     });
@@ -138,7 +138,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(match util::parse_float_literal(repr) {
                 Ok(_) => placeholder(target_type, lit.span),
                 Err(message) => {
-                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                    let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
                     });
@@ -157,7 +157,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(match util::parse_float_literal(repr) {
                 Ok(_) => placeholder(target_type, unary.span),
                 Err(message) => {
-                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                    let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
                     });
@@ -190,7 +190,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return Some(placeholder(target_type, lit.span));
                     }
                     Err(_) => {
-                        let _ = self.logger.error(TypeError::InvalidLiteral {
+                        let _ = self.emit(TypeError::InvalidLiteral {
                             message: format!("invalid {name} literal: {repr}"),
                             span: lit.span,
                         });
@@ -218,7 +218,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if util::parse_i128_literal(&negated_repr).is_ok() {
                     return Some(placeholder(target_type, unary.span));
                 }
-                let _ = self.logger.error(TypeError::InvalidLiteral {
+                let _ = self.emit(TypeError::InvalidLiteral {
                     message: format!("invalid i128 literal: -{repr}"),
                     span: unary.span,
                 });
@@ -411,7 +411,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         {
             let type_name = self.tysys.type_table.borrow().type_name(target_type);
-            let _ = self.logger.error(TypeError::MissingTraitImpl {
+            let _ = self.emit(TypeError::MissingTraitImpl {
                 type_name,
                 trait_name: "KeyValueLiteral".to_string(),
                 span: expr.span(),
@@ -598,7 +598,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut seen_fields: IndexSet<&str> = IndexSet::default();
         for field in &struct_lit.fields {
             if !seen_fields.insert(field.name.as_str()) {
-                let _ = self.logger.error(TypeError::DuplicateField {
+                let _ = self.emit(TypeError::DuplicateField {
                     name: field.name.clone(),
                     span: field.span,
                 });
@@ -608,7 +608,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for field in &struct_lit.fields {
             let value = self.resolve_expr(&field.value, ctx, Some(value_type));
             if value != value_type && value != TypeTable::UNKNOWN && value != TypeTable::NEVER {
-                let _ = self.logger.error(TypeError::TypeMismatch {
+                let _ = self.emit(TypeError::TypeMismatch {
                     expected: self.tysys.type_table.borrow().type_name(value_type),
                     found: self.tysys.type_table.borrow().type_name(value),
                     span: field.value.span(),
@@ -774,7 +774,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow()
                     .contains_type_param(element_type)
             {
-                let _ = self.logger.error(TypeError::TypeMismatch {
+                let _ = self.emit(TypeError::TypeMismatch {
                     expected: format!(
                         "homogeneous elements of type '{}'",
                         self.tysys.type_table.borrow().type_name(element_type)

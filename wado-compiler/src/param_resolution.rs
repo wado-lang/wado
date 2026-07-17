@@ -81,6 +81,7 @@ pub fn resolve_params<H: CompilerHost>(
     flat: &mut FlatPackage,
     overrides: &IndexMap<String, String>,
     policy: &ParamPolicy,
+    file: &str,
     logger: &Logger<'_, H>,
 ) -> Result<(), Bail> {
     // Nothing to resolve and no stray `-D` to flag — skip the type-table work.
@@ -110,7 +111,7 @@ pub fn resolve_params<H: CompilerHost>(
 
     let mut had_error = false;
     let mut emit = |level: ParamPolicyLevel, code: Code, message: String, span: Option<Span>| {
-        let diag_span = span.map(|s| DiagnosticSpan::from_span(&s, None));
+        let diag_span = span.map(|s| DiagnosticSpan::from_span(&s, Some(file)));
         match level {
             ParamPolicyLevel::Error => {
                 had_error = true;

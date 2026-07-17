@@ -377,6 +377,9 @@ fn collect_top_level_bare_idents(pattern: &crate::ast::Pattern) -> Vec<String> {
 pub struct Binder<'a, H: CompilerHost> {
     scopes: Vec<Scope>,
     logger: &'a Logger<'a, H>,
+    /// Module whose bodies are being bound; every diagnostic is attributed to
+    /// its source file.
+    module_source: &'a crate::module_source::ModuleSource,
     current_depth: u32,
     /// All local variable names defined in the current function
     /// Used to distinguish "out of scope" errors from "global reference"
@@ -389,14 +392,23 @@ pub struct Binder<'a, H: CompilerHost> {
 
 impl<'a, H: CompilerHost> Binder<'a, H> {
     /// Create a new binder
-    pub fn new(logger: &'a Logger<'a, H>) -> Self {
+    pub fn new(
+        logger: &'a Logger<'a, H>,
+        module_source: &'a crate::module_source::ModuleSource,
+    ) -> Self {
         Self {
             scopes: vec![Scope::new()], // Global scope
             logger,
+            module_source,
             current_depth: 0,
             local_names_in_function: IndexSet::default(),
             possibly_uninit: IndexSet::default(),
         }
+    }
+
+    /// Emit a bind error attributed to the module being bound.
+    fn emit(&self, err: impl Into<crate::compiler_host::Diagnostic>) -> Result<(), Bail> {
+        self.logger.error_in(self.module_source, err)
     }
 
     /// Returns true if the innermost binding for `name` is possibly uninitialized.
@@ -801,13 +813,13 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                     // Unknown names might be global functions/constants - those are
                     // resolved later by the analyzer.
                     if self.local_names_in_function.contains(&ident.name) {
-                        self.logger.error(BindError::UseBeforeDefine {
+                        self.emit(BindError::UseBeforeDefine {
                             name: ident.name.clone(),
                             used_at: ident.span,
                         })?;
                     }
                 } else if self.is_possibly_uninit(&ident.name) {
-                    self.logger.error(BindError::UseBeforeInit {
+                    self.emit(BindError::UseBeforeInit {
                         name: ident.name.clone(),
                         span: ident.span,
                     })?;
@@ -831,7 +843,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                     && let Some(binding) = self.lookup(&ident.name)
                     && !binding.is_mut
                 {
-                    self.logger.error(BindError::AssignToImmutable {
+                    self.emit(BindError::AssignToImmutable {
                         name: ident.name.clone(),
                         span: assign.span,
                     })?;
@@ -846,7 +858,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                     && let Some(binding) = self.lookup(&ident.name)
                     && !binding.is_mut
                 {
-                    self.logger.error(BindError::AssignToImmutable {
+                    self.emit(BindError::AssignToImmutable {
                         name: ident.name.clone(),
                         span: compound.span,
                     })?;
@@ -1200,13 +1212,19 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         is_reactive: bool,
         span: Span,
     ) -> Result<(), Bail> {
-        let scope = self.scopes.last_mut().unwrap();
-
-        // Check for duplicate in the same scope
-        if let Some(existing) = scope.bindings.get(name) {
-            self.logger.error(BindError::DuplicateInScope {
+        // Check for duplicate in the same scope. Read the prior span through a
+        // shared borrow so it ends before `emit` takes `&self`.
+        if let Some(first) = self
+            .scopes
+            .last()
+            .unwrap()
+            .bindings
+            .get(name)
+            .map(|b| b.defined_at)
+        {
+            self.emit(BindError::DuplicateInScope {
                 name: name.to_string(),
-                first: existing.defined_at,
+                first,
                 second: span,
             })?;
             return Ok(());
@@ -1215,6 +1233,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         // Track this name as a local variable in the current function
         self.local_names_in_function.insert(name.to_string());
 
+        let scope = self.scopes.last_mut().unwrap();
         scope.bindings.insert(
             name.to_string(),
             BindingInfo {
@@ -1256,8 +1275,12 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 }
 
 /// Convenience function to bind a module
-pub fn bind_module<H: CompilerHost>(module: &Module, logger: &Logger<H>) -> Result<(), Bail> {
-    let mut binder = Binder::new(logger);
+pub fn bind_module<H: CompilerHost>(
+    module: &Module,
+    module_source: &crate::module_source::ModuleSource,
+    logger: &Logger<H>,
+) -> Result<(), Bail> {
+    let mut binder = Binder::new(logger, module_source);
     binder.bind_module(module)
 }
 
@@ -1278,7 +1301,7 @@ mod tests {
     fn bind_and_check(module: &Module) -> (bool, Vec<crate::compiler_host::Diagnostic>) {
         let host = InMemoryCompilerHost::new();
         let logger = Logger::new(&host, LogLevel::Error);
-        let result = bind_module(module, &logger);
+        let result = bind_module(module, &crate::module_source::ModuleSource::default(), &logger);
         (result.is_ok(), host.diagnostics())
     }
 

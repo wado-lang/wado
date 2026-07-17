@@ -838,7 +838,11 @@ fn parse_bind_stdlib(label: &str, source: &str) -> Module {
     {
         let bind_host = crate::compiler_host::InMemoryCompilerHost::new();
         let bind_logger = Logger::new(&bind_host, LogLevel::Off);
-        bind::bind_module(&ast, &bind_logger).unwrap_or_else(|_| {
+        // A bind failure here is a bundled-stdlib bug: the panic message below
+        // formats each diagnostic against `label`, so the source's file
+        // attribution is never read — a label-named source keeps it honest.
+        let module_source = crate::module_source::ModuleSourceInterner::new().entry_point(label);
+        bind::bind_module(&ast, &module_source, &bind_logger).unwrap_or_else(|_| {
             let diags = bind_host.diagnostics();
             let mut msg = format!("bind error in {label}:\n");
             for d in &diags {
@@ -1842,8 +1846,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // Bind errors are emitted directly to the host via Logger.
         // We use a temporary logger per module so error counting is per-module.
         let logger = Logger::new(self.host, self.log_level);
-        logger.set_file(module_source.source_path());
-        bind::bind_module(module, &logger).map_err(|_bail| {
+        bind::bind_module(module, module_source, &logger).map_err(|_bail| {
             let error_count = logger.error_count();
             LoadError::BindError {
                 module_source: module_source.clone(),

@@ -1212,6 +1212,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             compiler_item: crate::elaborator::item::extract_compiler_item(
                 &func.attrs,
                 func.span,
+                &self.current_module_source,
                 self.logger,
             ),
             export_name: extract_export_name_attr(&func.attrs),
@@ -1640,6 +1641,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             compiler_item: crate::elaborator::item::extract_compiler_item(
                 &func.attrs,
                 func.span,
+                &self.current_module_source,
                 self.logger,
             ),
             export_name: extract_export_name_attr(&func.attrs),
@@ -1778,12 +1780,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let attr = global_decl.attributes.iter().find(|a| a.name == "param")?;
         let emit = |message: String| {
-            let _ = self.logger.error(Diagnostic {
-                severity: Severity::Error,
-                code: Code::ParamAttr,
-                message,
-                span: Some(DiagnosticSpan::from_span(&attr.span, None)),
-            });
+            let _ = self.logger.error_in(
+                &self.current_module_source,
+                Diagnostic {
+                    severity: Severity::Error,
+                    code: Code::ParamAttr,
+                    message,
+                    span: Some(DiagnosticSpan::from_span(&attr.span, None)),
+                },
+            );
         };
 
         let mut ok = true;

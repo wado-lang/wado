@@ -108,7 +108,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .make_type_pack(name.clone(), *index)
                 } else {
-                    let _ = self.logger.error(TypeError::UnknownType {
+                    let _ = self.emit(TypeError::UnknownType {
                         name: format!("..{name}"),
                         span: *span,
                     });
@@ -143,7 +143,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return type_id;
             }
             // If not found, it's an unknown associated type
-            let _ = self.logger.error(TypeError::UnknownType {
+            let _ = self.emit(TypeError::UnknownType {
                 name: format!("Self::{}", namespaced.name),
                 span: namespaced.span,
             });
@@ -241,7 +241,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_generic_type(&alias, &namespaced.args, namespaced.span)
             }
         } else {
-            let _ = self.logger.error(TypeError::UnknownType {
+            let _ = self.emit(TypeError::UnknownType {
                 name: format!("{}::{}", namespaced.namespace, namespaced.name),
                 span: namespaced.span,
             });
@@ -291,7 +291,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Check newtypes, struct definitions, and variants
             _ => {
                 if enforce_arity && let Some(expected) = self.bare_generic_type_arity(name) {
-                    let _ = self.logger.error(TypeError::MissingTypeArguments {
+                    let _ = self.emit(TypeError::MissingTypeArguments {
                         name: name.to_string(),
                         expected,
                         span,
@@ -384,7 +384,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 if !found_as_variant {
                     // Option not found as a variant - likely #![no_prelude] without explicit import
-                    let _ = self.logger.error(TypeError::UnknownType {
+                    let _ = self.emit(TypeError::UnknownType {
                         name: "Option".to_string(),
                         span,
                     });
@@ -439,7 +439,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // populated.
             _ if name == TypeTable::ARRAY_TYPE_NAME => {
                 if args.len() != 1 {
-                    let _ = self.logger.error(TypeError::ArgumentCountMismatch {
+                    let _ = self.emit(TypeError::ArgumentCountMismatch {
                         expected: 1,
                         found: args.len(),
                         span,
@@ -506,7 +506,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                             bound,
                                         );
                                         let _ =
-                                            self.logger.error(TypeError::TraitBoundNotSatisfied {
+                                            self.emit(TypeError::TraitBoundNotSatisfied {
                                                 type_name,
                                                 trait_name: bound.clone(),
                                                 param_name: param_name.clone(),

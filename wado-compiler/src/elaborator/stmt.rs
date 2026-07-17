@@ -398,7 +398,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                         // Also check length mismatch
                         if tuple_lit.elements.len() != expected_elem_types.len() {
-                            let _ = self.logger.error(TypeError::PatternTypeMismatch {
+                            let _ = self.emit(TypeError::PatternTypeMismatch {
                                 expected: format!(
                                     "tuple with {} elements",
                                     expected_elem_types.len()
@@ -447,7 +447,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 if !vis.reachable_from(same_package)
                                     && struct_lit.fields.iter().any(|f| f.name == *fname)
                                 {
-                                    let _ = self.logger.error(TypeError::PrivateFieldAccess {
+                                    let _ = self.emit(TypeError::PrivateFieldAccess {
                                         struct_name: name.clone(),
                                         field_name: fname.clone(),
                                         visibility: *vis,
@@ -462,7 +462,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             if !struct_field_types.iter().any(|(n, _)| n == &field.name)
                                 && !struct_field_types.is_empty()
                             {
-                                let _ = self.logger.error(TypeError::ExtraField {
+                                let _ = self.emit(TypeError::ExtraField {
                                     struct_name: name.clone(),
                                     field_name: field.name.clone(),
                                     span: field.span,
@@ -495,7 +495,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else {
                         // Target type does not implement KeyValueLiteral
                         let type_name = self.tysys.type_table.borrow().type_name(target_type);
-                        let _ = self.logger.error(TypeError::MissingTraitImpl {
+                        let _ = self.emit(TypeError::MissingTraitImpl {
                             type_name,
                             trait_name: "KeyValueLiteral".to_string(),
                             span: struct_lit.span,
@@ -582,7 +582,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             };
             if !is_null_to_option && !is_compatible_fn_type {
-                let _ = self.logger.error(TypeError::TypeMismatch {
+                let _ = self.emit(TypeError::TypeMismatch {
                     expected: self.tysys.type_table.borrow().type_name(type_id),
                     found: self.tysys.type_table.borrow().type_name(value_type),
                     span: ast_value.span(),
@@ -709,28 +709,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .all(|f| self.check_irrefutable_pattern(&f.pattern, span)),
             Pattern::Literal(_) => {
-                let _ = self.logger.error(TypeError::InvalidPattern {
+                let _ = self.emit(TypeError::InvalidPattern {
                     message: "refutable pattern in `let` binding: literal patterns may not match; use `if let` instead".to_string(),
                     span,
                 });
                 false
             }
             Pattern::Variant { variant_name, .. } => {
-                let _ = self.logger.error(TypeError::InvalidPattern {
+                let _ = self.emit(TypeError::InvalidPattern {
                     message: format!("refutable pattern in `let` binding: `{variant_name}` may not match; use `if let` instead"),
                     span,
                 });
                 false
             }
             Pattern::Or(_) => {
-                let _ = self.logger.error(TypeError::InvalidPattern {
+                let _ = self.emit(TypeError::InvalidPattern {
                     message: "refutable pattern in `let` binding: or-patterns may not match; use `if let` or `match` instead".to_string(),
                     span,
                 });
                 false
             }
             Pattern::Range { .. } => {
-                let _ = self.logger.error(TypeError::InvalidPattern {
+                let _ = self.emit(TypeError::InvalidPattern {
                     message: "refutable pattern in `let` binding: range patterns may not match; use `if let` instead".to_string(),
                     span,
                 });
@@ -954,7 +954,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         elem_types
                     } else {
                         // Error: expected tuple type
-                        let _ = self.logger.error(TypeError::PatternTypeMismatch {
+                        let _ = self.emit(TypeError::PatternTypeMismatch {
                             expected: "tuple type".to_string(),
                             found: type_table.type_name(type_id),
                             span,
@@ -966,14 +966,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Check length
                 if *has_rest {
                     if patterns.len() > elem_types.len() {
-                        let _ = self.logger.error(TypeError::PatternTypeMismatch {
+                        let _ = self.emit(TypeError::PatternTypeMismatch {
                             expected: format!("tuple with at least {} elements", patterns.len()),
                             found: format!("tuple with {} elements", elem_types.len()),
                             span,
                         });
                     }
                 } else if patterns.len() != elem_types.len() {
-                    let _ = self.logger.error(TypeError::PatternTypeMismatch {
+                    let _ = self.emit(TypeError::PatternTypeMismatch {
                         expected: format!("tuple with {} elements", elem_types.len()),
                         found: format!("pattern with {} elements", patterns.len()),
                         span,
@@ -1016,7 +1016,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let actual_short = actual_name.rsplit("::").next().unwrap_or(actual_name);
                     let matches = actual_short == expected_short;
                     if !matches {
-                        let _ = self.logger.error(TypeError::PatternTypeMismatch {
+                        let _ = self.emit(TypeError::PatternTypeMismatch {
                             expected: expected_name.clone(),
                             found: self.tysys.type_table.borrow().type_name(type_id),
                             span: *pat_span,
@@ -1028,7 +1028,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
 
                 if struct_name.is_none() {
-                    let _ = self.logger.error(TypeError::PatternTypeMismatch {
+                    let _ = self.emit(TypeError::PatternTypeMismatch {
                         expected: "struct type".to_string(),
                         found: self.tysys.type_table.borrow().type_name(type_id),
                         span: *pat_span,
@@ -1067,7 +1067,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .map(|(name, _, _)| name.clone())
                             .collect();
                         if !missing.is_empty() {
-                            let _ = self.logger.error(TypeError::PatternTypeMismatch {
+                            let _ = self.emit(TypeError::PatternTypeMismatch {
                                         expected: format!(
                                             "all fields (missing: {}), or use `..` to ignore remaining fields",
                                             missing.join(", ")
@@ -1108,7 +1108,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_return(&mut self, ret_stmt: &ReturnStmt, ctx: &mut FunctionContext) {
         // In async functions, `return expr` (with a value) is forbidden; use `task return expr`
         if ctx.is_async && ret_stmt.value.is_some() {
-            let _ = self.logger.error(TypeError::InvalidLiteral {
+            let _ = self.emit(TypeError::InvalidLiteral {
                 message:
                     "cannot use `return expr` in `export async fn`; use `task return expr` instead"
                         .to_string(),
@@ -1137,7 +1137,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) {
         if !ctx.is_async {
-            let _ = self.logger.error(TypeError::InvalidLiteral {
+            let _ = self.emit(TypeError::InvalidLiteral {
                 message: "`task return` is only valid inside `export async fn`".to_string(),
                 span: tr_stmt.span,
             });
@@ -1393,7 +1393,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     Literal::Number(repr) => {
                         // Float literals cannot be used in match patterns
                         if util::is_float_only_literal(repr) {
-                            let _ = self.logger.error(TypeError::InvalidPattern {
+                            let _ = self.emit(TypeError::InvalidPattern {
                                 message: "float literals cannot be used in match patterns"
                                     .to_string(),
                                 span,
@@ -1415,7 +1415,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if let Some(types) = self.tysys.type_table.borrow().as_tuple(scrutinee_type) {
                         types
                     } else {
-                        let _ = self.logger.error(TypeError::PatternTypeMismatch {
+                        let _ = self.emit(TypeError::PatternTypeMismatch {
                             expected: "tuple type".to_string(),
                             found: self.tysys.type_table.borrow().type_name(scrutinee_type),
                             span,
@@ -1516,7 +1516,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                         _ => "variant or enum case".to_string(),
                     };
-                    let _ = self.logger.error(TypeError::PatternTypeMismatch {
+                    let _ = self.emit(TypeError::PatternTypeMismatch {
                         expected,
                         found: qualified_variant_name,
                         span: *span,
@@ -1531,7 +1531,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 } = &resolved_type
                 {
                     if !bindings.is_empty() {
-                        let _ = self.logger.error(TypeError::InvalidPattern {
+                        let _ = self.emit(TypeError::InvalidPattern {
                             message: format!("enum case `{variant_name}` does not have a payload"),
                             span: *span,
                         });
@@ -1549,7 +1549,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             // Enum case carries no payload — no binding.
                             return Vec::new();
                         }
-                        let _ = self.logger.error(TypeError::PatternTypeMismatch {
+                        let _ = self.emit(TypeError::PatternTypeMismatch {
                             expected: format!(
                                 "one of: {}",
                                 enum_info
@@ -1565,7 +1565,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                         return Vec::new();
                     }
-                    let _ = self.logger.error(TypeError::PatternTypeMismatch {
+                    let _ = self.emit(TypeError::PatternTypeMismatch {
                         expected: format!("enum type `{name}`"),
                         found: "unknown enum".to_string(),
                         span: *span,
@@ -1631,7 +1631,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 *span,
                             )
                         } else {
-                            let _ = self.logger.error(TypeError::PatternTypeMismatch {
+                            let _ = self.emit(TypeError::PatternTypeMismatch {
                                 expected: "variant type".to_string(),
                                 found: name.clone(),
                                 span: *span,
@@ -1640,7 +1640,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                     }
                     _ => {
-                        let _ = self.logger.error(TypeError::PatternTypeMismatch {
+                        let _ = self.emit(TypeError::PatternTypeMismatch {
                             expected: "variant or enum type".to_string(),
                             found: format!("{resolved_type:?}"),
                             span: *span,
@@ -1694,7 +1694,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .unwrap_or(expected_name.as_str());
                         let actual_short = name.rsplit("::").next().unwrap_or(name);
                         if actual_short != expected_short {
-                            let _ = self.logger.error(TypeError::PatternTypeMismatch {
+                            let _ = self.emit(TypeError::PatternTypeMismatch {
                                 expected: expected_name.clone(),
                                 found: self.tysys.type_table.borrow().type_name(scrutinee_type),
                                 span: *pat_span,
@@ -1743,7 +1743,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 .map(|(name, _, _)| name.clone())
                                 .collect();
                             if !missing.is_empty() {
-                                let _ = self.logger.error(TypeError::PatternTypeMismatch {
+                                let _ = self.emit(TypeError::PatternTypeMismatch {
                                         expected: format!(
                                             "all fields (missing: {}), or use `..` to ignore remaining fields",
                                             missing.join(", ")
@@ -1803,7 +1803,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if first_names != alt_names {
                         let fn_: Vec<&str> = first_names.iter().map(|(n, _)| *n).collect();
                         let an: Vec<&str> = alt_names.iter().map(|(n, _)| *n).collect();
-                        let _ = self.logger.error(TypeError::InvalidPattern {
+                        let _ = self.emit(TypeError::InvalidPattern {
                             message: format!(
                                 "or-pattern alternatives must bind the same names with the same types: \
                                  alternative 1 binds {:?}, but alternative {} binds {:?}",
@@ -1917,7 +1917,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let end_val = self.pattern_to_i128(end, is_unsigned);
 
         let (Some(start_val), Some(end_val)) = (start_val, end_val) else {
-            let _ = self.logger.error(TypeError::InvalidPattern {
+            let _ = self.emit(TypeError::InvalidPattern {
                 message: "range pattern bounds must be integer or char literals".to_string(),
                 span,
             });
@@ -1927,14 +1927,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Check for reversed or empty range
         let inclusive = matches!(kind, crate::ast::RangeKind::Inclusive);
         if start_val > end_val {
-            let _ = self.logger.error(TypeError::InvalidPattern {
+            let _ = self.emit(TypeError::InvalidPattern {
                 message: "reversed range pattern".to_string(),
                 span,
             });
             return;
         }
         if !inclusive && start_val >= end_val {
-            let _ = self.logger.error(TypeError::InvalidPattern {
+            let _ = self.emit(TypeError::InvalidPattern {
                 message: "empty range pattern".to_string(),
                 span,
             });
@@ -2000,13 +2000,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check if variant exists but case not found
         if self.contains_variant(variant_name) {
-            let _ = self.logger.error(TypeError::PatternTypeMismatch {
+            let _ = self.emit(TypeError::PatternTypeMismatch {
                 expected: format!("valid case of variant {variant_name}"),
                 found: case_name.to_string(),
                 span,
             });
         } else {
-            let _ = self.logger.error(TypeError::PatternTypeMismatch {
+            let _ = self.emit(TypeError::PatternTypeMismatch {
                 expected: "known variant type".to_string(),
                 found: variant_name.to_string(),
                 span,
@@ -2124,7 +2124,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
             if !implements_into_iter {
                 let type_name = self.tysys.type_table.borrow().type_name(iterable_type_id);
-                let _ = self.logger.error(TypeError::MissingTraitImpl {
+                let _ = self.emit(TypeError::MissingTraitImpl {
                     type_name,
                     trait_name: "IntoIterator".to_string(),
                     span: for_of.span,
@@ -2169,7 +2169,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         // Validate: no break/continue/return in variadic for-of
         if let Some((kind, bad_span)) = Self::find_control_flow_in_block(&for_of.body) {
-            let _ = self.logger.error(TypeError::InvalidPattern {
+            let _ = self.emit(TypeError::InvalidPattern {
                 message: format!(
                     "`{kind}` is not allowed inside a variadic for-of loop (the loop is expanded at compile time)"
                 ),
@@ -2278,7 +2278,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Validate: break, continue, and return are not allowed inside tuple for-of
         // because the loop is expanded at compile time into sequential blocks.
         if let Some((kind, bad_span)) = Self::find_control_flow_in_block(&for_of.body) {
-            let _ = self.logger.error(TypeError::InvalidPattern {
+            let _ = self.emit(TypeError::InvalidPattern {
                 message: format!(
                     "`{kind}` is not allowed inside a tuple for-of loop (the loop is expanded at compile time)"
                 ),
@@ -2367,7 +2367,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // Discard the element; nothing to bind.
                     }
                     _ => {
-                        let _ = self.logger.error(TypeError::InvalidPattern {
+                        let _ = self.emit(TypeError::InvalidPattern {
                             message: "invalid binding pattern in for-of loop".to_string(),
                             span,
                         });
@@ -2483,7 +2483,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Unknown | ResolvedType::TypeParam { .. }
         ) {
             let type_name = self.tysys.type_table.borrow().type_name(iter_type);
-            let _ = self.logger.error(TypeError::MissingTraitImpl {
+            let _ = self.emit(TypeError::MissingTraitImpl {
                 type_name,
                 trait_name: "Iterator".to_string(),
                 span,
@@ -2576,7 +2576,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let elem_resolved = self.tysys.type_table.borrow().get(elem).clone();
             let elem_name = self.tysys.type_table.borrow().type_name(elem);
             if matches!(elem_resolved, ResolvedType::TypeParam { .. }) {
-                let _ = self.logger.error(TypeError::CannotMutate {
+                let _ = self.emit(TypeError::CannotMutate {
                     message: format!(
                         "cannot iterate `&mut` over a list of generic type `{elem_name}`: the \
                          element type is not known to support in-place mutation. Constrain it to \
@@ -2585,7 +2585,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span,
                 });
             } else if self.is_replace_on_assign_element(elem) {
-                let _ = self.logger.error(TypeError::CannotMutate {
+                let _ = self.emit(TypeError::CannotMutate {
                     message: format!(
                         "cannot iterate `&mut` over a list of `{elem_name}`: a write through \
                          `&mut {elem_name}` would be lost (no in-place interior). Assign by index \
@@ -2706,7 +2706,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(label) = &break_stmt.label
             && !ctx.active_labels.iter().any(|l| l == label)
         {
-            let _ = self.logger.error(TypeError::UnknownIdentifier {
+            let _ = self.emit(TypeError::UnknownIdentifier {
                 name: format!("labeled break target not found: {label}"),
                 span: break_stmt.span,
             });
@@ -2895,7 +2895,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     None
                 };
                 let Some((pattern, expr, elem_span)) = single_let else {
-                    let _ = self.logger.error(TypeError::InvalidPattern {
+                    let _ = self.emit(TypeError::InvalidPattern {
                         message: "for-header let-chain must consist of a single \
                                   `let pattern = expr` element"
                             .to_string(),
