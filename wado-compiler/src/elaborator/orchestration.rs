@@ -763,6 +763,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             );
                     }
                     Item::Flags(flags_decl) => {
+                        // A flags value is a single 32-bit word at the CM
+                        // boundary (bitmask `1 << i`), so >32 members has no
+                        // representation. Reject it here rather than shifting
+                        // past the word width.
+                        if flags_decl.flags.len() > 32 {
+                            logger.error(TypeError::FlagsTooManyMembers {
+                                name: flags_decl.name.clone(),
+                                count: flags_decl.flags.len(),
+                                span: flags_decl.name_span,
+                            })?;
+                            // Skip registering the malformed decl; building its
+                            // `1 << i` bitmasks would overflow the word width.
+                            continue;
+                        }
                         // Create a distinct Flags type (not a newtype over u32)
                         let flags_type = type_table
                             .borrow_mut()

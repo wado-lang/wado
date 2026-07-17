@@ -123,6 +123,12 @@ impl FlatPackage {
             .is_some_and(|w| w.imports_interface(interface_name))
     }
 
+    /// Whether the target world is a kiln generator world (imports
+    /// [`crate::world_registry::GENERATOR_HOST_INTERFACE`]).
+    pub fn is_generator_world(&self) -> bool {
+        self.world_imports_interface(crate::world_registry::GENERATOR_HOST_INTERFACE)
+    }
+
     /// Look up a variant by `(module_source, name)`.
     pub fn find_variant(&self, ms: &ModuleSource, name: &str) -> Option<&TirVariantDecl> {
         self.variant_index

@@ -1151,6 +1151,15 @@ impl TypeTable {
         self.compiler_items.variant_name(item)
     }
 
+    /// Whether `id` resolves to an instance of the compiler `Result` variant.
+    pub fn is_result(&self, id: TypeId) -> bool {
+        matches!(
+            self.get(id),
+            ResolvedType::GenericInstance { name, .. }
+                if *name == self.compiler_variant_name(crate::compiler_item::CompilerItem::Result)
+        )
+    }
+
     pub fn compiler_enum_name(&self, item: crate::compiler_item::CompilerItem) -> &str {
         self.compiler_items.enum_name(item)
     }

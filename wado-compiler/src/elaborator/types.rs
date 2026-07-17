@@ -167,6 +167,14 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A `flags` declaration with more members than the CM ABI's single-word
+    /// bitmask can represent (at most 32).
+    FlagsTooManyMembers {
+        name: String,
+        count: usize,
+        span: Span,
+    },
+
     /// A by-value `self` receiver on a non-resource type. Only resources are
     /// move-only (WEP 2026-05-21); value types borrow with `&self`.
     SelfByValueOnNonResource {
@@ -620,6 +628,14 @@ impl TypeError {
             TypeError::UnknownType { name, span } => {
                 (Code::UnknownType, format!("unknown type '{name}'"), *span)
             }
+            TypeError::FlagsTooManyMembers { name, count, span } => (
+                Code::UnsupportedFeature,
+                format!(
+                    "flags `{name}` has {count} members; at most 32 are supported \
+                     (a flags value is a single 32-bit word at the Component Model boundary)"
+                ),
+                *span,
+            ),
             TypeError::SelfByValueOnNonResource { type_name, span } => (
                 Code::TypeMismatch,
                 format!(

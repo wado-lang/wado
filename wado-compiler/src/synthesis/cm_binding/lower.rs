@@ -12,11 +12,8 @@
 //!   a `Vec<TirExpr>` of i32 / i64 / f32 / f64 args (used for direct
 //!   imports that take their params on the operand stack).
 
-use std::cell::RefCell;
-
 use crate::ast::{NamedType, Type};
 use crate::cm_abi;
-use crate::component_model::CmInterfaceRegistry;
 use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
 use crate::tir::{
@@ -27,12 +24,12 @@ use crate::tir::{
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, cast, expr_stmt,
     generic_method_call, i32_const, i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
-    local_ref, loop_stmt, synth_span,
+    local_ref, loop_stmt, split_packed_ptr_len, synth_span,
 };
 
 use super::types::{
-    binary_add, cm_type_to_type_id, cm_val_type_from_type_id, coerce_flat_lower, field_access,
-    flatten_param_type, is_unit_type, kebab_to_pascal, variant_tag, variant_test,
+    LowerContext, binary_add, cm_type_to_type_id, cm_val_type_from_type_id, coerce_flat_lower,
+    field_access, flatten_param_type, is_unit_type, kebab_to_pascal, variant_tag, variant_test,
 };
 
 /// Join two CM flat slot types via the single Canonical ABI join
@@ -70,10 +67,10 @@ pub fn synthesize_lower(
     addr: TirExpr,
     next_local: &mut u32,
     locals: &mut Vec<TirLocal>,
-    names: &super::types::CmStdlibNames,
+    ctx: &LowerContext<'_>,
 ) -> Vec<TirStmt> {
     match ty {
-        Type::Named(named) if named.name == names.string => {
+        Type::Named(named) if named.name == ctx.names.string => {
             // cm_lower_string(value) returns packed i64: (ptr | (len << 32))
             let packed_local = *next_local;
             locals.push(TirLocal::synth(*next_local, TypeTable::I64, false));
@@ -81,25 +78,14 @@ pub fn synthesize_lower(
             let packed = internal_call("cm_lower_string", vec![value], TypeTable::I64);
             let mut stmts = vec![let_stmt("__packed", packed_local, TypeTable::I64, packed)];
 
-            // Store ptr (low 32 bits) at addr
-            let ptr = cast(
-                local_ref(packed_local, "__packed", TypeTable::I64),
-                TypeTable::I32,
-            );
+            let (ptr, len) =
+                split_packed_ptr_len(local_ref(packed_local, "__packed", TypeTable::I64));
+            // Store ptr (low 32 bits) at addr, len (high 32 bits) at addr + 4.
             stmts.push(expr_stmt(builtin_call(
                 "i32_store",
                 vec![addr.clone(), ptr],
                 TypeTable::UNIT,
             )));
-
-            // Store len (high 32 bits) at addr + 4
-            let shifted = binary(
-                TirBinaryOp::Shr,
-                local_ref(packed_local, "__packed", TypeTable::I64),
-                i64_const(32),
-                TypeTable::I64,
-            );
-            let len = cast(shifted, TypeTable::I32);
             stmts.push(expr_stmt(builtin_call(
                 "i32_store",
                 vec![
@@ -164,78 +150,30 @@ pub fn synthesize_lower(
                 TypeTable::UNIT,
             ))],
         },
-        Type::Generic(g) => match g.name.as_str() {
-            // list<T>: lowered as (ptr, len) pair stored at addr
-            name if name == names.array
-                && g.args.len() == 1
-                && matches!(&g.args[0], Type::Named(n) if n.name == "u8") =>
-            {
-                // list<u8>: use cm_lower_array_u8 → packed i64, store (ptr, len)
-                let packed_local = *next_local;
-                locals.push(TirLocal::synth(*next_local, TypeTable::I64, false));
-                *next_local += 1;
-                let packed = internal_call("cm_lower_array_u8", vec![value], TypeTable::I64);
-                let mut stmts = vec![let_stmt(
-                    "__elem_packed",
-                    packed_local,
-                    TypeTable::I64,
-                    packed,
-                )];
-                // Store ptr (low 32 bits) at addr
-                let ptr = cast(
-                    local_ref(packed_local, "__elem_packed", TypeTable::I64),
-                    TypeTable::I32,
-                );
-                stmts.push(expr_stmt(builtin_call(
-                    "i32_store",
-                    vec![addr.clone(), ptr],
-                    TypeTable::UNIT,
-                )));
-                // Store len (high 32 bits) at addr + 4
-                let shifted = binary(
-                    TirBinaryOp::Shr,
-                    local_ref(packed_local, "__elem_packed", TypeTable::I64),
-                    i64_const(32),
-                    TypeTable::I64,
-                );
-                let len = cast(shifted, TypeTable::I32);
-                stmts.push(expr_stmt(builtin_call(
-                    "i32_store",
-                    vec![
-                        binary(TirBinaryOp::Add, addr, i32_const(4), TypeTable::I32),
-                        len,
-                    ],
-                    TypeTable::UNIT,
-                )));
-                stmts
-            }
-            name if name == names.array => {
-                // General list<T>: treat as opaque i32 for now
-                vec![expr_stmt(builtin_call(
-                    "i32_store",
-                    vec![addr, value],
-                    TypeTable::UNIT,
-                ))]
-            }
-            // Own<T>, Borrow<T>, Stream<T>, Future<T>: i32 handles
-            _ => vec![expr_stmt(builtin_call(
+        // Own<T>, Borrow<T>, Stream<T>, Future<T>: i32 handles
+        Type::Generic(g) if matches!(g.name.as_str(), "Stream" | "Future" | "Own" | "Borrow") => {
+            vec![expr_stmt(builtin_call(
                 "i32_store",
                 vec![addr, value],
                 TypeTable::UNIT,
-            ))],
-        },
-        Type::Tuple(elems) if elems.is_empty() => vec![],
-        Type::Tuple(_) => {
-            // Tuple lowering requires type_table for correct TypeIds.
-            // Callers with tuple elements should call synthesize_lower_tuple directly.
-            vec![]
+            ))]
         }
+        Type::Generic(g) => panic!(
+            "`{}` must lower via synthesize_lower_wasi_type_to_memory, \
+             which handles aggregate layout; synthesize_lower covers primitives only",
+            g.name
+        ),
+        Type::Tuple(elems) if elems.is_empty() => vec![],
+        Type::Tuple(_) => panic!(
+            "tuples must lower via synthesize_lower_tuple, \
+             which computes element offsets; synthesize_lower covers primitives only"
+        ),
         Type::Reference(_) | Type::MutReference(_) => vec![expr_stmt(builtin_call(
             "i32_store",
             vec![addr, value],
             TypeTable::UNIT,
         ))],
-        _ => vec![],
+        other => panic!("unsupported type for CM memory lower: {other:?}"),
     }
 }
 
@@ -249,19 +187,21 @@ pub(super) fn synthesize_lower_tuple(
     addr: TirExpr,
     next_local: &mut u32,
     locals: &mut Vec<TirLocal>,
-    cm_interface_registry: &CmInterfaceRegistry,
-    wasi_package: &str,
-    type_table: &RefCell<TypeTable>,
+    ctx: &LowerContext<'_>,
 ) -> Vec<TirStmt> {
-    let layout =
-        cm_abi::layout_tuple_with_registry_scoped(elems, cm_interface_registry, Some(wasi_package));
+    let layout = cm_abi::layout_tuple_with_registry_scoped(
+        elems,
+        ctx.cm_interface_registry,
+        Some(ctx.wasi_package),
+    );
     let mut stmts = Vec::new();
 
     // Element TypeIds come from the tuple's own type arguments — the
     // elaborator-registered types with correct module sources. Re-deriving them
     // via `cm_type_to_type_id` can't resolve a lib-local struct's source and
     // would fall back to i32, breaking FieldAccess on aggregate elements.
-    let elem_type_ids = type_table
+    let elem_type_ids = ctx
+        .type_table
         .borrow()
         .as_tuple(value.type_id)
         .unwrap_or_default();
@@ -283,8 +223,13 @@ pub(super) fn synthesize_lower_tuple(
         // Prefer the registered element TypeId; fall back only if the tuple
         // type lacks args (shouldn't happen for a well-formed tuple value).
         let field_type_id = elem_type_ids.get(i).copied().unwrap_or_else(|| {
-            let mut tt = type_table.borrow_mut();
-            cm_type_to_type_id(elem_ty, &mut tt, cm_interface_registry, wasi_package)
+            let mut tt = ctx.type_table.borrow_mut();
+            cm_type_to_type_id(
+                elem_ty,
+                &mut tt,
+                ctx.cm_interface_registry,
+                ctx.wasi_package,
+            )
         });
 
         // Extract the i-th field from the tuple using FieldAccess
@@ -307,14 +252,7 @@ pub(super) fn synthesize_lower_tuple(
         // lists, results, nested tuples) lay out their payload correctly
         // rather than being stored as an opaque i32 GC ref.
         stmts.extend(synthesize_lower_wasi_type_to_memory(
-            elem_ty,
-            field_expr,
-            field_addr,
-            next_local,
-            locals,
-            cm_interface_registry,
-            wasi_package,
-            type_table,
+            elem_ty, field_expr, field_addr, next_local, locals, ctx,
         ));
     }
 
@@ -342,9 +280,7 @@ fn synthesize_lower_variant_to_memory(
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
-    cm_interface_registry: &CmInterfaceRegistry,
-    wasi_package: &str,
-    type_table: &RefCell<TypeTable>,
+    ctx: &LowerContext<'_>,
 ) {
     let value_type_id = value.type_id;
 
@@ -360,15 +296,13 @@ fn synthesize_lower_variant_to_memory(
         TypeTable::UNIT,
     )));
 
-    let mut max_payload_align = 1u32;
-    for (_, payload) in &cases {
-        if let Some((payload_ty, _)) = payload {
-            max_payload_align = max_payload_align.max(
-                crate::component_model::cm_align_with_registry(payload_ty, cm_interface_registry),
-            );
-        }
-    }
-    let payload_offset = cm_abi::align_to(1, max_payload_align);
+    let payload_offset = cm_abi::variant_payload_offset_with_registry_scoped(
+        cases
+            .iter()
+            .filter_map(|(_, p)| p.as_ref().map(|(ty, _)| ty)),
+        ctx.cm_interface_registry,
+        Some(ctx.wasi_package),
+    );
     let payload_addr = if payload_offset == 0 {
         addr
     } else {
@@ -389,9 +323,7 @@ fn synthesize_lower_variant_to_memory(
                 payload_addr.clone(),
                 next_local,
                 locals,
-                cm_interface_registry,
-                wasi_package,
-                type_table,
+                ctx,
             );
 
             arms.push(TirMatchArm {
@@ -455,12 +387,13 @@ pub(super) fn synthesize_lower_wasi_variant_to_memory(
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
-    cm_interface_registry: &CmInterfaceRegistry,
-    wasi_package: &str,
-    type_table: &RefCell<TypeTable>,
+    ctx: &LowerContext<'_>,
 ) {
     let name = named.name.as_str();
-    let Some(cases) = cm_interface_registry.get_variant_cases_by_source(source, name) else {
+    let Some(cases) = ctx
+        .cm_interface_registry
+        .get_variant_cases_by_source(source, name)
+    else {
         // Fallback: store as i32
         stmts.push(expr_stmt(builtin_call(
             "i32_store8",
@@ -475,8 +408,8 @@ pub(super) fn synthesize_lower_wasi_variant_to_memory(
         .map(|case| {
             let payload = case.payload.map(|ty| {
                 let tid = {
-                    let mut tt = type_table.borrow_mut();
-                    cm_type_to_type_id(&ty, &mut tt, cm_interface_registry, wasi_package)
+                    let mut tt = ctx.type_table.borrow_mut();
+                    cm_type_to_type_id(&ty, &mut tt, ctx.cm_interface_registry, ctx.wasi_package)
                 };
                 (ty, tid)
             });
@@ -491,9 +424,7 @@ pub(super) fn synthesize_lower_wasi_variant_to_memory(
         next_local,
         stmts,
         locals,
-        cm_interface_registry,
-        wasi_package,
-        type_table,
+        ctx,
     );
 }
 
@@ -509,13 +440,10 @@ pub(super) fn synthesize_lower_option_to_memory(
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
-    cm_interface_registry: &CmInterfaceRegistry,
-    wasi_package: &str,
-    type_table: &RefCell<TypeTable>,
+    ctx: &LowerContext<'_>,
 ) {
     let value_type_id = value.type_id;
-    let names =
-        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
+    let names = &ctx.names;
 
     // Materialize value into a local so we can reference it multiple times
     let value_local = alloc_local(next_local, locals, value_type_id);
@@ -537,10 +465,12 @@ pub(super) fn synthesize_lower_option_to_memory(
         TypeTable::UNIT,
     )));
 
-    // Compute payload offset (aligned to payload alignment)
-    let payload_align =
-        crate::component_model::cm_align_with_registry(inner_type, cm_interface_registry);
-    let payload_offset = cm_abi::align_to(1, payload_align);
+    let payload_offset = cm_abi::layout_option_with_registry_scoped(
+        inner_type,
+        ctx.cm_interface_registry,
+        Some(ctx.wasi_package),
+    )
+    .offsets[1];
 
     let payload_addr = if payload_offset == 0 {
         addr
@@ -558,7 +488,7 @@ pub(super) fn synthesize_lower_option_to_memory(
     // re-deriving it via `cm_type_to_type_id`, which can't resolve a lib-local
     // struct source and would fall back to i32.
     let inner_type_id = {
-        let tt = type_table.borrow();
+        let tt = ctx.type_table.borrow();
         match tt.get(value_type_id) {
             crate::tir::ResolvedType::GenericInstance { type_args, .. }
                 if !type_args.is_empty() =>
@@ -569,9 +499,9 @@ pub(super) fn synthesize_lower_option_to_memory(
                 drop(tt);
                 cm_type_to_type_id(
                     inner_type,
-                    &mut type_table.borrow_mut(),
-                    cm_interface_registry,
-                    wasi_package,
+                    &mut ctx.type_table.borrow_mut(),
+                    ctx.cm_interface_registry,
+                    ctx.wasi_package,
                 )
             }
         }
@@ -587,9 +517,7 @@ pub(super) fn synthesize_lower_option_to_memory(
         payload_addr,
         next_local,
         locals,
-        cm_interface_registry,
-        wasi_package,
-        type_table,
+        ctx,
     );
 
     let span = synth_span();
@@ -615,7 +543,7 @@ pub(super) fn synthesize_lower_option_to_memory(
     let none_arm = TirMatchArm {
         pattern: TirPattern::Variant {
             enum_type: value_type_id,
-            variant_name: names.none_name,
+            variant_name: names.none_name.clone(),
             bindings: Vec::new(),
             payload_type: TypeTable::UNIT,
         },
@@ -642,7 +570,6 @@ pub(super) fn synthesize_lower_option_to_memory(
 /// 2-case variant (Ok=0, Err=1), so it shares [`synthesize_lower_variant_to_memory`]:
 /// build its case list (Ok/Err names from compiler items, payload types from the
 /// instance's type args; unit arms carry no payload) and delegate.
-#[allow(clippy::too_many_arguments)]
 pub(super) fn synthesize_lower_result_to_memory(
     ok_type: &Type,
     err_type: &Type,
@@ -651,13 +578,11 @@ pub(super) fn synthesize_lower_result_to_memory(
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
-    cm_interface_registry: &CmInterfaceRegistry,
-    wasi_package: &str,
-    type_table: &RefCell<TypeTable>,
+    ctx: &LowerContext<'_>,
 ) {
     let value_type_id = value.type_id;
     let (ok_name, err_name, err_index, ok_tid, err_tid) = {
-        let tt = type_table.borrow();
+        let tt = ctx.type_table.borrow();
         let (_, _, ok_name, _) = tt
             .compiler_items()
             .require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
@@ -694,18 +619,7 @@ pub(super) fn synthesize_lower_result_to_memory(
     // disc byte: `variant_test(Err)` → 1 when Err, 0 when Ok. (`variant_tag`,
     // used for registry variants, mis-resolves the generic `Result` struct.)
     let disc_of = move |v: TirExpr| variant_test(v, err_index, &err_name);
-    synthesize_lower_variant_to_memory(
-        value,
-        addr,
-        cases,
-        disc_of,
-        next_local,
-        stmts,
-        locals,
-        cm_interface_registry,
-        wasi_package,
-        type_table,
-    );
+    synthesize_lower_variant_to_memory(value, addr, cases, disc_of, next_local, stmts, locals, ctx);
 }
 
 /// Lower a `List<T>` (GC value) to a CM `list` element buffer in linear memory,
@@ -718,31 +632,28 @@ pub(super) fn synthesize_lower_list_to_buffer(
     value: TirExpr,
     next_local: &mut u32,
     locals: &mut Vec<TirLocal>,
-    cm_interface_registry: &CmInterfaceRegistry,
-    wasi_package: &str,
-    type_table: &RefCell<TypeTable>,
+    ctx: &LowerContext<'_>,
 ) -> (Vec<TirStmt>, u32, u32) {
-    let names =
-        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
+    let names = &ctx.names;
     let list_type_id = value.type_id;
-    let elem_resolved = cm_interface_registry.resolve_type(elem_type);
+    let elem_resolved = ctx.cm_interface_registry.resolve_type(elem_type);
 
     let elem_size = crate::component_model::cm_size_with_registry_scoped(
         &elem_resolved,
-        cm_interface_registry,
-        Some(wasi_package),
+        ctx.cm_interface_registry,
+        Some(ctx.wasi_package),
     ) as i32;
     let elem_align = crate::component_model::cm_align_with_registry_scoped(
         &elem_resolved,
-        cm_interface_registry,
-        Some(wasi_package),
+        ctx.cm_interface_registry,
+        Some(ctx.wasi_package),
     ) as i32;
     // Take the element TypeId from the list's own type arguments — it is the
     // elaborator-registered type (correct module source), unlike a fresh
     // `cm_type_to_type_id`, which can't resolve a lib-local struct's source and
     // would fall back to i32.
     let elem_type_id = {
-        let tt = type_table.borrow();
+        let tt = ctx.type_table.borrow();
         match tt.get(list_type_id) {
             crate::tir::ResolvedType::GenericInstance { type_args, .. }
                 if !type_args.is_empty() =>
@@ -751,8 +662,13 @@ pub(super) fn synthesize_lower_list_to_buffer(
             }
             _ => {
                 drop(tt);
-                let mut tt = type_table.borrow_mut();
-                cm_type_to_type_id(&elem_resolved, &mut tt, cm_interface_registry, wasi_package)
+                let mut tt = ctx.type_table.borrow_mut();
+                cm_type_to_type_id(
+                    &elem_resolved,
+                    &mut tt,
+                    ctx.cm_interface_registry,
+                    ctx.wasi_package,
+                )
             }
         }
     };
@@ -842,7 +758,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
     // __elem = list.index_value(__i)
     let elem_local = alloc_local(next_local, locals, elem_type_id);
     let iv_info = LocalMethodName::new(
-        names.array,
+        names.array.clone(),
         Some("IndexValue<i32>".to_string()),
         "index_value".to_string(),
     );
@@ -876,9 +792,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
         local_ref(addr_local, "__list_addr", TypeTable::I32),
         next_local,
         locals,
-        cm_interface_registry,
-        wasi_package,
-        type_table,
+        ctx,
     ));
     loop_body.push(expr_stmt(assign(
         local_ref(i_local, "__list_i", TypeTable::I32),
@@ -902,19 +816,10 @@ pub(super) fn synthesize_lower_list_to_memory(
     addr: TirExpr,
     next_local: &mut u32,
     locals: &mut Vec<TirLocal>,
-    cm_interface_registry: &CmInterfaceRegistry,
-    wasi_package: &str,
-    type_table: &RefCell<TypeTable>,
+    ctx: &LowerContext<'_>,
 ) -> Vec<TirStmt> {
-    let (mut stmts, base_local, len_local) = synthesize_lower_list_to_buffer(
-        elem_type,
-        value,
-        next_local,
-        locals,
-        cm_interface_registry,
-        wasi_package,
-        type_table,
-    );
+    let (mut stmts, base_local, len_local) =
+        synthesize_lower_list_to_buffer(elem_type, value, next_local, locals, ctx);
     stmts.push(expr_stmt(builtin_call(
         "i32_store",
         vec![
@@ -947,13 +852,10 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
     flat_args: &mut Vec<TirExpr>,
-    cm_interface_registry: &CmInterfaceRegistry,
-    wasi_package: &str,
-    type_table: &RefCell<TypeTable>,
+    ctx: &LowerContext<'_>,
 ) {
-    let names =
-        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
-    let resolved = cm_interface_registry.resolve_type(ty);
+    let names = &ctx.names;
+    let resolved = ctx.cm_interface_registry.resolve_type(ty);
     match &resolved {
         // String → cm_lower_string → packed i64 → (ptr, len)
         Type::Named(n) if n.name == names.string => {
@@ -964,28 +866,20 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 TypeTable::I64,
                 internal_call("cm_lower_string", vec![value], TypeTable::I64),
             ));
-            // ptr = packed as i32 (low 32 bits)
-            flat_args.push(cast(
-                local_ref(packed_local, &format!("{prefix}_packed"), TypeTable::I64),
-                TypeTable::I32,
+            let (ptr, len) = split_packed_ptr_len(local_ref(
+                packed_local,
+                &format!("{prefix}_packed"),
+                TypeTable::I64,
             ));
-            // len = (packed >> 32) as i32 (high 32 bits)
-            flat_args.push(cast(
-                binary(
-                    TirBinaryOp::Shr,
-                    local_ref(packed_local, &format!("{prefix}_packed"), TypeTable::I64),
-                    i64_const(32),
-                    TypeTable::I64,
-                ),
-                TypeTable::I32,
-            ));
+            flat_args.push(ptr);
+            flat_args.push(len);
         }
         // Enum → variant_tag (single i32). The registry lookup is the gate:
         // every source it holds is a CM interface, so a prefix check would be
         // redundant (same for the record/variant gates below).
         Type::Named(n)
             if n.source_interface.as_deref().is_some_and(|s| {
-                cm_interface_registry
+                ctx.cm_interface_registry
                     .get_enum_variants_by_source(s, &n.name)
                     .is_some()
             }) =>
@@ -995,7 +889,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
         // Variant → disc + join of all case payload flats
         Type::Named(n)
             if n.source_interface.as_deref().is_some_and(|s| {
-                cm_interface_registry
+                ctx.cm_interface_registry
                     .get_variant_cases_by_source(s, &n.name)
                     .is_some()
             }) =>
@@ -1016,7 +910,8 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
             )));
 
             // Compute max flat payload count across all cases (the "join")
-            let cases = cm_interface_registry
+            let cases = ctx
+                .cm_interface_registry
                 .get_variant_cases_by_source(source, &n.name)
                 .unwrap_or(&[]);
             let max_flat_count: usize = cases
@@ -1024,7 +919,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 .map(|c| {
                     c.payload
                         .as_ref()
-                        .map(|t| flatten_param_type(t, cm_interface_registry, &names).len())
+                        .map(|t| flatten_param_type(t, ctx.cm_interface_registry, names).len())
                         .unwrap_or(0)
                 })
                 .max()
@@ -1037,7 +932,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 // local, and matches the flat signature `flatten_param_type`
                 // declares for this variant.
                 let payload_slot_types: Vec<TypeId> = {
-                    let joined = flatten_param_type(&resolved, cm_interface_registry, &names);
+                    let joined = flatten_param_type(&resolved, ctx.cm_interface_registry, names);
                     joined.get(1..).map(<[TypeId]>::to_vec).unwrap_or_default()
                 };
                 // Allocate mutable locals for each payload flat slot, zero-init.
@@ -1066,12 +961,12 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                     let case_name = case.wado_name.clone();
                     if let Some(payload_ty) = &case.payload {
                         let payload_type_id = {
-                            let mut tt = type_table.borrow_mut();
+                            let mut tt = ctx.type_table.borrow_mut();
                             cm_type_to_type_id(
                                 payload_ty,
                                 &mut tt,
-                                cm_interface_registry,
-                                wasi_package,
+                                ctx.cm_interface_registry,
+                                ctx.wasi_package,
                             )
                         };
                         let binding_local = alloc_local(next_local, locals, payload_type_id);
@@ -1088,9 +983,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                             &mut case_stmts,
                             locals,
                             &mut case_flat,
-                            cm_interface_registry,
-                            wasi_package,
-                            type_table,
+                            ctx,
                         );
                         for (i, flat_val) in case_flat.into_iter().enumerate() {
                             if i < payload_locals.len() {
@@ -1171,74 +1064,40 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
         // dedicated option flattener, which conditionally lowers the Some
         // payload via a Match. Reached for an `Option` field of a CM record
         // (e.g. `span: Option<SourceSpan>` on the kiln-host Diagnostic).
-        Type::Generic(g) if g.name == "Option" && g.args.len() == 1 => {
+        Type::Generic(g) if g.name == names.option && g.args.len() == 1 => {
             synthesize_flatten_option_to_flat_args(
-                &g.args[0],
-                value,
-                prefix,
-                next_local,
-                stmts,
-                locals,
-                flat_args,
-                cm_interface_registry,
-                wasi_package,
-                type_table,
+                &g.args[0], value, prefix, next_local, stmts, locals, flat_args, ctx,
             );
         }
         // The core `Result` is not a CM-registry variant, so it never matches
         // the variant arm above and needs its own flattener.
-        Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
+        Type::Generic(g) if g.name == names.result && g.args.len() == 2 => {
             synthesize_flatten_result_to_flat_args(
-                &g.args[0],
-                &g.args[1],
-                value,
-                prefix,
-                next_local,
-                stmts,
-                locals,
-                flat_args,
-                cm_interface_registry,
-                wasi_package,
-                type_table,
+                &g.args[0], &g.args[1], value, prefix, next_local, stmts, locals, flat_args, ctx,
             );
         }
         // List<T> → (ptr, len): lower into an element buffer, push base/len.
         Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
-            let (list_stmts, base_local, len_local) = synthesize_lower_list_to_buffer(
-                &g.args[0],
-                value,
-                next_local,
-                locals,
-                cm_interface_registry,
-                wasi_package,
-                type_table,
-            );
+            let (list_stmts, base_local, len_local) =
+                synthesize_lower_list_to_buffer(&g.args[0], value, next_local, locals, ctx);
             stmts.extend(list_stmts);
             flat_args.push(local_ref(base_local, "__list_base", TypeTable::I32));
             flat_args.push(local_ref(len_local, "__list_len", TypeTable::I32));
         }
         Type::Tuple(elems) if !elems.is_empty() => synthesize_flatten_tuple_to_flat_args(
-            elems,
-            value,
-            prefix,
-            next_local,
-            stmts,
-            locals,
-            flat_args,
-            cm_interface_registry,
-            wasi_package,
-            type_table,
+            elems, value, prefix, next_local, stmts, locals, flat_args, ctx,
         ),
         // CM record → its fields' flat args (recursion handles nested records).
         Type::Named(n)
             if n.source_interface.as_deref().is_some_and(|s| {
-                cm_interface_registry
+                ctx.cm_interface_registry
                     .get_struct_fields_with_wado_names_by_source(s, &n.name)
                     .is_some()
             }) =>
         {
             let source = n.source_interface.as_deref().expect("matched above");
-            let fields = cm_interface_registry
+            let fields = ctx
+                .cm_interface_registry
                 .get_struct_fields_with_wado_names_by_source(source, &n.name)
                 .expect("matched above");
             let value_type_id = value.type_id;
@@ -1255,9 +1114,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 stmts,
                 locals,
                 flat_args,
-                cm_interface_registry,
-                wasi_package,
-                type_table,
+                ctx,
             );
         }
         // Primitive, flags, resource, or borrow handle: the value is the single flat arg.
@@ -1271,7 +1128,6 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
 }
 
 /// Flatten a tuple value (GC ref) into its elements' flat CM ABI args, in order.
-#[allow(clippy::too_many_arguments)]
 fn synthesize_flatten_tuple_to_flat_args(
     elems: &[Type],
     value: TirExpr,
@@ -1280,22 +1136,26 @@ fn synthesize_flatten_tuple_to_flat_args(
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
     flat_args: &mut Vec<TirExpr>,
-    cm_interface_registry: &CmInterfaceRegistry,
-    wasi_package: &str,
-    type_table: &RefCell<TypeTable>,
+    ctx: &LowerContext<'_>,
 ) {
     let tuple_type_id = value.type_id;
     let val_local = alloc_local(next_local, locals, tuple_type_id);
     let val_name = format!("{prefix}_tup");
     stmts.push(let_stmt(&val_name, val_local, tuple_type_id, value));
-    let elem_type_ids: Vec<TypeId> = type_table
+    let elem_type_ids: Vec<TypeId> = ctx
+        .type_table
         .borrow()
         .as_tuple(tuple_type_id)
         .unwrap_or_default();
     for (i, elem_ty) in elems.iter().enumerate() {
         let elem_type_id = elem_type_ids.get(i).copied().unwrap_or_else(|| {
-            let mut tt = type_table.borrow_mut();
-            cm_type_to_type_id(elem_ty, &mut tt, cm_interface_registry, wasi_package)
+            let mut tt = ctx.type_table.borrow_mut();
+            cm_type_to_type_id(
+                elem_ty,
+                &mut tt,
+                ctx.cm_interface_registry,
+                ctx.wasi_package,
+            )
         });
         let elem_expr = field_access(
             local_ref(val_local, &val_name, tuple_type_id),
@@ -1311,9 +1171,7 @@ fn synthesize_flatten_tuple_to_flat_args(
             stmts,
             locals,
             flat_args,
-            cm_interface_registry,
-            wasi_package,
-            type_table,
+            ctx,
         );
     }
 }
@@ -1334,19 +1192,17 @@ pub(super) fn flatten_cm_record_fields(
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
     flat_args: &mut Vec<TirExpr>,
-    cm_interface_registry: &CmInterfaceRegistry,
-    wasi_package: &str,
-    type_table: &RefCell<TypeTable>,
+    ctx: &LowerContext<'_>,
 ) {
     for (field_idx, (wado_name, _, field_ty)) in fields.iter().enumerate() {
-        let resolved_field = cm_interface_registry.resolve_type(field_ty);
+        let resolved_field = ctx.cm_interface_registry.resolve_type(field_ty);
         let field_type_id = {
-            let mut tt = type_table.borrow_mut();
+            let mut tt = ctx.type_table.borrow_mut();
             cm_type_to_type_id(
                 &resolved_field,
                 &mut tt,
-                cm_interface_registry,
-                wasi_package,
+                ctx.cm_interface_registry,
+                ctx.wasi_package,
             )
         };
         let field_expr = field_access(
@@ -1363,9 +1219,7 @@ pub(super) fn flatten_cm_record_fields(
             stmts,
             locals,
             flat_args,
-            cm_interface_registry,
-            wasi_package,
-            type_table,
+            ctx,
         );
     }
 }
@@ -1383,12 +1237,9 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
     flat_args: &mut Vec<TirExpr>,
-    cm_interface_registry: &CmInterfaceRegistry,
-    wasi_package: &str,
-    type_table: &RefCell<TypeTable>,
+    ctx: &LowerContext<'_>,
 ) {
-    let names =
-        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
+    let names = &ctx.names;
     let vt = value.type_id;
     let val_local = alloc_local(next_local, locals, vt);
     stmts.push(let_stmt(&format!("{prefix}_optval"), val_local, vt, value));
@@ -1414,7 +1265,7 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
     ));
 
     // Compute inner flat types
-    let inner_flat_types = flatten_param_type(inner_type, cm_interface_registry, &names);
+    let inner_flat_types = flatten_param_type(inner_type, ctx.cm_interface_registry, names);
     if inner_flat_types.is_empty() {
         return;
     }
@@ -1436,8 +1287,13 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
     // value. The None arm is empty; variant `Match` is exhaustive on
     // `Option<T>` so no wildcard is required.
     let inner_type_id = {
-        let mut tt = type_table.borrow_mut();
-        cm_type_to_type_id(inner_type, &mut tt, cm_interface_registry, wasi_package)
+        let mut tt = ctx.type_table.borrow_mut();
+        cm_type_to_type_id(
+            inner_type,
+            &mut tt,
+            ctx.cm_interface_registry,
+            ctx.wasi_package,
+        )
     };
     let payload_binding_local = alloc_local(next_local, locals, inner_type_id);
     let payload_binding_name = format!("__opt_payload_{payload_binding_local}");
@@ -1453,9 +1309,7 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
         &mut some_stmts,
         locals,
         &mut some_flat,
-        cm_interface_registry,
-        wasi_package,
-        type_table,
+        ctx,
     );
     for (i, flat_val) in some_flat.into_iter().enumerate() {
         if i < inner_locals.len() {
@@ -1490,7 +1344,7 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
     let none_arm = TirMatchArm {
         pattern: TirPattern::Variant {
             enum_type: vt,
-            variant_name: names.none_name,
+            variant_name: names.none_name.clone(),
             bindings: Vec::new(),
             payload_type: TypeTable::UNIT,
         },
@@ -1520,7 +1374,6 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
 
 /// Flatten a `Result<T, E>` GC value to flat CM ABI args. Unlike `Option`, reads
 /// the discriminant with `variant_tag` (`struct.get`) — a `Result` is never null.
-#[allow(clippy::too_many_arguments)]
 pub(super) fn synthesize_flatten_result_to_flat_args(
     ok_type: &Type,
     err_type: &Type,
@@ -1530,12 +1383,9 @@ pub(super) fn synthesize_flatten_result_to_flat_args(
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
     flat_args: &mut Vec<TirExpr>,
-    cm_interface_registry: &CmInterfaceRegistry,
-    wasi_package: &str,
-    type_table: &RefCell<TypeTable>,
+    ctx: &LowerContext<'_>,
 ) {
-    let names =
-        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
+    let names = &ctx.names;
     let vt = value.type_id;
     let val_local = alloc_local(next_local, locals, vt);
     stmts.push(let_stmt(&format!("{prefix}_resval"), val_local, vt, value));
@@ -1554,8 +1404,8 @@ pub(super) fn synthesize_flatten_result_to_flat_args(
         TypeTable::I32,
     ));
 
-    let ok_flat = flatten_param_type(ok_type, cm_interface_registry, &names);
-    let err_flat = flatten_param_type(err_type, cm_interface_registry, &names);
+    let ok_flat = flatten_param_type(ok_type, ctx.cm_interface_registry, names);
+    let err_flat = flatten_param_type(err_type, ctx.cm_interface_registry, names);
     let max_len = ok_flat.len().max(err_flat.len());
     if max_len == 0 {
         return;
@@ -1583,21 +1433,17 @@ pub(super) fn synthesize_flatten_result_to_flat_args(
         prefix,
         next_local,
         locals,
-        cm_interface_registry,
-        wasi_package,
-        type_table,
+        ctx,
     );
     let err_arm = flatten_result_case_arm(
-        names.err_name,
+        names.err_name.clone(),
         err_type,
         vt,
         &payload_locals,
         prefix,
         next_local,
         locals,
-        cm_interface_registry,
-        wasi_package,
-        type_table,
+        ctx,
     );
     let match_expr = TirExpr::new(
         TirExprKind::Match {
@@ -1614,7 +1460,6 @@ pub(super) fn synthesize_flatten_result_to_flat_args(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn flatten_result_case_arm(
     case_name: String,
     payload_type: &Type,
@@ -1623,16 +1468,12 @@ fn flatten_result_case_arm(
     prefix: &str,
     next_local: &mut u32,
     locals: &mut Vec<TirLocal>,
-    cm_interface_registry: &CmInterfaceRegistry,
-    wasi_package: &str,
-    type_table: &RefCell<TypeTable>,
+    ctx: &LowerContext<'_>,
 ) -> TirMatchArm {
     let span = synth_span();
-    let names =
-        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
 
     // Empty flat list ⇒ unit payload: a binding-free arm.
-    if flatten_param_type(payload_type, cm_interface_registry, &names).is_empty() {
+    if flatten_param_type(payload_type, ctx.cm_interface_registry, &ctx.names).is_empty() {
         return TirMatchArm {
             pattern: TirPattern::Variant {
                 enum_type,
@@ -1651,8 +1492,13 @@ fn flatten_result_case_arm(
     }
 
     let payload_type_id = {
-        let mut tt = type_table.borrow_mut();
-        cm_type_to_type_id(payload_type, &mut tt, cm_interface_registry, wasi_package)
+        let mut tt = ctx.type_table.borrow_mut();
+        cm_type_to_type_id(
+            payload_type,
+            &mut tt,
+            ctx.cm_interface_registry,
+            ctx.wasi_package,
+        )
     };
     let binding_local = alloc_local(next_local, locals, payload_type_id);
     let binding_name = format!("__result_payload_{binding_local}");
@@ -1668,9 +1514,7 @@ fn flatten_result_case_arm(
         &mut case_stmts,
         locals,
         &mut case_flat,
-        cm_interface_registry,
-        wasi_package,
-        type_table,
+        ctx,
     );
     for (i, flat_val) in case_flat.into_iter().enumerate() {
         if i < payload_locals.len() {
@@ -1718,13 +1562,10 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
     addr: TirExpr,
     next_local: &mut u32,
     locals: &mut Vec<TirLocal>,
-    cm_interface_registry: &CmInterfaceRegistry,
-    wasi_package: &str,
-    type_table: &RefCell<TypeTable>,
+    ctx: &LowerContext<'_>,
 ) -> Vec<TirStmt> {
-    let names =
-        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
-    let resolved = cm_interface_registry.resolve_type(ty);
+    let names = &ctx.names;
+    let resolved = ctx.cm_interface_registry.resolve_type(ty);
     match &resolved {
         Type::Named(n) => {
             // CM record lowering: store each field at its offset, keyed on
@@ -1738,34 +1579,38 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
             // Resolve via the registry so lib-local records (no
             // `source_interface` on the nested type) are found by name under
             // their package's default-interface FQ, like WASI/kiln records.
-            let source = cm_interface_registry.resolve_cm_source_for(n, Some(wasi_package));
+            let source = ctx
+                .cm_interface_registry
+                .resolve_cm_source_for(n, Some(ctx.wasi_package));
             if let Some(fields) = source.and_then(|s| {
-                cm_interface_registry.get_struct_fields_with_wado_names_by_source(s, &n.name)
+                ctx.cm_interface_registry
+                    .get_struct_fields_with_wado_names_by_source(s, &n.name)
             }) {
                 let resolved_fields: Vec<(String, Type)> = fields
                     .iter()
-                    .map(|(wn, _, ft)| (wn.clone(), cm_interface_registry.resolve_type(ft)))
+                    .map(|(wn, _, ft)| (wn.clone(), ctx.cm_interface_registry.resolve_type(ft)))
                     .collect();
+                let offsets = cm_abi::layout_fields_with_registry_scoped(
+                    resolved_fields.iter().map(|(_, ty)| ty),
+                    ctx.cm_interface_registry,
+                    Some(ctx.wasi_package),
+                )
+                .offsets;
                 let mut stmts = Vec::new();
-                let mut offset = 0u32;
-                let mut max_align = 1u32;
                 let value_type_id = value.type_id;
                 let val_local = alloc_local(next_local, locals, value_type_id);
                 stmts.push(let_stmt("__struct_val", val_local, value_type_id, value));
 
                 for (field_idx, (wado_name, field_ty)) in resolved_fields.iter().enumerate() {
-                    let fa = crate::component_model::cm_align_with_registry(
-                        field_ty,
-                        cm_interface_registry,
-                    );
-                    let fs = crate::component_model::cm_size_with_registry(
-                        field_ty,
-                        cm_interface_registry,
-                    );
-                    offset = cm_abi::align_to(offset, fa);
+                    let offset = offsets[field_idx];
                     let field_type_id = {
-                        let mut tt = type_table.borrow_mut();
-                        cm_type_to_type_id(field_ty, &mut tt, cm_interface_registry, wasi_package)
+                        let mut tt = ctx.type_table.borrow_mut();
+                        cm_type_to_type_id(
+                            field_ty,
+                            &mut tt,
+                            ctx.cm_interface_registry,
+                            ctx.wasi_package,
+                        )
                     };
                     let field_expr = TirExpr {
                         kind: TirExprKind::FieldAccess {
@@ -1782,17 +1627,8 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
                         binary_add(addr.clone(), i32_const(offset as i32))
                     };
                     stmts.extend(synthesize_lower_wasi_type_to_memory(
-                        field_ty,
-                        field_expr,
-                        field_addr,
-                        next_local,
-                        locals,
-                        cm_interface_registry,
-                        wasi_package,
-                        type_table,
+                        field_ty, field_expr, field_addr, next_local, locals, ctx,
                     ));
-                    offset += fs;
-                    max_align = max_align.max(fa);
                 }
                 return stmts;
             }
@@ -1801,84 +1637,43 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
             // same resolved source. Lib-local variants register their cases
             // under the package's default-interface FQ, like WASI variants.
             if let Some(src) = source
-                && cm_interface_registry
+                && ctx
+                    .cm_interface_registry
                     .get_variant_cases_by_source(src, &n.name)
                     .is_some()
             {
                 let mut stmts = Vec::new();
                 synthesize_lower_wasi_variant_to_memory(
-                    n,
-                    src,
-                    value,
-                    addr,
-                    next_local,
-                    &mut stmts,
-                    locals,
-                    cm_interface_registry,
-                    wasi_package,
-                    type_table,
+                    n, src, value, addr, next_local, &mut stmts, locals, ctx,
                 );
                 return stmts;
             }
             // Fall through to synthesize_lower for primitives and simple types
-            synthesize_lower(&resolved, value, addr, next_local, locals, &names)
+            synthesize_lower(&resolved, value, addr, next_local, locals, ctx)
         }
-        Type::Tuple(elems) if !elems.is_empty() => synthesize_lower_tuple(
-            elems,
-            value,
-            addr,
-            next_local,
-            locals,
-            cm_interface_registry,
-            wasi_package,
-            type_table,
-        ),
-        Type::Generic(g) if g.name == "Option" && g.args.len() == 1 => {
-            let inner = cm_interface_registry.resolve_type(&g.args[0]);
+        Type::Tuple(elems) if !elems.is_empty() => {
+            synthesize_lower_tuple(elems, value, addr, next_local, locals, ctx)
+        }
+        Type::Generic(g) if g.name == names.option && g.args.len() == 1 => {
+            let inner = ctx.cm_interface_registry.resolve_type(&g.args[0]);
             let mut stmts = Vec::new();
             synthesize_lower_option_to_memory(
-                &inner,
-                value,
-                addr,
-                next_local,
-                &mut stmts,
-                locals,
-                cm_interface_registry,
-                wasi_package,
-                type_table,
+                &inner, value, addr, next_local, &mut stmts, locals, ctx,
             );
             stmts
         }
         Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
-            synthesize_lower_list_to_memory(
-                &g.args[0],
-                value,
-                addr,
-                next_local,
-                locals,
-                cm_interface_registry,
-                wasi_package,
-                type_table,
-            )
+            synthesize_lower_list_to_memory(&g.args[0], value, addr, next_local, locals, ctx)
         }
-        Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
-            let ok = cm_interface_registry.resolve_type(&g.args[0]);
-            let err = cm_interface_registry.resolve_type(&g.args[1]);
+        Type::Generic(g) if g.name == names.result && g.args.len() == 2 => {
+            let ok = ctx.cm_interface_registry.resolve_type(&g.args[0]);
+            let err = ctx.cm_interface_registry.resolve_type(&g.args[1]);
             let mut stmts = Vec::new();
             synthesize_lower_result_to_memory(
-                &ok,
-                &err,
-                value,
-                addr,
-                next_local,
-                &mut stmts,
-                locals,
-                cm_interface_registry,
-                wasi_package,
-                type_table,
+                &ok, &err, value, addr, next_local, &mut stmts, locals, ctx,
             );
             stmts
         }
-        _ => synthesize_lower(&resolved, value, addr, next_local, locals, &names),
+        _ => synthesize_lower(&resolved, value, addr, next_local, locals, ctx),
     }
 }
