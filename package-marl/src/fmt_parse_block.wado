@@ -85,20 +85,20 @@ fn collect_ref_defs(lines: &List<String>) -> RefTable {
             fence_len = flen;
             continue;
         }
-        if let Some(def) = try_ref_def_line(line) {
+        if let Some(def) = try_ref_def_line_chars(&chars) {
             ref_table_insert(&mut table, def);
         }
     }
     return table;
 }
 
-/// A `[label]: url "title"` line, or `null` if `line` isn't one. Reference
-/// definitions in this codebase's Markdown are always single-line (see
-/// `docs/wep-2026-07-05-marl.md`, "One parser, two backends").
-fn try_ref_def_line(line: &String) -> Option<LinkReferenceDef> {
-    let chars = line.to_chars();
+/// Parses a `[label]: url "title"` line from its materialized `chars`, or
+/// `null` if it isn't one. Reference definitions in this codebase's Markdown
+/// are always single-line (see `docs/wep-2026-07-05-marl.md`, "One parser, two
+/// backends").
+fn try_ref_def_line_chars(chars: &List<char>) -> Option<LinkReferenceDef> {
     let len = chars.len();
-    let mut p = skip_indent(&chars, len);
+    let mut p = skip_indent(chars, len);
     if p >= len || chars[p] != '[' {
         return null;
     }
@@ -118,7 +118,7 @@ fn try_ref_def_line(line: &String) -> Option<LinkReferenceDef> {
     if j >= len {
         return null;
     }
-    let label = slice_chars(&chars, p + 1, j);
+    let label = slice_chars(chars, p + 1, j);
     if label.trim().len() == 0 {
         return null;
     }
@@ -133,7 +133,7 @@ fn try_ref_def_line(line: &String) -> Option<LinkReferenceDef> {
     if q >= len {
         return null;
     }
-    let [url, title] = parse_dest_and_title(&slice_chars(&chars, q, len));
+    let [url, title] = parse_dest_and_title(&slice_chars(chars, q, len));
     if url.len() == 0 {
         return null;
     }
@@ -180,7 +180,8 @@ fn parse_blocks(lines: &List<String>, start: i32, end: i32, refs: &RefTable) -> 
             i += 1;
             continue;
         }
-        if let Some(def) = try_ref_def_line(line) {
+        let chars = line.to_chars();
+        if let Some(def) = try_ref_def_line_chars(&chars) {
             // Emitted as a node in place (not just recorded in `refs`, which
             // only exists to resolve forward references) so the printer
             // reproduces the definition — otherwise every reference-style
@@ -190,7 +191,6 @@ fn parse_blocks(lines: &List<String>, start: i32, end: i32, refs: &RefTable) -> 
             i += 1;
             continue;
         }
-        let chars = line.to_chars();
         if is_html_block_start(&chars) && (para.is_empty() || html_block_interrupts_paragraph(&chars)) {
             flush_paragraph(&mut out, &mut para, refs);
             let block_end = html_block_bounds(lines, i, end);
@@ -389,23 +389,29 @@ fn fence_marker(chars: &List<char>) -> Option<[char, i32, String]> {
 }
 
 fn is_code_fence_close(line: &String, ch: char, fence_len: i32) -> bool {
-    let chars = line.to_chars();
-    let len = chars.len();
-    let mut p = skip_indent(&chars, len);
+    let mut indent = 0;
     let mut run = 0;
-    while p < len && chars[p] == ch {
-        run += 1;
-        p += 1;
-    }
-    if run < fence_len {
-        return false;
-    }
-    for let q of p..<len {
-        if !chars[q] matches { ' ' | '\t' } {
+    let mut counting = true;
+    for let c of line.chars() {
+        if counting {
+            if run == 0 && indent < 3 && is_indent(c) {
+                indent += 1;
+                continue;
+            }
+            if c == ch {
+                run += 1;
+                continue;
+            }
+            counting = false;
+            if run < fence_len {
+                return false;
+            }
+        }
+        if !c matches { ' ' | '\t' } {
             return false;
         }
     }
-    return true;
+    return run >= fence_len;
 }
 
 fn first_word(s: &String) -> String {

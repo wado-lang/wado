@@ -20,9 +20,15 @@ use {
 use { RefTable, ref_table_get, parse_dest_and_title } from "./fmt_links.wado";
 use { StrCursor } from "./str_cursor.wado";
 
+/// A flat inline token. Resolved nodes (text runs, code spans, links, images,
+/// breaks) live in a separate arena and are referenced here by index, so the
+/// token itself stays small: `process_emphasis`'s random-access scans and its
+/// `insert`-driven shifts, plus `build_seq`'s scrutinee reads, copy tokens by
+/// value, and embedding a `Node`/`String` here would deep-copy a whole subtree
+/// on every such read. The arena node is copied out exactly once, in
+/// `build_seq`.
 internal variant InlineTok {
-    TextRun(String),
-    Resolved(Node),
+    Node(i32),
     Delim(DelimTok),
     Open(OpenTok),
     Close,
@@ -52,12 +58,13 @@ pub fn parse_inline(text: &String, refs: &RefTable) -> List<Node> {
 
 internal fn parse_inline_chars(cursor: StrCursor, refs: &RefTable) -> List<Node> {
     let mut toks: List<InlineTok> = [];
-    tokenize(cursor, refs, &mut toks);
+    let mut nodes: List<Node> = [];
+    tokenize(cursor, refs, &mut toks, &mut nodes);
     process_emphasis(&mut toks);
-    return build_tree(&toks);
+    return build_tree(&toks, &nodes);
 }
 
-fn tokenize(cursor: StrCursor, refs: &RefTable, toks: &mut List<InlineTok>) {
+fn tokenize(cursor: StrCursor, refs: &RefTable, toks: &mut List<InlineTok>, nodes: &mut List<Node>) {
     let mut cur = cursor;
     let mut buf = String::new();
     while !cur.eof() {
@@ -75,13 +82,13 @@ fn tokenize(cursor: StrCursor, refs: &RefTable, toks: &mut List<InlineTok>) {
                 cur.set_position(i + 2);
             },
             '\\' && cur.is_at(i + 1, '\n') => {
-                flush_text(&mut buf, toks);
-                toks.push(InlineTok::Resolved(Node::HardBreak));
+                flush_text(&mut buf, toks, nodes);
+                push_node(Node::HardBreak, toks, nodes);
                 cur.set_position(i + 2);
             },
             '\n' => {
-                flush_text(&mut buf, toks);
-                toks.push(InlineTok::Resolved(Node::SoftBreak));
+                flush_text(&mut buf, toks, nodes);
+                push_node(Node::SoftBreak, toks, nodes);
                 cur.set_position(i + 1);
             },
             ' ' | '\t' => {
@@ -107,22 +114,22 @@ fn tokenize(cursor: StrCursor, refs: &RefTable, toks: &mut List<InlineTok>) {
                 cur.set_position(j);
             },
             '`' => {
-                cur.set_position(push_construct(try_code_span(&cur, i), c, i, &mut buf, toks));
+                cur.set_position(push_construct(try_code_span(&cur, i), c, i, &mut buf, toks, nodes));
             },
             '<' => {
-                cur.set_position(push_construct(try_angle_construct(&cur, i), c, i, &mut buf, toks));
+                cur.set_position(push_construct(try_angle_construct(&cur, i), c, i, &mut buf, toks, nodes));
             },
             'h' => {
-                cur.set_position(push_construct(try_bare_autolink(&cur, i), c, i, &mut buf, toks));
+                cur.set_position(push_construct(try_bare_autolink(&cur, i), c, i, &mut buf, toks, nodes));
             },
             '!' && cur.is_at(i + 1, '[') => {
-                cur.set_position(push_construct(try_image(&cur, i + 1, refs), c, i, &mut buf, toks));
+                cur.set_position(push_construct(try_image(&cur, i + 1, refs), c, i, &mut buf, toks, nodes));
             },
             '[' => {
-                cur.set_position(push_construct(try_link(&cur, i, refs), c, i, &mut buf, toks));
+                cur.set_position(push_construct(try_link(&cur, i, refs), c, i, &mut buf, toks, nodes));
             },
             '*' | '_' | '~' => {
-                flush_text(&mut buf, toks);
+                flush_text(&mut buf, toks, nodes);
                 cur.set_position(push_delim(&cur, i, c, toks));
             },
             _ => {
@@ -131,7 +138,7 @@ fn tokenize(cursor: StrCursor, refs: &RefTable, toks: &mut List<InlineTok>) {
             },
         }
     }
-    flush_text(&mut buf, toks);
+    flush_text(&mut buf, toks, nodes);
 }
 
 fn char_at(cur: &StrCursor, idx: i32) -> char {
@@ -148,20 +155,34 @@ fn is_escapable(cur: &StrCursor, idx: i32) -> bool {
     };
 }
 
-fn flush_text(buf: &mut String, toks: &mut List<InlineTok>) {
+/// Appends `node` to the arena and pushes a token referencing it.
+fn push_node(node: Node, toks: &mut List<InlineTok>, nodes: &mut List<Node>) {
+    let idx = nodes.len();
+    nodes.push(node);
+    toks.push(InlineTok::Node(idx));
+}
+
+fn flush_text(buf: &mut String, toks: &mut List<InlineTok>, nodes: &mut List<Node>) {
     if buf.len() == 0 {
         return;
     }
     let text = *buf;
     *buf = String::new();
-    toks.push(InlineTok::TextRun(text));
+    push_node(Node::Text(text), toks, nodes);
 }
 
-fn push_construct(result: Option<[Node, i32]>, c: char, i: i32, buf: &mut String, toks: &mut List<InlineTok>) -> i32 {
+fn push_construct(
+    result: Option<[Node, i32]>,
+    c: char,
+    i: i32,
+    buf: &mut String,
+    toks: &mut List<InlineTok>,
+    nodes: &mut List<Node>,
+) -> i32 {
     match result {
         Some([node, next]) => {
-            flush_text(buf, toks);
-            toks.push(InlineTok::Resolved(node));
+            flush_text(buf, toks, nodes);
+            push_node(node, toks, nodes);
             return next;
         },
         None => {
@@ -279,9 +300,9 @@ fn get_delim_unchecked(toks: &List<InlineTok>, idx: i32) -> DelimTok {
 
 // --- flat token stream -> tree ---
 
-fn build_tree(toks: &List<InlineTok>) -> List<Node> {
+fn build_tree(toks: &List<InlineTok>, nodes: &List<Node>) -> List<Node> {
     let mut out: List<Node> = [];
-    build_seq(toks, 0, true, &mut out);
+    build_seq(toks, nodes, 0, true, &mut out);
     return out;
 }
 
@@ -294,17 +315,13 @@ fn build_tree(toks: &List<InlineTok>) -> List<Node> {
 /// the number of inline constructs per paragraph. `top` distinguishes the
 /// outermost level, where an unmatched `Close` is dropped rather than ending a
 /// level.
-fn build_seq(toks: &List<InlineTok>, start: i32, top: bool, current: &mut List<Node>) -> i32 {
+fn build_seq(toks: &List<InlineTok>, nodes: &List<Node>, start: i32, top: bool, current: &mut List<Node>) -> i32 {
     let n = toks.len();
     let mut i = start;
     while i < n {
         match toks.get_unchecked(i) {
-            InlineTok::TextRun(s) => {
-                current.push(Node::Text(s));
-                i += 1;
-            },
-            InlineTok::Resolved(node) => {
-                current.push(node);
+            InlineTok::Node(idx) => {
+                current.push(nodes.get_unchecked(idx));
                 i += 1;
             },
             InlineTok::Delim(d) => {
@@ -315,7 +332,7 @@ fn build_seq(toks: &List<InlineTok>, start: i32, top: bool, current: &mut List<N
             },
             InlineTok::Open(o) => {
                 let mut children: List<Node> = [];
-                i = build_seq(toks, i + 1, false, &mut children);
+                i = build_seq(toks, nodes, i + 1, false, &mut children);
                 current.push(wrap(&o, children));
             },
             InlineTok::Close => {
