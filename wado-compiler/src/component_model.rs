@@ -775,6 +775,15 @@ fn find_unique_source_in<'a, V>(
 /// A source string without a trailing `.wado` suffix or `@version` tag, so a
 /// loader identity (`wasi:http/types.wado`) and its CM registration key
 /// (`wasi:http/types@0.3.0`) reduce to the same stem.
+/// The `wasi:<package>/...` package segment of a CM interface FQ, e.g.
+/// `"filesystem"` from `"wasi:filesystem/types@0.3.0"`. `None` for a
+/// non-`wasi:` source.
+fn wasi_package_from_source(source: &str) -> Option<&str> {
+    let after_scheme = source.strip_prefix("wasi:")?;
+    let without_version = after_scheme.split('@').next().unwrap_or(after_scheme);
+    without_version.split('/').next()
+}
+
 fn interface_stem(source: &str) -> &str {
     let source = source.strip_suffix(".wado").unwrap_or(source);
     source.split_once('@').map_or(source, |(base, _)| base)
@@ -3971,14 +3980,19 @@ pub fn cm_variant_size_align_scoped(
     if !cases.iter().any(|case| case.payload.is_some()) {
         return None; // no payload cases — not outptr
     }
+    // Payload type names are written in the variant's own defining interface,
+    // so anchor the payload recursion to the variant's package, not the
+    // caller's hint — otherwise a bare name shared across packages could
+    // resolve to the caller's package instead of the variant's.
+    let payload_package = wasi_package_from_source(source).or(wasi_package);
     let mut max_payload_size = 0u32;
     let mut max_payload_align = 1u32;
     for case in cases {
         if let Some(ty) = &case.payload {
             max_payload_size =
-                max_payload_size.max(cm_size_with_registry_scoped(ty, registry, wasi_package));
+                max_payload_size.max(cm_size_with_registry_scoped(ty, registry, payload_package));
             max_payload_align =
-                max_payload_align.max(cm_align_with_registry_scoped(ty, registry, wasi_package));
+                max_payload_align.max(cm_align_with_registry_scoped(ty, registry, payload_package));
         }
     }
     let disc_size = 1u32; // u8 for n ≤ 256 cases
@@ -4073,16 +4087,19 @@ pub fn cm_align_with_registry_scoped(
                 return cm_align_with_registry_scoped(resolved, registry, wasi_package);
             }
             if let Some(fields) = registry.get_struct_fields_by_source(source, &named.name) {
-                let mut max_align = 1u32;
-                for (_, field_ty) in fields {
-                    let resolved = registry.resolve_type(field_ty);
-                    max_align = max_align.max(cm_align_with_registry_scoped(
-                        &resolved,
-                        registry,
-                        wasi_package,
-                    ));
-                }
-                return max_align;
+                // Single-source the record layout with the size arm above:
+                // both go through the same `layout_record` helper so alignment
+                // and size can never diverge.
+                let resolved_fields: Vec<Type> = fields
+                    .iter()
+                    .map(|(_, ty)| registry.resolve_type(ty))
+                    .collect();
+                return crate::cm_abi::layout_record_with_registry_scoped(
+                    &resolved_fields,
+                    registry,
+                    wasi_package,
+                )
+                .align;
             }
             if let Some(sa) = cm_variant_size_align_scoped(named, registry, wasi_package) {
                 return sa.1;

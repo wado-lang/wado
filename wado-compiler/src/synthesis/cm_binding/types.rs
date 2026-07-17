@@ -619,6 +619,10 @@ pub(super) fn check_cm_boundary_representable(
                         }
                         Ok(())
                     }
+                    // A struct with no TIR decl is a registry-only record whose
+                    // fields are validated by the registry path; if such a type
+                    // ever reached flat lowering without a decl, that path
+                    // panics rather than silently mis-flattening it.
                     None => Ok(()),
                 }
             }
@@ -1089,7 +1093,13 @@ fn flat_types_from_type_id_inner(
             } else if let Some(struct_decl) = find_struct_decl(name, tir_modules) {
                 flatten_struct_type(&struct_decl, out, tir_modules, type_table, names);
             } else {
-                out.push(cm_abi::CmValType::I32); // unknown struct → i32
+                // A record with no TIR declaration has no known field layout;
+                // flattening it as one i32 would emit a wrong-arity lowering for
+                // a multi-field record. Fail loudly rather than corrupt the
+                // component (the memory lowerer panics on the same condition).
+                panic!(
+                    "struct `{name}` has no TIR declaration; cannot compute its flat CM types"
+                );
             }
         }
         ResolvedType::Resource { .. } => out.push(cm_abi::CmValType::I32),

@@ -209,8 +209,13 @@ fn synthesize_record_stream_read_func(
         span: synth_span(),
         source_interface: Some(source.clone()),
     });
-    let elem_size = crate::component_model::cm_size_with_registry(&ast_type, registry) as i32;
-    let elem_align = crate::component_model::cm_align_with_registry(&ast_type, registry) as i32;
+    // Scope element layout to the record's own package (from `source`) so
+    // nested field names resolve the same way the scoped lift reads them.
+    let elem_pkg = super::types::wasi_package_from_cm_source(&source);
+    let elem_size =
+        crate::component_model::cm_size_with_registry_scoped(&ast_type, registry, elem_pkg) as i32;
+    let elem_align =
+        crate::component_model::cm_align_with_registry_scoped(&ast_type, registry, elem_pkg) as i32;
     let cm_record_name = registry
         .get_struct_cm_name_by_source(&source, &elem_name)
         .unwrap_or(&elem_name)
@@ -398,10 +403,19 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         let payload = crate::component_model::classify_stream_payload(&tt, elem_type_id);
         let write_name = CanonicalIntrinsic::StreamWrite(payload).import_name();
         let elem_ast = type_id_to_ast_type(elem_type_id, &tt, cm_interface_registry);
-        let size =
-            crate::component_model::cm_size_with_registry(&elem_ast, cm_interface_registry) as i32;
-        let align =
-            crate::component_model::cm_align_with_registry(&elem_ast, cm_interface_registry) as i32;
+        // Match the package the element buffer is packed with below
+        // (`synthesize_lower_list_to_buffer`, wasi_package "cli"), so the retry
+        // pointer stride can't disagree with the buffer's element size.
+        let size = crate::component_model::cm_size_with_registry_scoped(
+            &elem_ast,
+            cm_interface_registry,
+            Some("cli"),
+        ) as i32;
+        let align = crate::component_model::cm_align_with_registry_scoped(
+            &elem_ast,
+            cm_interface_registry,
+            Some("cli"),
+        ) as i32;
         (func_name, write_name, elem_ast, size, align)
     };
 
