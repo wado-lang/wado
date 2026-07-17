@@ -1,0 +1,40 @@
+// A payload-less variant returned from an export flattens to a single CM
+// discriminant. Regression guard for the missing ResolvedType::Variant arm in
+// the flat-lowering path (previously ICE'd at the export boundary).
+
+pub variant Status {
+    Active,
+    Inactive,
+}
+
+// A payload-bearing variant flattens to disc + joined payload slots.
+pub variant Shape {
+    Circle(f64),
+    Square(i32),
+}
+
+export fn status() -> Status {
+    return Status::Active;
+}
+
+export fn shape(pick: bool) -> Shape {
+    if pick {
+        return Shape::Circle(2.5);
+    }
+    return Shape::Square(7);
+}
+
+test "payload-less variant export round-trips" {
+    assert status() matches { Status::Active };
+}
+
+test "payload-bearing variant export round-trips" {
+    match shape(true) {
+        Shape::Circle(r) => { assert r == 2.5; }
+        Shape::Square(_) => { assert false; }
+    }
+    match shape(false) {
+        Shape::Circle(_) => { assert false; }
+        Shape::Square(n) => { assert n == 7; }
+    }
+}

@@ -204,13 +204,15 @@ fn lower_to_flat_inner(
                 let tt = ctx.type_table.borrow();
                 type_id_to_ast_type(elem_type_id, &tt, ctx.cm_interface_registry)
             };
-            let elem_size = crate::component_model::cm_size_with_registry(
+            let elem_size = crate::component_model::cm_size_with_registry_scoped(
                 &elem_ast_type,
                 ctx.cm_interface_registry,
+                Some(ctx.cm_package),
             );
-            let elem_align = crate::component_model::cm_align_with_registry(
+            let elem_align = crate::component_model::cm_align_with_registry_scoped(
                 &elem_ast_type,
                 ctx.cm_interface_registry,
+                Some(ctx.cm_package),
             );
 
             // __arr = value
@@ -587,6 +589,56 @@ fn lower_to_flat_inner(
             }
 
             result
+        }
+        ResolvedType::Variant { name, .. } => {
+            // Named variant → disc(i32) + join of the case payload flats, per
+            // the Canonical ABI. Reuses the same discriminant-plus-Match
+            // lowering the memory path uses; a payload-less variant flattens
+            // to the bare discriminant.
+            let Some(variant_decl) = find_variant_decl(name, tir_modules) else {
+                panic!("variant `{name}` has no TIR declaration; cannot lower it to flat CM values")
+            };
+            let flat_types: Vec<cm_abi::CmValType> = {
+                let tt = ctx.type_table.borrow();
+                flat_types_from_type_id(type_id, tir_modules, &tt)
+            };
+
+            let value_local = alloc_local(next_local, locals, type_id);
+            stmts.push(let_stmt("__variant_val", value_local, type_id, value));
+
+            let slot_locals: Vec<(u32, String)> = flat_types
+                .iter()
+                .enumerate()
+                .map(|(i, &vt)| {
+                    let tid = cm_val_type_to_type_id(vt);
+                    let l = alloc_local(next_local, locals, tid);
+                    let name = format!("__variant_slot_{i}");
+                    stmts.push(let_mut_stmt(&name, l, tid, cm_zero(vt)));
+                    (l, name)
+                })
+                .collect();
+
+            synthesize_variant_lower_to_flat(
+                value_local,
+                type_id,
+                &variant_decl,
+                &slot_locals,
+                &flat_types,
+                next_local,
+                stmts,
+                locals,
+                tir_modules,
+                ctx,
+            );
+
+            slot_locals
+                .iter()
+                .zip(flat_types.iter())
+                .map(|(&(l, _), &vt)| FlatLocal {
+                    index: l,
+                    cm_type: vt,
+                })
+                .collect()
         }
         ResolvedType::Struct { name, .. } if name != &names.string => {
             // Struct: concatenation of field flat types
@@ -1621,8 +1673,16 @@ fn push_sync_return_epilogue(
             call_user,
         ));
 
-        let size = crate::component_model::cm_size_with_registry(ty, env.cm_interface_registry);
-        let align = crate::component_model::cm_align_with_registry(ty, env.cm_interface_registry);
+        let size = crate::component_model::cm_size_with_registry_scoped(
+            ty,
+            env.cm_interface_registry,
+            Some(env.cm_package),
+        );
+        let align = crate::component_model::cm_align_with_registry_scoped(
+            ty,
+            env.cm_interface_registry,
+            Some(env.cm_package),
+        );
         let ptr_local = alloc_local(next_local, locals, TypeTable::I32);
         body_stmts.push(let_stmt(
             "__ret_ptr",
@@ -1968,21 +2028,12 @@ pub(super) fn synthesize_variant_lower_to_flat(
                 tir_modules,
                 ctx,
             );
-            for (i, flat_val) in lowered.iter().enumerate() {
-                if 1 + i < flat_locals.len() {
-                    let target_type = cm_val_type_to_type_id(flat_types[1 + i]);
-                    let source_type = cm_val_type_to_type_id(flat_val.cm_type);
-                    let val = coerce_flat_lower(
-                        local_ref(flat_val.index, "__flat", source_type),
-                        flat_val.cm_type,
-                        flat_types[1 + i],
-                    );
-                    case_stmts.push(expr_stmt(assign(
-                        local_ref(flat_locals[1 + i].0, &flat_locals[1 + i].1, target_type),
-                        val,
-                    )));
-                }
-            }
+            assign_flat_values_into_slots(
+                &lowered,
+                &flat_locals[1..],
+                &flat_types[1..],
+                &mut case_stmts,
+            );
             vec![TirPattern::Binding {
                 name: payload_name,
                 local_index: payload_local,
