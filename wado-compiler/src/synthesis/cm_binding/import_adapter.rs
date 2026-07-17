@@ -39,9 +39,8 @@ use super::lower::{
     synthesize_lower_wasi_variant_to_memory,
 };
 use super::types::{
-    CmStdlibNames, LiftContext, LowerContext, binary_add, cm_param_align, cm_param_size,
-    cm_param_store_plan, cm_type_to_type_id, cm_val_type_to_type_id, flatten_param_type,
-    needs_flat_result_lifting,
+    CmStdlibNames, LiftContext, LowerContext, binary_add, cm_param_store_plan, cm_type_to_type_id,
+    cm_val_type_to_type_id, flatten_param_type, needs_flat_result_lifting,
 };
 
 /// Build the binding function name for a WASI import.
@@ -729,15 +728,29 @@ fn classify_param<'t>(
         {
             ParamLowering::Variant { named: n }
         }
-        Type::Generic(g) if g.name == "Option" && g.args.len() == 1 => ParamLowering::OptionValue {
-            payload: &g.args[0],
-        },
-        Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => ParamLowering::ResultValue {
-            ok: &g.args[0],
-            err: &g.args[1],
-        },
+        Type::Generic(g) if g.name == names.option && g.args.len() == 1 => {
+            ParamLowering::OptionValue {
+                payload: &g.args[0],
+            }
+        }
+        Type::Generic(g) if g.name == names.result && g.args.len() == 2 => {
+            ParamLowering::ResultValue {
+                ok: &g.args[0],
+                err: &g.args[1],
+            }
+        }
         Type::Tuple(elems) if !elems.is_empty() => ParamLowering::TupleFlatten,
-        _ => ParamLowering::Direct,
+        // Scalars, plain enums/flags, and resource handles are a single flat
+        // param forwarded unchanged; likewise `&self`/`&mut self` receivers
+        // and the async/handle generics, all i32 handles. A `Named` here has
+        // no registered struct/variant source (the arms above caught those),
+        // so it is a scalar/enum/flags/resource — all Direct.
+        Type::Named(_) | Type::Reference(_) | Type::MutReference(_) => ParamLowering::Direct,
+        Type::Generic(g) if matches!(g.name.as_str(), "Stream" | "Future" | "Own" | "Borrow") => {
+            ParamLowering::Direct
+        }
+        Type::Tuple(elems) if elems.is_empty() => ParamLowering::Direct,
+        other => panic!("unsupported param type shape for CM import lowering: {other:?}"),
     }
 }
 
@@ -1298,18 +1311,20 @@ impl<'a> AdapterBuilder<'a> {
     ) {
         let registry = self.lower_ctx.cm_interface_registry;
 
-        let mut buf_offset = 0u32;
-        let mut buf_max_align = 1u32;
-        let mut param_offsets: Vec<u32> = Vec::with_capacity(plans.len());
-        for plan in plans {
-            let sz = cm_param_size(plan.ty, registry);
-            let al = cm_param_align(plan.ty, registry);
-            buf_offset = (buf_offset + al - 1) & !(al - 1);
-            param_offsets.push(buf_offset);
-            buf_offset += sz;
-            buf_max_align = buf_max_align.max(al);
-        }
-        let buf_total_size = (buf_offset + buf_max_align - 1) & !(buf_max_align - 1);
+        // Size the buffer with the same package-scoped layout the writes below
+        // use (via `self.lower_ctx`), so a same-named type resolved under the
+        // package hint cannot make the allocation disagree with the bytes
+        // written. `layout_tuple_*` lays a param sequence out exactly like the
+        // buffer: each param aligned then placed, padded to the max align.
+        let param_types: Vec<Type> = plans.iter().map(|plan| plan.ty.clone()).collect();
+        let layout = crate::cm_abi::layout_tuple_with_registry_scoped(
+            &param_types,
+            registry,
+            Some(self.lower_ctx.wasi_package),
+        );
+        let param_offsets = layout.offsets;
+        let buf_max_align = layout.align;
+        let buf_total_size = layout.size;
 
         let params_buf_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
         self.body_stmts.push(let_stmt(

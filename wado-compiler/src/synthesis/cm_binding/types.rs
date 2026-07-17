@@ -825,22 +825,6 @@ pub(super) fn disc_store_op(byte_size: u32) -> &'static str {
     }
 }
 
-/// Compute the CM Canonical ABI size for a param type, resolving WASI types through the registry.
-pub(super) fn cm_param_size(
-    ty: &Type,
-    cm_interface_registry: &crate::component_model::CmInterfaceRegistry,
-) -> u32 {
-    crate::component_model::cm_size_with_registry(ty, cm_interface_registry)
-}
-
-/// Compute the CM Canonical ABI alignment for a param type, resolving WASI types through the registry.
-pub(super) fn cm_param_align(
-    ty: &Type,
-    cm_interface_registry: &crate::component_model::CmInterfaceRegistry,
-) -> u32 {
-    crate::component_model::cm_align_with_registry(ty, cm_interface_registry)
-}
-
 pub(super) fn cm_param_store_plan(
     ty: &Type,
     cm_interface_registry: &crate::component_model::CmInterfaceRegistry,
