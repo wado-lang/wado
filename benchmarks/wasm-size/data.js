@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784287686647,
+  "lastUpdate": 1784288543810,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -41109,6 +41109,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/de00f519865bf73e3c4d276064f43ce4cf5a376e"
         },
         "date": 1784287685886,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16233,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265299,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7c54a6cc80950924a633c80c8c247ddba4fbb4a5",
+          "message": "Merge pull request #1604 from wado-lang/claude/matches-postfix-precedence-z6eq85\n\nfeat(parser): let value scrutinees bind into `matches` without parentheses",
+          "timestamp": "2026-07-17T20:23:21+09:00",
+          "tree_id": "a346e11296158ec1078aea8af38b6038f0b0ffe3",
+          "url": "https://github.com/wado-lang/wado/commit/7c54a6cc80950924a633c80c8c247ddba4fbb4a5"
+        },
+        "date": 1784288543046,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
