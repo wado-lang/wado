@@ -26,9 +26,9 @@ use crate::tir::{
 };
 
 use crate::synthesis::common::{
-    alloc_local, assign, binary, block, break_stmt, builtin_call, cast, cm_raw_call, expr_stmt,
-    generic_method_call, i32_const, i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
-    local_ref, loop_stmt, null_expr, return_stmt, synth_span,
+    alloc_local, assign, binary, block, break_stmt, builtin_call, cm_raw_call, expr_stmt,
+    generic_method_call, i32_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
+    local_ref, loop_stmt, null_expr, return_stmt, split_packed_ptr_len, synth_span,
 };
 
 use super::lift::{materialize_if_needed, synthesize_lift, try_lift_wasi_variant_or_enum};
@@ -1055,21 +1055,10 @@ impl<'a> AdapterBuilder<'a> {
         self.body_stmts
             .push(let_stmt(&packed_name, packed_local, TypeTable::I64, packed));
 
-        // ptr = packed as i32 (low 32 bits)
-        self.flat_args.push(cast(
-            local_ref(packed_local, &packed_name, TypeTable::I64),
-            TypeTable::I32,
-        ));
-        // len = (packed >> 32) as i32 (high 32 bits)
-        self.flat_args.push(cast(
-            binary(
-                TirBinaryOp::Shr,
-                local_ref(packed_local, &packed_name, TypeTable::I64),
-                i64_const(32),
-                TypeTable::I64,
-            ),
-            TypeTable::I32,
-        ));
+        let (ptr, len) =
+            split_packed_ptr_len(local_ref(packed_local, &packed_name, TypeTable::I64));
+        self.flat_args.push(ptr);
+        self.flat_args.push(len);
     }
 
     /// General List<T>: lower each element into a realloc'd linear-memory

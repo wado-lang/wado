@@ -38,9 +38,9 @@ use crate::tir::{
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, cast, cm_raw_call, expr_stmt,
-    generic_method_call, i32_const, i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
+    generic_method_call, i32_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
     local_ref, loop_stmt, null_expr, option_none, option_some, param_local, return_stmt,
-    synth_span,
+    split_packed_ptr_len, synth_span,
 };
 
 use super::import_adapter::make_binding_function;
@@ -156,22 +156,10 @@ fn lower_to_flat_inner(
             let packed_local = alloc_local(next_local, locals, TypeTable::I64);
             stmts.push(let_stmt("__packed", packed_local, TypeTable::I64, packed));
 
-            // ptr = packed as i32
-            let ptr = cast(
-                local_ref(packed_local, "__packed", TypeTable::I64),
-                TypeTable::I32,
-            );
+            let (ptr, len) =
+                split_packed_ptr_len(local_ref(packed_local, "__packed", TypeTable::I64));
             let ptr_local = alloc_local(next_local, locals, TypeTable::I32);
             stmts.push(let_stmt("__ptr", ptr_local, TypeTable::I32, ptr));
-
-            // len = (packed >> 32) as i32
-            let shifted = binary(
-                TirBinaryOp::Shr,
-                local_ref(packed_local, "__packed", TypeTable::I64),
-                i64_const(32),
-                TypeTable::I64,
-            );
-            let len = cast(shifted, TypeTable::I32);
             let len_local = alloc_local(next_local, locals, TypeTable::I32);
             stmts.push(let_stmt("__len", len_local, TypeTable::I32, len));
 

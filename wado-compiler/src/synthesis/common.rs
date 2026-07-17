@@ -145,6 +145,20 @@ pub fn cast(expr: TirExpr, target_type: TypeId) -> TirExpr {
     )
 }
 
+/// Split a packed pointer/length `i64` — the `(ptr | len << 32)` encoding
+/// `cm_lower_string` / `cm_lower_array_u8` return — into its `ptr` (low 32
+/// bits) and `len` (high 32 bits) `i32` expressions. The one place the packing
+/// convention is decoded, so every CM lowering site agrees with the runtime
+/// helper. `packed` should be a cheap-to-clone local reference.
+pub fn split_packed_ptr_len(packed: TirExpr) -> (TirExpr, TirExpr) {
+    let ptr = cast(packed.clone(), TypeTable::I32);
+    let len = cast(
+        binary(TirBinaryOp::Shr, packed, i64_const(32), TypeTable::I64),
+        TypeTable::I32,
+    );
+    (ptr, len)
+}
+
 /// Create a let statement.
 pub fn let_stmt(name: &str, local_index: u32, type_id: TypeId, value: TirExpr) -> TirStmt {
     TirStmt::new(

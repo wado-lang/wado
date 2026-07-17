@@ -24,7 +24,7 @@ use crate::tir::{
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, cast, expr_stmt,
     generic_method_call, i32_const, i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
-    local_ref, loop_stmt, synth_span,
+    local_ref, loop_stmt, split_packed_ptr_len, synth_span,
 };
 
 use super::types::{
@@ -78,25 +78,14 @@ pub fn synthesize_lower(
             let packed = internal_call("cm_lower_string", vec![value], TypeTable::I64);
             let mut stmts = vec![let_stmt("__packed", packed_local, TypeTable::I64, packed)];
 
-            // Store ptr (low 32 bits) at addr
-            let ptr = cast(
-                local_ref(packed_local, "__packed", TypeTable::I64),
-                TypeTable::I32,
-            );
+            let (ptr, len) =
+                split_packed_ptr_len(local_ref(packed_local, "__packed", TypeTable::I64));
+            // Store ptr (low 32 bits) at addr, len (high 32 bits) at addr + 4.
             stmts.push(expr_stmt(builtin_call(
                 "i32_store",
                 vec![addr.clone(), ptr],
                 TypeTable::UNIT,
             )));
-
-            // Store len (high 32 bits) at addr + 4
-            let shifted = binary(
-                TirBinaryOp::Shr,
-                local_ref(packed_local, "__packed", TypeTable::I64),
-                i64_const(32),
-                TypeTable::I64,
-            );
-            let len = cast(shifted, TypeTable::I32);
             stmts.push(expr_stmt(builtin_call(
                 "i32_store",
                 vec![
@@ -877,21 +866,13 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 TypeTable::I64,
                 internal_call("cm_lower_string", vec![value], TypeTable::I64),
             ));
-            // ptr = packed as i32 (low 32 bits)
-            flat_args.push(cast(
-                local_ref(packed_local, &format!("{prefix}_packed"), TypeTable::I64),
-                TypeTable::I32,
+            let (ptr, len) = split_packed_ptr_len(local_ref(
+                packed_local,
+                &format!("{prefix}_packed"),
+                TypeTable::I64,
             ));
-            // len = (packed >> 32) as i32 (high 32 bits)
-            flat_args.push(cast(
-                binary(
-                    TirBinaryOp::Shr,
-                    local_ref(packed_local, &format!("{prefix}_packed"), TypeTable::I64),
-                    i64_const(32),
-                    TypeTable::I64,
-                ),
-                TypeTable::I32,
-            ));
+            flat_args.push(ptr);
+            flat_args.push(len);
         }
         // Enum → variant_tag (single i32). The registry lookup is the gate:
         // every source it holds is a CM interface, so a prefix check would be

@@ -816,7 +816,7 @@ pub fn flatten_param_type(
         .collect()
 }
 
-pub use crate::cm_abi::{cm_enum_byte_size, cm_flags_byte_align, cm_flags_byte_size};
+pub use crate::cm_abi::{cm_enum_byte_size, cm_flags_byte_size};
 
 /// Core-wasm load op for a CM discriminant of the given byte size.
 /// Discriminants are unsigned, so 1/2-byte widths zero-extend.
