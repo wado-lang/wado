@@ -50,7 +50,6 @@ pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
     // Built once and threaded down: sound because eliminations never add
     // reassignments, so the snapshot only omits bindings, never holds a stale one.
     let binds = build_copy_bindings(engine.body);
-<<<<<<< HEAD
     // The three flow-insensitive eliminators recognise self-contained shapes
     // (bitmask-bounded, const-bound index, short-circuit `||`), so one subtree
     // walk from the root refutes every nesting depth once — rather than a full
@@ -61,13 +60,8 @@ pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
     // Flow-sensitive elimination: loop guards, dominating-ifs, and early-exit
     // facts, threaded through the block structure.
     changed |= process_block(engine, root, &binds);
-||||||| 550f7454b
-    process_block(engine, root, &binds)
-=======
-    let mut changed = process_block(engine, root, &binds);
     let mut facts: Vec<ProvenLt> = Vec::new();
     changed |= rbce_walk(engine, NodeRef::Block(root), &mut facts, &binds);
->>>>>>> origin/main
     changed
 }
 
