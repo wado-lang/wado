@@ -1192,11 +1192,11 @@ fn read_file(path: String) -> String with Preopens {
     let [stream, _done] = file.read_via_stream(0 as Filesize);
     let mut buf = String::with_capacity(2 * 1024 * 1024);
     loop {
-        let chunk = stream.read(4096);
+        let chunk = stream.read(4096) as ByteList;
         if chunk.len() == 0 {
             break;
         }
-        buf.push_bytes_unchecked(chunk);
+        buf.push_bytes_unchecked(&chunk);
     }
     stream.drop();
     return buf;
