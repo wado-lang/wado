@@ -124,7 +124,7 @@ pub fn percent_encode(input: String) -> String {
 /// Returns Err if the input contains invalid percent-encoding or invalid UTF-8.
 pub fn percent_decode(input: String) -> Result<String, ParseError> {
     let len = input.len();
-    let mut bytes: List<u8> = List::with_capacity(len);
+    let mut bytes = ByteList::with_capacity(len);
     let mut i = 0;
     while i < len {
         let c = input.get_byte_unchecked(i) as char;
@@ -169,7 +169,7 @@ fn percent_encode_query_component(input: &String) -> String {
 
 fn percent_decode_query_component(input: &String) -> String {
     let len = input.len();
-    let mut bytes: List<u8> = List::with_capacity(len);
+    let mut bytes = ByteList::with_capacity(len);
     let mut i = 0;
     while i < len {
         let c = input.get_byte_unchecked(i) as char;

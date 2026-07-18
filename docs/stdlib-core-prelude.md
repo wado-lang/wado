@@ -1032,7 +1032,7 @@ Panics if the character is not a valid hex digit.
 
 Returns the number of bytes this character needs in UTF-8 encoding.
 
-#### `pub fn encode_utf8(&self) -> List<u8>`
+#### `pub fn encode_utf8(&self) -> ByteList`
 
 Encodes this character as UTF-8, returning the bytes.
 
