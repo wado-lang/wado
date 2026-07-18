@@ -1,0 +1,16 @@
+// Helper module for `struct_default_foreign_generic`.
+//
+// `Registry.entries` is defaulted to `TreeMap::new()`. `TreeMap` is imported
+// here but need not be imported by a module that constructs `Registry` while
+// omitting `entries`: the default — including the generic args that drive
+// `TreeMap::new`'s inference — is resolved in THIS module's scope.
+use { TreeMap } from "core:collections";
+
+pub struct Registry {
+    pub name: String,
+    pub entries: TreeMap<String, i32> = TreeMap::new(),
+}
+
+pub fn registry_len(r: &Registry) -> i32 {
+    return r.entries.len();
+}

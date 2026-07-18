@@ -556,6 +556,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         gn_info.module_source,
                         base_type_id,
                     )
+                } else if let Some(scope_mod) = self.annotate_ctx.default_scope_module.clone()
+                    && scope_mod != self.current_module_source
+                {
+                    // A foreign default re-resolved at the caller may name a
+                    // generic type the callee's module imports but the caller
+                    // does not (`entries: TreeMap<K, V> = TreeMap::new()`
+                    // omitted cross-module); retry in the callee's perspective.
+                    // Mirrors the `resolve_named_type` fallback for bare names.
+                    self.with_module_perspective_for(&scope_mod, |s| {
+                        s.resolve_generic_type(name, args, span)
+                    })
                 } else {
                     TypeTable::UNKNOWN
                 }
