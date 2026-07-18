@@ -3144,11 +3144,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return true;
         }
 
-        // For newtypes/flags, check if the base type has the static method
+        // For newtypes/flags, check if the base type has the static method.
+        // Use the ultimate base *struct* name (bare `List`, not the mangled
+        // `List<u8>`) so the recursion matches how statics register.
         if let Some(newtype_id) = self.lookup_newtype(struct_name) {
             let base_name = match self.tysys.type_table.borrow().get(newtype_id).clone() {
                 ResolvedType::Newtype { base_type, .. } => {
-                    Some(self.tysys.type_table.borrow().type_name(base_type))
+                    Some(self.tysys.get_ultimate_base_struct_name(base_type))
                 }
                 ResolvedType::Flags { .. } => Some("u32".to_string()),
                 _ => None,
@@ -3218,21 +3220,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let mangled_func_name = mangled_func_name_owned.as_str();
         // For newtypes, check if the newtype itself has the method first,
-        // then fall back to the base type's static method
+        // then fall back to the base type's static method. When falling back,
+        // the call dispatches to the base's associated function but the result
+        // is viewed as the newtype (repr-identical); `newtype_dispatch` carries
+        // `(newtype_id, base_type_id, base_type_args)` so the return type is
+        // remapped and the base's concrete type args seed the instantiation
+        // (e.g. `ByteList::with_capacity` -> `List::<u8>::with_capacity`).
+        let mut newtype_dispatch: Option<(TypeId, TypeId, Vec<TypeId>)> = None;
         let (actual_struct_name, actual_mangled_name) =
             if let Some(newtype_id) = self.lookup_newtype(struct_name) {
                 // First check if the newtype itself has this static method
                 if self.has_static_method_direct(struct_name, method_name) {
                     (struct_name.to_string(), mangled_func_name.to_string())
                 } else {
-                    let base_name = match self.tysys.type_table.borrow().get(newtype_id).clone() {
-                        ResolvedType::Newtype { base_type, .. } => {
-                            Some(self.tysys.get_ultimate_base_struct_name(base_type))
-                        }
-                        ResolvedType::Flags { .. } => Some("u32".to_string()),
+                    let base_type_id = match self.tysys.type_table.borrow().get(newtype_id).clone() {
+                        ResolvedType::Newtype { base_type, .. } => Some(base_type),
                         _ => None,
                     };
-                    if let Some(base_name) = base_name {
+                    let base_name = base_type_id
+                        .map(|b| self.tysys.get_ultimate_base_struct_name(b))
+                        .or_else(|| match self.tysys.type_table.borrow().get(newtype_id) {
+                            ResolvedType::Flags { .. } => Some("u32".to_string()),
+                            _ => None,
+                        });
+                    if let (Some(base_name), Some(base_type_id)) = (base_name.clone(), base_type_id) {
+                        let base_args = match self.tysys.type_table.borrow().get(base_type_id) {
+                            ResolvedType::GenericInstance { type_args, .. }
+                            | ResolvedType::GenericResource { type_args, .. } => type_args.clone(),
+                            _ => vec![],
+                        };
+                        newtype_dispatch = Some((newtype_id, base_type_id, base_args));
+                        let mangled = MethodName::format_local(&base_name, None, method_name);
+                        (base_name, mangled)
+                    } else if let Some(base_name) = base_name {
                         let mangled = MethodName::format_local(&base_name, None, method_name);
                         (base_name, mangled)
                     } else {
@@ -3242,6 +3262,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 (struct_name.to_string(), mangled_func_name.to_string())
             };
+
+        // Seed impl-level type args from the newtype's concrete base
+        // instantiation when the caller supplied none (a bare
+        // `ByteList::with_capacity` has no turbofish to infer `T` from).
+        let impl_type_args_owned: Vec<TypeId> = match &newtype_dispatch {
+            Some((_, _, base_args)) if impl_type_args.is_empty() && !base_args.is_empty() => {
+                base_args.clone()
+            }
+            _ => impl_type_args.to_vec(),
+        };
+        let impl_type_args = impl_type_args_owned.as_slice();
 
         // Find trait name and the module where the impl block lives.
         // For From/TryFrom, disambiguate by matching the first argument's type so that
@@ -3287,6 +3318,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut combined = impl_type_args.to_vec();
             combined.extend_from_slice(method_type_args);
             return_type = self.substitute_type_params(return_type, &combined);
+        }
+
+        // Newtype associated-fn inheritance: when the base method returns its
+        // own type (`-> Self` / `-> List<T>`), view the result as the newtype
+        // (repr-identical). Matches when the substituted return type is the
+        // newtype's base — the common `new` / `with_capacity` / `filled` shape.
+        if let Some((newtype_id, base_type_id, _)) = newtype_dispatch
+            && return_type == base_type_id
+        {
+            return_type = newtype_id;
         }
 
         // Build monomorph_info for impl-level and/or method-level generic instantiation
