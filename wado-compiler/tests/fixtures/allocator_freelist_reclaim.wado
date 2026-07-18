@@ -9,14 +9,14 @@ export fn run() with Stdout {
     assert ptr1 > 0;
     builtin::realloc(ptr1, 128, 4, 0);
     let ptr2 = builtin::realloc(0, 0, 4, 128);
-    assert ptr2 == ptr1, `expected recycled address: ptr1={ptr1}, ptr2={ptr2}`;
+    assert ptr2 == ptr1, `expected recycled address: ptr1=${ptr1}, ptr2=${ptr2}`;
 
     // Free and re-allocate in a loop: steady state stays at one address —
     // the heap must not creep upward.
     builtin::realloc(ptr2, 128, 4, 0);
     for let mut i = 0; i < 1000; i += 1 {
         let p = builtin::realloc(0, 0, 4, 128);
-        assert p == ptr1, `loop iteration {i}: expected recycled address, got {p}`;
+        assert p == ptr1, `loop iteration ${i}: expected recycled address, got ${p}`;
         builtin::realloc(p, 128, 4, 0);
     }
 

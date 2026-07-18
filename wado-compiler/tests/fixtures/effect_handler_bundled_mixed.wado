@@ -43,7 +43,7 @@ struct MultiMock {
 impl Greeting for MultiMock {
     fn hello(&mut self) -> String {
         self.count += 1;
-        resume `hello, {self.name}`
+        resume `hello, ${self.name}`
     }
 }
 
@@ -77,9 +77,9 @@ export fn run() with Stdout {
         // Counter inner = AltCounter; delegates to outer (MultiMock).
         let n1 = Counter::tick();    // outer h.count: 1 -> 2 ; alt.bias -> 1 ; result = 2 + 100 = 102
         let n2 = Counter::tick();    // outer h.count: 2 -> 3 ; alt.bias -> 2 ; result = 3 + 200 = 203
-        println(`{g}, n1={n1}, n2={n2}`);
+        println(`${g}, n1=${n1}, n2=${n2}`);
     }
-    println(`h.count={h.count}, alt.bias={alt.bias}`);
+    println(`h.count=${h.count}, alt.bias=${alt.bias}`);
 }
 
 __DATA__

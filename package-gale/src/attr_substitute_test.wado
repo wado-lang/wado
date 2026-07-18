@@ -11,13 +11,13 @@ e returns [int v] : ID ;
     let refs = resolve_attrs(body, &g.parser_rules[0], &g.parser_rules).unwrap();
     let repls: List<String> = ["vals.v", "a.v"];
     let out = splice_attrs(body, &refs, &repls);
-    assert out == " vals.v = a.v; ", `out: '{out}'`;
+    assert out == " vals.v = a.v; ", `out: '${out}'`;
 }
 
 test "splice_attrs leaves a ref-free body verbatim" {
     let body = &" p.emit(\"hi\"); ";
     let out = splice_attrs(body, &[], &[]);
-    assert out == " p.emit(\"hi\"); ", `out: '{out}'`;
+    assert out == " p.emit(\"hi\"); ", `out: '${out}'`;
 }
 
 test "splice_attrs handles adjacent and end-anchored references" {
@@ -29,5 +29,5 @@ r : x=ID ;
     assert refs.len() == 2;
     let repls: List<String> = ["A", "B"];
     let out = splice_attrs(body, &refs, &repls);
-    assert out == "AB", `out: '{out}'`;
+    assert out == "AB", `out: '${out}'`;
 }

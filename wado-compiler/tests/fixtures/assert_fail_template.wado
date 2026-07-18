@@ -1,18 +1,18 @@
 // Test: assert captures template string literals, rendering their value.
-// Template strings were previously opaque leaves, so `` `{...}` == "..." ``
+// Template strings were previously opaque leaves, so `` `${...}` == "..." ``
 // conditions showed no sub-value for the interpolated string.
 
 export fn run() with Stdout {
     let m = 100.5;
     let name = "wado";
-    assert `{m} {name}` == "nope";
+    assert `${m} ${name}` == "nope";
 }
 
 __DATA__
 {
     "trapped": true,
     "stderr_contains": [
-        "condition: `{m} {name}` == \"nope\"",
-        "`{m} {name}`: \"100.5 wado\""
+        "condition: `${m} ${name}` == \"nope\"",
+        "`${m} ${name}`: \"100.5 wado\""
     ]
 }

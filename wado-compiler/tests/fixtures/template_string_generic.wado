@@ -19,15 +19,15 @@ fn make_wrapper<T>(value: T) -> Wrapper<T> {
 
 impl Wrapper<T> {
     fn display_value(&self) -> String {
-        return `{self.value}`;
+        return `${self.value}`;
     }
 
     fn inspect_value(&self) -> String {
-        return `{self.value:?}`;
+        return `${self.value:?}`;
     }
 
     fn both(&self) -> String {
-        return `display={self.value} inspect={self.value:?}`;
+        return `display=${self.value} inspect=${self.value:?}`;
     }
 }
 
@@ -78,20 +78,20 @@ test "inspect bool" {
 // Interpolations parse a full expression, so call-site turbofish
 // (`fn::<T>(args)`) is allowed inside `{...}`.
 test "free function turbofish" {
-    assert `{identity::<i32>(42)}` == "42";
-    assert `{identity::<String>("hi")}` == "hi";
+    assert `${identity::<i32>(42)}` == "42";
+    assert `${identity::<String>("hi")}` == "hi";
 }
 
 // The `::` of the turbofish must not be mistaken for the `:` that starts a
 // format specifier: here `::<i32>` is part of the expression and `:x` is the
 // format specifier.
 test "turbofish with format specifier" {
-    assert `{identity::<i32>(255):x}` == "ff";
-    assert `{identity::<i32>(7):03}` == "007";
+    assert `${identity::<i32>(255):x}` == "ff";
+    assert `${identity::<i32>(7):03}` == "007";
 }
 
 // Turbofish on a generic constructor, followed by a field access on the result.
 test "turbofish on generic constructor" {
-    assert `{make_wrapper::<i32>(1).value}` == "1";
-    assert `{make_wrapper::<String>("a").value}` == "a";
+    assert `${make_wrapper::<i32>(1).value}` == "1";
+    assert `${make_wrapper::<String>("a").value}` == "a";
 }

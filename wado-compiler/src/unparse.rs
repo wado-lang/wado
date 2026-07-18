@@ -2397,7 +2397,7 @@ impl<'a> Unparser<'a> {
                     escape_template_literal_into(s, &mut self.output);
                 }
                 TemplatePart::Interpolation { expr, format } => {
-                    self.output.push('{');
+                    self.output.push_str("${");
                     self.unparse_expr(expr);
                     if let Some(fmt) = format {
                         self.output.push(':');
@@ -3369,7 +3369,7 @@ fn unparse_template_string_into(t: &TemplateStringExpr, output: &mut String) {
                 escape_template_literal_into(s, output);
             }
             TemplatePart::Interpolation { expr, format } => {
-                output.push('{');
+                output.push_str("${");
                 unparse_expr_into(expr, output);
                 if let Some(fmt) = format {
                     output.push(':');

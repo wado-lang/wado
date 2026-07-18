@@ -9,7 +9,7 @@ grammar WadoLrVals;
 
 options { language = Wado; }
 
-s : x=e { p.emit(`={$x.v}`); } ;
+s : x=e { p.emit(`=${$x.v}`); } ;
 
 e returns [i32 v]
   : l=e '*' r=e { $v = $l.v * $r.v; }

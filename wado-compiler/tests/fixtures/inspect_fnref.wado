@@ -9,17 +9,17 @@ fn double(x: i32) -> i32 {
 }
 
 fn fmt_def(f: fn(i32) -> i32) -> String {
-    return `{f:?}`;
+    return `${f:?}`;
 }
 
 fn fmt_alt(f: fn(i32) -> i32) -> String {
-    return `{f:#?}`;
+    return `${f:#?}`;
 }
 
 fn fmt_alt_ref(f: &fn(i32) -> i32) -> String {
     // Deref to render the underlying closure; the surface-level `&` prefix is
     // exercised by other reference-rendering fixtures.
-    return `{*f:#?}`;
+    return `${*f:#?}`;
 }
 
 test "bare fn-ref :? signature" {
@@ -41,5 +41,5 @@ test "explicit &fn-ref deref :#? matches the bare form" {
 // synthetic forwarder. Round-trips through the parser.
 test "user-written forwarding closure keeps its source for :#?" {
     let f = |x: i32| double(x);
-    assert `{f:#?}` == "|x: i32| double(x)";
+    assert `${f:#?}` == "|x: i32| double(x)";
 }

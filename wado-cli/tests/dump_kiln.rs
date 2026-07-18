@@ -40,7 +40,7 @@ fn write_project(root: &std::path::Path) {
         root.join("entry.wado"),
         "use { println, Stdout } from \"core:cli\";\n\
          use { hello } from \"./grammar.g4\"\n    with { generator: { module: \"./gen.wado\" } };\n\n\
-         export fn run() with Stdout {\n    println(`{hello()}`);\n}\n",
+         export fn run() with Stdout {\n    println(`${hello()}`);\n}\n",
     )
     .unwrap();
 }

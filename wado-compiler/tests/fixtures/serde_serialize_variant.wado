@@ -36,12 +36,12 @@ impl Serializer for JsonSerializer {
     type VariantSerializer = JsonVariantSerializer;
 
     fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
-        self.buf.push_str(&`{v}`);
+        self.buf.push_str(&`${v}`);
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError> {
-        self.buf.push_str(&`"{*variant_name}"`);
+        self.buf.push_str(&`"${*variant_name}"`);
         return Result::<(), SerializeError>::Ok(());
     }
 

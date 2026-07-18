@@ -23,26 +23,26 @@ export fn run() with Stdout {
     let mut a = Box { xs: [10] };
     let ra = &a.xs;
     a.xs = [20];
-    println(`{ra[0]}`);
+    println(`${ra[0]}`);
 
     // In-place element write: visible through the shared handle.
     let mut b = Box { xs: [10] };
     let rb = &b.xs;
     b.xs[0] = 20;
-    println(`{rb[0]}`);
+    println(`${rb[0]}`);
 
     // Reassignment through a `&mut` alias of the enclosing struct.
     let mut c = Box { xs: [10] };
     let rc = &c.xs;
     let m = &mut c;
     m.xs = [20];
-    println(`{rc[0]}`);
+    println(`${rc[0]}`);
 
     // Reassignment inside an out-of-line `&mut self` method.
     let mut d = Box { xs: [10] };
     let rd = &d.xs;
     d.replace(20);
-    println(`{rd[0]}`);
+    println(`${rd[0]}`);
 }
 
 __DATA__

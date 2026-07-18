@@ -6,7 +6,7 @@ Wado needs a range object to support common patterns like counted iteration, mem
 
 ```wado
 for let mut i = 0; i < 10; i += 1 {
-    println(`{i}`);
+    println(`${i}`);
 }
 ```
 
@@ -14,7 +14,7 @@ A range object would enable the more idiomatic:
 
 ```wado
 for let i of 0..<10 {
-    println(`{i}`);
+    println(`${i}`);
 }
 ```
 
@@ -309,17 +309,17 @@ Since ranges have value semantics, copying a range into the iterator is safe and
 ```wado
 // Count from 0 to 9
 for let i of 0..<10 {
-    println(`{i}`);
+    println(`${i}`);
 }
 
 // Count from 1 to 10 (inclusive)
 for let i of 1..=10 {
-    println(`{i}`);
+    println(`${i}`);
 }
 
 // Character range
 for let c of 'a'..='z' {
-    print(`{c}`);
+    print(`${c}`);
 }
 // Output: abcdefghijklmnopqrstuvwxyz
 
@@ -510,23 +510,23 @@ let x = match n {
 ```wado
 impl Display for RangeExclusive<T: Display> {
     fn fmt(&self, f: &mut Formatter) {
-        f.write(`{self.start}..<{self.end}`);
+        f.write(`${self.start}..<${self.end}`);
     }
 }
 
 impl Display for RangeInclusive<T: Display> {
     fn fmt(&self, f: &mut Formatter) {
-        f.write(`{self.start}..={self.end}`);
+        f.write(`${self.start}..=${self.end}`);
     }
 }
 ```
 
 ```wado
 let r = 0..<10;
-println(`{r}`);   // "0..<10"
+println(`${r}`);   // "0..<10"
 
 let r = 1..=5;
-println(`{r}`);   // "1..=5"
+println(`${r}`);   // "1..=5"
 ```
 
 ### Eq for Ranges
@@ -580,7 +580,7 @@ Reverse ranges can use C-style `for`:
 ```wado
 // Instead of (0..<10).rev()
 for let mut i = 9; i >= 0; i -= 1 {
-    println(`{i}`);
+    println(`${i}`);
 }
 ```
 

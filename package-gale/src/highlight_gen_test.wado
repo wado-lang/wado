@@ -74,8 +74,8 @@ WS : ' ' -> skip ;
     let b = index_of(&out, "// TK_B");
     let ws = index_of(&out, "// TK_WS");
     assert a >= 0 && b >= 0 && ws >= 0, out;
-    assert b < a, `TK_B row must precede deferred TK_A row: b={b} a={a}`;
-    assert ws < a, `TK_WS row must precede deferred TK_A row: ws={ws} a={a}`;
+    assert b < a, `TK_B row must precede deferred TK_A row: b=${b} a=${a}`;
+    assert ws < a, `TK_WS row must precede deferred TK_A row: ws=${ws} a=${a}`;
 }
 
 test "highlight fn: lexer-only grammar is tokenize-only (no walk_ call)" {
@@ -100,7 +100,7 @@ B : 'b' ;
 ERROR : . ;
 ");
     let n = count_occurrences(&out, "// TK_ERROR");
-    assert n == 1, `expected exactly one TK_ERROR row (the user rule), got {n}:\n{out}`;
+    assert n == 1, `expected exactly one TK_ERROR row (the user rule), got ${n}:\n${out}`;
 }
 
 test "query maps a token to its default capture" {
@@ -164,7 +164,7 @@ B : 'b' ;
     let mut w = CodeWriter::new();
     gen_highlight(&mut w, &g, &lits, &query, &mut ctx);
     let diags = ctx.copy_diagnostics();
-    assert diags.len() == 1, `expected one diagnostic, got {diags.len()}`;
+    assert diags.len() == 1, `expected one diagnostic, got ${diags.len()}`;
     assert diags[0].message.contains("unknown token"), diags[0].message;
 }
 
@@ -179,6 +179,6 @@ B : 'b' ;
     let mut w = CodeWriter::new();
     gen_highlight(&mut w, &g, &lits, &query, &mut ctx);
     let diags = ctx.copy_diagnostics();
-    assert diags.len() == 1, `expected one diagnostic, got {diags.len()}`;
+    assert diags.len() == 1, `expected one diagnostic, got ${diags.len()}`;
     assert diags[0].message.contains("unknown parser rule"), diags[0].message;
 }

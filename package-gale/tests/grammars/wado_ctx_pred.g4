@@ -11,7 +11,7 @@ options { language = Wado; }
 
 r returns [i32 n]
     @init { $n = 1; }
-    : {$n == 1}? A { p.emit(`n={$n} one`); }
+    : {$n == 1}? A { p.emit(`n=${$n} one`); }
     | B { p.emit("b"); }
     ;
 

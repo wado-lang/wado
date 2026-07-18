@@ -25,12 +25,12 @@ struct TextSerializer {
 
 impl Serializer for TextSerializer {
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
-        self.buf.push_str(&`{v}`);
+        self.buf.push_str(&`${v}`);
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
-        self.buf.push_str(&`"{*v}"`);
+        self.buf.push_str(&`"${*v}"`);
         return Result::<(), SerializeError>::Ok(());
     }
 }
@@ -54,12 +54,12 @@ export fn run() with Stdout {
 
     let n = 42;
     n.serialize::<TextSerializer>(&mut ser);
-    println(`i32: {ser.buf}`);
+    println(`i32: ${ser.buf}`);
 
     ser.buf = "";
     let s = "hello";
     s.serialize::<TextSerializer>(&mut ser);
-    println(`String: {ser.buf}`);
+    println(`String: ${ser.buf}`);
 }
 
 __DATA__

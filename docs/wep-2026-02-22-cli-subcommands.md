@@ -335,9 +335,7 @@ commit is a linked git worktree nested in `.worktrees/`. Nesting keeps `ghq list
 to one entry per repo, and the short commit prefix (8 hex) distinguishes commits
 sharing a version tag. Worktrees are disposable derived state (rebuilt from the
 lock by `wado fetch`, evicted by `wado clean`); registry dependencies are
-prebuilt components at the exact version. See the
-[git dependency design](./git-dependency-resolution-design.md) for the acquisition
-and concurrency model.
+prebuilt components at the exact version.
 
 #### Cache Root
 

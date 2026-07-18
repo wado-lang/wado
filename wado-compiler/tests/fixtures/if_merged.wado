@@ -48,16 +48,16 @@ fn test_expr_1() with Stdout {
     } else {
         0;
     };
-    println(`{x}`);
+    println(`${x}`);
     let y = if false {
         100;
     } else {
         200;
     };
-    println(`{y}`);
-    println(`{compute_mode1(IfMode1::Decimal, 2, 3)}`);
-    println(`{compute_mode1(IfMode1::Decimal, 2, -1)}`);
-    println(`{compute_mode1(IfMode1::Exp, 2, 3)}`);
+    println(`${y}`);
+    println(`${compute_mode1(IfMode1::Decimal, 2, 3)}`);
+    println(`${compute_mode1(IfMode1::Decimal, 2, -1)}`);
+    println(`${compute_mode1(IfMode1::Exp, 2, 3)}`);
     let n = 25;
     let x2 = if n < 10 {
         1;
@@ -68,7 +68,7 @@ fn test_expr_1() with Stdout {
     } else {
         4;
     };
-    println(`{x2}`);
+    println(`${x2}`);
     let y2 = if n == 25 {
         100;
     } else if n == 24 {
@@ -76,7 +76,7 @@ fn test_expr_1() with Stdout {
     } else {
         300;
     };
-    println(`{y2}`);
+    println(`${y2}`);
 }
 
 variant IfMode2 {
@@ -95,14 +95,14 @@ fn compute_mode2(mode: IfMode2, x: i32) -> i32 {
 }
 
 fn test_expr_2() with Stdout {
-    println(`{compute_mode2(IfMode2::A, 5)}`);
-    println(`{compute_mode2(IfMode2::B, 5)}`);
+    println(`${compute_mode2(IfMode2::A, 5)}`);
+    println(`${compute_mode2(IfMode2::B, 5)}`);
     let x = if true {
         42;
     } else {
         0;
     };
-    println(`{x}`);
+    println(`${x}`);
 }
 
 fn compute_if3(x: i32) -> i32 {
@@ -118,70 +118,70 @@ fn compute_if3(x: i32) -> i32 {
 }
 
 fn test_expr_3() with Stdout {
-    println(`{compute_if3(5)}`);
-    println(`{compute_if3(-2)}`);
+    println(`${compute_if3(5)}`);
+    println(`${compute_if3(-2)}`);
     let x = if true {
         42;
     } else {
         0;
     };
-    println(`{x}`);
+    println(`${x}`);
 }
 
 fn test_if_let() with Stdout {
     if let x = 10 && x > 5 {
-        println(`x = {x}`);
+        println(`x = ${x}`);
     }
     let val = 3;
     if let x = val && x > 5 {
         println("big");
     } else {
-        println(`small: {val}`);
+        println(`small: ${val}`);
     }
     if let mut x = 5 && x > 0 {
         x = x + 1;
-        println(`{x}`);
+        println(`${x}`);
     }
 }
 
 fn test_if_let_chain() with Stdout {
     if let x = 10 && x > 5 {
-        println(`x = {x}`);
+        println(`x = ${x}`);
     }
     let val = 3;
     if let x = val && x > 5 {
         println("big");
     } else {
-        println(`small: {val}`);
+        println(`small: ${val}`);
     }
     if let mut x = 5 && x > 0 {
         x = x + 1;
-        println(`{x}`);
+        println(`${x}`);
     }
     let opt = Option::<i32>::Some(42);
     if let Some(x) = opt && x > 10 {
-        println(`big: {x}`);
+        println(`big: ${x}`);
     }
     let a = Option::<i32>::Some(10);
     let b = Option::<i32>::Some(20);
     if let Some(x) = a && let Some(y) = b {
-        println(`{x} {y}`);
+        println(`${x} ${y}`);
     }
     if let Some(x) = a && let Some(y) = b && x + y > 25 {
-        println(`sum ok: {x + y}`);
+        println(`sum ok: ${x + y}`);
     }
     let opt2 = Option::<i32>::Some(5);
     let flag = true;
     if flag && let Some(x) = opt2 {
-        println(`flag and x={x}`);
+        println(`flag and x=${x}`);
     }
     let outer: Option<Option<i32>> = Option::Some(Option::Some(99));
     if let Some(inner) = outer && let Some(n) = inner {
-        println(`nested: {n}`);
+        println(`nested: ${n}`);
     }
     let outer2: Option<Option<i32>> = Option::Some(null);
     if let Some(inner2) = outer2 && let Some(n2) = inner2 {
-        println(`should not print: {n2}`);
+        println(`should not print: ${n2}`);
     } else {
         println("inner none");
     }
@@ -189,10 +189,10 @@ fn test_if_let_chain() with Stdout {
     let flag1 = true;
     let flag2 = true;
     if let Some(x) = opt3 && (flag1 && flag2) {
-        println(`paren: x={x}`);
+        println(`paren: x=${x}`);
     }
     if let Some(x) = opt3 && (flag1 && false) {
-        println(`should not print: {x}`);
+        println(`should not print: ${x}`);
     } else {
         println("paren false");
     }
@@ -220,14 +220,14 @@ fn nested_opt(outer: Option<Option<i32>>) -> i32 {
 }
 
 fn test_if_let_expr() with Stdout {
-    println(`{unwrap_or(Option::Some(42), 0)}`);
-    println(`{unwrap_or(null, 99)}`);
-    println(`{classify_opt(Option::Some(5))}`);
-    println(`{classify_opt(Option::Some(-3))}`);
-    println(`{classify_opt(null)}`);
-    println(`{nested_opt(Option::Some(Option::Some(7)))}`);
-    println(`{nested_opt(Option::Some(null))}`);
-    println(`{nested_opt(null)}`);
+    println(`${unwrap_or(Option::Some(42), 0)}`);
+    println(`${unwrap_or(null, 99)}`);
+    println(`${classify_opt(Option::Some(5))}`);
+    println(`${classify_opt(Option::Some(-3))}`);
+    println(`${classify_opt(null)}`);
+    println(`${nested_opt(Option::Some(Option::Some(7)))}`);
+    println(`${nested_opt(Option::Some(null))}`);
+    println(`${nested_opt(null)}`);
 }
 
 fn test_never_branch() with Stdout {

@@ -46,7 +46,7 @@ export fn run() with Stdout, IpNameLookup, TcpSocket, Connector, Error {
     // .wait() blocks the current subtask until the result arrives.
     let addrs = match IpNameLookup::resolve_addresses(domain).wait() {
         Ok(a) => a,
-        Err(_) => panic(`DNS lookup failed for {domain}`),
+        Err(_) => panic(`DNS lookup failed for ${domain}`),
     };
     let ip = addrs[0];
 
@@ -58,7 +58,7 @@ export fn run() with Stdout, IpNameLookup, TcpSocket, Connector, Error {
     match sock.connect(socket_address(ip, port)).wait() {
         Ok(_) => {
         },
-        Err(_) => panic(`TCP connect to {domain}:{port as i32} failed`),
+        Err(_) => panic(`TCP connect to ${domain}:${port as i32} failed`),
     }
 
     let conn = Connector::new();
@@ -76,7 +76,7 @@ export fn run() with Stdout, IpNameLookup, TcpSocket, Connector, Error {
     match Connector::connect(conn, domain).wait() {
         Ok(_) => {
         },
-        Err(e) => panic(`TLS handshake failed: {e.to_debug_string()}`),
+        Err(e) => panic(`TLS handshake failed: ${e.to_debug_string()}`),
     }
 
     // Send a minimal HTTP/1.1 GET request. `Connection: close` tells the
@@ -92,7 +92,7 @@ export fn run() with Stdout, IpNameLookup, TcpSocket, Connector, Error {
     // `data_tx` open lets the request data flow and the peer's response
     // come back as expected; the run-to-completion exit then GCs both
     // ends.
-    let request = `GET /get HTTP/1.1\r\nHost: {domain}\r\nUser-Agent: wado-hello-tls\r\nConnection: close\r\n\r\n`;
+    let request = `GET /get HTTP/1.1\r\nHost: ${domain}\r\nUser-Agent: wado-hello-tls\r\nConnection: close\r\n\r\n`;
     data_tx.write(request.bytes().collect());
 
     // Read until the peer closes the connection.

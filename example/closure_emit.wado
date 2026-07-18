@@ -63,10 +63,10 @@ fn to_sexpr(node: &Node) -> String {
         &mut w,
         0,
         |w: &mut Writer, _d: i32, name: &String| {
-            w.put(&`({name} `);
+            w.put(&`(${name} `);
         },
         |w: &mut Writer, _d: i32, s: &String| {
-            w.put(&`{s} `);
+            w.put(&`${s} `);
         },
         |w: &mut Writer, _d: i32, _name: &String| {
             w.put(&")");
@@ -84,11 +84,11 @@ fn to_outline(node: &Node) -> String {
         0,
         |w: &mut Writer, d: i32, name: &String| {
             w.indent(d);
-            w.put(&`{name}:\n`);
+            w.put(&`${name}:\n`);
         },
         |w: &mut Writer, d: i32, s: &String| {
             w.indent(d);
-            w.put(&`- {s}\n`);
+            w.put(&`- ${s}\n`);
         },
         |w: &mut Writer, _d: i32, _name: &String| {
         },

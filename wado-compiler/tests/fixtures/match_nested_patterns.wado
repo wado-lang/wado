@@ -37,18 +37,18 @@ fn variant_inside_tuple() with Stdout {
     let b: Option<i32> = null;
     let pair = [a, b];
     let result = match pair {
-        [Some(a), Some(b)] => `both: {a},{b}`,
-        [Some(a), None] => `left: {a}`,
-        [None, Some(b)] => `right: {b}`,
+        [Some(a), Some(b)] => `both: ${a},${b}`,
+        [Some(a), None] => `left: ${a}`,
+        [None, Some(b)] => `right: ${b}`,
         [None, None] => "neither",
     };
     println(result);
 
     let pair2 = [Option::Some(3), Option::Some(7)];
     let result2 = match pair2 {
-        [Some(a), Some(b)] => `both: {a},{b}`,
-        [Some(a), None] => `left: {a}`,
-        [None, Some(b)] => `right: {b}`,
+        [Some(a), Some(b)] => `both: ${a},${b}`,
+        [Some(a), None] => `left: ${a}`,
+        [None, Some(b)] => `right: ${b}`,
         [None, None] => "neither",
     };
     println(result2);
@@ -58,8 +58,8 @@ fn variant_inside_tuple() with Stdout {
 fn tuple_inside_variant() with Stdout {
     let s = Shape::Rect([3, 4]);
     let desc = match s {
-        Circle(r) => `circle r={r}`,
-        Rect([w, h]) => `rect {w}x{h}`,
+        Circle(r) => `circle r=${r}`,
+        Rect([w, h]) => `rect ${w}x${h}`,
         Labeled(_) => "labeled",
         Point => "point",
     };
@@ -69,7 +69,7 @@ fn tuple_inside_variant() with Stdout {
     let desc2 = match s2 {
         Circle(_) => "circle",
         Rect(_) => "rect",
-        Labeled([name, { x, y }]) => `{name}: {x},{y}`,
+        Labeled([name, { x, y }]) => `${name}: ${x},${y}`,
         Point => "point",
     };
     println(desc2);
@@ -79,7 +79,7 @@ fn tuple_inside_variant() with Stdout {
 fn variant_inside_struct() with Stdout {
     let t = Tagged { label: "test", value: Option::Some(99) };
     let result = match t {
-        { value: Some(n), .. } => `has: {n}`,
+        { value: Some(n), .. } => `has: ${n}`,
         { value: None, .. } => "empty",
     };
     println(result);
@@ -90,18 +90,18 @@ fn literal_in_tuple() with Stdout {
     let pair = [1, 2];
     let desc = match pair {
         [0, 0] => "origin",
-        [0, y] => `y-axis: {y}`,
-        [x, 0] => `x-axis: {x}`,
-        [x, y] => `point: {x},{y}`,
+        [0, y] => `y-axis: ${y}`,
+        [x, 0] => `x-axis: ${x}`,
+        [x, y] => `point: ${x},${y}`,
     };
     println(desc);
 
     let pair2 = [0, 5];
     let desc2 = match pair2 {
         [0, 0] => "origin",
-        [0, y] => `y-axis: {y}`,
-        [x, 0] => `x-axis: {x}`,
-        [x, y] => `point: {x},{y}`,
+        [0, y] => `y-axis: ${y}`,
+        [x, 0] => `x-axis: ${x}`,
+        [x, y] => `point: ${x},${y}`,
     };
     println(desc2);
 }
@@ -110,9 +110,9 @@ fn literal_in_tuple() with Stdout {
 fn enum_inside_tuple() with Stdout {
     let pair = [Color::Red, 100];
     let desc = match pair {
-        [Red, n] => `red: {n}`,
-        [Green, n] => `green: {n}`,
-        [Blue, n] => `blue: {n}`,
+        [Red, n] => `red: ${n}`,
+        [Green, n] => `green: ${n}`,
+        [Blue, n] => `blue: ${n}`,
     };
     println(desc);
 }
@@ -136,7 +136,7 @@ fn or_pattern_nested() with Stdout {
 fn if_let_nested() with Stdout {
     let opt = Option::Some([10, 20]);
     if let Some([a, b]) = opt {
-        println(`if-let: {a},{b}`);
+        println(`if-let: ${a},${b}`);
     }
 }
 
@@ -148,19 +148,19 @@ fn while_let_nested() with Stdout {
     while let Some([a, b]) = iter.next() {
         sum += a + b;
     }
-    println(`while-let sum: {sum}`);
+    println(`while-let sum: ${sum}`);
 }
 
 // 9. matches operator with nested pattern
 fn matches_nested() with Stdout {
     let opt = Option::Some([1, 2]);
-    println(`matches tuple: {opt matches { Some([_, _]) }}`);
+    println(`matches tuple: ${opt matches { Some([_, _]) }}`);
 
     let opt2 = Option::Some(Option::Some(42));
-    println(`matches nested: {opt2 matches { Some(Some(_)) }}`);
+    println(`matches nested: ${opt2 matches { Some(Some(_)) }}`);
 
     let opt3 = Option::Some(Point { x: 0, y: 0 });
-    println(`matches struct: {opt3 matches { Some({ x: 0, .. }) }}`);
+    println(`matches struct: ${opt3 matches { Some({ x: 0, .. }) }}`);
 }
 
 // 10. Nested patterns in for-of with match
@@ -172,9 +172,9 @@ fn for_of_with_nested_match() with Stdout {
     ];
     for let [color, n] of items {
         let desc = match color {
-            Red => `R:{n}`,
-            Green => `G:{n}`,
-            Blue => `B:{n}`,
+            Red => `R:${n}`,
+            Green => `G:${n}`,
+            Blue => `B:${n}`,
         };
         println(desc);
     }
@@ -185,9 +185,9 @@ fn struct_literal_in_match() with Stdout {
     let p = Point { x: 0, y: 5 };
     let desc = match p {
         { x: 0, y: 0 } => "origin",
-        { x: 0, y } => `y-axis: {y}`,
-        { x, y: 0 } => `x-axis: {x}`,
-        { x, y } => `point: {x},{y}`,
+        { x: 0, y } => `y-axis: ${y}`,
+        { x, y: 0 } => `x-axis: ${x}`,
+        { x, y } => `point: ${x},${y}`,
     };
     println(desc);
 }
@@ -199,8 +199,8 @@ fn nested_struct_match() with Stdout {
         end: Point { x: 10, y: 20 },
     };
     let desc = match line {
-        { start: { x: 0, y: 0 }, end: { x, y } } => `from origin to ({x},{y})`,
-        { start: { x: sx, y: sy }, end: { x: ex, y: ey } } => `({sx},{sy})->({ex},{ey})`,
+        { start: { x: 0, y: 0 }, end: { x, y } } => `from origin to (${x},${y})`,
+        { start: { x: sx, y: sy }, end: { x: ex, y: ey } } => `(${sx},${sy})->(${ex},${ey})`,
     };
     println(desc);
 }
@@ -209,7 +209,7 @@ fn nested_struct_match() with Stdout {
 fn variant_inside_variant_iflet() with Stdout {
     let nested = Option::Some(Option::Some(42));
     if let Some(Some(n)) = nested {
-        println(`nested if-let: {n}`);
+        println(`nested if-let: ${n}`);
     }
 }
 
@@ -217,7 +217,7 @@ fn variant_inside_variant_iflet() with Stdout {
 fn struct_inside_variant_iflet() with Stdout {
     let opt = Option::Some(Point { x: 5, y: 10 });
     if let Some({ x, y }) = opt {
-        println(`struct if-let: {x},{y}`);
+        println(`struct if-let: ${x},${y}`);
     }
 }
 

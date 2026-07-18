@@ -43,11 +43,11 @@ use { Instant as ClockInstant } from "wasi:clocks";
 #[synopsis]
 test {
     let epoch = Instant::from_epoch_seconds(0);
-    assert `{epoch}` == "1970-01-01T00:00:00Z";
+    assert `${epoch}` == "1970-01-01T00:00:00Z";
     assert epoch < Instant::from_epoch_seconds(1_000_000_000);
 
     assert ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20+09:00") matches { Ok(zoned) && zoned.hour() == 22
-        && `{zoned}` == "2023-11-14T22:13:20+09:00" };
+        && `${zoned}` == "2023-11-14T22:13:20+09:00" };
 }
 
 /// An exact point on the timeline, as the offset from the Unix epoch
@@ -164,7 +164,7 @@ fn render_iso8601(seconds: i64, nanoseconds: u32, offset_seconds: i64, digits: i
     let second = second_of_day % 60;
     let year_str = format_iso_year(year);
     let fraction = format_fraction(nanoseconds, digits);
-    return `{year_str}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}{fraction}{suffix}`;
+    return `${year_str}-${month:02}-${day:02}T${hour:02}:${minute:02}:${second:02}${fraction}${suffix}`;
 }
 
 /// Split an epoch-second count into whole days since 1970-01-01 and the
@@ -202,13 +202,13 @@ fn civil_from_days(days: i64) -> [i64, i64, i64] {
 /// `0..=9999`, otherwise a sign followed by six digits.
 fn format_iso_year(year: i64) -> String {
     if year >= 0 && year <= 9999 {
-        return `{year:04}`;
+        return `${year:04}`;
     }
     if year > 9999 {
-        return `+{year:06}`;
+        return `+${year:06}`;
     }
     let magnitude = -year;
-    return `-{magnitude:06}`;
+    return `-${magnitude:06}`;
 }
 
 /// Format the `.fff…` fractional-second suffix, truncated to `digits`
@@ -224,10 +224,10 @@ fn format_fraction(nanoseconds: u32, digits: i32) -> String {
         i = i + 1;
     }
     let value = nanoseconds / divisor;
-    let value_str = `{value}`;
+    let value_str = `${value}`;
     let zeros = digits - value_str.len();
     let padding = if zeros > 0 { "0".repeat(zeros) } else { "" };
-    return `.{padding}{value_str}`;
+    return `.${padding}${value_str}`;
 }
 
 /// Render a `ZonedDateTime` for `Display`/`DisplayAlt`. Only fixed UTC offsets
@@ -263,7 +263,7 @@ fn parse_fixed_offset(zone: &String) -> i64 {
         && is_ascii_digit(zone.get_byte_unchecked(5));
     if !well_formed {
         panic(
-            `core:temporal: cannot Display a ZonedDateTime whose time zone "{zone}" is not a fixed UTC offset; only "Z", "UTC", and ±HH:MM are supported (IANA zone offset resolution is future work)`,
+            `core:temporal: cannot Display a ZonedDateTime whose time zone "${zone}" is not a fixed UTC offset; only "Z", "UTC", and ±HH:MM are supported (IANA zone offset resolution is future work)`,
         );
     }
     let hours = (zone.get_byte_unchecked(1) - '0' as u8) as i64 * 10 + (zone.get_byte_unchecked(2) - '0' as u8) as i64;
@@ -288,7 +288,7 @@ fn format_offset_suffix(offset_seconds: i64) -> String {
     let magnitude = if offset_seconds < 0 { -offset_seconds } else { offset_seconds };
     let hours = magnitude / 3600;
     let minutes = magnitude % 3600 / 60;
-    return `{sign}{hours:02}:{minutes:02}`;
+    return `${sign}${hours:02}:${minutes:02}`;
 }
 
 // Accessors.
@@ -642,7 +642,7 @@ fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
 /// `DeserializeError` on mismatch or end of input.
 fn expect_byte(text: &String, i: i32, byte: u8) -> Result<i32, DeserializeError> {
     if i >= text.len() || text.get_byte_unchecked(i) != byte {
-        return Result::Err(DeserializeError::malformed(`expected '{byte as char}'`, i as i64));
+        return Result::Err(DeserializeError::malformed(`expected '${byte as char}'`, i as i64));
     }
     return Result::Ok(i + 1);
 }

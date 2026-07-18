@@ -67,12 +67,12 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
         Err(Parse(pe)) => {
             let which = if pe.0 == req.primary.path { "primary" } else { "supplementary" };
             return Result::Err(Error::InvalidSchema(
-                `gale: failed to parse {which} grammar '{pe.0}': {pe.1}`,
+                `gale: failed to parse ${which} grammar '${pe.0}': ${pe.1}`,
             ));
         },
         Err(Check(msg)) => {
             return Result::Err(Error::InvalidSchema(
-                `gale: unresolved rule references in '{req.primary.path}': {msg}`,
+                `gale: unresolved rule references in '${req.primary.path}': ${msg}`,
             ));
         },
     };
@@ -91,7 +91,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
                 },
                 Err(e) => {
                     return Result::Err(Error::InvalidSchema(
-                        `gale: invalid highlight query '{scm.0}' at {e.line}:{e.col}: {e.message}`,
+                        `gale: invalid highlight query '${scm.0}' at ${e.line}:${e.col}: ${e.message}`,
                     ));
                 },
             }
@@ -113,7 +113,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
         KilnHost::emit_diagnostic(KilnDiagnostic {
             level: DiagnosticLevel::Warning,
             span: null,
-            message: `gale: {d.rule}: {d.message}`,
+            message: `gale: ${d.rule}: ${d.message}`,
         });
     }
     let wado_source = generated.source;
@@ -127,7 +127,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
     let entry_name = to_snake_case(&grammar.name);
     let files: List<OutputFile> = [
         OutputFile {
-            path: `{entry_name}.wado`,
+            path: `${entry_name}.wado`,
             content: wado_source,
             is_entry: true,
         },

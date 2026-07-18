@@ -6,24 +6,24 @@ use { wrap_and_double, quad_wrap, transform } from "./sub/generic_level2.wado";
 export fn run() with Stdout {
     // Test direct level1 calls
     let x = wrap::<i32>(42);
-    println(`wrap(42) = {x}`);
+    println(`wrap(42) = ${x}`);
 
     let y = apply_twice::<i32>(10);
-    println(`apply_twice(10) = {y}`);
+    println(`apply_twice(10) = ${y}`);
 
     // Test level2 calls (which internally call level1)
     let pair = wrap_and_double::<i32>(5);
-    println(`wrap_and_double(5) = [{pair.0}, {pair.1}]`);
+    println(`wrap_and_double(5) = [${pair.0}, ${pair.1}]`);
 
     let quad = quad_wrap::<i32>(7);
-    println(`quad_wrap(7) = {quad}`);
+    println(`quad_wrap(7) = ${quad}`);
 
     // Test with different types
     let s = wrap::<String>("hello");
-    println(`wrap(hello) = {s}`);
+    println(`wrap(hello) = ${s}`);
 
     let s2 = quad_wrap::<String>("world");
-    println(`quad_wrap(world) = {s2}`);
+    println(`quad_wrap(world) = ${s2}`);
 }
 
 __DATA__

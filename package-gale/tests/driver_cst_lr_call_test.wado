@@ -10,9 +10,9 @@ use lc from "./grammars/lr_call.g4"
 
 fn chk(input: &String, expected: &String) {
     let r = lc::parse(input);
-    assert r.ok(), `unexpected diagnostics for {*input}: {lc::to_string_tree(&r)}`;
+    assert r.ok(), `unexpected diagnostics for ${*input}: ${lc::to_string_tree(&r)}`;
     let a = lc::to_string_tree(&r);
-    assert a == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {a}`;
+    assert a == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${a}`;
 }
 
 test "call: nested call arg stays a full expr" {

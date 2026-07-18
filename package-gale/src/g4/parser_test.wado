@@ -177,7 +177,7 @@ EMOJI : [\\u{1F600}] ;";
     let body = &g.lexer_rules[0].body;
     if let CharClass(cc) = body[0].elements[0] {
         assert cc.ranges.len() == 1;
-        assert cc.ranges[0].start == '\u{1F600}', `start={cc.ranges[0].start as i32}`;
+        assert cc.ranges[0].start == '\u{1F600}', `start=${cc.ranges[0].start as i32}`;
     } else {
         panic("expected CharClass");
     }
@@ -189,10 +189,10 @@ C : [\\u0041\\b\\f] ;";
     let g = parse(input).unwrap();
     let body = &g.lexer_rules[0].body;
     if let CharClass(cc) = body[0].elements[0] {
-        assert cc.ranges.len() == 3, `len={cc.ranges.len()}`;
-        assert cc.ranges[0].start == 'A', `0={cc.ranges[0].start as i32}`;
-        assert cc.ranges[1].start == '\u0008', `1={cc.ranges[1].start as i32}`;
-        assert cc.ranges[2].start == '\u000C', `2={cc.ranges[2].start as i32}`;
+        assert cc.ranges.len() == 3, `len=${cc.ranges.len()}`;
+        assert cc.ranges[0].start == 'A', `0=${cc.ranges[0].start as i32}`;
+        assert cc.ranges[1].start == '\u0008', `1=${cc.ranges[1].start as i32}`;
+        assert cc.ranges[2].start == '\u000C', `2=${cc.ranges[2].start as i32}`;
     } else {
         panic("expected CharClass");
     }
@@ -210,7 +210,7 @@ R : [\\u0041-\\u005A] ;";
     let body = &g.lexer_rules[0].body;
     if let CharClass(cc) = body[0].elements[0] {
         assert cc.ranges.len() == 1;
-        assert cc.ranges[0].start == 'A' && cc.ranges[0].end == 'Z', `{cc.ranges[0].start as i32}-{cc.ranges[0].end as i32}`;
+        assert cc.ranges[0].start == 'A' && cc.ranges[0].end == 'Z', `${cc.ranges[0].start as i32}-${cc.ranges[0].end as i32}`;
     } else {
         panic("expected CharClass");
     }
@@ -431,10 +431,10 @@ DOC : '///' -> channel(DOCS) ;";
     assert g.lexer_rules.len() == 2;
     for let r of &g.lexer_rules {
         if r.name == "COMMENT" {
-            assert r.channel == 2, `COMMENT channel {r.channel}`;
+            assert r.channel == 2, `COMMENT channel ${r.channel}`;
         }
         if r.name == "DOC" {
-            assert r.channel == 3, `DOC channel {r.channel}`;
+            assert r.channel == 3, `DOC channel ${r.channel}`;
         }
     }
 }
@@ -525,12 +525,12 @@ test "prequel args / returns / locals retained as AttrDecls" {
 expr[int _p, String name] returns [int v, List<String> ignored] locals [int i] : ID ;";
     let g = parse(input).unwrap();
     let r = &g.parser_rules[0];
-    assert r.args.len() == 2, `args: {r.args.len()}`;
-    assert r.args[0].type_text == "int" && r.args[0].name == "_p", `arg0: {r.args[0].type_text}/{r.args[0].name}`;
-    assert r.args[1].type_text == "String" && r.args[1].name == "name", `arg1: {r.args[1].type_text}/{r.args[1].name}`;
-    assert r.returns_decls.len() == 2, `returns: {r.returns_decls.len()}`;
+    assert r.args.len() == 2, `args: ${r.args.len()}`;
+    assert r.args[0].type_text == "int" && r.args[0].name == "_p", `arg0: ${r.args[0].type_text}/${r.args[0].name}`;
+    assert r.args[1].type_text == "String" && r.args[1].name == "name", `arg1: ${r.args[1].type_text}/${r.args[1].name}`;
+    assert r.returns_decls.len() == 2, `returns: ${r.returns_decls.len()}`;
     assert r.returns_decls[0].type_text == "int" && r.returns_decls[0].name == "v";
-    assert r.returns_decls[1].type_text == "List<String>" && r.returns_decls[1].name == "ignored", `ret1: {r.returns_decls[1].type_text}/{r.returns_decls[1].name}`;
+    assert r.returns_decls[1].type_text == "List<String>" && r.returns_decls[1].name == "ignored", `ret1: ${r.returns_decls[1].type_text}/${r.returns_decls[1].name}`;
     assert r.locals_decls.len() == 1 && r.locals_decls[0].name == "i";
     assert r.throws.len() == 0;
 }
@@ -540,11 +540,11 @@ test "prequel attr decls with initializers" {
 r returns [int i = 0, String s = \"x\"] locals [int n = f(1, 2)] : ID ;";
     let g = parse(input).unwrap();
     let r = &g.parser_rules[0];
-    assert r.returns_decls.len() == 2, `returns: {r.returns_decls.len()}`;
-    assert r.returns_decls[0].type_text == "int" && r.returns_decls[0].name == "i", `ret0: {r.returns_decls[0].type_text}/{r.returns_decls[0].name}`;
-    assert r.returns_decls[1].type_text == "String" && r.returns_decls[1].name == "s", `ret1: {r.returns_decls[1].type_text}/{r.returns_decls[1].name}`;
-    assert r.locals_decls.len() == 1, `locals: {r.locals_decls.len()}`;
-    assert r.locals_decls[0].type_text == "int" && r.locals_decls[0].name == "n", `loc0: {r.locals_decls[0].type_text}/{r.locals_decls[0].name}`;
+    assert r.returns_decls.len() == 2, `returns: ${r.returns_decls.len()}`;
+    assert r.returns_decls[0].type_text == "int" && r.returns_decls[0].name == "i", `ret0: ${r.returns_decls[0].type_text}/${r.returns_decls[0].name}`;
+    assert r.returns_decls[1].type_text == "String" && r.returns_decls[1].name == "s", `ret1: ${r.returns_decls[1].type_text}/${r.returns_decls[1].name}`;
+    assert r.locals_decls.len() == 1, `locals: ${r.locals_decls.len()}`;
+    assert r.locals_decls[0].type_text == "int" && r.locals_decls[0].name == "n", `loc0: ${r.locals_decls[0].type_text}/${r.locals_decls[0].name}`;
 }
 
 test "action language from string-literal option value" {
@@ -562,8 +562,8 @@ test "prequel throws list retained" {
 expr throws E1, pkg.E2 : ID ;";
     let g = parse(input).unwrap();
     let r = &g.parser_rules[0];
-    assert r.throws.len() == 2, `throws: {r.throws.len()}`;
-    assert r.throws[0] == "E1" && r.throws[1] == "pkg.E2", `throws: {r.throws[0]}, {r.throws[1]}`;
+    assert r.throws.len() == 2, `throws: ${r.throws.len()}`;
+    assert r.throws[0] == "E1" && r.throws[1] == "pkg.E2", `throws: ${r.throws[0]}, ${r.throws[1]}`;
 }
 
 test "prequel @init / @after bodies retained" {
@@ -574,7 +574,7 @@ expr @init { int x = 0; } @after { print(x); } : ID ;";
     assert r.init_action matches { Some(_) }, "init missing";
     assert r.after_action matches { Some(_) }, "after missing";
     if let Some(a) = &r.init_action {
-        assert a.text == " int x = 0; ", `init body: '{a.text}'`;
+        assert a.text == " int x = 0; ", `init body: '${a.text}'`;
     }
 }
 
@@ -583,9 +583,9 @@ test "catch / finally clauses retained on the rule" {
 expr : ID ; catch [E1 e] { h1(e); } catch [E2 e] { h2(e); } finally { done(); }";
     let g = parse(input).unwrap();
     let r = &g.parser_rules[0];
-    assert r.catches.len() == 2, `catches: {r.catches.len()}`;
-    assert r.catches[0].decl_text == "E1 e", `decl0: '{r.catches[0].decl_text}'`;
-    assert r.catches[0].body.text == " h1(e); ", `body0: '{r.catches[0].body.text}'`;
+    assert r.catches.len() == 2, `catches: ${r.catches.len()}`;
+    assert r.catches[0].decl_text == "E1 e", `decl0: '${r.catches[0].decl_text}'`;
+    assert r.catches[0].body.text == " h1(e); ", `body0: '${r.catches[0].body.text}'`;
     assert r.finally_action matches { Some(_) }, "finally missing";
 }
 
@@ -598,7 +598,7 @@ a[int i] : ID ;";
     if let RuleRef(rr) = &s.alternatives[0].elements[0] {
         assert rr.arg_action matches { Some(_) }, "arg_action missing";
         if let Some(a) = &rr.arg_action {
-            assert a.text == "$i", `arg: '{a.text}'`;
+            assert a.text == "$i", `arg: '${a.text}'`;
         }
     } else {
         panic("expected a rule ref");
@@ -610,13 +610,13 @@ test "alternative actions retained in sidecar with positions" {
 r : A {act1();} B {p()}? C ;";
     let g = parse(input).unwrap();
     let alt = &g.parser_rules[0].alternatives[0];
-    assert alt.elements.len() == 3, `elements: {alt.elements.len()}`;
-    assert alt.actions.len() == 2, `actions: {alt.actions.len()}`;
+    assert alt.elements.len() == 3, `elements: ${alt.elements.len()}`;
+    assert alt.actions.len() == 2, `actions: ${alt.actions.len()}`;
     assert alt.actions[0].kind matches { Action }, "act1 kind";
-    assert alt.actions[0].before_index == 1, `act1 pos: {alt.actions[0].before_index}`;
-    assert alt.actions[0].source.text == "act1();", `act1 body: '{alt.actions[0].source.text}'`;
+    assert alt.actions[0].before_index == 1, `act1 pos: ${alt.actions[0].before_index}`;
+    assert alt.actions[0].source.text == "act1();", `act1 body: '${alt.actions[0].source.text}'`;
     assert alt.actions[1].kind matches { Predicate }, "p kind";
-    assert alt.actions[1].before_index == 2, `p pos: {alt.actions[1].before_index}`;
+    assert alt.actions[1].before_index == 2, `p pos: ${alt.actions[1].before_index}`;
 }
 
 test "alt-initial predicate is before_index 0" {
@@ -627,7 +627,7 @@ r : {isOk()}? A | B ;";
     assert alt.elements.len() == 1;
     assert alt.actions.len() == 1;
     assert alt.actions[0].kind matches { Predicate };
-    assert alt.actions[0].before_index == 0, `pos: {alt.actions[0].before_index}`;
+    assert alt.actions[0].before_index == 0, `pos: ${alt.actions[0].before_index}`;
 }
 
 test "lexer alternative actions retained in sidecar" {
@@ -635,10 +635,10 @@ test "lexer alternative actions retained in sidecar" {
 TOK : 'a' {more();} 'b' ;";
     let g = parse(input).unwrap();
     let alt = &g.lexer_rules[0].body[0];
-    assert alt.elements.len() == 2, `elements: {alt.elements.len()}`;
-    assert alt.actions.len() == 1, `actions: {alt.actions.len()}`;
-    assert alt.actions[0].before_index == 1, `pos: {alt.actions[0].before_index}`;
-    assert alt.actions[0].source.text == "more();", `body: '{alt.actions[0].source.text}'`;
+    assert alt.elements.len() == 2, `elements: ${alt.elements.len()}`;
+    assert alt.actions.len() == 1, `actions: ${alt.actions.len()}`;
+    assert alt.actions[0].before_index == 1, `pos: ${alt.actions[0].before_index}`;
+    assert alt.actions[0].source.text == "more();", `body: '${alt.actions[0].source.text}'`;
 }
 
 test "named action bodies retained" {
@@ -648,7 +648,7 @@ start : 'a' ;";
     let g = parse(input).unwrap();
     assert g.named_actions.len() == 1;
     assert g.named_actions[0].name == "members";
-    assert g.named_actions[0].body.text == " int count = 0; ", `body: '{g.named_actions[0].body.text}'`;
+    assert g.named_actions[0].body.text == " int count = 0; ", `body: '${g.named_actions[0].body.text}'`;
 }
 
 test "action language defaults to Java" {
@@ -743,7 +743,7 @@ options {
 }
 rule : ID ;";
     let g = parse(input).unwrap();
-    assert g.options.len() == 3, `got {g.options.len()} options`;
+    assert g.options.len() == 3, `got ${g.options.len()} options`;
     assert g.options[0].name == "caseInsensitive";
     assert_option_ident(&g.options[0], "true");
     assert g.options[1].name == "language";
@@ -799,7 +799,7 @@ rule : ID ;";
     let g = parse(input).unwrap();
     assert g.options.len() == 1;
     if let Action(body) = &g.options[0].value {
-        assert body.text == "some code;", `got action body: '{body.text}'`;
+        assert body.text == "some code;", `got action body: '${body.text}'`;
     } else {
         panic("expected Action option value");
     }
@@ -812,7 +812,7 @@ test "grammar level named actions recorded" {
 @parser::members { /* parser-specific */ }
 rule : ID ;";
     let g = parse(input).unwrap();
-    assert g.named_actions.len() == 3, `got {g.named_actions.len()} actions`;
+    assert g.named_actions.len() == 3, `got ${g.named_actions.len()} actions`;
     assert g.named_actions[0].name == "header";
     if let Some(_) = g.named_actions[0].scope {
         panic("@header should have no scope");
@@ -1707,35 +1707,35 @@ CMT : '//' .*? '\\n' CMT?? ;";
 
 fn assert_option_ident(opt: &GrammarOption, expected: String) {
     if let Ident(v) = &opt.value {
-        assert *v == expected, `option '{opt.name}': expected Ident('{expected}'), got Ident('{*v}')`;
+        assert *v == expected, `option '${opt.name}': expected Ident('${expected}'), got Ident('${*v}')`;
     } else {
-        panic(`option '{opt.name}': expected Ident, got other`);
+        panic(`option '${opt.name}': expected Ident, got other`);
     }
 }
 
 fn assert_option_str(opt: &GrammarOption, expected: String) {
     if let Str(v) = &opt.value {
-        assert *v == expected, `option '{opt.name}': expected Str('{expected}'), got Str('{*v}')`;
+        assert *v == expected, `option '${opt.name}': expected Str('${expected}'), got Str('${*v}')`;
     } else {
-        panic(`option '{opt.name}': expected Str, got other`);
+        panic(`option '${opt.name}': expected Str, got other`);
     }
 }
 
 fn assert_option_int(opt: &GrammarOption, expected: i64) {
     if let Int(n) = &opt.value {
-        assert *n == expected, `option '{opt.name}': expected Int({expected}), got Int({*n})`;
+        assert *n == expected, `option '${opt.name}': expected Int(${expected}), got Int(${*n})`;
     } else {
-        panic(`option '{opt.name}': expected Int, got other`);
+        panic(`option '${opt.name}': expected Int, got other`);
     }
 }
 
 fn assert_option_qualified(opt: &GrammarOption, expected: List<String>) {
     if let Qualified(parts) = &opt.value {
-        assert parts.len() == expected.len(), `option '{opt.name}': expected {expected.len()} parts, got {parts.len()}`;
+        assert parts.len() == expected.len(), `option '${opt.name}': expected ${expected.len()} parts, got ${parts.len()}`;
         for let mut i = 0; i < parts.len(); i += 1 {
-            assert parts[i] == expected[i], `option '{opt.name}': part {i}: expected '{expected[i]}', got '{parts[i]}'`;
+            assert parts[i] == expected[i], `option '${opt.name}': part ${i}: expected '${expected[i]}', got '${parts[i]}'`;
         }
     } else {
-        panic(`option '{opt.name}': expected Qualified, got other`);
+        panic(`option '${opt.name}': expected Qualified, got other`);
     }
 }

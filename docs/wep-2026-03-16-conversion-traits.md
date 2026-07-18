@@ -56,7 +56,7 @@ Usage is always explicit via `Type::from(value)`:
 ```wado
 impl From<i32> for String {
     fn from(value: i32) -> String {
-        return `{value}`;
+        return `${value}`;
     }
 }
 
@@ -83,7 +83,7 @@ impl TryFrom<i64> for u8 {
     type Error = String;
     fn try_from(value: i64) -> Result<u8, String> {
         if value < 0 || value > 255 {
-            return Result::<u8, String>::Err(`{value} out of range for u8`);
+            return Result::<u8, String>::Err(`${value} out of range for u8`);
         }
         return Result::<u8, String>::Ok(value as u8);
     }
@@ -233,7 +233,7 @@ The auto-generated `From` impls enable newtypes to participate in generic code:
 ```wado
 fn print_id<T: From<u64>>(raw: u64) {
     let id = T::from(raw);
-    println(`{id}`);
+    println(`${id}`);
 }
 print_id::<UserId>(42);
 ```
@@ -309,7 +309,7 @@ A parameter modifier that performs conversion at the call site without monomorph
 
 ```wado
 fn greet(name: String from &str) with Stdout {
-    println(`Hello, {name}!`);
+    println(`Hello, ${name}!`);
 }
 greet("world");  // compiler inserts String::from("world") at call site
 ```

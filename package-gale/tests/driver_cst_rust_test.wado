@@ -16,73 +16,73 @@ use { normalize_tree } from "./grammars/RustLexer.g4";
 
 test "tokenize fn declaration" {
     let tokens = rust::tokenize(&"fn main() {}");
-    assert tokens.len() >= 5, `expected at least 5 tokens, got {tokens.len()}`;
+    assert tokens.len() >= 5, `expected at least 5 tokens, got ${tokens.len()}`;
     let first = rust::token_kind_name(tokens.kinds[0]);
-    assert first == "KW_FN", `expected KW_FN, got {first}`;
+    assert first == "KW_FN", `expected KW_FN, got ${first}`;
 }
 
 test "tokenize struct" {
     let tokens = rust::tokenize(&"struct Point { x: i32, y: i32 }");
-    assert tokens.len() >= 8, `expected at least 8 tokens, got {tokens.len()}`;
+    assert tokens.len() >= 8, `expected at least 8 tokens, got ${tokens.len()}`;
     let first = rust::token_kind_name(tokens.kinds[0]);
-    assert first == "KW_STRUCT", `expected KW_STRUCT, got {first}`;
+    assert first == "KW_STRUCT", `expected KW_STRUCT, got ${first}`;
 }
 
 test "tokenize enum" {
     let tokens = rust::tokenize(&"enum Color { Red, Green, Blue }");
-    assert tokens.len() >= 8, `expected at least 8 tokens, got {tokens.len()}`;
+    assert tokens.len() >= 8, `expected at least 8 tokens, got ${tokens.len()}`;
     let first = rust::token_kind_name(tokens.kinds[0]);
-    assert first == "KW_ENUM", `expected KW_ENUM, got {first}`;
+    assert first == "KW_ENUM", `expected KW_ENUM, got ${first}`;
 }
 
 test "tokenize impl block" {
     let tokens = rust::tokenize(&"impl Point { fn new() -> Self { Self { x: 0, y: 0 } } }");
-    assert tokens.len() >= 15, `expected at least 15 tokens, got {tokens.len()}`;
+    assert tokens.len() >= 15, `expected at least 15 tokens, got ${tokens.len()}`;
     let first = rust::token_kind_name(tokens.kinds[0]);
-    assert first == "KW_IMPL", `expected KW_IMPL, got {first}`;
+    assert first == "KW_IMPL", `expected KW_IMPL, got ${first}`;
 }
 
 test "tokenize use statement" {
     let tokens = rust::tokenize(&"use std::collections::HashMap;");
-    assert tokens.len() >= 5, `expected at least 5 tokens, got {tokens.len()}`;
+    assert tokens.len() >= 5, `expected at least 5 tokens, got ${tokens.len()}`;
     let first = rust::token_kind_name(tokens.kinds[0]);
-    assert first == "KW_USE", `expected KW_USE, got {first}`;
+    assert first == "KW_USE", `expected KW_USE, got ${first}`;
 }
 
 test "tokenize trait" {
     let tokens = rust::tokenize(&"trait Foo { fn bar(&self); }");
-    assert tokens.len() >= 8, `expected at least 8 tokens, got {tokens.len()}`;
+    assert tokens.len() >= 8, `expected at least 8 tokens, got ${tokens.len()}`;
     let first = rust::token_kind_name(tokens.kinds[0]);
-    assert first == "KW_TRAIT", `expected KW_TRAIT, got {first}`;
+    assert first == "KW_TRAIT", `expected KW_TRAIT, got ${first}`;
 }
 
 test "tokenize match expression" {
     let tokens = rust::tokenize(&"match x { 1 => true, _ => false }");
-    assert tokens.len() >= 10, `expected at least 10 tokens, got {tokens.len()}`;
+    assert tokens.len() >= 10, `expected at least 10 tokens, got ${tokens.len()}`;
     let first = rust::token_kind_name(tokens.kinds[0]);
-    assert first == "KW_MATCH", `expected KW_MATCH, got {first}`;
+    assert first == "KW_MATCH", `expected KW_MATCH, got ${first}`;
 }
 
 test "tokenize lifetime" {
     let tokens = rust::tokenize(&"fn foo<'a>(x: &'a str) -> &'a str { x }");
-    assert tokens.len() >= 10, `expected at least 10 tokens, got {tokens.len()}`;
+    assert tokens.len() >= 10, `expected at least 10 tokens, got ${tokens.len()}`;
 }
 
 test "tokenize closure" {
     let tokens = rust::tokenize(&"|x: i32| x + 1");
-    assert tokens.len() >= 5, `expected at least 5 tokens, got {tokens.len()}`;
+    assert tokens.len() >= 5, `expected at least 5 tokens, got ${tokens.len()}`;
 }
 
 test "tokenize macro invocation" {
     let tokens = rust::tokenize(&"println!(\"hello {}\", name);");
-    assert tokens.len() >= 5, `expected at least 5 tokens, got {tokens.len()}`;
+    assert tokens.len() >= 5, `expected at least 5 tokens, got ${tokens.len()}`;
 }
 
 
 test "parse empty crate" {
     let result = rust::parse(&"");
     if !result.ok() {
-        panic(`parse failed: {result.diagnostics[0].message}`);
+        panic(`parse failed: ${result.diagnostics[0].message}`);
     }
 }
 
@@ -113,7 +113,7 @@ test "fn keyword requires semantic predicates" {
 test "tree: bare `return` as if condition (caller-FOLLOW gate)" {
     let r = rust::parse(&"const X: i32 = if return { 1 } else { 2 };");
     if !r.ok() {
-        panic(`parse failed: {r.diagnostics[0].message}`);
+        panic(`parse failed: ${r.diagnostics[0].message}`);
     }
 }
 
@@ -122,7 +122,7 @@ fn assert_tree(input: &String, expected: &String) {
     let result = rust::parse(input);
     let actual = rust::to_string_tree(&result);
     let norm = normalize_tree(expected);
-    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+    assert actual == norm, `\ninput:    ${*input}\nexpected: ${norm}\nactual:   ${actual}`;
 }
 
 test "tree: operator precedence" {

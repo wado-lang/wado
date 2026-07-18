@@ -10,16 +10,16 @@ export fn run() with Stdout {
 
     // Allocate a smaller block — carved from the freed large block.
     let small1 = builtin::realloc(0, 0, 8, 64);
-    assert small1 == big, `expected split from freed block: big={big}, small1={small1}`;
+    assert small1 == big, `expected split from freed block: big=${big}, small1=${small1}`;
 
     // The next small block comes from the split remainder. A 64-byte
     // payload occupies an 80-byte block (16 bytes of boundary tags).
     let small2 = builtin::realloc(0, 0, 8, 64);
-    assert small2 == big + 80, `expected split remainder: expected={big + 80}, small2={small2}`;
+    assert small2 == big + 80, `expected split remainder: expected=${big + 80}, small2=${small2}`;
 
     // And again, a 128-byte payload (144-byte block) from what is left.
     let small3 = builtin::realloc(0, 0, 8, 128);
-    assert small3 == big + 160, `expected from remainder: expected={big + 160}, small3={small3}`;
+    assert small3 == big + 160, `expected from remainder: expected=${big + 160}, small3=${small3}`;
 
     println("ok");
 }

@@ -121,7 +121,7 @@ impl Lexer {
         if is_ident_start(c) {
             return self.lex_ident(line, col);
         }
-        return Result::Err(HighlightQueryError { message: `unexpected character '{c}'`, line, col });
+        return Result::Err(HighlightQueryError { message: `unexpected character '${c}'`, line, col });
     }
 
     fn lex_string(&mut self, line: i32, col: i32) -> Result<Lexeme, HighlightQueryError> {
@@ -149,7 +149,7 @@ impl Lexer {
                     // is UTF-8.
                     _ => {
                         return Result::Err(HighlightQueryError {
-                            message: `unsupported escape '\\{e}' in string literal`,
+                            message: `unsupported escape '\\${e}' in string literal`,
                             line,
                             col,
                         });

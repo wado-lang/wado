@@ -19,7 +19,7 @@ struct Data {
 
 fn make_data(n: i32) -> Result<Data, String> {
     if n > 0 {
-        return Result::<Data, String>::Ok(Data { x: n, y: n * 2, name: `item_{n}` });
+        return Result::<Data, String>::Ok(Data { x: n, y: n * 2, name: `item_${n}` });
     }
     return Result::<Data, String>::Err("negative");
 }
@@ -27,11 +27,11 @@ fn make_data(n: i32) -> Result<Data, String> {
 export fn run() with Stdout {
     let result = make_data(5);
     if let Ok(data) = result {
-        println(`{data.x} {data.y} {data.name}`);
+        println(`${data.x} ${data.y} ${data.name}`);
     }
     let result2 = make_data(10);
     if let Ok(d) = result2 {
-        println(`{d.x} {d.y} {d.name}`);
+        println(`${d.x} ${d.y} ${d.name}`);
     }
 }
 

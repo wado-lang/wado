@@ -10,13 +10,13 @@ use ma from "./grammars/wado_multi_arg.g4"
 test "arg and @init seed reach an overlapping alt via the _alt_n helper" {
     let ab = ma::parse(&"a b");
     assert ab.ok(), "clean parse of a b";
-    assert ab.output == "sum=100", `output: '{ab.output}'`;
+    assert ab.output == "sum=100", `output: '${ab.output}'`;
 
     let ac = ma::parse(&"a c");
     assert ac.ok(), "clean parse of a c";
-    assert ac.output == "alt2 100", `output: '{ac.output}'`;
+    assert ac.output == "alt2 100", `output: '${ac.output}'`;
 
     let d = ma::parse(&"d");
     assert d.ok(), "clean parse of d";
-    assert d.output == "d 100", `output: '{d.output}'`;
+    assert d.output == "d 100", `output: '${d.output}'`;
 }

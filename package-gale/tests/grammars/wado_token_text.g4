@@ -8,7 +8,7 @@ grammar WadoTokenText;
 
 options { language = Wado; }
 
-r : a=ID '+' b=ID { p.emit(`{$a.text}-{$b.text}`); } ;
+r : a=ID '+' b=ID { p.emit(`${$a.text}-${$b.text}`); } ;
 
 ID : [a-z]+ ;
 WS : ' ' -> skip ;

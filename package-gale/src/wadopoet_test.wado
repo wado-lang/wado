@@ -48,7 +48,7 @@ test "begin/end block" {
     w.line(&"y: i32,");
     w.end();
     let expected = "struct Foo {\n    x: i32,\n    y: i32,\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
 }
 
 test "nested blocks" {
@@ -59,7 +59,7 @@ test "nested blocks" {
     w.end();
     w.end();
     let expected = "impl Foo {\n    fn bar(&self) -> i32 {\n        return self.x;\n    }\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
 }
 
 test "end_with suffix" {
@@ -70,7 +70,7 @@ test "end_with suffix" {
     w.end_with(&",");
     w.end();
     let expected = "variant Shape {\n    Circle {\n        radius: f64,\n    },\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
 }
 
 test "write with embedded newlines" {
@@ -79,7 +79,7 @@ test "write with embedded newlines" {
     w.write(&"let x = 1;\nlet y = 2;\n");
     w.end();
     let expected = "fn foo() {\n    let x = 1;\n    let y = 2;\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
 }
 
 test "raw bypasses indentation" {
@@ -89,7 +89,7 @@ test "raw bypasses indentation" {
     w.line(&"return 1;");
     w.end();
     let expected = "// raw header\nfn foo() {\n    return 1;\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
 }
 
 test "next_id generates unique ids" {
@@ -112,7 +112,7 @@ test "else_begin for if/else-if chain" {
     w.line(&"zero();");
     w.end();
     let expected = "if x > 0 {\n    positive();\n} else if x < 0 {\n    negative();\n} else {\n    zero();\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
 }
 
 test "manual indent/dedent" {
@@ -134,7 +134,7 @@ test "StructSpec basic" {
     let mut w = CodeWriter::new();
     s.emit(&mut w);
     let expected = "struct Point {\n    x: i32,\n    y: i32,\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
 }
 
 test "StructSpec pub with pub fields" {
@@ -145,7 +145,7 @@ test "StructSpec pub with pub fields" {
     let mut w = CodeWriter::new();
     s.emit(&mut w);
     let expected = "pub struct Token {\n    pub kind: i32,\n    pub text: String,\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
 }
 
 test "StructSpec mixed visibility fields" {
@@ -156,7 +156,7 @@ test "StructSpec mixed visibility fields" {
     let mut w = CodeWriter::new();
     s.emit(&mut w);
     let expected = "pub struct Config {\n    pub name: String,\n    secret: i32,\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
 }
 
 test "StructSpec with FieldSpec" {
@@ -178,7 +178,7 @@ test "VariantSpec unit cases" {
     let mut w = CodeWriter::new();
     v.emit(&mut w);
     let expected = "pub variant TokenKind {\n    Number,\n    String,\n    Eof,\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
 }
 
 test "VariantSpec with payloads" {
@@ -190,7 +190,7 @@ test "VariantSpec with payloads" {
     let mut w = CodeWriter::new();
     v.emit(&mut w);
     let expected = "variant Shape {\n    Circle(f64),\n    Rect([f64, f64]),\n    Point,\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
 }
 
 
@@ -203,7 +203,7 @@ test "EnumSpec basic" {
     let mut w = CodeWriter::new();
     e.emit(&mut w);
     let expected = "pub enum Color {\n    Red,\n    Green,\n    Blue,\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
 }
 
 
@@ -218,7 +218,7 @@ test "FnSpec simple" {
     w.line(&"return a + b;");
     w.end();
     let expected = "fn add(a: i32, b: i32) -> i32 {\n    return a + b;\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
 }
 
 test "FnSpec with receiver" {
@@ -251,7 +251,7 @@ test "FnSpec no return type" {
     w.line(&"self.x = 0;");
     w.end();
     let expected = "fn reset(&mut self) {\n    self.x = 0;\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
 }
 
 test "FnSpec signature string" {
@@ -262,7 +262,7 @@ test "FnSpec signature string" {
     f.set_return_type(&"String");
 
     let sig = f.signature();
-    assert sig == "pub fn transform(&self, input: &String, scale: f64) -> String", `got: {sig}`;
+    assert sig == "pub fn transform(&self, input: &String, scale: f64) -> String", `got: ${sig}`;
 }
 
 test "FnSpec export with effects" {
@@ -273,7 +273,7 @@ test "FnSpec export with effects" {
     f.add_effect(&"Environment");
 
     let sig = f.signature();
-    assert sig == "export fn run() with Stdout, Stderr, Environment", `got: {sig}`;
+    assert sig == "export fn run() with Stdout, Stderr, Environment", `got: ${sig}`;
 }
 
 test "FnSpec generic type parameter" {
@@ -283,7 +283,7 @@ test "FnSpec generic type parameter" {
     f.add_param(&"node", &"&StmtNode");
 
     let sig = f.signature();
-    assert sig == "pub fn walk_stmt<V: Visitor>(v: &mut V, node: &StmtNode)", `got: {sig}`;
+    assert sig == "pub fn walk_stmt<V: Visitor>(v: &mut V, node: &StmtNode)", `got: ${sig}`;
 }
 
 test "FnSpec multiple generics" {
@@ -295,7 +295,7 @@ test "FnSpec multiple generics" {
     f.set_return_type(&"[A, B]");
 
     let sig = f.signature();
-    assert sig == "fn zip<A, B>(a: A, b: B) -> [A, B]", `got: {sig}`;
+    assert sig == "fn zip<A, B>(a: A, b: B) -> [A, B]", `got: ${sig}`;
 }
 
 
@@ -348,7 +348,7 @@ test "struct + impl + fn composition" {
     w.end();
 
     let expected = "struct Lexer {\n    chars: List<char>,\n    pos: i32,\n}\n\nimpl Lexer {\n    fn new(input: &String) -> Lexer {\n        return Lexer { chars: input.chars().collect(), pos: 0 };\n    }\n\n    fn at_end(&self) -> bool {\n        return self.pos >= self.chars.len();\n    }\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
 }
 
 test "variant + global composition" {
@@ -366,7 +366,7 @@ test "variant + global composition" {
     GlobalSpec::new("TK_ERROR", "i32", "2").emit(&mut w);
 
     let expected = "pub variant TokenKind {\n    Number,\n    Eof,\n    Error,\n}\n\nglobal TK_Number: i32 = 0;\nglobal TK_EOF: i32 = 1;\nglobal TK_ERROR: i32 = 2;\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
 }
 
 test "chaining builder methods" {
@@ -376,16 +376,16 @@ test "chaining builder methods" {
     let mut w = CodeWriter::new();
     s.emit(&mut w);
     let expected = "pub struct Pair {\n    pub first: i32,\n    pub second: i32,\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
 }
 
 
 test "str_lit wraps and quotes" {
-    assert `{str_lit("foo")}` == "\"foo\"";
+    assert `${str_lit("foo")}` == "\"foo\"";
 }
 
 test "str_lit empty" {
-    assert `{str_lit("")}` == "\"\"";
+    assert `${str_lit("")}` == "\"\"";
 }
 
 test "str_lit escapes quote and backslash" {
@@ -405,12 +405,12 @@ test "str_lit escapes quote and backslash" {
     expected.push('\\');
     expected.push('b');
     expected.push('"');
-    assert `{str_lit(input)}` == expected, `got: {str_lit(input)}`;
+    assert `${str_lit(input)}` == expected, `got: ${str_lit(input)}`;
 }
 
 test "str_lit keeps printable non-ASCII verbatim" {
     // The key contract: Japanese text is NOT \u-escaped.
-    assert `{str_lit("あ")}` == "\"あ\"";
+    assert `${str_lit("あ")}` == "\"あ\"";
 }
 
 test "str_lit escapes control chars" {
@@ -429,11 +429,11 @@ test "str_lit escapes control chars" {
     expected.push('1');
     expected.push('}');
     expected.push('"');
-    assert `{str_lit(input)}` == expected, `got: {str_lit(input)}`;
+    assert `${str_lit(input)}` == expected, `got: ${str_lit(input)}`;
 }
 
 test "char_lit basic" {
-    assert `{char_lit('a')}` == "'a'";
+    assert `${char_lit('a')}` == "'a'";
 }
 
 test "char_lit escapes single quote" {
@@ -443,7 +443,7 @@ test "char_lit escapes single quote" {
     expected.push('\\');
     expected.push('\'');
     expected.push('\'');
-    assert `{char_lit('\'')}` == expected, `got: {char_lit('\'')}`;
+    assert `${char_lit('\'')}` == expected, `got: ${char_lit('\'')}`;
 }
 
 test "char_lit named control" {
@@ -453,25 +453,25 @@ test "char_lit named control" {
     expected.push('\\');
     expected.push('n');
     expected.push('\'');
-    assert `{char_lit('\n')}` == expected, `got: {char_lit('\n')}`;
+    assert `${char_lit('\n')}` == expected, `got: ${char_lit('\n')}`;
 }
 
 test "char_lit keeps printable non-ASCII verbatim" {
-    assert `{char_lit('あ')}` == "'あ'";
+    assert `${char_lit('あ')}` == "'あ'";
 }
 
 test "char_range_pat renders an inclusive range" {
-    assert `{char_range_pat('a'..='z')}` == "'a'..='z'";
+    assert `${char_range_pat('a'..='z')}` == "'a'..='z'";
 }
 
 test "char_range_pat collapses a singleton to one literal" {
-    assert `{char_range_pat('_'..='_')}` == "'_'";
+    assert `${char_range_pat('_'..='_')}` == "'_'";
 }
 
 test "char_range_pat escapes both endpoints" {
     let mut expected = String::new();
     expected.push_str(&"'\\t'..='\\n'");
-    assert `{char_range_pat('\t'..='\n')}` == expected, `got: {char_range_pat('\t'..='\n')}`;
+    assert `${char_range_pat('\t'..='\n')}` == expected, `got: ${char_range_pat('\t'..='\n')}`;
 }
 
 test "ImplSpec basic" {
@@ -485,7 +485,7 @@ test "ImplSpec basic" {
     w.end();
     w.end();
     let expected = "impl Point {\n    fn origin() -> Point {\n        return Point { x: 0, y: 0 };\n    }\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
 }
 
 test "ImplSpec trait impl" {
@@ -501,7 +501,7 @@ test "ImplSpec trait impl" {
     w.end();
     w.end();
     let expected = "impl Eq for Point {\n    fn eq(&self, other: &Self) -> bool {\n        return self.x == other.x && self.y == other.y;\n    }\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
 }
 
 test "struct + impl trait composition" {
@@ -525,5 +525,5 @@ test "struct + impl trait composition" {
     w.end();
 
     let expected = "pub struct Article {\n    pub name: String,\n}\n\nimpl Summary for Article {\n    fn title(&self) -> String {\n        return self.name;\n    }\n}\n";
-    assert w.to_string() == expected, `got: {w.to_string()}`;
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
 }

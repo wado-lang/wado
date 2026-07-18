@@ -10,11 +10,11 @@
 // of `CanonicalClosure_K`.
 
 fn fmt_def(f: fn(i32) -> i32) -> String {
-    return `{f:?}`;
+    return `${f:?}`;
 }
 
 fn fmt_alt(f: fn(i32) -> i32) -> String {
-    return `{f:#?}`;
+    return `${f:#?}`;
 }
 
 struct Holder {
@@ -25,7 +25,7 @@ global mut GLOBAL_CB: fn(i32) -> i32 = |x: i32| x * 10;
 
 test "literal-site :#? still works" {
     let add_one = |x: i32| x + 1;
-    assert `{add_one:#?}` == "|x: i32| (x + 1)";
+    assert `${add_one:#?}` == "|x: i32| (x + 1)";
 }
 
 test "closure passed as fn param keeps signature for :?" {
@@ -40,13 +40,13 @@ test "closure passed as fn param keeps source for :#?" {
 
 test "closure stored in struct field keeps source for :#?" {
     let h = Holder { cb: |y: i32| y * 2 };
-    assert `{h.cb:#?}` == "|y: i32| (y * 2)";
+    assert `${h.cb:#?}` == "|y: i32| (y * 2)";
 }
 
 test "let-bound closure stored in struct field then read back keeps source for :#?" {
     let inner = |a: i32| a * 3;
     let h = Holder { cb: inner };
-    assert `{h.cb:#?}` == "|a: i32| (a * 3)";
+    assert `${h.cb:#?}` == "|a: i32| (a * 3)";
 }
 
 test "let-bound closure stored in struct field passed across fn boundary keeps source" {
@@ -60,15 +60,15 @@ test "specialised closure formatted via Display falls through to Inspect output"
     // Display (`{f}`) and DisplayAlt (`{f:#}`) both render the signature:
     // DisplayAlt delegates to Display, not InspectAlt. The per-literal source
     // form is on the inspect side, via `{f:#?}`.
-    assert `{f}` == "|i32| -> i32";
-    assert `{f:#}` == "|i32| -> i32";
-    assert `{f:#?}` == "|x: i32| (x + 1)";
+    assert `${f}` == "|i32| -> i32";
+    assert `${f:#}` == "|i32| -> i32";
+    assert `${f:#?}` == "|x: i32| (x + 1)";
 }
 
 test "capturing closure shows captures clause in :#?" {
     let n = 7;
     let f = |x: i32| x + n;
-    assert `{f:#?}` == "|x: i32| captures[n] (x + n)";
+    assert `${f:#?}` == "|x: i32| captures[n] (x + n)";
 }
 
 test "capturing closure passed through fn parameter keeps captures clause for :#?" {
@@ -82,16 +82,16 @@ test "capturing closure stored in struct field keeps captures clause for :#?" {
     let h = Holder {
         cb: |y: i32| y * multiplier,
     };
-    assert `{h.cb:#?}` == "|y: i32| captures[multiplier] (y * multiplier)";
+    assert `${h.cb:#?}` == "|y: i32| captures[multiplier] (y * multiplier)";
 }
 
 test "closure stored in global keeps source for :#?" {
     GLOBAL_CB = |z: i32| z + 100;
-    assert `{GLOBAL_CB:#?}` == "|z: i32| (z + 100)";
+    assert `${GLOBAL_CB:#?}` == "|z: i32| (z + 100)";
 }
 
 test "closure stored in global keeps signature for :?" {
-    assert `{GLOBAL_CB:?}` == "|i32| -> i32";
+    assert `${GLOBAL_CB:?}` == "|i32| -> i32";
 }
 
 fn returns_closure() -> fn(i32) -> i32 {
@@ -100,11 +100,11 @@ fn returns_closure() -> fn(i32) -> i32 {
 
 test "closure escaped through return value keeps source for :#?" {
     let r = returns_closure();
-    assert `{r:#?}` == "|k: i32| (k + 42)";
+    assert `${r:#?}` == "|k: i32| (k + 42)";
 }
 
 test "closure rebound to another local keeps source for :#?" {
     let inner = |m: i32| m * 7;
     let alias = inner;
-    assert `{alias:#?}` == "|m: i32| (m * 7)";
+    assert `${alias:#?}` == "|m: i32| (m * 7)";
 }

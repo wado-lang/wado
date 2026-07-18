@@ -11,6 +11,11 @@ crate-type = ["cdylib"]
 
 [dependencies]
 wado-compiler = { path = "../wado-compiler" }
+# Bundled into the same cdylib so the browser gets the LSP engine without a
+# second copy of the compiler. The VS Code extension keeps its own wasip1 stdio
+# build of the `wado-lsp` binary; this is the wasm32-unknown-unknown library path.
+wado-lsp = { path = "../wado-lsp" }
+serde_json = { workspace = true }
 
 [lints]
 workspace = true

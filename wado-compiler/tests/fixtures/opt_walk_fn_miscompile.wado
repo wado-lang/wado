@@ -128,8 +128,8 @@ struct WalkField {
 
 fn gen_walk_field(w: &mut Writer, field: &WalkField, var: &String) {
     match &field.action {
-        VisitToken => w.line(&`v.visit_token(&{*var}.{field.name});`),
-        WalkRule(rn) => w.line(&`walk_{*rn}(v, &{*var}.{field.name});`),
+        VisitToken => w.line(&`v.visit_token(&${*var}.${field.name});`),
+        WalkRule(rn) => w.line(&`walk_${*rn}(v, &${*var}.${field.name});`),
     };
 }
 
@@ -137,9 +137,9 @@ fn build_walk_fields(n: i32) -> List<WalkField> {
     let mut fields: List<WalkField> = [];
     for let mut i = 0; i < n; i += 1 {
         if i % 2 == 0 {
-            fields.push(WalkField { name: `f{Dec { value: i }}`, action: WalkAction::VisitToken });
+            fields.push(WalkField { name: `f${Dec { value: i }}`, action: WalkAction::VisitToken });
         } else {
-            fields.push(WalkField { name: `f{Dec { value: i }}`, action: WalkAction::WalkRule(`r{Dec { value: i }}`) });
+            fields.push(WalkField { name: `f${Dec { value: i }}`, action: WalkAction::WalkRule(`r${Dec { value: i }}`) });
         }
     }
     return fields;
@@ -148,23 +148,23 @@ fn build_walk_fields(n: i32) -> List<WalkField> {
 fn build_case_names(n: i32) -> List<String> {
     let mut names: List<String> = [];
     for let mut i = 0; i < n; i += 1 {
-        names.push(`Alt{Dec { value: i }}`);
+        names.push(`Alt${Dec { value: i }}`);
     }
     return names;
 }
 
 fn gen_walk_fn(w: &mut Writer, rule_name: &String, n_alts: i32, n_fields: i32) {
-    w.begin(&`pub fn walk_{*rule_name}<V: Visitor>(v: &mut V, node: &Node)`);
+    w.begin(&`pub fn walk_${*rule_name}<V: Visitor>(v: &mut V, node: &Node)`);
     let case_names = build_case_names(n_alts);
     w.begin(&"match node");
     for let mut i = 0; i < n_alts; i += 1 {
-        w.begin(&`{case_names[i]}(n) =>`);
-        w.line(&`v.enter_rule({Dec { value: i }}, &"{*rule_name}", &n.span);`);
+        w.begin(&`${case_names[i]}(n) =>`);
+        w.line(&`v.enter_rule(${Dec { value: i }}, &"${*rule_name}", &n.span);`);
         let fields = build_walk_fields(n_fields);
         for let f of &fields {
             gen_walk_field(w, f, &"n");
         }
-        w.line(&`v.exit_rule({Dec { value: i }}, &"{*rule_name}", &n.span);`);
+        w.line(&`v.exit_rule(${Dec { value: i }}, &"${*rule_name}", &n.span);`);
         w.end();
     }
     w.end();
@@ -174,9 +174,9 @@ fn gen_walk_fn(w: &mut Writer, rule_name: &String, n_alts: i32, n_fields: i32) {
 export fn run() {
     let mut w = Writer::new();
     gen_walk_fn(&mut w, &"e", 3, 2);
-    assert w.indent_level == 0, `expected level=0 after gen_walk_fn(3, 2), got {w.indent_level}`;
+    assert w.indent_level == 0, `expected level=0 after gen_walk_fn(3, 2), got ${w.indent_level}`;
     gen_walk_fn(&mut w, &"stmt", 4, 3);
-    assert w.indent_level == 0, `expected level=0 after gen_walk_fn(4, 3), got {w.indent_level}`;
+    assert w.indent_level == 0, `expected level=0 after gen_walk_fn(4, 3), got ${w.indent_level}`;
 }
 
 __DATA__

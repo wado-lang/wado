@@ -254,9 +254,9 @@ where T: Reflect<Fields = [..F]>
         let values: [..F] = Reflect::<T>::fields(self);
         let mut parts: List<String> = [];
         for let [i, v] of values.enumerate() {
-            parts.push(`{names[i]}: {v.inspect()}`);
+            parts.push(`${names[i]}: ${v.inspect()}`);
         }
-        return `{Reflect::<T>::type_name()} \{ {parts.join(", ")} \}`;
+        return `${Reflect::<T>::type_name()} \{ ${parts.join(", ")} \}`;
     }
 }
 ```
@@ -338,7 +338,7 @@ impl<..T: Inspect> Inspect for [..T] {
         for let v of *self {
             parts.push(v.inspect());
         }
-        return `[{parts.join(", ")}]`;
+        return `[${parts.join(", ")}]`;
     }
 }
 ```
@@ -379,9 +379,9 @@ where T: Reflect<Fields = [..F]>
         let values: [..F] = Reflect::<T>::fields(self);
         let mut parts: List<String> = [];
         for let [i, v] of values.enumerate() {
-            parts.push(`{names[i]}: {v.inspect()}`);
+            parts.push(`${names[i]}: ${v.inspect()}`);
         }
-        return `{Reflect::<T>::type_name()} \{ {parts.join(", ")} \}`;
+        return `${Reflect::<T>::type_name()} \{ ${parts.join(", ")} \}`;
     }
 }
 ```

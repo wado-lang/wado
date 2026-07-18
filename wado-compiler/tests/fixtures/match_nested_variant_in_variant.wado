@@ -5,7 +5,7 @@ use { println, Stdout } from "core:cli";
 export fn run() with Stdout {
     let nested = Option::Some(Option::Some(42));
     let result = match nested {
-        Some(Some(n)) => `inner: {n}`,
+        Some(Some(n)) => `inner: ${n}`,
         Some(None) => "some-none",
         None => "none",
     };
@@ -14,7 +14,7 @@ export fn run() with Stdout {
     let inner: Option<i32> = null;
     let outer_some = Option::Some(inner);
     let result2 = match outer_some {
-        Some(Some(n)) => `inner: {n}`,
+        Some(Some(n)) => `inner: ${n}`,
         Some(None) => "some-none",
         None => "none",
     };
@@ -22,7 +22,7 @@ export fn run() with Stdout {
 
     let outer_none: Option<Option<i32>> = null;
     let result3 = match outer_none {
-        Some(Some(n)) => `inner: {n}`,
+        Some(Some(n)) => `inner: ${n}`,
         Some(None) => "some-none",
         None => "none",
     };

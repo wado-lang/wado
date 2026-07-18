@@ -42,7 +42,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
     let grammars = match open_dir(&root, &grammars_root(), false) {
         Ok(d) => d,
         Err(_) => {
-            eprintln(`expand: cannot open '{grammars_root()}' — run from the repository root`);
+            eprintln(`expand: cannot open '${grammars_root()}' — run from the repository root`);
             exit(1);
         },
     };
@@ -54,7 +54,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
         let cat_dir = match open_dir(&grammars, &category, true) {
             Ok(d) => d,
             Err(_) => {
-                eprintln(`expand: cannot open category '{category}'`);
+                eprintln(`expand: cannot open category '${category}'`);
                 exit(1);
             },
         };
@@ -63,26 +63,26 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
             let text = match read_file_to_string(&cat_dir, &name) {
                 Ok(s) => s,
                 Err(_) => {
-                    eprintln(`expand: cannot read {category}/{name}`);
+                    eprintln(`expand: cannot read ${category}/${name}`);
                     exit(1);
                 },
             };
             let outcome = expand_action_templates(&text);
             for let w of outcome.warnings {
-                eprintln(`expand: {category}/{name}: {w}`);
+                eprintln(`expand: ${category}/${name}: ${w}`);
                 warned += 1;
             }
             if outcome.text == text {
                 continue;
             }
             if let Err(_) = write_file_string(&cat_dir, &name, &outcome.text) {
-                eprintln(`expand: cannot write {category}/{name}`);
+                eprintln(`expand: cannot write ${category}/${name}`);
                 exit(1);
             }
             rewritten += 1;
         }
     }
-    println(`expand: {total} grammars scanned, {rewritten} rewritten, {warned} warnings`);
+    println(`expand: ${total} grammars scanned, ${rewritten} rewritten, ${warned} warnings`);
 }
 
 fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorCode> {

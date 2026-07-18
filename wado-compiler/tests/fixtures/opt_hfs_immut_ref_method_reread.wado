@@ -61,12 +61,12 @@ impl Lexer {
 export fn run() {
     let mut lx = Lexer { chars: "[^\"\\n]".chars().collect(), pos: 0 };
     let tok = lx.read_char_class();
-    assert tok == "[^\"\\n]", `expected [^"\\n] got {tok}`;
+    assert tok == "[^\"\\n]", `expected [^"\\n] got ${tok}`;
 
     // Two escapes in a row — exercises the branch twice.
     let mut lx2 = Lexer { chars: "[\\t\\n]".chars().collect(), pos: 0 };
     let tok2 = lx2.read_char_class();
-    assert tok2 == "[\\t\\n]", `expected [\\t\\n] got {tok2}`;
+    assert tok2 == "[\\t\\n]", `expected [\\t\\n] got ${tok2}`;
 }
 
 __DATA__

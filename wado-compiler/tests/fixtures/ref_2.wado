@@ -88,14 +88,14 @@ fn process(arr: &mut List<u8>, input: &List<u8>, count: i32) {
 
 fn ref_mut_array_ops() with Stdout {
     let mut nums: List<i32> = [1, 2, 3];
-    println(`len: {nums.len()}`);
+    println(`len: ${nums.len()}`);
 
     append_elements(&mut nums);
-    println(`len: {nums.len()}`);
+    println(`len: ${nums.len()}`);
 
     double_all(&mut nums);
     for let mut i = 0; i < nums.len(); i += 1 {
-        println(`{nums[i]}`);
+        println(`${nums[i]}`);
     }
 }
 
@@ -113,28 +113,28 @@ fn ref_loop_mut_test() with Stdout {
     let mut sum = 0;
 
     accumulate(&mut sum, 5);
-    println(`sum 0..4: {sum}`);
+    println(`sum 0..4: ${sum}`);
 
     let mut count = 0;
     let r = &mut count;
     while *r < 5 {
         *r = *r + 1;
     }
-    println(`count: {count}`);
+    println(`count: ${count}`);
 }
 
 fn ref_conditional_mut_test() with Stdout {
     let mut a = 50;
     clamp(&mut a, 0, 100);
-    println(`clamped 50: {a}`);
+    println(`clamped 50: ${a}`);
 
     let mut b = -10;
     clamp(&mut b, 0, 100);
-    println(`clamped -10: {b}`);
+    println(`clamped -10: ${b}`);
 
     let mut c = 200;
     clamp(&mut c, 0, 100);
-    println(`clamped 200: {c}`);
+    println(`clamped 200: ${c}`);
 }
 
 fn ref_mut_while_condition_test() with Stdout {
@@ -142,7 +142,7 @@ fn ref_mut_while_condition_test() with Stdout {
     while pos < 3 {
         advance(&mut pos);
     }
-    println(`pos: {pos}`);
+    println(`pos: ${pos}`);
 }
 
 fn ref_nested_mut_write_test() with Stdout {
@@ -154,21 +154,21 @@ fn ref_nested_mut_write_test() with Stdout {
         id: 1,
     };
 
-    println(`before: {get_inner_value(&data)}, {data.middle.label}`);
+    println(`before: ${get_inner_value(&data)}, ${data.middle.label}`);
 
     set_inner_value(&mut data, 42);
     set_label(&mut data, "updated");
 
-    println(`after: {get_inner_value(&data)}, {data.middle.label}`);
+    println(`after: ${get_inner_value(&data)}, ${data.middle.label}`);
 }
 
 fn ref_mut_array_append_complex_test() with Stdout {
     let mut out: List<u8> = [];
     let input: List<u8> = [65, 66, 67, 130];
     process(&mut out, &input, 4);
-    println(`len: {out.len()}`);
+    println(`len: ${out.len()}`);
     for let mut i = 0; i < out.len(); i += 1 {
-        println(`{out[i]}`);
+        println(`${out[i]}`);
     }
 }
 

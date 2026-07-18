@@ -9,27 +9,27 @@ export fn run() with Stdout {
     let mut total = 0;
     for let mut i = 0; i < 5; i += 1 {
         let x = i as f64 / 10.0;
-        let s = `{x:0.4f}`;
+        let s = `${x:0.4f}`;
         total += s.len();
     }
-    println(`total={total}`);
+    println(`total=${total}`);
 
     // Hoistable: hex format specifier
     let mut total2 = 0;
     for let mut i = 0; i < 5; i += 1 {
-        let s = `{i:x}`;
+        let s = `${i:x}`;
         total2 += s.len();
     }
-    println(`total2={total2}`);
+    println(`total2=${total2}`);
 
     // Multiple interpolations with mixed format specs: one default, one formatted
     let mut total3 = 0;
     for let mut i = 0; i < 3; i += 1 {
         let x = i as f64;
-        let s = `i={i}, x={x:0.2f}`;
+        let s = `i=${i}, x=${x:0.2f}`;
         total3 += s.len();
     }
-    println(`total3={total3}`);
+    println(`total3=${total3}`);
 }
 
 __DATA__

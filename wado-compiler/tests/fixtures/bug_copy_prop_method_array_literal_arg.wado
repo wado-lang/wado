@@ -63,9 +63,9 @@ export fn run() {
     let mut s = State { tokens, pos: 0 };
     let r = drive(&mut s);
     if let Err(e) = &r {
-        panic(`expected Ok, got Err({e.msg})`);
+        panic(`expected Ok, got Err(${e.msg})`);
     }
-    assert s.pos == 1, `expected pos==1 after match_set, got pos={s.pos}`;
+    assert s.pos == 1, `expected pos==1 after match_set, got pos=${s.pos}`;
     assert r.unwrap().kind == 2;
 }
 

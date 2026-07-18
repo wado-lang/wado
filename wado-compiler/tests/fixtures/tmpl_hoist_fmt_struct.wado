@@ -13,38 +13,38 @@ export fn run() with Stdout {
     let mut total = 0;
     for let mut i = 0; i < 5; i += 1 {
         let p = Point { x: i, y: i * 2 };
-        let s = `{p:?}`;
+        let s = `${p:?}`;
         total += s.len();
     }
-    println(`inspect={total}`);
+    println(`inspect=${total}`);
 
     // Struct inspect with surrounding text
     let mut total2 = 0;
     for let mut i = 0; i < 5; i += 1 {
         let p = Point { x: i, y: i * 2 };
-        let s = `point={p:?}!`;
+        let s = `point=${p:?}!`;
         total2 += s.len();
     }
-    println(`ctx={total2}`);
+    println(`ctx=${total2}`);
 
     // Mixed: struct inspect + number with format specifier
     let mut total3 = 0;
     for let mut i = 0; i < 3; i += 1 {
         let p = Point { x: i, y: i * 2 };
         let d = i as f64 * 1.5;
-        let s = `{p:?} d={d:0.2f}`;
+        let s = `${p:?} d=${d:0.2f}`;
         total3 += s.len();
     }
-    println(`mixed={total3}`);
+    println(`mixed=${total3}`);
 
     // Struct inspect + default number interpolation
     let mut total4 = 0;
     for let mut i = 0; i < 3; i += 1 {
         let p = Point { x: i, y: i * 2 };
-        let s = `{p:?} i={i}`;
+        let s = `${p:?} i=${i}`;
         total4 += s.len();
     }
-    println(`both={total4}`);
+    println(`both=${total4}`);
 }
 
 __DATA__

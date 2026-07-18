@@ -11,14 +11,14 @@ struct Wrapper<T: Describable> {
 
 impl Describable for i32 {
     fn describe(&self) -> String {
-        return `{*self}`;
+        return `${*self}`;
     }
 }
 
 // Wrapper<T: Describable> itself implements Describable
 impl<T: Describable> Describable for Wrapper<T> {
     fn describe(&self) -> String {
-        return `Wrapper({self.inner.describe()})`;
+        return `Wrapper(${self.inner.describe()})`;
     }
 }
 

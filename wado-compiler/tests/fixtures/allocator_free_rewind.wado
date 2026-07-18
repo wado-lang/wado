@@ -15,7 +15,7 @@ export fn run() with Stdout {
 
     // Allocate again with the same size — should get the same address
     let ptr2 = builtin::realloc(0, 0, 4, 128);
-    assert ptr2 == ptr1, `expected rewind: ptr1={ptr1}, ptr2={ptr2}`;
+    assert ptr2 == ptr1, `expected rewind: ptr1=${ptr1}, ptr2=${ptr2}`;
 
     // Free ptr2 before the loop
     builtin::realloc(ptr2, 128, 4, 0);
@@ -25,7 +25,7 @@ export fn run() with Stdout {
         let p = builtin::realloc(0, 0, 4, 256);
         // After freeing ptr2, heap is rewound to same base end,
         // so each allocation should start at the same address
-        assert p == ptr2, `loop iteration {i}: expected same address`;
+        assert p == ptr2, `loop iteration ${i}: expected same address`;
         builtin::realloc(p, 256, 4, 0);
     }
 

@@ -228,21 +228,21 @@ test "Value whitespace tolerance" {
 }
 
 test "inspect null" {
-    assert `{Value::Null:?}` == "null";
+    assert `${Value::Null:?}` == "null";
 }
 
 test "inspect bool" {
-    assert `{Value::Bool(true):?}` == "true";
-    assert `{Value::Bool(false):?}` == "false";
+    assert `${Value::Bool(true):?}` == "true";
+    assert `${Value::Bool(false):?}` == "false";
 }
 
 test "inspect float" {
-    assert `{Value::Float(42.0):?}` == "42.0";
-    assert `{Value::Float(3.14):?}` == "3.14";
+    assert `${Value::Float(42.0):?}` == "42.0";
+    assert `${Value::Float(3.14):?}` == "3.14";
 }
 
 test "inspect string" {
-    assert `{Value::String("hello"):?}` == "\"hello\"";
+    assert `${Value::String("hello"):?}` == "\"hello\"";
 }
 
 test "inspect array" {
@@ -250,22 +250,22 @@ test "inspect array" {
         Value::Float(1.0),
         Value::Bool(true), Value::Null,
     ]);
-    assert `{v:?}` == "[1.0, true, null]";
+    assert `${v:?}` == "[1.0, true, null]";
 }
 
 test "inspect empty array" {
-    assert `{Value::List([]):?}` == "[]";
+    assert `${Value::List([]):?}` == "[]";
 }
 
 test "inspect object" {
     let v = Value::Object(obj([
         ["a", Value::Float(1.0)],
     ]));
-    assert `{v:?}` == "{\"a\": 1.0}";
+    assert `${v:?}` == "{\"a\": 1.0}";
 }
 
 test "inspect empty object" {
-    assert `{Value::Object(obj([])):?}` == "{}";
+    assert `${Value::Object(obj([])):?}` == "{}";
 }
 
 test "pretty-print object" {
@@ -273,7 +273,7 @@ test "pretty-print object" {
         ["name", Value::String("Alice")],
         ["age", Value::Float(30.0)],
     ]));
-    assert `{v:#?}` == "{
+    assert `${v:#?}` == "{
   \"name\": \"Alice\",
   \"age\": 30.0,
 }";
@@ -288,7 +288,7 @@ test "pretty-print nested" {
             ]),
         ],
     ]));
-    assert `{v:#?}` == "{
+    assert `${v:#?}` == "{
   \"items\": [
     1.0,
     2.0,

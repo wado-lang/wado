@@ -208,26 +208,26 @@ export fn run() with Stdout {
 
     // Case conversion
     let text = "The Quick Brown Fox Jumps Over The Lazy Dog!";
-    println(`Original:  "{text}"`);
-    println(`Lowercase: "{to_lowercase_simd(text)}"`);
+    println(`Original:  "${text}"`);
+    println(`Lowercase: "${to_lowercase_simd(text)}"`);
 
     // Byte counting
     println("");
     let code = "fn main() { let x = 42; println(x); }";
-    println(`Code: "{code}"`);
-    println(`  Spaces:     {count_byte_simd(code, ' ' as u8)}`);
-    println(`  Semicolons: {count_byte_simd(code, ';' as u8)}`);
-    println(`  Digits:     {count_digits_simd(code)}`);
+    println(`Code: "${code}"`);
+    println(`  Spaces:     ${count_byte_simd(code, ' ' as u8)}`);
+    println(`  Semicolons: ${count_byte_simd(code, ';' as u8)}`);
+    println(`  Digits:     ${count_digits_simd(code)}`);
 
     // Printable check
     println("");
     let clean = "Hello, World!";
     let with_tab = "Hello\tWorld";
-    println(`"{clean}" is printable: {is_ascii_printable_simd(clean)}`);
-    println(`"Hello\\tWorld" is printable: {is_ascii_printable_simd(with_tab)}`);
+    println(`"${clean}" is printable: ${is_ascii_printable_simd(clean)}`);
+    println(`"Hello\\tWorld" is printable: ${is_ascii_printable_simd(with_tab)}`);
 
     // Newline counting (common in log/text processing)
     println("");
     let log = "INFO: started\nWARN: slow query\nERROR: timeout\nINFO: recovered\n";
-    println(`Log lines: {count_byte_simd(log, '\n' as u8)}`);
+    println(`Log lines: ${count_byte_simd(log, '\n' as u8)}`);
 }

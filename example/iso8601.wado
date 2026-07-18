@@ -32,18 +32,18 @@ export fn run() with Stdout, SystemClock, Timezone {
     let instant = Instant::from(now);
 
     if let Some(name) = Timezone::iana_id() {
-        println(`IANA:  {name}`);
+        println(`IANA:  ${name}`);
     }
 
     let utc = ZonedDateTime { instant, time_zone: "UTC" };
-    println(`UTC:   {utc:#}`);
+    println(`UTC:   ${utc:#}`);
 
     let zone = match Timezone::utc_offset(now) {
         Some(ns) => offset_zone(ns / 1_000_000_000),
         None => "UTC",
     };
     let local = ZonedDateTime { instant, time_zone: zone };
-    println(`Local: {local:#}`);
+    println(`Local: ${local:#}`);
 }
 
 // Format a UTC offset in whole seconds as a fixed-offset zone string
@@ -54,5 +54,5 @@ fn offset_zone(offset_secs: i64) -> String {
     let abs = if offset_secs < 0 { -offset_secs } else { offset_secs };
     let h = abs / 3600;
     let m = abs % 3600 / 60;
-    return `{sign}{h:02}:{m:02}`;
+    return `${sign}${h:02}:${m:02}`;
 }

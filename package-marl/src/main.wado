@@ -32,7 +32,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
     let cli = match from_env::<Cli>() {
         Ok(c) => c,
         Err(e) => {
-            eprintln(`marl-format: {e.message}`);
+            eprintln(`marl-format: ${e.message}`);
             exit_error();
         },
     };
@@ -57,7 +57,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
         let original = match read_file(&root, path) {
             Ok(s) => s,
             Err(e) => {
-                eprintln(`marl-format: cannot read {path}: {e:?}`);
+                eprintln(`marl-format: cannot read ${path}: ${e:?}`);
                 had_errors = true;
                 continue;
             },
@@ -68,12 +68,12 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
         }
         had_changes = true;
         if cli.check {
-            println(`would reformat: {path}`);
+            println(`would reformat: ${path}`);
         } else {
             match write_file(&root, path, &formatted) {
-                Ok(_) => println(`formatted: {path}`),
+                Ok(_) => println(`formatted: ${path}`),
                 Err(e) => {
-                    eprintln(`marl-format: cannot write {path}: {e:?}`);
+                    eprintln(`marl-format: cannot write ${path}: ${e:?}`);
                     had_errors = true;
                 },
             }
@@ -93,7 +93,7 @@ fn collect_md_files(dir: &Descriptor, prefix: String) -> List<String> with Stder
     let entries = match read_dir_entries(dir) {
         Ok(e) => e,
         Err(e) => {
-            eprintln(`marl-format: cannot read directory {prefix}: {e:?}`);
+            eprintln(`marl-format: cannot read directory ${prefix}: ${e:?}`);
             return out;
         },
     };
@@ -105,7 +105,7 @@ fn collect_md_files(dir: &Descriptor, prefix: String) -> List<String> with Stder
         if entry.type matches { DescriptorType::Directory } {
             match open_dir(dir, entry.name) {
                 Ok(sub) => out.extend(&collect_md_files(&sub, path)),
-                Err(e) => eprintln(`marl-format: cannot open {path}: {e:?}`),
+                Err(e) => eprintln(`marl-format: cannot open ${path}: ${e:?}`),
             }
         } else if entry.name.ends_with(".md") {
             out.push(path);
@@ -127,7 +127,7 @@ fn join_path(prefix: &String, name: &String) -> String {
     if prefix.len() == 0 {
         return *name;
     }
-    return `{prefix}/{name}`;
+    return `${prefix}/${name}`;
 }
 
 /// Resolves explicit CLI path arguments: a `.md`-suffixed path is treated as
@@ -141,7 +141,7 @@ fn resolve_paths(root: &Descriptor, paths: &List<String>) -> List<String> with S
         }
         match open_dir(root, *path) {
             Ok(dir) => out.extend(&collect_md_files(&dir, *path)),
-            Err(e) => eprintln(`marl-format: cannot open {path}: {e:?}`),
+            Err(e) => eprintln(`marl-format: cannot open ${path}: ${e:?}`),
         }
     }
     return unique_sorted(out);

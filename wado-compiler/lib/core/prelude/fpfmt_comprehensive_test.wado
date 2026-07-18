@@ -102,7 +102,7 @@ fn run_batch(bits: &List<i64>, expected: &List<String>, batch_name: String) -> i
         if actual != exp {
             failures = failures + 1;
             if failures <= 10 {
-                println(`FAIL [{batch_name}][{i}]: expected="{exp}", got="{actual}"`);
+                println(`FAIL [${batch_name}][${i}]: expected="${exp}", got="${actual}"`);
             }
         }
 
@@ -110,7 +110,7 @@ fn run_batch(bits: &List<i64>, expected: &List<String>, batch_name: String) -> i
         if !parsed matches { Some(v) && v == f } {
             failures = failures + 1;
             if failures <= 10 {
-                println(`FAIL [{batch_name}][{i}]: parse_text("{actual}") did not round-trip`);
+                println(`FAIL [${batch_name}][${i}]: parse_text("${actual}") did not round-trip`);
             }
         }
     }
@@ -124,14 +124,14 @@ test "comprehensive testFloats" {
     let bits = test_floats_bits();
     let expected = test_floats_expected();
     let failures = run_batch(&bits, &expected, "testFloats");
-    assert failures == 0, `testFloats: {failures} failures`;
+    assert failures == 0, `testFloats: ${failures} failures`;
 }
 
 test "comprehensive hardFloats" {
     let bits = hard_floats_bits();
     let expected = hard_floats_expected();
     let failures = run_batch(&bits, &expected, "hardFloats");
-    assert failures == 0, `hardFloats: {failures} failures`;
+    assert failures == 0, `hardFloats: ${failures} failures`;
 }
 
 

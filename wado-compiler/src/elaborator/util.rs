@@ -220,7 +220,7 @@ pub(super) fn unescape_template_string(raw: &str) -> Result<String, String> {
         if ch == '\\' {
             // Handle template-specific escapes first
             if let Some(&next) = chars.peek()
-                && (next == '{' || next == '}')
+                && (next == '{' || next == '}' || next == '$')
             {
                 if pending_high.is_some() {
                     return Err(

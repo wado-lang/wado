@@ -14,7 +14,7 @@ Effects must be explicitly declared on functions. No inference.
 
 ```wado
 fn greet(name: String) with Stdout {
-    println(`Hello, {name}!`);
+    println(`Hello, ${name}!`);
 }
 
 fn pure_add(a: i32, b: i32) -> i32 {
@@ -139,7 +139,7 @@ Closures require explicit effect annotation:
 
 ```wado
 let f: fn(i32) -> i32 with Stdout = |x| {
-    println(`{x}`);
+    println(`${x}`);
     return x;
 };
 ```

@@ -11,11 +11,11 @@ use pm from "./grammars/wado_pred_mixed.g4"
 test "the longest alt wins a non-interchangeable overlap group" {
     let result = pm::parse_s(&"a b c");
     assert result.ok(), "the A B C alt must parse cleanly";
-    assert result.output == "abc", `output: '{result.output}'`;
+    assert result.output == "abc", `output: '${result.output}'`;
 }
 
 test "the shorter alt still parses when it is the only match" {
     let result = pm::parse_s(&"a b");
     assert result.ok(), "the A B alt must parse cleanly";
-    assert result.output == "ab", `output: '{result.output}'`;
+    assert result.output == "ab", `output: '${result.output}'`;
 }

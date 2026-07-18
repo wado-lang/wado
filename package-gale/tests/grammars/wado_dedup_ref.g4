@@ -8,7 +8,7 @@ grammar WadoDedupRef;
 
 options { language = Wado; }
 
-r : E e { p.emit(`v={$e.v}`); } ;
+r : E e { p.emit(`v=${$e.v}`); } ;
 
 e returns [i32 v] : N { $v = 7; } ;
 

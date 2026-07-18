@@ -17,16 +17,16 @@ test "lx.skip() and lx.set_channel() hide the token from the parser" {
     // so `s : B` parses cleanly.
     let r = sk::parse(&"acb");
     assert r.ok(), `parse of 'acb' should be clean: skip/channel hide a and c`;
-    assert r.output == "B", `output: '{r.output}'`;
+    assert r.output == "B", `output: '${r.output}'`;
 
     let r2 = sk::parse(&"b");
     assert r2.ok(), "plain 'b'";
-    assert r2.output == "B", `output: '{r2.output}'`;
+    assert r2.output == "B", `output: '${r2.output}'`;
 }
 
 test "lx.more() folds the matched text into the next token" {
     // 'a' matches A with more(); 'b' matches B; the emitted B token spans "ab".
     let r = mo::parse(&"ab");
     assert r.ok(), "clean parse of 'ab'";
-    assert r.output == "ab", `output: '{r.output}'`;
+    assert r.output == "ab", `output: '${r.output}'`;
 }

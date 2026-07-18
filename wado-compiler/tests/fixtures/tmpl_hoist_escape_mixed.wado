@@ -6,13 +6,13 @@ export fn run() with Stdout {
     let mut total = 0;
     for let mut i = 0; i < 3; i += 1 {
         // safe: only used as receiver
-        let safe = `s={i}`;
+        let safe = `s=${i}`;
         total += safe.len();
         // escaped: passed as arg to println (core lib, not inlined)
-        let escaped = `e={i}`;
+        let escaped = `e=${i}`;
         println(escaped);
     }
-    println(`total={total}`);
+    println(`total=${total}`);
 }
 
 __DATA__

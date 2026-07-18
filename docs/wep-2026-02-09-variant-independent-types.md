@@ -12,7 +12,7 @@ variant Shape {
 }
 
 fn process_circle(c: Shape::Circle) {
-    println(`radius: {c.0}`);
+    println(`radius: ${c.0}`);
 }
 ```
 
@@ -280,7 +280,7 @@ Pattern matching on a case type still works but is trivially exhaustive:
 ```wado
 fn process(c: Shape::Circle) {
     match c {
-        Circle(r) => println(`radius: {r}`),
+        Circle(r) => println(`radius: ${r}`),
         // No other arms needed — exhaustive
     }
 }

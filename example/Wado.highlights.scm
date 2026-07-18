@@ -12,9 +12,9 @@
 (FLOAT) @number
 (INTEGER) @number
 
-; Template strings: text chunks and backticks are string; a `{ ... }`
+; Template strings: text chunks and backticks are string; a `${ ... }`
 ; interpolation holds code (identifiers -> variable). The `:spec` format
-; specifier is muted, listed first so it wins the override for `{x:width}`.
+; specifier is muted, listed first so it wins the override for `${x:width}`.
 (TEMPLATE_TEXT) @string
 (BACKTICK) @string
 (formatSpec (IDENTIFIER) @comment)
