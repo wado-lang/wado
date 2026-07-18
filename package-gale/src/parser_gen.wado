@@ -2573,7 +2573,7 @@ fn gen_scan_op_elements(
 }
 
 /// `gen_scan_op_elements` variant that routes failures through a
-/// labeled `break {label};` so the sequence can be nested in a
+/// labeled `break ${label};` so the sequence can be nested in a
 /// labeled block.
 fn gen_scan_op_elements_in_block(
     w: &mut CodeWriter,
@@ -5189,7 +5189,7 @@ fn gate_cond_with_caller_follow(cond: &String, gate_caller_follow: bool) -> Stri
 }
 
 /// Shared body of every storable-Optional + Group arm: emit a single
-/// `let {opt_field}: Option<T> = if {cond} { parse; Some(...) } else
+/// `let ${opt_field}: Option<T> = if ${cond} { parse; Some(...) } else
 /// { null };`. Caller computes the gate condition (`gen_lookahead_condition`,
 /// `body_first_set`, scan-pos check, etc.).
 fn gen_op_storable_optional_with_first(
@@ -5264,7 +5264,7 @@ fn gen_op_transparent_optional(
 }
 
 /// Shared body of every transparent-Optional + Group arm: emit
-/// `if {cond} { /* inline inner alt's elements */ }`. Caller computes
+/// `if ${cond} { /* inline inner alt's elements */ }`. Caller computes
 /// the gate condition.
 fn gen_op_transparent_optional_with_cond(
     w: &mut CodeWriter,
@@ -6222,7 +6222,7 @@ fn rep_recovery_expr(rep_op: &RepeatOp, emit_follow: bool) -> Option<String> {
     return null;
 }
 
-/// Emit the `if {scan_pos} < 0 { break; }` loop-exit, augmented with
+/// Emit the `if ${scan_pos} < 0 { break; }` loop-exit, augmented with
 /// error-path recovery for RuleRef inners: when the lookahead is in the
 /// inner's FIRST set (so an element plausibly starts here) but the scan
 /// failed, re-parse the inner for real. The result is kept only if it actually
@@ -6538,7 +6538,7 @@ fn unwrap_optional(elem: &Element) -> &Element with stores[elem] {
 /// ```
 ///
 /// Returns the name of the outer pos variable (`-1` on scan failure, end-pos on success).
-/// Caller emits `if {pos_var} >= 0 { /* commit parse */ }`.
+/// Caller emits `if ${pos_var} >= 0 { /* commit parse */ }`.
 /// Emit an inline scan guard for a repetition's inner element.
 /// Same shape as gen_rep_scan_guard but uses `rep_scan_*` naming. Requires
 /// the scan to advance at least one token; 0-advance is treated as failure
@@ -6644,7 +6644,7 @@ fn rule_ref_group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternativ
 }
 
 /// Emit the strict-`>` argmax update that resolves ties to the first
-/// grammar alternative: `if {end_expr} > {best_var} { best = end; winner =
+/// grammar alternative: `if ${end_expr} > ${best_var} { best = end; winner =
 /// value }`. Both scan-winner sites call this while iterating candidates in
 /// ASCENDING alt-index order, so the first (lowest-index) candidate to reach
 /// the running max keeps it — ANTLR4's ambiguity resolution.
@@ -7364,7 +7364,7 @@ fn emit_spec_alt_preamble(w: &mut CodeWriter) {
 
 /// Emit the per-alt index dispatch shared by the longest-match tournament
 /// (`var` = `_sd_best_i`) and the AtEndConflict ATN route (`var` = `_atn_alt`):
-/// a single `trace_pick`, one `if {var} == {idx} { return _alt_{idx} }` per
+/// a single `trace_pick`, one `if ${var} == ${idx} { return _alt_${idx} }` per
 /// alt, then an unconditional fallthrough to the last alt (its parse path
 /// surfaces a useful diagnostic when `var` matched nothing).
 fn emit_index_pick_dispatch(

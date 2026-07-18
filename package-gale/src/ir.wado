@@ -348,7 +348,7 @@ pub struct ParserRule {
     /// when the rule itself appears as a field (e.g. the LR self-ref slot in
     /// the precedence-climbing helper struct).
     pub field_name: String = "",
-    /// Cached `{to_pascal_case(name)}Node` — the rule's CST type name.
+    /// Cached `${to_pascal_case(name)}Node` — the rule's CST type name.
     /// Equivalent to `rule_type_name(name)`; populated so codegen never
     /// re-runs `to_pascal_case` for the same rule name.
     pub type_name: String = "",
@@ -490,7 +490,7 @@ pub struct TokenRefElement {
     /// Cached `escape_ident(lower_name)` — standalone field name in CST structs.
     pub field_name: String = "",
     /// Canonical token kind id (`token_slot_order` position, i.e. the value of
-    /// the emitted `TK_{name}` global). Resolved once by `resolve_kind_ids` on
+    /// the emitted `TK_${name}` global). Resolved once by `resolve_kind_ids` on
     /// the `generate()` path so FIRST-set analysis carries the integer, not the
     /// name. -1 until resolved (or for an unresolved reference).
     pub kind_id: i32 = -1,
