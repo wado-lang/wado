@@ -274,14 +274,37 @@ pub(super) fn is_pure_operand(body: &Body, op: Operand) -> bool {
 /// keep the expression (its trap still fires). The trap dimension comes from the
 /// shared [`ModRef`] oracle so the taxonomy lives in one place.
 pub(super) fn is_pure_nontrapping_expr(body: &Body, id: ExprId) -> bool {
-    is_pure_expr(body, id) && !super::mod_ref::ModRef::of_expr(body, id).may_trap
+    is_pure_nontrapping_expr_typed(body, id, None)
+}
+
+/// [`is_pure_nontrapping_expr`] with a type table, so a `FieldAccess` on a
+/// non-null struct/ref receiver is recognised as non-trapping (a caller holding
+/// a type table gets a tighter answer — e.g. dropping the dead residue of an
+/// inlined unused `&self` receiver). Without a table it is exactly the
+/// conservative [`is_pure_nontrapping_expr`].
+pub(super) fn is_pure_nontrapping_expr_typed(
+    body: &Body,
+    id: ExprId,
+    types: Option<&crate::tir::TypeTable>,
+) -> bool {
+    is_pure_expr(body, id) && !super::mod_ref::ModRef::of_expr_typed(body, id, types).may_trap
 }
 
 /// [`is_pure_nontrapping_expr`] for an operand: a promoted constant is pure and
 /// cannot trap.
 pub(super) fn is_pure_nontrapping_operand(body: &Body, op: Operand) -> bool {
+    is_pure_nontrapping_operand_typed(body, op, None)
+}
+
+/// [`is_pure_nontrapping_operand`] with a type table (see
+/// [`is_pure_nontrapping_expr_typed`]).
+pub(super) fn is_pure_nontrapping_operand_typed(
+    body: &Body,
+    op: Operand,
+    types: Option<&crate::tir::TypeTable>,
+) -> bool {
     op.as_expr()
-        .is_none_or(|e| is_pure_nontrapping_expr(body, e))
+        .is_none_or(|e| is_pure_nontrapping_expr_typed(body, e, types))
 }
 
 /// True when the expression at `id` and every sub-expression has no observable

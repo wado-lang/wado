@@ -1830,11 +1830,10 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 }
 
 fn "result_mut_ref_side_effect.wado/Parser::last_end"(self) {
-    let index_2: i32;
     if self.pos == 0 {
         return 0;
     }
-    return index_2 = self.pos - 1; drop(self.tokens.used); builtin::array_get<ref "result_mut_ref_side_effect.wado//Token">(self.tokens.repr, index_2).span.end;
+    return builtin::array_get<ref "result_mut_ref_side_effect.wado//Token">(self.tokens.repr, self.pos - 1).span.end;
 }
 
 fn "result_mut_ref_side_effect.wado/Parser::advance"(self) {

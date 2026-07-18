@@ -227,13 +227,13 @@ type "functype//core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//L
 
 type "functype//core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(79)
 
-type "functype//effect_handler_resource_stream.wado/__Closure_2::__call" = fn(ref "effect_handler_resource_stream.wado//__Closure_2") -> ref "tuple//[Stream<u8>, StreamWritable<u8>]";  // TypeId(80)
+type "functype//effect_handler_resource_stream.wado/__Closure_2::__call" = fn() -> ref "tuple//[Stream<u8>, StreamWritable<u8>]";  // TypeId(80)
 
 type "functype//effect_handler_resource_stream.wado/__Closure_3::__call" = fn(ref "effect_handler_resource_stream.wado//__Closure_3", i32, i32) -> ref "core:prelude//List<u8>";  // TypeId(81)
 
 type "functype//effect_handler_resource_stream.wado/__Closure_4::__call" = fn();  // TypeId(82)
 
-type "functype//effect_handler_resource_stream.wado/__Closure_5::__call" = fn(ref "effect_handler_resource_stream.wado//__Closure_5", i32);  // TypeId(83)
+type "functype//effect_handler_resource_stream.wado/__Closure_5::__call" = fn(i32);  // TypeId(83)
 
 type "functype//effect_handler_resource_stream.wado/__Closure_6::__call" = fn(ref "effect_handler_resource_stream.wado//__Closure_6", i32, ref "core:prelude//List<u8>");  // TypeId(84)
 
@@ -241,7 +241,7 @@ type "functype//effect_handler_resource_stream.wado/__Closure_7::__call" = fn();
 
 type "functype//effect_handler_resource_stream.wado/__Closure_8::__call" = fn();  // TypeId(86)
 
-type "functype//effect_handler_resource_stream.wado/__Closure_9::__call" = fn(ref "effect_handler_resource_stream.wado//__Closure_9", i32);  // TypeId(87)
+type "functype//effect_handler_resource_stream.wado/__Closure_9::__call" = fn(i32);  // TypeId(87)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(88)
 
@@ -962,8 +962,8 @@ fn "core:prelude/list.wado/List<u8>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "effect_handler_resource_stream.wado/__Closure_2::__call"(self) {
-    return drop(self.__capture_0), struct.new "tuple//[Stream<u8>, StreamWritable<u8>]" { 0: 0, 1: 0 };
+fn "effect_handler_resource_stream.wado/__Closure_2::__call"() {
+    return struct.new "tuple//[Stream<u8>, StreamWritable<u8>]" { 0: 0, 1: 0 };
 }
 
 fn "effect_handler_resource_stream.wado/__Closure_3::__call"(self_0, self_1, max) {
@@ -977,8 +977,7 @@ fn "effect_handler_resource_stream.wado/__Closure_4::__call"() {
     unreachable;
 }
 
-fn "effect_handler_resource_stream.wado/__Closure_5::__call"(self_0, self_1) {
-    drop(self_0.__capture_0);
+fn "effect_handler_resource_stream.wado/__Closure_5::__call"(self) {
 }
 
 fn "effect_handler_resource_stream.wado/__Closure_6::__call"(self_0, self_1, data) {
@@ -993,14 +992,11 @@ fn "effect_handler_resource_stream.wado/__Closure_8::__call"() {
     unreachable;
 }
 
-fn "effect_handler_resource_stream.wado/__Closure_9::__call"(self_0, self_1) {
-    drop(self_0.__capture_0);
+fn "effect_handler_resource_stream.wado/__Closure_9::__call"(self) {
 }
 
 fn "closure/effect_handler_resource_stream.wado/__closure_wrapper_0"(__env) {
-    let __typed_env: ref "effect_handler_resource_stream.wado//__Closure_2";
-    __typed_env = ref.cast "effect_handler_resource_stream.wado//__Closure_2"(__env);
-    return "effect_handler_resource_stream.wado/__Closure_2::__call"(__typed_env);
+    return "effect_handler_resource_stream.wado/__Closure_2::__call"();
 }
 
 fn "closure/effect_handler_resource_stream.wado/__closure_wrapper_1"(__env, __p0, __p1) {
@@ -1014,9 +1010,7 @@ fn "closure/effect_handler_resource_stream.wado/__closure_wrapper_2"(__env, __p0
 }
 
 fn "closure/effect_handler_resource_stream.wado/__closure_wrapper_3"(__env, __p0) {
-    let __typed_env: ref "effect_handler_resource_stream.wado//__Closure_5";
-    __typed_env = ref.cast "effect_handler_resource_stream.wado//__Closure_5"(__env);
-    "effect_handler_resource_stream.wado/__Closure_5::__call"(__typed_env, __p0);
+    "effect_handler_resource_stream.wado/__Closure_5::__call"(__p0);
 }
 
 fn "closure/effect_handler_resource_stream.wado/__closure_wrapper_4"(__env, __p0, __p1) {
@@ -1034,9 +1028,7 @@ fn "closure/effect_handler_resource_stream.wado/__closure_wrapper_6"(__env, __p0
 }
 
 fn "closure/effect_handler_resource_stream.wado/__closure_wrapper_7"(__env, __p0) {
-    let __typed_env: ref "effect_handler_resource_stream.wado//__Closure_9";
-    __typed_env = ref.cast "effect_handler_resource_stream.wado//__Closure_9"(__env);
-    "effect_handler_resource_stream.wado/__Closure_9::__call"(__typed_env, __p0);
+    "effect_handler_resource_stream.wado/__Closure_9::__call"(__p0);
 }
 
 export fn "effect_handler_resource_stream.wado/__cm_export__run" as "run"

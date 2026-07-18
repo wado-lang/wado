@@ -1,0 +1,31 @@
+// Precision: eliminating the dead residue of an inlined unused `&self` receiver.
+// `convert` ignores `self`, so inlining `w.convert(100)` leaves a dead
+// `w.value` field read. A struct receiver is non-null (Wado structs never null;
+// Option/nullable is a `variant`), so that read cannot trap and `elide_local`
+// must drop it — which lets the block collapse, `x` fold to `100`, and the
+// always-true `assert x == 100` prune. If the field read is kept as a
+// may-trap statement, the assert and its whole panic path survive.
+
+struct Wrapper {
+    value: i32,
+}
+
+impl Wrapper {
+    fn convert<U>(&self, other: U) -> U {
+        return other;
+    }
+}
+
+export fn run() {
+    let w = Wrapper { value: 42 };
+    let x = w.convert::<i64>(100 as i64);
+    assert x == 100 as i64;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O2": [
+        "condition: x == 100"
+    ]
+}

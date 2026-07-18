@@ -91,7 +91,11 @@ fn classify(
             let (idx, value) = (*local_index, *value);
             if is_kept(engine, idx, stores_aliased, promoted_reads) {
                 Action::Keep
-            } else if arena_query::is_pure_nontrapping_operand(engine.body, value) {
+            } else if arena_query::is_pure_nontrapping_operand_typed(
+                engine.body,
+                value,
+                engine.value_graph_type_table(),
+            ) {
                 Action::Drop
             } else {
                 // Effectful or trap-capable ⟹ a skeleton expr (a promoted value
@@ -115,7 +119,11 @@ fn classify(
             {
                 let index = *index;
                 if !is_kept(engine, index, stores_aliased, promoted_reads) {
-                    return if arena_query::is_pure_nontrapping_operand(engine.body, value) {
+                    return if arena_query::is_pure_nontrapping_operand_typed(
+                        engine.body,
+                        value,
+                        engine.value_graph_type_table(),
+                    ) {
                         Action::Drop
                     } else {
                         // Effectful or trap-capable ⟹ a skeleton expr (a promoted

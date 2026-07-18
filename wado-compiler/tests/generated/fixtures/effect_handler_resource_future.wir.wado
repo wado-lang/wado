@@ -204,19 +204,19 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(70)
 
-type "functype//effect_handler_resource_future.wado/__Closure_2::__call" = fn(ref "effect_handler_resource_future.wado//__Closure_2") -> ref "tuple//[Future<i32>, FutureWritable<i32>]";  // TypeId(71)
+type "functype//effect_handler_resource_future.wado/__Closure_2::__call" = fn() -> ref "tuple//[Future<i32>, FutureWritable<i32>]";  // TypeId(71)
 
 type "functype//effect_handler_resource_future.wado/__Closure_3::__call" = fn(ref "effect_handler_resource_future.wado//__Closure_3", i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(72)
 
 type "functype//effect_handler_resource_future.wado/__Closure_4::__call" = fn();  // TypeId(73)
 
-type "functype//effect_handler_resource_future.wado/__Closure_5::__call" = fn(ref "effect_handler_resource_future.wado//__Closure_5", i32);  // TypeId(74)
+type "functype//effect_handler_resource_future.wado/__Closure_5::__call" = fn(i32);  // TypeId(74)
 
 type "functype//effect_handler_resource_future.wado/__Closure_6::__call" = fn(ref "effect_handler_resource_future.wado//__Closure_6", i32, i32);  // TypeId(75)
 
 type "functype//effect_handler_resource_future.wado/__Closure_7::__call" = fn();  // TypeId(76)
 
-type "functype//effect_handler_resource_future.wado/__Closure_8::__call" = fn(ref "effect_handler_resource_future.wado//__Closure_8", i32);  // TypeId(77)
+type "functype//effect_handler_resource_future.wado/__Closure_8::__call" = fn(i32);  // TypeId(77)
 
 type "functype//wasi/future-new:s32" = fn() -> i64;  // TypeId(78)
 
@@ -847,8 +847,8 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "effect_handler_resource_future.wado/__Closure_2::__call"(self) {
-    return drop(self.__capture_0), struct.new "tuple//[Future<i32>, FutureWritable<i32>]" { 0: 0, 1: 0 };
+fn "effect_handler_resource_future.wado/__Closure_2::__call"() {
+    return struct.new "tuple//[Future<i32>, FutureWritable<i32>]" { 0: 0, 1: 0 };
 }
 
 fn "effect_handler_resource_future.wado/__Closure_3::__call"(self_0, self_1) {
@@ -860,8 +860,7 @@ fn "effect_handler_resource_future.wado/__Closure_4::__call"() {
     unreachable;
 }
 
-fn "effect_handler_resource_future.wado/__Closure_5::__call"(self_0, self_1) {
-    drop(self_0.__capture_0);
+fn "effect_handler_resource_future.wado/__Closure_5::__call"(self) {
 }
 
 fn "effect_handler_resource_future.wado/__Closure_6::__call"(self_0, self_1, value) {
@@ -872,14 +871,11 @@ fn "effect_handler_resource_future.wado/__Closure_7::__call"() {
     unreachable;
 }
 
-fn "effect_handler_resource_future.wado/__Closure_8::__call"(self_0, self_1) {
-    drop(self_0.__capture_0);
+fn "effect_handler_resource_future.wado/__Closure_8::__call"(self) {
 }
 
 fn "closure/effect_handler_resource_future.wado/__closure_wrapper_0"(__env) {
-    let __typed_env: ref "effect_handler_resource_future.wado//__Closure_2";
-    __typed_env = ref.cast "effect_handler_resource_future.wado//__Closure_2"(__env);
-    return "effect_handler_resource_future.wado/__Closure_2::__call"(__typed_env);
+    return "effect_handler_resource_future.wado/__Closure_2::__call"();
 }
 
 fn "closure/effect_handler_resource_future.wado/__closure_wrapper_1"(__env, __p0) {
@@ -893,9 +889,7 @@ fn "closure/effect_handler_resource_future.wado/__closure_wrapper_2"(__env, __p0
 }
 
 fn "closure/effect_handler_resource_future.wado/__closure_wrapper_3"(__env, __p0) {
-    let __typed_env: ref "effect_handler_resource_future.wado//__Closure_5";
-    __typed_env = ref.cast "effect_handler_resource_future.wado//__Closure_5"(__env);
-    "effect_handler_resource_future.wado/__Closure_5::__call"(__typed_env, __p0);
+    "effect_handler_resource_future.wado/__Closure_5::__call"(__p0);
 }
 
 fn "closure/effect_handler_resource_future.wado/__closure_wrapper_4"(__env, __p0, __p1) {
@@ -909,9 +903,7 @@ fn "closure/effect_handler_resource_future.wado/__closure_wrapper_5"(__env, __p0
 }
 
 fn "closure/effect_handler_resource_future.wado/__closure_wrapper_6"(__env, __p0) {
-    let __typed_env: ref "effect_handler_resource_future.wado//__Closure_8";
-    __typed_env = ref.cast "effect_handler_resource_future.wado//__Closure_8"(__env);
-    "effect_handler_resource_future.wado/__Closure_8::__call"(__typed_env, __p0);
+    "effect_handler_resource_future.wado/__Closure_8::__call"(__p0);
 }
 
 export fn "effect_handler_resource_future.wado/__cm_export__run" as "run"

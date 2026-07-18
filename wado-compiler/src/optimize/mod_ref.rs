@@ -150,7 +150,7 @@ pub(super) struct ModRef {
 /// would be caught by the innermost enclosing loop / labeled block
 /// recorded in `scope`. Used to decide whether the break's `NonLocal`
 /// contribution must propagate past the surrounding construct.
-fn break_is_captured(label: Option<&str>, scope: &AccumScope) -> bool {
+fn break_is_captured(label: Option<&str>, scope: &AccumScope<'_>) -> bool {
     match label {
         None => scope.loop_depth > 0,
         Some(l) => scope.open_labels.iter().any(|open| open == l),
@@ -164,7 +164,7 @@ fn break_is_captured(label: Option<&str>, scope: &AccumScope) -> bool {
 /// that actually escape (`return`, label-targeted `break L` to an
 /// unenclosed `L`).
 #[derive(Default)]
-struct AccumScope {
+struct AccumScope<'a> {
     /// Number of `Loop` / `LabeledBlock` bodies currently being
     /// accumulated. A bare `break;` / `continue;` resolves to the
     /// innermost such enclosure, so when `loop_depth > 0` their
@@ -173,6 +173,29 @@ struct AccumScope {
     /// Labels of `LabeledBlock`s currently on the accumulation stack.
     /// `break L;` whose `L` is in this set is captured here.
     open_labels: Vec<String>,
+    /// Type table, when the caller can supply one (`of_expr_typed`). Lets the
+    /// `FieldAccess` trap check prove a non-null struct/ref receiver; absent
+    /// (`of_expr`), the check stays conservative.
+    types: Option<&'a crate::tir::TypeTable>,
+}
+
+/// A `FieldAccess` traps only on a null receiver, but Wado struct refs are
+/// non-null (an `Option`/nullable value is a `Variant`, read via the separate
+/// `VariantPayload` node — never `FieldAccess`). So a field access whose base
+/// is a struct or reference type provably cannot trap. Provable only with a
+/// type table; without one, callers stay conservative (`may_trap`).
+fn field_receiver_nonnull(body: &Body, scope: &AccumScope<'_>, base: Operand) -> bool {
+    let Some(types) = scope.types else {
+        return false;
+    };
+    matches!(
+        types.get_pruned(body.operand_type(base)),
+        Some(
+            crate::tir::ResolvedType::Struct { .. }
+                | crate::tir::ResolvedType::Ref(_)
+                | crate::tir::ResolvedType::MutRef(_)
+        )
+    )
 }
 
 impl ModRef {
@@ -180,6 +203,20 @@ impl ModRef {
     pub fn of_expr(body: &Body, id: ExprId) -> Self {
         let mut mr = ModRef::default();
         let mut scope = AccumScope::default();
+        mr.accumulate_expr(body, id, &mut scope);
+        mr
+    }
+
+    /// Like [`of_expr`], but with a type table so the `FieldAccess` trap check
+    /// can prove a non-null receiver (see [`field_receiver_nonnull`]). Callers
+    /// that hold a type table (e.g. `elide_local` via
+    /// `Engine::value_graph_type_table`) get a tighter `may_trap`.
+    pub fn of_expr_typed(body: &Body, id: ExprId, types: Option<&crate::tir::TypeTable>) -> Self {
+        let mut mr = ModRef::default();
+        let mut scope = AccumScope {
+            types,
+            ..AccumScope::default()
+        };
         mr.accumulate_expr(body, id, &mut scope);
         mr
     }
@@ -230,14 +267,14 @@ impl ModRef {
         false
     }
 
-    fn accumulate_operand(&mut self, body: &Body, op: Operand, scope: &mut AccumScope) {
+    fn accumulate_operand(&mut self, body: &Body, op: Operand, scope: &mut AccumScope<'_>) {
         match op {
             Operand::Expr(e) => self.accumulate_expr(body, e, scope),
             Operand::Value(_) => {}
         }
     }
 
-    fn accumulate_expr(&mut self, body: &Body, id: ExprId, scope: &mut AccumScope) {
+    fn accumulate_expr(&mut self, body: &Body, id: ExprId, scope: &mut AccumScope<'_>) {
         match &body.exprs[id].kind {
             // === Locals ===
             ExprKind::Local { index, .. } => {
@@ -271,7 +308,9 @@ impl ModRef {
             // === Heap reads ===
             ExprKind::FieldAccess { expr, .. } => {
                 self.heap.reads = true;
-                self.may_trap = true; // null receiver
+                if !field_receiver_nonnull(body, scope, *expr) {
+                    self.may_trap = true; // null receiver
+                }
                 let expr = *expr;
                 self.accumulate_operand(body, expr, scope);
             }
@@ -474,14 +513,16 @@ impl ModRef {
         }
     }
 
-    fn accumulate_assign_target(&mut self, body: &Body, id: ExprId, scope: &mut AccumScope) {
+    fn accumulate_assign_target(&mut self, body: &Body, id: ExprId, scope: &mut AccumScope<'_>) {
         match &body.exprs[id].kind {
             ExprKind::Local { index, .. } => {
                 self.local_writes.insert(*index);
             }
             ExprKind::FieldAccess { expr, .. } => {
                 self.heap.writes = true;
-                self.may_trap = true; // null receiver
+                if !field_receiver_nonnull(body, scope, *expr) {
+                    self.may_trap = true; // null receiver
+                }
                 let expr = *expr;
                 self.accumulate_operand(body, expr, scope);
             }
@@ -528,7 +569,7 @@ impl ModRef {
         }
     }
 
-    fn accumulate_stmt(&mut self, body: &Body, id: StmtId, scope: &mut AccumScope) {
+    fn accumulate_stmt(&mut self, body: &Body, id: StmtId, scope: &mut AccumScope<'_>) {
         match &body.stmts[id].kind {
             StmtKind::Let {
                 local_index, value, ..
@@ -615,13 +656,13 @@ impl ModRef {
         }
     }
 
-    fn accumulate_block(&mut self, body: &Body, id: BlockId, scope: &mut AccumScope) {
+    fn accumulate_block(&mut self, body: &Body, id: BlockId, scope: &mut AccumScope<'_>) {
         for s in body.blocks[id].stmts.clone() {
             self.accumulate_stmt(body, s, scope);
         }
     }
 
-    fn accumulate_pattern_writes(&mut self, body: &Body, id: PatId, scope: &mut AccumScope) {
+    fn accumulate_pattern_writes(&mut self, body: &Body, id: PatId, scope: &mut AccumScope<'_>) {
         match &body.pats[id].kind {
             PatKind::Binding { local_index, .. } => {
                 self.local_writes.insert(*local_index);
@@ -971,6 +1012,42 @@ mod tests {
         assert!(mr.heap.reads);
         assert!(!mr.heap.writes);
         assert!(mr.may_trap);
+    }
+
+    #[test]
+    fn field_access_on_struct_receiver_is_nontrapping_with_types() {
+        // A struct receiver is non-null (Wado structs never null; `Option` is a
+        // `variant`, read via `VariantPayload`), so `s.value` cannot trap once a
+        // type table proves the base is a struct. Without types it stays
+        // conservative — see `field_access_is_heap_read_and_may_trap`.
+        use crate::tir::{ResolvedType, TypeTable};
+        let mut types = TypeTable::new();
+        let struct_ty = types.intern(ResolvedType::Struct {
+            name: "W".to_string(),
+            module_source: ModuleSource::default(),
+            is_monomorphized: false,
+            base_name: None,
+        });
+        let mut body = Body::empty();
+        let base = body.exprs.push(ExprNode {
+            kind: ExprKind::Local {
+                index: 0,
+                name: "w".to_string(),
+            },
+            type_id: struct_ty,
+            span: sp(),
+        });
+        let fa = field_access(&mut body, base);
+        assert!(
+            ModRef::of_expr(&body, fa).may_trap,
+            "conservative without a type table"
+        );
+        let mr = ModRef::of_expr_typed(&body, fa, Some(&types));
+        assert!(
+            !mr.may_trap,
+            "struct receiver is non-null → field access cannot trap"
+        );
+        assert!(mr.heap.reads);
     }
 
     #[test]
