@@ -452,7 +452,7 @@ trait Debug {
 
 **Usage**:
 
-- `Display` is for user-facing output, used in template strings: `{value}`
+- `Display` is for user-facing output, used in template strings: `${value}`
 - `Debug` is for developer-facing output, used in debug printing
 
 ### 3. Non-Overloadable Operators

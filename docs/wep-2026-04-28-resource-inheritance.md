@@ -552,7 +552,7 @@ The `is-T` predicates scale O(N) with the number of extends-participating types.
 | `el.foo()` resolving to `Node::foo`   | call `node.foo(el, ...)`                                                           |
 | `el.downcast::<HtmlInputElement>()`   | call `is-html-input-element(el)`, branch into `Option::Some(el)` or `Option::None` |
 | `a == b` for `a, b: ExternRef`-backed | call `is-same(a, b)`                                                               |
-| `` `{x:?}` ``                         | call `inspect(x)`                                                                  |
+| `` `${x:?}` ``                        | call `inspect(x)`                                                                  |
 | `` `${x}` ``                          | call `display(x)`                                                                  |
 
 Upcast and the receiver argument of inherited methods are wasm-level no-ops; the same `externref` value flows through unchanged.
