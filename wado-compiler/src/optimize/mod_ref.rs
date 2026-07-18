@@ -173,17 +173,14 @@ struct AccumScope<'a> {
     /// Labels of `LabeledBlock`s currently on the accumulation stack.
     /// `break L;` whose `L` is in this set is captured here.
     open_labels: Vec<String>,
-    /// Type table, when the caller can supply one (`of_expr_typed`). Lets the
-    /// `FieldAccess` trap check prove a non-null struct/ref receiver; absent
-    /// (`of_expr`), the check stays conservative.
+    /// Type table for the `FieldAccess` non-null trap check; `None` stays
+    /// conservative.
     types: Option<&'a crate::tir::TypeTable>,
 }
 
-/// A `FieldAccess` traps only on a null receiver, but Wado struct refs are
-/// non-null (an `Option`/nullable value is a `Variant`, read via the separate
-/// `VariantPayload` node — never `FieldAccess`). So a field access whose base
-/// is a struct or reference type provably cannot trap. Provable only with a
-/// type table; without one, callers stay conservative (`may_trap`).
+/// A `FieldAccess` traps only on a null receiver, and a struct / reference base
+/// is non-null in Wado (nullable values are a `Variant`, read via
+/// `VariantPayload`). Provable only with a type table.
 fn field_receiver_nonnull(body: &Body, scope: &AccumScope<'_>, base: Operand) -> bool {
     let Some(types) = scope.types else {
         return false;
@@ -207,10 +204,8 @@ impl ModRef {
         mr
     }
 
-    /// Like [`of_expr`], but with a type table so the `FieldAccess` trap check
-    /// can prove a non-null receiver (see [`field_receiver_nonnull`]). Callers
-    /// that hold a type table (e.g. `elide_local` via
-    /// `Engine::value_graph_type_table`) get a tighter `may_trap`.
+    /// Like [`of_expr`], but a type table lets the `FieldAccess` trap check
+    /// prove a non-null receiver (see [`field_receiver_nonnull`]).
     pub fn of_expr_typed(body: &Body, id: ExprId, types: Option<&crate::tir::TypeTable>) -> Self {
         let mut mr = ModRef::default();
         let mut scope = AccumScope {
@@ -309,7 +304,7 @@ impl ModRef {
             ExprKind::FieldAccess { expr, .. } => {
                 self.heap.reads = true;
                 if !field_receiver_nonnull(body, scope, *expr) {
-                    self.may_trap = true; // null receiver
+                    self.may_trap = true;
                 }
                 let expr = *expr;
                 self.accumulate_operand(body, expr, scope);
@@ -521,7 +516,7 @@ impl ModRef {
             ExprKind::FieldAccess { expr, .. } => {
                 self.heap.writes = true;
                 if !field_receiver_nonnull(body, scope, *expr) {
-                    self.may_trap = true; // null receiver
+                    self.may_trap = true;
                 }
                 let expr = *expr;
                 self.accumulate_operand(body, expr, scope);
@@ -1016,10 +1011,8 @@ mod tests {
 
     #[test]
     fn field_access_on_struct_receiver_is_nontrapping_with_types() {
-        // A struct receiver is non-null (Wado structs never null; `Option` is a
-        // `variant`, read via `VariantPayload`), so `s.value` cannot trap once a
-        // type table proves the base is a struct. Without types it stays
-        // conservative — see `field_access_is_heap_read_and_may_trap`.
+        // Non-null struct receiver ⇒ `s.value` cannot trap. The conservative
+        // no-table path is `field_access_is_heap_read_and_may_trap`.
         use crate::tir::{ResolvedType, TypeTable};
         let mut types = TypeTable::new();
         let struct_ty = types.intern(ResolvedType::Struct {
