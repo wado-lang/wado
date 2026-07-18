@@ -345,16 +345,12 @@ land with stage 6 of the rearchitecture (see
       (load the whole package via `wado test` discovery; `wado check`
       package mode). Until then `test-only` only surfaces for `test` blocks
       in the compiled entry's own module graph.
-- [x] LSP wiring: `unused_diagnostics(&Semantics, is_test_world)` (a pure
-      builder shared by the batch path and `Engine::diagnostics`) surfaces
-      `DeadFunction` / `DeadGlobal` / `TestOnly*` in the editor. The LSP runs
-      in the default command world (`is_test_world = false`, so test-only
-      items are reported); `Engine::set_unused_diagnostics` mirrors
-      `CompilerOptions::unused_diagnostics`. `Engine::diagnostics` applies the
-      builder at query time (not baked into the snapshot, so the toggle is
-      live) and keeps only entry-document items — dead code in an imported
-      module belongs to that module's own `publishDiagnostics`. Diagnostics
-      carry the LSP `Unnecessary` tag so editors fade the range. Covered by
+- [x] LSP wiring: the pure `unused_diagnostics(&Semantics, is_test_world)`
+      builder is shared by the batch path and `Engine::diagnostics`, which
+      applies it at query time (toggle stays live via
+      `Engine::set_unused_diagnostics`) and keeps only entry-document items.
+      The LSP runs the command world, so test-only items are reported.
+      Diagnostics carry the LSP `Unnecessary` tag. Tests in
       `wado-lsp/tests/diagnostics.rs`.
 
 #### Phase 3b — reify gating (Design B)

@@ -16,10 +16,8 @@ lsp_repr_u32_enum!(
 );
 
 lsp_repr_u32_enum!(
-    /// LSP `DiagnosticTag` (spec §Diagnostic). Serializes as the 1..=2
-    /// integer defined by the LSP wire format. `Unnecessary` asks the
-    /// client to render the range faded/greyed-out (unused code);
-    /// `Deprecated` renders it struck through.
+    /// LSP `DiagnosticTag`: `Unnecessary` fades the range, `Deprecated`
+    /// strikes it through.
     pub enum DiagnosticTag {
         Unnecessary = 1,
         Deprecated = 2,
@@ -49,8 +47,7 @@ pub struct Diagnostic {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
     pub message: String,
-    /// LSP diagnostic tags (`Unnecessary` / `Deprecated`). Unused / dead-code
-    /// diagnostics carry `Unnecessary` so the editor fades their range.
+    /// Diagnostic tags; unused / dead-code lints carry `Unnecessary`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<DiagnosticTag>,
 }
@@ -194,8 +191,6 @@ mod tests {
         )
         .unwrap();
         assert_eq!(diag.tags, vec![DiagnosticTag::Unnecessary]);
-        // Empty tags must be omitted from the wire form; a tagged diagnostic
-        // serializes the array.
         let json = serde_json::to_string(&diag).unwrap();
         assert!(json.contains("\"tags\":[1]"), "got {json}");
     }

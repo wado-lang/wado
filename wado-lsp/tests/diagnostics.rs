@@ -38,9 +38,7 @@ fn warnings(diags: &[Diagnostic]) -> Vec<&Diagnostic> {
         .collect()
 }
 
-/// A private function with no caller surfaces as a dead-code warning in the
-/// editor. The compiler already computes source-level liveness on the LSP
-/// path (`build_tir = false`); `Engine::diagnostics` now reads it.
+/// A private function with no caller surfaces as a dead-code warning.
 #[test]
 fn dead_function_is_reported() {
     futures::executor::block_on(async {
@@ -76,8 +74,7 @@ fn dead_global_is_reported() {
     });
 }
 
-/// A `pub fn` crosses the package boundary and is a liveness root, so it is
-/// never reported even without an in-package caller.
+/// A `pub fn` is a liveness root, so it is never reported without a caller.
 #[test]
 fn pub_function_is_not_reported() {
     futures::executor::block_on(async {
@@ -90,8 +87,7 @@ fn pub_function_is_not_reported() {
     });
 }
 
-/// A function reached only from a `test` block is reported test-only (the
-/// editor runs in the default command world, so `is_test_world` is false).
+/// A function reached only from a `test` block is reported test-only.
 #[test]
 fn test_only_function_is_reported() {
     futures::executor::block_on(async {
@@ -112,8 +108,7 @@ fn test_only_function_is_reported() {
     });
 }
 
-/// Dead-code diagnostics carry the LSP `Unnecessary` tag so the editor fades
-/// their range; ordinary errors do not.
+/// Dead-code diagnostics carry the LSP `Unnecessary` tag.
 #[test]
 fn dead_code_diagnostics_carry_unnecessary_tag() {
     futures::executor::block_on(async {
@@ -131,10 +126,8 @@ fn dead_code_diagnostics_carry_unnecessary_tag() {
     });
 }
 
-/// Dead code in an *imported* user module belongs to that module's own
-/// `publishDiagnostics`, not the importer's: opening `foo.wado` must not
-/// surface `bar.wado`'s dead function (whose range would otherwise be mapped
-/// onto the wrong document). Opening `bar.wado` directly still reports it.
+/// Dead code in an imported module stays off the importer's diagnostics but
+/// still appears when that module is opened directly.
 #[test]
 fn imported_module_dead_code_stays_off_the_importer() {
     futures::executor::block_on(async {
@@ -162,9 +155,7 @@ fn imported_module_dead_code_stays_off_the_importer() {
     });
 }
 
-/// `set_unused_diagnostics(false)` takes effect at the next query without a
-/// document edit: the classification is applied at query time, not baked into
-/// the cached snapshot.
+/// `set_unused_diagnostics(false)` takes effect at the next query, no edit.
 #[test]
 fn toggling_unused_diagnostics_takes_effect_without_reopen() {
     futures::executor::block_on(async {
@@ -188,8 +179,7 @@ fn toggling_unused_diagnostics_takes_effect_without_reopen() {
     });
 }
 
-/// A clean program whose every item is reached emits no dead-code warnings —
-/// in particular the imported stdlib items are never reported.
+/// A fully-used program emits no dead-code warnings (stdlib items included).
 #[test]
 fn fully_used_program_has_no_dead_warnings() {
     futures::executor::block_on(async {

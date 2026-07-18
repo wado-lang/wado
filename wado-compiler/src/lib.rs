@@ -309,19 +309,10 @@ pub async fn compile_with_host<H: CompilerHost>(
 /// This is the main compilation entry point with all options. It runs the full compilation pipeline:
 /// lexer -> parser -> binder -> loader -> analyzer -> elaborator -> lower -> optimize -> `tir_to_wir`
 ///
-/// Build unused-item warnings for the user-authored items the liveness pass
-/// classified: `DeadFunction` / `DeadGlobal` for items reachable from neither
-/// production nor tests, and `TestOnlyFunction` / `TestOnlyGlobal` for items
-/// reachable only from `test` blocks.
-///
-/// Pure over `Semantics`: it reads the liveness classification the elaborator
-/// already computed (available on both the batch and LSP paths, since liveness
-/// runs before reify) and returns the warnings without emitting them. The
-/// batch path forwards them through its [`Logger`]; the LSP path
-/// (`Engine::diagnostics`) pushes them into the snapshot's diagnostic list.
-///
-/// `is_test_world` suppresses the `TestOnly*` warnings during a `wado test`
-/// run, where the reaching `test` blocks are the whole point.
+/// Build unused-item warnings from the liveness classification: `DeadFunction`
+/// / `DeadGlobal` (reached by neither production nor tests) and
+/// `TestOnlyFunction` / `TestOnlyGlobal` (reached only by `test` blocks).
+/// Pure over `Semantics`; `is_test_world` suppresses the `TestOnly*` warnings.
 pub fn unused_diagnostics(sem: &semantics::Semantics, is_test_world: bool) -> Vec<Diagnostic> {
     use crate::ast::Item;
     use crate::compiler_host::{Code, DiagnosticSpan};

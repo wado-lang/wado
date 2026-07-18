@@ -92,9 +92,8 @@ pub struct Engine {
     /// updates this from the `initialize` request before dispatching any
     /// position-bearing query.
     position_encoding: PositionEncoding,
-    /// Whether to surface source-level unused / dead-code warnings
-    /// (`DeadFunction` / `DeadGlobal` / `TestOnly*`) in `diagnostics`.
-    /// On by default, mirroring `CompilerOptions::unused_diagnostics`.
+    /// Surface unused / dead-code warnings in `diagnostics` (on by default;
+    /// mirrors `CompilerOptions::unused_diagnostics`).
     unused_diagnostics: bool,
 }
 
@@ -161,8 +160,7 @@ impl Engine {
         }
     }
 
-    /// Toggle source-level unused / dead-code warnings in `diagnostics`.
-    /// Defaults to `true`; mirrors `CompilerOptions::unused_diagnostics`.
+    /// Toggle unused / dead-code warnings in `diagnostics` (default `true`).
     pub fn set_unused_diagnostics(&mut self, enabled: bool) {
         self.unused_diagnostics = enabled;
     }
@@ -622,13 +620,9 @@ impl Engine {
     /// columns, the entry document is re-expressed in the negotiated
     /// position encoding.
     ///
-    /// Source-level unused / dead-code warnings are computed here rather
-    /// than baked into the snapshot: the classification is a cheap walk
-    /// over the liveness lists the compiler already produced, and applying
-    /// it at query time keeps [`Engine::set_unused_diagnostics`] live
-    /// without invalidating the cache. Only items in the entry document
-    /// are reported — dead code in an imported module belongs to that
-    /// module's own `publishDiagnostics`, not this one.
+    /// Unused / dead-code warnings are applied here (not baked into the
+    /// snapshot, so [`Engine::set_unused_diagnostics`] stays live) and are
+    /// kept only for the entry document.
     pub async fn diagnostics<H: CompilerHost>(&self, uri: &str, host: &H) -> Vec<Diagnostic> {
         let Some(snapshot) = self.snapshot(uri, host).await else {
             return Vec::new();
@@ -637,12 +631,8 @@ impl Engine {
         let encoding = self.position_encoding;
         let entry_text = self.documents.get(uri).map(|d| d.text.as_str());
         let reencode = |d: &CompilerDiagnostic| {
-            // Only re-encode against the entry document's text when the
-            // diagnostic actually points at it. Diagnostics from imported
-            // modules carry codepoint columns relative to the OTHER
-            // module's source, which we don't have on hand; passing `None`
-            // keeps them as raw codepoint indices (correct under UTF-32 /
-            // ASCII).
+            // Re-encode against the entry text only when the diagnostic points
+            // at it; imported-module spans keep raw codepoint columns.
             let source = d
                 .span
                 .as_ref()
