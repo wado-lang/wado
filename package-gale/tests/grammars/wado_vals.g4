@@ -8,7 +8,7 @@ grammar WadoVals;
 
 options { language = Wado; }
 
-r returns [i32 v] : A { $v = 5; } B { p.emit(`v={$v}`); } ;
+r returns [i32 v] : A { $v = 5; } B { p.emit(`v=${$v}`); } ;
 
 A : 'a' ;
 B : 'b' ;

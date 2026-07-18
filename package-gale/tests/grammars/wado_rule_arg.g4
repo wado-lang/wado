@@ -10,7 +10,7 @@ options { language = Wado; }
 
 r : e[3] e[40] ;
 
-e[i32 base] : A { p.emit(`base={$base} `); } ;
+e[i32 base] : A { p.emit(`base=${$base} `); } ;
 
 A : 'a' ;
 WS : ' ' -> skip ;

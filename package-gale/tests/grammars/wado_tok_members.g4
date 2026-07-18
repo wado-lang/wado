@@ -8,7 +8,7 @@ grammar WadoTokMembers;
 
 options { language = Wado; }
 
-r : a=NUM b=NUM { p.emit(`{$a.int}+{$b.int}={$a.int + $b.int} idx={$b.index}`); } ;
+r : a=NUM b=NUM { p.emit(`${$a.int}+${$b.int}=${$a.int + $b.int} idx=${$b.index}`); } ;
 
 NUM : [0-9]+ ;
 WS : ' ' -> skip ;
