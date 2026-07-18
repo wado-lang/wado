@@ -11,21 +11,18 @@ export fn run() {
     bag.push(2);
     bag.push(3);
 
-    // By value: Item = u8.
     let mut sum = 0;
     for let b of bag {
         sum += b as i32;
     }
     assert sum == 6;
 
-    // By reference: Item = &u8.
     let mut ref_sum = 0;
     for let b of &bag {
         ref_sum += *b as i32;
     }
     assert ref_sum == 6;
 
-    // The prelude `ByteList` newtype behaves the same.
     let mut bl: ByteList = ByteList::with_capacity(2);
     bl.push(10);
     bl.push(20);
@@ -35,7 +32,6 @@ export fn run() {
     }
     assert bl_sum == 30;
 
-    // A newtype over the raw GC `Array<T>` iterates by reference too.
     let ba: ByteArray = ByteArray::filled(3, 7);
     let mut ba_sum = 0;
     for let b of &ba {

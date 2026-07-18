@@ -354,11 +354,6 @@ impl TypeSystem {
     pub(crate) fn newtype_base_lookup(&self, name: &str, type_id: TypeId) -> (String, TypeId) {
         let tt = self.type_table.borrow();
         if let Some(base_id) = tt.get_newtype_base(type_id) {
-            // A newtype over the raw GC array (`type ByteArray = Array<u8>`) peels
-            // to the `Array` name so it inherits `impl IndexValue / IndexAssign /
-            // … for Array<T>`, just as a `List` newtype peels to `List`.
-            // `struct_name_for_type` returns `None` for `BuiltinArray`, so handle
-            // it explicitly here.
             let is_builtin_array = matches!(tt.get(base_id), ResolvedType::BuiltinArray(_));
             drop(tt);
             if is_builtin_array {

@@ -1,17 +1,12 @@
 // Rust-style byte-string literal `b"..."` lowers to a constant byte buffer
 // via the data-segment path (the same `BytesLiteral` lowering `#include_bytes`
-// uses), so a large constant byte blob never becomes a builder/push chain.
-//
-// Its default type is the first-class `ByteList` newtype. Newtype literal
-// coercion still lets it flow into a `List<u8>` context (`let x: List<u8> =
-// b"..."`) with no cast, since the two share a representation.
+// uses). Its default type is the first-class `ByteList` newtype, and newtype
+// literal coercion still lets it flow into a `List<u8>` context with no cast.
 
 fn byte_list_len(v: ByteList) -> i32 {
     return v.len();
 }
 
-// A `List<u8>` parameter, return, and field all accept a bare `b"..."`
-// via the same newtype literal coercion (no cast).
 fn raw_len(v: List<u8>) -> i32 {
     return v.len();
 }
@@ -25,17 +20,12 @@ struct Holder {
 }
 
 export fn run() {
-    // Default type is `ByteList`: an inferred binding is a `ByteList`, so it
-    // passes to a `ByteList` parameter with no cast. (A `List<u8>` binding
-    // would need `as ByteList` here.)
     let inferred = b"abc";
     assert byte_list_len(inferred) == 3;
 
     let bl: ByteList = b"abc";
     assert bl.len() == 3;
 
-    // Newtype literal coercion: `b"..."` flows into `List<u8>` with no cast,
-    // in a binding, a call argument, a return, and a struct field.
     let a: List<u8> = b"abc";
     assert a.len() == 3;
     assert a[0] == 97;
@@ -47,7 +37,6 @@ export fn run() {
     let h = Holder { buf: b"abcde" };
     assert h.buf.len() == 5;
 
-    // Escapes: \xNN hex byte, plus the standard string escapes.
     let b: List<u8> = b"\x00\xff\n\t\\\"\0";
     assert b.len() == 7;
     assert b[0] == 0;
@@ -58,8 +47,6 @@ export fn run() {
     assert b[5] == 34;
     assert b[6] == 0;
 
-    // Escapes shared with string literals via the common decoder
-    // (`\r`, `\b`, `\f`, `\/`), so byte strings accept the same set.
     let c: List<u8> = b"\r\b\f/";
     assert c.len() == 4;
     assert c[0] == 13;
@@ -67,7 +54,6 @@ export fn run() {
     assert c[2] == 12;
     assert c[3] == 47;
 
-    // Empty byte literal.
     let e: List<u8> = b"";
     assert e.len() == 0;
 }

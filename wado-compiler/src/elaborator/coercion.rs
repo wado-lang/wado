@@ -360,11 +360,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Byte literal (`b"..."` / `#include_bytes`, default `ByteList`) →
-        // any type whose ultimate base is `List<u8>` — notably the base
-        // `List<u8>` itself (`let x: List<u8> = b"..."`). Repr-identical, so
-        // the retag is free; the byte-slice newtypes (`ByteSlice`) do not
-        // match since their base is `ArraySlice<u8>`, not `List<u8>`.
         let is_bytes_literal = matches!(
             expr,
             Expr::Literal(lit)

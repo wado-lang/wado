@@ -2154,10 +2154,7 @@ impl TypeTable {
         self.make_generic_instance("List".to_string(), ModuleSource::list(), vec![element])
     }
 
-    /// Create the `ByteList` newtype (`type ByteList = List<u8>` in
-    /// `core:prelude/bytes.wado`). Interned so it matches the `TypeId` a
-    /// source-level `ByteList` annotation resolves to; the default type of a
-    /// `b"..."` / `#include_bytes` byte literal.
+    /// Create the `ByteList` newtype (`type ByteList = List<u8>`).
     pub fn make_byte_list(&mut self) -> TypeId {
         let base = self.make_list(TypeTable::U8);
         self.make_newtype("ByteList".to_string(), ModuleSource::bytes(), base)

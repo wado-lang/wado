@@ -1372,11 +1372,9 @@ fn generate_struct_deserialize(
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
     let option_i32 = tt.make_option(TypeTable::I32);
-    // `FieldSchema::lookup(key: ByteSlice)` — the wire key is a borrowed byte
-    // view. The slice module is taken from the byte-read compiler item so the
-    // synthesiser never hard-codes a stdlib path; the base `ArraySlice<u8>` is
-    // wrapped in the `ByteSlice` newtype so the synthesised signature matches
-    // the trait's `ByteSlice` spelling exactly.
+    // `FieldSchema::lookup(key: ByteSlice)`: the slice module comes from the
+    // byte-read compiler item, wrapped in the `ByteSlice` newtype to match the
+    // trait signature.
     let key_slice_type = {
         let slice_module = tt
             .compiler_method(crate::compiler_item::CompilerItem::ByteSliceGetUnchecked)

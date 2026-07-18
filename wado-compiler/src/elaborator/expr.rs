@@ -3179,10 +3179,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 let is_tuple_literal = matches!(&field.value, ast::Expr::TupleLiteral(_));
 
-                // Byte literals (`b"..."` / `#include_bytes`) default to
-                // `ByteList`; a `List<u8>` field needs the expected type so the
-                // `BytesNewtype` coercion in `try_coerce` fires (mirrors the
-                // numeric/null-literal handling below).
                 let is_bytes_literal = matches!(
                     &field.value,
                     ast::Expr::Literal(lit)

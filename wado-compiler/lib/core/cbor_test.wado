@@ -7,10 +7,7 @@ use { Serialize, Deserialize, DeserializeError, DeserializeErrorKind } from "cor
 use { Value } from "core:value";
 use { TreeMap } from "core:collections";
 
-// A newtype's inherent method (`ByteList::to_hex`) called directly inside a
-// generic function body currently mis-resolves its owner to the erased base
-// (`List<u8>`); routing through this non-generic helper sidesteps it.
-// Tracked in wado-lang/wado#1615.
+// Non-generic helper: works around wado-lang/wado#1615.
 fn bytes_to_hex(b: ByteList) -> String {
     return b.to_hex();
 }

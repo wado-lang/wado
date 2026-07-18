@@ -10,20 +10,17 @@ fn takes_mybytes(v: MyBytes) -> i32 {
 }
 
 export fn run() {
-    // Inherited `with_capacity` returns the newtype.
     let mut a = MyBytes::with_capacity(4);
     a.push(1);
     a.push(2);
     assert a.len() == 2;
     assert takes_mybytes(a) == 2;
 
-    // Inherited `filled` returns the newtype.
     let b = MyBytes::filled(3, 7);
     assert b.len() == 3;
     assert b[0] == 7;
     assert takes_mybytes(b) == 3;
 
-    // The prelude `ByteList` newtype inherits the same constructors.
     let mut c = ByteList::with_capacity(2);
     c.push(9);
     assert c.len() == 1;
