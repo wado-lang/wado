@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784331071527,
+  "lastUpdate": 1784334431488,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -41285,6 +41285,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1ac19df7fa7ada406333d4235161602e12e7620e"
         },
         "date": 1784331070782,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16233,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265299,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "52da04c5cfc39fcd8fe8e96c7d765b9888124bd8",
+          "message": "Merge pull request #1610 from wado-lang/claude/dependabot-github-actions-cqfbf6\n\nci: add Dependabot for GitHub Actions and cargo",
+          "timestamp": "2026-07-18T09:18:42+09:00",
+          "tree_id": "4f3e2bcdb1b1b40f9b1e49134cb5939a85ce3a80",
+          "url": "https://github.com/wado-lang/wado/commit/52da04c5cfc39fcd8fe8e96c7d765b9888124bd8"
+        },
+        "date": 1784334431191,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
