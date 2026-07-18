@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784381037349,
+  "lastUpdate": 1784416377654,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -41769,6 +41769,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d6b8fbd5f7d6e207b309deb7a1917868b46d5997"
         },
         "date": 1784381036642,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8257,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16526,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271337,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "46160cf4aaec5e128800ad65e4d99f9566e134c9",
+          "message": "Merge pull request #1627 from wado-lang/claude/wado-compiler-optimization-4jrsao\n\nperf(build): opt-level 2 for all deps in the dev profile",
+          "timestamp": "2026-07-19T08:02:54+09:00",
+          "tree_id": "3f13ce0ea9de56ad4f0143e91fcd580203fbfd9c",
+          "url": "https://github.com/wado-lang/wado/commit/46160cf4aaec5e128800ad65e4d99f9566e134c9"
+        },
+        "date": 1784416377265,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
