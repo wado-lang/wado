@@ -1,0 +1,32 @@
+// A newtype over the raw GC `Array<T>` inherits its `Index` traits (and its
+// associated functions) just like a `List` newtype inherits `List`'s — the
+// `Array` `[]` sugar is a normal `impl IndexValue / IndexAssign for Array<T>`,
+// reached by peeling the newtype to the `Array` name.
+type Bytes = Array<u8>;
+
+export fn run() {
+    // Associated function inherited, result viewed as the newtype.
+    let mut a: Bytes = Bytes::filled(3, 0);
+    assert a.len() == 3;
+
+    // IndexAssign / IndexValue via inheritance.
+    a[0] = 7;
+    a[2] = 9;
+    assert a[0] == 7;
+    assert a[1] == 0;
+    assert a[2] == 9;
+
+    // Range indexing yields a slice.
+    let s = a[0..<2];
+    assert s.len() == 2;
+    assert s[0] == 7;
+
+    // The prelude `ByteArray` newtype behaves the same.
+    let mut b: ByteArray = ByteArray::filled(2, 5);
+    b[1] = 6;
+    assert b[0] == 5;
+    assert b[1] == 6;
+}
+
+__DATA__
+{"stdout": ""}

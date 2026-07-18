@@ -3247,6 +3247,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let base_args = match self.tysys.type_table.borrow().get(base_type_id) {
                             ResolvedType::GenericInstance { type_args, .. }
                             | ResolvedType::GenericResource { type_args, .. } => type_args.clone(),
+                            // The raw GC array's element is its single type arg,
+                            // so a newtype over `Array<u8>` seeds `[u8]`.
+                            ResolvedType::BuiltinArray(elem) => vec![*elem],
                             _ => vec![],
                         };
                         newtype_dispatch = Some((newtype_id, base_type_id, base_args));
