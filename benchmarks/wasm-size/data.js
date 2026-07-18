@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784341323610,
+  "lastUpdate": 1784345386785,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -41461,6 +41461,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/107ada4cf0e8d30fe17f3657f0c6da34865b7137"
         },
         "date": 1784341323092,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16233,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265299,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e90a85c7167b1a502ed588003de7de2ec42265d0",
+          "message": "Merge pull request #1617 from wado-lang/claude/docs-cleanup-gc6ai3\n\ndocs: remove stale docs and prefix operator-precedence research",
+          "timestamp": "2026-07-18T12:21:27+09:00",
+          "tree_id": "e510df7678d0a1fb2b95f2aeab94ffc029babc05",
+          "url": "https://github.com/wado-lang/wado/commit/e90a85c7167b1a502ed588003de7de2ec42265d0"
+        },
+        "date": 1784345386396,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
