@@ -142,7 +142,7 @@ fn push_be(buf: &mut List<u8>, value: u64, nbytes: i32) {
 /// Append the UTF-8 bytes of `s` (a `String` is already valid UTF-8, so the
 /// text string is emitted verbatim — RFC 8949 §3.1).
 fn push_text_bytes(buf: &mut List<u8>, s: &String) {
-    buf.extend_from_slice(s.as_bytes());
+    buf.extend_from_slice(s.as_bytes() as ArraySlice<u8>);
 }
 
 /// Append a byte string's contents.

@@ -948,7 +948,7 @@ impl JsonDeserializer {
         if !all_ascii && !String::is_valid_utf8(slice) {
             return Result::Err(self.invalid_utf8_string(start));
         }
-        dst.push_byte_slice_unchecked(slice);
+        dst.push_bytes_unchecked(&slice);
         return Result::Ok(());
     }
 
