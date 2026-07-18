@@ -430,7 +430,7 @@ Cross-type comparison falls out of subtyping. `el == html_input` is well-typed w
 
 #### `Inspect`, `InspectAlt`, and `Display` delegate to the host
 
-For resources, the auto-derived implementations of `Inspect` (`{x:?}`), `InspectAlt` (`{x:#?}`), and `Display` (`{x}`) call host-imported formatters:
+For resources, the auto-derived implementations of `Inspect` (`${x:?}`), `InspectAlt` (`${x:#?}`), and `Display` (`${x}`) call host-imported formatters:
 
 ```wit
 inspect:     func(r: extern-ref) -> string
@@ -438,7 +438,7 @@ inspect-alt: func(r: extern-ref) -> string
 display:     func(r: extern-ref) -> string
 ```
 
-These are the **one place** where dynamic-type information leaks into Wado output: the host inspects the runtime type of the underlying object and renders accordingly, so `{n:?}` on a `Node` value that is actually an `HTMLInputElement` prints the input element. This matches the intuition that debug output is most valuable when it reflects what's really there.
+These are the **one place** where dynamic-type information leaks into Wado output: the host inspects the runtime type of the underlying object and renders accordingly, so `${n:?}` on a `Node` value that is actually an `HTMLInputElement` prints the input element. This matches the intuition that debug output is most valuable when it reflects what's really there.
 
 A user `impl Inspect for Element { ... }` (or `Display`, etc.) shadows the auto-derived host call by the normal trait-resolution rules, with the trait-vs-inherited collision rule (rule 2 of method resolution) keeping ambiguities loud.
 
@@ -553,7 +553,7 @@ The `is-T` predicates scale O(N) with the number of extends-participating types.
 | `el.downcast::<HtmlInputElement>()`   | call `is-html-input-element(el)`, branch into `Option::Some(el)` or `Option::None` |
 | `a == b` for `a, b: ExternRef`-backed | call `is-same(a, b)`                                                               |
 | `` `{x:?}` ``                         | call `inspect(x)`                                                                  |
-| `` `{x}` ``                           | call `display(x)`                                                                  |
+| `` `${x}` ``                          | call `display(x)`                                                                  |
 
 Upcast and the receiver argument of inherited methods are wasm-level no-ops; the same `externref` value flows through unchanged.
 

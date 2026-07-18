@@ -1621,20 +1621,20 @@ JSON-like content needs no escaping:
 
 ```wado
 let name = "Alice";
-let greeting = `Hello, $${name}!`;  // "Hello, Alice!"
+let greeting = `Hello, ${name}!`;  // "Hello, Alice!"
 
 let count = 42;
-let message = `Count: $${count}`;   // "Count: 42"
+let message = `Count: ${count}`;   // "Count: 42"
 
 // Format specifiers
 let pi = 3.14159;
-let formatted = `Pi: $${pi:.2}`;   // "Pi: 3.14"
-let hex = `$${255:x}`;             // "ff"
+let formatted = `Pi: ${pi:.2}`;   // "Pi: 3.14"
+let hex = `${255:x}`;             // "ff"
 
 // Inspect (debug) format — works for any type
 let p = Point { x: 10, y: 20 };
-let debug = `$${p:?}`;            // "Point { x: 10, y: 20 }"
-let pretty = `$${p:#?}`;          // pretty-print: "Point {\n  x: 10,\n  y: 20,\n}"
+let debug = `${p:?}`;            // "Point { x: 10, y: 20 }"
+let pretty = `${p:#?}`;          // pretty-print: "Point {\n  x: 10,\n  y: 20,\n}"
 // `${p}` (Display) needs an `impl Display` for `Point`; use `${p:?}` for debug output.
 
 // Braces are literal — JSON embeds cleanly without escaping
@@ -2161,7 +2161,7 @@ Interpolation support may be added in future versions:
 ```wado
 // Future: interpolation syntax (not yet implemented)
 let id = 42;
-let query = sql`SELECT * FROM users WHERE id = $${id}`;
+let query = sql`SELECT * FROM users WHERE id = ${id}`;
 ```
 
 ### Newtype

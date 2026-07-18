@@ -6,7 +6,7 @@ When debugging or logging, developers need to convert arbitrary values to string
 
 | Language   | Default Output               | Customization            | Escape Hatch            |
 | ---------- | ---------------------------- | ------------------------ | ----------------------- |
-| **Rust**   | None (trait required)        | `Display`/`Debug` traits | `${:?}` for Debug        |
+| **Rust**   | None (trait required)        | `Display`/`Debug` traits | `{:?}` for Debug        |
 | **Elixir** | All types inspectable        | `Inspect` protocol       | `structs: false` option |
 | **Python** | `<Foo at 0x...>` (unhelpful) | `__str__`/`__repr__`     | `repr()`                |
 | **Ruby**   | Detailed inspect             | `to_s`/`inspect`         | `p obj`                 |
@@ -37,8 +37,8 @@ The compiler automatically generates inspect logic for all types. This is not a 
 
 Template strings support two interpolation modes:
 
-| Syntax     | Behavior                                  | Use Case       |
-| ---------- | ----------------------------------------- | -------------- |
+| Syntax      | Behavior                                  | Use Case       |
+| ----------- | ----------------------------------------- | -------------- |
 | `${expr}`   | Display if implemented, otherwise inspect | General output |
 | `${expr:?}` | Always inspect (compiler-generated)       | Debugging      |
 
@@ -139,8 +139,8 @@ This ensures template strings always produce output without requiring explicit t
 
 | Aspect                 | Rust                            | Wado                                  |
 | ---------------------- | ------------------------------- | ------------------------------------- |
-| `${x}` without trait    | Compile error                   | Falls back to inspect                 |
-| `${x:?}` without trait  | Compile error                   | Always works (compiler intrinsic)     |
+| `${x}` without trait   | Compile error                   | Falls back to inspect                 |
+| `${x:?}` without trait | Compile error                   | Always works (compiler intrinsic)     |
 | Debug implementation   | `#[derive(Debug)]` macro        | Compiler-generated inspect            |
 | Display implementation | Manual `impl Display`           | Manual `impl Display`                 |
 | Inspect function       | `dbg!` macro (prints file:line) | `builtin::inspect()` (returns String) |

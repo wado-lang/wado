@@ -503,12 +503,13 @@ fn append_interp(
     return Result::Ok(());
 }
 
-/// Escape a string-literal part for Wado template text: the braces and backtick
-/// that carry template meaning. Java `\`-escapes pass through unchanged.
+/// Escape a string-literal part for Wado template text. Only `$` (which could
+/// start a `${` interpolation) and the backtick carry template meaning; braces
+/// are literal. Java `\`-escapes pass through unchanged.
 fn escape_template(content: &String) -> String {
     let mut out = String::with_capacity(content.chars().count());
     for let c of content.chars() {
-        if c == '{' || c == '}' || c == '`' {
+        if c == '$' || c == '`' {
             out.push('\\');
         }
         out.push(c);

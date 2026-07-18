@@ -4,22 +4,22 @@
 
 ## Context
 
-Template strings in Wado support interpolation with format specifiers: `` `value: {x:spec}` ``. Different languages provide different sets of format specifiers:
+Template strings in Wado support interpolation with format specifiers: `` `value: ${x:spec}` ``. Different languages provide different sets of format specifiers:
 
 ### Language Comparison
 
 | Feature                   | Go         | Python     | Rust           | Wado    |
 | ------------------------- | ---------- | ---------- | -------------- | ------- |
 | Fixed-point float         | `%f`, `%F` | `:f`, `:F` | `{}` (default) | `{}`    |
-| Exponential (lower)       | `%e`       | `:e`       | `${:e}`         | `${:e}`  |
-| Exponential (upper)       | `%E`       | `:E`       | `${:E}`         | `${:E}`  |
+| Exponential (lower)       | `%e`       | `:e`       | `{:e}`         | `${:e}` |
+| Exponential (upper)       | `%E`       | `:E`       | `{:E}`         | `${:E}` |
 | General format (adaptive) | `%g`, `%G` | `:g`, `:G` | ❌ None        | ❌ None |
-| Binary                    | `%b`       | `:b`       | `${:b}`         | `${:b}`  |
-| Octal                     | `%o`       | `:o`       | `${:o}`         | `${:o}`  |
-| Hex (lower)               | `%x`       | `:x`       | `${:x}`         | `${:x}`  |
-| Hex (upper)               | `%X`       | `:X`       | `${:X}`         | `${:X}`  |
-| Pointer                   | `%p`       | N/A        | `${:p}`         | ❌ None |
-| Debug                     | `%#v`      | `!r`       | `${:?}`         | `${:?}`  |
+| Binary                    | `%b`       | `:b`       | `{:b}`         | `${:b}` |
+| Octal                     | `%o`       | `:o`       | `{:o}`         | `${:o}` |
+| Hex (lower)               | `%x`       | `:x`       | `{:x}`         | `${:x}` |
+| Hex (upper)               | `%X`       | `:X`       | `{:X}`         | `${:X}` |
+| Pointer                   | `%p`       | N/A        | `{:p}`         | ❌ None |
+| Debug                     | `%#v`      | `!r`       | `{:?}`         | `${:?}` |
 
 ### The Problem with General Format (`g`/`G`)
 
@@ -32,8 +32,8 @@ C's `%g` format specifier automatically switches between fixed-point and exponen
 Rust's design decision was to **exclude** `g`/`G` format specifiers entirely. Instead:
 
 1. **RFC #844 (2015)**: Community requested `%g` equivalent for prettier float output
-2. **RFC #2729**: Proposed `${:g?}` debug formatter
-3. **Final solution (Rust 1.58)**: Modified `${:?}` (Debug) to automatically use exponential notation for very large/small floats, without adding a separate format specifier
+2. **RFC #2729**: Proposed `{:g?}` debug formatter
+3. **Final solution (Rust 1.58)**: Modified `{:?}` (Debug) to automatically use exponential notation for very large/small floats, without adding a separate format specifier
 
 This avoided the unpredictability of `g` while still providing readable output for debugging.
 
@@ -52,8 +52,8 @@ Where `spec` follows Rust's format specification mini-language.
 
 ### Supported Format Types
 
-| Specifier | Trait      | Description           | Example              |
-| --------- | ---------- | --------------------- | -------------------- |
+| Specifier | Trait      | Description           | Example               |
+| --------- | ---------- | --------------------- | --------------------- |
 | (none)    | Display    | Default display       | `${x}` → `"42"`       |
 | `?`       | Inspect    | Debug representation  | `${x:?}` → `"42"`     |
 | `#?`      | InspectAlt | Pretty-print debug    | `${x:#?}` (indented)  |
@@ -75,13 +75,13 @@ Where `spec` follows Rust's format specification mini-language.
 Format specifiers can include additional parameters in this order:
 
 ```
-{expr:[[fill]align][sign][#][0][width][.precision]type}
+${expr:[[fill]align][sign][#][0][width][.precision]type}
 ```
 
 #### Alignment and Width
 
-| Syntax    | Description                | Example    | Output    |
-| --------- | -------------------------- | ---------- | --------- |
+| Syntax     | Description                | Example     | Output    |
+| ---------- | -------------------------- | ----------- | --------- |
 | `${x:5}`   | Width 5, default align     | `${42:5}`   | `"   42"` |
 | `${x:<5}`  | Left align                 | `${42:<5}`  | `"42   "` |
 | `${x:^5}`  | Center align               | `${42:^5}`  | `" 42  "` |
@@ -106,7 +106,7 @@ println(`${12345:.2e}`);     // => "1.23e4"
 ```
 
 For strings, precision specifies the maximum length in characters, matching
-Rust's `${:.N}`. `Display` truncates silently; `Inspect` (`:?`) truncates to the
+Rust's `{:.N}`. `Display` truncates silently; `Inspect` (`:?`) truncates to the
 same characters and appends a `...` marker (outside the quotes) when truncation
 actually happened. The marker does not count toward the precision:
 
@@ -157,18 +157,18 @@ affecting non-sequence operands.
 
 #### Sign
 
-| Syntax    | Description                 | Example   | Output  |
-| --------- | --------------------------- | --------- | ------- |
-| `${x:+}`   | Always show sign            | `${42:+}`  | `"+42"` |
-| `${x:+}`   | Always show sign (negative) | `${-42:+}` | `"-42"` |
+| Syntax    | Description                 | Example    | Output  |
+| --------- | --------------------------- | ---------- | ------- |
+| `${x:+}`  | Always show sign            | `${42:+}`  | `"+42"` |
+| `${x:+}`  | Always show sign (negative) | `${-42:+}` | `"-42"` |
 | (default) | Only negative sign          | `${42}`    | `"42"`  |
 
 #### Alternate Form
 
 The `#` flag provides alternate representations:
 
-| Type     | Effect          | Example   | Output       |
-| -------- | --------------- | --------- | ------------ |
+| Type     | Effect          | Example    | Output       |
+| -------- | --------------- | ---------- | ------------ |
 | `x`, `X` | Add `0x` prefix | `${42:#x}` | `"0x2a"`     |
 | `b`      | Add `0b` prefix | `${42:#b}` | `"0b101010"` |
 | `o`      | Add `0o` prefix | `${42:#o}` | `"0o52"`     |
@@ -270,22 +270,22 @@ Resolution order for `${expr:spec}`:
 
 Following Rust's ecosystem, we can add:
 
-1. **Dynamic width and precision**: Allow runtime values using nested `{}` syntax
-   - Syntax: `${value:{width}.{precision}}` (Python-style)
-   - Rationale: Python's nested `{}` approach is more consistent with Wado's "arbitrary expressions" philosophy than Rust's `$` syntax, which requires argument lists. Variables in the current scope can be referenced directly.
-   - Example: `let w = 8; let p = 2; println(\`{pi:{w}.{p}}\`);`→`" 3.14"`
+1. **Dynamic width and precision**: Allow runtime values using nested `${}` syntax
+   - Syntax: `${value:${width}.${precision}}` (Python-style)
+   - Rationale: Python's nested-interpolation approach is more consistent with Wado's "arbitrary expressions" philosophy than Rust's `width$` syntax, which requires argument lists. Variables in the current scope can be referenced directly.
+   - Example: `let w = 8; let p = 2; println(\`${pi:${w}.${p}}\`);`→`" 3.14"`
 
 ### Migration from Other Languages
 
 For developers coming from other languages:
 
-| From                      | To Wado                      | Notes                |
-| ------------------------- | ---------------------------- | -------------------- |
-| Python `f"{x:.2f}"`       | `` `{x:.2}` ``               | No `f` suffix needed |
-| Go `fmt.Printf("%d", x)`  | `` `{x}` ``                  | Type inferred        |
-| Go `fmt.Printf("%x", x)`  | `` `{x:x}` ``                | Same specifier       |
-| Python `f"{x:g}"`         | `` `{x}` `` or `` `{x:e}` `` | Choose explicitly    |
-| Rust `format!("{:?}", x)` | `` `{x:?}` ``                | Identical            |
+| From                      | To Wado                        | Notes                |
+| ------------------------- | ------------------------------ | -------------------- |
+| Python `f"{x:.2f}"`       | `` `${x:.2}` ``                | No `f` suffix needed |
+| Go `fmt.Printf("%d", x)`  | `` `${x}` ``                   | Type inferred        |
+| Go `fmt.Printf("%x", x)`  | `` `${x:x}` ``                 | Same specifier       |
+| Python `f"{x:g}"`         | `` `${x}` `` or `` `${x:e}` `` | Choose explicitly    |
+| Rust `format!("{:?}", x)` | `` `${x:?}` ``                 | Identical            |
 
 ## References
 

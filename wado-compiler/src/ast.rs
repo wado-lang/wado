@@ -3463,7 +3463,7 @@ mod ast_id_tests {
         // Interpolations historically restarted ids at 0 and collided on
         // `AstId(0)`; sub-parsers now continue the parent's space + counter,
         // so every id in one module tree shares one space and a unique local.
-        let m = parse("fn f(a: i32, b: i32) -> i32 { return `{a}{b}`.len(); }\n");
+        let m = parse("fn f(a: i32, b: i32) -> i32 { return `${a}${b}`.len(); }\n");
         let ids = collect_ids(&m.items);
         let space = m.ast_id_space();
         let mut seen: IndexSet<AstId> = IndexSet::default();

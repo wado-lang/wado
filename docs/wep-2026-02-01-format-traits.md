@@ -2,10 +2,10 @@
 
 ## Context
 
-Template strings in Wado support format specifiers: `` `{x:spec}` ``. As defined in [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md), Wado uses Rust-compatible format specifiers:
+Template strings in Wado support format specifiers: `` `${x:spec}` ``. As defined in [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md), Wado uses Rust-compatible format specifiers:
 
-| Specifier | Description           | Example              |
-| --------- | --------------------- | -------------------- |
+| Specifier | Description           | Example               |
+| --------- | --------------------- | --------------------- |
 | (none)    | Default display       | `${x}` → `"42"`       |
 | `?`       | Debug/Inspect         | `${x:?}` → `"42"`     |
 | `b`       | Binary integers       | `${x:b}` → `"101010"` |
@@ -118,8 +118,8 @@ other type — a struct, variant, or generic container — needs a hand-written
 
 Each format trait has an alternate variant activated by the `#` flag. For Inspect, `InspectAlt` produces pretty-printed output. For numeric traits, Alt variants add prefixes (`0x`, `0b`, `0o`).
 
-| Base Trait | Alt Trait     | Syntax  | Effect                        |
-| ---------- | ------------- | ------- | ----------------------------- |
+| Base Trait | Alt Trait     | Syntax   | Effect                        |
+| ---------- | ------------- | -------- | ----------------------------- |
 | `Display`  | `DisplayAlt`  | `${:#}`  | Delegates to `Display`        |
 | `Inspect`  | `InspectAlt`  | `${:#?}` | Pretty-print with indentation |
 | `Binary`   | `BinaryAlt`   | `${:#b}` | Add `0b` prefix               |
@@ -156,8 +156,8 @@ Each format trait has an alternate variant activated by the `#` flag. For Inspec
 Zero padding (`${x:08}`) inserts zeros after sign/prefix but before digits:
 
 ```
-{-42:08}   → "-0000042"
-{42:#08x}  → "0x00002a"
+${-42:08}   → "-0000042"
+${42:#08x}  → "0x00002a"
 ```
 
 ## Consequences
@@ -180,7 +180,7 @@ Zero padding (`${x:08}`) inserts zeros after sign/prefix but before digits:
 
 ### Future Extensions
 
-1. **Dynamic width/precision**: `${value:{width}.{precision}}`
+1. **Dynamic width/precision**: `${value:${width}.${precision}}`
 
 ## References
 
