@@ -636,7 +636,7 @@ fn emit_test_file_for_category(category: &String, entries: &List<DescriptorEntry
         w.indent();
         // Single-quoted Wado string keeps `{...}` literal so the
         // backticks land in the generated file unmolested.
-        w.line(&"panic(`parse failed: {err.message} at {err.span.start}..{err.span.end}`);");
+        w.line(&"panic(`parse failed: ${err.message} at ${err.span.start}..${err.span.end}`);");
         w.dedent();
         w.line(&"}");
         w.end();
@@ -741,7 +741,7 @@ fn emit_stage_b_test_file(
         w.line(&"let norm = normalize_tree(&expected);");
         // Backticks land in the generated source verbatim; the Wado compiler
         // there interprets them as a template string with `{actual}` etc.
-        w.line(&"assert actual == norm, `actual:   {actual}\\nexpected: {norm}`;");
+        w.line(&"assert actual == norm, `actual:   ${actual}\\nexpected: ${norm}`;");
     });
 }
 
@@ -784,7 +784,7 @@ fn emit_stage_sub_b_test_file(
         w.line(&`let result = t::${parse_call_for_start(start)}(&input);`);
         w.line(&`let actual = t::to_string_subtree(&result, &"${*sub_rule}");`);
         w.line(&"let norm = normalize_tree(&expected);");
-        w.line(&"assert actual == norm, `actual:   {actual}\\nexpected: {norm}`;");
+        w.line(&"assert actual == norm, `actual:   ${actual}\\nexpected: ${norm}`;");
     });
 }
 
@@ -826,7 +826,7 @@ fn emit_stage_a_parse_test_file(
         w.line(&"if !result.ok() {");
         w.indent();
         w.line(&"let d = &result.diagnostics[0];");
-        w.line(&"panic(`parse failed: {d.message} at {d.span.start}..{d.span.end}`);");
+        w.line(&"panic(`parse failed: ${d.message} at ${d.span.start}..${d.span.end}`);");
         w.dedent();
         w.line(&"}");
     });
@@ -887,7 +887,7 @@ fn emit_stage_c_output_test_file(
         w.line(&`let input = "${escape_for_wado_str(input)}";`);
         w.line(&`let expected = "${escape_for_wado_str(&expected)}";`);
         w.line(&`let result = t::${parse_call_for_start(start)}(&input);`);
-        w.line(&"assert result.output == expected, `output:\\n{result.output}\\nexpected:\\n{expected}`;");
+        w.line(&"assert result.output == expected, `output:\\n${result.output}\\nexpected:\\n${expected}`;");
     });
 }
 
@@ -1073,7 +1073,7 @@ fn emit_stage_a_tokens_test_file(
         w.line(&`let expected = "${escape_for_wado_str(expected)}";`);
         w.line(&"let tokens = t::tokenize(&input);");
         w.line(&"let actual = t::to_lexer_string(&tokens, TK_EOF);");
-        w.line(&"assert actual == expected, `actual:\\n{actual}\\nexpected:\\n{expected}`;");
+        w.line(&"assert actual == expected, `actual:\\n${actual}\\nexpected:\\n${expected}`;");
     });
 }
 
@@ -2052,7 +2052,7 @@ fn emit_stage_b_oracle_test_file(
         w.line(&`let result = t::${parse_call_for_start(start)}(&input);`);
         w.line(&"let actual = t::to_string_tree(&result);");
         w.line(&"let norm = normalize_tree(&expected);");
-        w.line(&"assert actual == norm, `actual:   {actual}\\nexpected: {norm}`;");
+        w.line(&"assert actual == norm, `actual:   ${actual}\\nexpected: ${norm}`;");
     });
 }
 

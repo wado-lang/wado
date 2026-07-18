@@ -461,7 +461,7 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
     // `max_errors` caps recovery; 1 is the fail-fast minimum. 0 (or negative)
     // would suppress every diagnostic and let a broken parse report `ok()`, so
     // reject it up front.
-    w.line(&"assert max_errors >= 1, `max_errors must be >= 1, got {max_errors}`;");
+    w.line(&"assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;");
     w.line(&"let tokens = tokenize(input);");
     w.line(&"let mut p = Parser::new(tokens);");
     w.line(&"p.max_errors = max_errors;");
@@ -987,7 +987,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
     rex.emit_begin(w);
     emit_diag_prologue(w);
     w.line(
-        &"self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input \"{self.tokens.token_text(self.pos)}\"`, span, lc.0, lc.1));",
+        &"self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input \"${self.tokens.token_text(self.pos)}\"`, span, lc.0, lc.1));",
     );
     w.end();
     w.blank();
@@ -1000,7 +1000,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
     emit_diag_prologue(w);
     w.line(&"let name = token_kind_name(kind);");
     w.line(
-        &"self.diagnostics.push(Diagnostic::error(DiagnosticCode::MissingToken, `missing {name}`, span, lc.0, lc.1));",
+        &"self.diagnostics.push(Diagnostic::error(DiagnosticCode::MissingToken, `missing ${name}`, span, lc.0, lc.1));",
     );
     w.end();
     w.blank();
@@ -1012,7 +1012,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
     run.emit_begin(w);
     emit_diag_prologue(w);
     w.line(
-        &"self.diagnostics.push(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input \"{self.tokens.token_text(self.pos)}\"`, span, lc.0, lc.1));",
+        &"self.diagnostics.push(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input \"${self.tokens.token_text(self.pos)}\"`, span, lc.0, lc.1));",
     );
     w.end();
     w.blank();
@@ -1102,7 +1102,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
     w.begin(&"if self.speculating");
     w.line(&"let name = token_kind_name(kind);");
     w.line(
-        &"self.fail(`expected {name}, got \"{self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), [name], DiagnosticCode::UnexpectedToken);",
+        &"self.fail(`expected ${name}, got \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), [name], DiagnosticCode::UnexpectedToken);",
     );
     w.line(&"return self.pos;");
     w.end();
@@ -1153,7 +1153,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
     w.line(&"let name = token_kind_name(kind);");
     w.line(&"self.fail(");
     w.indent();
-    w.line(&"`expected {name}, got \"{self.tokens.token_text(self.pos)}\"`,");
+    w.line(&"`expected ${name}, got \"${self.tokens.token_text(self.pos)}\"`,");
     w.line(&"self.tokens.span_at(self.pos),");
     w.line(&"[name],");
     w.line(&"DiagnosticCode::UnexpectedToken,");
@@ -1175,7 +1175,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
     w.end();
     w.line(&"self.fail(");
     w.indent();
-    w.line(&"`expected any token, got \"{self.tokens.token_text(self.pos)}\"`,");
+    w.line(&"`expected any token, got \"${self.tokens.token_text(self.pos)}\"`,");
     w.line(&"self.tokens.span_at(self.pos),");
     w.line(&"[\"any token\"],");
     w.line(&"DiagnosticCode::UnexpectedToken,");
@@ -1208,7 +1208,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
     w.end();
     w.line(&"self.fail(");
     w.indent();
-    w.line(&"`unexpected token \"{self.tokens.token_text(self.pos)}\"`,");
+    w.line(&"`unexpected token \"${self.tokens.token_text(self.pos)}\"`,");
     w.line(&"self.tokens.span_at(self.pos),");
     w.line(&"[\"set complement\"],");
     w.line(&"DiagnosticCode::UnexpectedToken,");
@@ -1239,7 +1239,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
     w.end();
     w.line(&"self.fail(");
     w.indent();
-    w.line(&"`unexpected token \"{self.tokens.token_text(self.pos)}\"`,");
+    w.line(&"`unexpected token \"${self.tokens.token_text(self.pos)}\"`,");
     w.line(&"self.tokens.span_at(self.pos),");
     w.line(&"[\"token set\"],");
     w.line(&"DiagnosticCode::UnexpectedToken,");
@@ -2733,25 +2733,25 @@ fn gen_trace_helpers(w: &mut CodeWriter) {
     w.indent();
     w.line(&"if p.pos >= p.tokens.len() { return String::from(\"<eof>\"); }");
     w.line(&"if p.tokens.is_empty_text(p.pos) { return String::from(\"<eof>\"); }");
-    w.line(&"return `'{p.tokens.token_text(p.pos)}'`;");
+    w.line(&"return `'${p.tokens.token_text(p.pos)}'`;");
     w.dedent();
     w.line(&"}");
     w.blank();
     w.line(&"fn trace_enter(p: &Parser, rule: &String) {");
     w.indent();
-    w.line(&"log_stderr(`{trace_pad(p.trace_depth)}enter {*rule} @{p.pos} {trace_tok(p)}`);");
+    w.line(&"log_stderr(`${trace_pad(p.trace_depth)}enter ${*rule} @${p.pos} ${trace_tok(p)}`);");
     w.dedent();
     w.line(&"}");
     w.blank();
     w.line(&"fn trace_ok(p: &Parser, rule: &String) {");
     w.indent();
-    w.line(&"log_stderr(`{trace_pad(p.trace_depth)}ok {*rule}`);");
+    w.line(&"log_stderr(`${trace_pad(p.trace_depth)}ok ${*rule}`);");
     w.dedent();
     w.line(&"}");
     w.blank();
     w.line(&"fn trace_fail(p: &Parser, rule: &String, msg: &String) {");
     w.indent();
-    w.line(&"log_stderr(`{trace_pad(p.trace_depth)}FAIL {*rule}: {*msg}`);");
+    w.line(&"log_stderr(`${trace_pad(p.trace_depth)}FAIL ${*rule}: ${*msg}`);");
     w.dedent();
     w.line(&"}");
     w.blank();
@@ -2760,22 +2760,22 @@ fn gen_trace_helpers(w: &mut CodeWriter) {
     // tournament weighed, and the outcome of each speculative try.
     w.line(&"fn trace_pick(p: &Parser, rule: &String, alt: i32) {");
     w.indent();
-    w.line(&"if alt < 0 { log_stderr(`{trace_pad(p.trace_depth)}  pick {*rule}: no alt matched`); }");
-    w.line(&"else { log_stderr(`{trace_pad(p.trace_depth)}  pick {*rule} alt#{alt}`); }");
+    w.line(&"if alt < 0 { log_stderr(`${trace_pad(p.trace_depth)}  pick ${*rule}: no alt matched`); }");
+    w.line(&"else { log_stderr(`${trace_pad(p.trace_depth)}  pick ${*rule} alt#${alt}`); }");
     w.dedent();
     w.line(&"}");
     w.blank();
     w.line(&"fn trace_scan_alt(p: &Parser, rule: &String, alt: i32, end: i32) {");
     w.indent();
-    w.line(&"let r = if end < 0 { String::from(\"fail\") } else { `-> @{end}` };");
-    w.line(&"log_stderr(`{trace_pad(p.trace_depth)}  scan {*rule} alt#{alt}: {r}`);");
+    w.line(&"let r = if end < 0 { String::from(\"fail\") } else { `-> @${end}` };");
+    w.line(&"log_stderr(`${trace_pad(p.trace_depth)}  scan ${*rule} alt#${alt}: ${r}`);");
     w.dedent();
     w.line(&"}");
     w.blank();
     w.line(&"fn trace_try(p: &Parser, rule: &String, alt: i32, ok: bool) {");
     w.indent();
     w.line(&"let r = if ok { String::from(\"ok\") } else { String::from(\"rewind\") };");
-    w.line(&"log_stderr(`{trace_pad(p.trace_depth)}  try {*rule} alt#{alt}: {r}`);");
+    w.line(&"log_stderr(`${trace_pad(p.trace_depth)}  try ${*rule} alt#${alt}: ${r}`);");
     w.dedent();
     w.line(&"}");
     w.blank();

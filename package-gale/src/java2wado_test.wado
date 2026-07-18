@@ -148,7 +148,7 @@ r : ID ;
         &g.name,
         &NO_METHODS,
     ).unwrap();
-    assert out == "`ID {p.token_text(id)}`", `out: '${out}'`;
+    assert out == "`ID ${p.token_text(id)}`", `out: '${out}'`;
 }
 
 test "dispatcher routes language = Wado through the identity translator" {
@@ -215,17 +215,17 @@ test "java action: print omits the newline" {
 
 test "java action: println stringifies a value arg" {
     let out = java_action(&"System.out.println($x.v);", &"r : x=e ; e returns [i32 v] : ID ;", false);
-    assert out == "p.emit(`{x.v}\\n`);", `out: '${out}'`;
+    assert out == "p.emit(`${x.v}\\n`);", `out: '${out}'`;
 }
 
 test "java action: println with a concat arg" {
     let out = java_action(&"System.out.println(\"ID \" + $ID.text);", &"r : ID ;", false);
-    assert out == "p.emit(`ID {p.token_text(id)}\\n`);", `out: '${out}'`;
+    assert out == "p.emit(`ID ${p.token_text(id)}\\n`);", `out: '${out}'`;
 }
 
 test "java action: ctx.toStringTree(this) drops the redundant parser arg" {
     let out = java_action(&"System.out.println($ctx.toStringTree(this));", &"s : e EOF ; e : ID ;", false);
-    assert out == "p.emit(`{p.rule_string_tree()}\\n`);", `out: '${out}'`;
+    assert out == "p.emit(`${p.rule_string_tree()}\\n`);", `out: '${out}'`;
 }
 
 test "java action: assignment to the value channel" {
@@ -338,7 +338,7 @@ test "java members: method with a param, print, and return" {
     ).unwrap();
     assert m.fields.is_empty(), "no fields expected";
     assert m.methods.len() == 1, `methods: ${m.methods.len()}`;
-    assert m.methods[0] == "fn pred(&mut self, v: bool) -> bool { self.emit(`eval={v}\\n`); return v; }", `method: '${m.methods[0]}'`;
+    assert m.methods[0] == "fn pred(&mut self, v: bool) -> bool { self.emit(`eval=${v}\\n`); return v; }", `method: '${m.methods[0]}'`;
 }
 
 test "java members: void method, no params" {
