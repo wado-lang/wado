@@ -1,6 +1,6 @@
 use { Schema, TypeSet } from "../src/lib.wado";
 use { Value } from "core:value";
-use { to_string } from "core:json";
+use { to_string_pretty } from "core:json";
 
 test "gale-style options object serializes to idiomatic JSON Schema" {
     // { highlight: bool (required), trace: bool = false }
@@ -12,13 +12,31 @@ test "gale-style options object serializes to idiomatic JSON Schema" {
     root.property("trace", trace);
     root.require("highlight");
 
-    let json = to_string(&root).unwrap();
-    assert json == `{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"highlight":{"type":"boolean"},"trace":{"type":"boolean","default":false}},"required":["highlight"],"additionalProperties":false}`;
+    let json = to_string_pretty(&root).unwrap();
+    assert json == `{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "highlight": {
+      "type": "boolean"
+    },
+    "trace": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "highlight"
+  ],
+  "additionalProperties": false
+}`;
 }
 
 test "absent fields are omitted" {
-    let json = to_string(&Schema::boolean()).unwrap();
-    assert json == `{"type":"boolean"}`;
+    let json = to_string_pretty(&Schema::boolean()).unwrap();
+    assert json == `{
+  "type": "boolean"
+}`;
 }
 
 test "nullable string via a type union" {
@@ -26,6 +44,12 @@ test "nullable string via a type union" {
         type: Option::Some(TypeSet::Many(["string", "null"])),
         default_: Option::Some(Value::Null),
     };
-    let json = to_string(&schema).unwrap();
-    assert json == `{"type":["string","null"],"default":null}`;
+    let json = to_string_pretty(&schema).unwrap();
+    assert json == `{
+  "type": [
+    "string",
+    "null"
+  ],
+  "default": null
+}`;
 }
