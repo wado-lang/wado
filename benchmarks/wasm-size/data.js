@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784345386785,
+  "lastUpdate": 1784357008986,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -41505,6 +41505,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e90a85c7167b1a502ed588003de7de2ec42265d0"
         },
         "date": 1784345386396,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16233,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265299,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bfe041f8bbbfc157316d2f875236908a945683dc",
+          "message": "Merge pull request #1619 from wado-lang/claude/string-template-syntax-x5j61v\n\nfeat!: switch template interpolation from `{expr}` to `${expr}`",
+          "timestamp": "2026-07-18T15:33:30+09:00",
+          "tree_id": "faab7a1d2298de5e9e05f16e0ab34d96e8d74c3d",
+          "url": "https://github.com/wado-lang/wado/commit/bfe041f8bbbfc157316d2f875236908a945683dc"
+        },
+        "date": 1784357008482,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
