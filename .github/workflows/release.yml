@@ -24,7 +24,7 @@ jobs:
       tag: ${{ steps.v.outputs.tag }}
       version: ${{ steps.v.outputs.version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # On workflow_dispatch, github.ref is the default branch — check
           # out the requested tag instead so validate/build see the tagged
@@ -104,7 +104,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.validate.outputs.tag }}
 
@@ -162,12 +162,12 @@ jobs:
       # mise-action may hit the GitHub API to resolve tool versions.
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.validate.outputs.tag }}
 
       - name: Set up mise and install tools
-        uses: jdx/mise-action@v2
+        uses: jdx/mise-action@v4.2.0
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -219,7 +219,7 @@ jobs:
       # Bind each archive's digest to this workflow run, so a download can be
       # verified with `gh attestation verify --repo wado-lang/wado <file>`.
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             dist/wado-*.tar.gz
@@ -230,7 +230,7 @@ jobs:
       # a published release — assets must go onto a draft. action-gh-release@v3
       # uploads files before flipping draft=false, so leaving `draft` unset
       # (default false) uploads to the existing draft and then publishes it.
-      - uses: softprops/action-gh-release@v3
+      - uses: softprops/action-gh-release@v3.0.1
         with:
           tag_name: ${{ needs.validate.outputs.tag }}
           name: ${{ needs.validate.outputs.tag }}
@@ -249,7 +249,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.validate.outputs.tag }}
 
@@ -269,7 +269,7 @@ jobs:
         run: cargo binstall --no-confirm wkg
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
