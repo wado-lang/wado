@@ -281,6 +281,40 @@ impl Monomorphizer {
                     stores,
                 )
             }
+            // A generic newtype (`type MyArray<T> = List<T>`) embeds its type
+            // params in its base (`List<T>`) and name (`"MyArray<T>"`), so
+            // substitute the base and re-mangle the head with the base's
+            // concrete args. Without this the newtype's base stays generic and
+            // indexing / element access inside a monomorphized method keeps the
+            // unsubstituted element type (`array_get<T>` → WIR trap). A
+            // non-generic newtype has a param-free base and re-interns
+            // unchanged.
+            ResolvedType::Newtype {
+                name,
+                module_source,
+                base_type,
+            } => {
+                let new_base = self.substitute_type(base_type, substitution, type_table);
+                if new_base == base_type {
+                    return type_id;
+                }
+                let head = name.split('<').next().unwrap_or(&name).to_string();
+                let new_name = match type_table.generic_type_args(new_base) {
+                    Some(args) if !args.is_empty() => {
+                        let arg_names: Vec<String> = args
+                            .iter()
+                            .map(|&a| type_table.mangle_type_arg_for_generic(a))
+                            .collect();
+                        mangle_generic_name(&head, &arg_names)
+                    }
+                    _ => head,
+                };
+                type_table.intern(ResolvedType::Newtype {
+                    name: new_name,
+                    module_source,
+                    base_type: new_base,
+                })
+            }
             ResolvedType::GenericInstance {
                 name,
                 module_source,

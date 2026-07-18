@@ -1,0 +1,43 @@
+// Regression test for wado-lang/wado#1626: an inherent method defined on a
+// *generic* newtype (`impl MyArray<T> { fn ... }`) used to crash — method
+// lookup keyed by the newtype's full spelling (`MyArray<i32>`) while the impl
+// registers under the head name (`MyArray`), so the method was "not found" and
+// error recovery tripped a `debug_assert` (`LocalMethodName::new` with a `<`).
+//
+// The fix threads the newtype's base type args through lookup, splits the owner
+// name like a generic instance, and — crucially — substitutes a generic
+// newtype's base during monomorphization so element access (`self[i]`) inside a
+// monomorphized method keeps the concrete element type instead of the erased
+// `array_get<T>` (a WIR trap).
+type MyArray<T> = List<T>;
+
+impl MyArray<T> {
+    fn second(&self) -> T {
+        return self[1];
+    }
+    fn count(&self) -> i32 {
+        return self.len();
+    }
+}
+
+// Generic caller — exercises monomorphization of the call site too.
+fn via_generic<U>(_u: &U) -> i32 {
+    let a: MyArray<i32> = [10, 20, 30];
+    return a.second();
+}
+
+export fn run() {
+    let a: MyArray<i32> = [10, 20, 30];
+    assert a.second() == 20;
+    assert a.count() == 3;
+
+    // Distinct element type — a second instantiation of the same template.
+    let s: MyArray<String> = ["hi", "yo"];
+    assert s.second() == "yo";
+
+    let n = 5;
+    assert via_generic::<i32>(&n) == 20;
+}
+
+__DATA__
+{"stdout": ""}
