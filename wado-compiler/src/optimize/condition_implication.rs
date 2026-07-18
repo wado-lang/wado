@@ -1208,7 +1208,11 @@ fn index_upper_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64>
     // The eliminated bounds check drops this inline clamp with its branch, so a
     // trapping (or effectful) arm would erase a trap the program takes: the
     // deletion predicate must be non-trapping, not just pure.
-    if !super::arena_query::is_pure_nontrapping_expr(engine.body, e) {
+    if !super::arena_query::is_pure_nontrapping_expr_typed(
+        engine.body,
+        e,
+        engine.value_graph_type_table(),
+    ) {
         return None;
     }
     let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);

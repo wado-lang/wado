@@ -273,15 +273,10 @@ pub(super) fn is_pure_operand(body: &Body, op: Operand) -> bool {
 /// entitled to. `is_pure_expr` stays trap-agnostic for reordering/CSE, which
 /// keep the expression (its trap still fires). The trap dimension comes from the
 /// shared [`ModRef`] oracle so the taxonomy lives in one place.
-pub(super) fn is_pure_nontrapping_expr(body: &Body, id: ExprId) -> bool {
-    is_pure_nontrapping_expr_typed(body, id, None)
-}
-
-/// [`is_pure_nontrapping_expr`] with a type table, so a `FieldAccess` on a
-/// non-null struct/ref receiver is recognised as non-trapping (a caller holding
-/// a type table gets a tighter answer — e.g. dropping the dead residue of an
-/// inlined unused `&self` receiver). Without a table it is exactly the
-/// conservative [`is_pure_nontrapping_expr`].
+///
+/// With a type table, a `FieldAccess` on a non-null struct/ref receiver is
+/// recognised as non-trapping (dropping the dead residue of an inlined unused
+/// `&self` receiver, say); pass `None` to stay conservative.
 pub(super) fn is_pure_nontrapping_expr_typed(
     body: &Body,
     id: ExprId,

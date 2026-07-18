@@ -2042,11 +2042,12 @@ pub fn remove_unreachable_globals(
         used_globals.contains(&(global_module_key, global.name.clone()))
     });
 
+    let type_table = project.type_table.borrow();
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(body) = func.body.as_mut() {
             let root = body.root;
-            remove_dead_global_sets_block(body, root, used_globals);
+            remove_dead_global_sets_block(body, root, used_globals, &type_table);
         }
     }
 }
@@ -2061,10 +2062,11 @@ fn remove_dead_global_sets_block(
     body: &mut Body,
     block: BlockId,
     used: &IndexSet<(String, String)>,
+    type_table: &TypeTable,
 ) {
     // Recurse into sub-statements first.
     for s in body.blocks[block].stmts.clone() {
-        remove_dead_global_sets_stmt(body, s, used);
+        remove_dead_global_sets_stmt(body, s, used, type_table);
     }
 
     // Process GlobalVarSet statements for dead globals.
@@ -2095,7 +2097,7 @@ fn remove_dead_global_sets_block(
             // keeps its effect/trap even though the global itself is gone.
             // The discarded GlobalVarSet owned `value`, so reuse its id here.
             if let Some(ve) = value.as_expr()
-                && !super::arena_query::is_pure_nontrapping_expr(body, ve)
+                && !super::arena_query::is_pure_nontrapping_expr_typed(body, ve, Some(type_table))
             {
                 let new_s = body.stmts.push(StmtNode {
                     kind: StmtKind::Expr(ve.into()),
@@ -2110,7 +2112,12 @@ fn remove_dead_global_sets_block(
     body.blocks[block].stmts = new_stmts;
 }
 
-fn remove_dead_global_sets_stmt(body: &mut Body, s: StmtId, used: &IndexSet<(String, String)>) {
+fn remove_dead_global_sets_stmt(
+    body: &mut Body,
+    s: StmtId,
+    used: &IndexSet<(String, String)>,
+    type_table: &TypeTable,
+) {
     enum W {
         Expr(ExprId),
         Blocks(BlockId, Option<BlockId>),
@@ -2131,11 +2138,11 @@ fn remove_dead_global_sets_stmt(body: &mut Body, s: StmtId, used: &IndexSet<(Str
         StmtKind::Continue | StmtKind::LetDestructure { .. } => W::None,
     };
     match w {
-        W::Expr(e) => remove_dead_global_sets_expr(body, e, used),
+        W::Expr(e) => remove_dead_global_sets_expr(body, e, used, type_table),
         W::Blocks(b0, b1) => {
-            remove_dead_global_sets_block(body, b0, used);
+            remove_dead_global_sets_block(body, b0, used, type_table);
             if let Some(b1) = b1 {
-                remove_dead_global_sets_block(body, b1, used);
+                remove_dead_global_sets_block(body, b1, used, type_table);
             }
         }
         W::None => {}
@@ -2143,7 +2150,12 @@ fn remove_dead_global_sets_stmt(body: &mut Body, s: StmtId, used: &IndexSet<(Str
 }
 
 /// Recursively remove dead `GlobalVarSet` from expressions that contain blocks.
-fn remove_dead_global_sets_expr(body: &mut Body, e: ExprId, used: &IndexSet<(String, String)>) {
+fn remove_dead_global_sets_expr(
+    body: &mut Body,
+    e: ExprId,
+    used: &IndexSet<(String, String)>,
+    type_table: &TypeTable,
+) {
     enum W {
         Block(BlockId),
         If(Option<ExprId>, BlockId, Option<BlockId>),
@@ -2166,29 +2178,29 @@ fn remove_dead_global_sets_expr(body: &mut Body, e: ExprId, used: &IndexSet<(Str
         _ => W::None,
     };
     match w {
-        W::Block(b) => remove_dead_global_sets_block(body, b, used),
+        W::Block(b) => remove_dead_global_sets_block(body, b, used, type_table),
         W::If(cond, then_b, else_b) => {
             if let Some(cond) = cond {
-                remove_dead_global_sets_expr(body, cond, used);
+                remove_dead_global_sets_expr(body, cond, used, type_table);
             }
-            remove_dead_global_sets_block(body, then_b, used);
+            remove_dead_global_sets_block(body, then_b, used, type_table);
             if let Some(eb) = else_b {
-                remove_dead_global_sets_block(body, eb, used);
+                remove_dead_global_sets_block(body, eb, used, type_table);
             }
         }
         W::Match(scrutinee, bodies) => {
             if let Some(scrutinee) = scrutinee {
-                remove_dead_global_sets_expr(body, scrutinee, used);
+                remove_dead_global_sets_expr(body, scrutinee, used, type_table);
             }
             for b in bodies {
-                remove_dead_global_sets_expr(body, b, used);
+                remove_dead_global_sets_expr(body, b, used, type_table);
             }
         }
         W::Switch(arms, default) => {
             for a in arms {
-                remove_dead_global_sets_block(body, a, used);
+                remove_dead_global_sets_block(body, a, used, type_table);
             }
-            remove_dead_global_sets_block(body, default, used);
+            remove_dead_global_sets_block(body, default, used, type_table);
         }
         W::None => {}
     }
