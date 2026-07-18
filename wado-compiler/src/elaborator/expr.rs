@@ -384,14 +384,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 string_type
             }
             Literal::Bytes(raw) => {
-                let array_u8_type = self.tysys.type_table.borrow_mut().make_list(TypeTable::U8);
+                let byte_list_type = self.tysys.type_table.borrow_mut().make_byte_list();
                 if let Err(message) = util::unescape_bytes(raw) {
                     let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
                     });
                 }
-                array_u8_type
+                byte_list_type
             }
             Literal::Null => self
                 .tysys
@@ -448,7 +448,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Literal::IncludeBytes(raw_path) => {
                 let key = [self.current_module_source.to_string(), raw_path.clone()];
-                let array_u8_type = self.tysys.type_table.borrow_mut().make_list(TypeTable::U8);
+                let array_u8_type = self.tysys.type_table.borrow_mut().make_byte_list();
                 if !self.tysys.included_files.contains_key(&key) {
                     let _ = self.emit(TypeError::InvalidLiteral {
                         message: format!("file not found: \"{raw_path}\""),
@@ -3179,6 +3179,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 let is_tuple_literal = matches!(&field.value, ast::Expr::TupleLiteral(_));
 
+                // Byte literals (`b"..."` / `#include_bytes`) default to
+                // `ByteList`; a `List<u8>` field needs the expected type so the
+                // `BytesNewtype` coercion in `try_coerce` fires (mirrors the
+                // numeric/null-literal handling below).
+                let is_bytes_literal = matches!(
+                    &field.value,
+                    ast::Expr::Literal(lit)
+                        if matches!(&lit.value, ast::Literal::Bytes(_) | ast::Literal::IncludeBytes(_))
+                );
+
                 // Generic call expressions (e.g. `List::filled(n, 0)` inside
                 // a struct literal field) need the expected field type so the
                 // call's type-parameter inference can back-infer from it. Without
@@ -3189,6 +3199,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     || is_null_literal
                     || is_anonymous_struct_literal
                     || is_tuple_literal
+                    || is_bytes_literal
                     || is_call
                 {
                     struct_field_types

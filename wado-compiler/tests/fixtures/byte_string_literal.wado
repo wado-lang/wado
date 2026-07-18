@@ -1,12 +1,51 @@
-// Rust-style byte-string literal `b"..."` lowers to a constant `List<u8>`
+// Rust-style byte-string literal `b"..."` lowers to a constant byte buffer
 // via the data-segment path (the same `BytesLiteral` lowering `#include_bytes`
 // uses), so a large constant byte blob never becomes a builder/push chain.
+//
+// Its default type is the first-class `ByteList` newtype. Newtype literal
+// coercion still lets it flow into a `List<u8>` context (`let x: List<u8> =
+// b"..."`) with no cast, since the two share a representation.
+
+fn byte_list_len(v: ByteList) -> i32 {
+    return v.len();
+}
+
+// A `List<u8>` parameter, return, and field all accept a bare `b"..."`
+// via the same newtype literal coercion (no cast).
+fn raw_len(v: List<u8>) -> i32 {
+    return v.len();
+}
+
+fn raw_default() -> List<u8> {
+    return b"xy";
+}
+
+struct Holder {
+    buf: List<u8>,
+}
+
 export fn run() {
+    // Default type is `ByteList`: an inferred binding is a `ByteList`, so it
+    // passes to a `ByteList` parameter with no cast. (A `List<u8>` binding
+    // would need `as ByteList` here.)
+    let inferred = b"abc";
+    assert byte_list_len(inferred) == 3;
+
+    let bl: ByteList = b"abc";
+    assert bl.len() == 3;
+
+    // Newtype literal coercion: `b"..."` flows into `List<u8>` with no cast,
+    // in a binding, a call argument, a return, and a struct field.
     let a: List<u8> = b"abc";
     assert a.len() == 3;
     assert a[0] == 97;
     assert a[1] == 98;
     assert a[2] == 99;
+
+    assert raw_len(b"abcd") == 4;
+    assert raw_default().len() == 2;
+    let h = Holder { buf: b"abcde" };
+    assert h.buf.len() == 5;
 
     // Escapes: \xNN hex byte, plus the standard string escapes.
     let b: List<u8> = b"\x00\xff\n\t\\\"\0";

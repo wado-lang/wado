@@ -360,6 +360,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
+        // Byte literal (`b"..."` / `#include_bytes`, default `ByteList`) →
+        // any type whose ultimate base is `List<u8>` — notably the base
+        // `List<u8>` itself (`let x: List<u8> = b"..."`). Repr-identical, so
+        // the retag is free; the byte-slice newtypes (`ByteSlice`) do not
+        // match since their base is `ArraySlice<u8>`, not `List<u8>`.
+        let is_bytes_literal = matches!(
+            expr,
+            Expr::Literal(lit)
+                if matches!(&lit.value, Literal::Bytes(_) | Literal::IncludeBytes(_))
+        );
+        if is_bytes_literal {
+            let list_u8 = self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .make_list(crate::tir::TypeTable::U8);
+            let base_id = self
+                .tysys
+                .type_table
+                .borrow()
+                .get_ultimate_base_type(target_type);
+            if base_id == list_u8 {
+                self.record_coercion(
+                    expr.id(),
+                    super::sem::types::CoercionKind::BytesNewtype,
+                    target_type,
+                );
+                self.record_expression_type(expr.id(), target_type);
+                return Some(target_type);
+            }
+        }
+
         // Closure literal → fn-type newtype. Walk the closure against the
         // unwrapped base fn type (so unannotated params are inferred from
         // the expected signature) and retag the recorded expression type.

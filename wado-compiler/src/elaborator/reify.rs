@@ -9106,14 +9106,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Literal::Bytes(raw) => {
                 // Decode the raw source to bytes and reuse the `#include_bytes`
-                // lowering (`BytesLiteral` -> `List<u8>` data segment).
+                // lowering (`BytesLiteral` -> byte-buffer data segment). The
+                // default type is the `ByteList` newtype; a coercion
+                // (`let x: List<u8> = b"..."`) retags `recorded_type`, which
+                // this honours. `ByteList` and `List<u8>` share a repr, so the
+                // lowered data segment is identical either way.
                 let bytes = super::util::unescape_bytes(raw).unwrap_or_default();
-                let array_u8_type = self
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_list(crate::tir::TypeTable::U8);
-                return TirExpr::new(TirExprKind::BytesLiteral(bytes), array_u8_type, lit.span);
+                let byte_list_type = if recorded_type == crate::tir::TypeTable::UNKNOWN {
+                    self.tysys.type_table.borrow_mut().make_byte_list()
+                } else {
+                    recorded_type
+                };
+                return TirExpr::new(TirExprKind::BytesLiteral(bytes), byte_list_type, lit.span);
             }
             ast::Literal::Char(s) => {
                 // The Char literal is the raw source text (e.g. `'a'`,
@@ -9196,11 +9200,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 return TirExpr::new(TirExprKind::StringLiteral(value), string_type, lit.span);
             }
             ast::Literal::IncludeBytes(raw_path) => {
-                let array_u8_type = self
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_list(crate::tir::TypeTable::U8);
+                // Same default/coercion handling as `b"..."` above: default
+                // `ByteList`, honouring a coerced `recorded_type`.
+                let array_u8_type = if recorded_type == crate::tir::TypeTable::UNKNOWN {
+                    self.tysys.type_table.borrow_mut().make_byte_list()
+                } else {
+                    recorded_type
+                };
                 let key = [self.current_module_source.to_string(), raw_path.clone()];
                 let bytes = self
                     .tysys

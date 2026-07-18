@@ -133,6 +133,10 @@ pub(crate) enum CoercionKind {
     NullToOption,
     /// A `String` / template literal retagged as a newtype over `String`.
     StringNewtype,
+    /// A `b"..."` / `#include_bytes` byte literal (default type `ByteList`)
+    /// retagged as another type whose ultimate base is `List<u8>` — e.g.
+    /// `let x: List<u8> = b"..."`. Free: the repr is identical either way.
+    BytesNewtype,
     /// A closure literal retagged as a newtype over its fn-type.
     ClosureToFnNewtype,
     /// A tuple literal lowered through `SequenceLiteralBuilder` (List
