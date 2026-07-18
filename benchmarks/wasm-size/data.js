@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784339506506,
+  "lastUpdate": 1784341323610,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -41417,6 +41417,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9a643f65e8f5e96a9d69fa8f59be08a3d720e5bc"
         },
         "date": 1784339505763,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16233,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265299,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "107ada4cf0e8d30fe17f3657f0c6da34865b7137",
+          "message": "Merge pull request #1614 from wado-lang/claude/dependabot-github-actions-cqfbf6\n\nci: keep Dependabot cargo updates within Cargo.toml constraints",
+          "timestamp": "2026-07-18T11:12:26+09:00",
+          "tree_id": "3e0cd01288dff15d67e7fc5c9ee70c4d02d9518e",
+          "url": "https://github.com/wado-lang/wado/commit/107ada4cf0e8d30fe17f3657f0c6da34865b7137"
+        },
+        "date": 1784341323092,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
