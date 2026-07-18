@@ -243,6 +243,7 @@ impl UserId {
 - [x] Methods on primitive newtypes (`impl UserId { ... }` where `type UserId = i32`) — implemented
 - [x] `List<Newtype>.sort()` via Ord inheritance — implemented
 - [x] Associated-function inheritance (`ByteList::with_capacity`) with newtype return — implemented
+- [x] A newtype over the raw GC `Array<T>` inherits its `Index` traits (`ByteArray`) — implemented
 - [ ] A newtype's own inherent method called inside a generic function body mis-resolves its owner to the erased base (wado-lang/wado#1615)
 - [ ] `for-of` does not inherit `IntoIterator` on a newtype (wado-lang/wado#1616)
 

@@ -12,7 +12,7 @@ use { Option, Result } from "core:prelude/types.wado";
 use { ArraySlice } from "core:prelude/slice.wado";
 use { Array } from "core:prelude/array.wado";
 use { List } from "core:prelude/list.wado";
-use { ByteSlice, ByteList, AsByteSlice } from "core:prelude/bytes.wado";
+use { ByteSlice, ByteList, ByteArray, AsByteSlice } from "core:prelude/bytes.wado";
 use { i32_min, i32_max } from "core:rt";
 
 fn byte_to_ascii_lowercase(b: u8) -> u8 {
@@ -131,7 +131,7 @@ fn decode_utf8_scalar(bytes: ByteSlice, start: i32, len: i32) -> Utf8Scalar {
 /// UTF-8 encoded string type with O(1) amortized push_str
 #[compiler_item("string")]
 internal struct String {
-    repr: Array<u8>,
+    repr: ByteArray,
     used: i32,
 }
 
@@ -144,7 +144,7 @@ impl String {
     /// Create a new empty string with the specified capacity
     /// The string starts empty but has space for `capacity` bytes
     pub fn with_capacity(capacity: i32) -> String {
-        return String { repr: builtin::array_new(capacity), used: 0 };
+        return String { repr: builtin::array_new::<u8>(capacity) as ByteArray, used: 0 };
     }
 
     /// Get the length of the string in bytes
@@ -175,7 +175,7 @@ impl String {
     /// to `FieldSchema::lookup` without a `String` copy. The `AsByteSlice`
     /// trait impl (in `core:prelude/bytes.wado`) wraps this as a `ByteSlice`.
     pub fn as_bytes(&self) -> ByteSlice with stores[self] {
-        return ArraySlice::internal_new(&self.repr, 0, self.used) as ByteSlice;
+        return ArraySlice::internal_new(self.internal_raw_bytes(), 0, self.used) as ByteSlice;
     }
 
     /// Write the byte at `index` without bounds or UTF-8 checks.
@@ -192,7 +192,7 @@ impl String {
     /// Returns a reference so reads scan the buffer without copying. Caller must
     /// respect `len()` boundary.
     internal fn internal_raw_bytes(&self) -> &Array<u8> {
-        return &self.repr;
+        return &self.repr as &Array<u8>;
     }
 
     /// Internal: Mutable view of the backing byte array (stdlib use only).
@@ -200,7 +200,7 @@ impl String {
     /// `Array<u8>` would be deep-copied and detach the alias. Caller must
     /// respect `len()` boundary.
     internal fn internal_raw_bytes_mut(&mut self) -> &mut Array<u8> {
-        return &mut self.repr;
+        return &mut self.repr as &mut Array<u8>;
     }
 
     /// Internal: Consume `s`, moving out its backing byte array without copying
@@ -208,13 +208,13 @@ impl String {
     /// reference that a caller must deep-copy to own, this transfers ownership of
     /// the buffer directly. Caller must respect `len()` boundary.
     internal fn internal_into_raw_bytes(s: String) -> Array<u8> {
-        return s.repr;
+        return s.repr as Array<u8>;
     }
 
     /// Internal: Create String from raw UTF-8 bytes (stdlib use only)
     /// The bytes must be valid UTF-8. No validation is performed.
     internal fn internal_from_utf8_raw(bytes: Array<u8>, len: i32) -> String {
-        return String { repr: bytes, used: len };
+        return String { repr: bytes as ByteArray, used: len };
     }
 
     /// Ensure the string has capacity for at least `min_capacity` bytes.
@@ -231,8 +231,8 @@ impl String {
 
         // Create new array and copy existing bytes
         let mut new_repr: Array<u8> = builtin::array_new(new_capacity);
-        builtin::array_copy(&mut new_repr, 0, &self.repr, 0, self.used);
-        self.repr = new_repr;
+        builtin::array_copy(&mut new_repr, 0, self.internal_raw_bytes(), 0, self.used);
+        self.repr = new_repr as ByteArray;
     }
 
     /// Internal: Append bytes from linear memory to this string (stdlib use only)
@@ -284,7 +284,7 @@ impl String {
             builtin::cold_path();
             self.grow(new_used);
         }
-        builtin::array_fill(&mut self.repr, self.used, byte, n);
+        builtin::array_fill(self.internal_raw_bytes_mut(), self.used, byte, n);
         self.used = new_used;
     }
 
@@ -303,7 +303,7 @@ impl String {
             self.grow(new_used);
         }
 
-        builtin::array_copy(&mut self.repr, self.used, other.internal_raw_bytes(), 0, other_len);
+        builtin::array_copy(self.internal_raw_bytes_mut(), self.used, other.internal_raw_bytes(), 0, other_len);
         self.used = new_used;
     }
 
@@ -327,7 +327,7 @@ impl String {
             builtin::cold_path();
             self.grow(new_used);
         }
-        builtin::array_copy(&mut self.repr, self.used, slice.internal_repr(), slice.internal_start(), n);
+        builtin::array_copy(self.internal_raw_bytes_mut(), self.used, slice.internal_repr(), slice.internal_start(), n);
         self.used = new_used;
     }
 
@@ -348,7 +348,7 @@ impl String {
             builtin::cold_path();
             self.grow(new_used);
         }
-        builtin::array_copy(&mut self.repr, self.used, s.internal_raw_bytes(), start, n);
+        builtin::array_copy(self.internal_raw_bytes_mut(), self.used, s.internal_raw_bytes(), start, n);
         self.used = new_used;
     }
 
@@ -509,7 +509,7 @@ impl String {
     /// Returns an iterator over the UTF-8 bytes of the string.
     pub fn bytes(&self) -> StrUtf8ByteIter with stores[self] {
         return StrUtf8ByteIter {
-            repr: &self.repr,
+            repr: self.internal_raw_bytes(),
             used: self.used,
             index: 0,
         };
@@ -518,7 +518,7 @@ impl String {
     /// Returns an iterator over the Unicode scalar values (chars) of the string.
     pub fn chars(&self) -> StrCharIter with stores[self] {
         return StrCharIter {
-            repr: &self.repr,
+            repr: self.internal_raw_bytes(),
             used: self.used,
             byte_index: 0,
         };
@@ -745,8 +745,8 @@ impl String {
         let capacity = self.repr.len();
         if capacity > self.used {
             let mut new_repr: Array<u8> = builtin::array_new(self.used);
-            builtin::array_copy(&mut new_repr, 0, &self.repr, 0, self.used);
-            self.repr = new_repr;
+            builtin::array_copy(&mut new_repr, 0, self.internal_raw_bytes(), 0, self.used);
+            self.repr = new_repr as ByteArray;
         }
     }
 
@@ -896,8 +896,8 @@ impl String {
             return String::with_capacity(0);
         }
         let mut repr: Array<u8> = builtin::array_new(len);
-        builtin::array_copy(&mut repr, 0, &self.repr, start, len);
-        return String { repr, used: len };
+        builtin::array_copy(&mut repr, 0, self.internal_raw_bytes(), start, len);
+        return String { repr: repr as ByteArray, used: len };
     }
 
     /// Returns true if this string contains the given substring.
@@ -945,7 +945,7 @@ impl String {
         let start = prefix.len();
         let len = self.used - start;
         let mut part: Array<u8> = builtin::array_new(len);
-        builtin::array_copy(&mut part, 0, &self.repr, start, len);
+        builtin::array_copy(&mut part, 0, self.internal_raw_bytes(), start, len);
         return Option::Some(String::internal_from_utf8_raw(part, len));
     }
 
@@ -957,7 +957,7 @@ impl String {
         }
         let len = self.used - suffix.len();
         let mut part: Array<u8> = builtin::array_new(len);
-        builtin::array_copy(&mut part, 0, &self.repr, 0, len);
+        builtin::array_copy(&mut part, 0, self.internal_raw_bytes(), 0, len);
         return Option::Some(String::internal_from_utf8_raw(part, len));
     }
 
@@ -1059,7 +1059,7 @@ impl String {
             self.grow(new_used);
         }
         // Shift bytes right
-        builtin::array_copy(&mut self.repr, byte_index + char_len, &self.repr, byte_index, self.used - byte_index);
+        builtin::array_copy(self.internal_raw_bytes_mut(), byte_index + char_len, self.internal_raw_bytes(), byte_index, self.used - byte_index);
         // Write encoded char
         if code < 0x80 {
             self.repr[byte_index] = code as u8;
@@ -1101,9 +1101,9 @@ impl String {
             self.grow(new_used);
         }
         // Shift bytes right
-        builtin::array_copy(&mut self.repr, byte_index + s_len, &self.repr, byte_index, self.used - byte_index);
+        builtin::array_copy(self.internal_raw_bytes_mut(), byte_index + s_len, self.internal_raw_bytes(), byte_index, self.used - byte_index);
         // Copy inserted string
-        builtin::array_copy(&mut self.repr, byte_index, s.internal_raw_bytes(), 0, s_len);
+        builtin::array_copy(self.internal_raw_bytes_mut(), byte_index, s.internal_raw_bytes(), 0, s_len);
         self.used = new_used;
     }
 
@@ -1150,9 +1150,9 @@ impl String {
         };
         // Shift bytes left
         builtin::array_copy(
-            &mut self.repr,
+            self.internal_raw_bytes_mut(),
             byte_index,
-            &self.repr,
+            self.internal_raw_bytes(),
             byte_index + char_len,
             self.used - byte_index - char_len,
         );
@@ -1168,9 +1168,9 @@ impl String {
         let total = self.used * n;
         let mut repr: Array<u8> = builtin::array_new(total);
         for let mut r = 0; r < n; r += 1 {
-            builtin::array_copy(&mut repr, r * self.used, &self.repr, 0, self.used);
+            builtin::array_copy(&mut repr, r * self.used, self.internal_raw_bytes(), 0, self.used);
         }
-        return String { repr, used: total };
+        return String { repr: repr as ByteArray, used: total };
     }
 
     /// Replaces all occurrences of `from` with `to`.
@@ -1596,7 +1596,7 @@ impl String {
     pub fn split(&self, sep: String) -> StrSplitIter with stores[self] {
         let sep_len = sep.len();
         return StrSplitIter {
-            repr: &self.repr,
+            repr: self.internal_raw_bytes(),
             used: self.used,
             pos: 0,
             sep_repr: String::internal_into_raw_bytes(sep),
@@ -1609,7 +1609,7 @@ impl String {
     pub fn splitn(&self, n: i32, sep: String) -> StrSplitNIter with stores[self] {
         let sep_len = sep.len();
         return StrSplitNIter {
-            repr: &self.repr,
+            repr: self.internal_raw_bytes(),
             used: self.used,
             pos: 0,
             sep_repr: String::internal_into_raw_bytes(sep),
@@ -1622,7 +1622,7 @@ impl String {
     /// Returns an iterator over whitespace-separated substrings.
     pub fn split_whitespace(&self) -> StrSplitWhitespaceIter with stores[self] {
         return StrSplitWhitespaceIter {
-            repr: &self.repr,
+            repr: self.internal_raw_bytes(),
             used: self.used,
             pos: 0,
         };
@@ -1631,7 +1631,7 @@ impl String {
     /// Returns an iterator over the lines of this string.
     pub fn lines(&self) -> StrLinesIter with stores[self] {
         return StrLinesIter {
-            repr: &self.repr,
+            repr: self.internal_raw_bytes(),
             used: self.used,
             pos: 0,
             finished: false,
@@ -1641,7 +1641,7 @@ impl String {
     /// Returns an iterator over characters with their byte indices.
     pub fn char_indices(&self) -> StrCharIndicesIter with stores[self] {
         return StrCharIndicesIter {
-            repr: &self.repr,
+            repr: self.internal_raw_bytes(),
             used: self.used,
             byte_index: 0,
         };
