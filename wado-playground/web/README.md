@@ -36,13 +36,16 @@ is the UI.
 
 ## Language server
 
-`wado-lsp.wasm` — the same `wasm32-wasip1` stdio binary the VS Code extension
-bundles — runs in a Web Worker behind a minimal WASI preview1 shim
-(`lsp-worker.js`). stdin's `fd_read` is a `WebAssembly.Suspending` import, so
-JSPI suspends the server's blocking read loop until the page posts the next
-message; no SharedArrayBuffer (GitHub Pages cannot set COOP/COEP) and no
-Asyncify build. The stdlib is embedded in the compiler, so the shim needs no
-filesystem — `path_open` returns `ENOENT`.
+The `wado-lsp` engine is **bundled into `wado-playground.wasm`** (same
+`wasm32-unknown-unknown` module — no second copy of the compiler). `lsp-worker.js`
+drives it as a plain library: `wado_lsp_send(session, msg)` takes one JSON-RPC
+message and returns the framed replies. No WASI shim, no JSPI, no stdio loop —
+the browser LSP path needs none of them. The stdlib is embedded in the compiler,
+so a single-file document needs no host I/O.
+
+(The VS Code extension keeps its own `wasm32-wasip1` stdio build of the
+`wado-lsp` binary, produced by `mise run build-vscode-lsp`; only the browser
+uses this library path.)
 
 `lsp-client.js` is the main-thread API: JSON-RPC over the worker port with
 `initialize()` / `didOpen` / `didChange` / `request()` /

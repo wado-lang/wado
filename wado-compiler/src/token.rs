@@ -2,7 +2,8 @@
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TemplateTokenPart {
-    /// Literal text with escape sequences resolved (e.g. `\{` → `{`).
+    /// Literal text with escape sequences resolved (e.g. `\$` → `$`). Only
+    /// `${` opens an interpolation, so bare `{` / `}` stay literal.
     Literal(String),
     /// An interpolation. The lexer splits the content at the top-level `:`, so
     /// `expr` is the raw expression source (without enclosing braces) and

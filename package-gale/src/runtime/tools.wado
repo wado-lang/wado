@@ -148,8 +148,8 @@ fn emit_lexer_token(
     let line = line_col.0;
     let col = line_col.1;
     let end_inclusive = end - 1;
-    let channel_attr = if channel != 0 { `channel={channel},` } else { String::from("") };
-    out.push_str(&`[@{index},{start}:{end_inclusive}='{text_buf}',<{type_id}>,{channel_attr}{line}:{col}]\n`);
+    let channel_attr = if channel != 0 { `channel=${channel},` } else { String::from("") };
+    out.push_str(&`[@${index},${start}:${end_inclusive}='${text_buf}',<${type_id}>,${channel_attr}${line}:${col}]\n`);
 }
 
 /// Compute (line, column) at a 0-based char index in `chars`, with

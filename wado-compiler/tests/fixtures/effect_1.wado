@@ -55,20 +55,20 @@ fn effect_indirect_call() with Stdout {
 fn effect_poly_basic() with Stdout {
     wrapper(|| { println("hello from wrapper"); });
     let result = apply(|x: i32| x + 1, 41);
-    println(`result: {result}`);
+    println(`result: ${result}`);
     let result2 = apply(|x: i32| {
-        println(`applying to {x}`);
+        println(`applying to ${x}`);
         return x * 2;
     }, 21);
-    println(`result2: {result2}`);
+    println(`result2: ${result2}`);
 }
 
 fn effect_poly_chain() with Stdout {
     let result = chained(|x: i32| {
-        println(`got {x}`);
+        println(`got ${x}`);
         return x + 1;
     });
-    println(`result: {result}`);
+    println(`result: ${result}`);
 }
 
 fn effect_poly_method() with Stdout {

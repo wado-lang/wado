@@ -13,19 +13,19 @@ export fn run() with Stdout {
     let xs: List<i32> = [1, 2, 3];
 
     // Colon inside a parenthesised closure: no format specifier here.
-    let a = `any big? {xs.iter().copied().any(|p: i32| p > 2)}`;
+    let a = `any big? ${xs.iter().copied().any(|p: i32| p > 2)}`;
     assert a == "any big? true";
 
     // A real specifier still works after a closure-bearing expression: the
     // spec colon is the one at top level, once the parens have closed.
     let nums: List<i32> = [255];
-    let b = `hex={nums.iter().copied().fold(0, |acc: i32, x: i32| acc + x):x}`;
+    let b = `hex=${nums.iter().copied().fold(0, |acc: i32, x: i32| acc + x):x}`;
     assert b == "hex=ff";
 
     // A char literal holding a bracket must not unbalance the nesting count:
     // `'('` is a literal, not an open paren, so the trailing `:02` spec still
     // applies to the i32 value.
-    let c = `n={pick(7, '('):02}`;
+    let c = `n=${pick(7, '('):02}`;
     assert c == "n=07";
 
     println("ok");

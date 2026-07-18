@@ -11,7 +11,7 @@ fn java_pred(src: &String, rule_src: &String, vals_in_scope: bool) -> String {
 
 fn java_pred_m(src: &String, rule_src: &String, vals_in_scope: bool, methods: &List<String>) -> String {
     let g = parse(`grammar T;
-{*rule_src}
+${*rule_src}
 `).unwrap();
     let lang = ActionLanguage::Java;
     return translate_predicate(
@@ -28,7 +28,7 @@ fn java_pred_m(src: &String, rule_src: &String, vals_in_scope: bool, methods: &L
 
 fn java_pred_res(src: &String, rule_src: &String, vals_in_scope: bool) -> Result<String, String> {
     let g = parse(`grammar T;
-{*rule_src}
+${*rule_src}
 `).unwrap();
     let lang = ActionLanguage::Java;
     return translate_predicate(
@@ -45,33 +45,33 @@ fn java_pred_res(src: &String, rule_src: &String, vals_in_scope: bool) -> Result
 
 test "java predicate: this.field with arithmetic and comparison" {
     let out = java_pred(&"this.i % 2 == 0", &"a : ID ;", false);
-    assert out == "p.i % 2 == 0", `out: '{out}'`;
+    assert out == "p.i % 2 == 0", `out: '${out}'`;
 }
 
 test "java predicate: rule arg reference" {
     let out = java_pred(&"$i == 1", &"a[i32 i] : ID ;", true);
-    assert out == "vals.i == 1", `out: '{out}'`;
+    assert out == "vals.i == 1", `out: '${out}'`;
 }
 
 test "java predicate: negation with parens" {
     let out = java_pred(&"!(this.enumKeyword)", &"a : ID ;", false);
-    assert out == "!(p.enumKeyword)", `out: '{out}'`;
+    assert out == "!(p.enumKeyword)", `out: '${out}'`;
 }
 
 test "java predicate: input lookahead vs token constant" {
     let out = java_pred(&"_input.LA(1) != TParser.ELSE", &"a : ID ;", false);
-    assert out == "p.la(1) != TK_ELSE", `out: '{out}'`;
+    assert out == "p.la(1) != TK_ELSE", `out: '${out}'`;
 }
 
 test "java predicate: token text equals" {
     let out = java_pred(&"_input.LT(1).getText().equals(\"x\")", &"a : ID ;", false);
-    assert out == "(p.token_text(p.lt(1)) == \"x\")", `out: '{out}'`;
+    assert out == "(p.token_text(p.lt(1)) == \"x\")", `out: '${out}'`;
 }
 
 test "java predicate: member method call snake-cases" {
     let methods: List<String> = ["pred"];
     let out = java_pred_m(&"this.pred($i == 99)", &"a[i32 i] : ID ;", true, &methods);
-    assert out == "p.pred(vals.i == 99)", `out: '{out}'`;
+    assert out == "p.pred(vals.i == 99)", `out: '${out}'`;
 }
 
 test "java: an undeclared recognizer method is a loud error" {
@@ -91,7 +91,7 @@ test "java: an unknown Type constant is a loud error" {
 test "java: a declared @members method resolves; an undeclared sibling does not" {
     let methods: List<String> = ["is_keyword"];
     let ok = java_pred_m(&"this.isKeyword()", &"a : ID ;", false, &methods);
-    assert ok == "p.is_keyword()", `out: '{ok}'`;
+    assert ok == "p.is_keyword()", `out: '${ok}'`;
 
     let res = java_pred_res(&"this.isKeyword()", &"a : ID ;", false);
     assert res.is_err(), "an undeclared method must be a loud error even qualified by this";
@@ -99,19 +99,19 @@ test "java: a declared @members method resolves; an undeclared sibling does not"
 
 test "java predicate: negated equals is parenthesized" {
     let out = java_pred(&"!getText().equals(\"+\")", &"a : ID ;", false);
-    assert out == "!(p.rule_text(_rule_start_tok) == \"+\")", `out: '{out}'`;
+    assert out == "!(p.rule_text(_rule_start_tok) == \"+\")", `out: '${out}'`;
 }
 
 test "java members: method name is snake_cased at definition to match calls" {
     let lang = ActionLanguage::Java;
     let m = translate_members(&lang, &"boolean isKeyword() { return true; }", &"T").unwrap();
-    assert m.methods.len() == 1, `methods: {m.methods.len()}`;
-    assert m.methods[0] == "fn is_keyword(&mut self) -> bool { return true; }", `method: '{m.methods[0]}'`;
+    assert m.methods.len() == 1, `methods: ${m.methods.len()}`;
+    assert m.methods[0] == "fn is_keyword(&mut self) -> bool { return true; }", `method: '${m.methods[0]}'`;
 }
 
 test "java predicate: boolean literal" {
     let out = java_pred(&"false", &"a : ID ;", false);
-    assert out == "false", `out: '{out}'`;
+    assert out == "false", `out: '${out}'`;
 }
 
 test "java expr: numeric plus is not string concat" {
@@ -130,7 +130,7 @@ e returns [i32 v] : ID ;
         &g.name,
         &NO_METHODS,
     ).unwrap();
-    assert out == "x.v + 1", `out: '{out}'`;
+    assert out == "x.v + 1", `out: '${out}'`;
 }
 
 test "java expr: string concat becomes a template literal" {
@@ -148,7 +148,7 @@ r : ID ;
         &g.name,
         &NO_METHODS,
     ).unwrap();
-    assert out == "`ID {p.token_text(id)}`", `out: '{out}'`;
+    assert out == "`ID ${p.token_text(id)}`", `out: '${out}'`;
 }
 
 test "dispatcher routes language = Wado through the identity translator" {
@@ -166,12 +166,12 @@ r returns [i32 v] : ID { $v = 1; } ;
         &g.name,
         &NO_METHODS,
     ).unwrap();
-    assert out == " vals.v = 1; ", `out: '{out}'`;
+    assert out == " vals.v = 1; ", `out: '${out}'`;
 }
 
 fn java_action(src: &String, rule_src: &String, vals_in_scope: bool) -> String {
     let g = parse(`grammar T;
-{*rule_src}
+${*rule_src}
 `).unwrap();
     let lang = ActionLanguage::Java;
     return translate_action(
@@ -188,7 +188,7 @@ fn java_action(src: &String, rule_src: &String, vals_in_scope: bool) -> String {
 
 fn java_action_res(src: &String, rule_src: &String, vals_in_scope: bool) -> Result<String, String> {
     let g = parse(`grammar T;
-{*rule_src}
+${*rule_src}
 `).unwrap();
     let lang = ActionLanguage::Java;
     return translate_action(
@@ -205,27 +205,27 @@ fn java_action_res(src: &String, rule_src: &String, vals_in_scope: bool) -> Resu
 
 test "java action: println appends a newline" {
     let out = java_action(&"System.out.println(\"enum\");", &"a : ID ;", false);
-    assert out == "p.emit(`enum\\n`);", `out: '{out}'`;
+    assert out == "p.emit(`enum\\n`);", `out: '${out}'`;
 }
 
 test "java action: print omits the newline" {
     let out = java_action(&"System.out.print(\"a\");", &"a : ID ;", false);
-    assert out == "p.emit(`a`);", `out: '{out}'`;
+    assert out == "p.emit(`a`);", `out: '${out}'`;
 }
 
 test "java action: println stringifies a value arg" {
     let out = java_action(&"System.out.println($x.v);", &"r : x=e ; e returns [i32 v] : ID ;", false);
-    assert out == "p.emit(`{x.v}\\n`);", `out: '{out}'`;
+    assert out == "p.emit(`${x.v}\\n`);", `out: '${out}'`;
 }
 
 test "java action: println with a concat arg" {
     let out = java_action(&"System.out.println(\"ID \" + $ID.text);", &"r : ID ;", false);
-    assert out == "p.emit(`ID {p.token_text(id)}\\n`);", `out: '{out}'`;
+    assert out == "p.emit(`ID ${p.token_text(id)}\\n`);", `out: '${out}'`;
 }
 
 test "java action: ctx.toStringTree(this) drops the redundant parser arg" {
     let out = java_action(&"System.out.println($ctx.toStringTree(this));", &"s : e EOF ; e : ID ;", false);
-    assert out == "p.emit(`{p.rule_string_tree()}\\n`);", `out: '{out}'`;
+    assert out == "p.emit(`${p.rule_string_tree()}\\n`);", `out: '${out}'`;
 }
 
 test "java action: assignment to the value channel" {
@@ -234,22 +234,22 @@ test "java action: assignment to the value channel" {
         &"r returns [i32 v] : a=e b=e ; e returns [i32 v] : ID ;",
         true,
     );
-    assert out == "vals.v = a.v + b.v;", `out: '{out}'`;
+    assert out == "vals.v = a.v + b.v;", `out: '${out}'`;
 }
 
 test "java action: compound assignment on this.field" {
     let out = java_action(&"this.i += 1;", &"a : ID ;", false);
-    assert out == "p.i += 1;", `out: '{out}'`;
+    assert out == "p.i += 1;", `out: '${out}'`;
 }
 
 test "java action: local declaration maps the type" {
     let out = java_action(&"int x = 0;", &"a : ID ;", false);
-    assert out == "let mut x: i32 = 0;", `out: '{out}'`;
+    assert out == "let mut x: i32 = 0;", `out: '${out}'`;
 }
 
 test "java action: multiple statements space-join" {
     let out = java_action(&"this.i += 1; System.out.print(\"i=\");", &"a : ID ;", false);
-    assert out == "p.i += 1; p.emit(`i=`);", `out: '{out}'`;
+    assert out == "p.i += 1; p.emit(`i=`);", `out: '${out}'`;
 }
 
 test "java action: ctx-cast LR-binary value idiom" {
@@ -270,7 +270,7 @@ e returns [i32 v] : e '+' e | INT ;
         &g.name,
         &NO_METHODS,
     ).unwrap();
-    assert out == "vals.v = _lr_acc.v + e.v;", `out: '{out}'`;
+    assert out == "vals.v = _lr_acc.v + e.v;", `out: '${out}'`;
 }
 
 test "java predicate: ctx-cast child access maps to the LR accumulator" {
@@ -288,7 +288,7 @@ e returns [i32 v] : e '+' e | INT ;
         &g.name,
         &NO_METHODS,
     ).unwrap();
-    assert out == "_lr_acc.v > 0", `out: '{out}'`;
+    assert out == "_lr_acc.v > 0", `out: '${out}'`;
 }
 
 test "java: ctx-cast in a non-left-recursive rule is a loud error" {
@@ -312,21 +312,21 @@ r returns [i32 v] : INT ;
 test "java members: field declarations become struct fields" {
     let lang = ActionLanguage::Java;
     let m = translate_members(&lang, &"boolean enumKeyword = true; int i = 0;", &"T").unwrap();
-    assert m.fields.len() == 2, `fields: {m.fields.len()}`;
-    assert m.fields[0].name == "enumKeyword" && m.fields[0].ty == "bool" && m.fields[0].init == "true", `f0: {m.fields[0].name}:{m.fields[0].ty}={m.fields[0].init}`;
-    assert m.fields[1].name == "i" && m.fields[1].ty == "i32" && m.fields[1].init == "0", `f1: {m.fields[1].name}:{m.fields[1].ty}={m.fields[1].init}`;
+    assert m.fields.len() == 2, `fields: ${m.fields.len()}`;
+    assert m.fields[0].name == "enumKeyword" && m.fields[0].ty == "bool" && m.fields[0].init == "true", `f0: ${m.fields[0].name}:${m.fields[0].ty}=${m.fields[0].init}`;
+    assert m.fields[1].name == "i" && m.fields[1].ty == "i32" && m.fields[1].init == "0", `f1: ${m.fields[1].name}:${m.fields[1].ty}=${m.fields[1].init}`;
     assert m.methods.is_empty(), "no methods expected";
 }
 
 test "java members: numeric types map by exact Java width (byte=i8, short=i16, long=i64, float=f32, double=f64)" {
     let lang = ActionLanguage::Java;
     let m = translate_members(&lang, &"byte b = 0; short s = 0; long l = 0; float f = 0; double d = 0;", &"T").unwrap();
-    assert m.fields.len() == 5, `fields: {m.fields.len()}`;
-    assert m.fields[0].ty == "i8", `byte: {m.fields[0].ty}`;
-    assert m.fields[1].ty == "i16", `short: {m.fields[1].ty}`;
-    assert m.fields[2].ty == "i64", `long: {m.fields[2].ty}`;
-    assert m.fields[3].ty == "f32", `float: {m.fields[3].ty}`;
-    assert m.fields[4].ty == "f64", `double: {m.fields[4].ty}`;
+    assert m.fields.len() == 5, `fields: ${m.fields.len()}`;
+    assert m.fields[0].ty == "i8", `byte: ${m.fields[0].ty}`;
+    assert m.fields[1].ty == "i16", `short: ${m.fields[1].ty}`;
+    assert m.fields[2].ty == "i64", `long: ${m.fields[2].ty}`;
+    assert m.fields[3].ty == "f32", `float: ${m.fields[3].ty}`;
+    assert m.fields[4].ty == "f64", `double: ${m.fields[4].ty}`;
 }
 
 test "java members: method with a param, print, and return" {
@@ -337,15 +337,15 @@ test "java members: method with a param, print, and return" {
         &"T",
     ).unwrap();
     assert m.fields.is_empty(), "no fields expected";
-    assert m.methods.len() == 1, `methods: {m.methods.len()}`;
-    assert m.methods[0] == "fn pred(&mut self, v: bool) -> bool { self.emit(`eval={v}\\n`); return v; }", `method: '{m.methods[0]}'`;
+    assert m.methods.len() == 1, `methods: ${m.methods.len()}`;
+    assert m.methods[0] == "fn pred(&mut self, v: bool) -> bool { self.emit(`eval=${v}\\n`); return v; }", `method: '${m.methods[0]}'`;
 }
 
 test "java members: void method, no params" {
     let lang = ActionLanguage::Java;
     let m = translate_members(&lang, &"public void foo() { System.out.println(\"foo\"); }", &"T").unwrap();
-    assert m.methods.len() == 1, `methods: {m.methods.len()}`;
-    assert m.methods[0] == "fn foo(&mut self) { self.emit(`foo\\n`); }", `method: '{m.methods[0]}'`;
+    assert m.methods.len() == 1, `methods: ${m.methods.len()}`;
+    assert m.methods[0] == "fn foo(&mut self) { self.emit(`foo\\n`); }", `method: '${m.methods[0]}'`;
 }
 
 test "grammar_has_superclass keys the Phase 4 carve-out" {

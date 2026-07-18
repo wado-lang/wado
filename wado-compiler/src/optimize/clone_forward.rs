@@ -27,11 +27,13 @@
 //! - no statement in that interval mutates `place`'s root local or writes *any*
 //!   global, so `place`'s value at the use equals its value at the binding.
 
+use super::alias::{FirstParamTypes, first_param_types, method_mutates_receiver};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
+use crate::tir::TypeTable;
 
 /// The builtin general-name of a call's callee descriptor, resolving a
 /// monomorphized instance (`array_clone::<i32>`) to its generic builtin name.
@@ -159,10 +161,34 @@ fn collect_usage(body: &Body, usage: &mut IndexMap<u32, Usage>) {
     }
 }
 
-/// Whether the subtree rooted at `node` mutates `root` (of a local place) or
-/// writes any global — the two things that can change a re-materialized place's
-/// value across the binding→use interval.
-fn stmt_disturbs_place(body: &Body, stmt: StmtId, root: &PlaceRoot) -> bool {
+/// Whether a call in the interval can reach the place's root through a channel
+/// invisible to a syntactic scan: a global-rooted place (the callee may write
+/// any global), or an address-taken local (a `&mut` reference to it may have
+/// escaped into the callee, or into a closure the call invokes).
+fn call_disturbs_root(root: &PlaceRoot, address_taken: &IndexSet<u32>) -> bool {
+    match root {
+        PlaceRoot::Global => true,
+        PlaceRoot::Local(r) => address_taken.contains(r),
+    }
+}
+
+/// Whether the subtree rooted at `stmt` mutates `root` (of a local place) or
+/// writes any global — anything that can change a re-materialized place's value
+/// across the binding→use interval. Beyond direct assignments / `&mut` borrows /
+/// `mut` arguments, this covers three otherwise-invisible channels: a mutating
+/// method receiver (`xs.push(0)`, whose receiver is a bare `Local` with no
+/// `MutRef` node), a write through a `&mut` reference created before the interval
+/// (rooted at the reference, not the pointee — folded into the address-taken
+/// gate), and a callee-internal global write (any call disqualifies a
+/// global-rooted place).
+fn stmt_disturbs_place(
+    body: &Body,
+    stmt: StmtId,
+    root: &PlaceRoot,
+    address_taken: &IndexSet<u32>,
+    fpt: &FirstParamTypes,
+    type_table: &TypeTable,
+) -> bool {
     let mut disturbs = false;
     let mut stack = vec![NodeRef::Stmt(stmt)];
     while let Some(node) = stack.pop() {
@@ -170,10 +196,13 @@ fn stmt_disturbs_place(body: &Body, stmt: StmtId, root: &PlaceRoot) -> bool {
             match &body.exprs[id].kind {
                 ExprKind::GlobalVarSet { .. } => return true,
                 ExprKind::Assign { target, .. } => {
-                    if let (PlaceRoot::Local(r), Some(l)) = (root, root_local(body, *target))
-                        && l == *r
-                    {
-                        disturbs = true;
+                    if let PlaceRoot::Local(r) = root {
+                        // A direct write to the root, or — once the root is
+                        // address-taken — any write, since a `&mut` alias of it
+                        // may be the target we cannot attribute.
+                        if root_local(body, *target) == Some(*r) || address_taken.contains(r) {
+                            disturbs = true;
+                        }
                     }
                 }
                 ExprKind::Unary {
@@ -187,15 +216,33 @@ fn stmt_disturbs_place(body: &Body, stmt: StmtId, root: &PlaceRoot) -> bool {
                         disturbs = true;
                     }
                 }
-                ExprKind::MethodCall { args, .. } | ExprKind::Call { args, .. } => {
-                    for a in args {
-                        if a.is_mut
-                            && let (PlaceRoot::Local(r), Some(l)) =
-                                (root, a.expr.as_expr().and_then(|e| root_local(body, e)))
-                            && l == *r
-                        {
-                            disturbs = true;
-                        }
+                ExprKind::MethodCall {
+                    receiver,
+                    func_id,
+                    args,
+                    ..
+                } => {
+                    if call_disturbs_root(root, address_taken) {
+                        return true;
+                    }
+                    if let PlaceRoot::Local(r) = root
+                        && let Some(re) = receiver.as_expr()
+                        && root_local(body, re) == Some(*r)
+                        && method_mutates_receiver(body, re, *func_id, fpt, type_table, true, None)
+                    {
+                        disturbs = true;
+                    }
+                    disturbs |= mut_arg_hits_root(body, args, root);
+                }
+                ExprKind::Call { args, .. } => {
+                    if call_disturbs_root(root, address_taken) {
+                        return true;
+                    }
+                    disturbs |= mut_arg_hits_root(body, args, root);
+                }
+                ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => {
+                    if call_disturbs_root(root, address_taken) {
+                        return true;
                     }
                 }
                 _ => {}
@@ -204,6 +251,39 @@ fn stmt_disturbs_place(body: &Body, stmt: StmtId, root: &PlaceRoot) -> bool {
         body.for_each_child(node, |c| stack.push(c));
     }
     disturbs
+}
+
+/// Whether a `mut` call argument roots at the local place root.
+fn mut_arg_hits_root(
+    body: &Body,
+    args: &[crate::nir_arena::ArenaCallArg],
+    root: &PlaceRoot,
+) -> bool {
+    args.iter().any(|a| {
+        a.is_mut
+            && matches!(
+                (root, a.expr.as_expr().and_then(|e| root_local(body, e))),
+                (PlaceRoot::Local(r), Some(l)) if l == *r
+            )
+    })
+}
+
+/// Locals whose address is taken by a `&mut` borrow anywhere in the function:
+/// a write through such a reference can reach the local without naming it.
+fn collect_address_taken(body: &Body, out: &mut IndexSet<u32>) {
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(id) = node
+            && let ExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr: inner,
+            } = &body.exprs[id].kind
+            && let Some(l) = inner.as_expr().and_then(|e| root_local(body, e))
+        {
+            out.insert(l);
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
 }
 
 /// The `Local { index }` node that sits as the referent of an
@@ -260,11 +340,15 @@ struct Candidate {
 }
 
 /// Collect every eligible forwarding site in `block`.
+#[allow(clippy::too_many_arguments)]
 fn collect_in_block(
     body: &Body,
     block: BlockId,
     descriptors: &[FunctionRef],
     usage: &IndexMap<u32, Usage>,
+    address_taken: &IndexSet<u32>,
+    fpt: &FirstParamTypes,
+    type_table: &TypeTable,
     out: &mut Vec<Candidate>,
 ) {
     let stmts = &body.blocks[block].stmts;
@@ -305,7 +389,7 @@ fn collect_in_block(
         // The place must be unchanged across `(k, u]`.
         if stmts[k + 1..=u]
             .iter()
-            .any(|&s| stmt_disturbs_place(body, s, &root))
+            .any(|&s| stmt_disturbs_place(body, s, &root, address_taken, fpt, type_table))
         {
             continue;
         }
@@ -327,6 +411,8 @@ fn collect_in_block(
 /// eligible read-only clone in the function.
 struct CloneForwardRule<'a> {
     descriptors: &'a [FunctionRef],
+    fpt: &'a FirstParamTypes,
+    type_table: &'a TypeTable,
 }
 
 impl Rule for CloneForwardRule<'_> {
@@ -337,11 +423,22 @@ impl Rule for CloneForwardRule<'_> {
         }
         let mut usage: IndexMap<u32, Usage> = IndexMap::default();
         collect_usage(engine.body, &mut usage);
+        let mut address_taken: IndexSet<u32> = IndexSet::default();
+        collect_address_taken(engine.body, &mut address_taken);
 
         let mut candidates = Vec::new();
         let mut stack = vec![engine.body.root];
         while let Some(b) = stack.pop() {
-            collect_in_block(engine.body, b, self.descriptors, &usage, &mut candidates);
+            collect_in_block(
+                engine.body,
+                b,
+                self.descriptors,
+                &usage,
+                &address_taken,
+                self.fpt,
+                self.type_table,
+                &mut candidates,
+            );
             let stmts = engine.body.blocks[b].stmts.clone();
             for s in stmts {
                 let mut kids = Vec::new();
@@ -416,6 +513,9 @@ fn remove_dead_bindings(engine: &mut Engine, block: BlockId, dead: &IndexSet<Stm
 /// `const_object_globalization`, so there is no earlier iteration to be dirty in.
 pub fn forward_redundant_clones(project: &mut NirPackage) -> bool {
     let descriptors = super::dce::build_callee_descriptors(project);
+    let fpt = first_param_types(project);
+    let type_table = project.type_table.clone();
+    let type_table = type_table.borrow();
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
     let mut any = false;
@@ -426,6 +526,8 @@ pub fn forward_redundant_clones(project: &mut NirPackage) -> bool {
         }
         let rule = CloneForwardRule {
             descriptors: &descriptors,
+            fpt: &fpt,
+            type_table: &type_table,
         };
         let NirFunction { body, locals, .. } = &mut *func;
         let body = body.as_mut().expect("checked above");

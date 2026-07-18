@@ -327,13 +327,13 @@ test "insert after compact" {
 test "50 items insert and partial remove" {
     let mut map: TreeMap<String, i32> = TreeMap::new();
     for let mut i = 0; i < 50; i += 1 {
-        map[`item{i}`] = i;
+        map[`item${i}`] = i;
     }
     assert map.len() == 50;
     assert map["item0"] == 0;
     assert map["item49"] == 49;
     for let mut i = 0; i < 50; i += 2 {
-        map.remove(`item{i}`);
+        map.remove(`item${i}`);
     }
     assert map.len() == 25;
     assert map.contains_key("item1");
@@ -446,33 +446,33 @@ test "i32 key insertion order" {
 
 test "inspect empty map" {
     let map: TreeMap<String, i32> = TreeMap::new();
-    assert `{map:?}` == "{}";
+    assert `${map:?}` == "{}";
 }
 
 test "inspect string keys" {
     let mut map: TreeMap<String, i32> = TreeMap::new();
     map["a"] = 1;
     map["b"] = 2;
-    assert `{map:?}` == "{\"a\": 1, \"b\": 2}";
+    assert `${map:?}` == "{\"a\": 1, \"b\": 2}";
 }
 
 test "inspect i32 keys" {
     let mut map: TreeMap<i32, String> = TreeMap::new();
     map[1] = "one";
     map[2] = "two";
-    assert `{map:?}` == "{1: \"one\", 2: \"two\"}";
+    assert `${map:?}` == "{1: \"one\", 2: \"two\"}";
 }
 
 test "pretty-print empty map" {
     let map: TreeMap<String, i32> = TreeMap::new();
-    assert `{map:#?}` == "{}";
+    assert `${map:#?}` == "{}";
 }
 
 test "pretty-print string keys" {
     let mut map: TreeMap<String, i32> = TreeMap::new();
     map["a"] = 1;
     map["b"] = 2;
-    assert `{map:#?}` == "{
+    assert `${map:#?}` == "{
   \"a\": 1,
   \"b\": 2,
 }";
@@ -481,7 +481,7 @@ test "pretty-print string keys" {
 test "pretty-print single entry" {
     let mut map: TreeMap<String, i32> = TreeMap::new();
     map["key"] = 42;
-    assert `{map:#?}` == "{
+    assert `${map:#?}` == "{
   \"key\": 42,
 }";
 }

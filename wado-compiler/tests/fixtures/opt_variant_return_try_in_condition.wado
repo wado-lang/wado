@@ -1,0 +1,47 @@
+// Test: a candidate called inside an `if` condition stays SROA'd.
+//
+// `if get(n)? == 1` lowers the call into the condition expression
+// (`Seq([__m = call, if ref.test(__m, Ok) ...]) == 1`). The rewriter's
+// `recurse_rewrite_call_sites` treats that `Seq` as a statement list, so the
+// validator must too — blanket-invalidating condition calls kept `get`
+// boxed while `check` got the multi-value ABI.
+
+#[inline("never")]
+fn get(n: i32) -> Result<i32, String> {
+    if n < 0 {
+        return Result::<i32, String>::Err("neg");
+    }
+    return Result::<i32, String>::Ok(n % 2);
+}
+
+#[inline("never")]
+fn check(n: i32) -> Result<i32, String> {
+    if get(n)? == 1 {
+        return Result::<i32, String>::Ok(100);
+    }
+    return Result::<i32, String>::Ok(0);
+}
+
+#[inline("never")]
+fn drive(n: i32) -> i32 {
+    let r = check(n);
+    if let Ok(v) = r {
+        return v;
+    }
+    return -1;
+}
+
+export fn run() {
+    assert drive(3) == 100;
+    assert drive(2) == 0;
+    assert drive(-1) == -1;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "/get\" = fn(i32) -> [i32, i32, ref null \"core:prelude/string.wado//String\"]",
+        "/check\" = fn(i32) -> [i32, i32, ref null \"core:prelude/string.wado//String\"]"
+    ]
+}

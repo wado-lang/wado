@@ -13,7 +13,7 @@ impl FromI32 for i32 {
 }
 
 impl FromI32 for String {
-    fn from_i32(n: i32) -> String { return `{n}`; }
+    fn from_i32(n: i32) -> String { return `${n}`; }
 }
 
 trait Reader {
@@ -59,7 +59,7 @@ fn read_as_i32<S: Source>(source: &S) -> i32 {
 export fn run() with Stdout {
     let src = IntSource { value: 42 };
     let n = read_as_i32::<IntSource>(&src);
-    println(`{n}`);
+    println(`${n}`);
 }
 
 __DATA__

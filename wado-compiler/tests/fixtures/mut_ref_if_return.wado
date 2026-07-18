@@ -24,7 +24,7 @@ impl Parser {
         if self.tokens[self.pos].kind == kind {
             return Result::<Token, String>::Ok(self.advance());
         }
-        return Result::<Token, String>::Err(`expected {kind}`);
+        return Result::<Token, String>::Err(`expected ${kind}`);
     }
 }
 
@@ -50,7 +50,7 @@ fn parse_root(p: &mut Parser) -> Result<i32, String> {
     while p.peek_kind() == 1 {
         let item = parse_item(p)?;
     }
-    assert p.pos == 1, `expected pos=1, got pos={p.pos}`;
+    assert p.pos == 1, `expected pos=1, got pos=${p.pos}`;
     return Result::<i32, String>::Ok(0);
 }
 
@@ -62,7 +62,7 @@ export fn run() {
     let mut parser = Parser::new(tokens);
     let r = parse_root(&mut parser);
     if let Err(e) = &r {
-        panic(`error: {e}`);
+        panic(`error: ${e}`);
     }
 }
 

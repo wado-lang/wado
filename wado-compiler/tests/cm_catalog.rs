@@ -311,7 +311,7 @@ fn lookup_func(
         .or_else(|| instance.get_export(&mut *store, None, export))
         .map(|(_, idx)| idx)
         .and_then(|idx| instance.get_func(&mut *store, idx))
-        .ok_or_else(|| format!("export `{export}` not found"))
+        .ok_or_else(|| format!("export `${export}` not found"))
 }
 
 /// Round-trip a future's payload and assert it survived, not just the handle:
@@ -337,40 +337,40 @@ where
     let expected = payload.clone();
     let func = lookup_func(store, instance, iface, export)?;
     let f = FutureReader::new(&mut *store, async move { wasmtime::error::Ok(payload) })
-        .map_err(|e| format!("`{export}`: host future create failed: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: host future create failed: {e:#}"))?;
     let any = f
         .try_into_future_any(&mut *store)
-        .map_err(|e| format!("`{export}`: future -> any failed: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: future -> any failed: {e:#}"))?;
     let mut results = vec![Val::Bool(false); 1];
     func.call_async(&mut *store, &[Val::Future(any)], &mut results)
         .await
-        .map_err(|e| format!("`{export}`: call trapped: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: call trapped: {e:#}"))?;
     let out = match results.into_iter().next() {
         Some(Val::Future(a)) => a,
         other => {
             return Err(format!(
-                "`{export}`: expected a future result, got {other:?}"
+                "`${export}`: expected a future result, got {other:?}"
             ));
         }
     };
     let reader = out.try_into_future_reader::<T>().map_err(|e| {
         format!(
-            "`{export}`: result is not future<{}>: {e:#}",
+            "`${export}`: result is not future<{}>: {e:#}",
             std::any::type_name::<T>()
         )
     })?;
     let (tx, rx) = oneshot::channel::<T>();
     reader
         .pipe(&mut *store, OneshotConsumer::new(tx))
-        .map_err(|e| format!("`{export}`: pipe failed: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: pipe failed: {e:#}"))?;
     let got = store
         .run_concurrent(async move |_| rx.await)
         .await
-        .map_err(|e| format!("`{export}`: run_concurrent failed: {e:#}"))?
-        .map_err(|_| format!("`{export}`: future closed without a value"))?;
+        .map_err(|e| format!("`${export}`: run_concurrent failed: {e:#}"))?
+        .map_err(|_| format!("`${export}`: future closed without a value"))?;
     if got != expected {
         return Err(format!(
-            "`{export}`: future payload mismatch\n  in:  {expected:?}\n  out: {got:?}"
+            "`${export}`: future payload mismatch\n  in:  {expected:?}\n  out: {got:?}"
         ));
     }
     Ok(())
@@ -397,32 +397,32 @@ where
     let expected = payload.clone();
     let func = lookup_func(store, instance, iface, export)?;
     let s = StreamReader::new(&mut *store, ChunkedStreamProducer(Some(payload)))
-        .map_err(|e| format!("`{export}`: host stream create failed: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: host stream create failed: {e:#}"))?;
     let any = s
         .try_into_stream_any(&mut *store)
-        .map_err(|e| format!("`{export}`: stream -> any failed: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: stream -> any failed: {e:#}"))?;
     let mut results = vec![Val::Bool(false); 1];
     func.call_async(&mut *store, &[Val::Stream(any)], &mut results)
         .await
-        .map_err(|e| format!("`{export}`: call trapped: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: call trapped: {e:#}"))?;
     let out = match results.into_iter().next() {
         Some(Val::Stream(a)) => a,
         other => {
             return Err(format!(
-                "`{export}`: expected a stream result, got {other:?}"
+                "`${export}`: expected a stream result, got {other:?}"
             ));
         }
     };
     let reader = out.try_into_stream_reader::<T>().map_err(|e| {
         format!(
-            "`{export}`: result is not stream<{}>: {e:#}",
+            "`${export}`: result is not stream<{}>: {e:#}",
             std::any::type_name::<T>()
         )
     })?;
     let (tx, mut rx) = mpsc::unbounded::<T>();
     reader
         .pipe(&mut *store, StreamCollectConsumer::new(tx))
-        .map_err(|e| format!("`{export}`: pipe failed: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: pipe failed: {e:#}"))?;
     let got = store
         .run_concurrent(async move |_| {
             let mut items = Vec::new();
@@ -432,10 +432,10 @@ where
             items
         })
         .await
-        .map_err(|e| format!("`{export}`: run_concurrent failed: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: run_concurrent failed: {e:#}"))?;
     if got != expected {
         return Err(format!(
-            "`{export}`: stream payload mismatch\n  in:  {expected:?}\n  out: {got:?}"
+            "`${export}`: stream payload mismatch\n  in:  {expected:?}\n  out: {got:?}"
         ));
     }
     Ok(())
@@ -452,33 +452,33 @@ async fn embedded_future_round_trip(
     unwrap: impl FnOnce(Val) -> Option<FutureAny>,
 ) -> Result<(), String> {
     let f = FutureReader::new(&mut *store, async { wasmtime::error::Ok(0xFEED_u32) })
-        .map_err(|e| format!("`{export}`: host future create failed: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: host future create failed: {e:#}"))?;
     let any = f
         .try_into_future_any(&mut *store)
-        .map_err(|e| format!("`{export}`: future -> any failed: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: future -> any failed: {e:#}"))?;
     let func = lookup_func(store, instance, iface, export)?;
     let mut results = vec![Val::Bool(false); 1];
     func.call_async(&mut *store, &[wrap(Val::Future(any))], &mut results)
         .await
-        .map_err(|e| format!("`{export}`: call trapped: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: call trapped: {e:#}"))?;
     let result = results.into_iter().next().unwrap_or(Val::Bool(false));
     let inner = unwrap(result)
-        .ok_or_else(|| format!("`{export}`: result did not carry the inner future"))?;
+        .ok_or_else(|| format!("`${export}`: result did not carry the inner future"))?;
     let reader = inner
         .try_into_future_reader::<u32>()
-        .map_err(|e| format!("`{export}`: inner handle is not future<u32>: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: inner handle is not future<u32>: {e:#}"))?;
     let (tx, rx) = oneshot::channel::<u32>();
     reader
         .pipe(&mut *store, OneshotConsumer::new(tx))
-        .map_err(|e| format!("`{export}`: pipe failed: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: pipe failed: {e:#}"))?;
     let got = store
         .run_concurrent(async move |_| rx.await)
         .await
-        .map_err(|e| format!("`{export}`: run_concurrent failed: {e:#}"))?
-        .map_err(|_| format!("`{export}`: inner future closed without a value"))?;
+        .map_err(|e| format!("`${export}`: run_concurrent failed: {e:#}"))?
+        .map_err(|_| format!("`${export}`: inner future closed without a value"))?;
     if got != 0xFEED_u32 {
         return Err(format!(
-            "`{export}`: inner future payload mismatch: expected 0xFEED, got {got:#x}"
+            "`${export}`: inner future payload mismatch: expected 0xFEED, got {got:#x}"
         ));
     }
     Ok(())
@@ -493,25 +493,25 @@ async fn embedded_stream_round_trip(
     unwrap: impl FnOnce(Val) -> Option<StreamAny>,
 ) -> Result<(), String> {
     let s = StreamReader::new(&mut *store, vec![1u8, 2, 3])
-        .map_err(|e| format!("`{export}`: host stream create failed: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: host stream create failed: {e:#}"))?;
     let any = s
         .try_into_stream_any(&mut *store)
-        .map_err(|e| format!("`{export}`: stream -> any failed: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: stream -> any failed: {e:#}"))?;
     let func = lookup_func(store, instance, iface, export)?;
     let mut results = vec![Val::Bool(false); 1];
     func.call_async(&mut *store, &[wrap(Val::Stream(any))], &mut results)
         .await
-        .map_err(|e| format!("`{export}`: call trapped: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: call trapped: {e:#}"))?;
     let result = results.into_iter().next().unwrap_or(Val::Bool(false));
     let inner = unwrap(result)
-        .ok_or_else(|| format!("`{export}`: result did not carry the inner stream"))?;
+        .ok_or_else(|| format!("`${export}`: result did not carry the inner stream"))?;
     let reader = inner
         .try_into_stream_reader::<u8>()
-        .map_err(|e| format!("`{export}`: inner handle is not stream<u8>: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: inner handle is not stream<u8>: {e:#}"))?;
     let (tx, mut rx) = mpsc::unbounded::<u8>();
     reader
         .pipe(&mut *store, StreamCollectConsumer::new(tx))
-        .map_err(|e| format!("`{export}`: pipe failed: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: pipe failed: {e:#}"))?;
     let got = store
         .run_concurrent(async move |_| {
             let mut items = Vec::new();
@@ -521,10 +521,10 @@ async fn embedded_stream_round_trip(
             items
         })
         .await
-        .map_err(|e| format!("`{export}`: run_concurrent failed: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: run_concurrent failed: {e:#}"))?;
     if got != vec![1u8, 2, 3] {
         return Err(format!(
-            "`{export}`: inner stream payload mismatch: expected [1, 2, 3], got {got:?}"
+            "`${export}`: inner stream payload mismatch: expected [1, 2, 3], got {got:?}"
         ));
     }
     Ok(())
@@ -585,7 +585,7 @@ fn run_round_trips(opt_level: OptLevel) {
                 .map(|(_, idx)| idx)
                 .and_then(|idx| instance.get_func(&mut store, idx));
             let Some(func) = func else {
-                failures.push(format!("[{opt}] export `{export}` not found"));
+                failures.push(format!("[{opt}] export `${export}` not found"));
                 continue;
             };
             let result_arity = func.ty(&store).results().len();
@@ -594,17 +594,17 @@ fn run_round_trips(opt_level: OptLevel) {
                 Ok(()) => {
                     if results.len() != 1 {
                         failures.push(format!(
-                            "[{opt}] `{export}`: expected 1 result, got {}",
+                            "[{opt}] `${export}`: expected 1 result, got {}",
                             results.len()
                         ));
                     } else if results[0] != value {
                         failures.push(format!(
-                            "[{opt}] `{export}`: round-trip mismatch\n  in:  {value:?}\n  out: {:?}",
+                            "[{opt}] `${export}`: round-trip mismatch\n  in:  {value:?}\n  out: {:?}",
                             results[0]
                         ));
                     }
                 }
-                Err(e) => failures.push(format!("[{opt}] `{export}`: call trapped: {e:#}")),
+                Err(e) => failures.push(format!("[{opt}] `${export}`: call trapped: {e:#}")),
             }
         }
 
@@ -787,33 +787,33 @@ where
     let mut results = vec![Val::Bool(false); 1];
     func.call_async(&mut *store, &[input], &mut results)
         .await
-        .map_err(|e| format!("`{export}`: call trapped: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: call trapped: {e:#}"))?;
     let any = match results.into_iter().next() {
         Some(Val::Future(a)) => a,
         other => {
             return Err(format!(
-                "`{export}`: expected a future result, got {other:?}"
+                "`${export}`: expected a future result, got {other:?}"
             ));
         }
     };
     let reader = any.try_into_future_reader::<T>().map_err(|e| {
         format!(
-            "`{export}`: result is not future<{}>: {e:#}",
+            "`${export}`: result is not future<{}>: {e:#}",
             std::any::type_name::<T>()
         )
     })?;
     let (tx, rx) = oneshot::channel::<T>();
     reader
         .pipe(&mut *store, OneshotConsumer::new(tx))
-        .map_err(|e| format!("`{export}`: pipe failed: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: pipe failed: {e:#}"))?;
     let got = store
         .run_concurrent(async move |_| rx.await)
         .await
-        .map_err(|e| format!("`{export}`: run_concurrent failed: {e:#}"))?
-        .map_err(|_| format!("`{export}`: future closed without a value"))?;
+        .map_err(|e| format!("`${export}`: run_concurrent failed: {e:#}"))?
+        .map_err(|_| format!("`${export}`: future closed without a value"))?;
     if got != expected {
         return Err(format!(
-            "`{export}`: produced payload mismatch\n  in:  {expected:?}\n  out: {got:?}"
+            "`${export}`: produced payload mismatch\n  in:  {expected:?}\n  out: {got:?}"
         ));
     }
     Ok(())
@@ -936,25 +936,25 @@ where
     let mut results = vec![Val::Bool(false); 1];
     func.call_async(&mut *store, &[input], &mut results)
         .await
-        .map_err(|e| format!("`{export}`: call trapped: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: call trapped: {e:#}"))?;
     let any = match results.into_iter().next() {
         Some(Val::Stream(a)) => a,
         other => {
             return Err(format!(
-                "`{export}`: expected a stream result, got {other:?}"
+                "`${export}`: expected a stream result, got {other:?}"
             ));
         }
     };
     let reader = any.try_into_stream_reader::<T>().map_err(|e| {
         format!(
-            "`{export}`: result is not stream<{}>: {e:#}",
+            "`${export}`: result is not stream<{}>: {e:#}",
             std::any::type_name::<T>()
         )
     })?;
     let (tx, mut rx) = mpsc::unbounded::<T>();
     reader
         .pipe(&mut *store, StreamCollectConsumer::new(tx))
-        .map_err(|e| format!("`{export}`: pipe failed: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: pipe failed: {e:#}"))?;
     let got = store
         .run_concurrent(async move |_| {
             let mut items = Vec::new();
@@ -964,10 +964,10 @@ where
             items
         })
         .await
-        .map_err(|e| format!("`{export}`: run_concurrent failed: {e:#}"))?;
+        .map_err(|e| format!("`${export}`: run_concurrent failed: {e:#}"))?;
     if got != expected {
         return Err(format!(
-            "`{export}`: produced stream mismatch\n  in:  {expected:?}\n  out: {got:?}"
+            "`${export}`: produced stream mismatch\n  in:  {expected:?}\n  out: {got:?}"
         ));
     }
     Ok(())

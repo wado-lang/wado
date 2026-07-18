@@ -14,19 +14,19 @@ always holds (for a type parameter or any concrete type), and `impl Inspect
 for T;` is a conformance check that always validates. Because they are total
 and universal debug output is a feature rather than waste, their _generation_
 stays eager (a body for every type kind) — gating it would demand a discovery
-mechanism for `{v:?}` over an unbounded type param (whose concrete reference
+mechanism for `${v:?}` over an unbounded type param (whose concrete reference
 only materializes at monomorphize) with no offsetting code-size benefit.
 
 The _display_ traits (`Display` / `DisplayAlt`) are **not** total (revised
 2026-07-15). `Display` is never auto-derived for a struct, variant, or generic
 container — a type has a human-facing string representation only if someone
-wrote `impl Display`, so `{x}` on such a type is a compile error (use `{x:?}`
+wrote `impl Display`, so `${x}` on such a type is a compile error (use `${x:?}`
 for debug output), and `T: Display` is a real obligation. The two exceptions
 are types with an _unambiguous canonical string form_, which auto-derive it:
 a plain `enum` displays its **bare case name** (`Red`, distinct from `Inspect`'s
 type-qualified `Color::Red`), and a newtype **inherits its base type's
 `Display`** transparently (a `Meters = f64` renders `3.14`, no `as Name` tag).
-`DisplayAlt` (`{x:#}`) tracks `Display`: it auto-derives a fallback delegating
+`DisplayAlt` (`${x:#}`) tracks `Display`: it auto-derives a fallback delegating
 to `Display` only where a `Display` impl exists. A policy declaration for
 user-defined traits is open. See Open Questions.
 
@@ -62,7 +62,7 @@ instantiated for a given `T`.
   [`core:log`](./wep-2026-06-25-core-log.md).
 - `Eq` / `Ord` synthesizing for every declared type costs compile time and
   code size with no compensating benefit (unlike `Inspect`, which exists so
-  `{x:?}` always works everywhere).
+  `${x:?}` always works everywhere).
 
 ## Decision
 
@@ -90,7 +90,7 @@ holds, for a type parameter or any concrete type — so those bounds compile
 where the old policy rejected them, and an `impl Inspect for T;` marker always
 validates. Generation stays eager: a total trait wastes nothing meaningful by
 existing for every type (universal debug output is the point), and gating it
-would need a discovery mechanism for `{v:?}` over an unbounded type param —
+would need a discovery mechanism for `${v:?}` over an unbounded type param —
 whose concrete `T^Inspect` reference only materializes at monomorphize, after
 synthesis — for no code-size gain.
 
@@ -98,8 +98,8 @@ synthesis — for no code-size gain.
 (revised 2026-07-15). A human-facing string representation is not something the
 compiler can invent structurally the way it can a debug dump: for a struct
 there is no canonical field layout, delimiter, or ordering to pick, so `Display`
-is left to the author. `{x}` on a type with no `Display` is a compile error
-(use `{x:?}`), and `T: Display` is a real obligation. Two type kinds are the
+is left to the author. `${x}` on a type with no `Display` is a compile error
+(use `${x:?}`), and `T: Display` is a real obligation. Two type kinds are the
 exception because their string form _is_ canonical and unambiguous, so the
 compiler derives it eagerly:
 
@@ -186,12 +186,12 @@ value is compared, defaulted, or serialized only through a bound or a concrete
 call the resolver sees — so per-site recording is complete.
 
 A total debug trait has no such gate: `type_implements_trait` short-circuits
-`true` for it (totality), and generation is eager, so `{v:?}` over an
+`true` for it (totality), and generation is eager, so `${v:?}` over an
 unbounded type param — whose concrete `T^Inspect` reference only appears after
 monomorphize substitutes `T` — always finds its body already emitted. This is
 exactly the case that made gating the debug traits unattractive, and eager
 generation sidesteps it. `Display` does not face this: it is not total, so
-`{v}` over an unbounded `T` is a compile error unless `T: Display` is written,
+`${v}` over an unbounded `T` is a compile error unless `T: Display` is written,
 and a bounded generic only instantiates with `Display` types — no post-mono
 discovery gap.
 
@@ -209,7 +209,7 @@ because it exists and left to ordinary dead-code elimination.
 - `Display` / `DisplayAlt` are the `display` policy: not total. `Display` is
   auto-derived only for a plain `enum` (bare case name) or a newtype over a
   `Display` base (transparent inheritance); every other type needs a manual
-  `impl Display`. `{x}` / `T: Display` on a non-`Display` type is a compile
+  `impl Display`. `${x}` / `T: Display` on a non-`Display` type is a compile
   error. `DisplayAlt` derives a `Display`-delegating fallback wherever `Display`
   exists. A `Display` marker is rejected.
 - `Default` moved from `automatic` to demand `on_bound`: a body is generated
@@ -248,8 +248,8 @@ motivation is pure compile-time / code size, with no opt-out to weigh.
   `impl Inspect for T;` markers are accepted.
 - `Display` regains meaning: `T: Display` now certifies a real string
   representation, so `String::push_display` and any `Display`-bounded API reject
-  types with only a debug form instead of silently emitting one. `{x}` on a
-  non-`Display` type fails at compile time with a clear "use `{x:?}`" path.
+  types with only a debug form instead of silently emitting one. `${x}` on a
+  non-`Display` type fails at compile time with a clear "use `${x:?}`" path.
 - No macros, no dynamic reflection; synthesis stays static and monomorphized.
 
 ### Trade-offs
@@ -275,9 +275,9 @@ motivation is pure compile-time / code size, with no opt-out to weigh.
   genuinely non-debug-formattable type later without revisiting the totality
   short-circuit.
 - `Display`'s non-totality (revised 2026-07-15) is a source-compatibility
-  break: every `{x}` and `String::push_display` that relied on the old
+  break: every `${x}` and `String::push_display` that relied on the old
   Display-delegates-to-Inspect fallback for a struct / variant / container now
-  fails to compile and must switch to `{x:?}` or add a manual `impl Display`.
+  fails to compile and must switch to `${x:?}` or add a manual `impl Display`.
   Accepted as the point of the change — a silent debug fallback is what made
   `T: Display` meaningless.
 - Debug generation stays eager, so this WEP does not reduce debug code size —
@@ -311,7 +311,7 @@ changes _when_ a request is created, not _how_ the body is written. A future
   benefit. Rejected.
 - **Gate debug generation on demand, like `Eq` / `Ord`.** Would save the code
   of `Inspect` bodies for types never debug-formatted. But the debug traits are
-  total, and `{v:?}` over an unbounded type param has no bound to record and no
+  total, and `${v:?}` over an unbounded type param has no bound to record and no
   concrete reference until monomorphize — closing that gap needs either a
   post-monomorphize discovery sweep (reimplementing the per-type synthesizers
   against concrete `FlatPackage` data, a whole pass) or implicit `Inspect`
@@ -320,7 +320,7 @@ changes _when_ a request is created, not _how_ the body is written. A future
   trait whose universal availability is a feature. Rejected in favor of eager
   generation plus total obligation semantics.
 - **Keep `Display` total (auto-derived, delegating to `Inspect`).** The status
-  quo before 2026-07-15. Ergonomic — `{x}` always worked — but `T: Display`
+  quo before 2026-07-15. Ergonomic — `${x}` always worked — but `T: Display`
   was then satisfied by every type, so it certified nothing: `push_display` and
   every `Display`-bounded API silently accepted debug-only types, and the
   Display body was a redundant echo of `Inspect`. Rejected: making `Display`

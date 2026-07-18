@@ -32,7 +32,7 @@ test "continue in for-of inside c-style for" {
     let data: List<List<i32>> = [[1, 2, 3], [4, 5, 6]];
     let result = for_of_with_continue(&data);
     // Odd numbers only: 1, 3, 5
-    assert result.len() == 3, `expected 3, got {result.len()}`;
+    assert result.len() == 3, `expected 3, got ${result.len()}`;
     assert result[0] == 1;
     assert result[1] == 3;
     assert result[2] == 5;
@@ -42,7 +42,7 @@ test "break in for-of inside c-style for" {
     let data: List<List<i32>> = [[1, 2, 3], [4, 5, 6]];
     let result = for_of_with_break(&data);
     // First inner: 1, 2 (break at 3). Second inner: empty (break at 4).
-    assert result.len() == 2, `expected 2, got {result.len()}`;
+    assert result.len() == 2, `expected 2, got ${result.len()}`;
     assert result[0] == 1;
     assert result[1] == 2;
 }
@@ -60,7 +60,7 @@ test "continue with double-indexed access" {
         }
     }
     // Skip 20, 40, 60 → keep 10, 30, 50
-    assert result.len() == 3, `expected 3, got {result.len()}`;
+    assert result.len() == 3, `expected 3, got ${result.len()}`;
     assert result[0] == 10;
     assert result[1] == 30;
     assert result[2] == 50;

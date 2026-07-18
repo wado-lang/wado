@@ -62,7 +62,7 @@ fn print_bytes(data: &ByteList) with Stdout {
         if i > 0 {
             print(" ");
         }
-        print(`{data[i] as i32}`);
+        print(`${data[i] as i32}`);
     }
     println("");
 }
@@ -138,11 +138,11 @@ export fn run() with Stdout, Stdin {
         let len = data.len();
         let a = adler32(adler32_init(), &data, 0, len);
         let c = crc32(crc32_init(), &data, 0, len);
-        println(`{a} {c}`);
+        println(`${a} ${c}`);
     } else if cmd == 6 {
         // compress_bound: size=BE i32 at input[1..5]
         let size = read_be_i32(&input, 1);
-        println(`{compress_bound(size)}`);
+        println(`${compress_bound(size)}`);
     } else if cmd == 7 {
         // version
         println(zlib_version());
@@ -152,14 +152,14 @@ export fn run() with Stdout, Stdin {
         let a2 = read_be_u32(&input, 5);
         let len2 = read_be_i32(&input, 9);
         let combined = adler32_combine(a1, a2, len2);
-        println(`{combined}`);
+        println(`${combined}`);
     } else if cmd == 9 {
         // crc32_combine: crc1=BE u32 at 1, crc2=BE u32 at 5, len2=BE i32 at 9
         let c1 = read_be_u32(&input, 1);
         let c2 = read_be_u32(&input, 5);
         let len2 = read_be_i32(&input, 9);
         let combined = crc32_combine(c1, c2, len2);
-        println(`{combined}`);
+        println(`${combined}`);
     } else if cmd == 10 {
         // adler32_incremental: split=BE i32 at 1, data=input[5..]
         let split = read_be_i32(&input, 1);
@@ -170,7 +170,7 @@ export fn run() with Stdout, Stdin {
         let total_len = data.len();
         let a1 = adler32(adler32_init(), &data, 0, split);
         let a2 = adler32(a1, &data, split, total_len - split);
-        println(`{a2}`);
+        println(`${a2}`);
     } else if cmd == 11 {
         // crc32_incremental: split=BE i32 at 1, data=input[5..]
         let split = read_be_i32(&input, 1);
@@ -181,7 +181,7 @@ export fn run() with Stdout, Stdin {
         let total_len = data.len();
         let c1 = crc32(crc32_init(), &data, 0, split);
         let c2 = crc32(c1, &data, split, total_len - split);
-        println(`{c2}`);
+        println(`${c2}`);
     } else if cmd == 12 {
         // deflate_stream_zlib: level=input[1], data=input[2..]
         let level = input[1] as i32;
@@ -213,6 +213,6 @@ export fn run() with Stdout, Stdin {
         let result = ds.compress(&data);
         print_bytes(&result);
     } else {
-        println(`error: unknown command {cmd}`);
+        println(`error: unknown command ${cmd}`);
     }
 }

@@ -345,6 +345,13 @@ land with stage 6 of the rearchitecture (see
       (load the whole package via `wado test` discovery; `wado check`
       package mode). Until then `test-only` only surfaces for `test` blocks
       in the compiled entry's own module graph.
+- [x] LSP wiring: the pure `unused_diagnostics(&Semantics, is_test_world)`
+      builder is shared by the batch path and `Engine::diagnostics`, which
+      applies it at query time (toggle stays live via
+      `Engine::set_unused_diagnostics`) and keeps only entry-document items.
+      The LSP runs the command world, so test-only items are reported.
+      Diagnostics carry the LSP `Unnecessary` tag. Tests in
+      `wado-lsp/tests/diagnostics.rs`.
 
 #### Phase 3b — reify gating (Design B)
 

@@ -1,0 +1,36 @@
+// Precision guard for WIR struct-local elision (elide_single_field_struct /
+// elide_adjacent_box_locals): the `Box<i32>` shell minted for a `&primitive`
+// match-payload binding must keep eliding at O2. The def/use-safety checks
+// added for soundness (dominance, operand invariance, trap-free initializers)
+// must not block this — the pass's primary target.
+//
+// At O0 the box def is present; at O2 it must be gone (the payload read is
+// substituted at the use). The `Box<i32>` allocations in the assert-failure
+// formatting path are call arguments, not local defs, so the pattern is
+// anchored on the binding (`i = struct.new …`).
+
+variant Token {
+    Num(i32),
+    Word(String),
+}
+
+fn eval(t: &Token) -> i32 {
+    match t {
+        Num(i) => { return *i + 1; },
+        Word(_) => { return 0; },
+    }
+}
+
+test "payload box elides" {
+    let t = Token::Num(41);
+    assert eval(&t) == 42;
+    let w = Token::Word("x");
+    assert eval(&w) == 0;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_expect:O0": ["i = struct.new \"core:prelude/types.wado//Box<i32>\""],
+    "wir_not_expect:O2": ["i = struct.new \"core:prelude/types.wado//Box<i32>\""]
+}

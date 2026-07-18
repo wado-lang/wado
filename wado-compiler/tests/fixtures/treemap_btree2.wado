@@ -339,7 +339,7 @@ impl<K, V> Index<K> for TreeMap<K, V> {
         if let Some(val) = self.get(&key) {
             return &val;
         }
-        panic(`key not found: {key:?}`);
+        panic(`key not found: ${key:?}`);
     }
 }
 
@@ -363,20 +363,20 @@ export fn run() with Stdout {
     map["elderberry"] = 5;
 
     println("=== After insertion ===");
-    println(`Size: {map.len()}`);
+    println(`Size: ${map.len()}`);
 
     // Test retrieval using Index (map[key])
-    println(`banana = {map["banana"]}`);
-    println(`date = {map["date"]}`);
+    println(`banana = ${map["banana"]}`);
+    println(`date = ${map["date"]}`);
 
     // Test update using IndexAssign
     map["banana"] = 20;
-    println(`banana (updated) = {map["banana"]}`);
+    println(`banana (updated) = ${map["banana"]}`);
 
     // Test deletion (still use method)
     println("\n=== After deleting cherry ===");
     map.delete(&"cherry");
-    println(`Size: {map.len()}`);
+    println(`Size: ${map.len()}`);
 
     // Test iteration (should be in sorted order)
     println("\n=== Iteration (sorted) ===");
@@ -384,7 +384,7 @@ export fn run() with Stdout {
     for let entry of entries {
         let key = entry[0];
         let value = entry[1];
-        println(`{key} = {value}`);
+        println(`${key} = ${value}`);
     }
 
     // Test compaction
@@ -393,8 +393,8 @@ export fn run() with Stdout {
         println("Compaction needed, running...");
         map.compact();
     }
-    println(`Size: {map.len()}`);
-    println(`Deleted count: {map.deleted_count}`);
+    println(`Size: ${map.len()}`);
+    println(`Deleted count: ${map.deleted_count}`);
 
     // Final iteration
     println("\n=== Final iteration ===");
@@ -402,7 +402,7 @@ export fn run() with Stdout {
     for let entry of final_entries {
         let key = entry[0];
         let value = entry[1];
-        println(`{key} = {value}`);
+        println(`${key} = ${value}`);
     }
 }
 

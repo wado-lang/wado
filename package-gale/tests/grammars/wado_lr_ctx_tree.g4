@@ -8,7 +8,7 @@ grammar WadoLrCtxTree;
 
 options { language = Wado; }
 
-e @after { p.emit(`[{$ctx.toStringTree()}]`); } : e '+' e | INT ;
+e @after { p.emit(`[${$ctx.toStringTree()}]`); } : e '+' e | INT ;
 
 INT : [0-9]+ ;
 WS : ' ' -> skip ;

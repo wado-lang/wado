@@ -27,7 +27,7 @@ fn test_compile_project_under_path_with_space() {
         &main,
         "use { println, Stdout } from \"core:cli\";\n\
          use { answer } from \"./eval.wado\";\n\
-         export fn run() with Stdout { println(`answer: {answer()}`); }\n",
+         export fn run() with Stdout { println(`answer: ${answer()}`); }\n",
     )
     .unwrap();
     let out = dir.join("out.wasm");

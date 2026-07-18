@@ -61,7 +61,7 @@ fn parse_args(arguments: List<String>) -> Result<Options, String> {
                     opts.max_depth = n;
                 },
                 _ => {
-                    return Result::Err(`tree: invalid depth: {arguments[i + 1]}`);
+                    return Result::Err(`tree: invalid depth: ${arguments[i + 1]}`);
                 },
             }
             i += 1;  // consume the value; the loop step skips the flag
@@ -72,7 +72,7 @@ fn parse_args(arguments: List<String>) -> Result<Options, String> {
         } else if a == "-h" || a == "--help" {
             return Result::Err("__help__");
         } else if a.starts_with("-") {
-            return Result::Err(`tree: unknown option: {a}`);
+            return Result::Err(`tree: unknown option: ${a}`);
         } else {
             if !opts.path.is_empty() {
                 return Result::Err("tree: only one starting path is supported");
@@ -129,7 +129,7 @@ fn walk(dir: &Descriptor, depth: i32, prefix: String, opts: &Options, stats: &mu
         let is_dir = entry.type matches { Directory };
         let suffix = if is_dir { "/" } else { "" };
 
-        println(`{prefix}{connector}{entry.name}{suffix}`);
+        println(`${prefix}${connector}${entry.name}${suffix}`);
 
         if is_dir {
             stats.dirs += 1;
@@ -152,7 +152,7 @@ fn walk(dir: &Descriptor, depth: i32, prefix: String, opts: &Options, stats: &mu
                         let mut child_prefix = String::with_capacity(prefix.len() + 4);
                         child_prefix.push_str(&prefix);
                         child_prefix.push_str(&next_prefix_fragment);
-                        println(`{child_prefix}[error opening dir]`);
+                        println(`${child_prefix}[error opening dir]`);
                     },
                 }
             }
@@ -207,7 +207,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
                 }
             },
             Err(_) => {
-                eprintln(`tree: cannot open '{opts.path}'`);
+                eprintln(`tree: cannot open '${opts.path}'`);
                 return;
             },
         }
@@ -217,8 +217,8 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     let dir_word = if stats.dirs == 1 { "directory" } else { "directories" };
     let file_word = if stats.files == 1 { "file" } else { "files" };
     if opts.dirs_only {
-        println(`{stats.dirs} {dir_word}`);
+        println(`${stats.dirs} ${dir_word}`);
     } else {
-        println(`{stats.dirs} {dir_word}, {stats.files} {file_word}`);
+        println(`${stats.dirs} ${dir_word}, ${stats.files} ${file_word}`);
     }
 }

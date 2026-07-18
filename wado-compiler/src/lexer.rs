@@ -1010,8 +1010,8 @@ impl<'a> Lexer<'a> {
                     self.advance();
                     match self.peek_char() {
                         Some(
-                            ch @ ('{' | '}' | '\\' | '`' | 'n' | 'r' | 't' | '0' | '"' | '\'' | 'b'
-                            | 'f'),
+                            ch @ ('{' | '}' | '$' | '\\' | '`' | 'n' | 'r' | 't' | '0' | '"' | '\''
+                            | 'b' | 'f'),
                         ) => {
                             current_literal.push(ch);
                             self.advance();
@@ -1050,8 +1050,14 @@ impl<'a> Lexer<'a> {
                         }
                     }
                 }
-                Some((_, '{')) => {
-                    self.advance();
+                Some((_, '$')) => {
+                    self.advance(); // consume `$`
+                    if self.peek_char() != Some('{') {
+                        // A lone `$` is a literal; only `${` opens an interpolation.
+                        current_literal.push('$');
+                        continue;
+                    }
+                    self.advance(); // consume `{`
                     if !current_literal.is_empty() {
                         parts.push(TemplateTokenPart::Literal(std::mem::take(
                             &mut current_literal,

@@ -42,7 +42,56 @@
 //! candidates immutable.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::wir::{WirExportDesc, WirInstr, WirPackage, WirType};
+use crate::wir::{WirExportDesc, WirFuncId, WirInstr, WirPackage, WirType, WirTypeId};
+
+/// Structural identity over the const-expressible `WirInstr` subset (see
+/// [`WirInstr::is_const_expressible`]), distinguishing float payloads by their
+/// bit pattern — two `NaN`s with different bits are *not* equal. A
+/// `format!("{:?}", …)` key would print those identically and merge them (an
+/// observable difference under `f*.to_bits`). `RefAsNonNull` is transparent (the
+/// emitter drops it inside a const expression), so it never enters the key.
+#[derive(PartialEq, Eq, Hash)]
+pub(super) enum ConstKey {
+    I32(i32),
+    I64(i64),
+    F32(u32),
+    F64(u64),
+    RefNull(String),
+    RefFunc(WirFuncId),
+    RefI31(Box<ConstKey>),
+    StructNew(WirTypeId, Vec<ConstKey>),
+    ArrayNewFixed(WirTypeId, Vec<ConstKey>),
+    ArrayNewDefault(WirTypeId, Box<ConstKey>),
+}
+
+/// Build a [`ConstKey`] for a const-expressible instruction; `None` for
+/// anything outside the subset.
+pub(super) fn const_key(instr: &WirInstr) -> Option<ConstKey> {
+    Some(match instr {
+        WirInstr::I32Const(v) => ConstKey::I32(*v),
+        WirInstr::I64Const(v) => ConstKey::I64(*v),
+        WirInstr::F32Const(v) => ConstKey::F32(v.to_bits()),
+        WirInstr::F64Const(v) => ConstKey::F64(v.to_bits()),
+        WirInstr::RefNull { heap_type } => ConstKey::RefNull(format!("{heap_type:?}")),
+        WirInstr::RefFunc { func_id } => ConstKey::RefFunc(func_id.clone()),
+        WirInstr::RefI31(inner) => ConstKey::RefI31(Box::new(const_key(inner)?)),
+        WirInstr::RefAsNonNull(inner) => const_key(inner)?,
+        WirInstr::StructNew { type_id, fields } => {
+            ConstKey::StructNew(type_id.clone(), const_keys(fields)?)
+        }
+        WirInstr::ArrayNewFixed { type_id, elements } => {
+            ConstKey::ArrayNewFixed(type_id.clone(), const_keys(elements)?)
+        }
+        WirInstr::ArrayNewDefault { type_id, len } => {
+            ConstKey::ArrayNewDefault(type_id.clone(), Box::new(const_key(len)?))
+        }
+        _ => return None,
+    })
+}
+
+fn const_keys(instrs: &[WirInstr]) -> Option<Vec<ConstKey>> {
+    instrs.iter().map(const_key).collect()
+}
 
 pub(super) fn dedupe_const_globals(module: &mut WirPackage) {
     // Bail if any `ref.eq` exists: merging two equal-value references could flip
@@ -66,16 +115,17 @@ pub(super) fn dedupe_const_globals(module: &mut WirPackage) {
     // Only immutable, value(reference)-typed, const-expressible, non-exported
     // globals qualify; metadata is in the key so reads keep identical
     // nullability / lazy-init narrowing after the merge.
-    type Key = (bool, bool, bool, String, String);
+    // The type carries no float payload, so its `Debug` string is a safe key
+    // component; the init uses the bit-exact [`ConstKey`].
+    type Key = (bool, bool, bool, String, ConstKey);
     let mut groups: IndexMap<Key, Vec<usize>> = IndexMap::default();
     for (i, g) in module.globals.iter().enumerate() {
-        if g.mutable
-            || exported.contains(g.name.fq.as_str())
-            || !is_reference_type(&g.ty)
-            || !g.init.is_const_expressible()
-        {
+        if g.mutable || exported.contains(g.name.fq.as_str()) || !is_reference_type(&g.ty) {
             continue;
         }
+        let Some(init_key) = const_key(&g.init) else {
+            continue;
+        };
         let key = (
             g.lazy_init,
             g.wado_mutable,
@@ -84,7 +134,7 @@ pub(super) fn dedupe_const_globals(module: &mut WirPackage) {
                 WirType::Ref { nullable: true, .. } | WirType::AbstractRef { nullable: true, .. }
             ),
             format!("{:?}", g.ty),
-            format!("{:?}", g.init),
+            init_key,
         );
         groups.entry(key).or_default().push(i);
     }

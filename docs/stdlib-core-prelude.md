@@ -198,7 +198,7 @@ Returns self shifted right by rhs bits.
 ### `pub trait Display`
 
 Trait for user-facing display formatting.
-Types implementing this trait can be formatted with `{x}` in template strings.
+Types implementing this trait can be formatted with `${x}` in template strings.
 All format traits write to a `Formatter` that wraps `&mut String`.
 
 #### `fn fmt(&self, f: &mut Formatter)`
@@ -208,7 +208,7 @@ Formats the value and writes to the given formatter.
 ### `pub trait Binary`
 
 Trait for formatting values as binary integers.
-Used with the `{x:b}` format specifier.
+Used with the `${x:b}` format specifier.
 
 #### `fn fmt(&self, f: &mut Formatter)`
 
@@ -217,7 +217,7 @@ Formats the value as binary and writes to the given formatter.
 ### `pub trait Octal`
 
 Trait for formatting values as octal integers.
-Used with the `{x:o}` format specifier.
+Used with the `${x:o}` format specifier.
 
 #### `fn fmt(&self, f: &mut Formatter)`
 
@@ -226,7 +226,7 @@ Formats the value as octal and writes to the given formatter.
 ### `pub trait LowerHex`
 
 Trait for formatting values as lowercase hexadecimal.
-Used with the `{x:x}` format specifier.
+Used with the `${x:x}` format specifier.
 
 #### `fn fmt(&self, f: &mut Formatter)`
 
@@ -235,7 +235,7 @@ Formats the value as lowercase hex and writes to the given formatter.
 ### `pub trait UpperHex`
 
 Trait for formatting values as uppercase hexadecimal.
-Used with the `{x:X}` format specifier.
+Used with the `${x:X}` format specifier.
 
 #### `fn fmt(&self, f: &mut Formatter)`
 
@@ -244,7 +244,7 @@ Formats the value as uppercase hex and writes to the given formatter.
 ### `pub trait LowerExp`
 
 Trait for formatting values in lowercase exponential notation.
-Used with the `{x:e}` format specifier.
+Used with the `${x:e}` format specifier.
 
 #### `fn fmt(&self, f: &mut Formatter)`
 
@@ -253,7 +253,7 @@ Formats the value in lowercase exponential notation and writes to the given form
 ### `pub trait UpperExp`
 
 Trait for formatting values in uppercase exponential notation.
-Used with the `{x:E}` format specifier.
+Used with the `${x:E}` format specifier.
 
 #### `fn fmt(&self, f: &mut Formatter)`
 
@@ -366,8 +366,8 @@ syntax which is not yet supported.
 ### `pub trait PushDisplay`
 
 Writes a `Display` value into a `String` in place, skipping the temporary
-`String` that a `` `{value}` `` template allocates before copying it in. The
-alloc-free counterpart to `buf.push_str(&`{value}`)` for a single value with
+`String` that a `` `${value}` `` template allocates before copying it in. The
+alloc-free counterpart to `buf.push_str(&`${value}`)` for a single value with
 no format spec — the hot path in the serde numeric encoders.
 
 A trait (not an inherent `impl String`, which the coherence rules forbid on a
@@ -540,7 +540,7 @@ Returns self shifted right by rhs bits.
 ### `pub trait Display`
 
 Trait for user-facing display formatting.
-Types implementing this trait can be formatted with `{x}` in template strings.
+Types implementing this trait can be formatted with `${x}` in template strings.
 All format traits write to a `Formatter` that wraps `&mut String`.
 
 #### `fn fmt(&self, f: &mut Formatter)`
@@ -550,7 +550,7 @@ Formats the value and writes to the given formatter.
 ### `pub trait Binary`
 
 Trait for formatting values as binary integers.
-Used with the `{x:b}` format specifier.
+Used with the `${x:b}` format specifier.
 
 #### `fn fmt(&self, f: &mut Formatter)`
 
@@ -559,7 +559,7 @@ Formats the value as binary and writes to the given formatter.
 ### `pub trait Octal`
 
 Trait for formatting values as octal integers.
-Used with the `{x:o}` format specifier.
+Used with the `${x:o}` format specifier.
 
 #### `fn fmt(&self, f: &mut Formatter)`
 
@@ -568,7 +568,7 @@ Formats the value as octal and writes to the given formatter.
 ### `pub trait LowerHex`
 
 Trait for formatting values as lowercase hexadecimal.
-Used with the `{x:x}` format specifier.
+Used with the `${x:x}` format specifier.
 
 #### `fn fmt(&self, f: &mut Formatter)`
 
@@ -577,7 +577,7 @@ Formats the value as lowercase hex and writes to the given formatter.
 ### `pub trait UpperHex`
 
 Trait for formatting values as uppercase hexadecimal.
-Used with the `{x:X}` format specifier.
+Used with the `${x:X}` format specifier.
 
 #### `fn fmt(&self, f: &mut Formatter)`
 
@@ -586,7 +586,7 @@ Formats the value as uppercase hex and writes to the given formatter.
 ### `pub trait LowerExp`
 
 Trait for formatting values in lowercase exponential notation.
-Used with the `{x:e}` format specifier.
+Used with the `${x:e}` format specifier.
 
 #### `fn fmt(&self, f: &mut Formatter)`
 
@@ -595,7 +595,7 @@ Formats the value in lowercase exponential notation and writes to the given form
 ### `pub trait UpperExp`
 
 Trait for formatting values in uppercase exponential notation.
-Used with the `{x:E}` format specifier.
+Used with the `${x:E}` format specifier.
 
 #### `fn fmt(&self, f: &mut Formatter)`
 
@@ -4167,15 +4167,15 @@ Text alignment for padding.
 
 #### `Left`
 
-Left-aligned: `{x:<5}` -> "42 "
+Left-aligned: `${x:<5}` -> "42 "
 
 #### `Center`
 
-Center-aligned: `{x:^5}` -> " 42 "
+Center-aligned: `${x:^5}` -> " 42 "
 
 #### `Right`
 
-Right-aligned (default for numbers): `{x:>5}` -> " 42"
+Right-aligned (default for numbers): `${x:>5}` -> " 42"
 
 ### `pub enum IntErrorKind`
 

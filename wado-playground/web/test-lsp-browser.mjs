@@ -1,9 +1,11 @@
-// Browser test for the wado-lsp worker: serves web/ and drives a JSPI-capable
-// Chromium through an initialize → didOpen → diagnostics → hover round-trip.
+// Browser test for the wado-lsp worker: serves web/ and drives Chromium through
+// an initialize → didOpen → diagnostics → hover round-trip. The LSP engine is
+// bundled into wado-playground.wasm and driven as a library, so this path needs
+// no JSPI.
 //
 // Usage: node wado-playground/web/test-lsp-browser.mjs
 // Requires playwright-core and a Chromium 137+ (CHROME_PATH overrides), plus
-// wado-lsp.wasm staged in web/ (mise run playground-web-build).
+// wado-playground.wasm staged in web/ (mise run playground-web-build).
 
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";

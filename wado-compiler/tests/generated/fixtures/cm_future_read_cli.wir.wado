@@ -139,8 +139,7 @@ fn "cm_future_read_cli.wado/run"() with Stdout {
         global:cm_future_read_cli.wado::__modules_initialized = 1;
     };
     rx = builtin::i32_wrap_i64(local.tee packed("wasi/future-new:s32"()));
-    tx = builtin::i32_wrap_i64(packed >> 32_i64);
-    "cm_future_read_cli.wado/__cm_future_write_i32"(tx, 42);
+    "cm_future_read_cli.wado/__cm_future_write_i32"(local.tee tx(builtin::i32_wrap_i64(packed >> 32_i64)), 42);
     result = "cm_future_read_cli.wado/__cm_future_read_i32"(rx);
     if ref.test "core:prelude/types.wado//Option<i32>::Some"(result) {
         value = ref.cast "core:prelude/types.wado//Option<i32>::Some"(result).payload_0;

@@ -113,7 +113,7 @@ lib = "src/lib.wado"
         r#"use { subject } from "./helper.wado";
 
 export fn hello() -> String {
-    return `hello {subject()}`;
+    return `hello ${subject()}`;
 }
 "#,
     )
@@ -348,7 +348,7 @@ use { get_x } from "b";
 
 export fn run() with Stdout {
     let p = origin();
-    println(`{get_x(p)}`);
+    println(`${get_x(p)}`);
 }
 "#,
     )

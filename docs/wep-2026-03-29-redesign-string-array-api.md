@@ -185,7 +185,7 @@ Also available via existing Wado features:
 
 | Rust                            | Wado equivalent                          |
 | ------------------------------- | ---------------------------------------- |
-| `format!("{}", x)`              | `` `{x}` `` (template string)            |
+| `format!("{}", x)`              | `` `${x}` `` (template string)           |
 | `s.chars().filter(f).collect()` | `String::from_iter(s.chars().filter(f))` |
 | `s.chars().count()`             | `s.chars().count()`                      |
 

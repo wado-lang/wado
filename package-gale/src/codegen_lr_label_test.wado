@@ -28,7 +28,7 @@ WS : (' '|'\\n') -> skip ;
 ";
     let mut grammar = match parse_checked(g4) {
         Ok(g) => g,
-        Err(err) => panic(`parse_checked failed: {err.message}`),
+        Err(err) => panic(`parse_checked failed: ${err.message}`),
     };
     let out = generate(&mut grammar, &GenerateOptions {}).source;
 
@@ -53,7 +53,7 @@ WS : (' '|'\\n') -> skip ;
             out.len();
         };
         let body = out.substr_bytes(idx, body_end);
-        assert !body.contains("pos = scan_e(tokens, pos);"), `bare scan_e contains a self-call as its first step — infinite recursion: {body}`;
+        assert !body.contains("pos = scan_e(tokens, pos);"), `bare scan_e contains a self-call as its first step — infinite recursion: ${body}`;
     }
 }
 
@@ -90,13 +90,13 @@ WS : (' '|'\\n') -> skip ;
 ";
     let mut grammar = match parse_checked(g4) {
         Ok(g) => g,
-        Err(err) => panic(`parse_checked failed: {err.message}`),
+        Err(err) => panic(`parse_checked failed: ${err.message}`),
     };
     let out = generate(&mut grammar, &GenerateOptions {}).source;
     let body = scan_e_body(&out);
 
-    assert body.contains("let _lr_pos0 = pos;"), `scan_e loop is missing the no-progress snapshot: {body}`;
-    assert body.contains("if pos == _lr_pos0 {"), `scan_e loop is missing the no-progress break guard: {body}`;
+    assert body.contains("let _lr_pos0 = pos;"), `scan_e loop is missing the no-progress snapshot: ${body}`;
+    assert body.contains("if pos == _lr_pos0 {"), `scan_e loop is missing the no-progress break guard: ${body}`;
 }
 
 // Regression: the scan-side LR suffix helpers (`scan_X_lr_N`) must be emitted
@@ -117,7 +117,7 @@ WS : (' '|'\\n') -> skip ;
 ";
     let mut grammar = match parse_checked(g4) {
         Ok(g) => g,
-        Err(err) => panic(`parse_checked failed: {err.message}`),
+        Err(err) => panic(`parse_checked failed: ${err.message}`),
     };
     let out = generate(&mut grammar, &GenerateOptions {}).source;
 
@@ -125,9 +125,9 @@ WS : (' '|'\\n') -> skip ;
     // definition exists. The atom and suffix indices stay small for this
     // grammar, so a bounded scan over 0..8 covers every emitted helper.
     for let mut n = 0; n < 8; n += 1 {
-        let referenced = out.contains(`scan_e_lr_{n}(tokens`);
+        let referenced = out.contains(`scan_e_lr_${n}(tokens`);
         if referenced {
-            assert out.contains(`fn scan_e_lr_{n}(`), `dispatch references scan_e_lr_{n} but no helper is defined`;
+            assert out.contains(`fn scan_e_lr_${n}(`), `dispatch references scan_e_lr_${n} but no helper is defined`;
         }
     }
 }

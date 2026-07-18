@@ -292,7 +292,7 @@ type Handler = fn(&Request, &TreeMap<String, String>) -> Response with Stdout;
 
 let mut r = Router::<Handler>::new();
 r.route(Method::Get, "/health",   |_req, _params| Response::ok("ok"));
-r.route(Method::Get, "/users/:id", |_req, params| Response::ok(`user {params["id"]}`));
+r.route(Method::Get, "/users/:id", |_req, params| Response::ok(`user ${params["id"]}`));
 ```
 
 (For the CM-async case, the same shape works with `async fn(...) -> ...` once Wado closures support async — orthogonal to this WEP.)

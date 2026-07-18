@@ -74,12 +74,12 @@ impl Serializer for JsonSerializer {
     type StructSerializer = JsonStructSerializer;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
-        self.w.write(&`{v}`);
+        self.w.write(&`${v}`);
         return Result::<(), SerializeError>::Ok(());
     }
 
     fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
-        self.w.write(&`{v}`);
+        self.w.write(&`${v}`);
         return Result::<(), SerializeError>::Ok(());
     }
 
@@ -93,7 +93,7 @@ impl Serializer for JsonSerializer {
     }
 
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
-        self.w.write(&`"{*v}"`);
+        self.w.write(&`"${*v}"`);
         return Result::<(), SerializeError>::Ok(());
     }
 
@@ -141,7 +141,7 @@ impl SerializeStruct for JsonStructSerializer {
         if self.count > 0 {
             self.w.write(&",");
         }
-        self.w.write(&`"{*name}":`);
+        self.w.write(&`"${*name}":`);
         let mut ser = JsonSerializer { w: self.w };
         value.serialize::<JsonSerializer>(&mut ser);
         self.count += 1;

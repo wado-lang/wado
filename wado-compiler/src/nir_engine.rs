@@ -735,8 +735,9 @@ impl<'a> Engine<'a> {
             .any(|&mention| !self.is_assign_target(mention))
     }
 
-    /// Whether `mention` is the bare-`Local` target slot of an `Assign`.
-    fn is_assign_target(&self, mention: ExprId) -> bool {
+    /// Whether `mention` is the target slot (LHS place) of an `Assign`. Shared by
+    /// the optimizer passes that must not treat a write place as a value read.
+    pub(super) fn is_assign_target(&self, mention: ExprId) -> bool {
         let Some(NodeRef::Expr(parent)) = self.parent_of(NodeRef::Expr(mention)) else {
             return false;
         };

@@ -5,16 +5,16 @@ use { println, Stdout } from "core:cli";
 fn template_string_bool() with Stdout {
     let t = true;
     let f = false;
-    println(`true: {t}`);
-    println(`false: {f}`);
+    println(`true: ${t}`);
+    println(`false: ${f}`);
 }
 
 // from template_string_char.wado
 fn template_string_char() with Stdout {
     let a = 'A';
     let z = 'Z';
-    println(`char A: {a}`);
-    println(`char Z: {z}`);
+    println(`char A: ${a}`);
+    println(`char Z: ${z}`);
 }
 
 // from template_string_empty.wado
@@ -27,8 +27,8 @@ fn template_string_empty() with Stdout {
 fn template_string_f64() with Stdout {
     let pi = 3.14159;
     let neg = 0.0 - 2.5;
-    println(`pi: {pi}`);
-    println(`negative: {neg}`);
+    println(`pi: ${pi}`);
+    println(`negative: ${neg}`);
 }
 
 // from template_string_i32.wado
@@ -36,9 +36,9 @@ fn template_string_i32() with Stdout {
     let pos = 42;
     let neg = 0 - 17;
     let zero = 0;
-    println(`positive: {pos}`);
-    println(`negative: {neg}`);
-    println(`zero: {zero}`);
+    println(`positive: ${pos}`);
+    println(`negative: ${neg}`);
+    println(`zero: ${zero}`);
 }
 
 // from template_string_i64.wado
@@ -47,9 +47,9 @@ fn template_string_i64() with Stdout {
     // Build a large number through multiplication to avoid literal truncation
     let big: i64 = 100000 as i64 * 1000000 as i64;
     let neg: i64 = 0 as i64 - 9876 as i64;
-    println(`positive: {pos}`);
-    println(`big: {big}`);
-    println(`negative: {neg}`);
+    println(`positive: ${pos}`);
+    println(`big: ${big}`);
+    println(`negative: ${neg}`);
 }
 
 // from template_string_multiline.wado
@@ -62,7 +62,7 @@ Line 3`;
 
     // Multiline template with interpolation
     let name = "Alice";
-    let greeting = `Dear {name},
+    let greeting = `Dear ${name},
 
 Welcome to Wado!
 
@@ -72,9 +72,9 @@ Best regards`;
     // Multiline with multiple interpolations
     let a = 1;
     let b = 2;
-    let result = `First: {a}
-Second: {b}
-Sum: {a + b}`;
+    let result = `First: ${a}
+Second: ${b}
+Sum: ${a + b}`;
     println(result);
 
     println("done");
@@ -85,28 +85,28 @@ fn template_string_three_interp() with Stdout {
     let s1 = "X";
     let s2 = "Y";
     let s3 = "Z";
-    println(`{s1} a {s2} c {s3}`);
+    println(`${s1} a ${s2} c ${s3}`);
 }
 
 // from template_string_two_end.wado
 fn template_string_two_end() with Stdout {
     let s1 = "X";
     let s2 = "Y";
-    println(`a {s1} b {s2}`);
+    println(`a ${s1} b ${s2}`);
 }
 
 // from template_string_two_interp.wado
 fn template_string_two_interp() with Stdout {
     let s1 = "X";
     let s2 = "Y";
-    println(`{s1} a {s2} c`);
+    println(`${s1} a ${s2} c`);
 }
 
 // from template_string_two_middle.wado
 fn template_string_two_middle() with Stdout {
     let s1 = "X";
     let s2 = "Y";
-    println(`a {s1} b {s2} c`);
+    println(`a ${s1} b ${s2} c`);
 }
 
 // Interpolations hold arbitrary expressions, so an `if`/`match` expression can
@@ -115,12 +115,12 @@ fn template_string_two_middle() with Stdout {
 fn template_string_nested_expr() with Stdout {
     let n = 7;
     // `if` expression with nested template strings in both arms.
-    println(`status: {if n % 2 == 0 { `{n} is even` } else { `{n} is odd` }}`);
+    println(`status: ${if n % 2 == 0 { `${n} is even` } else { `${n} is odd` }}`);
     // `match` expression with nested template strings in the arms.
-    println(`{match n { 0 => `zero`, _ => `nonzero ({n})` }}`);
+    println(`${match n { 0 => `zero`, _ => `nonzero (${n})` }}`);
     // Nested interpolation can stack more than one level deep.
     let inner = 1;
-    println(`{if n > 0 { `inner={if inner == 1 { `one` } else { `other` }}` } else { `none` }}`);
+    println(`${if n > 0 { `inner=${if inner == 1 { `one` } else { `other` }}` } else { `none` }}`);
 }
 
 export fn run() with Stdout {

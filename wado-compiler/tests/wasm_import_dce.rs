@@ -101,7 +101,7 @@ use { println, Stdout } from "core:cli";
 use { add_one, twice, unused_no_args, unused_squared } from "./sub/wasm_import_user.wat" with { type: "wat" };
 
 export fn run() with Stdout {
-    println(`{add_one(41)}`);
+    println(`${add_one(41)}`);
 }
 "#;
     let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
@@ -122,7 +122,7 @@ export fn run() with Stdout {
     for unused in ["twice", "unused_no_args", "unused_squared"] {
         assert!(
             exports.iter().all(|e| e != unused),
-            "DCE failed to prune unused export `{unused}`; exports: {exports:?}"
+            "DCE failed to prune unused export `${unused}`; exports: {exports:?}"
         );
     }
 }
@@ -164,7 +164,7 @@ export fn run() with Stdout {
             assert!(
                 export != "add_one" && export != "twice",
                 "wat asset should be entirely DCE'd when no exports are called; \
-                 found export `{export}`"
+                 found export `${export}`"
             );
         }
     }

@@ -1,0 +1,29 @@
+// Wrapping-add soundness for guard-implied BCE. A dominating guard
+// `if i + 1 < arr.len()` does NOT imply the smaller-offset check `i < arr.len()`
+// under Wado's wrapping i32 add: at `i == i32::MAX` the guard computes
+// `i + 1 == i32::MIN`, which is `< arr.len()`, so the guard passes — yet
+// `i == i32::MAX` is far out of bounds. The bounds check on `arr[i]` must
+// survive (only `j == k` offsets refute), so the access traps with the reliable
+// assertion, not a raw wasm trap or a silent stale read.
+
+use { println, Stdout } from "core:cli";
+
+#[inline("never")]
+fn get(arr: List<i32>, i: i32) -> i32 {
+    if i + 1 < arr.len() {
+        return arr[i];
+    }
+    return -1;
+}
+
+export fn run() with Stdout {
+    let arr: List<i32> = [10, 20, 30];
+    let big = 2147483647;
+    println(`${get(arr, big)}`);
+}
+
+__DATA__
+{
+    "stderr_contains": ["index out of bounds"],
+    "trapped": true
+}

@@ -129,6 +129,14 @@ pub fn classify_multi_value_returns(project: &mut NirPackage) -> bool {
         };
         validate_uses_in_block(body, body.root, &candidate_ids, &candidates, &mut invalid);
     }
+    // Global initializers are arena bodies too; scan them so a candidate consumed
+    // there is validated with the same let-tracking logic (matching dae / drve's
+    // coverage). Benign today — lower hoisting keeps aggregate builders out of
+    // initializers — but the coverage is now uniform across every body.
+    for global in &project.globals {
+        let body = global.initializer.body();
+        validate_uses_in_block(body, body.root, &candidate_ids, &candidates, &mut invalid);
+    }
 
     // Phase 3: apply. Drop disqualified candidates, set ReturnAbi on the rest.
     drop(type_table);

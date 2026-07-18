@@ -140,8 +140,8 @@ fn resolve_selector(idx: &KindIndex, sel: &TokenSelector) -> Option<i32> {
 
 fn selector_desc(sel: &TokenSelector) -> String {
     return match sel {
-        Name(n) => `'{*n}'`,
-        Literal(t) => `literal "{*t}"`,
+        Name(n) => `'${*n}'`,
+        Literal(t) => `literal "${*t}"`,
     };
 }
 
@@ -169,7 +169,7 @@ fn push_override(overrides: &mut List<ResolvedOverride>, rule_name: String, toke
 
 fn slot_comment(slot: &TokenSlot, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) -> String {
     return match slot {
-        Rule(ri) => `TK_{lexer_rules[*ri].name}`,
+        Rule(ri) => `TK_${lexer_rules[*ri].name}`,
         Eof => "TK_EOF",
         Error => "TK_ERROR",
         Lit(li) => lit_tokens[*li].const_name,
@@ -204,7 +204,7 @@ fn gen_highlight_mapping(
                 ctx.warn(
                     &"highlight",
                     DiagnosticKind::HighlightQuery,
-                    `highlight query: unknown token {selector_desc(&rule.selector)}`,
+                    `highlight query: unknown token ${selector_desc(&rule.selector)}`,
                 );
                 continue;
             },
@@ -225,7 +225,7 @@ fn gen_highlight_mapping(
                     ctx.warn(
                         &"highlight",
                         DiagnosticKind::HighlightQuery,
-                        `highlight query: unknown parser rule '{*rctx}'`,
+                        `highlight query: unknown parser rule '${*rctx}'`,
                     );
                     continue;
                 }
@@ -249,7 +249,7 @@ fn gen_highlight_mapping(
             Some(c) => c,
             None => "",
         };
-        w.line(&`{str_lit(capture)},  // {slot_comment(&slots[i], lexer_rules, lit_tokens)}`);
+        w.line(&`${str_lit(capture)},  // ${slot_comment(&slots[i], lexer_rules, lit_tokens)}`);
     }
     w.dedent();
     w.line(&"];");
@@ -260,7 +260,7 @@ fn gen_highlight_mapping(
     w.line(&"let rule_names: List<String> = [");
     w.indent();
     for let rule of parser_rules {
-        w.line(&`{str_lit(rule.name)},`);
+        w.line(&`${str_lit(rule.name)},`);
     }
     w.dedent();
     w.line(&"];");
@@ -272,7 +272,7 @@ fn gen_highlight_mapping(
         w.indent();
         for let ov of &overrides {
             w.line(
-                &`HighlightOverride \{ rule_name: {str_lit(ov.rule_name)}, token_kind: {ov.token_kind}, capture: {str_lit(
+                &`HighlightOverride \{ rule_name: ${str_lit(ov.rule_name)}, token_kind: ${ov.token_kind}, capture: ${str_lit(
                     ov.capture,
                 )} \},`,
             );

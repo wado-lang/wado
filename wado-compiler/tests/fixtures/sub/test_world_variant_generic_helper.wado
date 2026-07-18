@@ -51,7 +51,7 @@ pub fn walk_node<V: Visitor>(v: &mut V, node: &NodeData) {
 pub fn to_tree(node: &NodeData) -> NodeData {
     let mut rec = Recorder { count: 0 };
     walk_node(&mut rec, node);
-    return NodeData { name: `counted:{rec.count}`, children: [] };
+    return NodeData { name: `counted:${rec.count}`, children: [] };
 }
 
 pub fn make_test_tree() -> NodeData {

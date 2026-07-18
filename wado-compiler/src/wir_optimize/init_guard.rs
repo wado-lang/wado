@@ -54,14 +54,17 @@ pub(super) fn remove_trivial_init_globals(module: &mut WirPackage) {
         }
     }
 
-    // Also check globals themselves (init expressions).
+    // Also check globals themselves (init expressions). A global initializer is
+    // never itself nop'd here, so any use inside one — including a would-be
+    // trivial-guard block — must count as an other-use (pass `true`), or the
+    // global could be removed while its init still references it.
     for global in &module.globals {
         count_global_uses_in_instr(
             &global.init,
             &global_idx_map,
             &mut trivial_guard_blocks,
             &mut other_use_counts,
-            false,
+            true,
         );
     }
 

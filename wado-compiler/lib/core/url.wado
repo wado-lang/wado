@@ -105,7 +105,7 @@ fn percent_encode_char(c: char, out: &mut String) {
     } else {
         for let b of c.encode_utf8() {
             let n = b as i32;
-            out.push_str(&`%{n:02X}`);
+            out.push_str(&`%${n:02X}`);
         }
     }
 }
@@ -160,7 +160,7 @@ fn percent_encode_query_component(input: &String) -> String {
         } else {
             for let b of c.encode_utf8() {
                 let n = b as i32;
-                out.push_str(&`%{n:02X}`);
+                out.push_str(&`%${n:02X}`);
             }
         }
     }
@@ -531,7 +531,7 @@ impl Url {
             out.push_str(&self.host);
         }
         if let Some(p) = self.port {
-            out.push_str(&`:{p}`);
+            out.push_str(&`:${p}`);
         }
         return out;
     }
@@ -549,7 +549,7 @@ impl Url {
             out.push_str(&self.host);
         }
         if let Some(p) = self.port {
-            out.push_str(&`:{p}`);
+            out.push_str(&`:${p}`);
         }
         return out;
     }
@@ -741,7 +741,7 @@ fn normalize_percent_encoding(input: &String) -> String {
                 if is_unreserved_char(decoded as u8 as char) {
                     out.push(decoded as u8 as char);
                 } else {
-                    out.push_str(&`%{decoded:02X}`);
+                    out.push_str(&`%${decoded:02X}`);
                 }
                 i += 3;
                 continue;

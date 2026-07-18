@@ -16,21 +16,21 @@ test "highlight produces HTML" {
 }
 test "highlight contains string span" {
     let html = json_hl::highlight(&"{\"key\": 42}");
-    assert html.contains("class=\"string\""), `missing string class in: {html}`;
+    assert html.contains("class=\"string\""), `missing string class in: ${html}`;
 }
 test "highlight contains number span" {
     let html = json_hl::highlight(&"{\"key\": 42}");
-    assert html.contains("class=\"number\""), `missing number class in: {html}`;
+    assert html.contains("class=\"number\""), `missing number class in: ${html}`;
 }
 test "highlight contains bracket span" {
     let html = json_hl::highlight(&"[1, 2]");
-    assert html.contains("class=\"punctuation bracket\""), `missing bracket class in: {html}`;
+    assert html.contains("class=\"punctuation bracket\""), `missing bracket class in: ${html}`;
 }
 test "highlight contains keyword span for true" {
     let html = json_hl::highlight(&"true");
-    assert html.contains("class=\"constant builtin\""), `missing constant.builtin class in: {html}`;
+    assert html.contains("class=\"constant builtin\""), `missing constant.builtin class in: ${html}`;
 }
 test "highlight escapes HTML entities" {
     let html = json_hl::highlight(&"\"<script>\"");
-    assert html.contains("&lt;"), `missing escaped < in: {html}`;
+    assert html.contains("&lt;"), `missing escaped < in: ${html}`;
 }

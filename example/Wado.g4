@@ -648,7 +648,7 @@ literal
     | 'null'
     ;
 
-// A template string alternates literal text with `{ ... }` interpolations. An
+// A template string alternates literal text with `${ ... }` interpolations. An
 // interpolation's expression is lexed in the default mode (see mode TEMPLATE),
 // so it highlights as real code, not string text.
 templateString
@@ -745,14 +745,20 @@ WS
     ;
 
 // Template-string body; whitespace is significant, so this mode skips nothing.
+// Only `${` opens an interpolation, so bare `{` / `}` are literal text; a `$`
+// not followed by `{` is literal too.
 mode TEMPLATE;
 
 TEMPLATE_TEXT
-    : ('\\' . | ~[`{\\])+
+    : ('\\' . | ~[`$\\])+
     ;
 
 INTERP_OPEN
-    : '{' -> pushMode(DEFAULT_MODE)
+    : '${' -> pushMode(DEFAULT_MODE)
+    ;
+
+DOLLAR_TEXT
+    : '$' -> type(TEMPLATE_TEXT)
     ;
 
 TEMPLATE_END

@@ -21,53 +21,53 @@ fn const_fold_f32_comparison() with Stdout {
 fn const_fold_int_basic() with Stdout {
     // Basic arithmetic
     let a = 21 * 2;
-    println(`a={a}`);
+    println(`a=${a}`);
 
     let b = 100 + 23;
-    println(`b={b}`);
+    println(`b=${b}`);
 
     let c = 50 - 8;
-    println(`c={c}`);
+    println(`c=${c}`);
 
     let d = 84 / 2;
-    println(`d={d}`);
+    println(`d=${d}`);
 
     let e = 10 % 3;
-    println(`e={e}`);
+    println(`e=${e}`);
 
     // Chained operations (should fold step by step)
     let f = 2 + 3 + 4;
-    println(`f={f}`);
+    println(`f=${f}`);
 
     let g = 10 * 2 + 5;
-    println(`g={g}`);
+    println(`g=${g}`);
 }
 
 // from const_fold_int_types.wado
 fn const_fold_int_types() with Stdout {
     // i64
     let a = 1000000 as i64 * 1000000 as i64;
-    println(`a={a}`);
+    println(`a=${a}`);
 
     // u32
     let b = 100 as u32 + 200 as u32;
-    println(`b={b}`);
+    println(`b=${b}`);
 
     // Division
     let c = 100 / 3;
-    println(`c={c}`);
+    println(`c=${c}`);
 
     // Subtraction producing zero
     let d = 42 - 42;
-    println(`d={d}`);
+    println(`d=${d}`);
 
     // Multiplication by zero
     let e = 999 * 0;
-    println(`e={e}`);
+    println(`e=${e}`);
 
     // Modulo
     let f = 17 % 5;
-    println(`f={f}`);
+    println(`f=${f}`);
 }
 
 // Stage 1 of niri: env-aware constant folding.
@@ -86,7 +86,7 @@ fn const_fold_local_env() with Stdout {
     assert z == 20;
     assert w == 33;
 
-    println(`y={y} z={z} w={w}`);
+    println(`y=${y} z=${z} w=${w}`);
 }
 
 export fn run() with Stdout {

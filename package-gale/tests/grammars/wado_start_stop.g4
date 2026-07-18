@@ -9,8 +9,8 @@ grammar WadoStartStop;
 
 options { language = Wado; }
 
-r : A B C { p.emit(`text={$text} start={$start.text} stop={$stop.text}`); }
-  | D { p.emit(`d text={$text} start={$start.text}`); }
+r : A B C { p.emit(`text=${$text} start=${$start.text} stop=${$stop.text}`); }
+  | D { p.emit(`d text=${$text} start=${$start.text}`); }
   ;
 
 A : 'a' ;

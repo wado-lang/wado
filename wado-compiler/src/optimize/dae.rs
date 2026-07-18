@@ -24,8 +24,12 @@
 //! - Allocator entry points (`allocator_tag.is_some()`) — wired raw into
 //!   the canonical ABI as `realloc`, with no `is_cm_export` wrapper to
 //!   absorb a shrunken signature.
-//! - Trait methods (`method_info.trait_name.is_some()`) — sibling impls and
-//!   the trait declaration share a signature contract.
+//! - Closure `__call` functors (`is_closure_call`) — their function-table
+//!   wrapper snapshots the signature. Concrete trait-impl methods are NOT
+//!   pinned: after monomorphization they are plain functions whose call sites
+//!   all carry a resolved `func_id` (matching `sroa_param`'s relaxation), so a
+//!   dead parameter is dropped soundly. The closure-functor `^Inspect` /
+//!   `^InspectAlt` impls are the relaxed exception even among `__call`s.
 //! - Functions whose pointer is taken via `FuncRef` anywhere in the project.
 //!
 //! `is_export` is NOT a pin: every user `export fn` reaches the world
@@ -53,6 +57,7 @@
 
 use cranelift_entity::EntityRef;
 
+use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionKind, NirFunction};
@@ -68,7 +73,6 @@ use crate::nir::FuncId;
 pub(super) type FnKey = FuncId;
 
 pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    let pinned = collect_pinned(project);
     let closure_call_keys = collect_closure_call_keys(project);
 
     // Phase 1: identify candidate (function, dead positions) pairs.
@@ -77,7 +81,7 @@ pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGat
         let func = project.functions[fid.index()].borrow();
         let Some(key) = func.id else { continue };
         let is_closure_dae_relaxed = closure_call_keys.contains(&key);
-        if !is_eligible(&func, &pinned, is_closure_dae_relaxed) {
+        if !is_dae_sroa_eligible(&func, is_closure_dae_relaxed) {
             continue;
         }
         let dead = find_dead_params(&func);
@@ -143,17 +147,27 @@ fn collect_closure_call_keys(project: &NirPackage) -> IndexSet<FnKey> {
     // Sweep the function list for synthesised
     // `__Closure_N^{Inspect,InspectAlt}::{inspect,inspect_alt}` impls.
     // These don't have a direct field on `ClosureFunctor`, so we
-    // discriminate by `(struct_name == __Closure_N, trait_name in
-    // {Inspect, InspectAlt})`.
+    // discriminate by `(struct_name == __Closure_N, trait is Inspect /
+    // InspectAlt)`. The trait is matched against the canonical names in
+    // the compiler-item registry — the same source
+    // `generate_functor_format_methods` stamps into these impls'
+    // `trait_name` — so a stdlib rename of either trait flows through
+    // instead of a bare-literal `"Inspect"` match a user trait could
+    // shadow. (`base_trait_module` is left `None` on these synthesis-
+    // derived impls, so the registry name is the exact-identity anchor.)
+    let type_table = project.type_table.borrow();
+    let items = type_table.compiler_items();
+    let inspect_name = items.trait_name(CompilerItem::Inspect);
+    let inspect_alt_name = items.trait_name(CompilerItem::InspectAlt);
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         let Some(mi) = &func.method_info else {
             continue;
         };
-        let Some(trait_name) = &mi.trait_name else {
+        let Some(trait_name) = mi.trait_name.as_deref() else {
             continue;
         };
-        if trait_name != "Inspect" && trait_name != "InspectAlt" {
+        if trait_name != inspect_name && trait_name != inspect_alt_name {
             continue;
         }
         if !functor_struct_names.contains(&(func.module_source.clone(), mi.struct_name.clone())) {
@@ -166,13 +180,30 @@ fn collect_closure_call_keys(project: &NirPackage) -> IndexSet<FnKey> {
     keys
 }
 
-fn is_eligible(func: &NirFunction, pinned: &IndexSet<FnKey>, is_closure_dae_relaxed: bool) -> bool {
+/// Shared pinning predicate for the two interprocedural signature-rewriting
+/// passes, `dae` and `sroa_param` (which calls this via `super::dae`). Both
+/// refuse the same world-boundary and ABI-fixed shapes — bodyless imports, CM
+/// bridges, non-`Regular` kinds, builtin / wasm-asset modules, and allocator
+/// entry points wired raw into the canonical ABI — and both treat a concrete
+/// trait-impl method as eligible (after monomorphization it is a plain function
+/// whose every call site carries a resolved `func_id`, so the rewrite reaches
+/// them all). They diverge only on the closure `__call` functor policy, carried
+/// by `relax_closure_call`:
+///
+/// - `false` (`sroa_param`, and `dae` for any `__call` not covered by its
+///   relaxation): a closure `__call` stays pinned — its function-table wrapper
+///   snapshots the signature.
+/// - `true` (`dae`, for the closure-functor `^Inspect` / `^InspectAlt` /
+///   `__call` impls whose wrapper adapts to the shrunken signature): the closure
+///   pin is lifted.
+///
+/// `is_export` / `is_async` are intentionally *not* pins — both describe
+/// user source-level intent, not a real call-shape constraint (see the module
+/// doc). `sroa_param` layers its one extra pin (`is_value_copy`) on top of this.
+pub(super) fn is_dae_sroa_eligible(func: &NirFunction, relax_closure_call: bool) -> bool {
     if func.body.is_none() {
         return false;
     }
-    // `is_export` and `is_async` are intentionally absent — both describe
-    // user source-level intent, not a real call-shape constraint (see the
-    // module doc).
     if func.is_cm_export || func.is_cm_binding || func.is_dispatch_wrapper || func.is_ambient {
         return false;
     }
@@ -182,25 +213,15 @@ fn is_eligible(func: &NirFunction, pinned: &IndexSet<FnKey>, is_closure_dae_rela
     if func.module_source.is_core_builtin() || func.module_source.is_wasm_asset() {
         return false;
     }
-    // Allocator entry points are wired straight into the canonical ABI as
-    // `realloc`; their signature must survive verbatim.
     if func.allocator_tag.is_some() {
         return false;
     }
-    // Trait methods share a signature contract with sibling impls and the
-    // trait declaration; the closure-functor `^Inspect` / `^InspectAlt`
-    // impls are the relaxed exception.
-    if !is_closure_dae_relaxed
-        && func
-            .method_info
-            .as_ref()
-            .is_some_and(|mi| mi.trait_name.is_some())
-    {
+    if !relax_closure_call && func.is_closure_call() {
         return false;
     }
-    if func.id.is_some_and(|id| pinned.contains(&id)) {
-        return false;
-    }
+    // No explicit pin set: `FuncRef` is lowered into a `Closure` literal (functor
+    // struct) by `lower::plan::closure` before NIR is built, so there is no bare
+    // function reference left to pin against.
     true
 }
 
@@ -234,20 +255,6 @@ fn find_dead_params(func: &NirFunction) -> Vec<bool> {
     dead
 }
 
-pub(super) fn collect_pinned(_project: &NirPackage) -> IndexSet<FnKey> {
-    // `FuncRef` is lowered into a `Closure` literal (functor struct) by
-    // `lower::plan::closure` before NIR is constructed, so there is no bare
-    // function reference left to pin. Closure functor `__call` methods are
-    // NOT pinned wholesale either — `wir_build::register_closure_wrappers`
-    // derives the function-table wrapper's external signature from
-    // `ClosureFunctor::canonical_user_params` / `canonical_return`, a
-    // snapshot taken at functor creation that DAE never mutates, and the
-    // wrapper body adapts to whichever `call_method.params` survive.
-    // Trait-shaped `__call`s (`^Inspect::inspect` / `^InspectAlt`) are
-    // skipped separately by `is_eligible`'s `trait_name` check.
-    IndexSet::default()
-}
-
 // ──────────────────────────────────────────────────────────────────────────────
 // Call-site validation
 // ──────────────────────────────────────────────────────────────────────────────
@@ -259,15 +266,21 @@ fn validate_call_sites(
     project: &NirPackage,
     mut candidates: IndexMap<FnKey, Vec<bool>>,
 ) -> IndexMap<FnKey, Vec<bool>> {
+    let type_table = project.type_table.borrow();
     let mut rejected: IndexSet<FnKey> = IndexSet::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         if let Some(body) = &func.body {
-            validate_in_body(body, &candidates, &mut rejected);
+            validate_in_body(body, &candidates, &mut rejected, &type_table);
         }
     }
     for global in &project.globals {
-        validate_in_body(global.initializer.body(), &candidates, &mut rejected);
+        validate_in_body(
+            global.initializer.body(),
+            &candidates,
+            &mut rejected,
+            &type_table,
+        );
     }
     for r in rejected {
         candidates.shift_remove(&r);
@@ -281,11 +294,12 @@ fn validate_in_body(
     body: &Body,
     candidates: &IndexMap<FnKey, Vec<bool>>,
     rejected: &mut IndexSet<FnKey>,
+    type_table: &crate::tir::TypeTable,
 ) {
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Expr(id) = node {
-            validate_call(body, id, candidates, rejected);
+            validate_call(body, id, candidates, rejected, type_table);
         }
         body.for_each_child(node, |c| stack.push(c));
     }
@@ -296,6 +310,7 @@ fn validate_call(
     id: ExprId,
     candidates: &IndexMap<FnKey, Vec<bool>>,
     rejected: &mut IndexSet<FnKey>,
+    type_table: &crate::tir::TypeTable,
 ) {
     match &body.exprs[id].kind {
         ExprKind::Call { func_id, args, .. } => {
@@ -311,9 +326,13 @@ fn validate_call(
                 if !*dead_at_i {
                     continue;
                 }
+                // Dropping the argument erases its evaluation, so a trapping
+                // (but side-effect-free) argument must keep the param alive.
                 let pure = match args.get(i).map(|a| a.expr) {
                     Some(Operand::Value(_)) => true,
-                    Some(Operand::Expr(e)) => arena_query::is_pure_expr(body, e),
+                    Some(Operand::Expr(e)) => {
+                        arena_query::is_pure_nontrapping_expr_typed(body, e, Some(type_table))
+                    }
                     None => false,
                 };
                 if !pure {
@@ -339,9 +358,9 @@ fn validate_call(
             // a `Call` and the receiver is discarded — it must be pure.
             let drops_receiver = dead.first() == Some(&true);
             if drops_receiver
-                && !receiver
-                    .as_expr()
-                    .is_none_or(|e| arena_query::is_pure_expr(body, e))
+                && !receiver.as_expr().is_none_or(|e| {
+                    arena_query::is_pure_nontrapping_expr_typed(body, e, Some(type_table))
+                })
             {
                 rejected.insert(key);
             } else {
@@ -352,7 +371,12 @@ fn validate_call(
                         continue;
                     }
                     match args.get(i - 1) {
-                        Some(arg) if arena_query::is_pure_operand(body, arg.expr) => {}
+                        Some(arg)
+                            if arena_query::is_pure_nontrapping_operand_typed(
+                                body,
+                                arg.expr,
+                                Some(type_table),
+                            ) => {}
                         _ => {
                             rejected.insert(key);
                             break;

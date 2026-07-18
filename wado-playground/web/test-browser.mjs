@@ -113,13 +113,17 @@ try {
   const stdout = w.events.filter((e) => e.type === "stdout").map((e) => e.text).join("");
   const stderr = w.events.filter((e) => e.type === "stderr").map((e) => e.text).join("");
   const phases = w.events.filter((e) => e.type === "status").map((e) => e.phase);
+  // Fine-grained compiler phases (log-level=debug) streamed for live progress.
+  const compilerPhases = w.events.filter((e) => e.type === "phase").map((e) => e.name);
   const workerPass =
     w.result.type === "done" &&
     stdout.includes(CASES[2].expect) &&
     stderr.includes(CASES[2].expectStderr) &&
     !stdout.includes(CASES[2].expectStderr) &&
-    ["compiling", "transpiling", "running"].every((p) => phases.includes(p));
-  console.log(`${workerPass ? "✅" : "❌"} runner-worker: ${JSON.stringify({ phases, stdout, stderr, result: w.result })}`);
+    ["compiling", "transpiling", "running"].every((p) => phases.includes(p)) &&
+    compilerPhases.some((p) => p.startsWith("parse")) &&
+    compilerPhases.includes("codegen");
+  console.log(`${workerPass ? "✅" : "❌"} runner-worker: ${JSON.stringify({ phases, compilerPhaseCount: compilerPhases.length, stdout, stderr, result: w.result })}`);
   if (!workerPass) failed++;
 
   // Every playground example (examples.json) must compile and run cleanly.

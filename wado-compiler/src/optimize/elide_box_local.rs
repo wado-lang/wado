@@ -516,15 +516,16 @@ fn walk_expr_for_leftmost(
         }
 
         ExprKind::Binary { left, right, op } => {
-            let (left, right) = (*left, *right);
+            let (left, right, op) = (*left, *right, *op);
+            // `&&` and `||` short-circuit: the right operand is evaluated
+            // only when the left operand permits, so a candidate use anchored
+            // in the right operand would execute conditionally after
+            // substitution while the original `let` ran unconditionally. Treat
+            // the right operand the same way as an `if` branch — a Found there
+            // must block elision, not anchor it. Every other binary walks both
+            // operands in order, then the shared trap taxonomy decides whether
+            // the op itself is observable (`Div` / `Mod`).
             match op {
-                // `&&` and `||` short-circuit: the right operand is
-                // evaluated only when the left operand permits, so a
-                // candidate use anchored in the right operand would
-                // execute conditionally after substitution while the
-                // original `let` ran unconditionally. Treat the right
-                // operand the same way as an `if` branch — a Found there
-                // must block elision, not anchor it.
                 NirBinaryOp::And | NirBinaryOp::Or => {
                     match walk_operand_for_leftmost(body, left, candidate, field_name) {
                         LeftmostWalk::Found => LeftmostWalk::Found,
@@ -537,85 +538,73 @@ fn walk_expr_for_leftmost(
                         }
                     }
                 }
-                // `Div` / `Mod` may trap on a zero divisor; the operation
-                // itself is observable, so a Pure subtree below it does
-                // not make the surrounding context Pure.
-                NirBinaryOp::Div | NirBinaryOp::Mod => observable_propagate(walk_children_pure(
+                _ => finish_leftmost(
                     body,
-                    [left, right].into_iter().filter_map(Operand::as_expr),
-                    candidate,
-                    field_name,
-                )),
-                _ => walk_children_pure(
-                    body,
-                    [left, right].into_iter().filter_map(Operand::as_expr),
-                    candidate,
-                    field_name,
+                    expr,
+                    walk_children_pure(
+                        body,
+                        [left, right].into_iter().filter_map(Operand::as_expr),
+                        candidate,
+                        field_name,
+                    ),
                 ),
             }
         }
-        ExprKind::Unary { expr: inner, op } => {
-            let inner = *inner;
-            match op {
-                // Deref may trap on a null receiver; the op itself is
-                // observable.
-                NirUnaryOp::Deref => observable_propagate(walk_operand_for_leftmost(
-                    body, inner, candidate, field_name,
-                )),
-                // Arithmetic / logical / address-taking unaries are pure.
-                NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot => {
-                    walk_operand_for_leftmost(body, inner, candidate, field_name)
-                }
-                NirUnaryOp::Ref | NirUnaryOp::MutRef => {
-                    walk_operand_for_leftmost(body, inner, candidate, field_name)
-                }
-            }
-        }
-        // `as` lowers to `ref.cast` / numeric narrowing — both may trap.
-        ExprKind::Cast { expr: inner, .. } => observable_propagate(walk_operand_for_leftmost(
-            body, *inner, candidate, field_name,
-        )),
-        // FieldAccess on a non-candidate receiver: a fresh `struct.get`
-        // on a possibly-null reference, so the op itself may trap. A
-        // Found in the receiver still anchors at the receiver position
-        // (the FieldAccess applies AFTER the substituted inner), but
-        // a Pure receiver does NOT make this subtree Pure.
-        ExprKind::FieldAccess { expr: inner, .. } => observable_propagate(
+        ExprKind::Unary { expr: inner, .. } => finish_leftmost(
+            body,
+            expr,
             walk_operand_for_leftmost(body, *inner, candidate, field_name),
         ),
-        // `List<T>::index_value`-shaped Index may trap on a null base
-        // and on OOB; the op itself is observable.
+        ExprKind::Cast { expr: inner, .. }
+        | ExprKind::FieldAccess { expr: inner, .. }
+        | ExprKind::VariantTag { expr: inner }
+        | ExprKind::VariantTest { expr: inner, .. }
+        | ExprKind::VariantPayload { expr: inner, .. } => finish_leftmost(
+            body,
+            expr,
+            walk_operand_for_leftmost(body, *inner, candidate, field_name),
+        ),
         ExprKind::Index { expr: inner, index } => {
             let (inner, index) = (*inner, *index);
-            observable_propagate(walk_children_pure(
+            finish_leftmost(
                 body,
-                [inner, index].into_iter().filter_map(Operand::as_expr),
-                candidate,
-                field_name,
-            ))
+                expr,
+                walk_children_pure(
+                    body,
+                    [inner, index].into_iter().filter_map(Operand::as_expr),
+                    candidate,
+                    field_name,
+                ),
+            )
         }
         ExprKind::StructLiteral { fields, .. } => {
             let fields: Vec<ExprId> = fields.iter().filter_map(|f| f.value.as_expr()).collect();
-            walk_children_pure(body, fields.into_iter(), candidate, field_name)
+            finish_leftmost(
+                body,
+                expr,
+                walk_children_pure(body, fields.into_iter(), candidate, field_name),
+            )
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             let elements: Vec<ExprId> = elements.iter().filter_map(|o| o.as_expr()).collect();
-            walk_children_pure(body, elements.into_iter(), candidate, field_name)
+            finish_leftmost(
+                body,
+                expr,
+                walk_children_pure(body, elements.into_iter(), candidate, field_name),
+            )
         }
-        ExprKind::VariantConstruct { payload, .. } => match *payload {
-            Some(p) => walk_operand_for_leftmost(body, p, candidate, field_name),
-            None => LeftmostWalk::Pure,
-        },
-        ExprKind::ClosureToCanonical { functor, .. } => {
-            walk_operand_for_leftmost(body, *functor, candidate, field_name)
-        }
-        // `VariantTag` / `VariantTest` / `VariantPayload` all read the
-        // discriminant or payload via `ref.cast` + `struct.get` on a
-        // possibly-null receiver; each may trap.
-        ExprKind::VariantTag { expr: inner }
-        | ExprKind::VariantTest { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. } => observable_propagate(
-            walk_operand_for_leftmost(body, *inner, candidate, field_name),
+        ExprKind::VariantConstruct { payload, .. } => finish_leftmost(
+            body,
+            expr,
+            match *payload {
+                Some(p) => walk_operand_for_leftmost(body, p, candidate, field_name),
+                None => LeftmostWalk::Pure,
+            },
+        ),
+        ExprKind::ClosureToCanonical { functor, .. } => finish_leftmost(
+            body,
+            expr,
+            walk_operand_for_leftmost(body, *functor, candidate, field_name),
         ),
 
         ExprKind::Local { .. }
@@ -623,6 +612,22 @@ fn walk_expr_for_leftmost(
         | ExprKind::PackedArray(_)
         | ExprKind::Dead
         | ExprKind::EnumConstruct { .. } => LeftmostWalk::Pure,
+    }
+}
+
+/// Finish a value-producing node's leftmost walk: after its children have been
+/// walked in evaluation order (`walked`), account for the node's *own* trap. A
+/// node the shared [`expr_node_may_trap`](super::arena_query::expr_node_may_trap)
+/// taxonomy flags as trapping is observable, so a Pure subtree below it does not
+/// paint the surrounding context Pure — but a Found still propagates unchanged
+/// (the substitution lands INSIDE the op, whose own trap fires AFTER the
+/// substituted inner, exactly as before elision). Consumes the single per-node
+/// taxonomy instead of re-listing which ops trap.
+fn finish_leftmost(body: &Body, expr: ExprId, walked: LeftmostWalk) -> LeftmostWalk {
+    if super::arena_query::expr_node_may_trap(body, expr) {
+        observable_propagate(walked)
+    } else {
+        walked
     }
 }
 

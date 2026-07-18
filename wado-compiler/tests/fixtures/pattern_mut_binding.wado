@@ -12,12 +12,12 @@ export fn run() with Stdout {
     if let Some(mut x) = opt {
         x += 5;
         assert x == 15;
-        println(`mutated: {x}`);
+        println(`mutated: ${x}`);
     }
     // original unchanged
     if let Some(orig) = opt {
         assert orig == 10;
-        println(`original: {orig}`);
+        println(`original: ${orig}`);
     }
 
     // match with mut binding — i32
@@ -30,11 +30,11 @@ export fn run() with Stdout {
         Empty => 0,
     };
     assert result == 200;
-    println(`result: {result}`);
+    println(`result: ${result}`);
     // original unchanged
     if let Value(orig) = c {
         assert orig == 100;
-        println(`original: {orig}`);
+        println(`original: ${orig}`);
     }
 
     // mut binding with String — append does not affect original
@@ -42,11 +42,11 @@ export fn run() with Stdout {
     if let Some(mut s) = opt_str {
         s.push_str(&" world");
         assert s == "hello world";
-        println(`mutated: {s}`);
+        println(`mutated: ${s}`);
     }
     if let Some(orig) = opt_str {
         assert orig == "hello";
-        println(`original: {orig}`);
+        println(`original: ${orig}`);
     }
 
     // mut binding with List — append does not affect original
@@ -54,11 +54,11 @@ export fn run() with Stdout {
     if let Some(mut arr) = opt_arr {
         arr.push(4);
         assert arr.len() == 4;
-        println(`mutated len: {arr.len()}`);
+        println(`mutated len: ${arr.len()}`);
     }
     if let Some(orig) = opt_arr {
         assert orig.len() == 3;
-        println(`original len: {orig.len()}`);
+        println(`original len: ${orig.len()}`);
     }
 }
 

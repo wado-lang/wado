@@ -1,0 +1,28 @@
+// A closure (indirect call) with a unit-typed parameter: the canonical
+// closure signature, the wrapper, and the call site all erase the unit slot
+// (previously the wrapper forwarded a phantom slot into `__call`, producing
+// invalid Wasm at -O0), and a unit argument's side effect still evaluates.
+use { println, Stdout } from "core:cli";
+
+global mut LOG: i32 = 0;
+
+#[inline(never)]
+fn bump() {
+    LOG += 1;
+}
+
+export fn run() with Stdout {
+    let f = |u: ()| -> i32 { return 7; };
+    let r = f(());
+    assert r == 7;
+
+    let g = |a: i32, u: (), b: i32| -> i32 { return a * 10 + b; };
+    let s = g(1, bump(), 2);
+    assert s == 12;
+    assert LOG == 1;
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

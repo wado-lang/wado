@@ -319,7 +319,6 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
     let offset_3: i32;
     let digit_count: i32;
     let temp: i64;
-    let signed_rem_7: i64;
     let rem_adjusted_8: i64;
     let signed_quot_9: i64;
     let carry_10: i64;
@@ -327,7 +326,6 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
     let repr: ref Array<u8>;
     let pos: i32;
     let digit: i32;
-    let signed_rem_15: i64;
     let rem_adjusted_16: i64;
     let signed_quot_17: i64;
     let carry_18: i64;
@@ -347,7 +345,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
             if temp >= 0_i64 {
                 temp = temp / 10_i64;
             } else {
-                rem_adjusted_8 = local.tee signed_rem_7(temp % 10_i64) + 6_i64;
+                rem_adjusted_8 = (temp % 10_i64) + 6_i64;
                 signed_quot_9 = temp / 10_i64;
                 carry_10 = 0_i64;
                 if rem_adjusted_8 < 0_i64 {
@@ -372,7 +370,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
                 digit = builtin::i32_wrap_i64(temp % 10_i64);
                 temp = temp / 10_i64;
             } else {
-                rem_adjusted_16 = local.tee signed_rem_15(temp % 10_i64) + 6_i64;
+                rem_adjusted_16 = (temp % 10_i64) + 6_i64;
                 if rem_adjusted_16 >= 0_i64 {
                     digit = builtin::i32_wrap_i64(rem_adjusted_16);
                 } else {

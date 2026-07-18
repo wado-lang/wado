@@ -109,7 +109,7 @@ impl Vec2 {
     }
 
     fn to_string(&self) -> String {
-        return `({self.x():0.4f}, {self.y():0.4f})`;
+        return `(${self.x():0.4f}, ${self.y():0.4f})`;
     }
 }
 
@@ -246,9 +246,9 @@ export fn run() with Stdout {
 
     // Basic vector operations
     let velocity = Vec2::new(3.0, 4.0);
-    println(`Velocity:  {velocity.to_string()}`);
-    println(`Speed:     {velocity.length():0.4f}`);
-    println(`Direction: {velocity.normalize().to_string()}`);
+    println(`Velocity:  ${velocity.to_string()}`);
+    println(`Speed:     ${velocity.length():0.4f}`);
+    println(`Direction: ${velocity.normalize().to_string()}`);
 
     // Simulate a ball bouncing off a wall
     println("");
@@ -256,9 +256,9 @@ export fn run() with Stdout {
     let ball_dir = Vec2::new(1.0, -0.5).normalize();
     let wall_normal = Vec2::new(-0.707, 0.707).normalize();  // 45-degree wall
     let bounce = ball_dir.reflect(&wall_normal);
-    println(`  Incoming:  {ball_dir.to_string()}`);
-    println(`  Normal:    {wall_normal.to_string()}`);
-    println(`  Reflected: {bounce.to_string()}`);
+    println(`  Incoming:  ${ball_dir.to_string()}`);
+    println(`  Normal:    ${wall_normal.to_string()}`);
+    println(`  Reflected: ${bounce.to_string()}`);
 
     // Path interpolation
     println("");
@@ -269,7 +269,7 @@ export fn run() with Stdout {
         let t = i as f64 / 4.0;
         let p = a.lerp(&b, t);
         let dist = a.distance(&p);
-        println(`  t={t:0.2f}: {p.to_string()}  dist={dist:0.2f}`);
+        println(`  t=${t:0.2f}: ${p.to_string()}  dist=${dist:0.2f}`);
     }
 
     // AABB collision detection
@@ -278,7 +278,7 @@ export fn run() with Stdout {
     let player = AABB::new(Vec2::new(5.0, 5.0), Vec2::new(15.0, 15.0));
     let enemy = AABB::new(Vec2::new(10.0, 10.0), Vec2::new(20.0, 20.0));
     let item = AABB::new(Vec2::new(50.0, 50.0), Vec2::new(55.0, 55.0));
-    println(`  Player center: {player.center().to_string()}`);
-    println(`  Player vs Enemy: {player.intersects(&enemy)}`);
-    println(`  Player vs Item:  {player.intersects(&item)}`);
+    println(`  Player center: ${player.center().to_string()}`);
+    println(`  Player vs Enemy: ${player.intersects(&enemy)}`);
+    println(`  Player vs Item:  ${player.intersects(&item)}`);
 }

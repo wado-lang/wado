@@ -31,6 +31,7 @@
 //! Strings stay lazy — a `String`'s `array.new_data<u8>` repr is not a valid
 //! Wasm constant instruction, so it is excluded by that predicate.
 
+use super::dedupe_const_globals::const_key;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirInstr, WirPackage};
 
@@ -93,11 +94,25 @@ pub(super) fn promote_const_global_inits(module: &mut WirPackage) {
 
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
+            // Reads of every local across the whole function, so dropping a
+            // promoted set's `Seq` value never discards a binding read elsewhere.
+            let mut read_counts: IndexMap<String, u32> = IndexMap::default();
+            for instr in body.iter() {
+                count_local_reads(instr, &mut read_counts);
+            }
             for instr in body.iter_mut() {
-                nop_promoted_assignments(instr, &promoted);
+                nop_promoted_assignments(instr, &promoted, &read_counts);
             }
         }
     }
+}
+
+/// Count `LocalGet` reads per local name in a subtree.
+fn count_local_reads(instr: &WirInstr, counts: &mut IndexMap<String, u32>) {
+    if let WirInstr::LocalGet { name, .. } = instr {
+        *counts.entry(name.clone()).or_default() += 1;
+    }
+    instr.for_each_child(&mut |child| count_local_reads(child, counts));
 }
 
 /// Fold a `GlobalSet` to a candidate into its consensus; recurse into
@@ -112,9 +127,20 @@ fn collect_assignments(
     {
         let next = match (state.get(&g_idx), resolve_const(value)) {
             (Some(Consensus::Disqualified), _) | (_, None) => Consensus::Disqualified,
-            // First const assignment, or a later (identical) duplicate from
-            // inlining: keep the value.
-            (None | Some(Consensus::Const(_)), Some(value)) => Consensus::Const(value),
+            // First const assignment: adopt it.
+            (None, Some(value)) => Consensus::Const(value),
+            // A later assignment: keep `Const` only when it is structurally
+            // identical to the first (the expected inlined-duplicate case). A
+            // user-immutable global is assigned once in source, so a genuinely
+            // different second value means the shape does not match our model —
+            // disqualify rather than silently last-write-wins.
+            (Some(Consensus::Const(prev)), Some(value)) => {
+                if const_key(prev) == const_key(&value) {
+                    Consensus::Const(value)
+                } else {
+                    Consensus::Disqualified
+                }
+            }
         };
         state.insert(g_idx, next);
         return;
@@ -122,15 +148,57 @@ fn collect_assignments(
     instr.for_each_child(&mut |child| collect_assignments(child, candidate_idx, state));
 }
 
-/// Replace every `GlobalSet` to a promoted global with `Nop`, at any depth.
-fn nop_promoted_assignments(instr: &mut WirInstr, promoted: &IndexSet<String>) {
-    if let WirInstr::GlobalSet { name, .. } = instr
+/// Replace every `GlobalSet` to a promoted global with its dead-store-free
+/// remainder, at any depth. When the assigned value is a builder `Seq`, its
+/// binding locals may be read outside the store, so drop the whole `Seq` only
+/// when they are provably dead elsewhere.
+fn nop_promoted_assignments(
+    instr: &mut WirInstr,
+    promoted: &IndexSet<String>,
+    read_counts: &IndexMap<String, u32>,
+) {
+    if let WirInstr::GlobalSet { name, value } = instr
         && promoted.contains(name.fq.as_str())
     {
-        *instr = WirInstr::Nop;
+        let replacement = drop_promoted_set(value, read_counts);
+        *instr = replacement;
         return;
     }
-    instr.for_each_boxed_child_mut(&mut |child| nop_promoted_assignments(child, promoted));
+    instr.for_each_boxed_child_mut(&mut |child| {
+        nop_promoted_assignments(child, promoted, read_counts);
+    });
+}
+
+/// The replacement for a promoted global's assignment. The resolved constant is
+/// already installed in the global's eager `init`, so the store itself is
+/// redundant. When its value is a builder `Seq` (`__b = …; __b`), dropping the
+/// whole `Seq` would also drop its `LocalSet` bindings — unsound if a bound
+/// local is read outside the store — so the `Seq` collapses to `Nop` only when
+/// every bound local is dead elsewhere, otherwise to its binding prefix.
+fn drop_promoted_set(value: &WirInstr, read_counts: &IndexMap<String, u32>) -> WirInstr {
+    match value {
+        WirInstr::RefAsNonNull(inner) => drop_promoted_set(inner, read_counts),
+        WirInstr::Seq(items) => {
+            let Some((_, binds)) = items.split_last() else {
+                return WirInstr::Nop;
+            };
+            let mut internal: IndexMap<String, u32> = IndexMap::default();
+            count_local_reads(value, &mut internal);
+            let all_dead = binds.iter().all(|stmt| match stmt {
+                WirInstr::LocalSet { name, .. } => {
+                    read_counts.get(name).copied().unwrap_or(0)
+                        <= internal.get(name).copied().unwrap_or(0)
+                }
+                _ => true,
+            });
+            if all_dead {
+                WirInstr::Nop
+            } else {
+                WirInstr::Seq(binds.to_vec())
+            }
+        }
+        _ => WirInstr::Nop,
+    }
 }
 
 /// Resolve a `GlobalSet` value to a constant init expression.

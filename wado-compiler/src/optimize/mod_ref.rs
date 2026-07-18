@@ -150,7 +150,7 @@ pub(super) struct ModRef {
 /// would be caught by the innermost enclosing loop / labeled block
 /// recorded in `scope`. Used to decide whether the break's `NonLocal`
 /// contribution must propagate past the surrounding construct.
-fn break_is_captured(label: Option<&str>, scope: &AccumScope) -> bool {
+fn break_is_captured(label: Option<&str>, scope: &AccumScope<'_>) -> bool {
     match label {
         None => scope.loop_depth > 0,
         Some(l) => scope.open_labels.iter().any(|open| open == l),
@@ -164,7 +164,7 @@ fn break_is_captured(label: Option<&str>, scope: &AccumScope) -> bool {
 /// that actually escape (`return`, label-targeted `break L` to an
 /// unenclosed `L`).
 #[derive(Default)]
-struct AccumScope {
+struct AccumScope<'a> {
     /// Number of `Loop` / `LabeledBlock` bodies currently being
     /// accumulated. A bare `break;` / `continue;` resolves to the
     /// innermost such enclosure, so when `loop_depth > 0` their
@@ -173,6 +173,27 @@ struct AccumScope {
     /// Labels of `LabeledBlock`s currently on the accumulation stack.
     /// `break L;` whose `L` is in this set is captured here.
     open_labels: Vec<String>,
+    /// Type table for the `FieldAccess` non-null trap check; `None` stays
+    /// conservative.
+    types: Option<&'a crate::tir::TypeTable>,
+}
+
+/// A `FieldAccess` traps only on a null receiver, and every type a field access
+/// can name is a non-null heap value in Wado — a struct, a reference, or a
+/// generic instance (tuple / `Box` / `List` / user generic). `Option` is the
+/// one nullable type, and it is read via `VariantPayload`, never `FieldAccess`.
+/// Provable only with a type table.
+fn field_receiver_nonnull(body: &Body, scope: &AccumScope<'_>, base: Operand) -> bool {
+    use crate::tir::ResolvedType;
+    let Some(types) = scope.types else {
+        return false;
+    };
+    let ty = body.operand_type(base);
+    match types.get_pruned(ty) {
+        Some(ResolvedType::Struct { .. } | ResolvedType::Ref(_) | ResolvedType::MutRef(_)) => true,
+        Some(ResolvedType::GenericInstance { .. }) => types.as_option(ty).is_none(),
+        _ => false,
+    }
 }
 
 impl ModRef {
@@ -180,6 +201,18 @@ impl ModRef {
     pub fn of_expr(body: &Body, id: ExprId) -> Self {
         let mut mr = ModRef::default();
         let mut scope = AccumScope::default();
+        mr.accumulate_expr(body, id, &mut scope);
+        mr
+    }
+
+    /// Like [`of_expr`], but a type table lets the `FieldAccess` trap check
+    /// prove a non-null receiver (see [`field_receiver_nonnull`]).
+    pub fn of_expr_typed(body: &Body, id: ExprId, types: Option<&crate::tir::TypeTable>) -> Self {
+        let mut mr = ModRef::default();
+        let mut scope = AccumScope {
+            types,
+            ..AccumScope::default()
+        };
         mr.accumulate_expr(body, id, &mut scope);
         mr
     }
@@ -195,14 +228,24 @@ impl ModRef {
     /// True iff `self`'s writes (or any call inside `self`) might
     /// invalidate any of `other`'s reads.
     ///
-    /// Call effects: callees can mutate globals, the GC heap, and
-    /// linear memory, so a call clobbers reads of those channels.
-    /// Callees CANNOT reach the caller's Wasm locals — locals live in
-    /// the calling frame and are not addressable from another function
-    /// — so a call does not clobber a `local_reads`-only expression.
+    /// Call effects: callees can both read and mutate globals, the GC
+    /// heap, and linear memory, so a call on either side conflicts with
+    /// the other side's accesses to those channels — `self`'s call
+    /// clobbers `other`'s channel reads and `other`'s calls (whose
+    /// hidden reads `self`'s hidden writes may feed), and `other`'s
+    /// call reads whatever `self` explicitly writes. Callees CANNOT
+    /// reach the caller's Wasm locals — locals live in the calling
+    /// frame and are not addressable from another function — so a call
+    /// does not clobber a `local_reads`-only expression.
     pub fn may_clobber(&self, other: &ModRef) -> bool {
-        if self.calls && (!other.global_reads.is_empty() || other.heap.reads || other.memory.reads)
-        {
+        let other_reads_shared =
+            !other.global_reads.is_empty() || other.heap.reads || other.memory.reads;
+        if self.calls && (other_reads_shared || other.calls) {
+            return true;
+        }
+        let self_writes_shared =
+            !self.global_writes.is_empty() || self.heap.writes || self.memory.writes;
+        if other.calls && self_writes_shared {
             return true;
         }
         if !self.local_writes.is_disjoint(&other.local_reads) {
@@ -220,14 +263,14 @@ impl ModRef {
         false
     }
 
-    fn accumulate_operand(&mut self, body: &Body, op: Operand, scope: &mut AccumScope) {
+    fn accumulate_operand(&mut self, body: &Body, op: Operand, scope: &mut AccumScope<'_>) {
         match op {
             Operand::Expr(e) => self.accumulate_expr(body, e, scope),
             Operand::Value(_) => {}
         }
     }
 
-    fn accumulate_expr(&mut self, body: &Body, id: ExprId, scope: &mut AccumScope) {
+    fn accumulate_expr(&mut self, body: &Body, id: ExprId, scope: &mut AccumScope<'_>) {
         match &body.exprs[id].kind {
             // === Locals ===
             ExprKind::Local { index, .. } => {
@@ -261,7 +304,9 @@ impl ModRef {
             // === Heap reads ===
             ExprKind::FieldAccess { expr, .. } => {
                 self.heap.reads = true;
-                self.may_trap = true; // null receiver
+                if !field_receiver_nonnull(body, scope, *expr) {
+                    self.may_trap = true;
+                }
                 let expr = *expr;
                 self.accumulate_operand(body, expr, scope);
             }
@@ -294,14 +339,20 @@ impl ModRef {
             }
 
             // === Calls ===
+            //
+            // Every call may trap inside the callee (`panic`, OOB index,
+            // division, `unreachable`), so `may_trap` accompanies `calls`
+            // — a call must not reorder against another trap site.
             ExprKind::Call { args, .. } => {
                 self.calls = true;
+                self.may_trap = true;
                 for a in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
                     self.accumulate_operand(body, a, scope);
                 }
             }
             ExprKind::MethodCall { receiver, args, .. } => {
                 self.calls = true;
+                self.may_trap = true;
                 let receiver = *receiver;
                 let args: Vec<_> = args.iter().map(|a| a.expr).collect();
                 self.accumulate_operand(body, receiver, scope);
@@ -311,6 +362,7 @@ impl ModRef {
             }
             ExprKind::IndirectCall { callee, args } => {
                 self.calls = true;
+                self.may_trap = true;
                 let callee = *callee;
                 let args = args.clone();
                 self.accumulate_operand(body, callee, scope);
@@ -320,6 +372,7 @@ impl ModRef {
             }
             ExprKind::CmRawCall { args, .. } => {
                 self.calls = true;
+                self.may_trap = true;
                 for a in args.clone() {
                     self.accumulate_operand(body, a, scope);
                 }
@@ -382,9 +435,14 @@ impl ModRef {
                 let block = *block;
                 self.accumulate_block(body, block, scope);
             }
-            ExprKind::LabeledBlock { block, .. } => {
+            ExprKind::LabeledBlock { label, block, .. } => {
+                // Same capture discipline as the statement-position arm: an
+                // enclosed `break label;` resolves here, so its `NonLocal`
+                // must not leak past this expression.
                 let block = *block;
+                scope.open_labels.push(label.clone());
                 self.accumulate_block(body, block, scope);
+                scope.open_labels.pop();
             }
             ExprKind::If {
                 condition,
@@ -451,14 +509,16 @@ impl ModRef {
         }
     }
 
-    fn accumulate_assign_target(&mut self, body: &Body, id: ExprId, scope: &mut AccumScope) {
+    fn accumulate_assign_target(&mut self, body: &Body, id: ExprId, scope: &mut AccumScope<'_>) {
         match &body.exprs[id].kind {
             ExprKind::Local { index, .. } => {
                 self.local_writes.insert(*index);
             }
             ExprKind::FieldAccess { expr, .. } => {
                 self.heap.writes = true;
-                self.may_trap = true; // null receiver
+                if !field_receiver_nonnull(body, scope, *expr) {
+                    self.may_trap = true;
+                }
                 let expr = *expr;
                 self.accumulate_operand(body, expr, scope);
             }
@@ -478,6 +538,15 @@ impl ModRef {
                 let expr = *expr;
                 self.accumulate_operand(body, expr, scope);
             }
+            ExprKind::VariantPayload { expr, .. } => {
+                // Writing through a payload projection stores into the
+                // variant's case struct: a heap write on a possibly-null,
+                // possibly-mismatched receiver.
+                self.heap.writes = true;
+                self.may_trap = true;
+                let expr = *expr;
+                self.accumulate_operand(body, expr, scope);
+            }
             ExprKind::GlobalVarGet {
                 module_source,
                 name,
@@ -486,12 +555,17 @@ impl ModRef {
                     .insert((module_source.clone(), name.clone()));
             }
             _ => {
+                // No legal assignment target takes any other shape; if one
+                // ever does, summarize it as a heap write (a write position
+                // must never be recorded read-only) on top of its own reads.
+                self.heap.writes = true;
+                self.may_trap = true;
                 self.accumulate_expr(body, id, scope);
             }
         }
     }
 
-    fn accumulate_stmt(&mut self, body: &Body, id: StmtId, scope: &mut AccumScope) {
+    fn accumulate_stmt(&mut self, body: &Body, id: StmtId, scope: &mut AccumScope<'_>) {
         match &body.stmts[id].kind {
             StmtKind::Let {
                 local_index, value, ..
@@ -531,7 +605,6 @@ impl ModRef {
                 // leaking NonLocal past the loop boundary.
                 let loop_body = *loop_body;
                 scope.loop_depth += 1;
-                let outer_control = self.control;
                 self.accumulate_block(body, loop_body, scope);
                 scope.loop_depth -= 1;
                 // If the loop body's only NonLocal contribution came from
@@ -542,7 +615,6 @@ impl ModRef {
                 if self.control < Control::NonLocal {
                     self.control = Control::Conditional;
                 }
-                let _ = outer_control; // reserved for future precision
             }
             StmtKind::Break { label, value } => {
                 if !break_is_captured(label.as_deref(), scope) {
@@ -561,11 +633,12 @@ impl ModRef {
             }
             StmtKind::LabeledBlock { label, block } => {
                 // Push the label so an enclosed `break label;` resolves
-                // here. The labeled block is itself a control-flow join
-                // point: even when no inner break fires, control may
-                // reach the end via the break value, so the surrounding
-                // construct sees Conditional (not Linear) execution of
-                // the body. Pop the label on exit.
+                // here (its NonLocal stays inside). Control stays Linear:
+                // whether or not a captured break fires, the block always
+                // falls through to the next statement, and the summary
+                // already unions the effects of the statements a break
+                // would skip, so motion checks over-approximate the
+                // partially-executed paths. Pop the label on exit.
                 let block = *block;
                 scope.open_labels.push(label.clone());
                 self.accumulate_block(body, block, scope);
@@ -579,13 +652,13 @@ impl ModRef {
         }
     }
 
-    fn accumulate_block(&mut self, body: &Body, id: BlockId, scope: &mut AccumScope) {
+    fn accumulate_block(&mut self, body: &Body, id: BlockId, scope: &mut AccumScope<'_>) {
         for s in body.blocks[id].stmts.clone() {
             self.accumulate_stmt(body, s, scope);
         }
     }
 
-    fn accumulate_pattern_writes(&mut self, body: &Body, id: PatId, scope: &mut AccumScope) {
+    fn accumulate_pattern_writes(&mut self, body: &Body, id: PatId, scope: &mut AccumScope<'_>) {
         match &body.pats[id].kind {
             PatKind::Binding { local_index, .. } => {
                 self.local_writes.insert(*local_index);
@@ -935,6 +1008,62 @@ mod tests {
         assert!(mr.heap.reads);
         assert!(!mr.heap.writes);
         assert!(mr.may_trap);
+    }
+
+    #[test]
+    fn field_access_on_struct_receiver_is_nontrapping_with_types() {
+        // Non-null struct receiver ⇒ `s.value` cannot trap. The conservative
+        // no-table path is `field_access_is_heap_read_and_may_trap`.
+        use crate::tir::{ResolvedType, TypeTable};
+        let mut types = TypeTable::new();
+        let struct_ty = types.intern(ResolvedType::Struct {
+            name: "W".to_string(),
+            module_source: ModuleSource::default(),
+            is_monomorphized: false,
+            base_name: None,
+        });
+        let mut body = Body::empty();
+        let base = body.exprs.push(ExprNode {
+            kind: ExprKind::Local {
+                index: 0,
+                name: "w".to_string(),
+            },
+            type_id: struct_ty,
+            span: sp(),
+        });
+        let fa = field_access(&mut body, base);
+        assert!(
+            ModRef::of_expr(&body, fa).may_trap,
+            "conservative without a type table"
+        );
+        let mr = ModRef::of_expr_typed(&body, fa, Some(&types));
+        assert!(
+            !mr.may_trap,
+            "struct receiver is non-null → field access cannot trap"
+        );
+        assert!(mr.heap.reads);
+    }
+
+    #[test]
+    fn tuple_field_access_receiver_is_nontrapping() {
+        // A tuple field read (`t.0`) has a `GenericInstance` receiver, non-null
+        // like a struct — so it must not trap either. (`Option` is the one
+        // nullable `GenericInstance`, but it is read via `VariantPayload`, never
+        // `FieldAccess`.)
+        use crate::tir::TypeTable;
+        let mut types = TypeTable::new();
+        let tuple_ty = types.make_tuple(vec![TypeTable::I32, TypeTable::I32]);
+        let mut body = Body::empty();
+        let base = body.exprs.push(ExprNode {
+            kind: ExprKind::Local {
+                index: 0,
+                name: "t".to_string(),
+            },
+            type_id: tuple_ty,
+            span: sp(),
+        });
+        let fa = field_access(&mut body, base);
+        assert!(!ModRef::of_expr_typed(&body, fa, Some(&types)).may_trap);
     }
 
     #[test]
@@ -1449,6 +1578,176 @@ mod tests {
             let brk = break_stmt(b, Some("OUTER"));
             let body = pblock(b, vec![brk]);
             ps(b, StmtKind::Loop { body })
+        });
+        assert_eq!(mr.control, Control::NonLocal);
+    }
+
+    // -----------------------------------------------------------------
+    // Calls carry read AND write channel effects, and may trap
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn call_may_trap() {
+        // A callee can `panic`, index OOB, or divide by zero; the trap
+        // fires inside the call, so a call must never reorder against
+        // another trap site.
+        assert!(mr_expr(|b| call(b, vec![])).may_trap);
+    }
+
+    #[test]
+    fn cannot_move_call_past_global_write() {
+        // expr = `call f()` — the callee may READ any global, so moving
+        // it past `G = 7` would expose the new value to the call.
+        let expr = mr_expr(|b| call(b, vec![]));
+        let intervening = mr_stmt(|b| {
+            let v = int(b, 7);
+            let gs = global_set(b, "G", v);
+            expr_stmt(b, gs)
+        });
+        assert!(!can_move_past(&expr, &intervening, 99));
+    }
+
+    #[test]
+    fn cannot_move_call_past_heap_write() {
+        let expr = mr_expr(|b| call(b, vec![]));
+        let intervening = mr_stmt(|b| {
+            let l = local(b, 2);
+            let f = field_access(b, l);
+            let v = int(b, 0);
+            let a = assign(b, f, v);
+            expr_stmt(b, a)
+        });
+        assert!(!can_move_past(&expr, &intervening, 99));
+    }
+
+    #[test]
+    fn cannot_move_call_past_call() {
+        // Two calls may communicate through any global / heap / memory
+        // state; their order is observable.
+        let expr = mr_expr(|b| call(b, vec![]));
+        let intervening = mr_stmt(|b| {
+            let c = call(b, vec![]);
+            expr_stmt(b, c)
+        });
+        assert!(!can_move_past(&expr, &intervening, 99));
+    }
+
+    #[test]
+    fn cannot_move_global_write_past_call() {
+        // Symmetric direction: the intervening call may read the global
+        // the moved expression writes.
+        let expr = mr_expr(|b| {
+            let v = int(b, 1);
+            global_set(b, "g", v)
+        });
+        let intervening = mr_stmt(|b| {
+            let c = call(b, vec![]);
+            expr_stmt(b, c)
+        });
+        assert!(!can_move_past(&expr, &intervening, 99));
+    }
+
+    #[test]
+    fn can_move_call_past_pure_local_arithmetic() {
+        // Precision pin: a call still rides past a locals-only statement
+        // with no global / heap / memory channel and no trap.
+        let expr = mr_expr(|b| call(b, vec![]));
+        let intervening = mr_stmt(|b| {
+            let l = local(b, 6);
+            let r = int(b, 2);
+            let sum = bin(b, l, NirBinaryOp::Add, r);
+            let_stmt(b, 5, sum)
+        });
+        assert!(can_move_past(&expr, &intervening, 99));
+    }
+
+    #[test]
+    fn can_move_call_past_local_copy() {
+        let expr = mr_expr(|b| call(b, vec![]));
+        let intervening = mr_stmt(|b| {
+            let v = local(b, 6);
+            let_stmt(b, 5, v)
+        });
+        assert!(can_move_past(&expr, &intervening, 99));
+    }
+
+    // -----------------------------------------------------------------
+    // Assign-target taxonomy
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn assign_to_variant_payload_is_heap_write() {
+        let mr = mr_expr(|b| {
+            let l = local(b, 3);
+            let vp = pe(
+                b,
+                ExprKind::VariantPayload {
+                    expr: l.into(),
+                    case_index: 0,
+                    payload_type: ty(),
+                },
+            );
+            let v = int(b, 0);
+            assign(b, vp, v)
+        });
+        assert!(mr.heap.writes);
+        assert!(mr.may_trap);
+        assert!(mr.local_reads.contains(&3));
+    }
+
+    #[test]
+    fn assign_through_deref_is_heap_write() {
+        let mr = mr_expr(|b| {
+            let l = local(b, 3);
+            let d = deref(b, l);
+            let v = int(b, 0);
+            assign(b, d, v)
+        });
+        assert!(mr.heap.writes);
+        assert!(mr.may_trap);
+    }
+
+    // -----------------------------------------------------------------
+    // Expression-position LabeledBlock captures its own label
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn expr_labeled_block_captures_its_break() {
+        // `let x = L: { break L; }` — the break resolves to the labeled
+        // block itself, so from outside the expression completes
+        // normally (not NonLocal). Precision: motion passes must not
+        // reject moves past this shape as an escaping transfer.
+        let mr = mr_stmt(|b| {
+            let brk = break_stmt(b, Some("L"));
+            let block = pblock(b, vec![brk]);
+            let lb = pe(
+                b,
+                ExprKind::LabeledBlock {
+                    label: "L".to_string(),
+                    block,
+                    result_type: ty(),
+                },
+            );
+            let_stmt(b, 5, lb)
+        });
+        assert_ne!(mr.control, Control::NonLocal);
+    }
+
+    #[test]
+    fn expr_labeled_block_break_to_outer_label_is_non_local() {
+        // A break targeting a label NOT opened by this block escapes.
+        let mr = mr_stmt(|b| {
+            let brk = break_stmt(b, Some("OUTER"));
+            let block = pblock(b, vec![brk]);
+            let lb = pe(
+                b,
+                ExprKind::LabeledBlock {
+                    label: "L".to_string(),
+                    block,
+                    result_type: ty(),
+                },
+            );
+            let_stmt(b, 5, lb)
         });
         assert_eq!(mr.control, Control::NonLocal);
     }

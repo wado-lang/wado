@@ -124,6 +124,19 @@ fn arm_always_traps(instrs: &[WirInstr]) -> bool {
             {
                 return true;
             }
+            // A labeled block/loop whose body reaches a trap before escaping it
+            // traps the arm. `br 0` inside targets the block's own end (a Block:
+            // fall-through past it; a Loop: re-entry), which `arm_always_traps`
+            // treats as an escape (returning `false`) — conservative for the
+            // loop case, so a hint is only inferred when the trap is unavoidable.
+            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
+                if arm_always_traps(body) {
+                    return true;
+                }
+                if may_transfer_out(instr, 0) {
+                    return false;
+                }
+            }
             other => {
                 if may_transfer_out(other, 0) {
                     return false;
@@ -250,12 +263,16 @@ fn br_only_arm(body: &[WirInstr]) -> Option<u32> {
 }
 
 /// True when an `if` has no meaningful `else` — either no else block, or one
-/// whose only instructions are `nop`s (the `if let` / `while let` desugaring
-/// shape).
+/// whose only instructions are no-op markers (`Nop`, or a `ColdPath` marker
+/// that emits nothing). Mirrors `br_only_arm`'s marker tolerance so `br_if`
+/// selection is not blocked asymmetrically when a cold-path marker lands in
+/// the else arm (the `if let` / `while let` desugaring shape).
 fn else_is_empty(else_body: &Option<Vec<WirInstr>>) -> bool {
     match else_body {
         None => true,
-        Some(body) => body.iter().all(|i| matches!(i, WirInstr::Nop)),
+        Some(body) => body
+            .iter()
+            .all(|i| matches!(i, WirInstr::Nop | WirInstr::ColdPath)),
     }
 }
 
@@ -360,6 +377,23 @@ mod tests {
         )];
         infer_in_body(&mut body);
         assert_eq!(hint_of(&body[0]), None);
+    }
+
+    #[test]
+    fn non_escaping_trap_inside_block_is_hinted() {
+        // The trap sits inside a labeled block that nothing branches out of;
+        // control still unavoidably reaches it, so the arm is cold.
+        let mut body = vec![if_instr(
+            local_get("c"),
+            vec![WirInstr::Block {
+                label: None,
+                result: None,
+                body: vec![WirInstr::Unreachable],
+            }],
+            None,
+        )];
+        infer_in_body(&mut body);
+        assert_eq!(hint_of(&body[0]), Some(false));
     }
 
     #[test]
@@ -504,6 +538,20 @@ mod tests {
             local_get("c"),
             vec![WirInstr::Br { depth: 1 }],
             Some(vec![WirInstr::Nop]),
+        );
+        select_in_instr(&mut instr);
+        assert!(matches!(instr, WirInstr::BrIf { depth: 0, .. }));
+    }
+
+    #[test]
+    fn select_allows_cold_path_marker_in_else() {
+        // A `ColdPath` marker emits nothing, so an else made only of markers is
+        // still empty — `br_if` selection must not be blocked asymmetrically
+        // (`br_only_arm` already tolerates the same markers in the then arm).
+        let mut instr = if_instr(
+            local_get("c"),
+            vec![WirInstr::Br { depth: 1 }],
+            Some(vec![WirInstr::ColdPath, WirInstr::Nop]),
         );
         select_in_instr(&mut instr);
         assert!(matches!(instr, WirInstr::BrIf { depth: 0, .. }));

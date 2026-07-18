@@ -614,7 +614,7 @@ fn test_format_preserves_array_element_comments() {
     let source = "fn run() {\n    let xs = [\n        // lead one\n        1,\n        2,  // tail two\n    ];\n}\n";
     let formatted = wado_compiler::format(source).expect("format failed");
     for c in ["// lead one", "// tail two"] {
-        assert!(formatted.contains(c), "missing `{c}`:\n{formatted}");
+        assert!(formatted.contains(c), "missing `${c}`:\n{formatted}");
     }
     let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
     assert_eq!(formatted, formatted2, "should be idempotent");
@@ -682,7 +682,7 @@ struct Config {
     ] {
         assert!(
             formatted.contains(comment),
-            "trailing comment `{comment}` should be preserved:\n{formatted}"
+            "trailing comment `${comment}` should be preserved:\n{formatted}"
         );
     }
     // Comments must not migrate onto the wrong line, and format is stable.
@@ -2118,7 +2118,7 @@ fn test_format_single_arg_wide_wraps_multiline() {
     // A single argument that exceeds MAX_LINE_WIDTH should trigger multiline call formatting
     let source = r#"
 fn run() {
-    println(match classify(i) { Fizz => "Fizz", Buzz => "Buzz", FizzBuzz => "FizzBuzz", Number(n) => `{n}` });
+    println(match classify(i) { Fizz => "Fizz", Buzz => "Buzz", FizzBuzz => "FizzBuzz", Number(n) => `${n}` });
 }
 "#;
     let formatted = wado_compiler::format(source).expect("format failed");
@@ -2386,7 +2386,7 @@ fn test_roundtrip_ast_imports_and_effects() {
 use { println } from "core:cli";
 
 fn greet(name: String) with Stdout {
-    println(`Hello, {name}!`);
+    println(`Hello, ${name}!`);
 }
 "#,
     );
@@ -2511,7 +2511,7 @@ fn test() {
     let flag1 = true;
     let flag2 = true;
     if let Some(x) = opt && (flag1 && flag2) {
-        println(`{x}`);
+        println(`${x}`);
     }
 }
 ",
@@ -2525,7 +2525,7 @@ fn test() {
     let min = 0;
     let max = 10;
     while let Some(v) = iter.next() && (v > min && v < max) {
-        println(`{v}`);
+        println(`${v}`);
     }
 }
 ",
@@ -2537,7 +2537,7 @@ fn test() {
 fn test() {
     let opt = Option::<i32>::Some(5);
     if let Some(x) = opt && (x > 10 || x < 0) {
-        println(`{x}`);
+        println(`${x}`);
     }
 }
 ",
@@ -2646,10 +2646,10 @@ fn test_format_template_string_escape_sequences_preserved() {
 #[test]
 fn test_format_template_string_escape_sequences_all() {
     // All escape sequences: \n, \r, \t, \0, \\, \{, \}
-    let source = "fn foo() {\n    let s = `a\\nb\\rc\\td\\0e\\\\f\\{g\\}`;\n}\n";
+    let source = "fn foo() {\n    let s = `a\\nb\\rc\\td\\0e\\\\f\\${g\\}`;\n}\n";
     let formatted = wado_compiler::format(source).expect("format failed");
     assert!(
-        formatted.contains("`a\\nb\\rc\\td\\0e\\\\f\\{g\\}`"),
+        formatted.contains("`a\\nb\\rc\\td\\0e\\\\f\\${g\\}`"),
         "all escape sequences in template string must be preserved: {formatted}"
     );
 }
@@ -2697,7 +2697,7 @@ fn foo() -> i32 {
     let formatted = wado_compiler::format(source).expect("format failed");
     assert!(
         formatted.contains("{\n        1 => 1,"),
-        "expected exactly one newline between match `{{` and first arm:\n{formatted}",
+        "expected exactly one newline between match `${{` and first arm:\n{formatted}",
     );
 }
 

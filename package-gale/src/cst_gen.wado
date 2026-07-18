@@ -49,7 +49,7 @@ fn rule_const(name: &String) -> String {
 /// (e.g. an interpreter walking the tree).
 pub fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
     for let mut i = 0; i < rules.len(); i += 1 {
-        w.line(&`pub global RK_{rule_const(&rule_name(&rules[i]))}: NodeKind = {i};`);
+        w.line(&`pub global RK_${rule_const(&rule_name(&rules[i]))}: NodeKind = ${i};`);
     }
     w.blank();
     let mut names = String::with_capacity(rules.len() * 12);
@@ -63,7 +63,7 @@ pub fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
         names.push('"');
     }
     names.push(']');
-    w.line(&`global RULE_NAMES: List<String> = {names};`);
+    w.line(&`global RULE_NAMES: List<String> = ${names};`);
     w.blank();
     // `NodeKind` is a newtype over `i32` (in `tree.wado`); give it name-aware
     // `Display` / `Inspect` here, where the grammar's `RULE_NAMES` table is in
@@ -83,7 +83,7 @@ pub fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
     w.begin(&"fn inspect(&self, f: &mut Formatter)");
     // Reuse Display for the name, then append the numeric id.
     w.line(&"self.fmt(f);");
-    w.line(&"f.write_str(&`({*self as i32})`);");
+    w.line(&"f.write_str(&`(${*self as i32})`);");
     w.end();
     w.end();
     w.blank();
@@ -109,13 +109,13 @@ fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
     if !rule_alts_labeled(&rule.alternatives) {
         return;
     }
-    let enum_name = `{to_pascal_case(&rule.name)}Alt`;
+    let enum_name = `${to_pascal_case(&rule.name)}Alt`;
 
     // Several alternatives may share one `# Label` (valid in ANTLR4: they
     // denote the same alternative kind), so emit each distinct label once —
     // a repeated variant would not compile. A label may be a Wado reserved
     // word (e.g. `# else`), so escape it to a valid identifier.
-    w.begin(&`pub enum {enum_name}`);
+    w.begin(&`pub enum ${enum_name}`);
     let mut seen: List<String> = [];
     for let alt of &rule.alternatives {
         if let Some(label) = &alt.label {
@@ -128,7 +128,7 @@ fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
             }
             if !dup {
                 seen.push(case);
-                w.line(&`{case},`);
+                w.line(&`${case},`);
             }
         }
     }
@@ -136,12 +136,12 @@ fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
     w.blank();
 
     w.begin(&"impl CstStore");
-    w.begin(&`pub fn {rule.snake_name}_alt(&self, node: i32) -> Option<{enum_name}>`);
+    w.begin(&`pub fn ${rule.snake_name}_alt(&self, node: i32) -> Option<${enum_name}>`);
     w.line(&"return match self.alt(node) {");
     w.indent();
     for let mut i = 0; i < rule.alternatives.len(); i += 1 {
         if let Some(label) = &rule.alternatives[i].label {
-            w.line(&`{i} => Option::Some({enum_name}::{escape_ident(label)}),`);
+            w.line(&`${i} => Option::Some(${enum_name}::${escape_ident(label)}),`);
         }
     }
     w.line(&"_ => null,");
@@ -162,8 +162,8 @@ pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens:
     // rebuilding it on every call.
     if should_emit_actions(grammar) {
         w.begin(&"fn _ctx_token_names() -> List<String>");
-        w.line(&`let mut v: List<String> = List::with_capacity({n});`);
-        w.begin(&`for let mut k = 0; k < {n}; k += 1`);
+        w.line(&`let mut v: List<String> = List::with_capacity(${n});`);
+        w.begin(&`for let mut k = 0; k < ${n}; k += 1`);
         w.line(&"v.push(token_kind_name(k));");
         w.end();
         w.line(&"return v;");
@@ -173,8 +173,8 @@ pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens:
         w.blank();
     }
     w.begin(&"pub fn to_string_tree(result: &ParseResult) -> String");
-    w.line(&`let mut token_names: List<String> = List::with_capacity({n});`);
-    w.begin(&`for let mut k = 0; k < {n}; k += 1`);
+    w.line(&`let mut token_names: List<String> = List::with_capacity(${n});`);
+    w.begin(&`for let mut k = 0; k < ${n}; k += 1`);
     w.line(&"token_names.push(token_kind_name(k));");
     w.end();
     w.line(&"return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &token_names);");
@@ -185,8 +185,8 @@ pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens:
     // just that subtree. For ANTLR4 descriptors whose `[output]` is a labelled
     // child's tree, not the start rule's full tree. Returns "" when absent.
     w.begin(&"pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String");
-    w.line(&`let mut token_names: List<String> = List::with_capacity({n});`);
-    w.begin(&`for let mut k = 0; k < {n}; k += 1`);
+    w.line(&`let mut token_names: List<String> = List::with_capacity(${n});`);
+    w.begin(&`for let mut k = 0; k < ${n}; k += 1`);
     w.line(&"token_names.push(token_kind_name(k));");
     w.end();
     w.line(&"let mut _kind: i32 = -1;");

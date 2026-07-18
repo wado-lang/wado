@@ -10,13 +10,13 @@ use css3 from "./grammars/css3Lexer.g4"
 fn assert_parses(input: &String) {
     let result = css3::parse(input);
     if !result.ok() {
-        panic(`parse failed for [{*input}]: {result.diagnostics[0].message}`);
+        panic(`parse failed for [${*input}]: ${result.diagnostics[0].message}`);
     }
 }
 
 test "tokenize css" {
     let tokens = css3::tokenize(&"body { color: red; }");
-    assert tokens.len() >= 3, `expected at least 3 tokens, got {tokens.len()}`;
+    assert tokens.len() >= 3, `expected at least 3 tokens, got ${tokens.len()}`;
 }
 
 test "parse simple rule" {

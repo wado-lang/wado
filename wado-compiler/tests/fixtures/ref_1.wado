@@ -60,7 +60,7 @@ fn reset_point(p: &mut DerefPoint) {
 
 fn maybe_read(r: &Option<i32>) -> String {
     if let Some(v) = *r {
-        return `some({v})`;
+        return `some(${v})`;
     }
     return "none";
 }
@@ -93,7 +93,7 @@ fn add_four(r: &mut i32) {
 }
 
 fn read_and_format(r: &i32) -> String {
-    return `value={*r}`;
+    return `value=${*r}`;
 }
 
 fn print_via(r: &i32) with Stdout {
@@ -113,38 +113,38 @@ fn make_ref() -> &i32 {
 
 fn ref_primitive_basic() with Stdout {
     let mut a = 10;
-    println(`{read_i32(&a)}`);
+    println(`${read_i32(&a)}`);
     increment_i32(&mut a);
-    println(`{a}`);
+    println(`${a}`);
 }
 
 fn ref_primitive_read() with Stdout {
     let a = 42;
-    println(`{read_value(&a)}`);
+    println(`${read_value(&a)}`);
 }
 
 fn ref_primitive_semantic() with Stdout {
     let mut a = 42;
     let result = get_and_modify(&mut a);
-    println(`original={result}`);
-    println(`modified={a}`);
+    println(`original=${result}`);
+    println(`modified=${a}`);
 }
 
 fn ref_primitive_types() with Stdout {
     let mut a: i64 = 100 as i64;
-    println(`i64: {read_i64(&a)}`);
+    println(`i64: ${read_i64(&a)}`);
     set_i64(&mut a, 200 as i64);
-    println(`i64: {a}`);
+    println(`i64: ${a}`);
 
     let mut b: f64 = 3.14;
-    println(`f64: {read_f64(&b)}`);
+    println(`f64: ${read_f64(&b)}`);
     set_f64(&mut b, 2.718);
-    println(`f64: {b}`);
+    println(`f64: ${b}`);
 
     let mut c = true;
-    println(`bool: {read_bool(&c)}`);
+    println(`bool: ${read_bool(&c)}`);
     set_bool(&mut c, false);
-    println(`bool: {c}`);
+    println(`bool: ${c}`);
 }
 
 fn ref_deref_assign_string() with Stdout {
@@ -157,10 +157,10 @@ fn ref_deref_assign_string() with Stdout {
 
 fn ref_deref_assign_struct() with Stdout {
     let mut p = DerefPoint { x: 10, y: 20 };
-    println(`{p.x},{p.y}`);
+    println(`${p.x},${p.y}`);
 
     reset_point(&mut p);
-    println(`{p.x},{p.y}`);
+    println(`${p.x},${p.y}`);
 }
 
 fn ref_deref_assign_variant() with Stdout {
@@ -184,13 +184,13 @@ fn ref_deref_reassign() with Stdout {
 
     let val = *r;
     *r = val * 2 + 1;
-    println(`modified: {original}`);
+    println(`modified: ${original}`);
 
     let val2 = *r;
     let r2 = &val2;
     *r = 0;
-    println(`original: {original}`);
-    println(`copy: {*r2}`);
+    println(`original: ${original}`);
+    println(`copy: ${*r2}`);
 }
 
 fn ref_alias_mut() with Stdout {
@@ -199,22 +199,22 @@ fn ref_alias_mut() with Stdout {
     let r2 = &mut x;
 
     *r1 = 10;
-    println(`after r1: {x}`);
+    println(`after r1: ${x}`);
 
     *r2 = 20;
-    println(`after r2: {x}`);
+    println(`after r2: ${x}`);
 
     *r1 = *r1 + *r2 + 5;
-    println(`final: {x}`);
+    println(`final: ${x}`);
 }
 
 fn ref_swap_test() with Stdout {
     let mut x = 1;
     let mut y = 2;
-    println(`before: {x}, {y}`);
+    println(`before: ${x}, ${y}`);
 
     swap(&mut x, &mut y);
-    println(`after: {x}, {y}`);
+    println(`after: ${x}, ${y}`);
 }
 
 fn ref_reassign_test() with Stdout {
@@ -222,27 +222,27 @@ fn ref_reassign_test() with Stdout {
     let mut b = 20;
 
     let mut r = &a;
-    println(`{*r}`);
+    println(`${*r}`);
 
     r = &b;
-    println(`{*r}`);
+    println(`${*r}`);
 
     let mut mr = &mut a;
     *mr = 100;
     mr = &mut b;
     *mr = 200;
 
-    println(`{a}`);
-    println(`{b}`);
+    println(`${a}`);
+    println(`${b}`);
 }
 
 fn ref_tuple_basic_test() with Stdout {
     let mut pair: [i32, i32] = [1, 2];
     let before = pair.0;
-    println(`before: {before}`);
+    println(`before: ${before}`);
     modify_tuple(&mut pair);
     let after = pair.0;
-    println(`after: {after}`);
+    println(`after: ${after}`);
 }
 
 fn ref_pass_through_test() with Stdout {
@@ -254,12 +254,12 @@ fn ref_pass_through_test() with Stdout {
 fn ref_return_test() with Stdout {
     let nums: List<i32> = [42, 99, 7];
     let first = get_first(&nums);
-    println(`{*first}`);
+    println(`${*first}`);
 }
 
 fn ref_return_local() with Stdout {
     let r = make_ref();
-    println(`{*r}`);
+    println(`${*r}`);
 }
 
 export fn run() with Stdout {

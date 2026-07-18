@@ -13,8 +13,8 @@ test "diagnostic carries a 1-based line and 0-based column" {
     let r = json::parse(&"{\"a\": }");
     assert !r.ok(), "expected a diagnostic";
     let d = &r.diagnostics[0];
-    assert d.line == 1, `line {d.line}`;
-    assert d.col == 6, `col {d.col}`;
+    assert d.line == 1, `line ${d.line}`;
+    assert d.col == 6, `col ${d.col}`;
 }
 
 test "diagnostic reports the active rule chain" {
@@ -22,21 +22,21 @@ test "diagnostic reports the active rule chain" {
     let d = &r.diagnostics[0];
     assert !d.rule_stack.is_empty(), "rule_stack empty";
     // Innermost rule first, start rule last.
-    assert d.rule_stack[d.rule_stack.len() - 1] == "json", `outer {d.rule_stack[d.rule_stack.len() - 1]}`;
-    assert d.rule_stack[0] == "value", `inner {d.rule_stack[0]}`;
+    assert d.rule_stack[d.rule_stack.len() - 1] == "json", `outer ${d.rule_stack[d.rule_stack.len() - 1]}`;
+    assert d.rule_stack[0] == "value", `inner ${d.rule_stack[0]}`;
 }
 
 test "diagnostic Display includes position and message" {
     let r = json::parse(&"{\"a\": }");
-    let text = `{r.diagnostics[0]}`;
+    let text = `${r.diagnostics[0]}`;
     assert text.contains("at 1:6:"), text;
 }
 
 test "line and column advance across newlines" {
     let r = json::parse(&"{\n  \"a\":\n}");
     let d = &r.diagnostics[0];
-    assert d.line == 3, `line {d.line}`;
-    assert d.col == 0, `col {d.col}`;
+    assert d.line == 3, `line ${d.line}`;
+    assert d.col == 0, `col ${d.col}`;
 }
 
 test "a valid parse reports no diagnostics" {
@@ -48,5 +48,5 @@ test "no viable alternative carries the NoViableAlternative code" {
     // `}` starts no `value` alternative, so the dispatch falls through to the
     // no-viable fallback.
     let r = json::parse(&"{\"a\": }");
-    assert r.diagnostics[0].code matches { NoViableAlternative }, `code {r.diagnostics[0].code.name()}`;
+    assert r.diagnostics[0].code matches { NoViableAlternative }, `code ${r.diagnostics[0].code.name()}`;
 }

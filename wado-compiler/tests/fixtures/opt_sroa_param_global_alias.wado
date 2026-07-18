@@ -1,0 +1,77 @@
+// Soundness (P0): `sroa_param` must not snapshot a `&M` reference parameter when
+// the callee can mutate the aliased global of type `M` — including through a
+// *called helper*, not just a direct write in its own body, and including an
+// in-place field write (`G.value = ...`, an `Assign` rooted at the global) as
+// well as a whole-global `GlobalVarSet`.
+//
+// `f(&G)` reads `p.value` after `bump()` mutates `G.value` in place; a call-time
+// value snapshot would be stale (1 instead of 101). `h(&G)` writes the global
+// directly in its own body — the old `GlobalVarSet`-only scan missed both the
+// call-through and the in-place `Assign` shapes.
+//
+// Precision guard: `k(&W)` calls `tick()`, which writes only an unrelated `i32`
+// global (`COUNTER`) that cannot alias `W` — scalarization must still fire, so
+// the allocator's own `heap_offset` writes (reached transitively by every
+// allocation) must never block the serde-style `&T` unwrap.
+use { println, Stdout } from "core:cli";
+
+struct M { value: i32 }
+struct W { value: i32 }
+
+global mut G: M = M { value: 1 };
+global mut COUNTER: i32 = 0;
+
+#[inline("never")]
+fn bump() {
+    G.value = G.value + 100;
+}
+
+#[inline("never")]
+fn f(p: &M) -> i32 {
+    bump();
+    return p.value;
+}
+
+#[inline("never")]
+fn h(p: &M) -> i32 {
+    G.value = G.value + 1000;
+    return p.value;
+}
+
+#[inline("never")]
+fn tick() {
+    COUNTER = COUNTER + 1;
+}
+
+#[inline("never")]
+fn k(p: &W) -> i32 {
+    tick();
+    return p.value;
+}
+
+export fn run() with Stdout {
+    G.value = 1;
+    let a = f(&G);
+    if a != 101 {
+        panic(`transitive alias: expected 101, got ${a}`);
+    }
+
+    G.value = 1;
+    let b = h(&G);
+    if b != 1001 {
+        panic(`direct alias: expected 1001, got ${b}`);
+    }
+
+    let w = W { value: 42 };
+    let c = k(&w);
+    if c != 42 {
+        panic(`non-aliasing: expected 42, got ${c}`);
+    }
+
+    println(`ok ${COUNTER}`);
+}
+
+__DATA__
+{
+    "stdout": "ok 1\n"
+}

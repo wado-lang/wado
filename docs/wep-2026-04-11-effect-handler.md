@@ -661,7 +661,7 @@ test "http-get fetches and prints" {
     let mut stdout = MockStdout { streams: [] };
     let mut client = MockClient {
         requests: [],
-        response_body: `{"origin": "127.0.0.1"}`,
+        response_body: `${"origin": "127.0.0.1"}`,
         status: 200,
     };
     with &mut cm, Stdout => &mut stdout, Client => &mut client do {

@@ -1,0 +1,41 @@
+// HFS &&-RHS as a conditional arm: the inlined `bump` in the RHS writes the
+// scalar, but the short-circuit path never runs it. Walking the RHS as
+// unconditionally executed leaves the walker at ScalarOnly while the
+// short-circuit runtime path is FieldOnly — the body-end write-back would
+// then clobber the field with the stale scalar on odd iterations.
+
+struct Counter {
+    x: i32,
+    y: i32,
+}
+
+#[inline(never)]
+fn double_x(c: &mut Counter) {
+    c.x = c.x * 2;
+}
+
+fn bump(c: &mut Counter) -> bool {
+    c.x += 1;
+    return true;
+}
+
+export fn run() {
+    let mut c = Counter { x: 1, y: 0 };
+    let mut total = 0;
+    for let mut i = 0; i < 4; i += 1 {
+        c.x += 1;
+        double_x(&mut c);
+        if i % 2 == 0 && bump(&mut c) {
+            total += 1;
+        }
+        total += c.x;
+    }
+    assert total == 102, `expected 102, got {total}`;
+    assert c.x == 56, `expected 56, got {c.x}`;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["__hfs_x"]
+}

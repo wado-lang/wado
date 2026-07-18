@@ -124,7 +124,7 @@ fn parse_field(
     let ty = match map_java_type(ty_java) {
         Some(t) => t,
         None => {
-            return Result::Err(`java2wado: @members: unsupported field type '{*ty_java}'`);
+            return Result::Err(`java2wado: @members: unsupported field type '${*ty_java}'`);
         },
     };
     let init = if punct_is(tokens, *pos, &"=") {
@@ -133,10 +133,10 @@ fn parse_field(
         let e = parse_java_expr(&slice)?;
         emit_member_expr(&e, env)?;
     } else {
-        return Result::Err(`java2wado: @members: field '{*name}' needs an initializer`);
+        return Result::Err(`java2wado: @members: field '${*name}' needs an initializer`);
     };
     if !punct_is(tokens, *pos, &";") {
-        return Result::Err(`java2wado: @members: expected ';' after field '{*name}'`);
+        return Result::Err(`java2wado: @members: expected ';' after field '${*name}'`);
     }
     *pos += 1;
     return Result::Ok(MemberField { name: *name, ty, init });
@@ -151,7 +151,7 @@ fn parse_method(
 ) -> Result<String, String> {
     let params = parse_params(tokens, pos)?;
     if !punct_is(tokens, *pos, &"{") {
-        return Result::Err(`java2wado: @members: expected '\{' for method '{*name}'`);
+        return Result::Err(`java2wado: @members: expected '\{' for method '${*name}'`);
     }
     let close = find_braced_end(tokens, *pos)?;
     let body_tokens = slice_tokens(tokens, *pos + 1, close);
@@ -178,21 +178,21 @@ fn build_method(
     ret_java: &String,
     body_wado: &String,
 ) -> Result<String, String> {
-    let mut sig = `fn {to_snake_case(name)}(&mut self`;
+    let mut sig = `fn ${to_snake_case(name)}(&mut self`;
     for let p of params {
-        sig.push_str(&`, {p.0}: {p.1}`);
+        sig.push_str(&`, ${p.0}: ${p.1}`);
     }
     sig.push(')');
     if *ret_java != "void" {
         let rty = match map_java_type(ret_java) {
             Some(t) => t,
             None => {
-                return Result::Err(`java2wado: @members: unsupported return type '{*ret_java}'`);
+                return Result::Err(`java2wado: @members: unsupported return type '${*ret_java}'`);
             },
         };
-        sig.push_str(&` -> {rty}`);
+        sig.push_str(&` -> ${rty}`);
     }
-    return Result::Ok(`{sig} \{ {*body_wado} \}`);
+    return Result::Ok(`${sig} \{ ${*body_wado} \}`);
 }
 
 /// Parse a Java parameter list `( Type name (, Type name)* )`; `pos` at `(`,
@@ -212,7 +212,7 @@ fn parse_params(tokens: &List<JToken>, pos: &mut i32) -> Result<List<[String, St
         let wty = match map_java_type(&ty) {
             Some(t) => t,
             None => {
-                return Result::Err(`java2wado: @members: unsupported parameter type '{ty}'`);
+                return Result::Err(`java2wado: @members: unsupported parameter type '${ty}'`);
             },
         };
         ps.push([nm, wty]);
@@ -244,7 +244,7 @@ fn is_modifier(tokens: &List<JToken>, pos: i32) -> bool {
 fn member_ident(tokens: &List<JToken>, pos: i32, what: &String) -> Result<String, String> {
     return match ident_at(tokens, pos) {
         Some(n) => Result::Ok(n),
-        None => Result::Err(`java2wado: @members: expected {*what} identifier`),
+        None => Result::Err(`java2wado: @members: expected ${*what} identifier`),
     };
 }
 

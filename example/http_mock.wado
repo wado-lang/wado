@@ -37,7 +37,7 @@ fn gateway(req: Request) -> Response with Client {
         Ok(upstream) => {
             let status = upstream.get_status_code() as i32;
             respond(200, [
-                ["x-upstream-status", `{status}`],
+                ["x-upstream-status", `${status}`],
             ]);
         },
         Err(_) => respond(502, []),

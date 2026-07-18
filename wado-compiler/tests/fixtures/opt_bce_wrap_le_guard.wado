@@ -1,0 +1,29 @@
+// Wrapping-add soundness for the `<=` loop-guard BCE. A guard `i <= limit` with
+// a check bound `limit + c` (bare arithmetic, not a real list length) must NOT
+// let the check `i >= limit + c` be dropped: Wado add wraps, so at
+// `limit == i32::MAX` the bound `limit + 5` overflows to a negative value that
+// `i` exceeds, and the panic must fire. Only a struct-field length bound
+// (runtime-maintained in range) may be related through the `<=` guard.
+
+fn scan(limit: i32, start: i32) {
+    let mut i = start;
+    loop {
+        if !(i <= limit) {
+            break;
+        }
+        if i >= limit + 5 {
+            panic("boom: bound overflowed");
+        }
+        i += 1;
+    }
+}
+
+export fn run() {
+    scan(2147483647, 2147483645);
+}
+
+__DATA__
+{
+    "stderr_contains": ["boom: bound overflowed"],
+    "trapped": true
+}

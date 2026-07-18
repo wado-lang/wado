@@ -163,22 +163,22 @@ impl Log for CaptureSink {
     fn new_span(&mut self, name: String) -> u64 {
         self.next_id += 1;
         let id = self.next_id;
-        self.trace.push(`new:{name}#{id}`);
+        self.trace.push(`new:${name}#${id}`);
         resume id;
     }
 
     fn enter(&mut self, id: u64) {
         self.stack.push(id);
-        self.trace.push(`enter:{id}`);
+        self.trace.push(`enter:${id}`);
     }
 
     fn exit(&mut self, id: u64) {
         self.stack.pop();
-        self.trace.push(`exit:{id}`);
+        self.trace.push(`exit:${id}`);
     }
 
     fn close(&mut self, id: u64) {
-        self.trace.push(`close:{id}`);
+        self.trace.push(`close:${id}`);
     }
 
     fn current_span(&self) -> u64 {
@@ -192,13 +192,13 @@ impl Log for CaptureSink {
     fn record_fields(&mut self, id: u64, fields: Value) {
         if let Object(map) = fields {
             for let [key, _] of map.entries() {
-                self.recorded.push(`record:{id}:{key}`);
+                self.recorded.push(`record:${id}:${key}`);
             }
         }
     }
 
     fn follows_from(&mut self, id: u64, cause: u64) {
-        self.links.push(`{id}<-{cause}`);
+        self.links.push(`${id}<-${cause}`);
     }
 
     fn event(&mut self, event: Event) {

@@ -16,10 +16,11 @@
 
 use crate::lower::plan::value_copy::needs_value_copy;
 use crate::module_source::ModuleSource;
-use crate::nir::{FunctionRef, NirBinaryOp, NirFunction, NirUnaryOp};
+use crate::nir::{FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
+use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 /// Run select lowering on all functions, driven by the rewrite engine.
@@ -99,11 +100,11 @@ impl Rule for SelectLoweringRule<'_> {
                         is_mut: false,
                     },
                     ArenaCallArg {
-                        expr: true_val.into(),
+                        expr: true_val,
                         is_mut: false,
                     },
                     ArenaCallArg {
-                        expr: false_val.into(),
+                        expr: false_val,
                         is_mut: false,
                     },
                 ],
@@ -114,19 +115,53 @@ impl Rule for SelectLoweringRule<'_> {
 }
 
 /// A branch is select-able when it is a single `Expr` statement whose value is
-/// select-eligible; returns that value's id.
-fn arm_select_value(body: &Body, block: BlockId, type_table: &TypeTable) -> Option<ExprId> {
+/// select-eligible; returns that value as an operand. A skeleton tail
+/// (`Operand::Expr`) is checked structurally; a born-as-operand scalar leaf
+/// (`Operand::Value`, e.g. the `1` / `2` of `if c { 1 } else { 2 }`, or a bare
+/// local read) is accepted directly — it is a pure, non-trapping, duplicable
+/// leaf that the value pool already holds.
+fn arm_select_value(body: &Body, block: BlockId, type_table: &TypeTable) -> Option<Operand> {
     let stmts = &body.blocks[block].stmts;
     if stmts.len() != 1 {
         return None;
     }
-    if let StmtKind::Expr(Operand::Expr(e)) = &body.stmts[stmts[0]].kind {
-        let e = *e;
-        if is_select_eligible(body, e, type_table) {
-            return Some(e);
+    match &body.stmts[stmts[0]].kind {
+        StmtKind::Expr(Operand::Expr(e)) => {
+            let e = *e;
+            is_select_eligible(body, e, type_table).then_some(Operand::Expr(e))
         }
+        StmtKind::Expr(Operand::Value(v)) => {
+            let v = *v;
+            is_select_eligible_value(body, v).then_some(Operand::Value(v))
+        }
+        _ => None,
     }
-    None
+}
+
+/// A promoted pure value is select-eligible when it is a scalar constant leaf or
+/// a local read: both are duplicable and cannot trap, so evaluating it in both
+/// `select` operand positions is observation-free.
+fn is_select_eligible_value(body: &Body, v: ValueId) -> bool {
+    match body.values.kind(v) {
+        ValueKind::Int(..)
+        | ValueKind::Float(..)
+        | ValueKind::Bool(_)
+        | ValueKind::Char(_)
+        | ValueKind::Null
+        | ValueKind::Unit => true,
+        ValueKind::Opaque(oid) => {
+            matches!(
+                body.values.opaque_source(*oid),
+                Some(OpaqueSource::Local(_))
+            )
+        }
+        ValueKind::Binary { .. }
+        | ValueKind::Unary { .. }
+        | ValueKind::Cast { .. }
+        | ValueKind::Select { .. }
+        | ValueKind::LoopPhi { .. }
+        | ValueKind::FieldAccess { .. } => false,
+    }
 }
 
 /// True when `id` is eligible to appear as a `builtin::select` arm: a
@@ -146,7 +181,11 @@ fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {
                 && is_select_eligible_operand(body, *inner, type_table)
         }
         ExprKind::Binary { op, left, right } => {
-            !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
+            // Both operands are duplicated into the `select`; a trapping op
+            // (`Div` / `Mod`) must not be lowered, since a `select` evaluates
+            // both arms unconditionally. The trap taxonomy is shared with
+            // `arena_query` so it cannot drift from the other trap consumers.
+            !super::arena_query::binary_op_may_trap(*op)
                 && left
                     .as_expr()
                     .is_none_or(|e| is_select_eligible(body, e, type_table))
@@ -168,6 +207,14 @@ fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {
 /// True when an `as` cast from `src` to `dst` lowers to a trapping Wasm
 /// instruction (only `f32`/`f64` → integer traps; everything else is a
 /// wrap / extend / convert / identity).
+///
+/// Intentionally finer than the shared `arena_query::expr_node_may_trap`
+/// taxonomy (which, like `mod_ref`, marks every `Cast` conservatively
+/// trap-capable): a `select` arm is a single duplicable leaf, so refining the
+/// cast test here recovers non-trapping widening / reinterpret casts that the
+/// conservative predicate would reject. Kept local because widening this
+/// refinement into the shared taxonomy would change the other consumers'
+/// classification.
 fn is_trapping_cast(src: TypeId, dst: TypeId, type_table: &TypeTable) -> bool {
     matches!(
         (type_table.get(src), type_table.get(dst)),

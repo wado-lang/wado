@@ -67,7 +67,7 @@ type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelud
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(27)
 
-type "functype//serde_serialize_enum.wado/JsonSerializer^Serializer::serialize_unit_variant" = fn(ref "serde_serialize_enum.wado//JsonSerializer", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref null "serde_serialize_enum.wado//SerializeError";  // TypeId(28)
+type "functype//serde_serialize_enum.wado/JsonSerializer^Serializer::serialize_unit_variant" = fn(ref "serde_serialize_enum.wado//JsonSerializer", ref "core:prelude/string.wado//String") -> ref null "serde_serialize_enum.wado//SerializeError";  // TypeId(28)
 
 type "functype//serde_serialize_enum.wado/Color^Serialize::serialize<serde_serialize_enum.wado/JsonSerializer>" = fn(ref "core:prelude/types.wado//Box<serde_serialize_enum.wado/Color>", ref "serde_serialize_enum.wado//JsonSerializer") -> ref null "serde_serialize_enum.wado//SerializeError";  // TypeId(29)
 
@@ -92,14 +92,11 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 global mut global:serde_serialize_enum.wado::__modules_initialized: bool = 0;
 global global:serde_serialize_enum.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(66, 108, 117, 101)), used: 4 };
-global global:serde_serialize_enum.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(67, 111, 108, 111, 114)), used: 5 };
-global global:serde_serialize_enum.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(71, 114, 101, 101, 110)), used: 5 };
-global global:serde_serialize_enum.wado::__const_obj_4: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(82, 101, 100)), used: 3 };
+global global:serde_serialize_enum.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(71, 114, 101, 101, 110)), used: 5 };
+global global:serde_serialize_enum.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(82, 101, 100)), used: 3 };
 
 fn "serde_serialize_enum.wado/run"() with Stdout {
     let ser: ref "serde_serialize_enum.wado//JsonSerializer";
-    let c: "serde_serialize_enum.wado//enum:Color";
-    let c2: "serde_serialize_enum.wado//enum:Color";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:serde_serialize_enum.wado::__modules_initialized);
         cold_path;
@@ -107,10 +104,10 @@ fn "serde_serialize_enum.wado/run"() with Stdout {
         global:serde_serialize_enum.wado::__modules_initialized = 1;
     };
     ser = struct.new "serde_serialize_enum.wado//JsonSerializer" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
-    drop("serde_serialize_enum.wado/Color^Serialize::serialize<serde_serialize_enum.wado/JsonSerializer>"(struct.new "core:prelude/types.wado//Box<serde_serialize_enum.wado/Color>" { value: local.tee c(0) }, ser));
+    drop("serde_serialize_enum.wado/Color^Serialize::serialize<serde_serialize_enum.wado/JsonSerializer>"(struct.new "core:prelude/types.wado//Box<serde_serialize_enum.wado/Color>" { value: 0 }, ser));
     "core:cli/println"(ser.buf);
     ser.buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    drop("serde_serialize_enum.wado/Color^Serialize::serialize<serde_serialize_enum.wado/JsonSerializer>"(struct.new "core:prelude/types.wado//Box<serde_serialize_enum.wado/Color>" { value: local.tee c2(2) }, ser));
+    drop("serde_serialize_enum.wado/Color^Serialize::serialize<serde_serialize_enum.wado/JsonSerializer>"(struct.new "core:prelude/types.wado//Box<serde_serialize_enum.wado/Color>" { value: 2 }, ser));
     "core:cli/println"(ser.buf);
 }
 
@@ -282,7 +279,7 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-fn "serde_serialize_enum.wado/JsonSerializer^Serializer::serialize_unit_variant"(self, type_name, variant_name, disc) {
+fn "serde_serialize_enum.wado/JsonSerializer^Serializer::serialize_unit_variant"(self, variant_name) {
     let __local_4: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/String::push_str"(self.buf, __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }; "core:prelude/string.wado/String::push"(__local_4, 34); "core:prelude/string.wado/String::push_str"(__local_4, variant_name); "core:prelude/string.wado/String::push"(__local_4, 34); __local_4);
     return ref.null none;
@@ -290,11 +287,11 @@ fn "serde_serialize_enum.wado/JsonSerializer^Serializer::serialize_unit_variant"
 
 fn "serde_serialize_enum.wado/Color^Serialize::serialize<serde_serialize_enum.wado/JsonSerializer>"(self, s) {
     return let __match_scrut_0: "serde_serialize_enum.wado//enum:Color", __match_scrut_0 = self.value, (if __match_scrut_0 == 0 -> ref null "serde_serialize_enum.wado//SerializeError" {
-        "serde_serialize_enum.wado/JsonSerializer^Serializer::serialize_unit_variant"(s, global:serde_serialize_enum.wado::__const_obj_1, global:serde_serialize_enum.wado::__const_obj_4, 0);
+        "serde_serialize_enum.wado/JsonSerializer^Serializer::serialize_unit_variant"(s, global:serde_serialize_enum.wado::__const_obj_2);
     } else if __match_scrut_0 == 1 -> ref null "serde_serialize_enum.wado//SerializeError" {
-        "serde_serialize_enum.wado/JsonSerializer^Serializer::serialize_unit_variant"(s, global:serde_serialize_enum.wado::__const_obj_1, global:serde_serialize_enum.wado::__const_obj_2, 1);
+        "serde_serialize_enum.wado/JsonSerializer^Serializer::serialize_unit_variant"(s, global:serde_serialize_enum.wado::__const_obj_1);
     } else {
-        "serde_serialize_enum.wado/JsonSerializer^Serializer::serialize_unit_variant"(s, global:serde_serialize_enum.wado::__const_obj_1, global:serde_serialize_enum.wado::__const_obj_0, 2);
+        "serde_serialize_enum.wado/JsonSerializer^Serializer::serialize_unit_variant"(s, global:serde_serialize_enum.wado::__const_obj_0);
     });
 }
 

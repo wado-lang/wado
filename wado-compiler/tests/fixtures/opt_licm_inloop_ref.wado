@@ -1,0 +1,63 @@
+// Precision: LICM looks through an in-loop immutable reference binding
+// (`let r = &config`) and hoists the source's field load — the binding
+// rewrites only the alias slot each iteration, never the pointee, so
+// `config.threshold` is loop-invariant. `probe(r)` keeps `r` alive past
+// `ref_elim`, so the look-through (licm's Case 2) does the work. After the
+// hoist, store-load forwarding folds the pre-header load to `t`, leaving
+// `t * i` in the loop with no `config.threshold` read anywhere.
+//
+// `pick` is the mutating counterexample: `r` is reassigned mid-loop, so its
+// field reads must NOT be redirected to one fixed source (0-based even
+// iterations read `one`: 3 * 100 + 2 * 1 = 302).
+
+use { println, Stdout } from "core:cli";
+
+struct Config {
+    threshold: i32,
+    scale: i32,
+}
+
+#[inline(never)]
+fn probe(c: &Config) -> i32 {
+    return c.scale;
+}
+
+#[inline(never)]
+fn accumulate(n: i32, t: i32) -> i32 {
+    let config = Config { threshold: t, scale: 2 };
+    let mut sum = 0;
+    for let mut i = 0; i < n; i += 1 {
+        let r = &config;
+        let _ = probe(r);
+        sum += r.threshold * i;
+    }
+    return sum;
+}
+
+#[inline(never)]
+fn pick(n: i32, t: i32, u: i32) -> i32 {
+    let one = Config { threshold: t, scale: 2 };
+    let two = Config { threshold: u, scale: 3 };
+    let mut sum = 0;
+    for let mut i = 0; i < n; i += 1 {
+        let mut r = &one;
+        if i % 2 == 1 {
+            r = &two;
+        }
+        let _ = probe(r);
+        sum += r.threshold;
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    println(`${accumulate(5, 100)}`);
+    println(`${pick(5, 100, 1)}`);
+}
+
+__DATA__
+{
+    "stdout": "1000\n302\n",
+    "wir_expect:O2": ["t * i"],
+    "wir_not_expect:O2": ["config.threshold"]
+}

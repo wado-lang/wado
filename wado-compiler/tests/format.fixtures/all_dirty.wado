@@ -202,20 +202,20 @@ literal";
 
 /// Template strings with format specifiers
 fn template_strings(name: String, pi: f64, n: i32) {
-    let a = `Hello, {name}!`;
-    let b = `Pi is approximately {pi:0.2f}`;
-    let c = `Hex value: {n:x}`;
-    let d = `Right-aligned: {n:>10}`;
-    let e = `Zero-padded: {n:08d}`;
-    let f = `Signed: {n:+}`;
-    let g = `Alt hex: {n:#x}`;
-    let h = `{name}: {n} items`;
+    let a = `Hello, ${name}!`;
+    let b = `Pi is approximately ${pi:0.2f}`;
+    let c = `Hex value: ${n:x}`;
+    let d = `Right-aligned: ${n:>10}`;
+    let e = `Zero-padded: ${n:08d}`;
+    let f = `Signed: ${n:+}`;
+    let g = `Alt hex: ${n:#x}`;
+    let h = `${name}: ${n} items`;
     let i = `no interpolation here`;
-    let j = `debug: {n:?}`;
+    let j = `debug: ${n:?}`;
     let k = `multiline
-template {name}`;
+template ${name}`;
     let l = `\{"key": "value"\}`;
-    let m = `prefix \{literal\} and {name} mixed`;
+    let m = `prefix \{literal\} and ${name} mixed`;
     let n2 = `\{"name":"Alice","age":30\}`;
 }
 
@@ -223,7 +223,7 @@ template {name}`;
 fn asserts(x: i32, s: String) {
     assert x > 0;
     assert x < 100, "x must be less than 100";
-    assert x != 0, `x is {x} but should not be zero`;
+    assert x != 0, `x is ${x} but should not be zero`;
     assert s.len() > 0;
 }
 
@@ -315,7 +315,7 @@ fn closure_block_body() {
         return doubled + x;
     };
     let greet = |name: String| {
-        return `Hello, {name}!`;
+        return `Hello, ${name}!`;
     };
 }
 

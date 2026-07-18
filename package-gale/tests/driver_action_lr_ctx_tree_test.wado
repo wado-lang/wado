@@ -12,8 +12,8 @@ test "$ctx.toStringTree renders the LR node at a single (atom-only) level" {
     assert result.ok(), "clean parse of 1";
     // `e` is the start rule, so at `@after` the open stack is empty; the render
     // must still produce the just-closed `e` node, not "".
-    assert result.output == "[(e 1)]", `output: '{result.output}'`;
-    assert result.output == `[{lct::to_string_tree(&result)}]`, `render mismatch: '{result.output}'`;
+    assert result.output == "[(e 1)]", `output: '${result.output}'`;
+    assert result.output == `[${lct::to_string_tree(&result)}]`, `render mismatch: '${result.output}'`;
 }
 
 test "$ctx.toStringTree renders each LR level's own node" {
@@ -21,5 +21,5 @@ test "$ctx.toStringTree renders each LR level's own node" {
     assert result.ok(), "clean parse of 1 + 2";
     // One `@after` per precedence level: the two atoms, then the wrapping node.
     // The outermost render is the whole expression.
-    assert result.output.contains("[(e (e 1) + (e 2))]"), `output: '{result.output}'`;
+    assert result.output.contains("[(e (e 1) + (e 2))]"), `output: '${result.output}'`;
 }

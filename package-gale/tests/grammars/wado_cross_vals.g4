@@ -8,7 +8,7 @@ grammar WadoCrossVals;
 
 options { language = Wado; }
 
-r : a=e '+' b=e { p.emit(`{$a.v + $b.v}`); } ;
+r : a=e '+' b=e { p.emit(`${$a.v + $b.v}`); } ;
 
 e returns [i32 v] : n=INT { $v = 1; } ;
 

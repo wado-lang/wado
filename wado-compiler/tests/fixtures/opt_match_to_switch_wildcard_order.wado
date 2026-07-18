@@ -1,0 +1,36 @@
+// `match` is first-match-wins, so a wildcard arm matches everything from its
+// position on and every later arm is dead. `match_to_switch` must not route a
+// dead literal arm's value to its own arm: `classify(8)` and `classify(9)` must
+// hit the wildcard (100), not the unreachable `8 => 999` / `9 => 999` arms.
+// The eight live arms above the wildcard keep the match dense enough to lower
+// to a `Switch`, so this exercises the switch path, not the generic fallback.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn classify(x: i32) -> i32 {
+    return match x {
+        0 => 0,
+        1 => 10,
+        2 => 20,
+        3 => 30,
+        4 => 40,
+        5 => 50,
+        6 => 60,
+        7 => 70,
+        _ => 100,
+        8 => 999,
+        9 => 999,
+    };
+}
+
+export fn run() with Stdout {
+    assert classify(3) == 30;
+    assert classify(7) == 70;
+    assert classify(8) == 100;
+    assert classify(9) == 100;
+    assert classify(42) == 100;
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

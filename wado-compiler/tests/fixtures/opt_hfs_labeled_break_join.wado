@@ -1,0 +1,38 @@
+// HFS labeled-break join: one path leaves the block ScalarOnly (via
+// `break scope`), the fall-through leaves it FieldOnly (after a &mut call).
+// The join must insert per-path convergence sync — resolving to ScalarOnly
+// without sync leaves the post-block scalar read stale on the call path.
+
+struct Counter {
+    x: i32,
+    y: i32,
+}
+
+#[inline(never)]
+fn double_x(c: &mut Counter) {
+    c.x = c.x * 2;
+}
+
+export fn run() {
+    let mut c = Counter { x: 1, y: 0 };
+    let mut total = 0;
+    for let mut i = 0; i < 4; i += 1 {
+        c.x += 1;
+        scope: {
+            if i % 2 == 0 {
+                c.x += 1;
+                break scope;
+            }
+            double_x(&mut c);
+        }
+        total += c.x;
+    }
+    assert total == 43, `expected 43, got {total}`;
+    assert c.x == 22, `expected 22, got {c.x}`;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["__hfs_x"]
+}

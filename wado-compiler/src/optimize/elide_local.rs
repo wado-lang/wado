@@ -91,10 +91,16 @@ fn classify(
             let (idx, value) = (*local_index, *value);
             if is_kept(engine, idx, stores_aliased, promoted_reads) {
                 Action::Keep
-            } else if arena_query::is_pure_operand(engine.body, value) {
+            } else if arena_query::is_pure_nontrapping_operand_typed(
+                engine.body,
+                value,
+                engine.value_graph_type_table(),
+            ) {
                 Action::Drop
             } else {
-                // Not pure ⟹ a skeleton expr (a promoted value is pure → Drop above).
+                // Effectful or trap-capable ⟹ a skeleton expr (a promoted value
+                // is pure and non-trapping → Drop above). Demote keeps it as a
+                // bare `Expr(value)` so any trap it carries still fires.
                 value.as_expr().map_or(Action::Drop, Action::Demote)
             }
         }
@@ -113,10 +119,15 @@ fn classify(
             {
                 let index = *index;
                 if !is_kept(engine, index, stores_aliased, promoted_reads) {
-                    return if arena_query::is_pure_operand(engine.body, value) {
+                    return if arena_query::is_pure_nontrapping_operand_typed(
+                        engine.body,
+                        value,
+                        engine.value_graph_type_table(),
+                    ) {
                         Action::Drop
                     } else {
-                        // Not pure ⟹ a skeleton expr (a promoted value is pure).
+                        // Effectful or trap-capable ⟹ a skeleton expr (a promoted
+                        // value is pure and non-trapping → Drop above).
                         value.as_expr().map_or(Action::Drop, Action::Demote)
                     };
                 }

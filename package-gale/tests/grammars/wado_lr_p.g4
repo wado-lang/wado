@@ -10,11 +10,11 @@ grammar WadoLrP;
 
 options { language = Wado; }
 
-s : x=e { p.emit(`v={$x.v} `); } ;
+s : x=e { p.emit(`v=${$x.v} `); } ;
 
 e returns [i32 v]
     : l=e '+' r=e { $v = $l.v + $r.v; }
-    | n=INT { $v = $n.int; p.emit(`_p={$_p} `); }
+    | n=INT { $v = $n.int; p.emit(`_p=${$_p} `); }
     ;
 
 INT : [0-9]+ ;

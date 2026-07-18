@@ -1,65 +1,65 @@
 test "primitives" {
-    assert `{42:?}` == "42";
-    assert `{-7:?}` == "-7";
-    assert `{3.14:?}` == "3.14";
-    assert `{true:?}` == "true";
-    assert `{false:?}` == "false";
-    assert `{'A':?}` == "'A'";
+    assert `${42:?}` == "42";
+    assert `${-7:?}` == "-7";
+    assert `${3.14:?}` == "3.14";
+    assert `${true:?}` == "true";
+    assert `${false:?}` == "false";
+    assert `${'A':?}` == "'A'";
 }
 
 test "float special" {
     let inf = f64::INFINITY;
-    assert `{inf:?}` == "inf";
+    assert `${inf:?}` == "inf";
     let neg_inf = f64::NEG_INFINITY;
-    assert `{neg_inf:?}` == "-inf";
+    assert `${neg_inf:?}` == "-inf";
     let zero = 0.0;
-    assert `{zero:?}` == "0.0";
+    assert `${zero:?}` == "0.0";
     let neg_zero = -0.0;
-    assert `{neg_zero:?}` == "-0.0";
+    assert `${neg_zero:?}` == "-0.0";
     let f32_inf = f32::INFINITY;
-    assert `{f32_inf:?}` == "inf";
+    assert `${f32_inf:?}` == "inf";
 }
 
 test "string" {
     let s = "hello";
-    assert `{s:?}` == "\"hello\"";
+    assert `${s:?}` == "\"hello\"";
     let with_quote = "say \"hi\"";
-    assert `{with_quote:?}` == "\"say \\\"hi\\\"\"";
+    assert `${with_quote:?}` == "\"say \\\"hi\\\"\"";
     let with_newline = "line1\nline2";
-    assert `{with_newline:?}` == "\"line1\\nline2\"";
+    assert `${with_newline:?}` == "\"line1\\nline2\"";
     let empty = "";
-    assert `{empty:?}` == "\"\"";
+    assert `${empty:?}` == "\"\"";
     // Control chars without a named escape render as `\u{HEX}` (not raw).
-    let with_control = `a{char::from_u32_unchecked(1)}b`;
-    assert `{with_control:?}` == "\"a\\u{1}b\"";
+    let with_control = `a${char::from_u32_unchecked(1)}b`;
+    assert `${with_control:?}` == "\"a\\u{1}b\"";
     // Printable non-ASCII stays verbatim.
     let unicode = "あ";
-    assert `{unicode:?}` == "\"あ\"";
+    assert `${unicode:?}` == "\"あ\"";
 }
 
 test "tuple" {
     let t = [1, "hello", true];
-    assert `{t:?}` == "[1, \"hello\", true]";
+    assert `${t:?}` == "[1, \"hello\", true]";
 }
 
 test "unit" {
     let u = ();
-    assert `{u:?}` == "()";
+    assert `${u:?}` == "()";
 }
 
 test "ref" {
     let x = 42;
     let r = &x;
-    assert `{r:?}` == "&42";
+    assert `${r:?}` == "&42";
     let mut y = 100;
     let mr = &mut y;
-    assert `{mr:?}` == "&mut 100";
+    assert `${mr:?}` == "&mut 100";
     let s = "hello";
     let rs = &s;
-    assert `{rs:?}` == "&\"hello\"";
+    assert `${rs:?}` == "&\"hello\"";
     let b = true;
     let rb = &b;
-    assert `{rb:?}` == "&true";
+    assert `${rb:?}` == "&true";
 }
 
 type Meters = f64;
@@ -67,9 +67,9 @@ type Seconds = i32;
 
 test "newtype" {
     let m: Meters = 100.5;
-    assert `{m:?}` == "100.5 as Meters";
+    assert `${m:?}` == "100.5 as Meters";
     let s: Seconds = 42;
-    assert `{s:?}` == "42 as Seconds";
+    assert `${s:?}` == "42 as Seconds";
 }
 
 enum InspColor {
@@ -80,11 +80,11 @@ enum InspColor {
 
 test "enum" {
     let r = InspColor::Red;
-    assert `{r:?}` == "InspColor::Red";
+    assert `${r:?}` == "InspColor::Red";
     let g = InspColor::Green;
-    assert `{g:?}` == "InspColor::Green";
+    assert `${g:?}` == "InspColor::Green";
     let b = InspColor::Blue;
-    assert `{b:?}` == "InspColor::Blue";
+    assert `${b:?}` == "InspColor::Blue";
 }
 
 variant InspShape {
@@ -95,11 +95,11 @@ variant InspShape {
 
 test "variant" {
     let c = InspShape::Circle(5.0);
-    assert `{c:?}` == "InspShape::Circle(5.0)";
+    assert `${c:?}` == "InspShape::Circle(5.0)";
     let r = InspShape::Rectangle([3.0, 4.0]);
-    assert `{r:?}` == "InspShape::Rectangle([3.0, 4.0])";
+    assert `${r:?}` == "InspShape::Rectangle([3.0, 4.0])";
     let p = InspShape::InspPoint;
-    assert `{p:?}` == "InspShape::InspPoint";
+    assert `${p:?}` == "InspShape::InspPoint";
 }
 
 pub flags InspPerms {
@@ -110,26 +110,26 @@ pub flags InspPerms {
 
 test "flags" {
     let r = InspPerms::Read;
-    assert `{r:?}` == "InspPerms::Read";
+    assert `${r:?}` == "InspPerms::Read";
     let rw = InspPerms::Read | InspPerms::Write;
-    assert `{rw:?}` == "InspPerms::Read | InspPerms::Write";
+    assert `${rw:?}` == "InspPerms::Read | InspPerms::Write";
     let all = InspPerms::all();
-    assert `{all:?}` == "InspPerms::Read | InspPerms::Write | InspPerms::Execute";
+    assert `${all:?}` == "InspPerms::Read | InspPerms::Write | InspPerms::Execute";
     let none = InspPerms::none();
-    assert `{none:?}` == "InspPerms::none()";
+    assert `${none:?}` == "InspPerms::none()";
 }
 
 test "closure" {
     let add_one = |x: i32| x + 1;
-    assert `{add_one:?}` == "|i32| -> i32";
+    assert `${add_one:?}` == "|i32| -> i32";
     let add = |a: i32, b: i32| a + b;
-    assert `{add:?}` == "|i32, i32| -> i32";
+    assert `${add:?}` == "|i32, i32| -> i32";
     let always42 = || 42;
-    assert `{always42:?}` == "|| -> i32";
+    assert `${always42:?}` == "|| -> i32";
 
     // alternate mode shows source (TIR-unparsed: binary ops get
     // parenthesised for unambiguous round-tripping).
-    assert `{add_one:#?}` == "|x: i32| (x + 1)";
-    assert `{add:#?}` == "|a: i32, b: i32| (a + b)";
-    assert `{always42:#?}` == "|| 42";
+    assert `${add_one:#?}` == "|x: i32| (x + 1)";
+    assert `${add:#?}` == "|a: i32, b: i32| (a + b)";
+    assert `${always42:#?}` == "|| 42";
 }

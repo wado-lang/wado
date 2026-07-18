@@ -167,7 +167,7 @@ impl ArgvDeserializer {
         if self.pos >= self.tokens.len() || self.tokens[self.pos].starts_with("--") {
             self.err = Option::Some(ArgsError {
                 kind: ArgsErrorKind::MissingValue,
-                message: `missing value for option --{self.cur_name}`,
+                message: `missing value for option --${self.cur_name}`,
             });
             return Result::Err(DeserializeError::eof(-1));
         }
@@ -244,7 +244,7 @@ impl ArgvDeserializer {
                 if k >= n || self.tokens[k].starts_with("--") {
                     self.err = Option::Some(ArgsError {
                         kind: ArgsErrorKind::MissingValue,
-                        message: `missing value for option --{self.cur_name}`,
+                        message: `missing value for option --${self.cur_name}`,
                     });
                     return Result::Err(DeserializeError::eof(-1));
                 }
@@ -258,7 +258,7 @@ impl ArgvDeserializer {
 
     /// Record an `InvalidValue` and return the matching `DeserializeError`.
     fn invalid_value(&mut self, token: &String) -> DeserializeError {
-        let msg = `invalid value: '{token}'`;
+        let msg = `invalid value: '${token}'`;
         self.err = Option::Some(ArgsError {
             kind: ArgsErrorKind::InvalidValue,
             message: msg,
@@ -314,11 +314,11 @@ impl DeserializeStruct for ArgvStructAccess {
                 if lo.raw == "" {
                     self.de.err = Option::Some(ArgsError {
                         kind: ArgsErrorKind::UnknownOption,
-                        message: `malformed option: {tok}`,
+                        message: `malformed option: ${tok}`,
                     });
                     return Result::Err(DeserializeError {
                         kind: DeserializeErrorKind::Custom,
-                        message: `malformed option: {tok}`,
+                        message: `malformed option: ${tok}`,
                         offset: -1,
                     });
                 }
@@ -330,11 +330,11 @@ impl DeserializeStruct for ArgvStructAccess {
                 }
                 self.de.err = Option::Some(ArgsError {
                     kind: ArgsErrorKind::UnknownOption,
-                    message: `unknown option --{lo.raw}`,
+                    message: `unknown option --${lo.raw}`,
                 });
                 return Result::Err(DeserializeError {
                     kind: DeserializeErrorKind::Custom,
-                    message: `unknown option --{lo.raw}`,
+                    message: `unknown option --${lo.raw}`,
                     offset: -1,
                 });
             }
@@ -346,11 +346,11 @@ impl DeserializeStruct for ArgvStructAccess {
             }
             self.de.err = Option::Some(ArgsError {
                 kind: ArgsErrorKind::TooManyPositionals,
-                message: `unexpected argument: {tok}`,
+                message: `unexpected argument: ${tok}`,
             });
             return Result::Err(DeserializeError {
                 kind: DeserializeErrorKind::Custom,
-                message: `unexpected positional argument: {tok}`,
+                message: `unexpected positional argument: ${tok}`,
                 offset: -1,
             });
         }
@@ -453,7 +453,7 @@ impl DeserializeVariant for ArgvVariantAccess {
 fn unsupported(what: String) -> DeserializeError {
     return DeserializeError {
         kind: DeserializeErrorKind::Custom,
-        message: `core:args does not support {what} yet`,
+        message: `core:args does not support ${what} yet`,
         offset: -1,
     };
 }
@@ -605,7 +605,7 @@ impl Deserializer for ArgvDeserializer {
         if self.pos >= self.tokens.len() {
             self.err = Option::Some(ArgsError {
                 kind: ArgsErrorKind::MissingArgument,
-                message: `missing subcommand for {type_name}`,
+                message: `missing subcommand for ${type_name}`,
             });
             return Result::Err(DeserializeError::eof(-1));
         }

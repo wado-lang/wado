@@ -23,7 +23,9 @@
 
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirFunction, NirLiteralPattern};
-use crate::nir_arena::{ArmData, BlockId, Body, ExprId, ExprKind, Operand, PatKind, StmtKind};
+use crate::nir_arena::{
+    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtKind,
+};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{PrimitiveType, ResolvedType, TypeTable};
@@ -38,6 +40,13 @@ const SWITCH_DENSITY_THRESHOLD: f64 = 0.75;
 
 /// Maximum range size for `br_table` (to avoid huge jump tables).
 const SWITCH_MAX_RANGE: i64 = 1024;
+
+/// Maximum total cloned expression count the rewrite may materialise. Each of
+/// the `range` `br_table` offsets clones the arm body mapped to it (a range
+/// spec repeats its arm across every value, a hole repeats the default), so a
+/// wide range over a large arm body would blow up the IR. Past this budget the
+/// generic match if-chain — which evaluates each arm body once — is cheaper.
+const SWITCH_MAX_CLONE_COST: usize = 8192;
 
 /// Ungated: lower every function (and global). Used at `-O0`, where the loop
 /// (and thus the gate) is skipped — avoids building a throwaway `FunctionGate`
@@ -284,6 +293,11 @@ fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Opti
                     return None;
                 }
                 default_arm = Some(arm_idx);
+                // `match` is first-match-wins, so a wildcard matches everything
+                // from this position on: every later arm is dead. Stop here —
+                // collecting their specs would route their values to their own
+                // arms instead of the wildcard default.
+                break;
             }
             // A `Binding` default arm (`n => use(n)`) would need an
             // arm-local `Let n = scrutinee` that `build_switch` doesn't
@@ -306,29 +320,49 @@ fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Opti
         return None;
     }
 
-    let covered: i128 = specs
-        .iter()
-        .map(|(spec, _)| match spec {
-            CaseSpec::Value(_) => 1,
-            CaseSpec::Range { lo, hi } => i128::from(*hi) - i128::from(*lo) + 1,
-        })
-        .sum();
-    if covered < SWITCH_MIN_CASES as i128 {
+    // `range <= SWITCH_MAX_RANGE`, so an offset table is small enough to
+    // materialise. The first spec covering an offset wins (later specs are
+    // dead there, matching `build_switch`), so overlapping specs count their
+    // shared values once — a value covered twice must not inflate density.
+    let range = range as usize;
+    let mut offset_arm: Vec<Option<usize>> = vec![None; range];
+    for (spec, arm_idx) in &specs {
+        let (lo, hi) = match spec {
+            CaseSpec::Value(v) => (*v, *v),
+            CaseSpec::Range { lo, hi } => (*lo, *hi),
+        };
+        for v in lo..=hi {
+            let offset = (v - min_value) as usize;
+            offset_arm[offset].get_or_insert(*arm_idx);
+        }
+    }
+
+    let covered = offset_arm.iter().filter(|a| a.is_some()).count();
+    if covered < SWITCH_MIN_CASES {
         return None;
     }
     if (covered as f64) / (range as f64) < SWITCH_DENSITY_THRESHOLD {
         return None;
     }
 
+    // Cost model: every offset (case or hole) clones the arm body it maps to.
+    // A wide range over a large arm body — or many default holes cloning a
+    // large first arm — would explode the IR, so bail past the budget.
+    let arm_sizes: Vec<usize> = arms.iter().map(|a| arm_body_size(body, a.body)).collect();
+    let fallback_arm = default_arm.unwrap_or(0);
+    let clone_cost: usize = offset_arm
+        .iter()
+        .map(|a| arm_sizes[a.unwrap_or(fallback_arm)])
+        .sum::<usize>()
+        + default_arm.map_or(0, |d| arm_sizes[d]);
+    if clone_cost > SWITCH_MAX_CLONE_COST {
+        return None;
+    }
+
     let mut value_to_arm: Vec<(i64, usize)> = Vec::new();
-    for (spec, arm_idx) in &specs {
-        match spec {
-            CaseSpec::Value(v) => value_to_arm.push((*v, *arm_idx)),
-            CaseSpec::Range { lo, hi } => {
-                for v in *lo..=*hi {
-                    value_to_arm.push((v, *arm_idx));
-                }
-            }
+    for (offset, arm) in offset_arm.iter().enumerate() {
+        if let Some(arm_idx) = arm {
+            value_to_arm.push((min_value + offset as i64, *arm_idx));
         }
     }
 
@@ -412,6 +446,21 @@ fn build_switch(
         arms: switch_arms,
         default: default_block,
     }
+}
+
+/// Node count of an arm body operand, the per-clone cost the [`build_switch`]
+/// budget sums over every offset. A promoted `Operand::Value` is one node.
+fn arm_body_size(body: &Body, op: Operand) -> usize {
+    op.as_expr()
+        .map_or(1, |e| node_count(body, NodeRef::Expr(e)))
+}
+
+/// Total nodes in the subtree at `node` (the node itself plus every arena
+/// descendant), via the shared child-visit query.
+fn node_count(body: &Body, node: NodeRef) -> usize {
+    let mut total = 1;
+    body.for_each_child(node, |c| total += node_count(body, c));
+    total
 }
 
 /// Wrap an arm body in a fresh block holding a single `Expr` statement. A

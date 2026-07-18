@@ -154,8 +154,7 @@ fn "stream_read_basic.wado/run"() with Stdout {
         global:stream_read_basic.wado::__modules_initialized = 1;
     };
     rx_9 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_10 = builtin::i32_wrap_i64(packed >> 32_i64);
-    "wasi/stream-drop-writable"(tx_10);
+    "wasi/stream-drop-writable"(local.tee tx_10(builtin::i32_wrap_i64(packed >> 32_i64)));
     result = "core:rt/cm_stream_read_u8"(rx_9, 64);
     __v0 = result.used;
     if @unlikely((__v0 == 0) == 0) {

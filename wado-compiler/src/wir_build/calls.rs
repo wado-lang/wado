@@ -1119,10 +1119,13 @@ impl FunctionTranslator<'_, '_> {
             ),
         };
 
-        // Compute canonical closure types directly by signature key
+        // Compute canonical closure types directly by signature key. Unit
+        // params are erased from the canonical signature (they have no Wasm
+        // representation); every canonical-key site filters identically.
         let param_wirs: Vec<WirType> = param_types
             .iter()
             .map(|p| self.ctx.type_id_to_wir_type(self.type_table, *p))
+            .filter(|t| !matches!(t, WirType::Unit))
             .collect();
         let result_wirs: Vec<WirType> =
             if return_type == TypeTable::UNIT || return_type == TypeTable::NEVER {
@@ -1174,10 +1177,15 @@ impl FunctionTranslator<'_, '_> {
             result_ty: env_result_ty,
         };
 
+        // Erase unit args from the call while preserving their evaluation
+        // (mirrors the direct-call convention). The prelude runs after the
+        // callee's own evaluation (the temp set above) and before the call,
+        // keeping callee-then-args order; `env_arg` reads the immutable temp,
+        // so leaving it inline cannot observe the prelude's effects.
+        let (arg_prelude, user_args) = self.translate_args_erasing_unit(args);
+        stmts.extend(arg_prelude);
         let mut call_args = vec![env_arg];
-        for arg in args {
-            call_args.push(self.translate_operand(*arg));
-        }
+        call_args.extend(user_args);
 
         // func_ref = struct.get $closure "func"
         let func_result_ty = self.struct_field_wir_type(&closure_struct_type_id, "func");
@@ -1235,9 +1243,12 @@ impl FunctionTranslator<'_, '_> {
             ),
         };
 
+        // Unit params are erased from the canonical signature; every
+        // canonical-key site filters identically.
         let param_wirs: Vec<WirType> = param_types
             .iter()
             .map(|p| self.ctx.type_id_to_wir_type(self.type_table, *p))
+            .filter(|t| !matches!(t, WirType::Unit))
             .collect();
         let result_wirs: Vec<WirType> =
             if return_type == TypeTable::UNIT || return_type == TypeTable::NEVER {

@@ -35,14 +35,14 @@ export fn run() with Stdout {
         kind: SerializeErrorKind::Custom,
         message: "test error",
     };
-    println(`SerializeError: {se.message}`);
+    println(`SerializeError: ${se.message}`);
 
     let de = DeserializeError {
         kind: DeserializeErrorKind::MissingField,
         message: "field 'name' is missing",
         offset: 42 as i64,
     };
-    println(`DeserializeError: {de.message} at offset {de.offset}`);
+    println(`DeserializeError: ${de.message} at offset ${de.offset}`);
 
     // Test enum matching
     let kind = DeserializeErrorKind::MissingField;
@@ -58,7 +58,7 @@ export fn run() with Stdout {
         Eof => "eof",
         Custom => "custom",
     };
-    println(`Kind: {label}`);
+    println(`Kind: ${label}`);
 }
 
 __DATA__

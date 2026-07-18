@@ -891,10 +891,38 @@ fn "core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prel
 
 fn "core:prelude/slice.wado/ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>^Iterator::next"(self) {
     let item: ref "wasi:filesystem/types.wado//DirectoryEntry";
+    let v_2: ref "wasi:filesystem/types.wado//DirectoryEntry";
+    let v_3: ref "wasi:filesystem/types.wado//DescriptorType";
+    let __vc_payload_7: ref null "core:prelude/string.wado//String";
+    let v_5: ref "core:prelude/string.wado//String";
+    let __vc_payload_0: ref "core:prelude/string.wado//String";
     if self.index >= self.end {
         return ref.null none;
     }
-    item = "cm_stream_read_record_in_branch.wado/$value_copy$wasi:filesystem/types.wado/DirectoryEntry"(builtin::array_get<ref "wasi:filesystem/types.wado//DirectoryEntry">(self.repr, self.index));
+    v_2 = builtin::array_get<ref "wasi:filesystem/types.wado//DirectoryEntry">(self.repr, self.index);
+    item = struct.new "wasi:filesystem/types.wado//DirectoryEntry" { type: ref.as_non_null(v_3 = v_2.type; (if v_3.discriminant == 0 -> ref "wasi:filesystem/types.wado//DescriptorType" {
+        v_3;
+    } else if v_3.discriminant == 1 -> ref "wasi:filesystem/types.wado//DescriptorType" {
+        v_3;
+    } else if v_3.discriminant == 2 -> ref "wasi:filesystem/types.wado//DescriptorType" {
+        v_3;
+    } else if v_3.discriminant == 3 -> ref "wasi:filesystem/types.wado//DescriptorType" {
+        v_3;
+    } else if v_3.discriminant == 4 -> ref "wasi:filesystem/types.wado//DescriptorType" {
+        v_3;
+    } else if v_3.discriminant == 5 -> ref "wasi:filesystem/types.wado//DescriptorType" {
+        v_3;
+    } else if v_3.discriminant == 6 -> ref "wasi:filesystem/types.wado//DescriptorType" {
+        v_3;
+    } else {
+        __vc_payload_7 = ref.cast "wasi:filesystem/types.wado//DescriptorType::Other"(v_3).payload_0;
+        struct.new "wasi:filesystem/types.wado//DescriptorType::Other" { discriminant: 7, payload_0: (if ref.is_null(__vc_payload_7) == 0 -> ref null "core:prelude/string.wado//String" {
+            __vc_payload_0 = ref.as_non_null(__vc_payload_7);
+            struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = __vc_payload_0.repr; let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__array_clone_src_1); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: __vc_payload_0.used };
+        } else {
+            __vc_payload_7;
+        }) };
+    })), name: ref.as_non_null(v_5 = v_2.name; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = v_5.repr; let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__array_clone_src_1); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: v_5.used }) };
     self.index = self.index + 1;
     return item;
 }

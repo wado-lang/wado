@@ -85,7 +85,7 @@ pub fn write_escaped_string(buf: &mut String, s: &String) {
             0x09 => buf.push_str(&"\\t"),
             _ => {
                 let code = b as i32;
-                buf.push_str(&`\\u{code:04x}`);
+                buf.push_str(&`\\u${code:04x}`);
             },
         }
         run_start = i + 1;
@@ -182,7 +182,7 @@ fn write_json_bool(buf: &mut String, v: bool) -> Result<(), SerializeError> {
 }
 
 fn write_json_char(buf: &mut String, v: char) -> Result<(), SerializeError> {
-    let s = `{v}`;
+    let s = `${v}`;
     write_escaped_string(buf, &s);
     return Result::Ok(());
 }
@@ -889,7 +889,7 @@ impl JsonDeserializer {
         if b != c {
             builtin::cold_path();
             return Result::Err(DeserializeError::malformed(
-                `expected '{c as u8 as char}', found '{b as u8 as char}'`,
+                `expected '${c as u8 as char}', found '${b as u8 as char}'`,
                 self.pos as i64,
             ));
         }
@@ -1039,7 +1039,7 @@ impl JsonDeserializer {
                 _ => {
                     builtin::cold_path();
                     return Result::Err(DeserializeError::malformed(
-                        `invalid escape '\\{esc}'`,
+                        `invalid escape '\\${esc}'`,
                         self.pos as i64,
                     ));
                 },

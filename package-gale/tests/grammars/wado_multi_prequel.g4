@@ -10,7 +10,7 @@ options { language = Wado; }
 
 r returns [i32 v]
     @init { $v = 10; p.emit("i"); }
-    @after { p.emit(`a{$v}`); }
+    @after { p.emit(`a${$v}`); }
     : A { $v = 1; p.emit("A"); }
     | B { $v = 2; p.emit("B"); }
     ;

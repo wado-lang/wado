@@ -103,11 +103,11 @@ Methods can declare effect requirements:
 ```wado
 impl User {
     pub fn save(&self) with FileSystem {
-        FileSystem::write(`users/{self.name}.json`, self.to_json());
+        FileSystem::write(`users/${self.name}.json`, self.to_json());
     }
 
     pub fn load(name: String) -> Result<User, IoError> with FileSystem {
-        let data = FileSystem::read(`users/{name}.json`)?;
+        let data = FileSystem::read(`users/${name}.json`)?;
         return User::from_json(data);
     }
 }
@@ -131,7 +131,7 @@ trait Greet {
     fn name(&self) -> String;
 
     fn greet(&self) -> String {
-        return `Hello, {self.name()}!`;
+        return `Hello, ${self.name()}!`;
     }
 }
 
@@ -153,7 +153,7 @@ trait Loadable {
 ```wado
 impl Display for Point {
     fn display(&self) -> String {
-        return `Point({self.x}, {self.y})`;
+        return `Point(${self.x}, ${self.y})`;
     }
 }
 
@@ -166,7 +166,7 @@ impl Default for Point {
 // Generic impl
 impl<T: Display> Display for Pair<T, T> {
     fn display(&self) -> String {
-        return `({self.first.display()}, {self.second.display()})`;
+        return `(${self.first.display()}, ${self.second.display()})`;
     }
 }
 ```
@@ -195,7 +195,7 @@ where
     T: Display + Clone,
     U: Display,
 {
-    return `{a.display()} and {b.display()}`;
+    return `${a.display()} and ${b.display()}`;
 }
 ```
 
@@ -366,7 +366,7 @@ trait Display {
 
 // Used by template strings
 let p = Point { x: 1, y: 2 };
-let s = `Point is: {p}`;  // calls p.display()
+let s = `Point is: ${p}`;  // calls p.display()
 ```
 
 #### Debug
@@ -563,7 +563,7 @@ impl Default for Point {
 
 impl Display for Point {
     fn display(&self) -> String {
-        return `({self.x}, {self.y})`;
+        return `(${self.x}, ${self.y})`;
     }
 }
 
@@ -571,13 +571,13 @@ fn run() with Stdout {
     let p1 = Point::new(3, 4);
     let p2 = p1;  // clone (both valid)
 
-    println(`p1 = {p1}`);  // p1 = (3, 4)
-    println(`p2 = {p2}`);  // p2 = (3, 4)
-    println(`magnitude = {p1.magnitude()}`);  // magnitude = 5.0
+    println(`p1 = ${p1}`);  // p1 = (3, 4)
+    println(`p2 = ${p2}`);  // p2 = (3, 4)
+    println(`magnitude = ${p1.magnitude()}`);  // magnitude = 5.0
 
     let mut p3 = Point::default();
     p3.translate(10, 20);
-    println(`p3 = {p3}`);  // p3 = (10, 20)
+    println(`p3 = ${p3}`);  // p3 = (10, 20)
 
     // Explicit move
     let p4 = move p3;
@@ -619,7 +619,7 @@ impl<T: Clone> Clone for Stack<T> {
 impl<T: Display> Display for Stack<T> {
     fn display(&self) -> String {
         let parts = self.items.iter().map(|x| x.display()).collect::<List<String>>();
-        return `Stack[{parts.join(", ")}]`;
+        return `Stack[${parts.join(", ")}]`;
     }
 }
 ```

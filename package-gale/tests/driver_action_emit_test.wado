@@ -11,11 +11,11 @@ use wa from "./grammars/wado_action.g4"
 test "wado actions emit into ParseResult.output in execution order" {
     let result = wa::parse(&"a b");
     assert result.ok(), "clean parse";
-    assert result.output == "hi!", `output: '{result.output}'`;
+    assert result.output == "hi!", `output: '${result.output}'`;
 }
 
 test "recovery that still traverses an action executes it" {
     let result = wa::parse(&"b");
     assert !result.ok(), "recovered parse reports the missing token";
-    assert result.output == "hi!", `output on recovered parse: '{result.output}'`;
+    assert result.output == "hi!", `output on recovered parse: '${result.output}'`;
 }

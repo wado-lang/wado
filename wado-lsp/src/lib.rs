@@ -28,7 +28,7 @@ use wado_compiler::{CompilerHost, Diagnostic as CompilerDiagnostic, LogLevel};
 use crate::query::QueryContext;
 
 pub use definition::DefinitionResult;
-pub use diagnostics::{Diagnostic, Position, Range, Severity};
+pub use diagnostics::{Diagnostic, DiagnosticTag, Position, Range, Severity};
 pub use document_highlight::{DocumentHighlight, HighlightKind};
 pub use host::FilesystemCompilerHost;
 pub use hover::{HoverResult, MarkupContent, MarkupKind};
@@ -92,6 +92,9 @@ pub struct Engine {
     /// updates this from the `initialize` request before dispatching any
     /// position-bearing query.
     position_encoding: PositionEncoding,
+    /// Surface unused / dead-code warnings in `diagnostics` (on by default;
+    /// mirrors `CompilerOptions::unused_diagnostics`).
+    unused_diagnostics: bool,
 }
 
 /// One semantics pass over a document. Bundles the analysis result with
@@ -153,7 +156,13 @@ impl Engine {
         Self {
             documents: IndexMap::new(),
             position_encoding: PositionEncoding::default(),
+            unused_diagnostics: true,
         }
+    }
+
+    /// Toggle unused / dead-code warnings in `diagnostics` (default `true`).
+    pub fn set_unused_diagnostics(&mut self, enabled: bool) {
+        self.unused_diagnostics = enabled;
     }
 
     /// Set the LSP position encoding negotiated during `initialize`.
@@ -610,6 +619,10 @@ impl Engine {
     /// `span.file` — cross-file diagnostics keep the compiler's codepoint
     /// columns, the entry document is re-expressed in the negotiated
     /// position encoding.
+    ///
+    /// Unused / dead-code warnings are applied here (not baked into the
+    /// snapshot, so [`Engine::set_unused_diagnostics`] stays live) and are
+    /// kept only for the entry document.
     pub async fn diagnostics<H: CompilerHost>(&self, uri: &str, host: &H) -> Vec<Diagnostic> {
         let Some(snapshot) = self.snapshot(uri, host).await else {
             return Vec::new();
@@ -617,24 +630,26 @@ impl Engine {
         let filename = Uri::new(uri).to_filename();
         let encoding = self.position_encoding;
         let entry_text = self.documents.get(uri).map(|d| d.text.as_str());
-        snapshot
-            .diagnostics
-            .iter()
-            .filter_map(|d| {
-                // Only re-encode against the entry document's text when
-                // the diagnostic actually points at it. Diagnostics from
-                // imported modules carry codepoint columns relative to
-                // the OTHER module's source, which we don't have on
-                // hand; passing `None` keeps them as raw codepoint
-                // indices (correct under UTF-32 / ASCII).
-                let source = d
-                    .span
-                    .as_ref()
-                    .filter(|s| s.file == filename)
-                    .and(entry_text);
-                diagnostics::from_compiler_diagnostic(d, uri, source, encoding)
-            })
-            .collect()
+        let reencode = |d: &CompilerDiagnostic| {
+            // Re-encode against the entry text only when the diagnostic points
+            // at it; imported-module spans keep raw codepoint columns.
+            let source = d
+                .span
+                .as_ref()
+                .filter(|s| s.file == filename)
+                .and(entry_text);
+            diagnostics::from_compiler_diagnostic(d, uri, source, encoding)
+        };
+        let mut out: Vec<Diagnostic> = snapshot.diagnostics.iter().filter_map(&reencode).collect();
+        if self.unused_diagnostics {
+            out.extend(
+                wado_compiler::unused_diagnostics(&snapshot.sem, false)
+                    .iter()
+                    .filter(|d| d.span.as_ref().is_some_and(|s| s.file == filename))
+                    .filter_map(&reencode),
+            );
+        }
+        out
     }
 }
 

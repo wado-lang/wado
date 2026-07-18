@@ -154,40 +154,40 @@ impl Serializer for NsdSerializer {
     type VariantSerializer = NsdVariantSerializer;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
-        self.buf.push_str(&`{v}`);
+        self.buf.push_str(&`${v}`);
         return Result::Ok(());
     }
 
     fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
         if v > 9007199254740991 || v < -9007199254740991 {
-            self.buf.push_str(&`"{v}"`);
+            self.buf.push_str(&`"${v}"`);
         } else {
-            self.buf.push_str(&`{v}`);
+            self.buf.push_str(&`${v}`);
         }
         return Result::Ok(());
     }
 
     fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
-        self.buf.push_str(&`{v}`);
+        self.buf.push_str(&`${v}`);
         return Result::Ok(());
     }
 
     fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
         if v > 9007199254740991 {
-            self.buf.push_str(&`"{v}"`);
+            self.buf.push_str(&`"${v}"`);
         } else {
-            self.buf.push_str(&`{v}`);
+            self.buf.push_str(&`${v}`);
         }
         return Result::Ok(());
     }
 
     fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
-        self.buf.push_str(&`"{v}"`);
+        self.buf.push_str(&`"${v}"`);
         return Result::Ok(());
     }
 
     fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError> {
-        self.buf.push_str(&`"{v}"`);
+        self.buf.push_str(&`"${v}"`);
         return Result::Ok(());
     }
 
@@ -204,7 +204,7 @@ impl Serializer for NsdSerializer {
                 message: "Infinity is not allowed in JSON",
             });
         }
-        self.buf.push_str(&`{v as f64}`);
+        self.buf.push_str(&`${v as f64}`);
         return Result::Ok(());
     }
 
@@ -221,7 +221,7 @@ impl Serializer for NsdSerializer {
                 message: "Infinity is not allowed in JSON",
             });
         }
-        self.buf.push_str(&`{v}`);
+        self.buf.push_str(&`${v}`);
         return Result::Ok(());
     }
 
@@ -235,7 +235,7 @@ impl Serializer for NsdSerializer {
     }
 
     fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
-        let s = `{v}`;
+        let s = `${v}`;
         write_escaped_string(self.buf, &s);
         return Result::Ok(());
     }
@@ -287,7 +287,7 @@ impl Serializer for NsdSerializer {
         disc: i32,
     ) -> Result<(), SerializeError> {
         // NSD: discriminant integer
-        self.buf.push_str(&`{disc}`);
+        self.buf.push_str(&`${disc}`);
         return Result::Ok(());
     }
 
@@ -298,7 +298,7 @@ impl Serializer for NsdSerializer {
         disc: i32,
     ) -> Result<NsdVariantSerializer, SerializeError> with stores[self] {
         // NSD: [disc, payload]
-        self.buf.push_str(&`[{disc}`);
+        self.buf.push_str(&`[${disc}`);
         return Result::Ok(NsdVariantSerializer {
             buf: self.buf,
         });

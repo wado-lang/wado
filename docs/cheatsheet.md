@@ -93,8 +93,8 @@ foo(100);                      // integer literal coerced to i64
 
 // Strings
 "Hello"         // String
-`Hello, {name}` // Template string
-`\{"key"\}`     // Escaped braces in template string → {"key"}
+`Hello, ${name}` // Template string
+`{"key": ${v}}` // Braces are literal → {"key": <v>}
 "Hello,
 world!"         // Multi-line string
 
@@ -143,7 +143,7 @@ pub global VERSION: i32 = 1;        // accessible from other modules
 global DOUBLED: i32 = 21 * 2;       // expressions allowed
 
 fn example() {
-    println(`{PI}`);                // read global
+    println(`${PI}`);                // read global
     counter = counter + 1;          // write mutable global
 }
 ```
@@ -244,25 +244,25 @@ nums.sort_by(|a: &i32, b: &i32| { ... });  // sort with custom Ordering comparat
 ```wado
 // Template strings (interpolation)
 let name = "Alice";
-let greeting = `Hello, {name}!`;         // "Hello, Alice!"
+let greeting = `Hello, ${name}!`;         // "Hello, Alice!"
 
 // Float-to-string: shortest roundtrip representation (no trailing .0)
-let s = `{5.0}`;                         // "5"
-let s = `{3.14}`;                        // "3.14"
+let s = `${5.0}`;                         // "5"
+let s = `${3.14}`;                        // "3.14"
 
 // Format specifiers via Display (see docs/wep-2026-01-17-template-format-specifiers.md)
-let formatted = `{3.14159:0.2f}`;        // "3.14"
-let hex = `{255:x}`;                     // "ff"
-let hex_alt = `{255:#x}`;                // "0xff" (via alternate flag)
+let formatted = `${3.14159:0.2f}`;        // "3.14"
+let hex = `${255:x}`;                     // "ff"
+let hex_alt = `${255:#x}`;                // "0xff" (via alternate flag)
 
 // Inspect — auto-derived debug outputs (see docs/wep-2026-02-21-inspect-debug-output.md)
-println(`{point:?}`);                    // "Point { x: 10, y: 20 }"
-println(`{point:#?}`);                   // pretty-print with indentation (see below)
-// `{point}` (Display) needs an `impl Display for Point`; use `{point:?}` for debug.
+println(`${point:?}`);                    // "Point { x: 10, y: 20 }"
+println(`${point:#?}`);                   // pretty-print with indentation (see below)
+// `${point}` (Display) needs an `impl Display for Point`; use `${point:?}` for debug.
 
 // Pretty-print (:#?) — multi-line indented output for composite types
 let arr: List<i32> = [1, 2, 3];
-println(`{arr:#?}`);
+println(`${arr:#?}`);
 // [
 //   1,
 //   2,
@@ -284,7 +284,7 @@ builder.push_str(&", World!");
 
 // Iterating over characters
 for let c of "hello".chars() {
-    println(`{c}`);
+    println(`${c}`);
 }
 ```
 
@@ -347,7 +347,7 @@ let { start: { x: x1, y: y1 }, end: { x: x2, y: y2 } } = line;
 
 // Destructuring in for-of
 for let { x, y } of points {
-    println(`{x}, {y}`);
+    println(`${x}, ${y}`);
 }
 ```
 
@@ -503,7 +503,7 @@ let abs = if x < 0 { -x } else { x };
 
 // If let pattern matching
 if let Some(x) = opt {
-    println(`Got: {x}`);
+    println(`Got: ${x}`);
 }
 
 // Mutable pattern bindings
@@ -514,33 +514,33 @@ if let Some(mut x) = opt {
 // Match ergonomics: &T scrutinees match against inner type
 let ro = &opt;                // &Option<i32>
 if let Some(x) = ro {         // x: &i32
-    println(`Got: {*x}`);
+    println(`Got: ${*x}`);
 }
 
 // While
 while i < 10 { i += 1; }
 
 // While let
-while let Some(x) = iter.next() { println(`{x}`); }
+while let Some(x) = iter.next() { println(`${x}`); }
 
 // C-style for
 for let mut i = 0; i < 10; i += 1 {
-    println(`{i}`);
+    println(`${i}`);
 }
 
 // For-of (any IntoIterator type)
 for let item of items {
-    println(`{item}`);
+    println(`${item}`);
 }
 
 // Range for-of
-for let i of 0..<10 { println(`{i}`); }    // 0 to 9
-for let i of 1..=10 { println(`{i}`); }    // 1 to 10
-for let c of 'a'..='z' { print(`{c}`); }   // abcdefghijklmnopqrstuvwxyz
+for let i of 0..<10 { println(`${i}`); }    // 0 to 9
+for let i of 1..=10 { println(`${i}`); }    // 1 to 10
+for let c of 'a'..='z' { print(`${c}`); }   // abcdefghijklmnopqrstuvwxyz
 
 // Tuple for-of (compile-time expansion)
 for let v of [42, "hello", true] {
-    println(`{v}`);
+    println(`${v}`);
 }
 
 // Infinite loop
@@ -599,7 +599,7 @@ let label = match value {
 let desc = match value {
     Some(n) => {
         let doubled = n * 2;
-        `value is {doubled}`
+        `value is ${doubled}`
     },
     None => "no value",
 };
@@ -650,7 +650,7 @@ fn add(a: i32, b: i32) -> i32 {
 
 // With effects
 fn greet(name: String) with Stdout {
-    println(`Hello, {name}!`);
+    println(`Hello, ${name}!`);
 }
 
 // Module public (accessible from other Wado modules)
@@ -808,7 +808,7 @@ fn use_data(data: &Data) -> i32 {
 
 // Combined with effects
 fn store_and_log(data: &Data) -> Container with Stdout, stores[data] {
-    println(`Storing: {data.value}`);
+    println(`Storing: ${data.value}`);
     return Container { data };
 }
 ```
@@ -863,7 +863,7 @@ trait Greet {
 
 impl Greet for Person {
     fn greet(&self) -> String {
-        return `Hello, {self.name}!`;
+        return `Hello, ${self.name}!`;
     }
 }
 
@@ -872,7 +872,7 @@ trait Summary {
     fn title(&self) -> String;
 
     fn summary(&self) -> String {
-        return `Title: {self.title()}`;
+        return `Title: ${self.title()}`;
     }
 }
 
@@ -984,7 +984,7 @@ struct Broken { retries: i32 = 3, name: String }
 impl Default for Broken;   // ERROR: `name` has no default expression
 ```
 
-`{x:?}` / `{x:#?}` (`Inspect` / `InspectAlt`) work for every type. `{x}` (`Display`) uses the type's `impl Display`: primitives, `String`, plain enums (bare case name, e.g. `Red`), and newtypes (inherited from the base) have one; other types need a hand-written impl, else `{x}` is a compile error and `{x:?}` gives the debug form. `{x:#}` (`DisplayAlt`) follows `Display`.
+`${x:?}` / `${x:#?}` (`Inspect` / `InspectAlt`) work for every type. `${x}` (`Display`) uses the type's `impl Display`: primitives, `String`, plain enums (bare case name, e.g. `Red`), and newtypes (inherited from the base) have one; other types need a hand-written impl, else `${x}` is a compile error and `${x:?}` gives the debug form. `${x:#}` (`DisplayAlt`) follows `Display`.
 
 A hand-written `impl Trait for T { … }` always wins. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
@@ -1042,7 +1042,7 @@ See [WEP: Iterator Traits Design](./wep-2026-01-24-iterator-traits.md).
 ```wado
 // List iteration
 let arr: List<i32> = [1, 2, 3, 4, 5];
-for let x of arr { println(`{x}`); }
+for let x of arr { println(`${x}`); }
 
 // Explicit iterator
 let mut iter = arr.into_iter();
@@ -1078,8 +1078,8 @@ Two range types: `RangeExclusive<T>` and `RangeInclusive<T>`. Both are generic s
 'a'..='z'          // RangeInclusive<char>
 
 // Iteration (integers and char via Step trait)
-for let i of 0..<5 { println(`{i}`); }    // 0, 1, 2, 3, 4
-for let c of 'a'..='e' { print(`{c}`); }  // abcde
+for let i of 0..<5 { println(`${i}`); }    // 0, 1, 2, 3, 4
+for let c of 'a'..='e' { print(`${c}`); }  // abcde
 ```
 
 ## Effects
@@ -1109,7 +1109,7 @@ fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E {
 wrapper(|| { println("hello"); });     // E = Stdout
 let x = apply(|n: i32| n + 1, 41);     // E = (none)
 let y = apply(|n: i32| {               // E = Stdout
-    println(`{n}`);
+    println(`${n}`);
     return n * 2;
 }, 21);
 
@@ -1301,7 +1301,7 @@ Each parameter resolves highest priority first: `-D NAME=value` (alias `--define
 
 struct Foo {
     #[secret]
-    password: String,      // omitted from Inspect (`{x:?}`)
+    password: String,      // omitted from Inspect (`${x:?}`)
 }
 
 #[inline]                  // hint: prefer inlining
@@ -1340,8 +1340,8 @@ use { println, eprintln, print, eprint, Stdout, Stderr } from "core:cli";
 use { args, env } from "core:cli";
 
 println("hello");
-for let arg of args() { println(`arg: {arg}`); }
-if let Some(home) = env("HOME") { println(`HOME={home}`); }
+for let arg of args() { println(`arg: ${arg}`); }
+if let Some(home) = env("HOME") { println(`HOME=${home}`); }
 ```
 
 ### core:collections
@@ -1358,7 +1358,7 @@ map["key"] = 42;              // index assignment
 let v = map["key"];           // index access (panics if absent)
 let opt = map.get("key");     // fallible access -> Option<V>
 map.remove("key");            // -> bool
-for let [k, v] of map.entries() { println(`{k}={v}`); }
+for let [k, v] of map.entries() { println(`${k}=${v}`); }
 
 let sizes = { small: 1, large: 3 } as TreeMap<String, i32>;  // literal
 let set = ["foo", "bar", "baz"] as TreeSet<String>;

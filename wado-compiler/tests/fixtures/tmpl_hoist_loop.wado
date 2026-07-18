@@ -9,23 +9,23 @@ export fn run() with Stdout {
     // Hoistable: template result used only via method receiver (.len())
     let mut total = 0;
     for let mut i = 0; i < 5; i += 1 {
-        let s = `value={i}`;
+        let s = `value=${i}`;
         total += s.len();
     }
-    println(`total={total}`);
+    println(`total=${total}`);
 
     // Hoistable: multiple interpolations, result used only via receiver
     let mut total2 = 0;
     for let mut i = 0; i < 3; i += 1 {
         let x = i * 10;
-        let s = `i={i}, x={x}`;
+        let s = `i=${i}, x=${x}`;
         total2 += s.len();
     }
-    println(`total2={total2}`);
+    println(`total2=${total2}`);
 
     // Not hoisted: template result passed as function argument (may escape)
     for let mut i = 0; i < 3; i += 1 {
-        let s = `item_{i}`;
+        let s = `item_${i}`;
         println(s);
     }
 }

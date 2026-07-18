@@ -18,7 +18,7 @@ fn read_file_bytes(path: String) -> ByteList with Preopens {
     let root = dirs[0].0;
     let file = match root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait() {
         Ok(f) => f,
-        Err(_) => panic(`failed to open {path}`),
+        Err(_) => panic(`failed to open ${path}`),
     };
     let [stream, _done] = file.read_via_stream(0 as Filesize);
     let mut buf: ByteList = [];
@@ -59,6 +59,6 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     let compressed = b.run("compress", || zlib_compress(&data));
     let decompressed = b.run("decompress", || inflate_zlib(&compressed).unwrap());
 
-    b.println(`compressed: {data.len()} -> {compressed.len()} bytes`);
+    b.println(`compressed: ${data.len()} -> ${compressed.len()} bytes`);
     assert decompressed.len() == data.len(), "decompressed size mismatch";
 }

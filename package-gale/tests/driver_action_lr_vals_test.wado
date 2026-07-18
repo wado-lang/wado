@@ -11,13 +11,13 @@ use lv from "./grammars/wado_lr_vals.g4"
 test "the LR value channel evaluates an expression" {
     let a = lv::parse(&"2 + 3");
     assert a.ok(), "clean parse of 2 + 3";
-    assert a.output == "=5", `output: '{a.output}'`;
+    assert a.output == "=5", `output: '${a.output}'`;
 
     let b = lv::parse(&"2 + 3 * 4");
     assert b.ok(), "clean parse with precedence";
-    assert b.output == "=14", `output: '{b.output}'`;
+    assert b.output == "=14", `output: '${b.output}'`;
 
     let c = lv::parse(&"2 * 3 + 4");
     assert c.ok(), "clean parse, product first";
-    assert c.output == "=10", `output: '{c.output}'`;
+    assert c.output == "=10", `output: '${c.output}'`;
 }

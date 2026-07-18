@@ -3,9 +3,9 @@
 //! This module hoists loop-invariant computations out of loops to improve performance.
 //! Two kinds of candidates move to the pre-header: field accesses on
 //! variables the loop does not modify (legality via [`ModifiedVars`]), and
-//! pure-arithmetic subtrees whose `Local` leaves are pre-header-stable —
-//! each leaf's use-site `ValueId` equals the loop-entry snapshot value
-//! ([`Engine::loop_entry_value`]), deduped by `ValueId` (see [`ArithHoist`]).
+//! pure-arithmetic subtrees whose `Local` leaves are pre-header-stable
+//! (never modified in the loop), deduped by structural identity
+//! ([`ArithKey`]; see [`ArithHoist`]).
 //!
 //! Runs on the worklist rewrite engine (combine migration; see
 //! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a [`Rule`]: a
@@ -15,10 +15,10 @@
 //! `alloc_local`, `clone_expr`, `set_block_stmts`, `replace_expr_kind`) so
 //! the parent map and use index stay coherent.
 //!
-//! The hoist-candidate and replacement walks share a `*_child_nodes`
-//! enumerator that mirrors the tree walk's child set exactly (expression and
-//! block children, excluding patterns); `collect_modified_vars` keeps its own
-//! walk because it special-cases assignments, calls, and pattern bindings.
+//! The hoist-candidate and replacement walks recurse over
+//! [`Body::for_each_child`], skipping pattern children; `collect_modified_vars`
+//! keeps its own walk because it special-cases assignments, calls, and pattern
+//! bindings.
 
 use std::cell::Cell;
 
@@ -50,7 +50,14 @@ use super::gate::{FunctionGate, GatedPass};
 #[derive(Default)]
 struct ModifiedVars {
     /// Locals that are fully modified (assigned as a whole, passed as &mut, etc.).
+    /// Membership poisons the whole alias set: a full modification of one alias
+    /// may write the shared heap object every alias points at.
     fully: IndexSet<u32>,
+    /// Alias locals (re)bound by an in-loop `let x = y` / `let r = &y`: the
+    /// local itself is not pre-header-stable (its binding runs inside the
+    /// loop), but the binding writes only the local slot, never the pointee —
+    /// so, unlike `fully`, membership does not poison the alias set.
+    rebound: IndexSet<u32>,
     /// (`local_index`, `field_index`) pairs where only a specific field is modified.
     fields: IndexSet<(u32, u32)>,
     /// GC alias pairs: if `(a, b)` is present, `a` and `b` may point to the same object.
@@ -68,6 +75,10 @@ struct ModifiedVars {
 impl ModifiedVars {
     fn insert_full(&mut self, local_idx: u32) {
         self.fully.insert(local_idx);
+    }
+
+    fn insert_rebound(&mut self, local_idx: u32) {
+        self.rebound.insert(local_idx);
     }
 
     fn insert_field(&mut self, local_idx: u32, field_idx: u32) {
@@ -125,10 +136,6 @@ impl ModifiedVars {
         is_gc_heap_type(pointee, type_table) && self.clobbered_pointee_types.contains(&pointee)
     }
 
-    fn extend_full(&mut self, other: &IndexSet<u32>) {
-        self.fully.extend(other.iter().copied());
-    }
-
     fn add_alias(&mut self, a: u32, b: u32) {
         self.aliases.push((a, b));
     }
@@ -152,10 +159,16 @@ impl ModifiedVars {
         set
     }
 
-    /// Returns true if the given local is not fully modified AND
-    /// the specific field of that local is not field-modified,
-    /// considering all aliases of the local.
+    /// Returns true if hoisting `local_idx.field_idx` to the pre-header is
+    /// legal: the local itself is not (re)bound inside the loop (a rebound
+    /// local is out of scope at the pre-header), it is not fully modified,
+    /// and the specific field is not field-modified — considering all aliases
+    /// of the local. A `rebound` alias does not block: its binding rewrites
+    /// only the alias slot, never the shared pointee.
     fn is_field_hoistable(&self, local_idx: u32, field_idx: u32) -> bool {
+        if self.rebound.contains(&local_idx) {
+            return false;
+        }
         let aliases = self.alias_set(local_idx);
         for &idx in &aliases {
             if self.fully.contains(&idx) || self.fields.contains(&(idx, field_idx)) {
@@ -165,16 +178,17 @@ impl ModifiedVars {
         true
     }
 
-    /// Whether `local_idx` (or any alias) is fully modified in the loop — i.e. it
-    /// is **not** loop-invariant. An in-loop `let` counts as a modification
-    /// (`collect_modified_vars` inserts the bound local), so a leaf bound inside
-    /// the loop is correctly non-invariant. This is exactly the invariance the
+    /// Whether `local_idx`'s value can change inside the loop — i.e. it is
+    /// **not** loop-invariant: it is (re)bound by an in-loop `let`, or it (or
+    /// any alias) is fully modified. This is exactly the invariance the
     /// `ValueGraph`'s `use-site value == loop-entry value` check computed, so an
     /// arith-hoist leaf check can read it instead of querying `value_of`.
     fn local_modified(&self, local_idx: u32) -> bool {
-        self.alias_set(local_idx)
-            .iter()
-            .any(|idx| self.fully.contains(idx))
+        self.rebound.contains(&local_idx)
+            || self
+                .alias_set(local_idx)
+                .iter()
+                .any(|idx| self.fully.contains(idx))
     }
 }
 
@@ -248,9 +262,43 @@ impl Rule for LicmRule<'_> {
             return false;
         }
         let root = engine.body.root;
+        let mut ctx = LicmCtx::new(self.type_table, engine.locals());
         let mut outer_aliases: Vec<(u32, u32)> = Vec::new();
-        licm_block(engine, root, self.type_table, &mut outer_aliases)
+        licm_block(engine, root, &mut ctx, &mut outer_aliases)
     }
+}
+
+/// Per-function LICM session state, threaded through the whole walk.
+struct LicmCtx<'a> {
+    type_table: &'a TypeTable,
+    /// Locals created by a LICM hoist. Every hoist in this session inserts
+    /// its fresh local; at session start the set is seeded from the
+    /// [`LICM_HOIST_PREFIX`] naming convention — the only marker that
+    /// persists on hoist locals surviving from a prior pass invocation.
+    hoist_locals: IndexSet<u32>,
+}
+
+impl<'a> LicmCtx<'a> {
+    fn new(type_table: &'a TypeTable, locals: &[crate::nir::NirLocal]) -> Self {
+        let hoist_locals = locals
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| l.name.starts_with(LICM_HOIST_PREFIX))
+            .map(|(i, _)| i as u32)
+            .collect();
+        Self {
+            type_table,
+            hoist_locals,
+        }
+    }
+}
+
+/// Collect a node's children into a buffer, so a mutating walk can recurse
+/// without holding the [`Body::for_each_child`] borrow across the mutation.
+fn child_nodes(body: &Body, node: NodeRef) -> Vec<NodeRef> {
+    let mut children = Vec::new();
+    body.for_each_child(node, |c| children.push(c));
+    children
 }
 
 /// Apply LICM to all loops in a block.
@@ -263,7 +311,7 @@ impl Rule for LicmRule<'_> {
 fn licm_block(
     engine: &mut Engine,
     block: BlockId,
-    type_table: &TypeTable,
+    ctx: &mut LicmCtx,
     outer_aliases: &mut Vec<(u32, u32)>,
 ) -> bool {
     let mut changed = false;
@@ -274,82 +322,85 @@ fn licm_block(
     // stay populated.
     for s in engine.body.blocks[block].stmts.clone() {
         // Classify without holding the borrow across the mutable recursion.
-        enum Shape {
-            Loop(BlockId),
-            If(BlockId, Option<BlockId>),
-            Labeled(BlockId),
-            Let(u32, Operand),
-            Other,
-        }
-        let shape = match &engine.body.stmts[s].kind {
-            StmtKind::Loop { body: lb } => Shape::Loop(*lb),
-            StmtKind::If {
-                then_block,
-                else_block,
-                ..
-            } => Shape::If(*then_block, *else_block),
-            StmtKind::LabeledBlock { block, .. } => Shape::Labeled(*block),
+        let loop_body = match &engine.body.stmts[s].kind {
+            StmtKind::Loop { body: lb } => Some(*lb),
             StmtKind::Let {
                 local_index, value, ..
-            } => Shape::Let(*local_index, *value),
-            _ => Shape::Other,
-        };
-
-        match shape {
-            Shape::Loop(lb) => {
-                let empty_set = IndexSet::default();
-                let hoist_stmts = licm_loop(engine, lb, type_table, &empty_set, outer_aliases);
-                if !hoist_stmts.is_empty() {
-                    changed = true;
-                }
-                new_stmts.extend(hoist_stmts);
-                new_stmts.push(s);
-            }
-            Shape::If(then_b, else_b) => {
-                // Sharing the alias accumulator across sibling branches is safe:
-                // aliasing is monotone-correct (extra aliases only cause
-                // conservative misses, never wrong hoists).
-                changed |= licm_block(engine, then_b, type_table, outer_aliases);
-                if let Some(eb) = else_b {
-                    changed |= licm_block(engine, eb, type_table, outer_aliases);
-                }
-                new_stmts.push(s);
-            }
-            Shape::Labeled(inner) => {
-                changed |= licm_block(engine, inner, type_table, outer_aliases);
-                new_stmts.push(s);
-            }
-            Shape::Let(local_index, value) => {
-                // Track outer-scope aliases so a subsequent loop's LICM can see them.
+            } => {
+                // Track outer-scope aliases so a subsequent loop's LICM can
+                // see them.
                 if let Some(ve) = value.as_expr()
                     && let Some(src_idx) = extract_alias_source(engine.body, ve)
-                    && is_gc_heap_type(engine.body.exprs[ve].type_id, type_table)
+                    && is_gc_heap_type(engine.body.exprs[ve].type_id, ctx.type_table)
                 {
-                    outer_aliases.push((local_index, src_idx));
+                    outer_aliases.push((*local_index, src_idx));
                 }
-                new_stmts.push(s);
+                None
             }
-            Shape::Other => {
-                new_stmts.push(s);
+            StmtKind::Expr(_)
+            | StmtKind::Return { .. }
+            | StmtKind::If { .. }
+            | StmtKind::LabeledBlock { .. }
+            | StmtKind::Break { .. }
+            | StmtKind::Continue
+            | StmtKind::LetDestructure { .. } => None,
+        };
+
+        if let Some(lb) = loop_body {
+            let hoist_stmts = licm_loop(engine, lb, ctx, outer_aliases);
+            if !hoist_stmts.is_empty() {
+                changed = true;
             }
+            new_stmts.extend(hoist_stmts);
+        } else {
+            // Recurse into every nested block — `if`/`match`/`switch` arms,
+            // labeled blocks, expression blocks in a `let` value — so loops
+            // anywhere under this statement are visited. Sharing the alias
+            // accumulator across sibling branches is safe: aliasing is
+            // monotone-correct (extra aliases only cause conservative misses,
+            // never wrong hoists).
+            changed |= licm_children(engine, NodeRef::Stmt(s), ctx, outer_aliases);
         }
+        new_stmts.push(s);
     }
 
     engine.set_block_stmts(block, new_stmts);
     changed
 }
 
-/// Name prefix for every LICM-created hoist local. Used to recognize a hoisted
-/// handle from any prior LICM invocation (the index threshold is per-invocation,
-/// but these locals persist), so its clobbered-object sub-fields stay un-hoisted.
+/// Recurse `licm_block` into every block child under `node` (a statement or
+/// expression), descending expression children to find them.
+fn licm_children(
+    engine: &mut Engine,
+    node: NodeRef,
+    ctx: &mut LicmCtx,
+    outer_aliases: &mut Vec<(u32, u32)>,
+) -> bool {
+    let mut changed = false;
+    for c in child_nodes(engine.body, node) {
+        match c {
+            NodeRef::Block(b) => changed |= licm_block(engine, b, ctx, outer_aliases),
+            NodeRef::Expr(e) => {
+                changed |= licm_children(engine, NodeRef::Expr(e), ctx, outer_aliases);
+            }
+            NodeRef::Pat(_) => {}
+            NodeRef::Stmt(_) => panic!("statement child outside a block"),
+        }
+    }
+    changed
+}
+
+/// Name prefix for every LICM-created hoist local. [`LicmCtx::new`] seeds its
+/// `hoist_locals` set from it, recognizing hoisted handles persisting from a
+/// prior LICM invocation so their clobbered-object sub-fields stay un-hoisted;
+/// within a session the set itself is authoritative.
 const LICM_HOIST_PREFIX: &str = "_licm_";
 
 /// Apply LICM to a single loop, returning hoisting statement ids to prepend.
 fn licm_loop(
     engine: &mut Engine,
     loop_body: BlockId,
-    type_table: &TypeTable,
-    extra_modified: &IndexSet<u32>,
+    ctx: &mut LicmCtx,
     outer_aliases: &[(u32, u32)],
 ) -> Vec<StmtId> {
     let mut all_hoist_stmts = Vec::new();
@@ -360,30 +411,32 @@ fn licm_loop(
     for _iteration in 0..MAX_LICM_ITERATIONS {
         // Step 1: Collect all variables modified in the loop.
         let mut modified_vars = ModifiedVars::default();
-        modified_vars.extend_full(extra_modified);
         for &(a, b) in outer_aliases {
             modified_vars.add_alias(a, b);
         }
-        collect_modified_vars_in_block(engine.body, loop_body, &mut modified_vars, type_table);
+        collect_modified_vars_in_block(engine.body, loop_body, &mut modified_vars, ctx.type_table);
 
-        // Step 2: Collect immutable reference bindings for look-through.
-        let ref_bindings = collect_immutable_ref_bindings(engine.body, loop_body, type_table);
+        // Step 2: Collect immutable reference bindings for look-through, then
+        // keep only bindings whose local provably holds `&source` at every
+        // in-loop use: bound by exactly one `let` (a second binding could
+        // retarget it) and never reassigned or `&mut`-escaped (`fully`).
+        let mut ref_bindings =
+            collect_immutable_ref_bindings(engine.body, loop_body, ctx.type_table);
+        ref_bindings.retain(|local, binding| {
+            binding.let_count == 1 && !modified_vars.fully.contains(local)
+        });
 
-        // Step 3: Find field accesses that can be hoisted. `next_local` is a
-        // local placeholder counter that `find_hoist_candidates_in_block`
-        // increments to dedup candidates by (local, field); the actual local
-        // indices are assigned at allocation time in step 4.
+        // Step 3: Find field accesses that can be hoisted, deduped by
+        // (local, field); locals are allocated in step 4.
         let mut candidates = Vec::new();
         let mut seen = IndexSet::default();
-        let mut next_local = engine.locals().len() as u32;
-        find_hoist_candidates_in_block(
+        find_hoist_candidates(
             engine.body,
-            loop_body,
+            NodeRef::Block(loop_body),
             &modified_vars,
             &ref_bindings,
             &mut candidates,
             &mut seen,
-            &mut next_local,
         );
 
         // Step 3.5: Drop `x.f` candidates that would be unsound to hoist:
@@ -400,12 +453,15 @@ fn licm_loop(
             } else {
                 c.type_id
             };
-            if modified_vars.is_reference_field_aliasing_written(root_ty, c.field_index, type_table)
-            {
+            if modified_vars.is_reference_field_aliasing_written(
+                root_ty,
+                c.field_index,
+                ctx.type_table,
+            ) {
                 return false;
             }
-            let is_hoist_local = c.local_name.starts_with(LICM_HOIST_PREFIX);
-            !(is_hoist_local && modified_vars.is_clobbered_gc_value(root_ty, type_table))
+            let is_hoist_local = ctx.hoist_locals.contains(&c.local_index);
+            !(is_hoist_local && modified_vars.is_clobbered_gc_value(root_ty, ctx.type_table))
         });
 
         if candidates.is_empty() {
@@ -414,17 +470,19 @@ fn licm_loop(
             // `_licm_end - _licm_start` a scan loop recomputes in its guard
             // every iteration). Runs here, after field-hoisting, so the
             // `_licm_*` locals it created are visible as stable operands.
-            if hoist_invariant_arith(engine, loop_body, &modified_vars, &mut all_hoist_stmts) {
+            if hoist_invariant_arith(engine, loop_body, &modified_vars, &mut all_hoist_stmts, ctx) {
                 continue;
             }
             break;
         }
 
-        // Step 4: Create hoisting statements. Each candidate gets its actual
-        // `new_local_index` from `engine.alloc_local` (which also pushes the
-        // `NirLocal` entry), so the surviving hoist locals are contiguous
-        // from the function's current local count.
-        for candidate in &mut candidates {
+        // Step 4: Create hoisting statements. Each candidate gets its local
+        // from `engine.alloc_local` (which also pushes the `NirLocal` entry),
+        // so the surviving hoist locals are contiguous from the function's
+        // current local count. The allocated name travels with the
+        // replacement so every rewritten read reuses it verbatim.
+        let mut replacements = Vec::with_capacity(candidates.len());
+        for candidate in candidates {
             let local_type_id = {
                 let locals = engine.locals();
                 if (candidate.local_index as usize) < locals.len() {
@@ -444,7 +502,7 @@ fn licm_loop(
                 candidate.type_id,
                 /* is_mut */ false,
             );
-            candidate.new_local_index = new_local_index;
+            ctx.hoist_locals.insert(new_local_index);
 
             // Build `local.field` as fresh arena nodes via the engine.
             let local_expr = engine.alloc_expr(
@@ -466,7 +524,7 @@ fn licm_loop(
             );
             let hoist_stmt = engine.alloc_stmt(
                 StmtKind::Let {
-                    name: hoist_name,
+                    name: hoist_name.clone(),
                     local_index: new_local_index,
                     is_mut: false,
                     is_reactive: false,
@@ -477,159 +535,29 @@ fn licm_loop(
                 Span::new(0, 0, 0, 0),
             );
             all_hoist_stmts.push(hoist_stmt);
+            replacements.push(HoistedField {
+                local_index: candidate.local_index,
+                field_index: candidate.field_index,
+                new_local_index,
+                name: hoist_name,
+            });
         }
 
         // Step 5: Replace field accesses in the loop body with the hoisted locals.
-        replace_hoisted_in_block(engine, loop_body, &candidates, &ref_bindings);
+        replace_hoisted(
+            engine,
+            NodeRef::Block(loop_body),
+            &replacements,
+            &ref_bindings,
+        );
     }
 
     // Nested loops: recurse. The nested `licm_block` accumulates aliases from
     // the outer loop's `let` statements on its own walk.
     let mut nested_aliases: Vec<(u32, u32)> = outer_aliases.to_vec();
-    licm_block(engine, loop_body, type_table, &mut nested_aliases);
+    licm_block(engine, loop_body, ctx, &mut nested_aliases);
 
     all_hoist_stmts
-}
-
-// ---------------------------------------------------------------------------
-// Shared child enumeration (expression + block children, patterns excluded)
-// ---------------------------------------------------------------------------
-
-enum Child {
-    Expr(ExprId),
-    Block(BlockId),
-}
-
-fn op_child(op: Operand) -> Option<Child> {
-    op.as_expr().map(Child::Expr)
-}
-
-/// The expression / block children of an expression, in walk order, *excluding*
-/// patterns. Mirrors the child set of the tree `find_hoist`/`replace_hoist`/
-/// `collect_licm_ref` walks (a `Match` yields its scrutinee plus each arm's
-/// guard and body, never the arm pattern).
-fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
-    match &body.exprs[e].kind {
-        ExprKind::FieldAccess { expr: inner, .. }
-        | ExprKind::Unary { expr: inner, .. }
-        | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::ClosureToCanonical { functor: inner, .. }
-        | ExprKind::GlobalVarSet { value: inner, .. }
-        | ExprKind::VariantTag { expr: inner }
-        | ExprKind::VariantTest { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. } => {
-            inner.as_expr().map(Child::Expr).into_iter().collect()
-        }
-        ExprKind::Binary { left, right, .. }
-        | ExprKind::Index {
-            expr: left,
-            index: right,
-        } => [*left, *right].into_iter().filter_map(op_child).collect(),
-        ExprKind::Assign { target, value } => [Some(Child::Expr(*target)), op_child(*value)]
-            .into_iter()
-            .flatten()
-            .collect(),
-        ExprKind::Call { args, .. } => args.iter().filter_map(|a| op_child(a.expr)).collect(),
-        ExprKind::MethodCall { receiver, args, .. } => op_child(*receiver)
-            .into_iter()
-            .chain(args.iter().filter_map(|a| op_child(a.expr)))
-            .collect(),
-        ExprKind::CmRawCall { args, .. } => args.iter().filter_map(|a| op_child(*a)).collect(),
-        ExprKind::IndirectCall { callee, args } => op_child(*callee)
-            .into_iter()
-            .chain(args.iter().filter_map(|a| op_child(*a)))
-            .collect(),
-        ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => vec![Child::Block(*b)],
-        ExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            let mut v: Vec<Child> = op_child(*condition)
-                .into_iter()
-                .chain(std::iter::once(Child::Block(*then_branch)))
-                .collect();
-            if let Some(eb) = else_branch {
-                v.push(Child::Block(*eb));
-            }
-            v
-        }
-        ExprKind::StructLiteral { fields, .. } => {
-            fields.iter().filter_map(|f| op_child(f.value)).collect()
-        }
-        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-            elements.iter().filter_map(|e| op_child(*e)).collect()
-        }
-        ExprKind::VariantConstruct { payload, .. } => {
-            payload.iter().filter_map(|p| op_child(*p)).collect()
-        }
-        ExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => op_child(*scrutinee)
-            .into_iter()
-            .chain(arms.iter().map(|a| Child::Block(*a)))
-            .chain(std::iter::once(Child::Block(*default)))
-            .collect(),
-        ExprKind::Match { expr, arms } => {
-            let mut v: Vec<Child> = op_child(*expr).into_iter().collect();
-            for arm in arms {
-                if let Some(c) = op_child(arm.body) {
-                    v.push(c);
-                }
-                if let Some(g) = arm.guard.and_then(op_child) {
-                    v.push(g);
-                }
-            }
-            v
-        }
-        // Leaves.
-        ExprKind::PackedArray(_)
-        | ExprKind::Dead
-        | ExprKind::Local { .. }
-        | ExprKind::GlobalVarGet { .. }
-        | ExprKind::EnumConstruct { .. } => vec![],
-    }
-}
-
-/// The expression / block children of a statement, in walk order, excluding the
-/// `LetDestructure` pattern (matching the tree `find_hoist`/`replace_hoist`/
-/// `collect_licm_ref` statement walks).
-fn stmt_child_nodes(body: &Body, s: StmtId) -> Vec<Child> {
-    match &body.stmts[s].kind {
-        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            value.as_expr().map(Child::Expr).into_iter().collect()
-        }
-        StmtKind::Expr(value) => value.as_expr().map(Child::Expr).into_iter().collect(),
-        StmtKind::Return { value } | StmtKind::Break { value, .. } => value
-            .iter()
-            .filter_map(|v| v.as_expr().map(Child::Expr))
-            .collect(),
-        StmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            // A promoted (`Operand::Value`) condition has no skeleton child to
-            // traverse; only an `Expr` condition contributes a child node.
-            let mut v: Vec<Child> = condition
-                .as_expr()
-                .map(Child::Expr)
-                .into_iter()
-                .chain(std::iter::once(Child::Block(*then_block)))
-                .collect();
-            if let Some(eb) = else_block {
-                v.push(Child::Block(*eb));
-            }
-            v
-        }
-        StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
-            vec![Child::Block(*b)]
-        }
-        StmtKind::Continue => vec![],
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -889,12 +817,19 @@ fn collect_modified_vars_in_stmt(
         } => {
             let local_index = *local_index;
             let value = *value;
-            modified.insert_full(local_index);
+            // An alias-shaped `let` (a GC reference copy) rebinds only the
+            // local slot: record it as `rebound` plus an alias edge, so the
+            // source's fields stay hoistable while anything rooted at the
+            // rebound local (or written through it) is still blocked. Any
+            // other `let` fully modifies the bound local.
             if let Some(ve) = value.as_expr()
                 && let Some(src_idx) = extract_alias_source(body, ve)
                 && is_gc_heap_type(body.exprs[ve].type_id, type_table)
             {
+                modified.insert_rebound(local_index);
                 modified.add_alias(local_index, src_idx);
+            } else {
+                modified.insert_full(local_index);
             }
             collect_modified_vars_in_operand(body, value, modified, type_table);
         }
@@ -1170,11 +1105,17 @@ fn collect_modified_vars_in_expr(
 // Immutable-reference binding collection
 // ---------------------------------------------------------------------------
 
-/// Information about an immutable reference binding: `let ref_var: &T = &source_var`
+/// An in-loop immutable reference binding `let ref_var: &T = &source_var`.
+/// Valid for look-through only when `ref_var` provably holds `&source_var` at
+/// every in-loop use: bound by exactly one in-loop `let` (`let_count == 1`;
+/// any second binding could retarget it) and never reassigned or
+/// `&mut`-escaped (checked against `ModifiedVars::fully` by the caller).
 #[derive(Debug, Clone)]
 struct LicmRefBinding {
     source_index: u32,
     source_name: String,
+    /// Total in-loop `let` statements binding this local (ref-shaped or not).
+    let_count: u32,
 }
 
 fn collect_immutable_ref_bindings(
@@ -1183,37 +1124,38 @@ fn collect_immutable_ref_bindings(
     type_table: &TypeTable,
 ) -> IndexMap<u32, LicmRefBinding> {
     let mut bindings = IndexMap::default();
-    collect_licm_ref_bindings_in_block(body, block, type_table, &mut bindings);
+    let mut let_counts: IndexMap<u32, u32> = IndexMap::default();
+    collect_licm_ref_bindings(
+        body,
+        NodeRef::Block(block),
+        type_table,
+        &mut bindings,
+        &mut let_counts,
+    );
+    for (local, binding) in &mut bindings {
+        binding.let_count = let_counts[local];
+    }
     bindings
 }
 
-fn collect_licm_ref_bindings_in_block(
+fn collect_licm_ref_bindings(
     body: &Body,
-    block: BlockId,
+    node: NodeRef,
     type_table: &TypeTable,
     bindings: &mut IndexMap<u32, LicmRefBinding>,
+    let_counts: &mut IndexMap<u32, u32>,
 ) {
-    for s in &body.blocks[block].stmts {
-        collect_licm_ref_bindings_in_stmt(body, *s, type_table, bindings);
-    }
-}
-
-fn collect_licm_ref_bindings_in_stmt(
-    body: &Body,
-    s: StmtId,
-    type_table: &TypeTable,
-    bindings: &mut IndexMap<u32, LicmRefBinding>,
-) {
-    // `let x: &T = &y` (immutable ref to a local) records `x -> y`.
-    if let StmtKind::Let {
-        local_index,
-        value,
-        type_id,
-        ..
-    } = &body.stmts[s].kind
+    // `let x: &T = &y` (immutable ref to a local) records `x -> y`; every
+    // `let` counts toward its local's binding total.
+    if let NodeRef::Stmt(s) = node
+        && let StmtKind::Let {
+            local_index,
+            value,
+            type_id,
+            ..
+        } = &body.stmts[s].kind
     {
-        let local_index = *local_index;
-        let value = *value;
+        *let_counts.entry(*local_index).or_insert(0) += 1;
         if matches!(type_table.get(*type_id), ResolvedType::Ref(_))
             && let Some(ve) = value.as_expr()
             && let ExprKind::Unary {
@@ -1227,42 +1169,27 @@ fn collect_licm_ref_bindings_in_stmt(
             } = &body.exprs[se].kind
         {
             bindings.insert(
-                local_index,
+                *local_index,
                 LicmRefBinding {
                     source_index: *source_idx,
                     source_name: source_name.clone(),
+                    let_count: 0,
                 },
             );
         }
     }
-    // Recurse into the statement's expression / block children.
-    for child in stmt_child_nodes(body, s) {
-        match child {
-            Child::Expr(e) => collect_licm_ref_bindings_in_expr(body, e, type_table, bindings),
-            Child::Block(b) => collect_licm_ref_bindings_in_block(body, b, type_table, bindings),
+    body.for_each_child(node, |c| {
+        if !matches!(c, NodeRef::Pat(_)) {
+            collect_licm_ref_bindings(body, c, type_table, bindings, let_counts);
         }
-    }
-}
-
-fn collect_licm_ref_bindings_in_expr(
-    body: &Body,
-    e: ExprId,
-    type_table: &TypeTable,
-    bindings: &mut IndexMap<u32, LicmRefBinding>,
-) {
-    for child in expr_child_nodes(body, e) {
-        match child {
-            Child::Expr(c) => collect_licm_ref_bindings_in_expr(body, c, type_table, bindings),
-            Child::Block(b) => collect_licm_ref_bindings_in_block(body, b, type_table, bindings),
-        }
-    }
+    });
 }
 
 // ---------------------------------------------------------------------------
 // Hoist-candidate detection
 // ---------------------------------------------------------------------------
 
-/// Represents a hoistable expression with its replacement info.
+/// A hoistable `local.field` access found in the loop body.
 #[derive(Debug)]
 struct HoistCandidate {
     local_index: u32,
@@ -1270,141 +1197,68 @@ struct HoistCandidate {
     field_index: u32,
     field_name: String,
     type_id: TypeId,
+}
+
+/// A hoist performed in step 4: the (source local, field) pair now served by
+/// the pre-header local `new_local_index`, whose allocated `name` every
+/// rewritten read reuses.
+struct HoistedField {
+    local_index: u32,
+    field_index: u32,
     new_local_index: u32,
+    name: String,
 }
 
-fn find_hoist_candidates_in_block(
+fn find_hoist_candidates(
     body: &Body,
-    block: BlockId,
+    node: NodeRef,
     modified_vars: &ModifiedVars,
     ref_bindings: &IndexMap<u32, LicmRefBinding>,
     candidates: &mut Vec<HoistCandidate>,
     seen: &mut IndexSet<(u32, u32)>,
-    next_local: &mut u32,
-) {
-    for s in &body.blocks[block].stmts {
-        find_hoist_candidates_in_stmt(
-            body,
-            *s,
-            modified_vars,
-            ref_bindings,
-            candidates,
-            seen,
-            next_local,
-        );
-    }
-}
-
-fn find_hoist_candidates_in_stmt(
-    body: &Body,
-    s: StmtId,
-    modified_vars: &ModifiedVars,
-    ref_bindings: &IndexMap<u32, LicmRefBinding>,
-    candidates: &mut Vec<HoistCandidate>,
-    seen: &mut IndexSet<(u32, u32)>,
-    next_local: &mut u32,
-) {
-    for child in stmt_child_nodes(body, s) {
-        match child {
-            Child::Expr(e) => find_hoist_candidates_in_expr(
-                body,
-                e,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            ),
-            Child::Block(b) => find_hoist_candidates_in_block(
-                body,
-                b,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            ),
-        }
-    }
-}
-
-fn find_hoist_candidates_in_expr(
-    body: &Body,
-    e: ExprId,
-    modified_vars: &ModifiedVars,
-    ref_bindings: &IndexMap<u32, LicmRefBinding>,
-    candidates: &mut Vec<HoistCandidate>,
-    seen: &mut IndexSet<(u32, u32)>,
-    next_local: &mut u32,
 ) {
     // The key pattern: field access on a loop-invariant local.
-    if let ExprKind::FieldAccess {
-        expr: inner,
-        field_index,
-        field_name,
-    } = &body.exprs[e].kind
+    if let NodeRef::Expr(e) = node
+        && let ExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            field_name,
+        } = &body.exprs[e].kind
         && let Some(inner_e) = inner.as_expr()
         && let ExprKind::Local { index, name } = &body.exprs[inner_e].kind
     {
         let field_index = *field_index;
         // Case 1: direct access on a loop-invariant local.
         if modified_vars.is_field_hoistable(*index, field_index) {
-            let key = (*index, field_index);
-            if !seen.contains(&key) {
-                seen.insert(key);
+            if seen.insert((*index, field_index)) {
                 candidates.push(HoistCandidate {
                     local_index: *index,
                     local_name: name.clone(),
                     field_index,
                     field_name: field_name.clone(),
                     type_id: body.exprs[e].type_id,
-                    new_local_index: *next_local,
                 });
-                *next_local += 1;
             }
         }
         // Case 2: access through an immutable reference to a loop-invariant local.
         else if let Some(ref_binding) = ref_bindings.get(index)
             && modified_vars.is_field_hoistable(ref_binding.source_index, field_index)
+            && seen.insert((ref_binding.source_index, field_index))
         {
-            let key = (ref_binding.source_index, field_index);
-            if !seen.contains(&key) {
-                seen.insert(key);
-                candidates.push(HoistCandidate {
-                    local_index: ref_binding.source_index,
-                    local_name: ref_binding.source_name.clone(),
-                    field_index,
-                    field_name: field_name.clone(),
-                    type_id: body.exprs[e].type_id,
-                    new_local_index: *next_local,
-                });
-                *next_local += 1;
-            }
+            candidates.push(HoistCandidate {
+                local_index: ref_binding.source_index,
+                local_name: ref_binding.source_name.clone(),
+                field_index,
+                field_name: field_name.clone(),
+                type_id: body.exprs[e].type_id,
+            });
         }
     }
-    // Recurse into children.
-    for child in expr_child_nodes(body, e) {
-        match child {
-            Child::Expr(c) => find_hoist_candidates_in_expr(
-                body,
-                c,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            ),
-            Child::Block(b) => find_hoist_candidates_in_block(
-                body,
-                b,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            ),
+    body.for_each_child(node, |c| {
+        if !matches!(c, NodeRef::Pat(_)) {
+            find_hoist_candidates(body, c, modified_vars, ref_bindings, candidates, seen);
         }
-    }
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -1440,6 +1294,13 @@ fn is_hoistable_binop(op: crate::nir::NirBinaryOp) -> bool {
     )
 }
 
+/// Unary ops that are pure and total, the unary counterpart of
+/// [`is_hoistable_binop`]. `Deref` and the reference constructors are not
+/// arithmetic; nothing else can be speculated.
+fn is_hoistable_unop(op: NirUnaryOp) -> bool {
+    matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
+}
+
 /// Whether `e`'s shape fits the hoistable-arithmetic grammar: a tree of pure,
 /// total ops over `Local` leaves. A promoted (`Operand::Value`) leaf has no
 /// skeleton expr and is treated as hoistable.
@@ -1461,7 +1322,7 @@ fn is_hoistable_arith_shape(body: &Body, e: ExprId) -> bool {
                     .is_none_or(|e| is_hoistable_arith_shape(body, e))
         }
         ExprKind::Unary { op, expr } => {
-            matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
+            is_hoistable_unop(*op)
                 && expr
                     .as_expr()
                     .is_none_or(|e| is_hoistable_arith_shape(body, e))
@@ -1496,19 +1357,27 @@ fn collect_arith_local_leaves(body: &Body, e: ExprId, out: &mut Vec<(ExprId, u32
 /// `b + a` agree (matching the `ValueGraph` hash-cons). Once a tree's `Local`
 /// leaves are all loop-invariant, two trees with the same key denote the same
 /// value — so this replaces the `value_of` `ValueId` for the hoist dedup.
-fn arith_structural_key(body: &Body, e: ExprId) -> String {
-    let mut s = String::new();
-    push_arith_key(body, e, &mut s);
-    s
+///
+/// Ops are stored as their discriminants (the enums are fieldless, so `as u8`
+/// is exact identity), which lets the key derive `Ord` for the commutative
+/// operand sort without an `Ord` on the op enums.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum ArithKey {
+    Local(u32),
+    /// A promoted operand is a frozen value: equal ids denote equal values.
+    Value(u32),
+    /// Any other shape is not part of a hoistable-arith tree; key it by expr
+    /// id so it never spuriously dedups with another node.
+    Opaque(u32),
+    Unary(u8, Box<ArithKey>),
+    Binary(u8, Box<ArithKey>, Box<ArithKey>),
 }
 
-fn push_arith_key(body: &Body, e: ExprId, out: &mut String) {
+fn arith_structural_key(body: &Body, e: ExprId) -> ArithKey {
     match &body.exprs[e].kind {
         ExprKind::Binary { left, op, right } => {
-            let mut l = String::new();
-            push_operand_key(body, *left, &mut l);
-            let mut r = String::new();
-            push_operand_key(body, *right, &mut r);
+            let mut l = arith_operand_key(body, *left);
+            let mut r = arith_operand_key(body, *right);
             // Commutative ops: order-independent so `a+b` ≡ `b+a`.
             if matches!(
                 op,
@@ -1521,25 +1390,45 @@ fn push_arith_key(body: &Body, e: ExprId, out: &mut String) {
             {
                 std::mem::swap(&mut l, &mut r);
             }
-            out.push_str(&format!("B{op:?}({l},{r})"));
+            ArithKey::Binary(*op as u8, Box::new(l), Box::new(r))
         }
         ExprKind::Unary { op, expr } => {
-            let mut inner = String::new();
-            push_operand_key(body, *expr, &mut inner);
-            out.push_str(&format!("U{op:?}({inner})"));
+            ArithKey::Unary(*op as u8, Box::new(arith_operand_key(body, *expr)))
         }
-        ExprKind::Local { index, .. } => out.push_str(&format!("L{index}")),
-        // Any other shape is not part of a hoistable-arith tree; key it by id so
-        // it never spuriously dedups with another node.
-        _ => out.push_str(&format!("E{}", e.index())),
+        ExprKind::Local { index, .. } => ArithKey::Local(*index),
+        ExprKind::Assign { .. }
+        | ExprKind::Cast { .. }
+        | ExprKind::Call { .. }
+        | ExprKind::MethodCall { .. }
+        | ExprKind::CmRawCall { .. }
+        | ExprKind::IndirectCall { .. }
+        | ExprKind::ClosureToCanonical { .. }
+        | ExprKind::FieldAccess { .. }
+        | ExprKind::Index { .. }
+        | ExprKind::Block(_)
+        | ExprKind::If { .. }
+        | ExprKind::Match { .. }
+        | ExprKind::Switch { .. }
+        | ExprKind::LabeledBlock { .. }
+        | ExprKind::StructLiteral { .. }
+        | ExprKind::TupleLiteral { .. }
+        | ExprKind::ArrayLiteral { .. }
+        | ExprKind::VariantConstruct { .. }
+        | ExprKind::VariantTag { .. }
+        | ExprKind::VariantTest { .. }
+        | ExprKind::VariantPayload { .. }
+        | ExprKind::EnumConstruct { .. }
+        | ExprKind::GlobalVarGet { .. }
+        | ExprKind::GlobalVarSet { .. }
+        | ExprKind::PackedArray(_)
+        | ExprKind::Dead => ArithKey::Opaque(e.index() as u32),
     }
 }
 
-fn push_operand_key(body: &Body, op: Operand, out: &mut String) {
+fn arith_operand_key(body: &Body, op: Operand) -> ArithKey {
     match op {
-        Operand::Expr(e) => push_arith_key(body, e, out),
-        // A promoted operand is a frozen value: equal ids denote equal values.
-        Operand::Value(v) => out.push_str(&format!("V{}", v.index())),
+        Operand::Expr(e) => arith_structural_key(body, e),
+        Operand::Value(v) => ArithKey::Value(v.index()),
     }
 }
 
@@ -1559,20 +1448,20 @@ struct ArithHoist<'a> {
 
 impl ArithHoist<'_> {
     /// Whether `e` is a compound arithmetic expression that may move to
-    /// the pre-header, returning its `ValueId` for dedup. Each `Local`
+    /// the pre-header, returning its structural key for dedup. Each `Local`
     /// leaf's use-site value must equal the pre-header entry value, so the
     /// hoisted clone computes what every occurrence reads — cross-iteration
     /// invariance alone would wrongly admit `loop { x = 5; … x + n … }`.
-    fn candidate(&self, engine: &mut Engine, e: ExprId) -> Option<String> {
+    fn candidate(&self, body: &Body, e: ExprId) -> Option<ArithKey> {
         let compound = matches!(
-            &engine.body.exprs[e].kind,
+            &body.exprs[e].kind,
             ExprKind::Binary { .. } | ExprKind::Unary { .. }
         );
-        if !compound || !is_hoistable_arith_shape(engine.body, e) {
+        if !compound || !is_hoistable_arith_shape(body, e) {
             return None;
         }
         let mut leaves: Vec<(ExprId, u32)> = Vec::new();
-        collect_arith_local_leaves(engine.body, e, &mut leaves);
+        collect_arith_local_leaves(body, e, &mut leaves);
         // A constant-only tree is left for constant folding.
         if leaves.is_empty() {
             return None;
@@ -1592,48 +1481,31 @@ impl ArithHoist<'_> {
         }
         // With every `Local` leaf invariant, the structural key is exact
         // value-identity for the dedup (replaces `engine.value(e)`).
-        Some(arith_structural_key(engine.body, e))
+        Some(arith_structural_key(body, e))
     }
 
-    /// Collect the maximal hoistable arithmetic subexpressions in `block`,
+    /// Collect the maximal hoistable arithmetic subexpressions under `node`,
     /// paired with their structural keys. "Maximal" means a hoistable expression
     /// whose parent is not itself hoistable, so each whole tree is hoisted
     /// once. Nested loops are skipped — the recursive `licm_loop` call
     /// hoists each nested loop's own invariants into that loop's pre-header.
-    fn collect_in_block(
-        &self,
-        engine: &mut Engine,
-        block: BlockId,
-        out: &mut Vec<(ExprId, String)>,
-    ) {
-        for s in engine.body.blocks[block].stmts.clone() {
-            self.collect_in_stmt(engine, s, out);
-        }
-    }
-
-    fn collect_in_stmt(&self, engine: &mut Engine, s: StmtId, out: &mut Vec<(ExprId, String)>) {
-        if matches!(engine.body.stmts[s].kind, StmtKind::Loop { .. }) {
+    fn collect(&self, body: &Body, node: NodeRef, out: &mut Vec<(ExprId, ArithKey)>) {
+        if let NodeRef::Stmt(s) = node
+            && matches!(body.stmts[s].kind, StmtKind::Loop { .. })
+        {
             return;
         }
-        for child in stmt_child_nodes(engine.body, s) {
-            match child {
-                Child::Expr(e) => self.collect_in_expr(engine, e, out),
-                Child::Block(b) => self.collect_in_block(engine, b, out),
-            }
-        }
-    }
-
-    fn collect_in_expr(&self, engine: &mut Engine, e: ExprId, out: &mut Vec<(ExprId, String)>) {
-        if let Some(key) = self.candidate(engine, e) {
+        if let NodeRef::Expr(e) = node
+            && let Some(key) = self.candidate(body, e)
+        {
             out.push((e, key));
             return; // maximal: do not recurse into a hoisted tree's children.
         }
-        for child in expr_child_nodes(engine.body, e) {
-            match child {
-                Child::Expr(c) => self.collect_in_expr(engine, c, out),
-                Child::Block(b) => self.collect_in_block(engine, b, out),
+        body.for_each_child(node, |c| {
+            if !matches!(c, NodeRef::Pat(_)) {
+                self.collect(body, c, out);
             }
-        }
+        });
     }
 }
 
@@ -1646,6 +1518,7 @@ fn hoist_invariant_arith(
     loop_body: BlockId,
     modified: &ModifiedVars,
     all_hoist_stmts: &mut Vec<StmtId>,
+    ctx: &mut LicmCtx,
 ) -> bool {
     // Earlier hoist rounds may have changed which locals are address-taken;
     // refresh that scan. The value graph is not rebuilt (build-once invariant):
@@ -1667,13 +1540,13 @@ fn hoist_invariant_arith(
         address_taken: &address_taken,
         modified,
     };
-    let mut found: Vec<(ExprId, String)> = Vec::new();
-    walk.collect_in_block(engine, loop_body, &mut found);
+    let mut found: Vec<(ExprId, ArithKey)> = Vec::new();
+    walk.collect(engine.body, NodeRef::Block(loop_body), &mut found);
     if found.is_empty() {
         // No skeleton arith trees, but operand promotion may have left the
         // invariant as a bare `Operand::Value` slot (no skeleton expr) — hoist
         // those.
-        let mut c = hoist_invariant_value_operands(engine, loop_body, all_hoist_stmts);
+        let mut c = hoist_invariant_value_operands(engine, loop_body, all_hoist_stmts, ctx);
         c |= cse_loop_body(engine, loop_body, modified);
         return c;
     }
@@ -1681,7 +1554,7 @@ fn hoist_invariant_arith(
     // Group occurrences by (structural key, type): structurally-equal invariant
     // trees of equal type share one temp. The type key is belt-and-braces —
     // same-key trees over a shared `Local` leaf already agree on types.
-    let mut groups: Vec<(String, TypeId, Vec<ExprId>)> = Vec::new();
+    let mut groups: Vec<(ArithKey, TypeId, Vec<ExprId>)> = Vec::new();
     'next: for (e, key) in found {
         let ty = engine.body.exprs[e].type_id;
         for g in &mut groups {
@@ -1695,8 +1568,9 @@ fn hoist_invariant_arith(
 
     for (_, type_id, occ) in groups {
         let rep = occ[0];
-        let name = format!("_licm_arith_{}", engine.locals().len());
+        let name = format!("{LICM_HOIST_PREFIX}arith_{}", engine.locals().len());
         let new_idx = engine.alloc_local(name.clone(), type_id, /* is_mut */ false);
+        ctx.hoist_locals.insert(new_idx);
 
         // Clone the representative into the pre-header `let` *before* rewriting
         // the in-loop occurrences (which include `rep` itself) to a `Local`.
@@ -1726,7 +1600,7 @@ fn hoist_invariant_arith(
         }
     }
 
-    hoist_invariant_value_operands(engine, loop_body, all_hoist_stmts);
+    hoist_invariant_value_operands(engine, loop_body, all_hoist_stmts, ctx);
     cse_loop_body(engine, loop_body, modified);
     true
 }
@@ -1831,10 +1705,10 @@ fn cse_loop_body(engine: &mut Engine, loop_body: BlockId, modified: &ModifiedVar
     // leaf assigned across the span) establishes that without `value_of`,
     // replacing the value graph's per-point flow-sensitivity. Nested loops are
     // not descended.
-    let mut occ: IndexMap<String, Vec<(usize, ExprId)>> = IndexMap::default();
+    let mut occ: IndexMap<ArithKey, Vec<(usize, ExprId)>> = IndexMap::default();
     for (i, &s) in stmts.iter().enumerate() {
         let mut exprs = Vec::new();
-        collect_stmt_exprs(engine.body, s, &mut exprs);
+        collect_cse_exprs(engine.body, NodeRef::Stmt(s), &mut exprs);
         for e in exprs {
             if !is_cse_candidate_expr(engine.body, e) {
                 continue;
@@ -1845,8 +1719,9 @@ fn cse_loop_body(engine: &mut Engine, loop_body: BlockId, modified: &ModifiedVar
             if leaves.is_empty() {
                 continue;
             }
-            let key = arith_structural_key(engine.body, e);
-            occ.entry(key).or_default().push((i, e));
+            occ.entry(arith_structural_key(engine.body, e))
+                .or_default()
+                .push((i, e));
         }
     }
 
@@ -1899,7 +1774,7 @@ fn cse_loop_body(engine: &mut Engine, loop_body: BlockId, modified: &ModifiedVar
                         let s = stmts[si];
                         leaf_ids.iter().any(|idx| {
                             !address_taken.contains(idx)
-                                && local_assigned_in_stmt(engine.body, s, *idx)
+                                && local_assigned_in(engine.body, NodeRef::Stmt(s), *idx)
                         })
                     })
                 }
@@ -1986,115 +1861,77 @@ fn cse_loop_body(engine: &mut Engine, loop_body: BlockId, modified: &ModifiedVar
     true
 }
 
-/// Collect every expression under statement `s`, descending through blocks but
+/// Collect every expression under `node`, descending through blocks but
 /// **not** into nested `Loop` bodies (keeping occurrences within one loop's
 /// dominance scope).
-fn collect_stmt_exprs(body: &Body, s: StmtId, out: &mut Vec<ExprId>) {
-    if matches!(body.stmts[s].kind, StmtKind::Loop { .. }) {
+fn collect_cse_exprs(body: &Body, node: NodeRef, out: &mut Vec<ExprId>) {
+    if let NodeRef::Stmt(s) = node
+        && matches!(body.stmts[s].kind, StmtKind::Loop { .. })
+    {
         return;
     }
-    for child in stmt_child_nodes(body, s) {
-        match child {
-            Child::Expr(e) => collect_expr_exprs(body, e, out),
-            Child::Block(b) => {
-                for &s2 in &body.blocks[b].stmts {
-                    collect_stmt_exprs(body, s2, out);
-                }
+    if let NodeRef::Expr(e) = node {
+        out.push(e);
+    }
+    body.for_each_child(node, |c| {
+        if !matches!(c, NodeRef::Pat(_)) {
+            collect_cse_exprs(body, c, out);
+        }
+    });
+}
+
+/// Whether the subtree under `node` assigns local `idx`: `idx = …` (an
+/// `Assign` rooting at `idx`), `let idx = …`, or a pattern binding of `idx`
+/// (`let [idx, …] = …`, a `match` arm). For a **non-address-taken** local
+/// these are the only paths that change its value (no reference can alias it,
+/// and a call cannot reach a non-escaping local) — so a `cse_loop_body`
+/// occurrence span free of such assignments reads the same leaf value at every
+/// occurrence. The whole subtree is searched, **including** nested `Loop`
+/// bodies: occurrences are collected only outside them, but an assignment
+/// inside one still changes what a later occurrence reads.
+fn local_assigned_in(body: &Body, node: NodeRef, idx: u32) -> bool {
+    match node {
+        NodeRef::Stmt(s) => {
+            if let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
+                && *local_index == idx
+            {
+                return true;
             }
         }
-    }
-}
-
-fn collect_expr_exprs(body: &Body, e: ExprId, out: &mut Vec<ExprId>) {
-    out.push(e);
-    for child in expr_child_nodes(body, e) {
-        match child {
-            Child::Expr(c) => collect_expr_exprs(body, c, out),
-            Child::Block(b) => {
-                for &s2 in &body.blocks[b].stmts {
-                    collect_stmt_exprs(body, s2, out);
-                }
+        NodeRef::Expr(e) => {
+            if let ExprKind::Assign { target, .. } = &body.exprs[e].kind
+                && super::arena_query::storage_root(body, *target) == Some(idx)
+            {
+                return true;
             }
         }
-    }
-}
-
-/// Whether `v` is a pure arithmetic compound worth CSE-materialising: a
-/// `Binary` / `Unary` with a non-trap-prone op. The leaves need no availability
-/// check here — see [`cse_loop_body`]'s soundness note (shared scope of ≥2
-/// occurrences) — only the root must be a compound, not a bare leaf.
-/// Whether top-level statement `s` (its subtree, **not** descending nested
-/// `Loop` bodies) directly assigns local `idx`: `idx = …` (an `Assign` rooting
-/// at `idx`) or `let idx = …`. For a **non-address-taken** local this is the
-/// only path that changes its value (no reference can alias it, and a call
-/// cannot reach a non-escaping local) — so a `cse_loop_body` occurrence span
-/// free of such assignments reads the same leaf value at every occurrence.
-fn local_assigned_in_stmt(body: &Body, s: StmtId, idx: u32) -> bool {
-    match &body.stmts[s].kind {
-        StmtKind::Let {
-            local_index, value, ..
-        } => *local_index == idx || operand_assigns_local(body, *value, idx),
-        StmtKind::Expr(op)
-        | StmtKind::Return { value: Some(op) }
-        | StmtKind::Break {
-            value: Some(op), ..
-        } => operand_assigns_local(body, *op, idx),
-        StmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            operand_assigns_local(body, *condition, idx)
-                || block_assigns_local(body, *then_block, idx)
-                || else_block.is_some_and(|b| block_assigns_local(body, b, idx))
+        NodeRef::Pat(p) => {
+            if let PatKind::Binding { local_index, .. } = &body.pats[p].kind
+                && *local_index == idx
+            {
+                return true;
+            }
         }
-        StmtKind::LabeledBlock { block, .. } => block_assigns_local(body, *block, idx),
-        // A nested `Loop` is not descended (its occurrences are out of this
-        // body's CSE scope); conservatively any local it writes is already in
-        // `modified_vars`, handled by the invariance fallback.
-        StmtKind::Loop { .. }
-        | StmtKind::Continue
-        | StmtKind::Return { value: None }
-        | StmtKind::Break { value: None, .. }
-        | StmtKind::LetDestructure { .. } => false,
-    }
-}
-
-fn block_assigns_local(body: &Body, b: BlockId, idx: u32) -> bool {
-    body.blocks[b]
-        .stmts
-        .iter()
-        .any(|&s| local_assigned_in_stmt(body, s, idx))
-}
-
-fn operand_assigns_local(body: &Body, op: Operand, idx: u32) -> bool {
-    let Some(e) = op.as_expr() else { return false };
-    expr_assigns_local(body, e, idx)
-}
-
-fn expr_assigns_local(body: &Body, e: ExprId, idx: u32) -> bool {
-    if let ExprKind::Assign { target, .. } = &body.exprs[e].kind
-        && super::arena_query::storage_root(body, *target) == Some(idx)
-    {
-        return true;
+        NodeRef::Block(_) => {}
     }
     let mut found = false;
-    body.for_each_child(NodeRef::Expr(e), |c| {
-        if !found && let NodeRef::Expr(ce) = c {
-            found = expr_assigns_local(body, ce, idx);
+    body.for_each_child(node, |c| {
+        if !found {
+            found = local_assigned_in(body, c, idx);
         }
     });
     found
 }
 
-/// A hoistable `Binary` / `Unary` arith expression — the CSE candidate shape,
-/// checked structurally (value-graph-free).
+/// Whether `e` is a pure arithmetic compound worth CSE-materialising: a
+/// `Binary` / `Unary` with a non-trap-prone op, checked structurally
+/// (value-graph-free). The leaves need no availability check here — see
+/// [`cse_loop_body`]'s soundness note (shared scope of ≥2 occurrences) — only
+/// the root must be a compound, not a bare leaf.
 fn is_cse_candidate_expr(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
         ExprKind::Binary { op, .. } => is_hoistable_binop(*op),
-        ExprKind::Unary { op, .. } => {
-            matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
-        }
+        ExprKind::Unary { op, .. } => is_hoistable_unop(*op),
         _ => false,
     }
 }
@@ -2109,6 +1946,7 @@ fn hoist_invariant_value_operands(
     engine: &mut Engine,
     loop_body: BlockId,
     all_hoist_stmts: &mut Vec<StmtId>,
+    ctx: &mut LicmCtx,
 ) -> bool {
     use crate::nir_value_graph::OpaqueSource;
 
@@ -2165,8 +2003,9 @@ fn hoist_invariant_value_operands(
         let Some(ty) = engine.body.values.type_of(rep) else {
             continue;
         };
-        let name = format!("_licm_arith_{}", engine.locals().len());
+        let name = format!("{LICM_HOIST_PREFIX}arith_{}", engine.locals().len());
         let temp = engine.alloc_local(name.clone(), ty, /* is_mut */ false);
+        ctx.hoist_locals.insert(temp);
         let read = engine
             .body
             .values
@@ -2224,38 +2063,22 @@ fn hoist_invariant_value_operands(
 
 /// Collect every expression and statement id reachable from `loop_body` (the
 /// whole loop subtree, including nested loops — a pre-header temp dominates
-/// them, so rewriting their slots stays sound).
+/// them, so rewriting their slots stays sound). Patterns are excluded: they
+/// carry no operand slots the caller rewrites.
 fn collect_loop_subtree(body: &Body, loop_body: BlockId) -> (Vec<ExprId>, Vec<StmtId>) {
     let mut expr_ids = Vec::new();
     let mut stmt_ids = Vec::new();
-    let mut block_work = vec![loop_body];
-    while let Some(b) = block_work.pop() {
-        for &s in &body.blocks[b].stmts {
-            stmt_ids.push(s);
-            for child in stmt_child_nodes(body, s) {
-                match child {
-                    Child::Block(nb) => block_work.push(nb),
-                    Child::Expr(e) => collect_expr_subtree(body, e, &mut expr_ids, &mut block_work),
-                }
-            }
+    let mut work = vec![NodeRef::Block(loop_body)];
+    while let Some(node) = work.pop() {
+        match node {
+            NodeRef::Expr(e) => expr_ids.push(e),
+            NodeRef::Stmt(s) => stmt_ids.push(s),
+            NodeRef::Block(_) => {}
+            NodeRef::Pat(_) => continue,
         }
+        body.for_each_child(node, |c| work.push(c));
     }
     (expr_ids, stmt_ids)
-}
-
-fn collect_expr_subtree(
-    body: &Body,
-    e: ExprId,
-    expr_ids: &mut Vec<ExprId>,
-    block_work: &mut Vec<BlockId>,
-) {
-    expr_ids.push(e);
-    for child in expr_child_nodes(body, e) {
-        match child {
-            Child::Expr(c) => collect_expr_subtree(body, c, expr_ids, block_work),
-            Child::Block(b) => block_work.push(b),
-        }
-    }
 }
 
 /// Whether `v` is a loop-invariant arithmetic compound worth hoisting: a
@@ -2306,8 +2129,7 @@ fn value_is_invariant(
                 && value_is_invariant(pool, *rhs, entry_locals)
         }
         ValueKind::Unary { op, operand, .. } => {
-            matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
-                && value_is_invariant(pool, *operand, entry_locals)
+            is_hoistable_unop(*op) && value_is_invariant(pool, *operand, entry_locals)
         }
         _ => false,
     }
@@ -2317,82 +2139,57 @@ fn value_is_invariant(
 // Replace hoisted field accesses with the hoisted locals
 // ---------------------------------------------------------------------------
 
-fn replace_hoisted_in_block(
+fn replace_hoisted(
     engine: &mut Engine,
-    block: BlockId,
-    candidates: &[HoistCandidate],
+    node: NodeRef,
+    hoisted: &[HoistedField],
     ref_bindings: &IndexMap<u32, LicmRefBinding>,
 ) {
-    for s in engine.body.blocks[block].stmts.clone() {
-        replace_hoisted_in_stmt(engine, s, candidates, ref_bindings);
-    }
-}
-
-fn replace_hoisted_in_stmt(
-    engine: &mut Engine,
-    s: StmtId,
-    candidates: &[HoistCandidate],
-    ref_bindings: &IndexMap<u32, LicmRefBinding>,
-) {
-    for child in stmt_child_nodes(engine.body, s) {
-        match child {
-            Child::Expr(e) => replace_hoisted_in_expr(engine, e, candidates, ref_bindings),
-            Child::Block(b) => replace_hoisted_in_block(engine, b, candidates, ref_bindings),
-        }
-    }
-}
-
-fn replace_hoisted_in_expr(
-    engine: &mut Engine,
-    e: ExprId,
-    candidates: &[HoistCandidate],
-    ref_bindings: &IndexMap<u32, LicmRefBinding>,
-) {
-    // First, check if this expression matches a hoist candidate.
-    let matched = if let ExprKind::FieldAccess {
-        expr: inner,
-        field_index,
-        ..
-    } = &engine.body.exprs[e].kind
+    // First, check if this expression matches a hoisted access.
+    let matched = if let NodeRef::Expr(e) = node
+        && let ExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            ..
+        } = &engine.body.exprs[e].kind
         && let Some(inner_e) = inner.as_expr()
         && let ExprKind::Local { index, .. } = &engine.body.exprs[inner_e].kind
     {
         let index = *index;
         let field_index = *field_index;
         // Case 1: direct match — local.field where local is the hoisted source.
-        let direct = candidates
+        let direct = hoisted
             .iter()
-            .find(|c| c.local_index == index && c.field_index == field_index);
-        if let Some(c) = direct {
-            Some((c.new_local_index, c.field_name.clone()))
+            .find(|h| h.local_index == index && h.field_index == field_index);
+        if let Some(h) = direct {
+            Some((e, h))
         } else if let Some(ref_binding) = ref_bindings.get(&index) {
             // Case 2: look through immutable reference — ref_var.field.
-            candidates
+            hoisted
                 .iter()
-                .find(|c| c.local_index == ref_binding.source_index && c.field_index == field_index)
-                .map(|c| (c.new_local_index, c.field_name.clone()))
+                .find(|h| h.local_index == ref_binding.source_index && h.field_index == field_index)
+                .map(|h| (e, h))
         } else {
             None
         }
     } else {
         None
     };
-    if let Some((new_local_index, field_name)) = matched {
+    if let Some((e, h)) = matched {
         engine.replace_expr_kind(
             e,
             ExprKind::Local {
-                index: new_local_index,
-                name: format!("_licm_{field_name}_{new_local_index}"),
+                index: h.new_local_index,
+                name: h.name.clone(),
             },
         );
         return;
     }
 
     // Recurse into sub-expressions / sub-blocks.
-    for child in expr_child_nodes(engine.body, e) {
-        match child {
-            Child::Expr(c) => replace_hoisted_in_expr(engine, c, candidates, ref_bindings),
-            Child::Block(b) => replace_hoisted_in_block(engine, b, candidates, ref_bindings),
+    for c in child_nodes(engine.body, node) {
+        if !matches!(c, NodeRef::Pat(_)) {
+            replace_hoisted(engine, c, hoisted, ref_bindings);
         }
     }
 }

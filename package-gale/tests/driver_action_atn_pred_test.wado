@@ -13,14 +13,14 @@ use ap from "./grammars/wado_atn_pred.g4"
 test "a true predicate leaves the ATN-selected longer alt" {
     let r = ap::parse_takes(&"abcc");
     assert r.ok(), "clean parse";
-    assert r.output == "abc", `expected the longer alt to run: '{r.output}'`;
+    assert r.output == "abc", `expected the longer alt to run: '${r.output}'`;
 }
 
 test "a false predicate excludes the ATN alt" {
     let r = ap::parse_rejects(&"abcc");
     // Same input, same ATN decision — but `{false}?` on the longer alt excludes
     // it from the seed set, so the shorter alt is chosen instead.
-    assert r.output == "ab", `expected the shorter alt to run: '{r.output}'`;
+    assert r.output == "ab", `expected the shorter alt to run: '${r.output}'`;
 }
 
 test "all-false predicates at an ATN decision fail no-viable" {
@@ -28,15 +28,15 @@ test "all-false predicates at an ATN decision fail no-viable" {
     // Both alts excluded → no seed survives → the decision must not commit to
     // the last (rejected) alt.
     assert !r.ok(), "no alternative is viable when every predicate is false";
-    assert r.output == "", `no alt action should run: '{r.output}'`;
+    assert r.output == "", `no alt action should run: '${r.output}'`;
 }
 
 test "a context-dependent predicate is honoured at the ATN decision" {
     // `$mode` (seeded to 1 by @init) is in scope at the ATN dispatch, so the
     // condition is evaluated there — not silently dropped.
     let keep = ap::parse_ctxkeep(&"abcc");
-    assert keep.output == "abc", `expected the longer alt ($mode == 1): '{keep.output}'`;
+    assert keep.output == "abc", `expected the longer alt ($mode == 1): '${keep.output}'`;
 
     let drop = ap::parse_ctxdrop(&"abcc");
-    assert drop.output == "ab", `expected the shorter alt ($mode == 0 is false): '{drop.output}'`;
+    assert drop.output == "ab", `expected the shorter alt ($mode == 0 is false): '${drop.output}'`;
 }

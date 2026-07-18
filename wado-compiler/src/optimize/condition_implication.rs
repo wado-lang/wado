@@ -50,7 +50,16 @@ pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
     // Built once and threaded down: sound because eliminations never add
     // reassignments, so the snapshot only omits bindings, never holds a stale one.
     let binds = build_copy_bindings(engine.body);
-    let mut changed = process_block(engine, root, &binds);
+    // The three flow-insensitive eliminators recognise self-contained shapes
+    // (bitmask-bounded, const-bound index, short-circuit `||`), so one subtree
+    // walk from the root refutes every nesting depth once — rather than a full
+    // walk per top-level statement of every enclosing block.
+    let mut changed = BitmaskEliminator { binds: &binds }.visit_block(engine, root);
+    changed |= ConstBoundIndexEliminator { binds: &binds }.visit_block(engine, root);
+    changed |= ShortCircuitEliminator { binds: &binds }.visit_block(engine, root);
+    // Flow-sensitive elimination: loop guards, dominating-ifs, and early-exit
+    // facts, threaded through the block structure.
+    changed |= process_block(engine, root, &binds);
     let mut facts: Vec<ProvenLt> = Vec::new();
     changed |= rbce_walk(engine, NodeRef::Block(root), &mut facts, &binds);
     changed
@@ -68,7 +77,11 @@ pub(super) fn resolve_panic_ids(
         .iter()
         .filter_map(|f| {
             let f = f.borrow();
-            (f.name.contains("panic") || f.name == "unreachable")
+            // Exact identity: the two diverging `core:rt` builtins by name. A
+            // substring match on `"panic"` would misclassify a user function
+            // like `panic_free_parse`, letting its call sites masquerade as
+            // bounds-check panic blocks.
+            (f.module_source.is_core_rt() && matches!(f.name.as_str(), "panic" | "unreachable"))
                 .then_some(f.id)
                 .flatten()
         })
@@ -190,10 +203,14 @@ pub(super) fn build_copy_bindings(body: &crate::nir_arena::Body) -> Binds {
     binds
 }
 
+/// Cap on how many copy-temp / block-tail hops a bounded resolution chain
+/// follows before giving up, guarding against pathological or cyclic bindings.
+const MAX_BIND_CHAIN: usize = 8;
+
 /// Resolve an operand through [`Binds`] (bounded depth).
 pub(super) fn resolve(engine: &Engine, binds: &Binds, op: Operand) -> Operand {
     let mut cur = op;
-    for _ in 0..8 {
+    for _ in 0..MAX_BIND_CHAIN {
         let Some(e) = cur.as_expr() else { break };
         let ExprKind::Local { index, .. } = &engine.body.exprs[e].kind else {
             break;
@@ -399,7 +416,7 @@ fn struct_field_init(
     field_name: &str,
 ) -> Option<Operand> {
     let mut cur = resolve(engine, binds, recv);
-    for _ in 0..8 {
+    for _ in 0..MAX_BIND_CHAIN {
         let Operand::Expr(e) = cur else { break };
         if matches!(&engine.body.exprs[e].kind, ExprKind::StructLiteral { .. }) {
             break;
@@ -419,21 +436,23 @@ fn struct_field_init(
         .map(|f| f.value)
 }
 
-/// `c >= 0` such that `bound`'s value equals `guard_var + c`: either `bound` is
-/// `guard_var + c` directly, or it is an invariant struct-field read
-/// (`arr.used` over `List { used: guard_var + c }`) projected via
-/// [`struct_field_init`]. Lets a `<=` guard relate its bound to a check bound.
+/// The offset `c` such that `bound`'s value equals `guard_var + c`, where `bound`
+/// is an invariant struct-field read (`arr.used` over `List { used: guard_var + c }`)
+/// projected via [`struct_field_init`]. Lets a `<=` guard relate its bound to a
+/// check bound (the caller keeps only `c > cj`).
+///
+/// A bare `guard_var + c` arithmetic bound is deliberately **not** accepted: Wado
+/// add wraps, so `guard_var + c` can overflow to a value below `guard_var`,
+/// making `guard_var + cj < guard_var + c` unsound (see `wraple` repro). The
+/// struct-field form is safe because the field holds a real list length, which
+/// the runtime maintains in `[0, capacity)` with `capacity < 2^31` — so
+/// `used == guard_var + c` proves the sum did not wrap.
 fn bound_offset_over(
     engine: &Engine,
     binds: &Binds,
     bound: Operand,
     guard_var: u32,
 ) -> Option<i64> {
-    if let Some((v, c)) = parse_var_offset(engine, binds, bound)
-        && v == guard_var
-    {
-        return Some(c);
-    }
     let Operand::Expr(e) = resolve(engine, binds, bound) else {
         return None;
     };
@@ -770,7 +789,7 @@ fn structural_loop_guard(engine: &mut Engine, loop_body: BlockId, binds: &Binds)
     // longer holds past it.
     //
     // - `<` guard: surviving `var + goff < bound`; a check `var + j >= bound` is
-    //   refuted for `j <= goff` (same bound, [`eliminate_checks_in_node`]).
+    //   refuted only for `j == goff` (same wrapping index, [`eliminate_checks_in_node`]).
     // - `<=` guard (`goff == 0`, `bound` a local `gbl`): surviving `var <= gbl`,
     //   i.e. `var < gbl + 1`; a check `var + j >= B` is refuted when `B` relates
     //   to `gbl + c` with `c >= j + 1` ([`eliminate_le_checks_in_node`]). This is
@@ -797,20 +816,17 @@ fn structural_loop_guard(engine: &mut Engine, loop_body: BlockId, binds: &Binds)
     changed
 }
 
-/// Drive to `false` every `if (var >= bound) { panic }` (no else) nested in
-/// `node`, matching the loop guard's `var` / `bound` structurally. Both
+/// Drive to `false` the condition of every `if <cond> { panic }` (no else)
+/// nested in `node` for which `refute` proves the condition is false. Both
 /// `StmtKind::If` and `ExprKind::If` holders are handled (an inlined bounds
-/// check sits in value position).
-fn eliminate_checks_in_node(
+/// check sits in value position). Candidates are collected first — the walk
+/// borrows the body immutably — then rewritten.
+fn refute_panic_checks(
     engine: &mut Engine,
     node: NodeRef,
-    var: u32,
-    k: i64,
-    bound: BoundKey,
     binds: &Binds,
+    refute: impl Fn(&Engine, &Binds, Operand) -> bool,
 ) -> bool {
-    // Collect candidate If holders first (the walk borrows the body immutably),
-    // then rewrite.
     let mut holders: Vec<(NodeRef, Operand)> = Vec::new();
     let mut stack = vec![node];
     while let Some(n) = stack.pop() {
@@ -833,14 +849,9 @@ fn eliminate_checks_in_node(
             },
             _ => None,
         };
-        // The guard gives `var + k < bound`; a check `var + j >= bound` is
-        // refuted for `0 <= j <= k` (`var + j <= var + k < bound`).
         if let Some((cond, then_b)) = cand
             && is_panic_block(engine, then_b)
-            && let Some((cvar, cj, cbound)) = parse_check(engine, binds, cond)
-            && cvar == var
-            && cbound == bound
-            && (0..=k).contains(&cj)
+            && refute(engine, binds, cond)
         {
             holders.push((n, cond));
         }
@@ -852,6 +863,33 @@ fn eliminate_checks_in_node(
         changed = true;
     }
     changed
+}
+
+/// Drive to `false` every `if (var >= bound) { panic }` (no else) nested in
+/// `node`, matching the loop guard's `var` / `bound` structurally.
+///
+/// The guard gives `var + k < bound`; a check `var + j >= bound` is refuted only
+/// for `j == k`. Wado add wraps (i32 two's-complement), so `var + j <= var + k`
+/// does **not** hold in general: if `var + k` overflows (e.g. `var == i32::MAX`,
+/// `k == 1`) the guard passes on the wrapped-negative value while `var + j`
+/// (`j < k`) stays a large in-range positive that violates the bound. Only
+/// `j == k` computes the identical wrapping index as the guard, so `var + k <
+/// bound` refutes `var + k >= bound` regardless of wrap. See
+/// `opt_bce_wrap_guard.wado`.
+fn eliminate_checks_in_node(
+    engine: &mut Engine,
+    node: NodeRef,
+    var: u32,
+    k: i64,
+    bound: BoundKey,
+    binds: &Binds,
+) -> bool {
+    refute_panic_checks(engine, node, binds, |engine, binds, cond| {
+        matches!(
+            parse_check(engine, binds, cond),
+            Some((cvar, cj, cbound)) if cvar == var && cbound == bound && cj == k
+        )
+    })
 }
 
 /// `<=` loop-guard elimination (`var <= gbound`, surviving `var < gbound + 1`):
@@ -866,53 +904,23 @@ fn eliminate_le_checks_in_node(
     gbound: u32,
     binds: &Binds,
 ) -> bool {
-    let mut holders: Vec<(NodeRef, Operand)> = Vec::new();
-    let mut stack = vec![node];
-    while let Some(n) = stack.pop() {
-        let cand = match n {
-            NodeRef::Stmt(s) => match &engine.body.stmts[s].kind {
-                StmtKind::If {
-                    condition,
-                    then_block,
-                    else_block: None,
-                } => Some((*condition, *then_block)),
-                _ => None,
-            },
-            NodeRef::Expr(e) => match &engine.body.exprs[e].kind {
-                ExprKind::If {
-                    condition,
-                    then_branch,
-                    else_branch: None,
-                } => Some((*condition, *then_branch)),
-                _ => None,
-            },
-            _ => None,
+    refute_panic_checks(engine, node, binds, |engine, binds, cond| {
+        let Some((left, right)) = ge_check_operands(engine, binds, cond) else {
+            return false;
         };
-        if let Some((cond, then_b)) = cand
-            && is_panic_block(engine, then_b)
-            && let Some((left, right)) = ge_check_operands(engine, binds, cond)
-            && let Some((cvar, cj)) = parse_var_offset(engine, binds, left)
-            && cvar == var
-            && let Some(c) = bound_offset_over(engine, binds, right, gbound)
-            && c > cj
-        {
-            holders.push((n, cond));
-        }
-        engine.body.for_each_child(n, |c| stack.push(c));
-    }
-    let mut changed = false;
-    for (holder, cond) in holders {
-        eliminate_condition(engine, holder, cond);
-        changed = true;
-    }
-    changed
+        let Some((cvar, cj)) = parse_var_offset(engine, binds, left) else {
+            return false;
+        };
+        cvar == var && bound_offset_over(engine, binds, right, gbound).is_some_and(|c| c > cj)
+    })
 }
 
-/// A dominating `if (var + K) < bound { … }` proves `var + j < bound` for
-/// `0 <= j <= K` inside its then-block (structural, value_of-free). Drive to
-/// `false` every dominated bounds-check `var + j >= bound` nested in the
-/// then-block, walked in order and stopped once a statement modifies
-/// `var` / `bound` (so the fact no longer holds past it).
+/// A dominating `if (var + K) < bound { … }` proves `var + K < bound` inside its
+/// then-block (structural, value_of-free). Drive to `false` every dominated
+/// bounds-check `var + K >= bound` (identical offset — wrapping-add makes the
+/// weaker `var + j`, `j < K`, unsound) nested in the then-block, walked in order
+/// and stopped once a statement modifies `var` / `bound` (so the fact no longer
+/// holds past it).
 fn apply_dominating_if(engine: &mut Engine, s: StmtId, binds: &Binds) -> bool {
     let StmtKind::If {
         condition,
@@ -926,8 +934,8 @@ fn apply_dominating_if(engine: &mut Engine, s: StmtId, binds: &Binds) -> bool {
     let Some((var, k, bound, op)) = parse_cmp(engine, binds, cond) else {
         return false;
     };
-    // Only `<` proves `var + j < bound`; `var + j >= bound` is then refuted for
-    // `0 <= j <= k`.
+    // `<` proves `var + k < bound`; a later `var + j >= bound` is refuted only
+    // for `j == k`, since Wado add wraps (`j < k` need not shrink the index).
     if op != NirBinaryOp::Lt || k < 0 {
         return false;
     }
@@ -974,9 +982,6 @@ fn process_block(engine: &mut Engine, block: BlockId, binds: &Binds) -> bool {
             }
         }
         changed |= apply_dominating_if(engine, s, binds);
-        changed |= BitmaskEliminator { binds }.visit_stmt(engine, s);
-        changed |= ConstBoundIndexEliminator { binds }.visit_stmt(engine, s);
-        changed |= ShortCircuitEliminator { binds }.visit_stmt(engine, s);
         changed |= process_stmt(engine, s, binds);
         seguards.retain(|&(var, _, bound)| !stmt_modifies(engine, s, var, bound));
         if let Some(fact) = recognize_early_exit(engine, s, binds) {
@@ -1019,69 +1024,44 @@ enum StmtShape {
 }
 
 fn process_loop(engine: &mut Engine, loop_body: BlockId, binds: &Binds) -> bool {
+    // Loop-head guard `i < bound` / `i <= bound` → dominated body checks. Kept
+    // as its own step because loop_version_bce keys on the guard/check shapes it
+    // leaves (its target checks relate `H`/`B` only at the call site, so nothing
+    // here can prove them false — they survive for loop_version to version on).
     let mut changed = structural_loop_guard(engine, loop_body, binds);
-
-    // Dominating `if (var + K) < bound { … }` in the loop body proves the
-    // dominated checks inside its then-block, and bitmask-bounded checks
-    // `(x & MASK) >= BOUND` are refuted by the mask (value_of-free, structural).
-    for s in engine.body.blocks[loop_body].stmts.clone() {
-        changed |= apply_dominating_if(engine, s, binds);
-        changed |= BitmaskEliminator { binds }.visit_stmt(engine, s);
-    }
-
-    // Recurse into nested loops.
-    for s in engine.body.blocks[loop_body].stmts.clone() {
-        changed |= process_stmt_nested_loops(engine, s, binds);
-    }
-
+    // Treat the body as a straight-line block so early-exit guard facts, the
+    // dominating-if rule, and every eliminator fire inside the loop, and nested
+    // structures recurse (`process_stmt`). This is sound across the back edge:
+    // `process_block` invalidates each early-exit fact the instant a statement
+    // reassigns its `var`/`bound` (`stmt_modifies`) and only applies a fact to
+    // statements textually after its establishing guard — which, being top-level
+    // in the body, executes before them on every iteration.
+    changed |= process_block(engine, loop_body, binds);
     changed
 }
 
-/// Recurse into nested structures to find inner loops, but don't re-process
-/// the current loop level.
-fn process_stmt_nested_loops(engine: &mut Engine, s: StmtId, binds: &Binds) -> bool {
-    let shape = match &engine.body.stmts[s].kind {
-        StmtKind::Loop { body: lb } => StmtShape::Loop(*lb),
-        StmtKind::If {
-            then_block,
-            else_block,
-            ..
-        } => StmtShape::If(*then_block, *else_block),
-        StmtKind::LabeledBlock { block, .. } => StmtShape::Labeled(*block),
-        _ => StmtShape::None,
-    };
-    match shape {
-        StmtShape::Loop(lb) => process_loop(engine, lb, binds),
-        StmtShape::If(then_b, else_b) => {
-            let mut changed = false;
-            for s in engine.body.blocks[then_b].stmts.clone() {
-                changed |= process_stmt_nested_loops(engine, s, binds);
-            }
-            if let Some(eb) = else_b {
-                for s in engine.body.blocks[eb].stmts.clone() {
-                    changed |= process_stmt_nested_loops(engine, s, binds);
-                }
-            }
-            changed
-        }
-        StmtShape::Labeled(b) => {
-            let mut changed = false;
-            for s in engine.body.blocks[b].stmts.clone() {
-                changed |= process_stmt_nested_loops(engine, s, binds);
-            }
-            changed
-        }
-        StmtShape::None => false,
-    }
+/// Whether every path through `block` leaves it — via `return`, `break`,
+/// `continue` (skips the fall-through for the rest of the iteration), or an `if`
+/// whose two arms both exit. An unconditional top-level exit makes the block
+/// exit before its end, so `any` is sound (a statement is reached only when no
+/// earlier one has already exited).
+fn block_always_exits(engine: &Engine, block: BlockId) -> bool {
+    engine.body.blocks[block]
+        .stmts
+        .iter()
+        .any(|&s| stmt_always_exits(engine, s))
 }
 
-fn block_always_exits(engine: &Engine, block: BlockId) -> bool {
-    engine.body.blocks[block].stmts.iter().any(|s| {
-        matches!(
-            engine.body.stmts[*s].kind,
-            StmtKind::Return { .. } | StmtKind::Break { .. }
-        )
-    })
+fn stmt_always_exits(engine: &Engine, s: StmtId) -> bool {
+    match &engine.body.stmts[s].kind {
+        StmtKind::Return { .. } | StmtKind::Break { .. } | StmtKind::Continue => true,
+        StmtKind::If {
+            then_block,
+            else_block: Some(else_block),
+            ..
+        } => block_always_exits(engine, *then_block) && block_always_exits(engine, *else_block),
+        _ => false,
+    }
 }
 
 /// Promote the condition at `cond` to the constant `false` in its parent slot.
@@ -1175,7 +1155,8 @@ impl ArenaOptVisitor for BitmaskEliminator<'_> {
 /// Eliminates redundant bounds checks inside short-circuit `||` expressions
 /// (value_of-free, structural): in `(var + k) >= bound || expr`, the right
 /// operand only runs when `(var + k) < bound`, refuting every dominated check
-/// `var + j >= bound` (`0 <= j <= k`) nested in it. Skipped when the right
+/// `var + k >= bound` (identical offset; wrapping-add makes `j < k` unsound)
+/// nested in it. Skipped when the right
 /// operand modifies `var` / `bound` (the fact would no longer hold).
 struct ShortCircuitEliminator<'a> {
     binds: &'a Binds,
@@ -1224,6 +1205,16 @@ fn index_upper_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64>
     else {
         return None;
     };
+    // The eliminated bounds check drops this inline clamp with its branch, so a
+    // trapping (or effectful) arm would erase a trap the program takes: the
+    // deletion predicate must be non-trapping, not just pure.
+    if !super::arena_query::is_pure_nontrapping_expr_typed(
+        engine.body,
+        e,
+        engine.value_graph_type_table(),
+    ) {
+        return None;
+    }
     let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
     let Operand::Expr(ce) = resolve(engine, binds, condition) else {
         return None;

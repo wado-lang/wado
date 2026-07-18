@@ -1,0 +1,25 @@
+// Regression: a deref-assign in EXPRESSION position (`let u = (*r = v);`)
+// bypasses the statement-position lowering expansion
+// (`lower::translate::try_expand_deref_aggregate_assign`) and reaches WIR as a
+// plain `Assign { target: Deref, .. }`. The WIR builder used to silently drop
+// the write; it now copies the value into the shared handle field by field.
+
+test "expression-position deref-assign of a tuple writes back" {
+    let mut p = [1, 2];
+    let rp = &mut p;
+    let u = (*rp = [3, 4]);
+    assert p.0 == 3;
+    assert p.1 == 4;
+    u;
+}
+
+test "expression-position deref-assign of a struct writes back" {
+    let mut s = "old";
+    let rs = &mut s;
+    let u = (*rs = "new");
+    assert s == "new";
+    u;
+}
+
+__DATA__
+{"test": {}}

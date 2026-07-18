@@ -123,7 +123,7 @@ let [first, ..] = triple;
 ```wado
 let opt: Option<[i32, i32]> = Option::<[i32, i32]>::Some([10, 20]);
 if let Some([x, y]) = opt {
-    println(`{x}, {y}`);
+    println(`${x}, ${y}`);
 }
 ```
 
@@ -135,7 +135,7 @@ let pair = [1, 2];
 let desc = match pair {
     [0, 0] => "origin",
     [x, y] && x == y => "diagonal",
-    [x, y] => `({x}, {y})`,
+    [x, y] => `(${x}, ${y})`,
 };
 
 // Variant with tuple payload
@@ -157,7 +157,7 @@ let area = match shape {
 ```wado
 let pairs: List<[i32, String]> = [[1, "one"], [2, "two"]];
 for let [num, name] of pairs {
-    println(`{num}: {name}`);
+    println(`${num}: ${name}`);
 }
 ```
 
