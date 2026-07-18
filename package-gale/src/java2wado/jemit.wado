@@ -84,18 +84,18 @@ fn emit_stmt(
     return match s {
         Expr(e) => {
             let w = emit_expr(rule, rules, e, vals_in_scope, bindings, env)?;
-            Result::Ok(`{w};`);
+            Result::Ok(`${w};`);
         },
         Local(l) => emit_local(rule, rules, l, vals_in_scope, bindings, env),
         Assign(a) => {
             let target = emit_expr(rule, rules, &a.target, vals_in_scope, bindings, env)?;
             let value = emit_expr(rule, rules, &a.value, vals_in_scope, bindings, env)?;
-            Result::Ok(`{target} {a.op} {value};`);
+            Result::Ok(`${target} ${a.op} ${value};`);
         },
         Return(v) => match v {
             Some(e) => {
                 let w = emit_expr(rule, rules, e, vals_in_scope, bindings, env)?;
-                Result::Ok(`return {w};`);
+                Result::Ok(`return ${w};`);
             },
             None => Result::Ok("return;"),
         },
@@ -113,16 +113,16 @@ fn emit_local(
     let ty = match map_java_type(&l.ty) {
         Some(t) => t,
         None => {
-            return Result::Err(`java2wado: unsupported local type '{l.ty}'`);
+            return Result::Err(`java2wado: unsupported local type '${l.ty}'`);
         },
     };
     let init = match &l.init {
         Some(e) => emit_expr(rule, rules, e, vals_in_scope, bindings, env)?,
         None => {
-            return Result::Err(`java2wado: local '{l.name}' needs an initializer`);
+            return Result::Err(`java2wado: local '${l.name}' needs an initializer`);
         },
     };
-    return Result::Ok(`let mut {l.name}: {ty} = {init};`);
+    return Result::Ok(`let mut ${l.name}: ${ty} = ${init};`);
 }
 
 /// Emit `System.out.print`/`println` as `<this>.emit(<template>)`, rendering the
@@ -144,7 +144,7 @@ fn emit_print(
         tmpl.push_str(&"\\n");
     }
     tmpl.push('`');
-    return Result::Ok(`{env.this_bind}.emit({tmpl})`);
+    return Result::Ok(`${env.this_bind}.emit(${tmpl})`);
 }
 
 /// Java primitive / `String` type text to its Wado type, or `None` if outside
@@ -174,7 +174,7 @@ pub fn emit_expr(
     return match e {
         Int(v) => Result::Ok(*v),
         Bool(b) => Result::Ok(if *b { String::from("true") } else { String::from("false") }),
-        Str(c) => Result::Ok(`"{*c}"`),
+        Str(c) => Result::Ok(`"${*c}"`),
         Attr(text) => resolve_attr_ref(rule, rules, text, vals_in_scope, bindings, &env.this_bind),
         Name(n) => Result::Ok(if *n == "this" { env.this_bind } else { *n }),
         Member(m) => emit_member(rule, rules, m, vals_in_scope, bindings, env),
@@ -182,11 +182,11 @@ pub fn emit_expr(
         Cast(c) => emit_expr(rule, rules, &c.operand, vals_in_scope, bindings, env),
         Unary(u) => {
             let operand = emit_expr(rule, rules, &u.operand, vals_in_scope, bindings, env)?;
-            Result::Ok(`{u.op}{operand}`);
+            Result::Ok(`${u.op}${operand}`);
         },
         Paren(p) => {
             let inner = emit_expr(rule, rules, &p.inner, vals_in_scope, bindings, env)?;
-            Result::Ok(`({inner})`);
+            Result::Ok(`(${inner})`);
         },
         Binary(b) => {
             if b.op == "+" && is_string_concat(e) {
@@ -194,7 +194,7 @@ pub fn emit_expr(
             } else {
                 let l = emit_expr(rule, rules, &b.lhs, vals_in_scope, bindings, env)?;
                 let r = emit_expr(rule, rules, &b.rhs, vals_in_scope, bindings, env)?;
-                Result::Ok(`{l} {b.op} {r}`);
+                Result::Ok(`${l} ${b.op} ${r}`);
             }
         },
     };
@@ -209,16 +209,16 @@ fn emit_member(
     env: &JEnv,
 ) -> Result<String, String> {
     if name_is(&m.recv, &"this") {
-        return Result::Ok(`{env.this_bind}.{m.name}`);
+        return Result::Ok(`${env.this_bind}.${m.name}`);
     }
     if is_upper_ident(&m.name) && is_name(&m.recv) {
         if recv_is_grammar_class(env, &m.recv) {
-            return Result::Ok(`TK_{m.name}`);
+            return Result::Ok(`TK_${m.name}`);
         }
-        return Result::Err(`java2wado: unknown constant '{name_text(&m.recv)}.{m.name}'`);
+        return Result::Err(`java2wado: unknown constant '${name_text(&m.recv)}.${m.name}'`);
     }
     let r = emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, env)?;
-    return Result::Ok(`{r}.{m.name}`);
+    return Result::Ok(`${r}.${m.name}`);
 }
 
 fn emit_call(
@@ -247,9 +247,9 @@ fn emit_call(
         Member(m) => emit_member_call(rule, rules, m, &c.args, &args_w, vals_in_scope, bindings, env),
         Name(n) => {
             if *n == "getText" {
-                Result::Ok(`{env.this_bind}.rule_text({RULE_START_TOK_LOCAL})`);
+                Result::Ok(`${env.this_bind}.rule_text(${RULE_START_TOK_LOCAL})`);
             } else if method_declared(env, n) {
-                Result::Ok(`{env.this_bind}.{to_snake_case(n)}({args_w})`);
+                Result::Ok(`${env.this_bind}.${to_snake_case(n)}(${args_w})`);
             } else {
                 Result::Err(unknown_method_err(n));
             }
@@ -282,15 +282,15 @@ fn emit_ctx_child(
         return Result::Err("java2wado: `$ctx` child access is only supported in a left-recursive rule");
     }
     if m.name != rule.name {
-        return Result::Err(`java2wado: $ctx.{m.name}(...): only the rule's own children are supported`);
+        return Result::Err(`java2wado: $ctx.${m.name}(...): only the rule's own children are supported`);
     }
     if args.is_empty() {
-        return Result::Err(`java2wado: $ctx.{m.name}(): token/child accessor form not yet supported`);
+        return Result::Err(`java2wado: $ctx.${m.name}(): token/child accessor form not yet supported`);
     }
     let idx = match &args[0] {
         Int(s) => *s,
         _ => {
-            return Result::Err(`java2wado: $ctx.{m.name}(...): child index must be an integer literal`);
+            return Result::Err(`java2wado: $ctx.${m.name}(...): child index must be an integer literal`);
         },
     };
     if idx == "0" {
@@ -316,16 +316,16 @@ fn emit_member_call(
     }
     if meth == "getText" {
         if name_is(&m.recv, &"_input") {
-            return Result::Ok(`{env.this_bind}.input_text()`);
+            return Result::Ok(`${env.this_bind}.input_text()`);
         }
         let r = emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, env)?;
-        return Result::Ok(`{env.this_bind}.token_text({r})`);
+        return Result::Ok(`${env.this_bind}.token_text(${r})`);
     }
     if meth == "LA" && name_is(&m.recv, &"_input") {
-        return Result::Ok(`{env.this_bind}.la({*args_w})`);
+        return Result::Ok(`${env.this_bind}.la(${*args_w})`);
     }
     if meth == "LT" && name_is(&m.recv, &"_input") {
-        return Result::Ok(`{env.this_bind}.lt({*args_w})`);
+        return Result::Ok(`${env.this_bind}.lt(${*args_w})`);
     }
     if meth == "equals" {
         if raw_args.is_empty() {
@@ -333,7 +333,7 @@ fn emit_member_call(
         }
         let r = emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, env)?;
         let a = emit_expr(rule, rules, &raw_args[0], vals_in_scope, bindings, env)?;
-        return Result::Ok(`({r} == {a})`);
+        return Result::Ok(`(${r} == ${a})`);
     }
     if !method_declared(env, &meth) {
         return Result::Err(unknown_method_err(&meth));
@@ -343,7 +343,7 @@ fn emit_member_call(
     } else {
         emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, env)?;
     };
-    return Result::Ok(`{recv_w}.{to_snake_case(&meth)}({*args_w})`);
+    return Result::Ok(`${recv_w}.${to_snake_case(&meth)}(${*args_w})`);
 }
 
 /// Whether `name` resolves to a declared `@members` method (compared
@@ -359,14 +359,14 @@ fn method_declared(env: &JEnv, name: &String) -> bool {
 }
 
 fn unknown_method_err(name: &String) -> String {
-    return `java2wado: unsupported method '{*name}': not a @members method or a recognizer API method`;
+    return `java2wado: unsupported method '${*name}': not a @members method or a recognizer API method`;
 }
 
 /// Whether `e` names the grammar's own parser / lexer class (`<Name>Parser` /
 /// `<Name>Lexer`), the qualifier of a token constant `TParser.ELSE`.
 fn recv_is_grammar_class(env: &JEnv, e: &JExpr) -> bool {
     return match e {
-        Name(q) => *q == `{env.grammar}Parser` || *q == `{env.grammar}Lexer`,
+        Name(q) => *q == `${env.grammar}Parser` || *q == `${env.grammar}Lexer`,
         _ => false,
     };
 }

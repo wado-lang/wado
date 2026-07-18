@@ -164,7 +164,7 @@ match path {
 ```wado
 trailers.append(
     "server-timing",
-    `app;dur={elapsed_ms:0.3f}`.bytes().collect() as FieldValue,
+    `app;dur=${elapsed_ms:0.3f}`.bytes().collect() as FieldValue,
 );
 ```
 

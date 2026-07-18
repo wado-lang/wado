@@ -296,7 +296,7 @@ impl<H> Router<H> {
                         wnames.push(*name);
                         self.states[cur].wildcard_names = wnames;
                     } else if existing != *name {
-                        panic(`wildcard name conflict: '*{existing}' vs '*{*name}' at the same node`);
+                        panic(`wildcard name conflict: '*${existing}' vs '*${*name}' at the same node`);
                     }
                     let handler_idx = self.handlers.len();
                     self.handlers.push(handler);
@@ -314,7 +314,7 @@ impl<H> Router<H> {
                         self.states[cur].param_target = new_id;
                         self.states[cur].param_name = *name;
                     } else if self.states[cur].param_name != *name {
-                        panic(`param name conflict: ':{self.states[cur].param_name}' vs ':{*name}' at the same node`);
+                        panic(`param name conflict: ':${self.states[cur].param_name}' vs ':${*name}' at the same node`);
                     }
                     names.push(*name);
                     cur = self.states[cur].param_target;
@@ -1004,7 +1004,7 @@ impl PathParamsDeserializer {
         let name = &self.src.names[i];
         let [s, e] = self.current_range();
         let value = self.src.path.substr_bytes(s, e);
-        return `path param '{*name}' is not a valid {type_name}: '{value}'`;
+        return `path param '${*name}' is not a valid ${type_name}: '${value}'`;
     }
 
     /// Parse the active param's byte range into `T` via `FromStr`.

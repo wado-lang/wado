@@ -107,11 +107,11 @@ impl P {
     fn expect_byte(&mut self, c: i32) {
         self.skip_ws();
         if self.pos >= self.len {
-            panic(`unexpected EOF, expected '{c as u8 as char}'`);
+            panic(`unexpected EOF, expected '${c as u8 as char}'`);
         }
         let b = builtin::array_get_u8(&self.repr, self.pos) as i32;
         if b != c {
-            panic(`expected '{c as u8 as char}' at {self.pos}, got '{b as u8 as char}'`);
+            panic(`expected '${c as u8 as char}' at ${self.pos}, got '${b as u8 as char}'`);
         }
         self.pos += 1;
     }
@@ -221,7 +221,7 @@ impl P {
                         panic("bad unicode codepoint");
                     }
                 },
-                _ => panic(`invalid escape \\{esc}`),
+                _ => panic(`invalid escape \\${esc}`),
             }
             // gather next unescaped chunk
             let cs = self.pos;
@@ -368,7 +368,7 @@ impl P {
         let len = self.len;
         let mut pos = self.pos;
         if pos >= len || builtin::array_get_u8(&raw, pos) as i32 != '"' as i32 {
-            panic(`expected key at {pos}`);
+            panic(`expected key at ${pos}`);
         }
         pos += 1;
         let start = pos;
@@ -1183,7 +1183,7 @@ fn read_file(path: String) -> String with Preopens {
     let root = dirs[0].0;
     let open_result = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait();
     if let Err(_) = open_result {
-        panic(`failed to open {path}`);
+        panic(`failed to open ${path}`);
     }
     let file = match open_result {
         Ok(f) => f,
@@ -1240,5 +1240,5 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     let counts = b.run("", || parse_counts_v2(json_data));
     assert counts.events == 184;
     assert counts.performances == 243;
-    b.println(`parsed {counts.events} events, {counts.performances} performances`);
+    b.println(`parsed ${counts.events} events, ${counts.performances} performances`);
 }

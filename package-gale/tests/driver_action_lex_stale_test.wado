@@ -12,11 +12,11 @@ use s from "./grammars/wado_lex_action_stale.g4"
 test "a longer non-action match does not replay the shorter action rule" {
     // "ab" -> LONG wins (no action); best_act must be reset, so no retype.
     let r = s::parse(&"ab");
-    assert r.ok(), `clean parse: {r.diagnostics.len()} diagnostics`;
-    assert r.output == "L", `output: '{r.output}' (SHORT's set_type must not run on the LONG token)`;
+    assert r.ok(), `clean parse: ${r.diagnostics.len()} diagnostics`;
+    assert r.output == "L", `output: '${r.output}' (SHORT's set_type must not run on the LONG token)`;
 
     // "a" alone -> SHORT wins, its action retypes to RETYPED.
     let r2 = s::parse(&"a");
     assert r2.ok(), "clean parse of 'a'";
-    assert r2.output == "R", `output: '{r2.output}'`;
+    assert r2.output == "R", `output: '${r2.output}'`;
 }

@@ -246,7 +246,7 @@ pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
                 if !found {
                     return Result::Err(
                         ParseError::new(
-                            `reference to undefined rule "{r.referenced_name}" in "{r.containing_rule}"`,
+                            `reference to undefined rule "${r.referenced_name}" in "${r.containing_rule}"`,
                             r.span,
                             ["defined rule name"],
                         ),
@@ -273,7 +273,7 @@ pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
                 if !found {
                     return Result::Err(
                         ParseError::new(
-                            `reference to undefined token "{r.referenced_name}" in "{r.containing_rule}"`,
+                            `reference to undefined token "${r.referenced_name}" in "${r.containing_rule}"`,
                             r.span,
                             ["defined token name"],
                         ),
@@ -300,7 +300,7 @@ pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
                 if !found {
                     return Result::Err(
                         ParseError::new(
-                            `reference to undefined lexer rule "{r.referenced_name}" in "{r.containing_rule}"`,
+                            `reference to undefined lexer rule "${r.referenced_name}" in "${r.containing_rule}"`,
                             r.span,
                             ["defined lexer rule name"],
                         ),
@@ -374,7 +374,7 @@ impl ParserRule {
     ) -> ParserRule {
         let snake_name = to_snake_case(&name);
         let field_name = escape_ident(&snake_name);
-        let type_name = `{to_pascal_case(&name)}Node`;
+        let type_name = `${to_pascal_case(&name)}Node`;
         return ParserRule { name, visibility, options, alternatives, snake_name, field_name, type_name };
     }
 }
@@ -870,7 +870,7 @@ pub fn normalize_caches(grammar: &mut Grammar) {
             rule.field_name = escape_ident(&rule.snake_name);
         }
         if rule.type_name.is_empty() {
-            rule.type_name = `{to_pascal_case(&rule.name)}Node`;
+            rule.type_name = `${to_pascal_case(&rule.name)}Node`;
         }
         for let mut ai = 0; ai < rule.alternatives.len(); ai += 1 {
             let alt = &mut rule.alternatives[ai];

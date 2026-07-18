@@ -561,7 +561,7 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext) -> MultiAltRule
         all_indices.push(i);
     }
 
-    let owner_label = `rule '{rule.name}'`;
+    let owner_label = `rule '${rule.name}'`;
     let dispatch = build_overlap_dispatch(&owner_label, &rule.alternatives, &all_indices, &first_sets, ctx);
     return MultiAltRule {
         header,
@@ -607,8 +607,8 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
             non_lr_indices.push(i);
         }
     }
-    assert !non_lr_indices.is_empty(), `LR rule '{rule.name}' has no non-LR alt — ANTLR4 requires at least one atom alt`;
-    assert !lr_indices.is_empty(), `LR rule '{rule.name}' has no LR alt — should not have reached lower_lr_rule`;
+    assert !non_lr_indices.is_empty(), `LR rule '${rule.name}' has no non-LR alt — ANTLR4 requires at least one atom alt`;
+    assert !lr_indices.is_empty(), `LR rule '${rule.name}' has no LR alt — should not have reached lower_lr_rule`;
 
     let total_lr: i32 = lr_indices.len();
     let atom = lower_lr_atom(rule, &non_lr_indices, ctx);
@@ -713,7 +713,7 @@ fn lr_rule_is_atn_class(rule: &ParserRule, non_lr_indices: &List<i32>, lr_alts: 
 /// (`TokenRef` / `Literal`), or `null` for anything else.
 fn fixed_token_const_name(elem: &Element) -> Option<String> {
     return match *elem {
-        TokenRef(t) => Option::Some(`TK_{t.name}`),
+        TokenRef(t) => Option::Some(`TK_${t.name}`),
         Literal(l) => Option::Some(literal_const_name(&l.text)),
         _ => null,
     };
@@ -743,7 +743,7 @@ fn stamp_lr_self_ref_min_prec(lr_alts: &mut List<LrAlt>, rule_name: &String, rul
         let conflict_min = lr_alts[i].conflict_min;
 
         let scan_len = lr_alts[i].scan_suffix.elements.len();
-        assert scan_len == suffix_len, `LR suffix walk length mismatch: parse-side {suffix_len}, scan-side {scan_len}`;
+        assert scan_len == suffix_len, `LR suffix walk length mismatch: parse-side ${suffix_len}, scan-side ${scan_len}`;
 
         let mut new_ops: List<Op> = [];
         let mut new_scan: List<ScanElement> = [];
@@ -1266,7 +1266,7 @@ fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut GenCon
         scan_alts.push(lower_scan_body(&rule.alternatives[*idx], ctx));
     }
 
-    let owner_label = `LR rule '{rule.name}' atom`;
+    let owner_label = `LR rule '${rule.name}' atom`;
     let dispatch = build_overlap_dispatch(&owner_label, &rule.alternatives, non_lr_indices, &first_sets, ctx);
     return MultiAltRule {
         header,
@@ -1291,7 +1291,7 @@ fn lower_lr_alt(
     alt_gc_starts: &List<i32>,
 ) -> LrAlt {
     let alt = &rule.alternatives[alt_index];
-    assert !alt.elements.is_empty(), `LR alt {alt_index} of '{rule.name}' is empty — should not be classified LR`;
+    assert !alt.elements.is_empty(), `LR alt ${alt_index} of '${rule.name}' is empty — should not be classified LR`;
 
     // Build per-alt CST identifiers. `case_name` mirrors
     // `case_names_for_rule`, and `struct_name` follows the
@@ -1304,7 +1304,7 @@ fn lower_lr_alt(
     let type_name = rule.type_name;
     let base = strip_suffix(&type_name, &"Node");
     let case_name = case_names[alt_index];
-    let struct_name = `{base}{case_name}`;
+    let struct_name = `${base}${case_name}`;
 
     // Compute `last_self_ref_idx` — the index (within the original
     // alt's element list) of the LAST self-reference. -1 when the
@@ -1473,7 +1473,7 @@ fn compute_lr_conflict_min_prec(
     for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
         let elem = &alt.elements[ei];
         match *elem {
-            TokenRef(t) => fixed_tokens.push(`TK_{t.name}`),
+            TokenRef(t) => fixed_tokens.push(`TK_${t.name}`),
             Literal(l) => fixed_tokens.push(literal_const_name(&l.text)),
             _ => {
             },
@@ -1593,7 +1593,7 @@ fn build_overlap_dispatch(
 
     for let idx of indices {
         let mut visiting: List<String> = [];
-        assert ctx.is_alt_scannable(&alts[*idx].elements, &mut visiting), `{*owner_label}: alt {*idx} is not fully scannable; Tournament dispatch needs all alts scannable`;
+        assert ctx.is_alt_scannable(&alts[*idx].elements, &mut visiting), `${*owner_label}: alt ${*idx} is not fully scannable; Tournament dispatch needs all alts scannable`;
     }
 
     // Surface the overlap as an advisory diagnostic. `GenContext::warn`
@@ -1607,7 +1607,7 @@ fn build_overlap_dispatch(
         ctx.warn(
             owner_label,
             DiagnosticKind::OverlapTournament,
-            `alts {join_kind_list(indices)} share lookahead {join_kind_set(&shared)}; resolved by longest-match scan tournament, not a token-led branch`,
+            `alts ${join_kind_list(indices)} share lookahead ${join_kind_set(&shared)}; resolved by longest-match scan tournament, not a token-led branch`,
         );
     }
 
@@ -1659,7 +1659,7 @@ fn join_kind_list(indices: &List<i32>) -> String {
         if i > 0 {
             out.push_str(&", ");
         }
-        out.push_str(&`{indices[i]}`);
+        out.push_str(&`${indices[i]}`);
     }
     return out;
 }
@@ -1753,7 +1753,7 @@ fn lr_prefix_field_decl(elem: &Element, rule_name: &String) -> FieldDecl {
             kind: FieldKind::Plain,
         },
         Label(lab) => {
-            let inner_type = if lab.list { `List<{type_str}>` } else { type_str };
+            let inner_type = if lab.list { `List<${type_str}>` } else { type_str };
             let kind = if lab.list { FieldKind::List } else { FieldKind::Plain };
             FieldDecl { name: lab.field_name, type_str: inner_type, kind: kind };
         },
@@ -1812,7 +1812,7 @@ fn lower_scan_element(
     gate_caller_follow: bool,
 ) -> ScanElement {
     return match *elem {
-        TokenRef(t) => ScanElement::Token(ScanTokenElement { kind: `TK_{t.name}` }),
+        TokenRef(t) => ScanElement::Token(ScanTokenElement { kind: `TK_${t.name}` }),
         Literal(l) => ScanElement::Token(ScanTokenElement {
             kind: literal_const_name(&l.text),
         }),
@@ -2356,7 +2356,7 @@ fn lower_alt_body(
     if rule.alternatives.len() != 1 {
         let base = strip_suffix(&type_name, &"Node");
         case_name = case_names[idx];
-        struct_name = `{base}{case_names[idx]}`;
+        struct_name = `${base}${case_names[idx]}`;
     }
 
     // The general-group counter is per-rule but its starting value
@@ -2445,7 +2445,7 @@ fn lower_op(
 ) -> Op {
     return match *elem {
         TokenRef(t) => Op::Token(TokenOp {
-            kind: `TK_{t.name}`,
+            kind: `TK_${t.name}`,
             field: dedup_name(&t.field_name, name_counts),
             dedup_base: t.field_name,
         }),
@@ -2820,7 +2820,7 @@ fn lower_token_only_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
 fn lower_token_only_leaf(elem: &Element, counts: &mut List<[String, i32]>) -> Op {
     return match *elem {
         TokenRef(t) => Op::Token(TokenOp {
-            kind: `TK_{t.name}`,
+            kind: `TK_${t.name}`,
             field: dedup_name(&t.field_name, counts),
             dedup_base: t.field_name,
         }),
@@ -2838,7 +2838,7 @@ fn lower_token_only_leaf(elem: &Element, counts: &mut List<[String, i32]>) -> Op
 
 fn token_only_kind(elem: &Element) -> String {
     return match *elem {
-        TokenRef(t) => `TK_{t.name}`,
+        TokenRef(t) => `TK_${t.name}`,
         Literal(l) => literal_const_name(&l.text),
         _ => panic("token_only_kind: classifier permitted non-token leaf"),
     };
@@ -3073,7 +3073,7 @@ fn lower_general_group(
 
         bodies.push(AltBody {
             alt_index: i,
-            case_name: `Alt{i}`,
+            case_name: `Alt${i}`,
             struct_name: alt_struct,
             fields: enumerate_op_field_decls(&ops),
             ops: ops,
@@ -3081,7 +3081,7 @@ fn lower_general_group(
         });
         scan_bodies.push(ScanBody { elements: scan_elements });
     }
-    let owner_label = `General group {*rule_name}Group{group_index}`;
+    let owner_label = `General group ${*rule_name}Group${group_index}`;
     let dispatch = build_overlap_dispatch(&owner_label, alts, &all_indices, &first_sets, ctx);
     return Op::Group(GroupOp {
         shape: GroupShape::General(GeneralShape {
@@ -3443,7 +3443,7 @@ fn collect_optional_leading_tokens(inner: &Element) -> List<String> {
         }
         for let elem of &g.alternatives[0].elements {
             if let TokenRef(t) = elem {
-                tokens.push(`TK_{t.name}`);
+                tokens.push(`TK_${t.name}`);
             } else if let Literal(l) = elem {
                 tokens.push(literal_const_name(&l.text));
             } else {
@@ -3657,7 +3657,7 @@ fn repeat_outer_base_name(elem: &Element, kind: RepeatKind, gc_speculative: i32)
     let base = repeat_inner_base_name(elem, gc_speculative);
     return match kind {
         Optional => base,
-        Star | Plus => `{base}_list`,
+        Star | Plus => `${base}_list`,
     };
 }
 
@@ -3847,7 +3847,7 @@ fn list_label_field_decl(ll: &ListLabelOp) -> Option<FieldDecl> {
     return match &inner_decl {
         Some(d) => Option::Some(FieldDecl {
             name: ll.field,
-            type_str: `List<{d.type_str}>`,
+            type_str: `List<${d.type_str}>`,
             kind: FieldKind::List,
         }),
         null => null,
@@ -3872,12 +3872,12 @@ fn repeat_field_decl(rep: &RepeatOp) -> Option<FieldDecl> {
     return match rep.kind {
         Optional => Option::Some(FieldDecl {
             name: rep.field,
-            type_str: `Option<{inner_type}>`,
+            type_str: `Option<${inner_type}>`,
             kind: FieldKind::Optional,
         }),
         Star | Plus => Option::Some(FieldDecl {
             name: rep.field,
-            type_str: `List<{inner_type}>`,
+            type_str: `List<${inner_type}>`,
             kind: FieldKind::List,
         }),
     };
@@ -3939,7 +3939,7 @@ fn group_field_decl(g: &GroupOp) -> Option<FieldDecl> {
         // `None` and only populate on a successful dispatch.
         SimpleCst(scst) => Option::Some(FieldDecl {
             name: scst.field,
-            type_str: `Option<{scst.type_name}>`,
+            type_str: `Option<${scst.type_name}>`,
             kind: FieldKind::Optional,
         }),
         SingleAlt(sa) => Option::Some(FieldDecl {
@@ -3949,7 +3949,7 @@ fn group_field_decl(g: &GroupOp) -> Option<FieldDecl> {
         }),
         General(gen) => Option::Some(FieldDecl {
             name: gen.field,
-            type_str: `Option<{gen.variant_type}>`,
+            type_str: `Option<${gen.variant_type}>`,
             kind: FieldKind::Optional,
         }),
     };
@@ -4067,7 +4067,7 @@ fn rebind_group_shape(shape: GroupShape, new_field: &String) -> GroupShape {
 /// in committed grammars.
 fn collect_excluded_kinds(inner: &Element) -> List<String> {
     return match *inner {
-        TokenRef(t) => [`TK_{t.name}`],
+        TokenRef(t) => [`TK_${t.name}`],
         Literal(l) => [literal_const_name(&l.text)],
         Group(g) => collect_excluded_kinds_from_group(&g),
         _ => panic(
@@ -4082,7 +4082,7 @@ fn collect_excluded_kinds_from_group(g: &GroupElement) -> List<String> {
         assert alt.elements.len() == 1, "collect_excluded_kinds: ~ Group alt must be a single token / literal";
         let elem = &alt.elements[0];
         match *elem {
-            TokenRef(t) => kinds.push(`TK_{t.name}`),
+            TokenRef(t) => kinds.push(`TK_${t.name}`),
             Literal(l) => kinds.push(literal_const_name(&l.text)),
             _ => panic("collect_excluded_kinds: ~ Group alt must be a single token / literal"),
         }

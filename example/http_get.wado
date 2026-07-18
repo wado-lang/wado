@@ -31,7 +31,7 @@ fn send_get(url: Url) -> Response with Client {
 
     return match result {
         Ok(resp) => resp,
-        Err(e) => panic(`HTTP request failed: {e}`),
+        Err(e) => panic(`HTTP request failed: ${e}`),
     };
 }
 
@@ -55,7 +55,7 @@ fn read_body(resp: Response) -> String {
 export fn run() with Stdout, Client {
     let url = Url::parse("https://httpbin.org/get").unwrap();
     let resp = send_get(url);
-    println(`Status: {resp.get_status_code() as i32}`);
+    println(`Status: ${resp.get_status_code() as i32}`);
 
     let body = read_body(resp);
     println(body);

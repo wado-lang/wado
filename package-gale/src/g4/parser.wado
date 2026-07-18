@@ -183,7 +183,7 @@ impl G4Parser {
         }
         let expected: List<String> = [kind.name()];
         return Result::<&Token, ParseError>::Err(
-            ParseError::new(`expected {kind.name()}, got "{tok.text}"`, tok.span, expected),
+            ParseError::new(`expected ${kind.name()}, got "${tok.text}"`, tok.span, expected),
         );
     }
 
@@ -283,7 +283,7 @@ impl G4Parser {
                     if existing.name == rule_name {
                         return Result::<Grammar, ParseError>::Err(
                             ParseError::new(
-                                `duplicate rule "{rule_name}"`,
+                                `duplicate rule "${rule_name}"`,
                                 rule_name_span,
                                 ["unique rule name"],
                             ),
@@ -299,7 +299,7 @@ impl G4Parser {
                     if existing.name == rule_name {
                         return Result::<Grammar, ParseError>::Err(
                             ParseError::new(
-                                `duplicate rule "{rule_name}"`,
+                                `duplicate rule "${rule_name}"`,
                                 rule_name_span,
                                 ["unique rule name"],
                             ),
@@ -967,7 +967,7 @@ impl G4Parser {
         let tok = self.peek();
         let expected: List<String> = ["identifier", "string", "(", ".", "~"];
         return Result::<Element, ParseError>::Err(
-            ParseError::new(`unexpected token "{tok.text}"`, tok.span, expected),
+            ParseError::new(`unexpected token "${tok.text}"`, tok.span, expected),
         );
     }
 
@@ -1116,7 +1116,7 @@ impl G4Parser {
                             let expected: List<String> = ["a channel declared in `channels { }`"];
                             return Result::<(), ParseError>::Err(
                                 ParseError::new(
-                                    `channel "{name}" is not declared in a \`channels \{ ... \}\` block`,
+                                    `channel "${name}" is not declared in a \`channels \{ ... \}\` block`,
                                     arg.span,
                                     expected,
                                 ),
@@ -1137,7 +1137,7 @@ impl G4Parser {
                 _ => {
                     return Result::<(), ParseError>::Err(
                         ParseError::new(
-                            `unknown lexer command "{action_name}" — expected one of: skip, more, channel, type, pushMode, popMode, mode`,
+                            `unknown lexer command "${action_name}" — expected one of: skip, more, channel, type, pushMode, popMode, mode`,
                             action_span,
                             ["skip", "more", "channel", "type", "pushMode", "popMode", "mode"],
                         ),
@@ -1287,7 +1287,7 @@ impl G4Parser {
         let tok = self.peek();
         let expected: List<String> = ["string", "char-class", "identifier", "(", "~", "."];
         return Result::<LexerElement, ParseError>::Err(
-            ParseError::new(`unexpected token "{tok.text}" in lexer rule`, tok.span, expected),
+            ParseError::new(`unexpected token "${tok.text}" in lexer rule`, tok.span, expected),
         );
     }
 

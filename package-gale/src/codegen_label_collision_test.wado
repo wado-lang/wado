@@ -29,7 +29,7 @@ WS : (' '|'\\n') -> skip ;
 ";
     let mut grammar = match parse_checked(g4) {
         Ok(g) => g,
-        Err(e) => panic(`parse_checked failed: {e.message}`),
+        Err(e) => panic(`parse_checked failed: ${e.message}`),
     };
     let out = generate(&mut grammar, &GenerateOptions {}).source;
     // The buggy codegen emitted two `let e = _parse_e(p)?;` lines in the
@@ -61,7 +61,7 @@ WS : (' '|'\\n') -> skip ;
         } else {
             after.len();
         };
-        assert next_decl >= next_fn, `two 'let e = _parse_e(p)?;' in same function body — bug repro at offset {abs}`;
+        assert next_decl >= next_fn, `two 'let e = _parse_e(p)?;' in same function body — bug repro at offset ${abs}`;
         pos = abs + parse_e_decl.len();
     }
 }

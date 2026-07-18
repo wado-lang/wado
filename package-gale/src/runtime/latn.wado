@@ -40,12 +40,12 @@ struct LThread {
 /// stack. `#` separates the state from the stack and `,` separates frames
 /// so distinct (state, stack) pairs never collide (`1#2,3` vs `12#3`).
 fn latn_sig(state: i32, stack: &List<i32>) -> String {
-    let mut s = `{state}#`;
+    let mut s = `${state}#`;
     for let mut i = 0; i < stack.len(); i += 1 {
         if i > 0 {
             s.push_str(&",");
         }
-        s.push_str(&`{stack[i]}`);
+        s.push_str(&`${stack[i]}`);
     }
     return s;
 }

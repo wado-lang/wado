@@ -2,22 +2,22 @@ use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
     let [lo1, hi1] = builtin::i64_add128(100 as i64, 200 as i64, 50 as i64, 25 as i64);
-    println(`add128: lo={lo1}, hi={hi1}`);
+    println(`add128: lo=${lo1}, hi=${hi1}`);
 
     let [lo2, hi2] = builtin::i64_sub128(150 as i64, 225 as i64, 50 as i64, 25 as i64);
-    println(`sub128: lo={lo2}, hi={hi2}`);
+    println(`sub128: lo=${lo2}, hi=${hi2}`);
 
     let [lo3, hi3] = builtin::i64_mul_wide_u(10 as i64, 20 as i64);
-    println(`mul_wide_u: lo={lo3}, hi={hi3}`);
+    println(`mul_wide_u: lo=${lo3}, hi=${hi3}`);
 
     let [lo4, hi4] = builtin::i64_mul_wide_s(0 as i64 - 10, 20 as i64);
-    println(`mul_wide_s: lo={lo4}, hi={hi4}`);
+    println(`mul_wide_s: lo=${lo4}, hi=${hi4}`);
 
     let [lo5, _] = builtin::i64_mul_wide_u(100 as i64, 100 as i64);
-    println(`mul_wide_u lo only: {lo5}`);
+    println(`mul_wide_u lo only: ${lo5}`);
 
     let [_, hi6] = builtin::i64_mul_wide_u(1 as i64 << 63, 2 as i64);
-    println(`mul_wide_u hi only: {hi6}`);
+    println(`mul_wide_u hi only: ${hi6}`);
 }
 
 __DATA__

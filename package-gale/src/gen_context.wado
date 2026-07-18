@@ -562,7 +562,7 @@ impl GenContext {
         if kind_id >= 0 {
             return kind_id;
         }
-        return self.token_kinds.intern(&`TK_{*name}`);
+        return self.token_kinds.intern(&`TK_${*name}`);
     }
 
     pub fn literal_id(&mut self, text: &String, kind_id: i32) -> i32 {
@@ -1518,10 +1518,10 @@ impl GenContext {
             return "true";
         }
         if tokens.len() == 1 {
-            return `{*expr} == {tokens[0]}`;
+            return `${*expr} == ${tokens[0]}`;
         }
         let id = self.intern_kind_set(tokens);
-        return `_kind_set_{id}({*expr})`;
+        return `_kind_set_${id}(${*expr})`;
     }
 
     /// Sugar for `kind_check_str` against `p.peek_kind()`.
@@ -1673,10 +1673,10 @@ impl GenContext {
             return "false";
         }
         if tokens.len() == 1 {
-            return `{*expr} != {tokens[0]}`;
+            return `${*expr} != ${tokens[0]}`;
         }
         let id = self.intern_kind_set(tokens);
-        return `!_kind_set_{id}({*expr})`;
+        return `!_kind_set_${id}(${*expr})`;
     }
 }
 

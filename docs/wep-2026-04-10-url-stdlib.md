@@ -343,7 +343,7 @@ export fn run() with Stdout {
         host: "example.com",
         port: null,
         path: "/search",
-        query: Option::Some(`q={percent_encode("hello world")}`),
+        query: Option::Some(`q=${percent_encode("hello world")}`),
         fragment: null,
     };
     assert url.to_string() == "https://example.com/search?q=hello%20world";

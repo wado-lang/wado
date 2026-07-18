@@ -10,13 +10,13 @@ use pd from "./grammars/wado_pred_direct.g4"
 test "a true predicate lets the token-led branch run" {
     let result = pd::parse_ok(&"1");
     assert result.ok(), "clean parse under a true predicate";
-    assert result.output == "num", `output: '{result.output}'`;
+    assert result.output == "num", `output: '${result.output}'`;
 }
 
 test "the unpredicated sibling is unaffected" {
     let result = pd::parse_ok(&"x");
     assert result.ok(), "clean parse of the unpredicated alt";
-    assert result.output == "id", `output: '{result.output}'`;
+    assert result.output == "id", `output: '${result.output}'`;
 }
 
 test "a false predicate on the selected branch fails the parse" {

@@ -7,9 +7,9 @@ use json from "./grammars/JSON.g4"
 
 fn assert_tree(input: &String, expected: &String) {
     let result = json::parse(input);
-    assert result.ok(), `unexpected diagnostics for {*input}`;
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
     let actual = json::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
 }
 
 test "json: number" {

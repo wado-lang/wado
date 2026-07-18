@@ -172,7 +172,7 @@ let x = match opt {
 
 // Statement: same syntax, just not assigned
 match opt {
-    Some(v) => println(`{v}`),
+    Some(v) => println(`${v}`),
     None => println("none"),
 }
 
@@ -180,7 +180,7 @@ match opt {
 match opt {
     Some(v) => {
         let doubled = v * 2;
-        println(`{doubled}`)   // no semicolon - OK
+        println(`${doubled}`)   // no semicolon - OK
     },
     None => {
         println("none");       // with semicolon - also OK, same meaning
@@ -440,9 +440,9 @@ match key {
 
 // === Nested patterns ===
 match result {
-    Ok([first, _]) => println(`first: {first}`),
+    Ok([first, _]) => println(`first: ${first}`),
     Ok([]) => println("empty"),
-    Err(msg) => println(`error: {msg}`),
+    Err(msg) => println(`error: ${msg}`),
 }
 
 // === Matches Infix Operator ===
@@ -503,7 +503,7 @@ Note:
 ```wado
 // In match: bindings scoped to arm body
 match opt {
-    Some(x) => println(`{x}`),  // x in scope here
+    Some(x) => println(`${x}`),  // x in scope here
     None => println("none"),    // x NOT in scope here
 }
 // x NOT in scope here
@@ -542,7 +542,7 @@ let x = match opt {
 
 // Statement form: no type unification needed
 match opt {
-    Some(v) => { println(`{v}`) },
+    Some(v) => { println(`${v}`) },
     None => { return },  // Different "return types" OK
 }
 ```

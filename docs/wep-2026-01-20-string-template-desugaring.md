@@ -1,8 +1,10 @@
 # WEP: String Template Desugaring
 
+> Interpolation was originally `{foo}`; it migrated to `${foo}` on 2026-07-18 to drop the brace-escaping cost against JSON-like content.
+
 ## Context
 
-String templates (`` `Hello, {name}!` ``) are currently lowered in the elaborator to chained `+` (Add::add) calls. This approach has limitations:
+String templates (`` `Hello, ${name}!` ``) are currently lowered in the elaborator to chained `+` (Add::add) calls. This approach has limitations:
 
 1. No support for tagged templates (`sql`...``, `String::raw`...``)
 2. Format specifiers are not fully implemented
@@ -42,7 +44,7 @@ Invariant: `strings.len() == values.len() + 1`
 Untagged templates are special-cased by the compiler for efficiency. No `CookedStrings` array or values tuple is constructed.
 
 ```wado
-`Hello, {name}! You are {age}.`
+`Hello, ${name}! You are ${age}.`
 ```
 
 The compiler directly emits an efficient sequence using a mutable string and labeled block expression. All interpolations go through `Formatter` + `Display::fmt` (see [Format Traits](./wep-2026-02-01-format-traits.md)) for predictable behavior, regardless of whether a format specifier is present. `Formatter` wraps `&mut String` and writes directly into the output buffer with no intermediate allocations.
@@ -61,7 +63,7 @@ __tmpl: {
 ### Tagged Template Desugaring
 
 ```wado
-sql`SELECT * FROM users WHERE id = {id} AND name = {name}`
+sql`SELECT * FROM users WHERE id = ${id} AND name = ${name}`
 ```
 
 Desugars to:
@@ -112,7 +114,7 @@ Usage:
 
 ```wado
 String::raw`Hello\nWorld`     // -> "Hello\\nWorld" (12 chars, not 11)
-String::raw`Path: {path}\n`   // -> "Path: " + display(path) + "\\n"
+String::raw`Path: ${path}\n`   // -> "Path: " + display(path) + "\\n"
 ```
 
 ### `String::base64` Implementation
@@ -142,7 +144,7 @@ Compile error if interpolation is present.
 All interpolations use the `Formatter` infrastructure (see [Format Traits](./wep-2026-02-01-format-traits.md)). When a format specifier is present, it becomes a custom `FormatSpec`; otherwise `FormatSpec::default()` is used. This ensures consistent behavior regardless of whether a specifier is present.
 
 ```wado
-`Pi is {pi:.2}`
+`Pi is ${pi:.2}`
 ```
 
 Desugars to:
@@ -158,7 +160,7 @@ __tmpl: {
 For tagged templates, format-specifier interpolations are pre-formatted and passed as strings in the values tuple:
 
 ```wado
-fmt`Value: {pi:.2}`
+fmt`Value: ${pi:.2}`
 ```
 
 Desugars to:
@@ -175,30 +177,33 @@ __tmpl: {
 
 Note: format specifiers are resolved at the call site before the tag function receives them. The tag function sees pre-formatted strings in the values tuple.
 
-### Brace Escaping
+### Braces and `$` Escaping
 
-`{{` and `}}` produce literal `{` and `}`:
+Only `${` opens an interpolation, so `{` and `}` are literal text and JSON-like
+content needs no escaping:
 
 ```wado
-`JSON: {{"key": {value}}}`
+`JSON: {"key": ${value}}`
 // cooked[0] = "JSON: {\"key\": "
 // cooked[1] = "}"
 // values = [value]
 ```
 
-Lexer change required: `{{` -> `{`, `}}` -> `}` in template strings.
+A literal `$` is also plain text; escape it with `\$` only when it directly
+precedes a `{` that should stay literal (`` `\${x}` `` renders `${x}`).
 
 ### Edge Cases
 
-| Case                    | Input                   | Output                         |
-| ----------------------- | ----------------------- | ------------------------------ |
-| Empty template          | `` ` ` ``               | `""`                           |
-| No interpolation        | `` `hello` ``           | `"hello"`                      |
-| Only interpolation      | `` `{x}` ``             | `Display::fmt` of x            |
-| Adjacent interpolations | `` `{a}{b}` ``          | `strings = ["", "", ""]`       |
-| Escaped braces          | `` `{{x}}` ``           | `"{x}"` (literal)              |
-| Nested template         | `` `outer {`inner`}` `` | Inner template evaluated first |
-| Multiline               | Preserved               | Newlines in cooked/raw         |
+| Case                    | Input                    | Output                         |
+| ----------------------- | ------------------------ | ------------------------------ |
+| Empty template          | `` ` ` ``                | `""`                           |
+| No interpolation        | `` `hello` ``            | `"hello"`                      |
+| Only interpolation      | `` `${x}` ``             | `Display::fmt` of x            |
+| Adjacent interpolations | `` `${a}${b}` ``         | `strings = ["", "", ""]`       |
+| Literal braces          | `` `{x}` ``              | `"{x}"` (no interpolation)     |
+| Literal `${`            | `` `\${x}` ``            | `"${x}"` (literal)             |
+| Nested template         | `` `outer ${`inner`}` `` | Inner template evaluated first |
+| Multiline               | Preserved                | Newlines in cooked/raw         |
 
 ## Consequences
 

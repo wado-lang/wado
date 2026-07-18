@@ -256,9 +256,9 @@ fn warn_unhandled_lexer_actions(grammar: &Grammar, ctx: &mut GenContext) {
             collect_unhandled_lexer_alt_action_ids(&rule.body[ai], top_executes, &mut ids);
             for let id of &ids {
                 ctx.warn(
-                    &`lexer action {*id}`,
+                    &`lexer action ${*id}`,
                     DiagnosticKind::UnsupportedAction,
-                    `action {*id} in lexer rule '{rule.name}' is not yet executed (nested inside an element; only top-level rule/alt actions and predicates run today)`,
+                    `action ${*id} in lexer rule '${rule.name}' is not yet executed (nested inside an element; only top-level rule/alt actions and predicates run today)`,
                 );
             }
         }
@@ -321,7 +321,7 @@ fn element_has_open_first(e: &Element) -> bool {
 /// inlined runtime decodes once, at construction, into the module-level sim.
 fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, emit_scan_globals: bool) {
     let lr_tables = if emit_scan_globals { "true" } else { "false" };
-    emit_atn_blob_global(w, atn, &"ATN_SIM", &`, {lr_tables}`);
+    emit_atn_blob_global(w, atn, &"ATN_SIM", &`, ${lr_tables}`);
     // The mutable scan caller stack. The scan emit pushes/pops it around
     // operand scans so an ATN-class LR rule's scan loop can route through
     // `atn_lr_loop_decision` exactly like the parse side. Only needed when an
@@ -359,13 +359,13 @@ fn emit_atn_blob_global(w: &mut CodeWriter, atn: &Atn, sim_name: &String, extra_
     for let b of &bytes {
         push_hex_byte(&mut body, *b);
     }
-    w.line(&`global {*sim_name}: AtnSim = atn_decode(&b"{body}"{*extra_args});`);
+    w.line(&`global ${*sim_name}: AtnSim = atn_decode(&b"${body}"${*extra_args});`);
 }
 
 /// Append the `\xNN` byte escape (lowercase, zero-padded to two digits) for
 /// byte `b` to `out`.
 fn push_hex_byte(out: &mut String, b: u8) {
-    out.push_str(&`\\x{b:02x}`);
+    out.push_str(&`\\x${b:02x}`);
 }
 
 fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {
@@ -509,13 +509,13 @@ fn gen_grammar_metadata(w: &mut CodeWriter, grammar: &Grammar) {
     }
     w.line(&"// Grammar metadata from source .g4 prequels:");
     for let opt of &grammar.options {
-        w.line(&`//   option {opt.name} = {format_option_value(&opt.value)}`);
+        w.line(&`//   option ${opt.name} = ${format_option_value(&opt.value)}`);
     }
     for let act of &grammar.named_actions {
         if let Some(scope) = &act.scope {
-            w.line(&`//   @{*scope}::{act.name}`);
+            w.line(&`//   @${*scope}::${act.name}`);
         } else {
-            w.line(&`//   @{act.name}`);
+            w.line(&`//   @${act.name}`);
         }
     }
     w.blank();
@@ -534,8 +534,8 @@ fn format_option_value(v: &OptionValue) -> String {
             }
             out;
         },
-        Str(s) => `"{s}"`,
-        Int(n) => `{n}`,
+        Str(s) => `"${s}"`,
+        Int(n) => `${n}`,
         Action(_) => "{ ... }",
     };
 }

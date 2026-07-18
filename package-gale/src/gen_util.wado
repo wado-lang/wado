@@ -19,7 +19,7 @@ pub fn gen_visibility_comment(w: &mut CodeWriter, visibility: &Visibility) {
     if label == "" {
         return;
     }
-    w.line(&`// rule visibility: {label} (ignored by codegen, matches ANTLR4)`);
+    w.line(&`// rule visibility: ${label} (ignored by codegen, matches ANTLR4)`);
 }
 
 pub fn rule_type_name(name: &String) -> String {
@@ -91,8 +91,8 @@ fn char_hex_name(c: char) -> String {
 /// derive a readable name from it so multi-element alternatives can dedup.
 pub fn not_element_field_name(inner: &Element) -> String {
     return match *inner {
-        TokenRef(t) => `not_{t.lower_name}`,
-        Literal(l) => `not_{literal_field_name(&l.text)}`,
+        TokenRef(t) => `not_${t.lower_name}`,
+        Literal(l) => `not_${literal_field_name(&l.text)}`,
         _ => "not_set",
     };
 }
@@ -346,19 +346,19 @@ pub fn count_element_groups(elem: &Element) -> i32 {
 /// Generate a variant type name for a general multi-alt group.
 /// Uses parent rule name + group index: "InsertStmtGroup0"
 pub fn general_group_type_name(rule_name: &String, group_index: i32) -> String {
-    return `{to_pascal_case(rule_name)}Group{group_index}`;
+    return `${to_pascal_case(rule_name)}Group${group_index}`;
 }
 
 /// Generate a field base name for a general multi-alt group.
 /// Uses group index: "group_0"
 pub fn general_group_field_name(group_index: i32) -> String {
-    return `group_{group_index}`;
+    return `group_${group_index}`;
 }
 
 /// Generate a struct name for a specific alternative in a general group.
 /// Uses parent rule name + group index + alt index: "InsertStmtGroup0Alt1"
 pub fn general_group_alt_struct_name(rule_name: &String, group_index: i32, alt_index: i32) -> String {
-    return `{to_pascal_case(rule_name)}Group{group_index}Alt{alt_index}`;
+    return `${to_pascal_case(rule_name)}Group${group_index}Alt${alt_index}`;
 }
 
 /// Get a field name for the elements in a single-alt group's element.
@@ -379,9 +379,9 @@ fn element_type_base_name(elem: &Element) -> String {
     if let Repeat(rep) = elem {
         let inner = element_base_name(&rep.element);
         return match rep.kind {
-            Optional => `{inner}_opt`,
-            Star => `{inner}_list`,
-            Plus => `{inner}_list`,
+            Optional => `${inner}_opt`,
+            Star => `${inner}_list`,
+            Plus => `${inner}_list`,
         };
     }
     return element_base_name(elem);
@@ -470,7 +470,7 @@ pub fn all_alts_are_single_token(alts: &List<Alternative>) -> bool {
 /// `all_alts_are_single_token`.
 pub fn single_token_first(elem: &Element) -> String {
     return match elem {
-        TokenRef(t) => `TK_{t.name}`,
+        TokenRef(t) => `TK_${t.name}`,
         Literal(l) => literal_const_name(&l.text),
         _ => panic("single_token_first: unexpected element"),
     };
@@ -488,7 +488,7 @@ fn build_case_names(alts: &List<Alternative>, all_labeled: bool) -> List<String>
     let mut names: List<String> = [];
     if !all_labeled {
         for let mut i = 0; i < alts.len(); i += 1 {
-            names.push(`Alt{i}`);
+            names.push(`Alt${i}`);
         }
         return names;
     }
@@ -530,7 +530,7 @@ fn build_case_names(alts: &List<Alternative>, all_labeled: bool) -> List<String>
             if !found_idx {
                 label_indices.push([lab, 0]);
             }
-            names.push(`{lab}{idx}`);
+            names.push(`${lab}${idx}`);
         } else {
             names.push(lab);
         }
@@ -606,7 +606,7 @@ pub fn dedup_name(base: &String, counts: &mut List<[String, i32]>) -> String {
     let count = get_count(counts, base);
     increment_count(counts, base);
     if count > 0 {
-        return `{base}_{count + 1}`;
+        return `${base}_${count + 1}`;
     }
     return *base;
 }
@@ -618,7 +618,7 @@ pub fn dedup_name(base: &String, counts: &mut List<[String, i32]>) -> String {
 pub fn peek_dedup_name(base: &String, counts: &List<[String, i32]>) -> String {
     let count = get_count(counts, base);
     if count > 0 {
-        return `{base}_{count + 1}`;
+        return `${base}_${count + 1}`;
     }
     return *base;
 }
@@ -642,7 +642,7 @@ pub fn element_field_info(elem: &Element) -> [String, String] {
     if let Label(lab) = elem {
         if lab.list {
             let inner = element_field_info(&lab.element);
-            return [lab.field_name, `List<{inner.1}>`];
+            return [lab.field_name, `List<${inner.1}>`];
         }
         return element_field_info(&lab.element);
     }

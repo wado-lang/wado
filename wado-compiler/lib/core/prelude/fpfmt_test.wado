@@ -280,30 +280,30 @@ test "fixed_width_for_prec small magnitudes round to nearest (issue #1229)" {
 // End-to-end formatting regression for issue #1229, exercising the same path
 // the `{x:.6f}` template specifier uses.
 test "fixed-point formatting of small magnitudes (issue #1229)" {
-    assert `{0.0000006:.6f}` == "0.000001";
-    assert `{0.00000055:.6f}` == "0.000001";
-    assert `{0.0000009:.6f}` == "0.000001";
-    assert `{0.0000004:.6f}` == "0.000000";
-    assert `{0.0000001:.6f}` == "0.000000";
+    assert `${0.0000006:.6f}` == "0.000001";
+    assert `${0.00000055:.6f}` == "0.000001";
+    assert `${0.0000009:.6f}` == "0.000001";
+    assert `${0.0000004:.6f}` == "0.000000";
+    assert `${0.0000001:.6f}` == "0.000000";
 
     // The exact LCG value from the issue: 2019 / 2^31 ~= 9.4017e-7.
     let lcg = 2019.0 / 2147483648.0;
-    assert `{lcg:.6f}` == "0.000001";
+    assert `${lcg:.6f}` == "0.000001";
 
     // Normal magnitudes keep formatting correctly.
-    assert `{3.14159:.6f}` == "3.141590";
+    assert `${3.14159:.6f}` == "3.141590";
     // The nearest f64 to 0.0000055 is just below the tie, so it rounds down
     // (matches Rust `{:.6}`).
-    assert `{0.0000055:.6f}` == "0.000005";
+    assert `${0.0000055:.6f}` == "0.000005";
 
     // Smaller precision boundary: 0.006 rounds up at two decimals.
-    assert `{0.006:.2f}` == "0.01";
-    assert `{0.004:.2f}` == "0.00";
+    assert `${0.006:.2f}` == "0.01";
+    assert `${0.004:.2f}` == "0.00";
 
     // Zero precision on a sub-1 value must not leave a trailing dot.
-    assert `{0.4:.0f}` == "0";
-    assert `{0.0000006:.0f}` == "0";
-    assert `{0.6:.0f}` == "1";
+    assert `${0.4:.0f}` == "0";
+    assert `${0.0000006:.0f}` == "0";
+    assert `${0.6:.0f}` == "1";
 }
 
 test "format_exp_prec with precision" {

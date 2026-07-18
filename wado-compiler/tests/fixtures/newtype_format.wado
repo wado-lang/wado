@@ -16,23 +16,23 @@ type FmtPointAlias = FmtPoint;
 
 test "display drops the inspect cast" {
     let m: Meters = 100.5;
-    assert `{m}` == "100.5";
-    assert `{m:?}` == "100.5 as Meters";
+    assert `${m}` == "100.5";
+    assert `${m:?}` == "100.5 as Meters";
     assert m.to_string() == "100.5";
 
     let s: Seconds = 42;
-    assert `{s}` == "42";
-    assert `{s:?}` == "42 as Seconds";
+    assert `${s}` == "42";
+    assert `${s:?}` == "42 as Seconds";
 
     let l: Label = "wado";
-    assert `{l}` == "wado";
-    assert `{l:?}` == "\"wado\" as Label";
+    assert `${l}` == "wado";
+    assert `${l:?}` == "\"wado\" as Label";
 }
 
 test "newtype inherits the base's alternate formats" {
     let m: Meters = 100.5;
     // `{m:#?}` is `InspectAlt` — a newtype overrides it with the ` as Name` tag.
-    assert `{m:#?}` == "100.5 as Meters";
+    assert `${m:#?}` == "100.5 as Meters";
     // `{m:#}` is `DisplayAlt`, which the newtype *inherits* from `f64` — and
     // `f64` has no `DisplayAlt` (like `{3.14:#}`), so this would be a compile
     // error, consistent with the base type. Inheritance, not a bespoke shim.
@@ -42,7 +42,7 @@ test "newtype over a non-Display struct: only Inspect applies" {
     let p: FmtPointAlias = FmtPoint { x: 1, y: 2 } as FmtPointAlias;
     // `FmtPoint` has no `Display`, so `FmtPointAlias` inherits none — `{p}`
     // would be a compile error. Debug output still works via Inspect.
-    assert `{p:?}` == "FmtPoint { x: 1, y: 2 } as FmtPointAlias";
+    assert `${p:?}` == "FmtPoint { x: 1, y: 2 } as FmtPointAlias";
 }
 
 __DATA__

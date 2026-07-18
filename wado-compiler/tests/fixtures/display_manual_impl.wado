@@ -8,17 +8,17 @@ struct Point {
 impl Display for Point {
     pub fn fmt(&self, f: &mut Formatter) {
         f.write_char('(');
-        f.write_str(&`{self.x}`);
+        f.write_str(&`${self.x}`);
         f.write_str(&", ");
-        f.write_str(&`{self.y}`);
+        f.write_str(&`${self.y}`);
         f.write_char(')');
     }
 }
 
 test "manual Display drives {x}, Inspect drives {x:?}" {
     let p = Point { x: 10, y: 20 };
-    assert `{p}` == "(10, 20)";
-    assert `{p:?}` == "Point { x: 10, y: 20 }";
+    assert `${p}` == "(10, 20)";
+    assert `${p:?}` == "Point { x: 10, y: 20 }";
 }
 
 __DATA__

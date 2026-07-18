@@ -25,8 +25,8 @@ Introduce compile-time literals with `#` prefix:
 
 ```wado
 fn example() {
-    println(`Error at {#file}:{#line}`);
-    println(`In function: {#function}`);
+    println(`Error at ${#file}:${#line}`);
+    println(`In function: ${#function}`);
 }
 ```
 

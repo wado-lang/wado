@@ -42,7 +42,7 @@ struct MultiMock {
 impl Greeting for MultiMock {
     fn hello(&mut self) -> String {
         self.count += 1;
-        resume `hello, {self.name} (count={self.count})`
+        resume `hello, ${self.name} (count=${self.count})`
     }
 }
 
@@ -70,9 +70,9 @@ export fn run() with Stdout {
         let n2 = Counter::tick();    // count: 2 -> 3
         // hello() must observe count=1 because no copy diverged.
         // tick() must observe count=2, then count=3 cumulatively.
-        println(`{g}, n1={n1}, n2={n2}, built={handler_built}`);
+        println(`${g}, n1=${n1}, n2=${n2}, built=${handler_built}`);
     }
-    println(`built={handler_built}`);
+    println(`built=${handler_built}`);
 }
 
 __DATA__

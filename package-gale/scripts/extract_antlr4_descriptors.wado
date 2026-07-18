@@ -78,7 +78,7 @@ fn generator_attr() -> String {
 /// The shared `// Triage data: …([<axis>_*]).` comment line. `axis` is
 /// `stage_a` / `stage_b` / `stage_b_oracle`.
 fn triage_doc_line(axis: &String) -> String {
-    return `// Triage data: package-gale/tests/antlr4-compat/status.toml ([{*axis}_*]).`;
+    return `// Triage data: package-gale/tests/antlr4-compat/status.toml ([${*axis}_*]).`;
 }
 
 // ===== Descriptor format =====
@@ -495,7 +495,7 @@ fn write_file_string(dir: &Descriptor, path: &String, content: &String) -> Resul
 fn expand_grammar_templates(key: &String, grammar: &String) -> String with Stderr {
     let outcome = expand_action_templates(grammar);
     for let w of outcome.warnings {
-        eprintln(`extract: {*key}: {w}`);
+        eprintln(`extract: ${*key}: ${w}`);
     }
     return outcome.text;
 }
@@ -609,7 +609,7 @@ fn emit_test_file_for_category(category: &String, entries: &List<DescriptorEntry
     w.line(&generator_attr());
     w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
     w.line(&"//");
-    w.line(&`// Source category: {*category} (ANTLR4 runtime-testsuite).`);
+    w.line(&`// Source category: ${*category} (ANTLR4 runtime-testsuite).`);
     w.line(&"// Triage data: package-gale/tests/antlr4-compat/status.toml");
     w.blank();
     w.line(&"use { parse } from \"../../src/g4/parser.wado\";");
@@ -620,16 +620,16 @@ fn emit_test_file_for_category(category: &String, entries: &List<DescriptorEntry
                 continue;
             },
             Todo(reason) => {
-                w.line(&`// triage: {escape_for_wado_str(reason)}`);
+                w.line(&`// triage: ${escape_for_wado_str(reason)}`);
                 w.line(&"#[TODO]");
             },
             Pass => {
             },
         }
-        w.begin(&`test "{*category}/{e.name}"`);
-        w.line(&`let input = #include_str("./grammars/{e.g4_relpath}");`);
+        w.begin(&`test "${*category}/${e.name}"`);
+        w.line(&`let input = #include_str("./grammars/${e.g4_relpath}");`);
         for let slave of &e.slave_relpaths {
-            w.line(&`let _slave = #include_str("./grammars/{*slave}");`);
+            w.line(&`let _slave = #include_str("./grammars/${*slave}");`);
         }
         w.line(&"let result = parse(input);");
         w.line(&"if let Err(err) = &result {");
@@ -671,27 +671,27 @@ fn emit_test_file(spec: &TestFileSpec, body: fn(&mut CodeWriter)) -> String {
     w.line(&spec.attr);
     w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
     w.line(&"//");
-    w.line(&`// Source descriptor: {spec.category}/{spec.name} (ANTLR4 runtime-testsuite).`);
+    w.line(&`// Source descriptor: ${spec.category}/${spec.name} (ANTLR4 runtime-testsuite).`);
     for let dl of &spec.doc_lines {
         w.line(dl);
     }
     w.blank();
-    w.line(&`use t from "../../grammars/{spec.category}/{spec.name}.g4"`);
+    w.line(&`use t from "../../grammars/${spec.category}/${spec.name}.g4"`);
     w.line(&"    with {");
     w.line(&"        generator: {");
     w.line(&`            module: "../../../../src/generator.wado",`);
-    w.line(&`            output_dir: "../../../generated/{spec.output_subdir}/{spec.category}/{spec.name}",`);
+    w.line(&`            output_dir: "../../../generated/${spec.output_subdir}/${spec.category}/${spec.name}",`);
     w.line(&"        },");
     w.line(&"    };");
     for let sym of &spec.import_names {
-        w.line(&`use \{ {*sym} \} from "../../grammars/{spec.category}/{spec.name}.g4";`);
+        w.line(&`use \{ ${*sym} \} from "../../grammars/${spec.category}/${spec.name}.g4";`);
     }
     w.blank();
     if let Todo(reason) = &spec.triage {
-        w.line(&`// triage: {escape_for_wado_str(reason)}`);
+        w.line(&`// triage: ${escape_for_wado_str(reason)}`);
         w.line(&"#[TODO]");
     }
-    w.begin(&`test "{spec.test_label}: {spec.category}/{spec.name}"`);
+    w.begin(&`test "${spec.test_label}: ${spec.category}/${spec.name}"`);
     body(&mut w);
     w.end();
     return w.to_string();
@@ -734,9 +734,9 @@ fn emit_stage_b_test_file(
         triage: *triage,
     };
     return emit_test_file(&spec, |w: &mut CodeWriter| {
-        w.line(&`let input = "{escape_for_wado_str(input)}";`);
-        w.line(&`let expected = "{escape_for_wado_str(expected_tree)}";`);
-        w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
+        w.line(&`let input = "${escape_for_wado_str(input)}";`);
+        w.line(&`let expected = "${escape_for_wado_str(expected_tree)}";`);
+        w.line(&`let result = t::${parse_call_for_start(start)}(&input);`);
         w.line(&"let actual = t::to_string_tree(&result);");
         w.line(&"let norm = normalize_tree(&expected);");
         // Backticks land in the generated source verbatim; the Wado compiler
@@ -770,7 +770,7 @@ fn emit_stage_sub_b_test_file(
         attr: generator_attr(),
         doc_lines: [
             triage_doc_line(&"stage_b"), "//",
-            `// Stage B sub-tree: [output] is the labelled child '{*sub_rule}' subtree,`,
+            `// Stage B sub-tree: [output] is the labelled child '${*sub_rule}' subtree,`,
             "// not the start rule's full tree. Navigate via find_first_child_node.",
         ],
         output_subdir: "antlr4_compat_b",
@@ -779,10 +779,10 @@ fn emit_stage_sub_b_test_file(
         triage: *triage,
     };
     return emit_test_file(&spec, |w: &mut CodeWriter| {
-        w.line(&`let input = "{escape_for_wado_str(input)}";`);
-        w.line(&`let expected = "{escape_for_wado_str(expected_tree)}";`);
-        w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
-        w.line(&`let actual = t::to_string_subtree(&result, &"{*sub_rule}");`);
+        w.line(&`let input = "${escape_for_wado_str(input)}";`);
+        w.line(&`let expected = "${escape_for_wado_str(expected_tree)}";`);
+        w.line(&`let result = t::${parse_call_for_start(start)}(&input);`);
+        w.line(&`let actual = t::to_string_subtree(&result, &"${*sub_rule}");`);
         w.line(&"let norm = normalize_tree(&expected);");
         w.line(&"assert actual == norm, `actual:   {actual}\\nexpected: {norm}`;");
     });
@@ -821,8 +821,8 @@ fn emit_stage_a_parse_test_file(
         triage: *triage,
     };
     return emit_test_file(&spec, |w: &mut CodeWriter| {
-        w.line(&`let input = "{escape_for_wado_str(input)}";`);
-        w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
+        w.line(&`let input = "${escape_for_wado_str(input)}";`);
+        w.line(&`let result = t::${parse_call_for_start(start)}(&input);`);
         w.line(&"if !result.ok() {");
         w.indent();
         w.line(&"let d = &result.diagnostics[0];");
@@ -884,9 +884,9 @@ fn emit_stage_c_output_test_file(
     // A no-op for non-tree output (no ` <EOF>)` tail).
     let expected = strip_tail_eof_marker(output);
     return emit_test_file(&spec, |w: &mut CodeWriter| {
-        w.line(&`let input = "{escape_for_wado_str(input)}";`);
-        w.line(&`let expected = "{escape_for_wado_str(&expected)}";`);
-        w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
+        w.line(&`let input = "${escape_for_wado_str(input)}";`);
+        w.line(&`let expected = "${escape_for_wado_str(&expected)}";`);
+        w.line(&`let result = t::${parse_call_for_start(start)}(&input);`);
         w.line(&"assert result.output == expected, `output:\\n{result.output}\\nexpected:\\n{expected}`;");
     });
 }
@@ -901,7 +901,7 @@ fn parse_call_for_start(start: &String) -> String {
     if trimmed.is_empty() {
         return "parse";
     }
-    return `parse_{to_snake_case(&trimmed)}`;
+    return `parse_${to_snake_case(&trimmed)}`;
 }
 
 /// Categories whose descriptors are emitted as Stage A claim (c)
@@ -1017,7 +1017,7 @@ fn emit_stage_a_err_test_file(
         triage: *triage,
     };
     return emit_test_file(&spec, |w: &mut CodeWriter| {
-        w.line(&`let input = "{escape_for_wado_str(input)}";`);
+        w.line(&`let input = "${escape_for_wado_str(input)}";`);
         if is_lexer {
             w.line(&"let tokens = t::tokenize(&input);");
             w.line(&"let mut has_err = false;");
@@ -1029,7 +1029,7 @@ fn emit_stage_a_err_test_file(
             w.end();
             w.line(&"assert has_err, `expected at least one TK_ERROR token in tokenize output`;");
         } else {
-            w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
+            w.line(&`let result = t::${parse_call_for_start(start)}(&input);`);
             w.line(&"assert !result.ok(), `expected parse to fail but it succeeded`;");
         }
     });
@@ -1069,8 +1069,8 @@ fn emit_stage_a_tokens_test_file(
         triage: *triage,
     };
     return emit_test_file(&spec, |w: &mut CodeWriter| {
-        w.line(&`let input = "{escape_for_wado_str(input)}";`);
-        w.line(&`let expected = "{escape_for_wado_str(expected)}";`);
+        w.line(&`let input = "${escape_for_wado_str(input)}";`);
+        w.line(&`let expected = "${escape_for_wado_str(expected)}";`);
         w.line(&"let tokens = t::tokenize(&input);");
         w.line(&"let actual = t::to_lexer_string(&tokens, TK_EOF);");
         w.line(&"assert actual == expected, `actual:\\n{actual}\\nexpected:\\n{expected}`;");
@@ -1108,7 +1108,7 @@ fn parse_cli_args(arguments: List<String>) -> Result<CliArgs, String> {
                 // (e.g. `--finalize-stage-b-oracl`) would otherwise run a
                 // full extract with the intended behaviour disabled.
                 if a.starts_with("-") {
-                    return Result::<CliArgs, String>::Err(`extract: unknown flag '{a}'`);
+                    return Result::<CliArgs, String>::Err(`extract: unknown flag '${a}'`);
                 }
                 categories.push(a);
             },
@@ -1150,7 +1150,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
     let src_root = match open_dir(&root, &descriptors_root(), false) {
         Ok(d) => d,
         Err(_) => {
-            eprintln(`extract: cannot open '{descriptors_root()}'`);
+            eprintln(`extract: cannot open '${descriptors_root()}'`);
             eprintln("extract: the antlr4 submodule appears to be missing.");
             eprintln("extract: run: git submodule update --init --recommend-shallow vendor/antlr4");
             eprintln("extract: (this script never auto-initializes submodules)");
@@ -1162,9 +1162,9 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
         categories = list_subdirs(&src_root);
     }
 
-    println(`extract: source root  = {descriptors_root()}`);
-    println(`extract: target dir   = {compat_root_dir()}`);
-    println(`extract: status file  = {status_file_path()}`);
+    println(`extract: source root  = ${descriptors_root()}`);
+    println(`extract: target dir   = ${compat_root_dir()}`);
+    println(`extract: status file  = ${status_file_path()}`);
     let mut categories_str = String::with_capacity(64);
     for let mut i = 0; i < categories.len(); i += 1 {
         if i > 0 {
@@ -1172,7 +1172,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
         }
         categories_str.push_str(&categories[i]);
     }
-    println(`extract: categories   = {categories_str}`);
+    println(`extract: categories   = ${categories_str}`);
 
     // Open the package-gale tests directory (mutable: we will create files there).
     let tests_dir = match open_dir(&root, &"package-gale/tests", true) {
@@ -1272,42 +1272,42 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
         let cat_src_dir = match open_dir(&src_root, category, false) {
             Ok(d) => d,
             Err(_) => {
-                eprintln(`extract: missing category '{*category}', skipping`);
+                eprintln(`extract: missing category '${*category}', skipping`);
                 continue;
             },
         };
         let cat_out_dir = match ensure_dir(&grammars_dir, category) {
             Ok(d) => d,
             Err(_) => {
-                eprintln(`extract: cannot create category dir '{*category}', skipping`);
+                eprintln(`extract: cannot create category dir '${*category}', skipping`);
                 continue;
             },
         };
         let stage_b_cat_dir = match ensure_dir(&stage_b_dir, category) {
             Ok(d) => d,
             Err(_) => {
-                eprintln(`extract: cannot create stage_b/{*category}/, skipping`);
+                eprintln(`extract: cannot create stage_b/${*category}/, skipping`);
                 continue;
             },
         };
         let stage_a_cat_dir = match ensure_dir(&stage_a_dir, category) {
             Ok(d) => d,
             Err(_) => {
-                eprintln(`extract: cannot create stage_a/{*category}/, skipping`);
+                eprintln(`extract: cannot create stage_a/${*category}/, skipping`);
                 continue;
             },
         };
         let stage_c_cat_dir = match ensure_dir(&stage_c_dir, category) {
             Ok(d) => d,
             Err(_) => {
-                eprintln(`extract: cannot create stage_c/{*category}/, skipping`);
+                eprintln(`extract: cannot create stage_c/${*category}/, skipping`);
                 continue;
             },
         };
         let oracle_pending_cat_dir = match ensure_dir(&oracle_pending_dir, category) {
             Ok(d) => d,
             Err(_) => {
-                eprintln(`extract: cannot create oracle-pending/{*category}/, skipping`);
+                eprintln(`extract: cannot create oracle-pending/${*category}/, skipping`);
                 continue;
             },
         };
@@ -1324,21 +1324,21 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
         for let txt_name of &txt_files {
             // Strip ".txt" → descriptor name.
             let base = txt_name.substr_bytes(0, txt_name.len() - 4);
-            let key = `{*category}/{base}`;
+            let key = `${*category}/${base}`;
 
             let triage = triage_map.lookup(&key);
             if let Skip(reason) = &triage {
-                println(`  skip:  {key} — {*reason}`);
+                println(`  skip:  ${key} — ${*reason}`);
                 total_skip += 1;
                 // Category-level [skip] supersedes all per-stage emission, so
                 // sweep any stale per-stage files away. Without this, flipping
                 // a descriptor from a per-stage [todo] / pass into [skip] would
                 // leave the previous Stage A / Stage B test files behind.
-                let stale_b_filename = `{base}_test.wado`;
+                let stale_b_filename = `${base}_test.wado`;
                 if let Err(_) = remove_file(&stage_b_cat_dir, &stale_b_filename) {
                 }
                 for let suffix of ["_parse_test.wado", "_err_test.wado", "_tokens_test.wado"] {
-                    let stale = `{base}{suffix}`;
+                    let stale = `${base}${suffix}`;
                     if let Err(_) = remove_file(&stage_a_cat_dir, &stale) {
                     }
                 }
@@ -1348,9 +1348,9 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
                 // makes the committed corpus look larger than the supported
                 // set. (Slave names are `{base}.slave<N>.g4`; enumerate by
                 // prefix since N is unknown without parsing the descriptor.)
-                if let Err(_) = remove_file(&cat_out_dir, &`{base}.g4`) {
+                if let Err(_) = remove_file(&cat_out_dir, &`${base}.g4`) {
                 }
-                let slave_prefix = `{base}.slave`;
+                let slave_prefix = `${base}.slave`;
                 for let existing of list_files_with_suffix(&cat_out_dir, &".g4") {
                     if existing.starts_with(slave_prefix) {
                         let _ = remove_file(&cat_out_dir, &existing);
@@ -1362,7 +1362,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
             let raw = match read_file_to_string(&cat_src_dir, txt_name) {
                 Ok(s) => s,
                 Err(_) => {
-                    eprintln(`extract: cannot read {key}`);
+                    eprintln(`extract: cannot read ${key}`);
                     category_errors += 1;
                     continue;
                 },
@@ -1370,7 +1370,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
 
             let mut parsed = parse_descriptor_text(&raw);
             if parsed.grammar.is_empty() {
-                eprintln(`extract: {key} has no [grammar] section, skipping`);
+                eprintln(`extract: ${key} has no [grammar] section, skipping`);
                 category_errors += 1;
                 continue;
             }
@@ -1385,9 +1385,9 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
             }
 
             // Write the main grammar.
-            let g4_filename = `{base}.g4`;
+            let g4_filename = `${base}.g4`;
             if let Err(_) = write_file_string(&cat_out_dir, &g4_filename, &parsed.grammar) {
-                eprintln(`extract: cannot write {key}.g4`);
+                eprintln(`extract: cannot write ${key}.g4`);
                 category_errors += 1;
                 continue;
             }
@@ -1396,13 +1396,13 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
             let mut slave_relpaths: List<String> = [];
             let mut slave_failed = false;
             for let mut i = 0; i < parsed.slave_grammars.len(); i += 1 {
-                let slave_name = `{base}.slave{i + 1}.g4`;
+                let slave_name = `${base}.slave${i + 1}.g4`;
                 if let Err(_) = write_file_string(&cat_out_dir, &slave_name, &parsed.slave_grammars[i]) {
-                    eprintln(`extract: cannot write {key} {slave_name}`);
+                    eprintln(`extract: cannot write ${key} ${slave_name}`);
                     slave_failed = true;
                     break;
                 }
-                slave_relpaths.push(`{*category}/{slave_name}`);
+                slave_relpaths.push(`${*category}/${slave_name}`);
             }
             if slave_failed {
                 // Skip emitting the whole descriptor — a composite that
@@ -1422,7 +1422,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
                 key,
                 name: base,
                 category: *category,
-                g4_relpath: `{*category}/{g4_filename}`,
+                g4_relpath: `${*category}/${g4_filename}`,
                 slave_relpaths,
                 triage,
             });
@@ -1462,9 +1462,9 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
                 && parsed.slave_grammars.len() == 0;
             let tokens_target = if tokens_basic { classify_output_for_tokens(&parsed.output) } else { null };
 
-            let parse_filename = `{base}_parse_test.wado`;
-            let err_filename = `{base}_err_test.wado`;
-            let tokens_filename = `{base}_tokens_test.wado`;
+            let parse_filename = `${base}_parse_test.wado`;
+            let err_filename = `${base}_err_test.wado`;
+            let tokens_filename = `${base}_tokens_test.wado`;
 
             // Stale-file sweep: only the variant that fires keeps its file;
             // the other two get removed. Filename uniqueness across stages
@@ -1496,7 +1496,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
                     deferred_composite += 1;
                 }
             } else if let Skip(reason) = &stage_a_triage {
-                println(`  skipA: {key} — {*reason}`);
+                println(`  skipA: ${key} — ${*reason}`);
                 stage_a_skip += 1;
                 // Remove the variant's file if it exists (above sweep only
                 // touches the non-eligible variants; an eligible-but-skipped
@@ -1510,7 +1510,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
             } else if parse_eligible {
                 let src = emit_stage_a_parse_test_file(category, &base, &parsed.input, &parsed.start, &stage_a_triage);
                 if let Err(_) = write_file_string(&stage_a_cat_dir, &parse_filename, &src) {
-                    eprintln(`extract: cannot write stage_a/{*category}/{parse_filename}`);
+                    eprintln(`extract: cannot write stage_a/${*category}/${parse_filename}`);
                 } else {
                     if let Todo(_) = &stage_a_triage {
                         stage_a_todo += 1;
@@ -1528,7 +1528,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
                     &stage_a_triage,
                 );
                 if let Err(_) = write_file_string(&stage_a_cat_dir, &err_filename, &src) {
-                    eprintln(`extract: cannot write stage_a/{*category}/{err_filename}`);
+                    eprintln(`extract: cannot write stage_a/${*category}/${err_filename}`);
                 } else {
                     if let Todo(_) = &stage_a_triage {
                         stage_a_todo += 1;
@@ -1555,7 +1555,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
                 };
                 let src = emit_stage_a_tokens_test_file(category, &base, &parsed.input, normalised_t, &effective_triage);
                 if let Err(_) = write_file_string(&stage_a_cat_dir, &tokens_filename, &src) {
-                    eprintln(`extract: cannot write stage_a/{*category}/{tokens_filename}`);
+                    eprintln(`extract: cannot write stage_a/${*category}/${tokens_filename}`);
                 } else {
                     if let Todo(_) = &effective_triage {
                         stage_a_todo += 1;
@@ -1585,12 +1585,12 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
             //     checking that the normalised output starts with `(<start>`.
             // Anything else is silently skipped (auto-skip counter); explicit
             // [stage_b_skip] / [stage_b_todo] entries override the default.
-            let stage_b_filename_pre = `{base}_test.wado`;
+            let stage_b_filename_pre = `${base}_test.wado`;
             // Stage B′ manifest: default-clear here so every Stage B
             // path leaves a clean slate; the auto-skip branches below
             // re-write the files when the descriptor is a candidate.
-            let oracle_input_filename = `{base}.input`;
-            let oracle_start_filename = `{base}.start`;
+            let oracle_input_filename = `${base}.input`;
+            let oracle_start_filename = `${base}.start`;
             let _ = remove_file(&oracle_pending_cat_dir, &oracle_input_filename);
             let _ = remove_file(&oracle_pending_cat_dir, &oracle_start_filename);
             let oracle_triage = stage_b_oracle_triage_map.lookup(&key);
@@ -1616,7 +1616,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
                     // of the Stage B′ oracle path below, which derives a tree.
                     if descriptor_is_stage_c_eligible(&parsed) {
                         let stage_c_triage = stage_c_triage_map.lookup(&key);
-                        let stage_c_filename = `{base}_output_test.wado`;
+                        let stage_c_filename = `${base}_output_test.wado`;
                         if let Skip(_) = &stage_c_triage {
                             let _ = remove_file(&stage_c_cat_dir, &stage_c_filename);
                         } else {
@@ -1629,7 +1629,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
                                 &stage_c_triage,
                             );
                             if let Err(_) = write_file_string(&stage_c_cat_dir, &stage_c_filename, &src) {
-                                eprintln(`extract: cannot write stage_c/{*category}/{stage_c_filename}`);
+                                eprintln(`extract: cannot write stage_c/${*category}/${stage_c_filename}`);
                             } else {
                                 stage_c_emitted += 1;
                                 if let Todo(_) = &stage_c_triage {
@@ -1648,7 +1648,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
                             &oracle_start_filename,
                             &parsed,
                         ) {
-                            eprintln(`extract: cannot write oracle-pending/{*category}/{base}.*`);
+                            eprintln(`extract: cannot write oracle-pending/${*category}/${base}.*`);
                         } else {
                             stage_b_oracle_pending += 1;
                         }
@@ -1657,7 +1657,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
                 },
             };
             let start_trimmed = parsed.start.trim();
-            let start_prefix = `({start_trimmed}`;
+            let start_prefix = `(${start_trimmed}`;
             let is_sub_tree = !start_trimmed.is_empty() && !normalised.starts_with(start_prefix);
             let sub_rule_opt = if is_sub_tree { extract_root_rule_name(&normalised) } else { null };
             // Descriptors whose `[output]` root rule equals `[start]` use the
@@ -1667,15 +1667,15 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
             // name; auto-skip otherwise.
             let stage_b_triage = stage_b_triage_map.lookup(&key);
             if let Skip(reason) = &stage_b_triage {
-                println(`  skipB: {key} — {*reason}`);
+                println(`  skipB: ${key} — ${*reason}`);
                 stage_b_skip += 1;
                 // Sweep the stale Stage B test, mirroring the Stage A skip
                 // branch: flipping a previously-emitted descriptor into
                 // [stage_b_skip] must not leave the old test behind.
-                let _ = remove_file(&stage_b_cat_dir, &`{base}_test.wado`);
+                let _ = remove_file(&stage_b_cat_dir, &`${base}_test.wado`);
                 continue;
             }
-            let stage_b_filename = `{base}_test.wado`;
+            let stage_b_filename = `${base}_test.wado`;
             if is_sub_tree {
                 let sub_rule = match sub_rule_opt {
                     Some(r) => r,
@@ -1693,7 +1693,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
                                 &oracle_start_filename,
                                 &parsed,
                             ) {
-                                eprintln(`extract: cannot write oracle-pending/{*category}/{base}.*`);
+                                eprintln(`extract: cannot write oracle-pending/${*category}/${base}.*`);
                             } else {
                                 stage_b_oracle_pending += 1;
                             }
@@ -1711,7 +1711,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
                     &stage_b_triage,
                 );
                 if let Err(_) = write_file_string(&stage_b_cat_dir, &stage_b_filename, &stage_b_src) {
-                    eprintln(`extract: cannot write stage_b/{*category}/{stage_b_filename}`);
+                    eprintln(`extract: cannot write stage_b/${*category}/${stage_b_filename}`);
                     continue;
                 }
             } else {
@@ -1724,7 +1724,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
                     &stage_b_triage,
                 );
                 if let Err(_) = write_file_string(&stage_b_cat_dir, &stage_b_filename, &stage_b_src) {
-                    eprintln(`extract: cannot write stage_b/{*category}/{stage_b_filename}`);
+                    eprintln(`extract: cannot write stage_b/${*category}/${stage_b_filename}`);
                     continue;
                 }
             }
@@ -1742,62 +1742,62 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
         // file in place: deleting it would silently hide the failure
         // behind an `empty:` line, and rewriting it as a header-only stub
         // would erase the last good run's coverage.
-        let test_filename = `{to_snake_case(category)}_test.wado`;
+        let test_filename = `${to_snake_case(category)}_test.wado`;
         if entries.is_empty() {
             if category_errors > 0 {
                 eprintln(
-                    `extract: {*category} had {category_errors} descriptor failure(s); leaving antlr4-compat/{test_filename} untouched`,
+                    `extract: ${*category} had ${category_errors} descriptor failure(s); leaving antlr4-compat/${test_filename} untouched`,
                 );
                 continue;
             }
             if let Err(_) = remove_file(&compat_dir, &test_filename) {
                 // No prior file is fine; only a real I/O failure would surface here.
             }
-            println(`  empty: antlr4-compat/{test_filename} (no descriptors emitted; not writing)`);
+            println(`  empty: antlr4-compat/${test_filename} (no descriptors emitted; not writing)`);
             continue;
         }
         let test_src = emit_test_file_for_category(category, &entries);
         if let Err(_) = write_file_string(&compat_dir, &test_filename, &test_src) {
-            eprintln(`extract: cannot write {test_filename}`);
+            eprintln(`extract: cannot write ${test_filename}`);
             continue;
         }
-        println(`  wrote: antlr4-compat/{test_filename} ({entries.len()} tests)`);
+        println(`  wrote: antlr4-compat/${test_filename} (${entries.len()} tests)`);
     }
 
     println("");
     println(
-        `extract: stage A claim (a) — .g4 parses cleanly: emitted {total_emitted} descriptor(s) across {categories.len(
+        `extract: stage A claim (a) — .g4 parses cleanly: emitted ${total_emitted} descriptor(s) across ${categories.len(
         )} categor(ies)`,
     );
-    println(`extract:           {total_todo} marked #[TODO]`);
-    println(`extract:           {total_skip} skipped`);
+    println(`extract:           ${total_todo} marked #[TODO]`);
+    println(`extract:           ${total_skip} skipped`);
     let stage_a_emitted = stage_a_parse_emitted + stage_a_err_emitted + stage_a_tokens_emitted;
     println(
-        `extract: stage A claims (b/c/d) — generated parser/lexer behaviour: emitted {stage_a_emitted} per-descriptor driver(s)`,
+        `extract: stage A claims (b/c/d) — generated parser/lexer behaviour: emitted ${stage_a_emitted} per-descriptor driver(s)`,
     );
-    println(`extract:           {stage_a_parse_emitted} parse-accepts-input (_parse_test.wado)`);
-    println(`extract:           {stage_a_err_emitted} parse-must-error    (_err_test.wado)`);
-    println(`extract:           {stage_a_tokens_emitted} tokens-equivalence  (_tokens_test.wado)`);
+    println(`extract:           ${stage_a_parse_emitted} parse-accepts-input (_parse_test.wado)`);
+    println(`extract:           ${stage_a_err_emitted} parse-must-error    (_err_test.wado)`);
+    println(`extract:           ${stage_a_tokens_emitted} tokens-equivalence  (_tokens_test.wado)`);
     println(
-        `extract:             of which {stage_a_tokens_stage_c_blocked} auto-#[TODO] (Stage C: action-print prefix)`,
+        `extract:             of which ${stage_a_tokens_stage_c_blocked} auto-#[TODO] (Stage C: action-print prefix)`,
     );
-    println(`extract:           {stage_a_todo} marked #[TODO] total (status.toml + auto)`);
-    println(`extract:           {stage_a_skip} explicit skip`);
-    println(`extract:           {stage_a_auto_skip} auto-skip (no eligible variant)`);
-    println(`extract: stage B — tree-shape equivalence: emitted {stage_b_emitted} per-descriptor driver(s)`);
-    println(`extract:           {stage_b_todo} marked #[TODO]`);
-    println(`extract:           {stage_b_skip} explicit skip`);
-    println(`extract:           {stage_b_auto_skip} auto-skip (output is not a parse tree)`);
+    println(`extract:           ${stage_a_todo} marked #[TODO] total (status.toml + auto)`);
+    println(`extract:           ${stage_a_skip} explicit skip`);
+    println(`extract:           ${stage_a_auto_skip} auto-skip (no eligible variant)`);
+    println(`extract: stage B — tree-shape equivalence: emitted ${stage_b_emitted} per-descriptor driver(s)`);
+    println(`extract:           ${stage_b_todo} marked #[TODO]`);
+    println(`extract:           ${stage_b_skip} explicit skip`);
+    println(`extract:           ${stage_b_auto_skip} auto-skip (output is not a parse tree)`);
     println(
-        `extract: stage B' — JVM-oracle candidates: {stage_b_oracle_pending} pending (handed to scripts/extract-antlr4-descriptors.sh post-processor)`,
+        `extract: stage B' — JVM-oracle candidates: ${stage_b_oracle_pending} pending (handed to scripts/extract-antlr4-descriptors.sh post-processor)`,
     );
-    println(`extract:           {stage_b_oracle_suppressed} suppressed via [stage_b_oracle_skip]`);
+    println(`extract:           ${stage_b_oracle_suppressed} suppressed via [stage_b_oracle_skip]`);
     println(
-        `extract: stage C — action-print output: emitted {stage_c_emitted} output-compare driver(s), {stage_c_todo} marked #[TODO]`,
+        `extract: stage C — action-print output: emitted ${stage_c_emitted} output-compare driver(s), ${stage_c_todo} marked #[TODO]`,
     );
     println(`extract: deferred — gaps blocked on missing infrastructure:`);
     println(
-        `extract:           {deferred_composite} composite descriptors — need Kiln multi-grammar \`use\` support to resolve \`import S;\` against sibling \`<Name>.slaveN.g4\``,
+        `extract:           ${deferred_composite} composite descriptors — need Kiln multi-grammar \`use\` support to resolve \`import S;\` against sibling \`<Name>.slaveN.g4\``,
     );
 }
 
@@ -1874,14 +1874,14 @@ fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment, 
         let pending_cat = match open_dir(&pending_root, &category, false) {
             Ok(d) => d,
             Err(_) => {
-                eprintln(`finalize: cannot open oracle-pending/{category}/`);
+                eprintln(`finalize: cannot open oracle-pending/${category}/`);
                 continue;
             },
         };
         let oracle_cat = match ensure_dir(&oracle_out_root, &category) {
             Ok(d) => d,
             Err(_) => {
-                eprintln(`finalize: cannot create stage_b_oracle/{category}/`);
+                eprintln(`finalize: cannot create stage_b_oracle/${category}/`);
                 continue;
             },
         };
@@ -1890,11 +1890,11 @@ fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment, 
         for let input_filename of &input_files {
             // Strip ".input" (6 chars) to get the descriptor base name.
             let base = input_filename.substr_bytes(0, input_filename.len() - 6);
-            let start_filename = `{base}.start`;
-            let expected_filename = `{base}.expected`;
-            let test_filename = `{base}_test.wado`;
+            let start_filename = `${base}.start`;
+            let expected_filename = `${base}.expected`;
+            let test_filename = `${base}_test.wado`;
             keep_test_files.push(test_filename);
-            let key = `{category}/{base}`;
+            let key = `${category}/${base}`;
             // A broken manifest (unreadable .start / .input) is the same
             // state as a missing .expected: the descriptor cannot be
             // (re-)emitted this run, so the previously committed test is
@@ -1903,7 +1903,7 @@ fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment, 
             let start_text = match read_file_to_string(&pending_cat, &start_filename) {
                 Ok(s) => s,
                 Err(_) => {
-                    eprintln(`finalize: missing oracle-pending/{category}/{start_filename} — dropping stale test`);
+                    eprintln(`finalize: missing oracle-pending/${category}/${start_filename} — dropping stale test`);
                     pending_no_expected += 1;
                     let _ = remove_file(&oracle_cat, &test_filename);
                     continue;
@@ -1922,7 +1922,7 @@ fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment, 
                 Ok(s) => s,
                 Err(_) => {
                     eprintln(
-                        `finalize: cannot read oracle-pending/{category}/{*input_filename} — dropping stale test`,
+                        `finalize: cannot read oracle-pending/${category}/${*input_filename} — dropping stale test`,
                     );
                     pending_no_expected += 1;
                     let _ = remove_file(&oracle_cat, &test_filename);
@@ -1949,7 +1949,7 @@ fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment, 
                 &oracle_version,
             );
             if let Err(_) = write_file_string(&oracle_cat, &test_filename, &src) {
-                eprintln(`finalize: cannot write stage_b_oracle/{category}/{test_filename}`);
+                eprintln(`finalize: cannot write stage_b_oracle/${category}/${test_filename}`);
                 continue;
             }
             if triage matches { Todo(_) } {
@@ -1965,10 +1965,10 @@ fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment, 
             }
         }
     }
-    println(`finalize: emitted {emitted} Stage B′ test(s) ({emitted_todo} #[TODO])`);
-    println(`finalize:           swept {swept} stale test(s)`);
-    println(`finalize:           {skip_dropped} dropped via [stage_b_oracle_skip]`);
-    println(`finalize:           {pending_no_expected} pending without .expected (oracle did not produce output)`);
+    println(`finalize: emitted ${emitted} Stage B′ test(s) (${emitted_todo} #[TODO])`);
+    println(`finalize:           swept ${swept} stale test(s)`);
+    println(`finalize:           ${skip_dropped} dropped via [stage_b_oracle_skip]`);
+    println(`finalize:           ${pending_no_expected} pending without .expected (oracle did not produce output)`);
 }
 
 /// Drop TestRig's trailing ` <EOF>` so the oracle's tree matches
@@ -2038,7 +2038,7 @@ fn emit_stage_b_oracle_test_file(
         name: *name,
         attr: "#![generated(by = \"package-gale/scripts/extract_antlr4_descriptors.wado --finalize-stage-b-oracle\")]",
         doc_lines: [
-            `// Expected tree: antlr-{*oracle_version}-complete.jar on the action-body-stripped grammar.`,
+            `// Expected tree: antlr-${*oracle_version}-complete.jar on the action-body-stripped grammar.`,
             triage_doc_line(&"stage_b_oracle"),
         ],
         output_subdir: "antlr4_compat_b_oracle",
@@ -2047,9 +2047,9 @@ fn emit_stage_b_oracle_test_file(
         triage: *triage,
     };
     return emit_test_file(&spec, |w: &mut CodeWriter| {
-        w.line(&`let input = "{escape_for_wado_str(input)}";`);
-        w.line(&`let expected = "{escape_for_wado_str(expected_tree)}";`);
-        w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
+        w.line(&`let input = "${escape_for_wado_str(input)}";`);
+        w.line(&`let expected = "${escape_for_wado_str(expected_tree)}";`);
+        w.line(&`let result = t::${parse_call_for_start(start)}(&input);`);
         w.line(&"let actual = t::to_string_tree(&result);");
         w.line(&"let norm = normalize_tree(&expected);");
         w.line(&"assert actual == norm, `actual:   {actual}\\nexpected: {norm}`;");
@@ -2163,7 +2163,7 @@ test "normalize: clean parse tree passes through trimmed" {
     let result = normalize_output_for_stage_b(&"(a x y)\n");
     assert result matches { Some(_) };
     if let Some(s) = result {
-        assert s == "(a x y)", `expected '(a x y)', got '{s}'`;
+        assert s == "(a x y)", `expected '(a x y)', got '${s}'`;
     }
 }
 
@@ -2175,7 +2175,7 @@ test "normalize: trailing <EOF> token is stripped" {
     let result = normalize_output_for_stage_b(&"(s (declarator a) <EOF>)");
     assert result matches { Some(_) };
     if let Some(s) = result {
-        assert s == "(s (declarator a))", `got '{s}'`;
+        assert s == "(s (declarator a))", `got '${s}'`;
     }
 }
 
@@ -2185,7 +2185,7 @@ test "normalize: nested tree with literal token text is preserved" {
     let result = normalize_output_for_stage_b(&"(s (declarator (declarator a) [ ]) <EOF>)");
     assert result matches { Some(_) };
     if let Some(s) = result {
-        assert s == "(s (declarator (declarator a) [ ]))", `got '{s}'`;
+        assert s == "(s (declarator (declarator a) [ ]))", `got '${s}'`;
     }
 }
 
@@ -2201,7 +2201,7 @@ test "normalize: nested-at-end EOF marker is stripped" {
     let result = normalize_output_for_stage_b(&"(s (t a <EOF>))");
     assert result matches { Some(_) };
     if let Some(s) = result {
-        assert s == "(s (t a))", `got '{s}'`;
+        assert s == "(s (t a))", `got '${s}'`;
     }
 }
 
@@ -2309,22 +2309,22 @@ fn lookup_for_axis(maps: &TriageMaps, axis: &String, key: &String) -> Triage {
 
 fn assert_triage_skip(maps: &TriageMaps, axis: &String, key: &String, expected_reason: &String) {
     if let Skip(reason) = &lookup_for_axis(maps, axis, key) {
-        assert *reason == *expected_reason, `axis {*axis} key '{*key}': expected Skip('{*expected_reason}'), got Skip('{*reason}')`;
+        assert *reason == *expected_reason, `axis ${*axis} key '${*key}': expected Skip('${*expected_reason}'), got Skip('${*reason}')`;
     } else {
-        panic(`axis {*axis} key '{*key}': expected Skip, got other`);
+        panic(`axis ${*axis} key '${*key}': expected Skip, got other`);
     }
 }
 
 fn assert_triage_todo(maps: &TriageMaps, axis: &String, key: &String, expected_reason: &String) {
     if let Todo(reason) = &lookup_for_axis(maps, axis, key) {
-        assert *reason == *expected_reason, `axis {*axis} key '{*key}': expected Todo('{*expected_reason}'), got Todo('{*reason}')`;
+        assert *reason == *expected_reason, `axis ${*axis} key '${*key}': expected Todo('${*expected_reason}'), got Todo('${*reason}')`;
     } else {
-        panic(`axis {*axis} key '{*key}': expected Todo, got other`);
+        panic(`axis ${*axis} key '${*key}': expected Todo, got other`);
     }
 }
 
 fn assert_triage_pass(maps: &TriageMaps, axis: &String, key: &String) {
-    assert lookup_for_axis(maps, axis, key) matches { Pass }, `axis {*axis} key '{*key}': expected Pass, got other`;
+    assert lookup_for_axis(maps, axis, key) matches { Pass }, `axis ${*axis} key '${*key}': expected Pass, got other`;
 }
 
 test "triage: missing file yields empty maps on all axes" {
@@ -2486,7 +2486,7 @@ test "triage: stage_a entry applies to whichever variant (parse / err / tokens) 
 test "extract_root_rule_name: simple tree returns the first identifier" {
     assert extract_root_rule_name(&"(a b c)") matches { Some(_) };
     if let Some(name) = extract_root_rule_name(&"(a b c)") {
-        assert name == "a", `got '{name}'`;
+        assert name == "a", `got '${name}'`;
     }
     if let Some(name) = extract_root_rule_name(&"(expr (lit 1) + (lit 2))") {
         assert name == "expr";
@@ -2510,7 +2510,7 @@ test "classify_tokens: clean token dump returns Clean(normalised)" {
     let result = classify_output_for_tokens(&input);
     assert result matches { Some(TokensTarget::Clean(_)) };
     if let Some(TokensTarget::Clean(s)) = result {
-        assert s == input, `unexpected: '{s}'`;
+        assert s == input, `unexpected: '${s}'`;
     }
 }
 
@@ -2523,7 +2523,7 @@ test "classify_tokens: action-print prefix returns StageCBlocked(normalised)" {
     let result = classify_output_for_tokens(&raw);
     assert result matches { Some(TokensTarget::StageCBlocked(_)) };
     if let Some(TokensTarget::StageCBlocked(s)) = result {
-        assert s == "stuff0:\nstuff1: a\n[@0,0:0='a',<1>,1:0]\n", `unexpected: '{s}'`;
+        assert s == "stuff0:\nstuff1: a\n[@0,0:0='a',<1>,1:0]\n", `unexpected: '${s}'`;
     }
 }
 
@@ -2558,24 +2558,24 @@ test "stage_a_err_category_eligible: only ParserErrors and LexerErrors" {
 
 test "strip_eof_marker: drops trailing ' <EOF>' before closing ')'" {
     let r = strip_eof_marker(&"(start (statement x) <EOF>)");
-    assert r == "(start (statement x))", `got '{r}'`;
+    assert r == "(start (statement x))", `got '${r}'`;
 }
 
 test "strip_eof_marker: trims surrounding whitespace and newlines" {
     let r = strip_eof_marker(&"  (start (statement x) <EOF>)\n");
-    assert r == "(start (statement x))", `got '{r}'`;
+    assert r == "(start (statement x))", `got '${r}'`;
 }
 
 test "strip_eof_marker: passes tree through when no EOF marker is present" {
     let r = strip_eof_marker(&"(start (statement x))");
-    assert r == "(start (statement x))", `got '{r}'`;
+    assert r == "(start (statement x))", `got '${r}'`;
 }
 
 test "strip_eof_marker: does not strip ' <EOF>' that is not at the end" {
     // Defensive: ` <EOF>` in token-text position (followed by space
     // rather than the closing ')') stays untouched.
     let r = strip_eof_marker(&"(start <EOF> x)");
-    assert r == "(start <EOF> x)", `got '{r}'`;
+    assert r == "(start <EOF> x)", `got '${r}'`;
 }
 
 test "parse_cli_args: unknown -- flag is rejected" {
@@ -2625,7 +2625,7 @@ test "emit_stage_b_oracle_test_file reproduces the committed file byte-for-byte"
         &Triage::Pass,
         &"4.13.2",
     );
-    assert actual == expected, `\nactual:\n{actual}\nexpected:\n{expected}`;
+    assert actual == expected, `\nactual:\n${actual}\nexpected:\n${expected}`;
 }
 
 test "emit_test_file: Todo triage decorates the test and wires Stage A paths" {

@@ -110,7 +110,7 @@ fn disambiguate_const_name(base: &String, result: &List<LitToken>) -> String {
     let mut candidate = *base;
     let mut n = 2;
     while const_name_taken(result, &candidate) {
-        candidate = `{*base}_{n}`;
+        candidate = `${*base}_${n}`;
         n += 1;
     }
     return candidate;
@@ -216,11 +216,11 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, li
     let slots = token_slot_order(lexer_rules, lit_tokens);
     let mut idx = 0;
     for let slot of &slots {
-        let init = `{idx}`;
+        let init = `${idx}`;
         match *slot {
             Rule(ri) => {
                 let rule = &lexer_rules[ri];
-                let name = `TK_{rule.name}`;
+                let name = `TK_${rule.name}`;
                 let mut g = GlobalSpec::new(&name, "i32", &init, Vis::Pub);
                 if rule.is_virtual {
                     g.set_trailing_comment(&"virtual");
@@ -249,13 +249,13 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, li
                 if n < 1 {
                     continue;
                 }
-                if rule_name_exists(lexer_rules, &`{n}`) {
+                if rule_name_exists(lexer_rules, &`${n}`) {
                     continue;
                 }
                 if emitted_numeric.contains(&n) {
                     continue;
                 }
-                GlobalSpec::new(&`TK_{n}`, "i32", &`{n - 1}`, Vis::Pub).emit(w);
+                GlobalSpec::new(&`TK_${n}`, "i32", &`${n - 1}`, Vis::Pub).emit(w);
                 emitted_numeric.push(n);
             }
         }
@@ -457,7 +457,7 @@ fn fragment_elem_refs_self(
 /// `try_ID` / `try_Id`) without any collision-resolution bookkeeping.
 /// Single source of truth so every emit site agrees on the name.
 pub fn lexer_try_fn_name(name: &String) -> String {
-    return `try_{*name}`;
+    return `try_${*name}`;
 }
 
 fn gen_lexer_match_fn(
@@ -479,7 +479,7 @@ fn gen_lexer_match_fn(
     // ATN-class rule (recursive non-greedy body): the static single-pass
     // emitter cannot decide it, so delegate to the runtime lexer simulator.
     if let Some(idx) = atn_class.get(rule.name) {
-        w.line(&`return latn_match(&LATN_SIM, {idx}, chars, start);`);
+        w.line(&`return latn_match(&LATN_SIM, ${idx}, chars, start);`);
         w.end();
         w.blank();
         return;
@@ -518,9 +518,9 @@ fn gen_lexer_rule_predicates(w: &mut CodeWriter, actions: &List<AltAction>, befo
         if a.kind matches { Predicate } {
             let cond = match translate_lexer_predicate(&a.source.text) {
                 Ok(c) => c,
-                Err(e) => panic(`lexer predicate: {e}`),
+                Err(e) => panic(`lexer predicate: ${e}`),
             };
-            w.line(&`if !({cond}) \{ {fail_action}; \}`);
+            w.line(&`if !(${cond}) \{ ${fail_action}; \}`);
         }
     }
 }
@@ -602,7 +602,7 @@ fn gen_lexer_actions_struct(w: &mut CodeWriter, uses_modes: bool) {
     let mut f = FnSpec::new("new");
     f.set_return_type(&"LexerActions");
     f.emit_begin(w);
-    w.line(&`return LexerActions \{ act_type: -1, act_channel: -1, act_skip: false, act_more: false{mode_init} \};`);
+    w.line(&`return LexerActions \{ act_type: -1, act_channel: -1, act_skip: false, act_more: false${mode_init} \};`);
     w.end();
     w.blank();
 
@@ -668,7 +668,7 @@ fn gen_lexer_actions_struct(w: &mut CodeWriter, uses_modes: bool) {
 /// Only emitted for a `mode` grammar that runs actions.
 fn gen_mode_constants(w: &mut CodeWriter, mode_names: &List<String>) {
     for let mut i = 0; i < mode_names.len(); i += 1 {
-        GlobalSpec::new(&`MODE_{mode_names[i]}`, "i32", &`{i}`, Vis::Pub).emit(w);
+        GlobalSpec::new(&`MODE_${mode_names[i]}`, "i32", &`${i}`, Vis::Pub).emit(w);
     }
     w.blank();
 }
@@ -701,17 +701,17 @@ fn gen_lexer_apply_fns(w: &mut CodeWriter, grammar: &Grammar) {
         if rule.body.len() == 1 {
             gen_lexer_alt_action_stmts(w, &rule.body[0]);
         } else {
-            w.line(&`let _walt = winning_alt_{rule.name}(chars, start);`);
+            w.line(&`let _walt = winning_alt_${rule.name}(chars, start);`);
             let mut first = true;
             for let mut ai = 0; ai < rule.body.len(); ai += 1 {
                 if !lexer_alt_has_action(&rule.body[ai]) {
                     continue;
                 }
                 if first {
-                    w.begin(&`if _walt == {ai}`);
+                    w.begin(&`if _walt == ${ai}`);
                     first = false;
                 } else {
-                    w.else_begin(&`else if _walt == {ai}`);
+                    w.else_begin(&`else if _walt == ${ai}`);
                 }
                 gen_lexer_alt_action_stmts(w, &rule.body[ai]);
             }
@@ -742,7 +742,7 @@ fn gen_lexer_alt_action_stmts(w: &mut CodeWriter, alt: &LexerAlternative) {
         }
         let body = match translate_lexer_action(&a.source.text) {
             Ok(b) => b,
-            Err(e) => panic(`lexer action: {e}`),
+            Err(e) => panic(`lexer action: ${e}`),
         };
         emit_lexer_action_stmt(w, &body);
     }
@@ -754,18 +754,18 @@ fn gen_lexer_alt_action_stmts(w: &mut CodeWriter, alt: &LexerAlternative) {
 /// labeled block; a failed match `break`s to the next, a full match returns its
 /// index. No side effects — actions are run by the caller for the returned alt.
 fn gen_lexer_winning_alt_fn(w: &mut CodeWriter, rule: &LexerRule, all_rules: &List<LexerRule>, ci: bool) {
-    let mut f = FnSpec::new(&`winning_alt_{rule.name}`);
+    let mut f = FnSpec::new(&`winning_alt_${rule.name}`);
     f.add_param(&"chars", &"&List<char>");
     f.add_param(&"start", &"i32");
     f.set_return_type(&"i32");
     f.emit_begin(w);
     w.line(&"let mut pos = start;");
     for let mut ai = 0; ai < rule.body.len(); ai += 1 {
-        let label = `walt_{ai}`;
-        w.begin(&`{label}:`);
+        let label = `walt_${ai}`;
+        w.begin(&`${label}:`);
         w.line(&"pos = start;");
-        gen_lexer_alt_seq(w, &rule.body[ai], all_rules, &`break {label}`, ci, true);
-        w.line(&`return {ai};`);
+        gen_lexer_alt_seq(w, &rule.body[ai], all_rules, &`break ${label}`, ci, true);
+        w.line(&`return ${ai};`);
         w.end();
     }
     w.line(&"return -1;");
@@ -781,12 +781,12 @@ fn emit_lexer_action_stmt(w: &mut CodeWriter, body: &String) {
     if trimmed.ends_with(";") || trimmed.ends_with("}") {
         w.line(&trimmed);
     } else {
-        w.line(&`{trimmed};`);
+        w.line(&`${trimmed};`);
     }
 }
 
 fn apply_fn_name(rule_name: &String) -> String {
-    return `apply_{*rule_name}_actions`;
+    return `apply_${*rule_name}_actions`;
 }
 
 /// Emit the post-tournament replay dispatch: for the winning rule (`best_act`),
@@ -797,11 +797,11 @@ fn gen_lexer_action_replay(w: &mut CodeWriter, act_rule_names: &List<String>, us
     w.begin(&"if best_act >= 0");
     w.line(&"let mut lx = LexerActions::new();");
     for let mut i = 0; i < act_rule_names.len(); i += 1 {
-        let call = `{apply_fn_name(&act_rule_names[i])}(&lexer.chars, start, best_end, &mut lx);`;
+        let call = `${apply_fn_name(&act_rule_names[i])}(&lexer.chars, start, best_end, &mut lx);`;
         if i == 0 {
-            w.begin(&`if best_act == {i}`);
+            w.begin(&`if best_act == ${i}`);
         } else {
-            w.else_begin(&`else if best_act == {i}`);
+            w.else_begin(&`else if best_act == ${i}`);
         }
         w.line(&call);
     }
@@ -865,23 +865,23 @@ fn gen_lexer_alts(
     ea: bool,
 ) {
     let id = w.next_id();
-    w.line(&`let alts_saved_{id} = pos;`);
-    w.line(&`let mut alts_ok_{id} = false;`);
+    w.line(&`let alts_saved_${id} = pos;`);
+    w.line(&`let mut alts_ok_${id} = false;`);
     for let mut i = 0; i < alts.len(); i += 1 {
         if i > 0 {
-            w.begin(&`if !alts_ok_{id}`);
+            w.begin(&`if !alts_ok_${id}`);
         }
-        let label = `alts_{id}_{i}`;
-        w.begin(&`{label}:`);
-        w.line(&`pos = alts_saved_{id};`);
-        gen_lexer_alt_seq(w, &alts[i], all_rules, &`break {label}`, ci, ea);
-        w.line(&`alts_ok_{id} = true;`);
+        let label = `alts_${id}_${i}`;
+        w.begin(&`${label}:`);
+        w.line(&`pos = alts_saved_${id};`);
+        gen_lexer_alt_seq(w, &alts[i], all_rules, &`break ${label}`, ci, ea);
+        w.line(&`alts_ok_${id} = true;`);
         w.end();
     }
     for let mut i = 1; i < alts.len(); i += 1 {
         w.end();
     }
-    w.line(&`if !alts_ok_{id} \{ {fail_action}; \}`);
+    w.line(&`if !alts_ok_${id} \{ ${fail_action}; \}`);
 }
 
 /// Whether `alt` has a semantic predicate strictly between element `after` and
@@ -968,7 +968,7 @@ fn gen_lexer_alt_seq(
                     // rather than drop it (the trailing one is still post-loop).
                     if lexer_alt_has_predicate_after(alt, i) {
                         panic(
-                            `lexer predicate after a lookahead-aware greedy repeat is not yet supported (rule alt element {i})`,
+                            `lexer predicate after a lookahead-aware greedy repeat is not yet supported (rule alt element ${i})`,
                         );
                     }
                     gen_lexer_repeat_lookahead_aware(w, rep, &suffix_elems, all_rules, fail_action, ci, ea);
@@ -1063,10 +1063,10 @@ fn gen_lexer_repeat_lookahead_aware(
     ea: bool,
 ) {
     let id = w.next_id();
-    let accept_var = `accept_{id}`;
-    let loop_label = `la_rep_{id}`;
+    let accept_var = `accept_${id}`;
+    let loop_label = `la_rep_${id}`;
 
-    w.line(&`let mut {accept_var}: i32 = -1;`);
+    w.line(&`let mut ${accept_var}: i32 = -1;`);
 
     // Star: zero iterations is a valid endpoint, so the suffix may
     // legally start at the current position even before any inner
@@ -1086,20 +1086,20 @@ fn gen_lexer_repeat_lookahead_aware(
     // position where the suffix could start; once the inner can no
     // longer match we exit the loop and resume from that position.
     w.begin(&"loop");
-    w.line(&`let la_saved_{id} = pos;`);
-    w.begin(&`{loop_label}:`);
-    gen_lexer_elem(w, &rep.element, all_rules, &`break {loop_label}`, ci, ea);
+    w.line(&`let la_saved_${id} = pos;`);
+    w.begin(&`${loop_label}:`);
+    gen_lexer_elem(w, &rep.element, all_rules, &`break ${loop_label}`, ci, ea);
     gen_lexer_suffix_peek(w, suffix, all_rules, &accept_var, ci, ea);
     w.line(&"continue;");
     w.end();
-    w.line(&`pos = la_saved_{id};`);
+    w.line(&`pos = la_saved_${id};`);
     w.line(&"break;");
     w.end();
 
-    w.begin(&`if {accept_var} < 0`);
-    w.line(&`{*fail_action};`);
+    w.begin(&`if ${accept_var} < 0`);
+    w.line(&`${*fail_action};`);
     w.end();
-    w.line(&`pos = {accept_var};`);
+    w.line(&`pos = ${accept_var};`);
 
     // Re-consume the suffix to advance `pos` past it. The peek that
     // recorded `accept_var` already proved every suffix element
@@ -1110,7 +1110,7 @@ fn gen_lexer_repeat_lookahead_aware(
     // runtime rather than silently degrading to a "rule rejected"
     // verdict.
     let assert_msg = `lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)`;
-    let assert_fail = `panic("{assert_msg}")`;
+    let assert_fail = `panic("${assert_msg}")`;
     for let elem of suffix {
         gen_lexer_elem(w, elem, all_rules, &assert_fail, ci, ea);
     }
@@ -1129,20 +1129,20 @@ fn gen_lexer_suffix_peek(
     ea: bool,
 ) {
     let id = w.next_id();
-    let save_var = `peek_save_{id}`;
-    let matched_var = `peek_ok_{id}`;
-    let label = `peek_{id}`;
-    w.line(&`let {save_var} = pos;`);
-    w.line(&`let mut {matched_var} = false;`);
-    w.begin(&`{label}:`);
+    let save_var = `peek_save_${id}`;
+    let matched_var = `peek_ok_${id}`;
+    let label = `peek_${id}`;
+    w.line(&`let ${save_var} = pos;`);
+    w.line(&`let mut ${matched_var} = false;`);
+    w.begin(&`${label}:`);
     for let elem of suffix {
-        gen_lexer_elem(w, elem, all_rules, &`break {label}`, ci, ea);
+        gen_lexer_elem(w, elem, all_rules, &`break ${label}`, ci, ea);
     }
-    w.line(&`{matched_var} = true;`);
+    w.line(&`${matched_var} = true;`);
     w.end();
-    w.line(&`pos = {save_var};`);
-    w.begin(&`if {matched_var}`);
-    w.line(&`{*accept_var} = {save_var};`);
+    w.line(&`pos = ${save_var};`);
+    w.begin(&`if ${matched_var}`);
+    w.line(&`${*accept_var} = ${save_var};`);
     w.end();
 }
 
@@ -1159,7 +1159,7 @@ fn gen_lexer_elem(
             let chars: List<char> = text.chars().collect();
             for let mut i = 0; i < chars.len(); i += 1 {
                 let mismatch = gen_char_mismatch(&`chars[pos]`, chars[i], ci);
-                w.line(&`if pos >= chars.len() || {mismatch} \{ {fail_action}; \}`);
+                w.line(&`if pos >= chars.len() || ${mismatch} \{ ${fail_action}; \}`);
                 w.line(&"pos += 1;");
             }
         },
@@ -1171,7 +1171,7 @@ fn gen_lexer_elem(
                 gen_char_class(w, &cc, fail_action);
             } else {
                 w.line(
-                    &`if pos >= chars.len() || !(chars[pos] matches \{ {char_range_pat(pair.0..=pair.1)} \}) \{ {fail_action}; \}`,
+                    &`if pos >= chars.len() || !(chars[pos] matches \{ ${char_range_pat(pair.0..=pair.1)} \}) \{ ${fail_action}; \}`,
                 );
                 w.line(&"pos += 1;");
             }
@@ -1181,12 +1181,12 @@ fn gen_lexer_elem(
             gen_char_class(w, &expanded, fail_action);
         },
         AnyChar => {
-            w.line(&`if pos >= chars.len() \{ {fail_action}; \}`);
+            w.line(&`if pos >= chars.len() \{ ${fail_action}; \}`);
             w.line(&"pos += 1;");
         },
         RuleRef(name) => {
             if name == "EOF" {
-                w.line(&`if pos < chars.len() \{ {fail_action}; \}`);
+                w.line(&`if pos < chars.len() \{ ${fail_action}; \}`);
             } else {
                 let frag = find_fragment(all_rules, &name);
                 if let Some(f) = frag {
@@ -1195,8 +1195,8 @@ fn gen_lexer_elem(
                     // emitted separately with grammar-level CI.
                     if fragment_is_recursive(f, all_rules) {
                         let fn_name = lexer_try_fn_name(&name);
-                        w.line(&`pos = {fn_name}(chars, pos);`);
-                        w.line(&`if pos < 0 \{ {fail_action}; \}`);
+                        w.line(&`pos = ${fn_name}(chars, pos);`);
+                        w.line(&`if pos < 0 \{ ${fail_action}; \}`);
                     } else if f.body.len() == 1 {
                         gen_lexer_alt_seq(w, &f.body[0], all_rules, fail_action, ci, ea);
                     } else {
@@ -1204,8 +1204,8 @@ fn gen_lexer_elem(
                     }
                 } else {
                     let fn_name = lexer_try_fn_name(&name);
-                    w.line(&`pos = {fn_name}(chars, pos);`);
-                    w.line(&`if pos < 0 \{ {fail_action}; \}`);
+                    w.line(&`pos = ${fn_name}(chars, pos);`);
+                    w.line(&`if pos < 0 \{ ${fail_action}; \}`);
                 }
             }
         },
@@ -1230,12 +1230,12 @@ fn expand_char_class_ci(cc: &CharClass) -> CharClass {
 }
 
 fn gen_char_class(w: &mut CodeWriter, cc: &CharClass, fail_action: &String) {
-    w.line(&`if pos >= chars.len() \{ {fail_action}; \}`);
+    w.line(&`if pos >= chars.len() \{ ${fail_action}; \}`);
     let cond = char_class_disjunction(cc);
     if cc.negated {
-        w.line(&`if {cond} \{ {*fail_action}; \}`);
+        w.line(&`if ${cond} \{ ${*fail_action}; \}`);
     } else {
-        w.line(&`if !({cond}) \{ {*fail_action}; \}`);
+        w.line(&`if !(${cond}) \{ ${*fail_action}; \}`);
     }
     w.line(&"pos += 1;");
 }
@@ -1253,7 +1253,7 @@ fn char_class_disjunction(cc: &CharClass) -> String {
             s.push_str(&" | ");
         }
         first = false;
-        s.push_str(&`{char_range_pat(range.start..=range.end)}`);
+        s.push_str(&`${char_range_pat(range.start..=range.end)}`);
     }
     s.push_str(&" })");
     return s;
@@ -1268,38 +1268,38 @@ fn gen_lexer_repeat(
     ea: bool,
 ) {
     let id = w.next_id();
-    let label = `rep_{id}`;
+    let label = `rep_${id}`;
     if let Star = rep.kind {
         w.begin(&"loop");
-        w.line(&`let rep_saved_{id} = pos;`);
-        w.begin(&`{label}:`);
-        gen_lexer_elem(w, &rep.element, all_rules, &`break {label}`, ci, ea);
+        w.line(&`let rep_saved_${id} = pos;`);
+        w.begin(&`${label}:`);
+        gen_lexer_elem(w, &rep.element, all_rules, &`break ${label}`, ci, ea);
         w.line(&"continue;");
         w.end();
-        w.line(&`pos = rep_saved_{id};`);
+        w.line(&`pos = rep_saved_${id};`);
         w.line(&"break;");
         w.end();
     }
     if let Plus = rep.kind {
         gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea);
         w.begin(&"loop");
-        w.line(&`let rep_saved_{id} = pos;`);
-        w.begin(&`{label}:`);
-        gen_lexer_elem(w, &rep.element, all_rules, &`break {label}`, ci, ea);
+        w.line(&`let rep_saved_${id} = pos;`);
+        w.begin(&`${label}:`);
+        gen_lexer_elem(w, &rep.element, all_rules, &`break ${label}`, ci, ea);
         w.line(&"continue;");
         w.end();
-        w.line(&`pos = rep_saved_{id};`);
+        w.line(&`pos = rep_saved_${id};`);
         w.line(&"break;");
         w.end();
     }
     if let Optional = rep.kind {
-        w.line(&`let opt_saved_{id} = pos;`);
-        w.line(&`let mut opt_ok_{id} = false;`);
-        w.begin(&`{label}:`);
-        gen_lexer_elem(w, &rep.element, all_rules, &`break {label}`, ci, ea);
-        w.line(&`opt_ok_{id} = true;`);
+        w.line(&`let opt_saved_${id} = pos;`);
+        w.line(&`let mut opt_ok_${id} = false;`);
+        w.begin(&`${label}:`);
+        gen_lexer_elem(w, &rep.element, all_rules, &`break ${label}`, ci, ea);
+        w.line(&`opt_ok_${id} = true;`);
         w.end();
-        w.line(&`if !opt_ok_{id} \{ pos = opt_saved_{id}; \}`);
+        w.line(&`if !opt_ok_${id} \{ pos = opt_saved_${id}; \}`);
     }
 }
 
@@ -1313,7 +1313,7 @@ fn gen_lexer_non_greedy_repeat(
     ea: bool,
 ) {
     let id = w.next_id();
-    let label = `ng_{id}`;
+    let label = `ng_${id}`;
     // For Plus, match at least one element first
     if let Plus = rep.kind {
         gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea);
@@ -1321,17 +1321,17 @@ fn gen_lexer_non_greedy_repeat(
     // Loop: try matching the rest first (non-greedy), otherwise consume one more
     w.begin(&"loop");
     // Try exit: match rest of elements
-    w.line(&`let ng_saved_{id} = pos;`);
-    w.line(&`let mut ng_exit_{id} = false;`);
-    w.begin(&`{label}:`);
-    gen_lexer_alt_seq(w, rest, all_rules, &`break {label}`, ci, ea);
-    w.line(&`ng_exit_{id} = true;`);
+    w.line(&`let ng_saved_${id} = pos;`);
+    w.line(&`let mut ng_exit_${id} = false;`);
+    w.begin(&`${label}:`);
+    gen_lexer_alt_seq(w, rest, all_rules, &`break ${label}`, ci, ea);
+    w.line(&`ng_exit_${id} = true;`);
     w.end();
-    w.begin(&`if ng_exit_{id}`);
+    w.begin(&`if ng_exit_${id}`);
     w.line(&"break;");
     w.end();
     // Exit failed, restore pos and consume one element
-    w.line(&`pos = ng_saved_{id};`);
+    w.line(&`pos = ng_saved_${id};`);
     gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea);
     w.end();
 }
@@ -1354,16 +1354,16 @@ fn gen_lexer_not(
         return;
     }
     let id = w.next_id();
-    let label = `not_{id}`;
-    w.line(&`if pos >= chars.len() \{ {fail_action}; \}`);
-    w.line(&`let not_saved_{id} = pos;`);
-    w.line(&`let mut not_matched_{id} = false;`);
-    w.begin(&`{label}:`);
-    gen_lexer_elem(w, &not_elem.element, all_rules, &`break {label}`, ci, ea);
-    w.line(&`not_matched_{id} = true;`);
+    let label = `not_${id}`;
+    w.line(&`if pos >= chars.len() \{ ${fail_action}; \}`);
+    w.line(&`let not_saved_${id} = pos;`);
+    w.line(&`let mut not_matched_${id} = false;`);
+    w.begin(&`${label}:`);
+    gen_lexer_elem(w, &not_elem.element, all_rules, &`break ${label}`, ci, ea);
+    w.line(&`not_matched_${id} = true;`);
     w.end();
-    w.line(&`pos = not_saved_{id};`);
-    w.line(&`if not_matched_{id} \{ {fail_action}; \}`);
+    w.line(&`pos = not_saved_${id};`);
+    w.line(&`if not_matched_${id} \{ ${fail_action}; \}`);
     w.line(&"pos += 1;");
 }
 
@@ -1702,10 +1702,10 @@ fn gen_keyword_classifier_fn(w: &mut CodeWriter, keywords: &List<KeywordInfo>) {
         }
 
         if first_len {
-            w.begin(&`if len == {target_len}`);
+            w.begin(&`if len == ${target_len}`);
             first_len = false;
         } else {
-            w.else_begin(&`else if len == {target_len}`);
+            w.else_begin(&`else if len == ${target_len}`);
         }
 
         // Group keywords of this length by first character for dispatch
@@ -1737,10 +1737,10 @@ fn gen_keyword_classifier_fn(w: &mut CodeWriter, keywords: &List<KeywordInfo>) {
             for let fc of &first_chars {
                 let guard = gen_char_guard(&"chars[start]", *fc, true);
                 if first_fc {
-                    w.begin(&`if {guard}`);
+                    w.begin(&`if ${guard}`);
                     first_fc = false;
                 } else {
-                    w.else_begin(&`else if {guard}`);
+                    w.else_begin(&`else if ${guard}`);
                 }
                 for let kw of &len_keywords {
                     if kw.lowercase_text.chars().next().unwrap() != *fc {
@@ -1769,18 +1769,18 @@ fn gen_char_guard(access: &String, c: char, ci: bool) -> String {
     let lower = c.to_ascii_lowercase();
     let upper = c.to_ascii_uppercase();
     if ci && lower != upper {
-        return `{access}.eq_ignore_ascii_case(&{char_lit(lower)})`;
+        return `${access}.eq_ignore_ascii_case(&${char_lit(lower)})`;
     }
-    return `{access} == {char_lit(c)}`;
+    return `${access} == ${char_lit(c)}`;
 }
 
 fn gen_char_mismatch(access: &String, c: char, ci: bool) -> String {
     let lower = c.to_ascii_lowercase();
     let upper = c.to_ascii_uppercase();
     if ci && lower != upper {
-        return `!{access}.eq_ignore_ascii_case(&{char_lit(lower)})`;
+        return `!${access}.eq_ignore_ascii_case(&${char_lit(lower)})`;
     }
-    return `{access} != {char_lit(c)}`;
+    return `${access} != ${char_lit(c)}`;
 }
 
 fn gen_keyword_check(w: &mut CodeWriter, kw: &KeywordInfo) {
@@ -1792,12 +1792,12 @@ fn gen_keyword_check(w: &mut CodeWriter, kw: &KeywordInfo) {
         }
         let lower = kw_chars[kc];
         if kw.char_ci[kc] {
-            w.write(&`chars[start + {kc}].eq_ignore_ascii_case(&{char_lit(lower)})`);
+            w.write(&`chars[start + ${kc}].eq_ignore_ascii_case(&${char_lit(lower)})`);
         } else {
-            w.write(&`chars[start + {kc}] == {char_lit(lower)}`);
+            w.write(&`chars[start + ${kc}] == ${char_lit(lower)}`);
         }
     }
-    w.write(&` \{ return TK_{kw.rule_name}; \}\n`);
+    w.write(&` \{ return TK_${kw.rule_name}; \}\n`);
 }
 
 fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &List<LitToken>, ci: bool) {
@@ -1811,11 +1811,11 @@ fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &List<LitToken>, ci: bo
         f.emit_begin(w);
         w.line(&"let pos = start;");
         for let mut i = 0; i < chars.len(); i += 1 {
-            let mismatch = gen_char_mismatch(&`chars[pos + {i}]`, chars[i], ci);
-            w.line(&`if pos + {i} >= chars.len() || {mismatch} \{ return -1; \}`);
+            let mismatch = gen_char_mismatch(&`chars[pos + ${i}]`, chars[i], ci);
+            w.line(&`if pos + ${i} >= chars.len() || ${mismatch} \{ return -1; \}`);
         }
         let len = chars.len();
-        w.line(&`return pos + {len};`);
+        w.line(&`return pos + ${len};`);
         w.end();
         w.blank();
     }
@@ -1889,7 +1889,7 @@ fn best_state_extras(
     let mut s = String::with_capacity(64);
     if emit_modes {
         if push_mode >= 0 {
-            s.push_str(&` best_push_mode = {push_mode};`);
+            s.push_str(&` best_push_mode = ${push_mode};`);
         } else {
             s.push_str(&" best_push_mode = -1;");
         }
@@ -1901,7 +1901,7 @@ fn best_state_extras(
     }
     if has_set_mode_rules {
         if set_mode >= 0 {
-            s.push_str(&` best_set_mode = {set_mode};`);
+            s.push_str(&` best_set_mode = ${set_mode};`);
         } else {
             s.push_str(&" best_set_mode = -1;");
         }
@@ -1915,7 +1915,7 @@ fn best_state_extras(
     }
     if has_channel_rules {
         if channel != 0 {
-            s.push_str(&` best_channel = {channel};`);
+            s.push_str(&` best_channel = ${channel};`);
         } else {
             s.push_str(&" best_channel = 0;");
         }
@@ -1978,9 +1978,9 @@ fn build_rule_try_call(
     // sees the renamed type. The rule itself still has its own TK_<name>
     // constant; the override only affects emission.
     let token_kind = if let Some(override_name) = rule.type_override {
-        `TK_{override_name}`;
+        `TK_${override_name}`;
     } else {
-        `TK_{rule.name}`;
+        `TK_${rule.name}`;
     };
     let extra = best_state_extras(
         rule.push_mode,
@@ -2184,13 +2184,13 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
         for let mut gi = 0; gi < groups.len(); gi += 1 {
             if groups[gi].calls == matching {
                 // Add char to existing group's guard
-                groups[gi].guard.push_str(&` || first_char == {char_lit(*c)}`);
+                groups[gi].guard.push_str(&` || first_char == ${char_lit(*c)}`);
                 merged = true;
             }
         }
         if !merged {
             groups.push(DispatchGroup {
-                guard: `first_char == {char_lit(*c)}`,
+                guard: `first_char == ${char_lit(*c)}`,
                 calls: matching,
             });
         }
@@ -2227,7 +2227,7 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
         for let r of &calls[i].first_chars {
             if r[0] != r[1] {
                 // Build range guard
-                let guard = `{char_lit(r[0])} <= first_char <= {char_lit(r[1])}`;
+                let guard = `${char_lit(r[0])} <= first_char <= ${char_lit(r[1])}`;
                 // Find or create group
                 let mut found_group = false;
                 for let mut gi = 0; gi < groups.len(); gi += 1 {
@@ -2316,9 +2316,9 @@ fn gen_dispatch_groups(
             }
             w.else_begin(&"else");
         } else if first_group {
-            w.begin(&`if {g.guard}`);
+            w.begin(&`if ${g.guard}`);
         } else {
-            w.else_begin(&`else if {g.guard}`);
+            w.else_begin(&`else if ${g.guard}`);
         }
         first_group = false;
         gen_group_calls(w, calls, &g.calls, needs_extras, has_actions);
@@ -2339,16 +2339,16 @@ fn gen_group_calls(
     // literals are not hand-inlined — the wado compiler folds the tiny bodies.
     for let call_idx of indices {
         let call = &calls[*call_idx];
-        w.line(&`end = {call.fn_name}(&lexer.chars, start);`);
+        w.line(&`end = ${call.fn_name}(&lexer.chars, start);`);
         // Under `has_actions` EVERY winner block reassigns `best_act` — the
         // rule's replay index, or -1 for a literal / non-action rule — so a
         // longer non-action match that supersedes an earlier action match does
         // not leave `best_act` pointing at the losing action rule.
-        let act = if has_actions { ` best_act = {call.act_index};` } else { String::new() };
+        let act = if has_actions { ` best_act = ${call.act_index};` } else { String::new() };
         if needs_extras {
-            w.line(&`if end > best_end \{ best_end = end; best_kind = {call.token_kind};{call.extra}{act} \}`);
+            w.line(&`if end > best_end \{ best_end = end; best_kind = ${call.token_kind};${call.extra}${act} \}`);
         } else {
-            w.line(&`if end > best_end \{ best_end = end; best_kind = {call.token_kind};{act} \}`);
+            w.line(&`if end > best_end \{ best_end = end; best_kind = ${call.token_kind};${act} \}`);
         }
     }
 }
@@ -2443,15 +2443,15 @@ fn gen_tokenize_fn(
         // Generate mode dispatch
         for let mut mi = 0; mi < mode_names.len(); mi += 1 {
             if mi == 0 {
-                w.begin(&`if current_mode == {mi}`);
+                w.begin(&`if current_mode == ${mi}`);
             } else {
-                w.else_begin(&`else if current_mode == {mi}`);
+                w.else_begin(&`else if current_mode == ${mi}`);
             }
             // Literal tokens only in default mode
             if mi == 0 {
                 for let lit of lit_tokens {
                     let fn_name = lit_try_fn_name(&lit.const_name);
-                    w.line(&`end = {fn_name}(&lexer.chars, start);`);
+                    w.line(&`end = ${fn_name}(&lexer.chars, start);`);
                     let lit_reset = literal_command_extras(
                         lit,
                         lexer_rules,
@@ -2467,7 +2467,7 @@ fn gen_tokenize_fn(
                     // inherit an earlier action rule's index.
                     let lit_act = if has_actions { " best_act = -1;" } else { "" };
                     w.line(
-                        &`if end > best_end \{ best_end = end; best_kind = {lit.const_name};{lit_reset}{lit_act} \}`,
+                        &`if end > best_end \{ best_end = end; best_kind = ${lit.const_name};${lit_reset}${lit_act} \}`,
                     );
                 }
             }
@@ -2478,7 +2478,7 @@ fn gen_tokenize_fn(
                     && !is_keyword_rule_name(&rule.name, keywords)
                     && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
                     let fn_name = lexer_try_fn_name(&rule.name);
-                    w.line(&`end = {fn_name}(&lexer.chars, start);`);
+                    w.line(&`end = ${fn_name}(&lexer.chars, start);`);
                     let extra = best_state_extras(
                         rule.push_mode,
                         rule.pop_mode,
@@ -2494,20 +2494,20 @@ fn gen_tokenize_fn(
                     // its own TK_<name> constant; the override only affects
                     // the emitted token.
                     let emit_kind = if let Some(override_name) = rule.type_override {
-                        `TK_{override_name}`;
+                        `TK_${override_name}`;
                     } else {
-                        `TK_{rule.name}`;
+                        `TK_${rule.name}`;
                     };
                     // Under `has_actions` every winner block reassigns
                     // `best_act` (the replay index, or -1) so a longer non-action
                     // match cannot inherit an earlier action rule's index — see
                     // the modeless dispatch (`gen_group_calls`).
                     let act = if has_actions {
-                        ` best_act = {index_of_name(act_rule_names, &rule.name)};`;
+                        ` best_act = ${index_of_name(act_rule_names, &rule.name)};`;
                     } else {
                         String::new();
                     };
-                    w.line(&`if end > best_end \{ best_end = end; best_kind = {emit_kind};{extra}{act} \}`);
+                    w.line(&`if end > best_end \{ best_end = end; best_kind = ${emit_kind};${extra}${act} \}`);
                 }
             }
         }
@@ -2588,11 +2588,11 @@ fn gen_tokenize_fn(
         if has_set_mode_rules {
             stalled.push_str(&" && best_set_mode < 0");
         }
-        `best_end < start || (best_end == start && {stalled})`;
+        `best_end < start || (best_end == start && ${stalled})`;
     } else {
         String::from("best_end <= start");
     };
-    w.begin(&`if {no_match_guard}`);
+    w.begin(&`if ${no_match_guard}`);
     emit_token_commit(w, &"TK_ERROR", &"start", &"start + 1");
     w.line(&"lexer.pos = start + 1;");
     w.else_begin(&"else");
@@ -2615,13 +2615,13 @@ fn gen_tokenize_fn(
     }
 
     let skip_names: List<String> = lexer_rules.iter().filter(|rule: &LexerRule| rule.skip).map(
-        |rule: &LexerRule| `TK_{rule.name}`,
+        |rule: &LexerRule| `TK_${rule.name}`,
     ).collect();
     // An action's `lx.skip()` latches `best_act_skip`; OR it into the
     // command-derived skip decision so either route routes the token to trivia.
     let act_skip = if has_actions { " || best_act_skip" } else { "" };
     if skip_names.is_empty() {
-        w.line(&`let is_skip = false{act_skip};`);
+        w.line(&`let is_skip = false${act_skip};`);
     } else {
         w.write(&"let is_skip = best_kind matches { ");
         for let mut i = 0; i < skip_names.len(); i += 1 {
@@ -2630,7 +2630,7 @@ fn gen_tokenize_fn(
             }
             w.write(&skip_names[i]);
         }
-        w.write(&` }{act_skip};\n`);
+        w.write(&` }${act_skip};\n`);
     }
 
     if has_more_rules {
@@ -2707,7 +2707,7 @@ fn gen_tokenize_fn(
 /// Emit a default-channel token commit: push it with the pending leading-trivia
 /// range `[triv_lo, trivia_mark())`, then reopen the range for the next token.
 fn emit_token_commit(w: &mut CodeWriter, kind: &String, start: &String, end: &String) {
-    w.line(&`ts.push_token({*kind}, {*start}, {*end}, triv_lo, ts.trivia_mark());`);
+    w.line(&`ts.push_token(${*kind}, ${*start}, ${*end}, triv_lo, ts.trivia_mark());`);
     w.line(&"triv_lo = ts.trivia_mark();");
 }
 
@@ -2722,7 +2722,7 @@ fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit
     for let rule of lexer_rules {
         if !rule.is_fragment {
             let trailer = if rule.is_virtual { "  // virtual" } else { "" };
-            w.line(&`TK_{rule.name} => "{rule.name}",{trailer}`);
+            w.line(&`TK_${rule.name} => "${rule.name}",${trailer}`);
         }
     }
     w.line(&"TK_EOF => \"Eof\",");
@@ -2733,7 +2733,7 @@ fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit
     }
     for let lit of lit_tokens {
         let name = lit.const_name;
-        w.line(&`{name} => "{name}",`);
+        w.line(&`${name} => "${name}",`);
     }
     w.line(&"_ => \"Unknown\",");
     w.dedent();

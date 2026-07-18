@@ -6,14 +6,14 @@ Template strings in Wado support format specifiers: `` `{x:spec}` ``. As defined
 
 | Specifier | Description           | Example              |
 | --------- | --------------------- | -------------------- |
-| (none)    | Default display       | `{x}` → `"42"`       |
-| `?`       | Debug/Inspect         | `{x:?}` → `"42"`     |
-| `b`       | Binary integers       | `{x:b}` → `"101010"` |
-| `o`       | Octal integers        | `{x:o}` → `"52"`     |
-| `x`       | Lowercase hex         | `{x:x}` → `"2a"`     |
-| `X`       | Uppercase hex         | `{x:X}` → `"2A"`     |
-| `e`       | Lowercase exponential | `{x:e}` → `"4.2e1"`  |
-| `E`       | Uppercase exponential | `{x:E}` → `"4.2E1"`  |
+| (none)    | Default display       | `${x}` → `"42"`       |
+| `?`       | Debug/Inspect         | `${x:?}` → `"42"`     |
+| `b`       | Binary integers       | `${x:b}` → `"101010"` |
+| `o`       | Octal integers        | `${x:o}` → `"52"`     |
+| `x`       | Lowercase hex         | `${x:x}` → `"2a"`     |
+| `X`       | Uppercase hex         | `${x:X}` → `"2A"`     |
+| `e`       | Lowercase exponential | `${x:e}` → `"4.2e1"`  |
+| `E`       | Uppercase exponential | `${x:E}` → `"4.2E1"`  |
 
 This WEP defines the trait system and Formatter infrastructure that backs these format specifiers.
 
@@ -110,8 +110,8 @@ for the two type kinds whose string form is unambiguous: a plain `enum` displays
 its bare case name (`Red`, vs `Inspect`'s `Color::Red`), and a newtype inherits
 its base type's `Display` transparently (`Meters = f64` renders `3.14`). Any
 other type — a struct, variant, or generic container — needs a hand-written
-`impl Display`; `{x}` on a type without one is a compile error (use `{x:?}`).
-`DisplayAlt` (`{x:#}`) follows `Display`. See
+`impl Display`; `${x}` on a type without one is a compile error (use `${x:?}`).
+`DisplayAlt` (`${x:#}`) follows `Display`. See
 [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
 ### Alternate (Alt) Trait Variants
@@ -120,12 +120,12 @@ Each format trait has an alternate variant activated by the `#` flag. For Inspec
 
 | Base Trait | Alt Trait     | Syntax  | Effect                        |
 | ---------- | ------------- | ------- | ----------------------------- |
-| `Display`  | `DisplayAlt`  | `{:#}`  | Delegates to `Display`        |
-| `Inspect`  | `InspectAlt`  | `{:#?}` | Pretty-print with indentation |
-| `Binary`   | `BinaryAlt`   | `{:#b}` | Add `0b` prefix               |
-| `Octal`    | `OctalAlt`    | `{:#o}` | Add `0o` prefix               |
-| `LowerHex` | `LowerHexAlt` | `{:#x}` | Add `0x` prefix               |
-| `UpperHex` | `UpperHexAlt` | `{:#X}` | Add `0X` prefix               |
+| `Display`  | `DisplayAlt`  | `${:#}`  | Delegates to `Display`        |
+| `Inspect`  | `InspectAlt`  | `${:#?}` | Pretty-print with indentation |
+| `Binary`   | `BinaryAlt`   | `${:#b}` | Add `0b` prefix               |
+| `Octal`    | `OctalAlt`    | `${:#o}` | Add `0o` prefix               |
+| `LowerHex` | `LowerHexAlt` | `${:#x}` | Add `0x` prefix               |
+| `UpperHex` | `UpperHexAlt` | `${:#X}` | Add `0X` prefix               |
 
 ### Format Resolution
 
@@ -153,7 +153,7 @@ Each format trait has an alternate variant activated by the `#` flag. For Inspec
 
 ### Zero Padding
 
-Zero padding (`{x:08}`) inserts zeros after sign/prefix but before digits:
+Zero padding (`${x:08}`) inserts zeros after sign/prefix but before digits:
 
 ```
 {-42:08}   → "-0000042"
@@ -176,11 +176,11 @@ Zero padding (`{x:08}`) inserts zeros after sign/prefix but before digits:
 
 ### Implemented Extensions
 
-1. **`{:#?}`**: Pretty-print debug with indentation via `InspectAlt` trait
+1. **`${:#?}`**: Pretty-print debug with indentation via `InspectAlt` trait
 
 ### Future Extensions
 
-1. **Dynamic width/precision**: `{value:{width}.{precision}}`
+1. **Dynamic width/precision**: `${value:{width}.{precision}}`
 
 ## References
 

@@ -20,7 +20,7 @@ fn read_file_bytes(path: String) -> ByteList with Preopens {
     let root = dirs[0].0;
     let open_result = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait();
     if let Err(_) = open_result {
-        panic(`failed to open {path}`);
+        panic(`failed to open ${path}`);
     }
     let file = match open_result {
         Ok(f) => f,
@@ -62,5 +62,5 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     b.run("ser", || to_bytes::<FeatureCollection>(&fc).unwrap().len());
     let total_points = b.run("de", || count_points(&from_bytes::<FeatureCollection, _>(json_data).unwrap()));
     assert total_points == 55563;
-    b.println(`round-tripped {total_points} coordinate points`);
+    b.println(`round-tripped ${total_points} coordinate points`);
 }

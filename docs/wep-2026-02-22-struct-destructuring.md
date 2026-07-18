@@ -149,7 +149,7 @@ variant Shape {
 }
 
 if let Named({ width, height }) = shape {
-    println(`area: {width * height}`);
+    println(`area: ${width * height}`);
 }
 ```
 
@@ -164,8 +164,8 @@ match shape {
 
 // With guards
 match person {
-    { name, age } && age >= 18 => `{name} is an adult`,
-    { name, .. } => `{name} is a minor`,
+    { name, age } && age >= 18 => `${name} is an adult`,
+    { name, .. } => `${name} is a minor`,
 }
 ```
 
@@ -174,7 +174,7 @@ match person {
 ```wado
 let people: List<Person> = [...];
 for let { name, age } of people {
-    println(`{name}: {age}`);
+    println(`${name}: ${age}`);
 }
 ```
 
@@ -216,14 +216,14 @@ struct Config { name: String, value: i32 }
 
 // Match with literal in field position
 match config {
-    Config { name, value: 0 } => `{name} is zero`,
-    Config { name, value: 42 } => `{name} is the answer`,
-    Config { name, value } => `{name} = {value}`,
+    Config { name, value: 0 } => `${name} is zero`,
+    Config { name, value: 42 } => `${name} is the answer`,
+    Config { name, value } => `${name} = ${value}`,
 }
 
 // If let with literal field
 if let Config { name, value: 0 } = config {
-    println(`{name} is zero`);
+    println(`${name} is zero`);
 }
 
 // Matches with literal field

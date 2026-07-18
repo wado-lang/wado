@@ -7,18 +7,18 @@ pub variant Value {
 
 pub fn stringify(v: &Value) -> String {
     return match v {
-        Str(s) => `"{s}"`,
+        Str(s) => `"${s}"`,
         Obj(map) => {
             let mut result = "{";
             let entries = map.entries();
             for let mut i = 0; i < entries.len(); i += 1 {
                 if i > 0 {
-                    result = `{result},`;
+                    result = `${result},`;
                 }
                 let [key, val] = entries[i];
-                result = `{result}"{key}":{stringify(&val)}`;
+                result = `${result}"${key}":${stringify(&val)}`;
             }
-            `{result}\}`;
+            `${result}\}`;
         },
     };
 }

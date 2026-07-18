@@ -32,7 +32,7 @@ fn free_call_missing_effect_is_reported_even_in_dead_function() {
 use { println, Stdout } from "core:cli";
 
 fn greet(name: String) with Stdout {
-    println(`Hello, {name}!`);
+    println(`Hello, ${name}!`);
 }
 
 fn bad() {
@@ -56,7 +56,7 @@ fn caller_with_effect_is_not_reported() {
 use { println, Stdout } from "core:cli";
 
 fn greet(name: String) with Stdout {
-    println(`Hello, {name}!`);
+    println(`Hello, ${name}!`);
 }
 
 export fn run() with Stdout {

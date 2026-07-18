@@ -1,6 +1,6 @@
 //! Tests for string template interpolation
 //!
-//! String templates use backticks and allow interpolation with {expr} syntax.
+//! String templates use backticks and allow interpolation with ${expr} syntax.
 //! They also support Python-like format specifiers, e.g., {pi:.2f}
 
 use wado_compiler::{Parser, lex};
@@ -73,7 +73,7 @@ fn test_template_string_plain_text() {
 
 #[test]
 fn test_template_string_single_interpolation() {
-    let module = parse_expr("`Hello, {name}!`").expect("parse failed");
+    let module = parse_expr("`Hello, ${name}!`").expect("parse failed");
     let expr = extract_expr(&module).expect("no expression found");
 
     match expr {
@@ -120,7 +120,7 @@ fn test_template_string_single_interpolation() {
 
 #[test]
 fn test_template_string_multiple_interpolations() {
-    let module = parse_expr("`{a} + {b} = {c}`").expect("parse failed");
+    let module = parse_expr("`${a} + ${b} = ${c}`").expect("parse failed");
     let expr = extract_expr(&module).expect("no expression found");
 
     match expr {
@@ -156,7 +156,7 @@ fn test_template_string_multiple_interpolations() {
 
 #[test]
 fn test_template_string_expression_interpolation() {
-    let module = parse_expr("`Result: {x + y}`").expect("parse failed");
+    let module = parse_expr("`Result: ${x + y}`").expect("parse failed");
     let expr = extract_expr(&module).expect("no expression found");
 
     match expr {
@@ -177,7 +177,7 @@ fn test_template_string_expression_interpolation() {
 
 #[test]
 fn test_template_format_simple() {
-    let module = parse_expr("`Pi: {pi:.2f}`").expect("parse failed");
+    let module = parse_expr("`Pi: ${pi:.2f}`").expect("parse failed");
     let expr = extract_expr(&module).expect("no expression found");
 
     match expr {
@@ -205,7 +205,7 @@ fn test_template_format_simple() {
 
 #[test]
 fn test_template_format_zero_padding() {
-    let module = parse_expr("`Value: {x:0.3f}`").expect("parse failed");
+    let module = parse_expr("`Value: ${x:0.3f}`").expect("parse failed");
     let expr = extract_expr(&module).expect("no expression found");
 
     match expr {
@@ -222,7 +222,7 @@ fn test_template_format_zero_padding() {
 
 #[test]
 fn test_template_format_width() {
-    let module = parse_expr("`{value:10}`").expect("parse failed");
+    let module = parse_expr("`${value:10}`").expect("parse failed");
     let expr = extract_expr(&module).expect("no expression found");
 
     match expr {
@@ -240,7 +240,7 @@ fn test_template_format_width() {
 #[test]
 fn test_template_double_colon_not_format() {
     // Module::function() should parse :: as scope resolution, not format spec
-    let module = parse_expr("`Value: {Module::function()}`").expect("parse failed");
+    let module = parse_expr("`Value: ${Module::function()}`").expect("parse failed");
     let expr = extract_expr(&module).expect("no expression found");
 
     match expr {
@@ -266,7 +266,7 @@ fn test_template_double_colon_not_format() {
 #[test]
 fn test_template_colon_alone_is_format() {
     // Single colon should start a format spec
-    let module = parse_expr("`{x:d}`").expect("parse failed");
+    let module = parse_expr("`${x:d}`").expect("parse failed");
     let expr = extract_expr(&module).expect("no expression found");
 
     match expr {
@@ -283,8 +283,8 @@ fn test_template_colon_alone_is_format() {
 
 #[test]
 fn test_template_nested() {
-    // Nested template: `Outer {`Inner {x}`}`
-    let module = parse_expr("`Outer {`Inner {x}`}`").expect("parse failed");
+    // Nested template: `Outer ${`Inner ${x}`}`
+    let module = parse_expr("`Outer ${`Inner ${x}`}`").expect("parse failed");
     let expr = extract_expr(&module).expect("no expression found");
 
     match expr {
@@ -314,7 +314,7 @@ fn test_template_nested() {
 #[test]
 fn test_template_consecutive_interpolations() {
     // No text between interpolations
-    let module = parse_expr("`{a}{b}`").expect("parse failed");
+    let module = parse_expr("`${a}${b}`").expect("parse failed");
     let expr = extract_expr(&module).expect("no expression found");
 
     match expr {
@@ -335,7 +335,7 @@ fn test_template_consecutive_interpolations() {
 
 #[test]
 fn test_template_starts_with_interpolation() {
-    let module = parse_expr("`{x} is the value`").expect("parse failed");
+    let module = parse_expr("`${x} is the value`").expect("parse failed");
     let expr = extract_expr(&module).expect("no expression found");
 
     match expr {
@@ -352,7 +352,7 @@ fn test_template_starts_with_interpolation() {
 
 #[test]
 fn test_template_ends_with_interpolation() {
-    let module = parse_expr("`The value is {x}`").expect("parse failed");
+    let module = parse_expr("`The value is ${x}`").expect("parse failed");
     let expr = extract_expr(&module).expect("no expression found");
 
     match expr {
@@ -392,20 +392,20 @@ fn test_template_unterminated() {
 #[test]
 fn test_template_empty_interpolation() {
     // {} without expression should be an error
-    let result = parse_expr("`empty {}`");
+    let result = parse_expr("`empty ${}`");
     assert!(result.is_err(), "expected error for empty interpolation");
 }
 
 #[test]
 fn test_template_unclosed_interpolation() {
     // { without closing } should be an error
-    let result = parse_expr("`unclosed {x`");
+    let result = parse_expr("`unclosed ${x`");
     assert!(result.is_err(), "expected error for unclosed interpolation");
 }
 
 #[test]
 fn test_template_complex_expression() {
-    let module = parse_expr("`Sum: {a + b * c}`").expect("parse failed");
+    let module = parse_expr("`Sum: ${a + b * c}`").expect("parse failed");
     let expr = extract_expr(&module).expect("no expression found");
 
     match expr {
@@ -424,7 +424,7 @@ fn test_template_complex_expression() {
 
 #[test]
 fn test_template_method_call() {
-    let module = parse_expr("`Length: {name.len()}`").expect("parse failed");
+    let module = parse_expr("`Length: ${name.len()}`").expect("parse failed");
     let expr = extract_expr(&module).expect("no expression found");
 
     match expr {

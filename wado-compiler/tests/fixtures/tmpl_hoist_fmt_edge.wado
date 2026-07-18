@@ -12,40 +12,40 @@ export fn run() with Stdout {
     let mut total = 0;
     for let mut i = 0; i < 3; i += 1 {
         for let mut j = 0; j < 3; j += 1 {
-            let s = `{i},{j}`;
+            let s = `${i},${j}`;
             total += s.len();
         }
     }
-    println(`nested={total}`);
+    println(`nested=${total}`);
 
     // Edge case 2: Template result is only used for .len() — safe to hoist
     let mut sum = 0;
     for let mut i = 0; i < 5; i += 1 {
         let x = i as f64 / 7.0;
-        sum += `{x:0.4f}`.len();
+        sum += `${x:0.4f}`.len();
     }
-    println(`len_only={sum}`);
+    println(`len_only=${sum}`);
 
     // Edge case 3: Single character interpolation (very short template)
     let mut total3 = 0;
     for let mut i = 0; i < 10; i += 1 {
         let c = char::from_i32(65 + i);
         if let Some(ch) = c {
-            let s = `{ch}`;
+            let s = `${ch}`;
             total3 += s.len();
         }
     }
-    println(`char={total3}`);
+    println(`char=${total3}`);
 
     // Edge case 4: Pretty-print inspect (`:#?`) — indent is mutated during formatting,
     // so the indent reset is essential for correctness
     let mut total4 = 0;
     for let mut i = 0; i < 3; i += 1 {
         let p = Pair { a: i, b: i * 10 };
-        let s = `{p:#?}`;
+        let s = `${p:#?}`;
         total4 += s.len();
     }
-    println(`pretty={total4}`);
+    println(`pretty=${total4}`);
 }
 
 __DATA__

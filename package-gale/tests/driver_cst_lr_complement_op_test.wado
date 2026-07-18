@@ -10,9 +10,9 @@ use co from "./grammars/lr_complement_op.g4"
 
 fn chk(input: &String, expected: &String) {
     let r = co::parse(input);
-    assert r.ok(), `unexpected diagnostics for {*input}: {co::to_string_tree(&r)}`;
+    assert r.ok(), `unexpected diagnostics for ${*input}: ${co::to_string_tree(&r)}`;
     let a = co::to_string_tree(&r);
-    assert a == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {a}`;
+    assert a == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${a}`;
 }
 
 test "complement-op: any non-';' token is the infix operator" {
@@ -26,5 +26,5 @@ test "complement-op: standard precedence ('*' binds tighter)" {
 }
 test "complement-op: the excluded ';' is not an operator" {
     let r = co::parse(&"1 ; 2");
-    assert !r.ok(), `';' must not be consumed as an operator, got: {co::to_string_tree(&r)}`;
+    assert !r.ok(), `';' must not be consumed as an operator, got: ${co::to_string_tree(&r)}`;
 }

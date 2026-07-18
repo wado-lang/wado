@@ -9,12 +9,12 @@ use g from "./grammars/nested_list_follow.g4"
 
 test "array as the sole element of a bare list" {
     let r = g::parse(&"foo<[a, b]>");
-    assert r.ok(), `tree: '{g::to_string_tree(&r)}'`;
+    assert r.ok(), `tree: '${g::to_string_tree(&r)}'`;
 }
 
 test "array followed by another element in a bare list" {
     let r = g::parse(&"foo<[a, b], c>");
-    assert r.ok(), `tree: '{g::to_string_tree(&r)}'`;
+    assert r.ok(), `tree: '${g::to_string_tree(&r)}'`;
 }
 
 test "the closing bracket still terminates the inner list" {

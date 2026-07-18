@@ -121,7 +121,7 @@ fn resolve_one(r: &AttrRef, env: &AttrEnv, rules: &List<ParserRule>) -> Result<R
             }
         }
     }
-    return Result::Err(`unresolved attribute reference '${r.name}'`);
+    return Result::Err(`unresolved attribute reference '$${r.name}'`);
 }
 
 fn label_target(lab: &LabelInfo) -> AttrTarget {
@@ -192,7 +192,7 @@ fn check_member(r: &AttrRef, target: &AttrTarget, rule_name: &String, rules: &Li
     if ok {
         return Result::Ok(());
     }
-    return Result::Err(`invalid member '.${member}' on '${r.name}'`);
+    return Result::Err(`invalid member '.$${member}' on '$${r.name}'`);
 }
 
 fn is_token_member(m: &String) -> bool {

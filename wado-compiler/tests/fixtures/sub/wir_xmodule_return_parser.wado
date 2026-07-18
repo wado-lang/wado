@@ -416,9 +416,9 @@ impl ParseError {
 
 impl Display for ParseError {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(&`parse error at {self.line}:{self.col}: {self.message}`);
+        f.write_str(&`parse error at ${self.line}:${self.col}: ${self.message}`);
         if !self.rule_stack.is_empty() {
-            f.write_str(&`\n  in rule: {self.rule_path()}`);
+            f.write_str(&`\n  in rule: ${self.rule_path()}`);
         }
     }
 }
@@ -525,9 +525,9 @@ impl Diagnostic {
 
 impl Display for Diagnostic {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(&`{self.severity.label()}[{self.code.name()}] at {self.line}:{self.col}: {self.message}`);
+        f.write_str(&`${self.severity.label()}[${self.code.name()}] at ${self.line}:${self.col}: ${self.message}`);
         for let r of &self.related {
-            f.write_str(&`\n  note: {r.message}`);
+            f.write_str(&`\n  note: ${r.message}`);
         }
     }
 }
@@ -678,7 +678,7 @@ fn cst_to_string_tree_impl(
                 }
             },
             Missing(i) => {
-                out.push_str(&` <missing {token_names[toks.kind_at(i)]}>`);
+                out.push_str(&` <missing ${token_names[toks.kind_at(i)]}>`);
             },
             Skipped(i) => {
                 out.push_str(&" <skip ");
@@ -1016,8 +1016,8 @@ fn emit_lexer_token(
     let line = line_col.0;
     let col = line_col.1;
     let end_inclusive = end - 1;
-    let channel_attr = if channel != 0 { `channel={channel},` } else { String::from("") };
-    out.push_str(&`[@{index},{start}:{end_inclusive}='{text_buf}',<{type_id}>,{channel_attr}{line}:{col}]\n`);
+    let channel_attr = if channel != 0 { `channel=${channel},` } else { String::from("") };
+    out.push_str(&`[@${index},${start}:${end_inclusive}='${text_buf}',<${type_id}>,${channel_attr}${line}:${col}]\n`);
 }
 
 /// Compute (line, column) at a 0-based char index in `chars`, with
@@ -1283,7 +1283,7 @@ impl Parser {
         }
         let name = token_kind_name(kind);
         return Result::Err(self.error(
-            `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
+            `expected ${name}, got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             [name],
         ));
@@ -1291,7 +1291,7 @@ impl Parser {
 
     fn fail(&self, name: String) -> Result<i32, ParseError> {
         return Result::Err(self.error(
-            `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
+            `expected ${name}, got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             [name],
         ));
@@ -1304,7 +1304,7 @@ impl Parser {
             return Result::Ok(_i);
         }
         return Result::Err(self.error(
-            `expected any token, got "{self.tokens.token_text(self.pos)}"`,
+            `expected any token, got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["any token"],
         ));
@@ -1327,7 +1327,7 @@ impl Parser {
             }
         }
         return Result::Err(self.error(
-            `unexpected token "{self.tokens.token_text(self.pos)}"`,
+            `unexpected token "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["set complement"],
         ));
@@ -1347,7 +1347,7 @@ impl Parser {
             }
         }
         return Result::Err(self.error(
-            `unexpected token "{self.tokens.token_text(self.pos)}"`,
+            `unexpected token "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["token set"],
         ));

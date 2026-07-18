@@ -12,10 +12,10 @@ use m from "./grammars/wado_lex_multi_alt_action.g4"
 test "a multi-alt lexer rule runs the winning alternative's action" {
     // 'a' -> T alt 0 -> retype AA; 'b' -> T alt 1 -> retype BB.
     let r = m::parse(&"a b a");
-    assert r.ok(), `clean parse: {r.diagnostics.len()} diagnostics`;
-    assert r.output == "ABA", `output: '{r.output}'`;
+    assert r.ok(), `clean parse: ${r.diagnostics.len()} diagnostics`;
+    assert r.output == "ABA", `output: '${r.output}'`;
 
     let r2 = m::parse(&"b b");
     assert r2.ok(), "two b's";
-    assert r2.output == "BB", `output: '{r2.output}'`;
+    assert r2.output == "BB", `output: '${r2.output}'`;
 }

@@ -39,7 +39,7 @@ projection:
 fn walk_fields<T, ..F: Inspect>(s: &T) where T: Reflect<Fields = [..F]> {
     let names = T::field_names();
     for let [i, v] of s.fields().enumerate() {
-        println(`{names[i]} = {v.inspect()}`);
+        println(`${names[i]} = ${v.inspect()}`);
     }
 }
 ```

@@ -189,7 +189,7 @@ test "rule_follow: callee gets first(suffix) of caller alt" {
     let env = build(&rules, &mut ctx, &start);
     let a = "a";
     let fs_a = env.rule_follow(&a);
-    assert fs_a.kinds.contains("TK_B"), `expected TK_B in FOLLOW(a), got {fs_a.kinds.len()} entries`;
+    assert fs_a.kinds.contains("TK_B"), `expected TK_B in FOLLOW(a), got ${fs_a.kinds.len()} entries`;
 }
 
 test "rule_follow: callee at deep-nullable suffix inherits caller's FOLLOW" {
@@ -244,7 +244,7 @@ test "rule_follow: ll_ctx_follow grammar yields FOLLOW(a) = {TK_Y, TK_EOF}" {
     let fs_a = env.rule_follow(&a);
     let fs_w = env.rule_follow(&wrapper);
     let fs_b = env.rule_follow(&b);
-    assert fs_a.kinds.contains("TK_Y"), `expected TK_Y in FOLLOW(a) (via wrapper b), got {fs_a.kinds.len()} entries`;
+    assert fs_a.kinds.contains("TK_Y"), `expected TK_Y in FOLLOW(a) (via wrapper b), got ${fs_a.kinds.len()} entries`;
     assert fs_a.kinds.contains("TK_EOF"), "expected TK_EOF in FOLLOW(a) (via wrapper alone in alt 1)";
     assert fs_w.kinds.contains("TK_Y"), "expected TK_Y in FOLLOW(wrapper) (via wrapper b in r alt 0)";
     assert fs_w.kinds.contains("TK_EOF"), "expected TK_EOF in FOLLOW(wrapper) (via wrapper alone in r alt 1)";

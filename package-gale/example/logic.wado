@@ -24,7 +24,7 @@ pub fn eval(input: &String) -> Result<i64, String> {
     let result = bw::parse(input);
     if !result.ok() {
         let d = &result.diagnostics[0];
-        return Result::Err(`{d.line}:{d.col}: {d.message}`);
+        return Result::Err(`${d.line}:${d.col}: ${d.message}`);
     }
     return eval_first_child(&result.cst, 0, &result.tokens);
 }
@@ -87,7 +87,7 @@ fn int_value(s: &bw::CstStore, node: i32, toks: &bw::TokenStream) -> Result<i64,
             let text = toks.token_text(s.token_index(c));
             return match i64::from_str(&text) {
                 Ok(v) => Result::Ok(v),
-                Err(_) => Result::Err(`integer literal out of range: {text}`),
+                Err(_) => Result::Err(`integer literal out of range: ${text}`),
             };
         }
     }

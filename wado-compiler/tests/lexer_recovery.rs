@@ -209,7 +209,7 @@ fn unterminated_block_comment_does_not_lose_preceding_tokens() {
 
 #[test]
 fn unterminated_template_string_keeps_preceding_tokens() {
-    let r = lex("let s = `hello {name");
+    let r = lex("let s = `hello ${name");
     assert_eq!(r.errors.len(), 1);
     assert!(matches!(
         r.errors[0].kind,

@@ -236,7 +236,7 @@ fn tokenize(input: String) -> List<u64> {
             tape.push(pack_token(TOK_NULL, pos, pos + 4));
             pos += 4;
         } else {
-            panic(`tokenize: unexpected byte at {pos}`);
+            panic(`tokenize: unexpected byte at ${pos}`);
         }
     }
     unreachable();
@@ -247,7 +247,7 @@ fn read_file(path: String) -> String with Preopens {
     let root = dirs[0].0;
     let open_result = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait();
     if let Err(_) = open_result {
-        panic(`failed to open {path}`);
+        panic(`failed to open ${path}`);
     }
     let file = match open_result {
         Ok(f) => f,
@@ -371,7 +371,7 @@ impl Cursor {
                             panic("bad unicode codepoint");
                         }
                     },
-                    _ => panic(`invalid escape \\{esc}`),
+                    _ => panic(`invalid escape \\${esc}`),
                 }
             } else {
                 result.push(b as u8 as char);
@@ -944,5 +944,5 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     let counts = b.run("", || parse_counts_v3(json_data));
     assert counts.events == 184;
     assert counts.performances == 243;
-    b.println(`parsed {counts.events} events, {counts.performances} performances`);
+    b.println(`parsed ${counts.events} events, ${counts.performances} performances`);
 }

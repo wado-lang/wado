@@ -42,7 +42,7 @@ fn sum_b(n: i32) -> i32 {
 }
 
 export fn run() with Stdout {
-    println(`{sum_a(4)},{sum_b(4)}`);
+    println(`${sum_a(4)},${sum_b(4)}`);
 }
 "#;
 

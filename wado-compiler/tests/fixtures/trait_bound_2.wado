@@ -42,7 +42,7 @@ trait Stringify {
 
 impl Stringify for i32 {
     fn to_str(&self) -> String {
-        return `{*self}`;
+        return `${*self}`;
     }
 }
 
@@ -54,13 +54,13 @@ fn print_it<T: Stringify>(x: T) with Stdout {
 // from trait_bound_fn.wado
 fn trait_bound_fn() with Stdout {
     let result = max::<i32>(3, 7);
-    println(`{result}`);
+    println(`${result}`);
 }
 
 // from trait_bound_generic_return.wado
 fn trait_bound_generic_return() with Stdout {
     let result = smaller::<i32>(10, 5);
-    println(`{result}`);
+    println(`${result}`);
     let s = smaller::<String>("apple", "banana");
     println(s);
 }
@@ -70,7 +70,7 @@ fn trait_bound_impl_block() with Stdout {
     let a = Wrapper { value: 10 };
     let b = Wrapper { value: 20 };
     // get() works for all T
-    println(`{a.get()}`);
+    println(`${a.get()}`);
     // is_greater_than works because i32: Ord
     if b.is_greater_than(&a) {
         println("b is greater");

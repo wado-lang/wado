@@ -130,7 +130,7 @@ The following keywords are **contextual** — they act as keywords only in speci
 ```wado
 // 'of' as a variable name
 let of = 42;
-println(`{of}`);
+println(`${of}`);
 
 // 'of' as a struct field
 struct Item { of: i32 }
@@ -139,7 +139,7 @@ let item = Item { of: 10 };
 // 'of' as a for-of binding
 let arr: List<i32> = [1, 2, 3];
 for let of of arr {
-    println(`{of}`);
+    println(`${of}`);
 }
 ```
 
@@ -171,9 +171,9 @@ Shadowing in an inner block creates a new binding:
 let x = 1;
 if true {
     let x = x + 1;  // New binding, initialized from outer x
-    println(`{x}`); // 2
+    println(`${x}`); // 2
 }
-println(`{x}`);     // 1 (outer x unchanged)
+println(`${x}`);     // 1 (outer x unchanged)
 ```
 
 Same-scope shadowing is allowed when the new value is derived from the old one:
@@ -438,7 +438,7 @@ Trailing semicolons are optional in expression blocks (like trailing commas).
 ```wado
 let opt: Option<i32> = Option::<i32>::Some(42);
 if let Some(x) = opt {
-    println(`Got: {x}`);
+    println(`Got: ${x}`);
 } else {
     println("None");
 }
@@ -450,7 +450,7 @@ if let Some(x) = opt {
 let opt: Option<i32> = Option::<i32>::Some(42);
 let ro = &opt;
 if let Some(x) = ro {       // ro: &Option<i32>, x: &i32
-    println(`Got: {*x}`);   // dereference to use the value
+    println(`Got: ${*x}`);   // dereference to use the value
 }
 ```
 
@@ -459,7 +459,7 @@ if let Some(x) = ro {       // ro: &Option<i32>, x: &i32
 ```wado
 let mut i = 0;
 while i < 10 {
-    println(`i = {i}`);
+    println(`i = ${i}`);
     i = i + 1;
 }
 ```
@@ -473,7 +473,7 @@ let items: List<i32> = [1, 2, 3];
 let mut iter = items.iter();
 
 while let Some(x) = iter.next() {
-    println(`{x}`);
+    println(`${x}`);
 }
 ```
 
@@ -485,12 +485,12 @@ C-style for loop with initialization, condition, and update. Parentheses are opt
 
 ```wado
 for let mut i = 0; i < 10; i = i + 1 {
-    println(`i = {i}`);
+    println(`i = ${i}`);
 }
 
 // With parentheses (also valid)
 for (let mut i = 0; i < 10; i = i + 1) {
-    println(`i = {i}`);
+    println(`i = ${i}`);
 }
 
 // All parts are optional
@@ -510,13 +510,13 @@ let items: List<i32> = [10, 20, 30];
 let mut iter = items.iter();
 
 for ; let Some(x) = iter.next(); {
-    println(`{x}`);
+    println(`${x}`);
 }
 
 // With update expression
 let mut count = 0;
 for ; let Some(x) = iter.next(); count += 1 {
-    println(`item {count}: {x}`);
+    println(`item ${count}: ${x}`);
 }
 ```
 
@@ -529,18 +529,18 @@ For iterating over any type that implements `IntoIterator`:
 ```wado
 let numbers: List<i32> = [1, 2, 3, 4, 5];
 for let n of numbers {
-    println(`{n}`);
+    println(`${n}`);
 }
 
 // With mutable binding
 for let mut item of items {
     item = item * 2;  // Can modify the local binding
-    println(`{item}`);
+    println(`${item}`);
 }
 
 // Custom types that implement IntoIterator also work
 for let x of my_collection {
-    println(`{x}`);
+    println(`${x}`);
 }
 ```
 
@@ -575,7 +575,7 @@ When the iterable is a tuple, the loop body is expanded once per element at comp
 ```wado
 let t = [42, "hello", true];
 for let v of t {
-    println(`{v}`);  // expanded to three blocks, each with the correct type
+    println(`${v}`);  // expanded to three blocks, each with the correct type
 }
 ```
 
@@ -611,7 +611,7 @@ for let mut i = 0; i < 10; i = i + 1 {
     if i == 5 {
         continue;  // skip printing 5
     }
-    println(`{i}`);
+    println(`${i}`);
 }
 ```
 
@@ -626,10 +626,10 @@ let x = 10;
 
 scope: {
     let x = 20;  // shadows outer x
-    println(`x = {x}`);  // prints "x = 20"
+    println(`x = ${x}`);  // prints "x = 20"
 }
 
-println(`x = {x}`);  // prints "x = 10" (outer x unchanged)
+println(`x = ${x}`);  // prints "x = 10" (outer x unchanged)
 ```
 
 **Syntax**: `LABEL: { ... }`
@@ -647,10 +647,10 @@ outer: {
     inner: {
         let b = 2;
         let sum = a + b;  // a is visible from outer scope
-        println(`{sum}`);
+        println(`${sum}`);
     }
     // b is not visible here
-    println(`{a}`);
+    println(`${a}`);
 }
 ```
 
@@ -1142,7 +1142,7 @@ fn make_ref() -> &i32 {
 }
 
 let r = make_ref();
-println(`{*r}`);  // Works: prints "42"
+println(`${*r}`);  // Works: prints "42"
 ```
 
 This would be a dangling pointer error in Rust, but is safe in Wado due to garbage collection.
@@ -1202,7 +1202,7 @@ The `mut` keyword grants write access to the local parameter binding inside the 
 ```wado
 fn countdown(mut n: i32) with Stdout {
     while n > 0 {
-        println(`{n}`);
+        println(`${n}`);
         n -= 1;         // only modifies the local copy
     }
 }
@@ -1290,11 +1290,11 @@ s.is_empty() -> bool       // Check if empty
 
 ```wado
 for let c of "hello".chars() {
-    println(`{c}`);  // h, e, l, l, o
+    println(`${c}`);  // h, e, l, l, o
 }
 
 for let b of "hello".bytes() {
-    println(`{b}`);  // 104, 101, 108, 108, 111
+    println(`${b}`);  // 104, 101, 108, 108, 111
 }
 ```
 
@@ -1596,12 +1596,16 @@ Escape sequences are shared between character and string literals:
 | `\r`     | Carriage return            |
 | `\t`     | Tab                        |
 | `\0`     | Null                       |
+| `\$`     | Dollar sign (literal `$`)  |
 | `\{`     | Left brace (literal `{`)   |
 | `\}`     | Right brace (literal `}`)  |
 | `\uHHHH` | Unicode BMP (4 hex digits) |
 | `\u{H+}` | Unicode full range         |
 
-`\{` and `\}` are useful in template strings to produce literal braces without triggering interpolation.
+In a template string only `${` opens an interpolation, so `{` and `}` are already
+literal and need no escaping. Use `\$` to write a literal `$` before a `{`
+(e.g. `` `\${x}` `` renders the text `${x}`). `\{` / `\}` remain accepted but are
+no longer necessary.
 
 For characters outside BMP (U+10000 and above), use either:
 
@@ -1611,28 +1615,30 @@ For characters outside BMP (U+10000 and above), use either:
 "😀"             // Direct Unicode character
 ```
 
-**Template strings** (interpolation) use backticks:
+**Template strings** (interpolation) use backticks. Interpolation is introduced
+with `${expr}` (ES/TypeScript-style); a bare `{` or `}` is literal text, so
+JSON-like content needs no escaping:
 
 ```wado
 let name = "Alice";
-let greeting = `Hello, {name}!`;  // "Hello, Alice!"
+let greeting = `Hello, $${name}!`;  // "Hello, Alice!"
 
 let count = 42;
-let message = `Count: {count}`;   // "Count: 42"
+let message = `Count: $${count}`;   // "Count: 42"
 
 // Format specifiers
 let pi = 3.14159;
-let formatted = `Pi: {pi:0.2f}`;  // "Pi: 3.14"
-let hex = `{255:x}`;              // "ff"
+let formatted = `Pi: $${pi:.2}`;   // "Pi: 3.14"
+let hex = `$${255:x}`;             // "ff"
 
 // Inspect (debug) format — works for any type
 let p = Point { x: 10, y: 20 };
-let debug = `{p:?}`;             // "Point { x: 10, y: 20 }"
-let pretty = `{p:#?}`;           // pretty-print: "Point {\n  x: 10,\n  y: 20,\n}"
-// `{p}` (Display) needs an `impl Display` for `Point`; use `{p:?}` for debug output.
+let debug = `$${p:?}`;            // "Point { x: 10, y: 20 }"
+let pretty = `$${p:#?}`;          // pretty-print: "Point {\n  x: 10,\n  y: 20,\n}"
+// `${p}` (Display) needs an `impl Display` for `Point`; use `${p:?}` for debug output.
 
-// Escaped braces — literal { and } without interpolation
-let json = `\{"key": "{name}"\}`;  // {"key": "Alice"}
+// Braces are literal — JSON embeds cleanly without escaping
+let json = `${"key": "${name}"}`;  // {"key": "Alice"}
 ```
 
 See [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md) for the full specifier table, [WEP: Format Traits](./wep-2026-02-01-format-traits.md) for the trait/Formatter infrastructure, and [WEP: Inspect](./wep-2026-02-21-inspect-debug-output.md) for the `:?` debug output format.
@@ -1648,7 +1654,7 @@ And so are you!";
 
 // Multiline template string
 let name = "Alice";
-let message = `Dear {name},
+let message = `Dear ${name},
 
 Welcome to Wado!
 
@@ -1886,8 +1892,8 @@ Compile-time location literals provide source location information at compile ti
 
 ```wado
 fn example() {
-    println(`Error at {#file}:{#line}`);
-    println(`In function: {#function}`);
+    println(`Error at ${#file}:${#line}`);
+    println(`In function: ${#function}`);
 }
 ```
 
@@ -2092,17 +2098,17 @@ let invalid = base64`!!!invalid!!!`;  // Compile error: Invalid base64 encoding
 fn regex(pattern: String) -> Regex {
     match compile_regex(pattern) {
         Ok(r) => r,
-        Err(e) => panic(`Invalid regex pattern: {e}`),  // Compile error
+        Err(e) => panic(`Invalid regex pattern: ${e}`),  // Compile error
     }
 }
 
-let email_pattern = regex`^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$`;
+let email_pattern = regex`^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]${2,}$`;
 
 // SQL query validation
 fn sql(query: String) -> SqlQuery {
     match parse_sql(query) {
         Ok(q) => q,
-        Err(e) => panic(`Invalid SQL syntax at {e.position}: {e.message}`),
+        Err(e) => panic(`Invalid SQL syntax at ${e.position}: ${e.message}`),
     }
 }
 
@@ -2120,7 +2126,7 @@ use {base64, hex} from "core:encoding";
 pub fn base64(input: String) -> List<u8> {
     match decode_base64_impl(input) {
         Ok(data) => data,
-        Err(e) => panic(`Invalid base64 encoding: {e}`),
+        Err(e) => panic(`Invalid base64 encoding: ${e}`),
     }
 }
 
@@ -2128,7 +2134,7 @@ pub fn base64(input: String) -> List<u8> {
 pub fn hex(input: String) -> List<u8> {
     match decode_hex_impl(input) {
         Ok(data) => data,
-        Err(e) => panic(`Invalid hex encoding: {e}`),
+        Err(e) => panic(`Invalid hex encoding: ${e}`),
     }
 }
 ```
@@ -2155,7 +2161,7 @@ Interpolation support may be added in future versions:
 ```wado
 // Future: interpolation syntax (not yet implemented)
 let id = 42;
-let query = sql`SELECT * FROM users WHERE id = ${id}`;
+let query = sql`SELECT * FROM users WHERE id = $${id}`;
 ```
 
 ### Newtype
@@ -2335,7 +2341,7 @@ let { start: { x: x1, y: y1 }, end: { x: x2, y: y2 } } = line;
 
 // In for-of
 for let { x, y } of points {
-    println(`{x}, {y}`);
+    println(`${x}, ${y}`);
 }
 ```
 
@@ -2443,7 +2449,7 @@ struct Person {
 
 impl Greet for Person {
     fn greet(&self) -> String {
-        return `Hello, {self.name}!`;
+        return `Hello, ${self.name}!`;
     }
 }
 
@@ -2509,7 +2515,7 @@ trait Summary {
 
     // Default method - uses self.title()
     fn summary(&self) -> String {
-        return `Title: {self.title()}`;
+        return `Title: ${self.title()}`;
     }
 }
 
@@ -2525,7 +2531,7 @@ struct Report { headline: String, body: String }
 // Overrides the default summary()
 impl Summary for Report {
     fn title(&self) -> String { return self.headline; }
-    fn summary(&self) -> String { return `{self.headline}: {self.body}`; }
+    fn summary(&self) -> String { return `${self.headline}: ${self.body}`; }
 }
 ```
 
@@ -2776,13 +2782,13 @@ let arr: List<i32> = [1, 2, 3, 4, 5];
 
 // for-of uses IntoIterator automatically
 for let x of arr {
-    println(`{x}`);
+    println(`${x}`);
 }
 
 // Explicit iterator
 let mut iter = arr.iter();
 while let Some(x) = iter.next() {
-    println(`{x}`);
+    println(`${x}`);
 }
 
 // Collect remaining elements
@@ -3133,7 +3139,7 @@ let err: Result<i32, String> = Result::Err("fail"); // E from payload, T from an
 let opt2 = Option::<i32>::Some(42);
 
 if let Some(x) = opt {
-    println(`Got: {x}`);
+    println(`Got: ${x}`);
 }
 
 // Custom variant pattern matching with tuple destructuring
@@ -3144,7 +3150,7 @@ variant ParseResult {
 }
 let result = ParseResult::Number([0, 10]);
 if let Number([start, end]) = result {
-    println(`Got number from {start} to {end}`);
+    println(`Got number from ${start} to ${end}`);
 }
 if let Fail = result {
     println("Failed");
@@ -3331,13 +3337,13 @@ impl Eq for Handler;
 
 ### Format Traits
 
-`{x:?}` / `{x:#?}` (`Inspect` / `InspectAlt`) work for every type — no bound needed.
+`${x:?}` / `${x:#?}` (`Inspect` / `InspectAlt`) work for every type — no bound needed.
 
-`{x}` (`Display`) uses the type's `impl Display`. Primitives, `String`, plain enums (bare case name), and newtypes (inherited from the base type) have one; a struct, variant, or generic container needs a hand-written `impl Display`, otherwise `{x}` is a compile error and `{x:?}` gives its debug form. So `T: Display` certifies a real string representation — e.g. `String::push_display` takes any `Display`. `{x:#}` (`DisplayAlt`) follows `Display`.
+`${x}` (`Display`) uses the type's `impl Display`. Primitives, `String`, plain enums (bare case name), and newtypes (inherited from the base type) have one; a struct, variant, or generic container needs a hand-written `impl Display`, otherwise `${x}` is a compile error and `${x:?}` gives its debug form. So `T: Display` certifies a real string representation — e.g. `String::push_display` takes any `Display`. `${x:#}` (`DisplayAlt`) follows `Display`.
 
 ```wado
-fn describe<T>(v: &T) -> String { return `{v:?}`; }         // any type
-fn label<T: Display>(v: &T) -> String { return `{v}`; }     // requires a `Display`
+fn describe<T>(v: &T) -> String { return `${v:?}`; }         // any type
+fn label<T: Display>(v: &T) -> String { return `${v}`; }     // requires a `Display`
 ```
 
 See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
@@ -4135,7 +4141,7 @@ test "add negative numbers" {
 ```wado
 // No async keyword needed in function implementations
 fn fetch_user(id: i32) -> Result<User, HttpError> with Http {
-    let response = Http::get(`users/{id}`)?;  // Even if Http::get is async in WIT
+    let response = Http::get(`users/${id}`)?;  // Even if Http::get is async in WIT
     let user = response.json()?;
     return Ok(user);
 }
@@ -4232,13 +4238,13 @@ This approach makes effect requirements explicit and visible in method signature
 ```wado
 // Declare required effects with `with`
 fn greet(name: String) with Stdout {
-    Stdout::write_via_stream(to_stream(`Hello, {name}!\n`));
+    Stdout::write_via_stream(to_stream(`Hello, ${name}!\n`));
 }
 
 // Multiple effects
 fn show_env() with Stdout, Environment {
     let args = Environment::get_arguments();
-    Stdout::write_via_stream(to_stream(`Arguments: {args}\n`));
+    Stdout::write_via_stream(to_stream(`Arguments: ${args}\n`));
 }
 
 // No effects = pure function
@@ -4728,7 +4734,7 @@ Hides a struct field from debug/inspect output (the `:?` format specifier).
 struct Foo {
     pub name: String,
     #[secret]
-    password: String, // excluded from `{foo:?}` output
+    password: String, // excluded from `${foo:?}` output
 }
 ```
 

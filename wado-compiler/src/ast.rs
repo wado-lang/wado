@@ -2896,7 +2896,7 @@ pub struct ClosureParam {
     pub default: Option<Expr>,
 }
 
-/// Template string expression: `Hello, {name}!`
+/// Template string expression: `Hello, ${name}!`
 #[derive(Debug, Clone)]
 pub struct TemplateStringExpr {
     pub id: AstId,

@@ -31,7 +31,7 @@ struct MultiMock {
 impl Greeting for MultiMock {
     fn hello(&mut self) -> String {
         self.count += 1;
-        resume `hello, {self.name}`
+        resume `hello, ${self.name}`
     }
 }
 
@@ -48,9 +48,9 @@ export fn run() with Stdout {
         let g = Greeting::hello();   // count: 0 -> 1
         let n1 = Counter::tick();    // count: 1 -> 2
         let n2 = Counter::tick();    // count: 2 -> 3
-        println(`{g}, n1={n1}, n2={n2}`);
+        println(`${g}, n1=${n1}, n2=${n2}`);
     }
-    println(`final count={h.count}`);
+    println(`final count=${h.count}`);
 }
 
 __DATA__

@@ -78,7 +78,7 @@ export fn run() with Stdout {
     // Plain Group: first arm fires, payload is `&g.alternatives` from
     // the outer `g` (index N1 in NIR).
     let e1 = Element::Group(GroupElement::new([1, 2, 3]));
-    println(`{process(&e1)}`);
+    println(`${process(&e1)}`);
 
     // Repeat-wrapping-Group: second arm fires, payload is
     // `&g.alternatives` from the nested `g` (index N2 in NIR, distinct
@@ -87,10 +87,10 @@ export fn run() with Stdout {
     // both arms, and ref_elim's last-write-wins substitution wins.
     let inner_g = GroupElement::new([10, 20]);
     let e2 = Element::Repeat(RepeatElement::new(Element::Group(inner_g)));
-    println(`{process(&e2)}`);
+    println(`${process(&e2)}`);
 
     // Leaf: neither arm fires.
-    println(`{process(&Element::Leaf(0))}`);
+    println(`${process(&Element::Leaf(0))}`);
 }
 
 __DATA__

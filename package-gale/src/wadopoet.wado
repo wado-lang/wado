@@ -126,7 +126,7 @@ impl CodeWriter {
 
     /// Return the generated code. Asserts that indentation is balanced.
     pub fn to_string(&self) -> String {
-        assert self.indent_level == 0, `CodeWriter: unbalanced indentation (level={self.indent_level})`;
+        assert self.indent_level == 0, `CodeWriter: unbalanced indentation (level=${self.indent_level})`;
         return self.buf;
     }
 
@@ -188,7 +188,7 @@ fn write_literal_char(f: &mut Formatter, c: char, quote: char) {
         if code < 0x20 || code == 0x7f {
             // C0 control / DEL with no named escape: `\u{HEX}`.
             f.write_str(&"\\u{");
-            f.write_str(&`{code:x}`);
+            f.write_str(&`${code:x}`);
             f.write_char('}');
         } else {
             f.write_char(c);
@@ -308,12 +308,12 @@ impl StructSpec {
     }
 
     pub fn emit(&self, w: &mut CodeWriter) {
-        w.begin(&`{self.visibility.prefix()}struct {self.name}`);
+        w.begin(&`${self.visibility.prefix()}struct ${self.name}`);
         for let field of &self.fields {
             let vis = if field.is_pub { "pub " } else { "" };
             match &field.default {
-                Some(d) => w.line(&`{vis}{field.name}: {field.type_str} = {*d},`),
-                None => w.line(&`{vis}{field.name}: {field.type_str},`),
+                Some(d) => w.line(&`${vis}${field.name}: ${field.type_str} = ${*d},`),
+                None => w.line(&`${vis}${field.name}: ${field.type_str},`),
             }
         }
         w.end();
@@ -350,12 +350,12 @@ impl VariantSpec {
     }
 
     pub fn emit(&self, w: &mut CodeWriter) {
-        w.begin(&`{self.visibility.prefix()}variant {self.name}`);
+        w.begin(&`${self.visibility.prefix()}variant ${self.name}`);
         for let case of &self.cases {
             if let Some(p) = &case.payload {
-                w.line(&`{case.name}({*p}),`);
+                w.line(&`${case.name}(${*p}),`);
             } else {
-                w.line(&`{case.name},`);
+                w.line(&`${case.name},`);
             }
         }
         w.end();
@@ -392,12 +392,12 @@ impl EnumSpec {
     }
 
     pub fn emit(&self, w: &mut CodeWriter) {
-        w.begin(&`{self.visibility.prefix()}enum {self.name}`);
+        w.begin(&`${self.visibility.prefix()}enum ${self.name}`);
         for let member of &self.members {
             if let Some(c) = &member.trailing_comment {
-                w.line(&`{member.name},  // {*c}`);
+                w.line(&`${member.name},  // ${*c}`);
             } else {
-                w.line(&`{member.name},`);
+                w.line(&`${member.name},`);
             }
         }
         w.end();
@@ -510,9 +510,9 @@ impl FnSpec {
         } else {
             sig.push_str(&self.visibility.prefix());
         }
-        sig.push_str(&`fn {self.name}`);
+        sig.push_str(&`fn ${self.name}`);
         if self.generics.len() > 0 {
-            sig.push_str(&`<{join_comma(&self.generics)}>`);
+            sig.push_str(&`<${join_comma(&self.generics)}>`);
         }
         sig.push_str(&"(");
         let mut first = true;
@@ -527,18 +527,18 @@ impl FnSpec {
             if param.is_mut {
                 sig.push_str(&"mut ");
             }
-            sig.push_str(&`{param.name}: {param.type_str}`);
+            sig.push_str(&`${param.name}: ${param.type_str}`);
             if let Some(d) = &param.default_value {
-                sig.push_str(&` = {*d}`);
+                sig.push_str(&` = ${*d}`);
             }
             first = false;
         }
         sig.push_str(&")");
         if let Some(ret) = &self.return_type {
-            sig.push_str(&` -> {*ret}`);
+            sig.push_str(&` -> ${*ret}`);
         }
         if self.effects.len() > 0 {
-            sig.push_str(&` with {join_comma(&self.effects)}`);
+            sig.push_str(&` with ${join_comma(&self.effects)}`);
         }
         return sig;
     }
@@ -574,11 +574,11 @@ impl GlobalSpec {
         let vis = self.visibility.prefix();
         let mutability = if self.is_mut { "mut " } else { "" };
         let trailer = if let Some(c) = &self.trailing_comment {
-            `  // {*c}`;
+            `  // ${*c}`;
         } else {
             "";
         };
-        w.line(&`{vis}global {mutability}{self.name}: {self.type_str} = {self.initializer};{trailer}`);
+        w.line(&`${vis}global ${mutability}${self.name}: ${self.type_str} = ${self.initializer};${trailer}`);
     }
 }
 
@@ -601,9 +601,9 @@ impl ImplSpec {
 
     pub fn emit_begin(&self, w: &mut CodeWriter) {
         if let Some(t) = &self.trait_name {
-            w.begin(&`impl {*t} for {self.type_name}`);
+            w.begin(&`impl ${*t} for ${self.type_name}`);
         } else {
-            w.begin(&`impl {self.type_name}`);
+            w.begin(&`impl ${self.type_name}`);
         }
     }
 }

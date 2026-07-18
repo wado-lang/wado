@@ -119,7 +119,7 @@ test "ParseError::at carries resolved position" {
     let e = ParseError::at(`expected '}', got "for"`, Span::new(40, 43), ["TK_RBRACE"], 12, 5);
     assert e.line == 12;
     assert e.col == 5;
-    assert `{e}` == `parse error at 12:5: expected '}', got "for"`;
+    assert `${e}` == `parse error at 12:5: expected '}', got "for"`;
 }
 
 test "ParseError Display renders rule stack outermost-first" {
@@ -129,7 +129,7 @@ test "ParseError Display renders rule stack outermost-first" {
     e.rule_stack.push("block");
     e.rule_stack.push("program");
     assert e.rule_path() == "program > block > statement";
-    assert `{e}` == "parse error at 2:7: unexpected token\n  in rule: program > block > statement";
+    assert `${e}` == "parse error at 2:7: unexpected token\n  in rule: program > block > statement";
 }
 
 test "Span::len returns length" {
@@ -200,7 +200,7 @@ test "LexerSlice push_to" {
 
 test "LexerSlice display" {
     let s = ls("world");
-    let msg = `hello {s}`;
+    let msg = `hello ${s}`;
     assert msg == "hello world";
 }
 

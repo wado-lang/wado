@@ -71,7 +71,7 @@ use { v1 } from "./feat1/mod.wado";
 use { v2 } from "./feat2/mod.wado";
 
 export fn run() with Stdout {
-    println(`{v1() + v2()}`);
+    println(`${v1() + v2()}`);
 }
 "#,
     )

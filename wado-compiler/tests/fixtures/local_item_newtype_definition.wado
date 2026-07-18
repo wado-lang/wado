@@ -8,10 +8,10 @@ test "local newtype definition" {
     type UserId = i32;
     let id: UserId = 42;
     assert id == 42;
-    assert `{id}` == "42";
+    assert `${id}` == "42";
     // Debug format must show the user-declared name, never the internal
     // local-item storage disambiguator (`UserId@<local>`).
-    assert `{id:?}` == "42 as UserId";
+    assert `${id:?}` == "42 as UserId";
 }
 
 test "sibling test blocks may declare same-named local newtypes with different base types" {

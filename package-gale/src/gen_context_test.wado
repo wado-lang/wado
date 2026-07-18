@@ -58,14 +58,14 @@ test "kind_check_str: empty set returns 'true'" {
     let mut ctx = mk_ctx();
     let empty: List<String> = [];
     let s = ctx.kind_check_str(&empty, &"k");
-    assert s == "true", `expected "true" got "{s}"`;
+    assert s == "true", `expected "true" got "${s}"`;
 }
 
 test "kind_check_str: single token uses '==' not 'matches'" {
     let mut ctx = mk_ctx();
     let toks: List<String> = ["TK_FOO"];
     let s = ctx.kind_check_str(&toks, &"kind");
-    assert s == "kind == TK_FOO", `expected "kind == TK_FOO", got "{s}"`;
+    assert s == "kind == TK_FOO", `expected "kind == TK_FOO", got "${s}"`;
     // Single-token check must NOT intern (no helper would be emitted).
     assert ctx.kind_sets().is_empty(), "single-token check should not intern";
 }
@@ -74,7 +74,7 @@ test "kind_check_str: multi-token uses helper call" {
     let mut ctx = mk_ctx();
     let toks: List<String> = ["TK_FOO", "TK_BAR"];
     let s = ctx.kind_check_str(&toks, &"k");
-    assert s == "_kind_set_0(k)", `expected helper call, got "{s}"`;
+    assert s == "_kind_set_0(k)", `expected helper call, got "${s}"`;
     assert ctx.kind_sets().len() == 1;
 }
 
@@ -88,7 +88,7 @@ test "intern_kind_set: same set returns same id (insertion order)" {
     let id1_again = ctx.intern_kind_set(&ab);
     assert id1 == 0;
     assert id2 == 1;
-    assert id1_again == id1, `expected reuse of id {id1}, got {id1_again}`;
+    assert id1_again == id1, `expected reuse of id ${id1}, got ${id1_again}`;
 }
 
 test "intern_kind_set: order-independent (sets are unordered)" {
@@ -99,7 +99,7 @@ test "intern_kind_set: order-independent (sets are unordered)" {
     let id1 = ctx.intern_kind_set(&abc);
     let id2 = ctx.intern_kind_set(&cab);
     let id3 = ctx.intern_kind_set(&bca);
-    assert id1 == id2 && id2 == id3, `permutations must collapse: {id1} {id2} {id3}`;
+    assert id1 == id2 && id2 == id3, `permutations must collapse: ${id1} ${id2} ${id3}`;
     assert ctx.kind_sets().len() == 1;
 }
 
@@ -112,7 +112,7 @@ test "intern_kind_set: duplicates within a set are deduplicated" {
     assert id1 == id2, "duplicate-tolerant interning";
     let entries = ctx.kind_sets();
     assert entries.len() == 1;
-    assert entries[0].tokens.len() == 2, `expected 2 unique tokens, got {entries[0].tokens.len()}`;
+    assert entries[0].tokens.len() == 2, `expected 2 unique tokens, got ${entries[0].tokens.len()}`;
 }
 
 test "intern_kind_set: stored tokens are sorted" {
@@ -180,7 +180,7 @@ test "kind_negate_check_str: single token uses '!='" {
     let mut ctx = mk_ctx();
     let toks: List<String> = ["TK_FOO"];
     let s = ctx.kind_negate_check_str(&toks, &"k");
-    assert s == "k != TK_FOO", `expected "k != TK_FOO", got "{s}"`;
+    assert s == "k != TK_FOO", `expected "k != TK_FOO", got "${s}"`;
     assert ctx.kind_sets().is_empty();
 }
 
@@ -188,7 +188,7 @@ test "kind_negate_check_str: multi-token uses negated helper" {
     let mut ctx = mk_ctx();
     let toks: List<String> = ["TK_A", "TK_B"];
     let s = ctx.kind_negate_check_str(&toks, &"k");
-    assert s == "!_kind_set_0(k)", `expected negated helper, got "{s}"`;
+    assert s == "!_kind_set_0(k)", `expected negated helper, got "${s}"`;
     assert ctx.kind_sets().len() == 1;
 }
 
@@ -215,8 +215,8 @@ test "tail_greedy_first: rule with tail-position Optional token" {
     let mut ctx = mk_ctx_with([a]);
     let mut visiting: List<String> = [];
     let r = ctx.tail_greedy_first_of_rule(&"a", &mut visiting);
-    assert r.len() == 1, `expected 1 token, got {r.len()}`;
-    assert r[0] == "TK_Y", `expected TK_Y, got {r[0]}`;
+    assert r.len() == 1, `expected 1 token, got ${r.len()}`;
+    assert r[0] == "TK_Y", `expected TK_Y, got ${r[0]}`;
 }
 
 test "tail_greedy_first: rule with non-tail Optional returns empty" {
@@ -231,7 +231,7 @@ test "tail_greedy_first: rule with non-tail Optional returns empty" {
     let mut ctx = mk_ctx_with([a]);
     let mut visiting: List<String> = [];
     let r = ctx.tail_greedy_first_of_rule(&"a", &mut visiting);
-    assert r.len() == 0, `expected empty, got {r.len()}`;
+    assert r.len() == 0, `expected empty, got ${r.len()}`;
 }
 
 test "tail_greedy_first: multiple tail-position Optionals stack" {
@@ -246,7 +246,7 @@ test "tail_greedy_first: multiple tail-position Optionals stack" {
     let mut ctx = mk_ctx_with([a]);
     let mut visiting: List<String> = [];
     let r = ctx.tail_greedy_first_of_rule(&"a", &mut visiting);
-    assert r.len() == 2, `expected 2 tokens, got {r.len()}`;
+    assert r.len() == 2, `expected 2 tokens, got ${r.len()}`;
     let mut sorted = r;
     sorted.sort();
     assert sorted[0] == "TK_Y";
@@ -264,7 +264,7 @@ test "tail_greedy_first: rule with no Repeat returns empty" {
     let mut ctx = mk_ctx_with([a]);
     let mut visiting: List<String> = [];
     let r = ctx.tail_greedy_first_of_rule(&"a", &mut visiting);
-    assert r.len() == 0, `expected empty, got {r.len()}`;
+    assert r.len() == 0, `expected empty, got ${r.len()}`;
 }
 
 test "tail_greedy_first: transitive via tail RuleRef" {
@@ -280,8 +280,8 @@ test "tail_greedy_first: transitive via tail RuleRef" {
     let mut ctx = mk_ctx_with([s, r]);
     let mut visiting: List<String> = [];
     let tg = ctx.tail_greedy_first_of_rule(&"s", &mut visiting);
-    assert tg.len() == 1, `expected 1 token, got {tg.len()}`;
-    assert tg[0] == "TK_Y", `expected TK_Y, got {tg[0]}`;
+    assert tg.len() == 1, `expected 1 token, got ${tg.len()}`;
+    assert tg[0] == "TK_Y", `expected TK_Y, got ${tg[0]}`;
 }
 
 
@@ -306,7 +306,7 @@ test "tail_greedy_first: tail Optional with multi-token inner is excluded" {
     let mut ctx = mk_ctx_with([r]);
     let mut visiting: List<String> = [];
     let tg = ctx.tail_greedy_first_of_rule(&"r", &mut visiting);
-    assert tg.is_empty(), `expected empty (multi-token inner suppressed), got {tg.len()} tokens`;
+    assert tg.is_empty(), `expected empty (multi-token inner suppressed), got ${tg.len()} tokens`;
 }
 
 test "tail_greedy_first: tail Optional with single-token-alt Group inner is also excluded" {
@@ -330,7 +330,7 @@ test "tail_greedy_first: tail Optional with single-token-alt Group inner is also
     let mut ctx = mk_ctx_with([r]);
     let mut visiting: List<String> = [];
     let tg = ctx.tail_greedy_first_of_rule(&"r", &mut visiting);
-    assert tg.is_empty(), `expected empty (Group inner blanket-excluded), got {tg.len()} tokens`;
+    assert tg.is_empty(), `expected empty (Group inner blanket-excluded), got ${tg.len()} tokens`;
 }
 
 
@@ -352,7 +352,7 @@ test "position_first_sets_from: full single-token sequence X Y Z, K=3" {
     let expected_x: List<String> = ["TK_X"];
     let expected_y: List<String> = ["TK_Y"];
     let expected_z: List<String> = ["TK_Z"];
-    assert r.len() == 3, `expected K=3, got {r.len()}`;
+    assert r.len() == 3, `expected K=3, got ${r.len()}`;
     assert r[0] == expected_x;
     assert r[1] == expected_y;
     assert r[2] == expected_z;
@@ -370,7 +370,7 @@ test "position_first_sets_from: start offset skips leading elements" {
     let expected_x: List<String> = ["TK_X"];
     let expected_y: List<String> = ["TK_Y"];
     let expected_z: List<String> = ["TK_Z"];
-    assert r.len() == 3, `expected K=3 from offset 1, got {r.len()}`;
+    assert r.len() == 3, `expected K=3 from offset 1, got ${r.len()}`;
     assert r[0] == expected_x;
     assert r[1] == expected_y;
     assert r[2] == expected_z;
@@ -387,7 +387,7 @@ test "position_first_sets_from: max_k truncates the result" {
     let r = ctx.position_first_sets_from(&elements, 0, 2);
     let expected_x: List<String> = ["TK_X"];
     let expected_y: List<String> = ["TK_Y"];
-    assert r.len() == 2, `expected K=2 (truncated), got {r.len()}`;
+    assert r.len() == 2, `expected K=2 (truncated), got ${r.len()}`;
     assert r[0] == expected_x;
     assert r[1] == expected_y;
 }
@@ -401,7 +401,7 @@ test "position_first_sets_from: stops at end of sequence shorter than max_k" {
     let r = ctx.position_first_sets_from(&elements, 0, 5);
     let expected_x: List<String> = ["TK_X"];
     let expected_y: List<String> = ["TK_Y"];
-    assert r.len() == 2, `expected K=2 (capped by sequence length), got {r.len()}`;
+    assert r.len() == 2, `expected K=2 (capped by sequence length), got ${r.len()}`;
     assert r[0] == expected_x;
     assert r[1] == expected_y;
 }
@@ -420,11 +420,11 @@ test "position_first_sets_from: nullable element halts past-advance but keeps th
     let r = ctx.position_first_sets_from(&elements, 0, 3);
     let expected_x: List<String> = ["TK_X"];
     let expected_yz: List<String> = ["TK_Y", "TK_Z"];
-    assert r.len() == 2, `expected K=2 (halted at Y?), got {r.len()}`;
+    assert r.len() == 2, `expected K=2 (halted at Y?), got ${r.len()}`;
     assert r[0] == expected_x;
     let mut d1 = r[1];
     d1.sort();
-    assert d1 == expected_yz, `expected [TK_Y, TK_Z], got {d1}`;
+    assert d1 == expected_yz, `expected [TK_Y, TK_Z], got ${d1}`;
 }
 
 test "position_first_sets_from: start at end returns empty" {
@@ -434,7 +434,7 @@ test "position_first_sets_from: start at end returns empty" {
         tk("Y"),
     ];
     let r = ctx.position_first_sets_from(&elements, 2, 3);
-    assert r.is_empty(), `expected empty (start past end), got {r.len()}`;
+    assert r.is_empty(), `expected empty (start past end), got ${r.len()}`;
 }
 
 // `deep_position_first_sets_from`: K-prefix that recurses through
@@ -471,11 +471,11 @@ test "deep_position_first_sets_from: recurses into single-alt RuleRef" {
     let expected_x: List<String> = ["TK_X"];
     let expected_y: List<String> = ["TK_Y"];
     let expected_z: List<String> = ["TK_Z"];
-    assert r.len() == 3, `expected K=3 by recursing into c, got {r.len()}`;
+    assert r.len() == 3, `expected K=3 by recursing into c, got ${r.len()}`;
     assert r[0] == expected_x;
     assert r[1] == expected_y;
     assert r[2] == expected_z;
-    assert consumed == 1, `expected one surface element (c) consumed, got {consumed}`;
+    assert consumed == 1, `expected one surface element (c) consumed, got ${consumed}`;
 }
 
 test "deep_position_first_sets_from: halts on multi-alt RuleRef" {
@@ -504,8 +504,8 @@ test "deep_position_first_sets_from: halts on multi-alt RuleRef" {
     ];
     let mut visiting: List<String> = [];
     let [r, consumed] = ctx.deep_position_first_sets_from(&elements, 1, 3, &mut visiting);
-    assert r.is_empty(), `expected empty (multi-alt halts), got {r.len()}`;
-    assert consumed == 0, `multi-alt halt must not advance the cursor, got {consumed}`;
+    assert r.is_empty(), `expected empty (multi-alt halts), got ${r.len()}`;
+    assert consumed == 0, `multi-alt halt must not advance the cursor, got ${consumed}`;
 }
 
 test "deep_position_first_sets_from: cycles bail to keep the analysis terminating" {
@@ -523,8 +523,8 @@ test "deep_position_first_sets_from: cycles bail to keep the analysis terminatin
     ];
     let mut visiting: List<String> = ["r"];  // simulate being inside r's expansion
     let [prefixes, consumed] = ctx.deep_position_first_sets_from(&elements, 1, 3, &mut visiting);
-    assert prefixes.is_empty(), `expected empty (cycle), got {prefixes.len()}`;
-    assert consumed == 0, `cycle halt must not advance the cursor, got {consumed}`;
+    assert prefixes.is_empty(), `expected empty (cycle), got ${prefixes.len()}`;
+    assert consumed == 0, `cycle halt must not advance the cursor, got ${consumed}`;
 }
 
 test "deep_position_first_sets_from: tokens before RuleRef accumulate normally" {
@@ -545,11 +545,11 @@ test "deep_position_first_sets_from: tokens before RuleRef accumulate normally" 
     let expected_x: List<String> = ["TK_X"];
     let expected_y: List<String> = ["TK_Y"];
     let expected_z: List<String> = ["TK_Z"];
-    assert r.len() == 3, `expected K=3, got {r.len()}`;
+    assert r.len() == 3, `expected K=3, got ${r.len()}`;
     assert r[0] == expected_x;
     assert r[1] == expected_y;
     assert r[2] == expected_z;
-    assert consumed == 2, `both surface elements consumed, got {consumed}`;
+    assert consumed == 2, `both surface elements consumed, got ${consumed}`;
 }
 
 test "deep_position_first_sets_from: matches shallow walk for single-token-only sequence" {
@@ -563,13 +563,13 @@ test "deep_position_first_sets_from: matches shallow walk for single-token-only 
     let mut visiting: List<String> = [];
     let [deep, _] = ctx.deep_position_first_sets_from(&elements, 0, 3, &mut visiting);
     let shallow = ctx.position_first_sets_from(&elements, 0, 3);
-    assert deep.len() == shallow.len(), `length mismatch: deep={deep.len()}, shallow={shallow.len()}`;
+    assert deep.len() == shallow.len(), `length mismatch: deep=${deep.len()}, shallow=${shallow.len()}`;
     for let mut d = 0; d < deep.len(); d += 1 {
         let mut a_set = deep[d];
         a_set.sort();
         let mut b_set = shallow[d];
         b_set.sort();
-        assert a_set == b_set, `mismatch at depth {d}: {a_set} vs {b_set}`;
+        assert a_set == b_set, `mismatch at depth ${d}: ${a_set} vs ${b_set}`;
     }
 }
 
@@ -606,9 +606,9 @@ test "deep_position_first_sets_from: halt inside expanded RuleRef stops outer wa
     let mut visiting: List<String> = [];
     let [prefixes, consumed] = ctx.deep_position_first_sets_from(&elements, 0, 4, &mut visiting);
     let expected_x: List<String> = ["TK_X"];
-    assert prefixes.len() == 1, `expected K=1 (halt after X), got {prefixes.len()}: {prefixes}`;
+    assert prefixes.len() == 1, `expected K=1 (halt after X), got ${prefixes.len()}: ${prefixes}`;
     assert prefixes[0] == expected_x;
-    assert consumed == 0, `expansion of 'c' must NOT advance cursor when its body halts, got {consumed}`;
+    assert consumed == 0, `expansion of 'c' must NOT advance cursor when its body halts, got ${consumed}`;
 }
 
 test "deep_position_first_sets_from: halt inside Label stops outer walk" {
@@ -640,8 +640,8 @@ test "deep_position_first_sets_from: halt inside Label stops outer walk" {
             z_at_misaligned_depth = true;
         }
     }
-    assert !z_at_misaligned_depth, `Z must not bleed past a halted Label, got {prefixes}`;
-    assert consumed == 0, `Label halt must not advance the surface cursor, got {consumed}`;
+    assert !z_at_misaligned_depth, `Z must not bleed past a halted Label, got ${prefixes}`;
+    assert consumed == 0, `Label halt must not advance the surface cursor, got ${consumed}`;
 }
 
 test "position_first_sets_from: matches alt_position_first_sets at start=0" {
@@ -655,13 +655,13 @@ test "position_first_sets_from: matches alt_position_first_sets at start=0" {
     ]);
     let direct = ctx.position_first_sets_from(&a.elements, 0, 4);
     let via_alt = ctx.alt_position_first_sets(&a, 4);
-    assert direct.len() == via_alt.len(), `length mismatch: direct={direct.len()}, via_alt={via_alt.len()}`;
+    assert direct.len() == via_alt.len(), `length mismatch: direct=${direct.len()}, via_alt=${via_alt.len()}`;
     for let mut d = 0; d < direct.len(); d += 1 {
         let mut a_set = direct[d];
         a_set.sort();
         let mut b_set = via_alt[d];
         b_set.sort();
-        assert a_set == b_set, `mismatch at depth {d}: {a_set} vs {b_set}`;
+        assert a_set == b_set, `mismatch at depth ${d}: ${a_set} vs ${b_set}`;
     }
 }
 
@@ -679,7 +679,7 @@ test "warn dedupes diagnostics with the same rule and message" {
     ctx.warn(&label, DiagnosticKind::OverlapTournament, String::from("alts 0, 1 share lookahead {TK_ID}"));
     ctx.warn(&label, DiagnosticKind::OverlapTournament, String::from("alts 0, 1 share lookahead {TK_ID}"));
     let diags = ctx.copy_diagnostics();
-    assert diags.len() == 1, `expected 1 deduped diagnostic, got {diags.len()}`;
+    assert diags.len() == 1, `expected 1 deduped diagnostic, got ${diags.len()}`;
     assert diags[0].rule == "rule 'r'";
 }
 
@@ -697,7 +697,7 @@ test "warn keeps distinct diagnostics" {
         "alts 0, 2 share lookahead {TK_X}",
     ));
     let diags = ctx.copy_diagnostics();
-    assert diags.len() == 3, `expected 3 distinct diagnostics, got {diags.len()}`;
+    assert diags.len() == 3, `expected 3 distinct diagnostics, got ${diags.len()}`;
 }
 
 test "precompute_scannability: mutually recursive defined rules are scannable" {

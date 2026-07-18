@@ -25,7 +25,7 @@ fn make_inner(v: i32) -> Result<Inner, String> {
     if v < 0 {
         return Result::<Inner, String>::Err("negative");
     }
-    return Result::<Inner, String>::Ok(Inner { value: v, name: `item_{v}` });
+    return Result::<Inner, String>::Ok(Inner { value: v, name: `item_${v}` });
 }
 
 #[inline(never)]
@@ -40,11 +40,11 @@ fn make_outer(v: i32) -> Result<Outer, String> {
 export fn run() with Stdout {
     let r = make_outer(5);
     if let Ok(o) = r {
-        println(`{o.inner.value} {o.inner.name} {o.tag}`);
+        println(`${o.inner.value} ${o.inner.name} ${o.tag}`);
     }
     let r2 = make_outer(-1);
     if let Err(e) = r2 {
-        println(`{e}`);
+        println(`${e}`);
     }
 }
 

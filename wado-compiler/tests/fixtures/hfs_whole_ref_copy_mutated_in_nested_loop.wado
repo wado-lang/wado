@@ -59,9 +59,9 @@ struct FlagsSpec {
 
 impl FlagsSpec {
     fn emit(&self, w: &mut CodeWriter) {
-        w.begin(&`flags {self.name}`);
+        w.begin(&`flags ${self.name}`);
         for let member of &self.members {
-            w.line(&`{*member},`);
+            w.line(&`${*member},`);
         }
         w.end();
     }
@@ -77,5 +77,5 @@ test "nested-loop indentation survives HFS" {
     f.emit(&mut w);
 
     let expected = "flags Perms {\n    Read,\n    Write,\n    Execute,\n}\n";
-    assert w.buf == expected, `got: {w.buf}`;
+    assert w.buf == expected, `got: ${w.buf}`;
 }

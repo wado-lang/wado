@@ -2,9 +2,9 @@
 
 ## Context
 
-Wado's type stringification system (WEP: Type Stringification) specifies that `builtin::inspect()` converts any value to its debug string representation. Template strings use it for `{expr:?}` (always inspect).
+Wado's type stringification system (WEP: Type Stringification) specifies that `builtin::inspect()` converts any value to its debug string representation. Template strings use it for `${expr:?}` (always inspect).
 
-> Note (2026-07-15): `{expr}` no longer falls back to `Inspect`. `Display` is not auto-derived for arbitrary types, so `{expr}` on a type with no `Display` impl is a compile error — use `{expr:?}` for debug output. See [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md). The historical fallback design below is retained for context.
+> Note (2026-07-15): `${expr}` no longer falls back to `Inspect`. `Display` is not auto-derived for arbitrary types, so `${expr}` on a type with no `Display` impl is a compile error — use `${expr:?}` for debug output. See [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md). The historical fallback design below is retained for context.
 
 This WEP defines the output format, the user-facing name, and the compiler implementation strategy.
 
@@ -22,8 +22,8 @@ This WEP defines the output format, the user-facing name, and the compiler imple
 The feature is called **inspect** throughout:
 
 - `builtin::inspect(expr, &mut f)` — the compiler marker in the elaborator
-- `{expr:?}` — template string syntax (inspect specifier)
-- `{expr:#?}` — alternate (pretty-print) inspect with indented multi-line output
+- `${expr:?}` — template string syntax (inspect specifier)
+- `${expr:#?}` — alternate (pretty-print) inspect with indented multi-line output
 
 ### Output Format by Type
 
@@ -76,7 +76,7 @@ Inspect output follows Wado literal syntax where possible:
 
 **References**: Prefix with `&` or `&mut`, then inspect the referent. Since Wado uses GC-managed references, dereferencing is always safe.
 
-**Closures**: By default, show only the parameter types and return type (the signature). With the `#` alternate flag (`{closure:#?}`), show the TIR-unparsed source code of the closure body. The signature-only default avoids potentially large output for complex closures.
+**Closures**: By default, show only the parameter types and return type (the signature). With the `#` alternate flag (`${closure:#?}`), show the TIR-unparsed source code of the closure body. The signature-only default avoids potentially large output for complex closures.
 
 **Option special handling**: `Option::Some(v)` renders as `Some(v)` (short form), `Option::None` renders as `null` (matching Wado's null literal).
 
@@ -86,7 +86,7 @@ Inspect output follows Wado literal syntax where possible:
 
 Inspect is implemented without adding a new TIR expression kind. Instead:
 
-1. **Elaborator phase**: When the elaborator encounters `{expr:?}` or falls back to inspect for `{expr}`, it emits a `StaticCall` to `builtin::inspect(expr, &mut f)`. This acts as a **marker** — the function doesn't exist as real code.
+1. **Elaborator phase**: When the elaborator encounters `${expr:?}` or falls back to inspect for `${expr}`, it emits a `StaticCall` to `builtin::inspect(expr, &mut f)`. This acts as a **marker** — the function doesn't exist as real code.
 
 2. **Synthesize phase** (`synthesize_inspect`): A new pass runs after TIR resolution and before CM binding synthesis. It scans the TIR for `builtin::inspect` calls and replaces each one with synthesized TIR that writes the formatted output to the Formatter. The synthesized code uses the same TIR nodes as hand-written Wado code (method calls, match expressions, struct field access, etc.).
 
@@ -293,7 +293,7 @@ A bare `&fn_name` lowers to a synthetic zero-capture closure (a `__Closure_N` wh
 | -------------------------- | -------------------------------------------------------------- |
 | Type Stringification       | Implements the `builtin::inspect` specified there              |
 | Format Traits              | `:?` resolves to `builtin::inspect`, not a trait               |
-| Template Format Specifiers | `{expr:?}` triggers inspect; `{expr:#?}` is the alternate flag |
+| Template Format Specifiers | `${expr:?}` triggers inspect; `${expr:#?}` is the alternate flag |
 | CM Binding Synthesis       | `synthesize_inspect` runs before CM bindings                   |
 
 ## Consequences
@@ -308,7 +308,7 @@ A bare `&fn_name` lowers to a synthetic zero-capture closure (a `__Closure_N` wh
 
 ### Negative
 
-1. **Code size**: Inspect synthesis generates code for every type that appears in `{:?}` — complex struct hierarchies produce substantial TIR
+1. **Code size**: Inspect synthesis generates code for every type that appears in `${:?}` — complex struct hierarchies produce substantial TIR
    - **Mitigation**: The optimizer and tree-shaking eliminate unused paths
 2. **Synthesis complexity**: The `synthesize_inspect` pass must handle every `ResolvedType` variant
    - **Mitigation**: The synthesis is mechanical and type-driven, similar to CM binding synthesis
@@ -323,11 +323,11 @@ A bare `&fn_name` lowers to a synthetic zero-capture closure (a `__Closure_N` wh
 
 ### Implemented Extensions
 
-1. **Pretty-print (`{:#?}`)**: Indented multi-line output via `InspectAlt` trait and `Formatter` indent tracking. Uses `open_brace`/`close_brace`/`write_newline_indent` on the `Formatter`. Example:
+1. **Pretty-print (`${:#?}`)**: Indented multi-line output via `InspectAlt` trait and `Formatter` indent tracking. Uses `open_brace`/`close_brace`/`write_newline_indent` on the `Formatter`. Example:
 
 ```wado
 let arr: List<i32> = [1, 2, 3];
-println(`{arr:#?}`);
+println(`${arr:#?}`);
 // [
 //   1,
 //   2,
@@ -367,7 +367,7 @@ The core `synthesize_inspect` phase and the full pipeline integration are implem
 | `&mut T`                   | Done    | `&mut inspect(inner)`                                                                                                                                              |
 | Closure (default)          | Done    | Signature only; dispatched via canonical closure vtable                                                                                                            |
 | Closure (`#` alternate)    | Done    | TIR unparsed source; works for indirect calls (param/field/global)                                                                                                 |
-| Display fallback           | Removed | `{expr}` no longer falls back to inspect (2026-07-15); a missing `Display` is a compile error. See [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md) |
+| Display fallback           | Removed | `${expr}` no longer falls back to inspect (2026-07-15); a missing `Display` is a compile error. See [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md) |
 | Nested structs/arrays      | Done    | Recursive inspect for composite fields                                                                                                                             |
 | `TreeMap<K, V>`            | Done    | Custom `Inspect`/`InspectAlt`: `{key: value, ...}` format                                                                                                          |
 | `TreeSet<T>`               | Done    | Custom `Inspect`/`InspectAlt`: `{elem, ...}` format                                                                                                                |

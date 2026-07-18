@@ -16,7 +16,7 @@ fn read_file(path: String) -> String with Preopens {
     let root = dirs[0].0;
     let file = match root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait() {
         Ok(f) => f,
-        Err(_) => panic(`failed to open {path}`),
+        Err(_) => panic(`failed to open ${path}`),
     };
     let [stream, _done] = file.read_via_stream(0 as Filesize);
     let mut buf = String::with_capacity(64 * 1024);
@@ -47,7 +47,7 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     b.run("", || {
         let result = sqlite::parse(&sql);
         if !result.ok() {
-            panic(`sqlite::parse failed: {result.diagnostics[0].message}`);
+            panic(`sqlite::parse failed: ${result.diagnostics[0].message}`);
         }
     });
 }

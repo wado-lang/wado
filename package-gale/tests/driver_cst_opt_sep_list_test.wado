@@ -9,9 +9,9 @@ use osl from "./grammars/opt_sep_list.g4"
 
 fn assert_tree(input: &String, expected: &String) {
     let result = osl::parse(input);
-    assert result.ok(), `unexpected diagnostics for {*input}`;
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
     let actual = osl::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
 }
 
 test "opt-sep-list: empty list" {

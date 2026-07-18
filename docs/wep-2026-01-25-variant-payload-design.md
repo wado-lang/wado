@@ -80,7 +80,7 @@ variant Shape {
 
 // Shape::Circle is a type
 fn process_circle(c: Shape::Circle) {
-    println(`radius: {c.0}`);
+    println(`radius: ${c.0}`);
 }
 
 // Subtype relationship: Shape::Circle <: Shape
@@ -152,7 +152,7 @@ match s {
 
 // if let for single variant
 if let Shape::Circle(r) = shape {
-    println(`radius: {r}`);
+    println(`radius: ${r}`);
 }
 
 // When parameter type is Shape::Circle, no match needed
@@ -190,7 +190,7 @@ In practice, pattern matching is preferred (99% of cases):
 
 ```wado
 if let Shape::Rectangle([w, h]) = shape {
-    println(`{w} x {h}`);
+    println(`${w} x ${h}`);
 }
 ```
 
@@ -224,9 +224,9 @@ type IntOrString = i32 | String;
 
 fn process(x: IntOrString) {
     if let n: i32 = x {
-        println(`int: {n}`);
+        println(`int: ${n}`);
     } else if let s: String = x {
-        println(`string: {s}`);
+        println(`string: ${s}`);
     }
 }
 ```
@@ -284,7 +284,7 @@ fn process(x: ABCD) {
     // Bind to a single type
     if let a: A = x {
         // a: A
-        println(`got A with a={a.a}`);
+        println(`got A with a=${a.a}`);
     }
 }
 ```
@@ -451,7 +451,7 @@ Wildcards work as expected:
 ```wado
 if let Shape::Rectangle([w, _]) = shape {
     // Ignore height
-    println(`width: {w}`);
+    println(`width: ${w}`);
 }
 ```
 

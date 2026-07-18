@@ -5,9 +5,9 @@ use g from "./grammars/ll_empty_alt_group.g4"
 
 fn assert_tree(input: &String, expected: &String) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for {*input}`;
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
 }
 
 // Sanity: a lone if with a trailing else must consume it.

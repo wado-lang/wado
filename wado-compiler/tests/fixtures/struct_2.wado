@@ -39,41 +39,41 @@ struct SDStringPair {
 fn destruct_basic() with Stdout {
     let p = SDPoint { x: 10, y: 20 };
     let { x, y } = p;
-    println(`{x}, {y}`);
+    println(`${x}, ${y}`);
     let SDPoint { x: a, y: b } = p;
-    println(`{a}, {b}`);
+    println(`${a}, ${b}`);
     let { x: x2, .. } = p;
-    println(`{x2}`);
+    println(`${x2}`);
     let mut { x: mx, y: my } = p;
     mx += 1;
     my += 2;
-    println(`{mx}, {my}`);
+    println(`${mx}, ${my}`);
 }
 
 fn destruct_for_of() with Stdout {
     let points: List<SDPoint> = [SDPoint { x: 1, y: 2 }, SDPoint { x: 3, y: 4 }, SDPoint { x: 5, y: 6 }];
     for let { x, y } of points {
-        println(`{x + y}`);
+        println(`${x + y}`);
     }
     for let { x: a, y: b } of points {
-        println(`{a * b}`);
+        println(`${a * b}`);
     }
 }
 
 fn destruct_if_let() with Stdout {
     let p = SDPoint { x: 5, y: 15 };
     if let { x, y } = p {
-        println(`{x}, {y}`);
+        println(`${x}, ${y}`);
     }
     if let SDPoint { x, y } = p {
-        println(`{x + y}`);
+        println(`${x + y}`);
     }
     let person = SDPerson { name: "Alice", age: 30, email: "alice@test.com" };
     if let { name, .. } = person {
         println(name);
     }
     if let { x: a, y: b } = p {
-        println(`{a * b}`);
+        println(`${a * b}`);
     }
 }
 
@@ -83,35 +83,35 @@ fn destruct_nested() with Stdout {
         end: SDPoint { x: 3, y: 4 },
     };
     let { start: { x: x1, y: y1 }, end: { x: x2, y: y2 } } = line;
-    println(`{x1}, {y1}, {x2}, {y2}`);
+    println(`${x1}, ${y1}, ${x2}, ${y2}`);
     let { start: { x, .. }, .. } = line;
-    println(`{x}`);
+    println(`${x}`);
 }
 
 fn destruct_rename() with Stdout {
     let p = SDPoint { x: 10, y: 20 };
     let { x: horizontal, y: vertical } = p;
-    println(`{horizontal}, {vertical}`);
+    println(`${horizontal}, ${vertical}`);
     let { x, y: vertical2 } = p;
-    println(`{x}, {vertical2}`);
+    println(`${x}, ${vertical2}`);
     let person = SDPerson { name: "Alice", age: 30, email: "alice@example.com" };
     let { name: n, .. } = person;
-    println(`{n}`);
+    println(`${n}`);
     let SDPoint { x: a, y: b } = p;
-    println(`{a}, {b}`);
+    println(`${a}, ${b}`);
 }
 
 fn destruct_wildcard() with Stdout {
     let p = SDPoint { x: 10, y: 20 };
     let { x, y: _ } = p;
-    println(`{x}`);
+    println(`${x}`);
     let { x: _, y } = p;
-    println(`{y}`);
+    println(`${y}`);
     let person = SDPerson { name: "Bob", age: 25, email: "bob@example.com" };
     let { name, age: _, email: _ } = person;
-    println(`{name}`);
+    println(`${name}`);
     let { name: _, age, email: _ } = person;
-    println(`{age}`);
+    println(`${age}`);
 }
 
 fn destruct_match() with Stdout {
@@ -128,8 +128,8 @@ fn destruct_match() with Stdout {
     };
     println(label2);
     let desc = match p {
-        { x: h, y: v } && h == v => `equal: {h}`,
-        { x: h, y: v } => `{h}, {v}`,
+        { x: h, y: v } && h == v => `equal: ${h}`,
+        { x: h, y: v } => `${h}, ${v}`,
     };
     println(desc);
 }
@@ -157,31 +157,31 @@ fn destruct_matches() with Stdout {
 fn destruct_literal() with Stdout {
     let ip = SDIntPair { label: "int", value: 42 };
     let result = match ip {
-        SDIntPair { label, value: 42 } => `matched int: {label}`,
+        SDIntPair { label, value: 42 } => `matched int: ${label}`,
         _ => "no match",
     };
     println(result);
     let bp = SDBoolPair { label: "bool", flag: true };
     let result3 = match bp {
-        SDBoolPair { label, flag: true } => `matched bool: {label}`,
-        SDBoolPair { label, flag: false } => `not matched: {label}`,
+        SDBoolPair { label, flag: true } => `matched bool: ${label}`,
+        SDBoolPair { label, flag: false } => `not matched: ${label}`,
     };
     println(result3);
     let cp = SDCharPair { label: "char", ch: 'Z' };
     let result4 = match cp {
-        SDCharPair { label, ch: 'Z' } => `matched char: {label}`,
+        SDCharPair { label, ch: 'Z' } => `matched char: ${label}`,
         _ => "no match",
     };
     println(result4);
     let sp = SDStringPair { first: "hello", second: "world" };
     let result5 = match sp {
-        SDStringPair { first, second: "world" } => `matched string: {first}`,
+        SDStringPair { first, second: "world" } => `matched string: ${first}`,
         _ => "no match",
     };
     println(result5);
     let ip2 = SDIntPair { label: "test", value: 0 };
     if let SDIntPair { label, value: 0 } = ip2 {
-        println(`if-let int: {label}`);
+        println(`if-let int: ${label}`);
     }
     let bp2 = SDBoolPair { label: "check", flag: false };
     if bp2 matches { SDBoolPair { flag: false, .. } } {

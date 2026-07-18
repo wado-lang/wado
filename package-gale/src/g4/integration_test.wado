@@ -21,7 +21,7 @@ test "parse JSON.g4" {
     let input = #include_str("../../tests/grammars/JSON.g4");
     let result = parse(input);
     if let Err(e) = result {
-        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+        panic(`parse failed: ${e.message} at ${e.span.start}..${e.span.end}`);
     }
     let g = result.unwrap();
     assert g.name == "JSON";
@@ -78,7 +78,7 @@ test "parse css3Lexer.g4" {
     let input = #include_str("../../tests/grammars/css3Lexer.g4");
     let result = parse(input);
     if let Err(e) = result {
-        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+        panic(`parse failed: ${e.message} at ${e.span.start}..${e.span.end}`);
     }
     let g = result.unwrap();
     assert g.name == "css3Lexer";
@@ -104,7 +104,7 @@ test "parse css3Parser.g4" {
     let input = #include_str("../../tests/grammars/css3Parser.g4");
     let result = parse(input);
     if let Err(e) = result {
-        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+        panic(`parse failed: ${e.message} at ${e.span.start}..${e.span.end}`);
     }
     let g = result.unwrap();
     assert g.name == "css3Parser";
@@ -117,7 +117,7 @@ test "parse HTMLLexer.g4" {
     let input = #include_str("../../tests/grammars/HTMLLexer.g4");
     let result = parse(input);
     if let Err(e) = result {
-        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+        panic(`parse failed: ${e.message} at ${e.span.start}..${e.span.end}`);
     }
     let g = result.unwrap();
     assert g.name == "HTMLLexer";
@@ -126,7 +126,7 @@ test "parse HTMLLexer.g4" {
     assert g.lexer_rules[0].name == "HTML_COMMENT";
     assert g.lexer_rules[0].mode == 0;
     // Check mode names table
-    assert g.mode_names.len() >= 3, `expected at least 3 modes, got {g.mode_names.len()}`;
+    assert g.mode_names.len() >= 3, `expected at least 3 modes, got ${g.mode_names.len()}`;
     assert g.mode_names[0] == "DEFAULT_MODE";
     // TAG_CLOSE is in TAG mode
     let mut found_tag_close = false;
@@ -163,7 +163,7 @@ test "parse HTMLParser.g4" {
     let input = #include_str("../../tests/grammars/HTMLParser.g4");
     let result = parse(input);
     if let Err(e) = result {
-        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+        panic(`parse failed: ${e.message} at ${e.span.start}..${e.span.end}`);
     }
     let g = result.unwrap();
     assert g.name == "HTMLParser";
@@ -195,7 +195,7 @@ test "parse ANTLRv4Lexer.g4" {
     let input = #include_str("../../tests/grammars/ANTLRv4Lexer.g4");
     let result = parse(input);
     if let Err(e) = result {
-        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+        panic(`parse failed: ${e.message} at ${e.span.start}..${e.span.end}`);
     }
     let g = result.unwrap();
     assert g.name == "ANTLRv4Lexer";
@@ -207,7 +207,7 @@ test "parse ANTLRv4Parser.g4" {
     let input = #include_str("../../tests/grammars/ANTLRv4Parser.g4");
     let result = parse(input);
     if let Err(e) = result {
-        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+        panic(`parse failed: ${e.message} at ${e.span.start}..${e.span.end}`);
     }
     let g = result.unwrap();
     assert g.name == "ANTLRv4Parser";
@@ -219,7 +219,7 @@ test "parse RustLexer.g4" {
     let input = #include_str("../../tests/grammars/RustLexer.g4");
     let result = parse(input);
     if let Err(e) = result {
-        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+        panic(`parse failed: ${e.message} at ${e.span.start}..${e.span.end}`);
     }
     let g = result.unwrap();
     assert g.name == "RustLexer";
@@ -232,7 +232,7 @@ test "parse RustParser.g4" {
     let input = #include_str("../../tests/grammars/RustParser.g4");
     let result = parse(input);
     if let Err(e) = result {
-        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+        panic(`parse failed: ${e.message} at ${e.span.start}..${e.span.end}`);
     }
     let g = result.unwrap();
     assert g.name == "RustParser";
@@ -244,7 +244,7 @@ test "parse TypeScriptLexer.g4" {
     let input = #include_str("../../tests/grammars/TypeScriptLexer.g4");
     let result = parse(input);
     if let Err(e) = result {
-        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+        panic(`parse failed: ${e.message} at ${e.span.start}..${e.span.end}`);
     }
     let g = result.unwrap();
     assert g.name == "TypeScriptLexer";
@@ -256,7 +256,7 @@ test "parse TypeScriptLexer.g4" {
     for let rule of g.lexer_rules {
         if rule.name == "BackTickInside" {
             if let Some(t) = &rule.type_override {
-                assert *t == "BackTick", `expected type_override BackTick, got {*t}`;
+                assert *t == "BackTick", `expected type_override BackTick, got ${*t}`;
             } else {
                 panic("BackTickInside should have type_override");
             }
@@ -272,7 +272,7 @@ test "parse TypeScriptParser.g4" {
     let input = #include_str("../../tests/grammars/TypeScriptParser.g4");
     let result = parse(input);
     if let Err(e) = result {
-        panic(`parse failed: {e.message} at {e.span.start}..{e.span.end}`);
+        panic(`parse failed: ${e.message} at ${e.span.start}..${e.span.end}`);
     }
     let g = result.unwrap();
     assert g.name == "TypeScriptParser";
@@ -293,10 +293,10 @@ test "parse TypeScriptParser.g4" {
                     continue;
                 }
                 found_power = true;
-                assert alt.options.len() == 1, `expected 1 option on PowerExpression, got {alt.options.len()}`;
+                assert alt.options.len() == 1, `expected 1 option on PowerExpression, got ${alt.options.len()}`;
                 assert alt.options[0].name == "assoc";
                 if let Ident(v) = &alt.options[0].value {
-                    assert *v == "right", `expected assoc=right, got assoc={*v}`;
+                    assert *v == "right", `expected assoc=right, got assoc=${*v}`;
                 } else {
                     panic("expected Ident for assoc value");
                 }

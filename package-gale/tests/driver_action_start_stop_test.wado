@@ -11,9 +11,9 @@ test "$start / $stop / $text read the rule span on a multi-alt rule" {
     let abc = ss::parse(&"a b c");
     assert abc.ok(), "clean parse of a b c";
     // `$text` concatenates the tokens (skipped WS excluded), so `abc` not `a b c`.
-    assert abc.output == "text=abc start=a stop=c", `output: '{abc.output}'`;
+    assert abc.output == "text=abc start=a stop=c", `output: '${abc.output}'`;
 
     let d = ss::parse(&"d");
     assert d.ok(), "clean parse of d";
-    assert d.output == "d text=d start=d", `output: '{d.output}'`;
+    assert d.output == "d text=d start=d", `output: '${d.output}'`;
 }

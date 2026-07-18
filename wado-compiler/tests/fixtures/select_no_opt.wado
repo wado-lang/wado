@@ -1,7 +1,7 @@
 use { println, Stdout } from "core:cli";
 
 fn side_effect(x: i32) -> i32 with Stdout {
-    println(`called with {x}`);
+    println(`called with ${x}`);
     return x;
 }
 
@@ -13,14 +13,14 @@ export fn run() with Stdout {
     } else {
         side_effect(2);
     };
-    println(`{result}`);
+    println(`${result}`);
 
     // Should NOT be optimized: no else branch
     let mut val = 0;
     if a > 5 {
         val = 42;
     }
-    println(`{val}`);
+    println(`${val}`);
 }
 
 __DATA__

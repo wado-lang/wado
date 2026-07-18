@@ -25,7 +25,7 @@ fn read_file_bytes(path: String) -> ByteList with Preopens {
     let root = dirs[0].0;
     let open_result = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait();
     if let Err(_) = open_result {
-        panic(`failed to open {path}`);
+        panic(`failed to open ${path}`);
     }
     let file = match open_result {
         Ok(f) => f,
@@ -66,10 +66,10 @@ export fn run() with Stdout, MonotonicClock, Preopens {
         name: "cbor-catalog",
         input_size: Option::Some(json_size),
     };
-    b.println(`{json_size} bytes JSON -> {cbor.len()} bytes CBOR payload`);
+    b.println(`${json_size} bytes JSON -> ${cbor.len()} bytes CBOR payload`);
 
     b.run("ser", || cbor_to_bytes::<CitmCatalog>(&catalog).unwrap().len());
     let events = b.run("de", || event_count(&cbor_from_bytes::<CitmCatalog, _>(cbor).unwrap()));
     assert events == 184;
-    b.println(`round-tripped {events} events`);
+    b.println(`round-tripped ${events} events`);
 }

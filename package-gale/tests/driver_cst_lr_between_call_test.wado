@@ -11,9 +11,9 @@ use bc from "./grammars/lr_between_call.g4"
 
 fn chk(input: &String, expected: &String) {
     let r = bc::parse(input);
-    assert r.ok(), `unexpected diagnostics for {*input}: {bc::to_string_tree(&r)}`;
+    assert r.ok(), `unexpected diagnostics for ${*input}: ${bc::to_string_tree(&r)}`;
     let a = bc::to_string_tree(&r);
-    assert a == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {a}`;
+    assert a == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${a}`;
 }
 
 test "between-call: comma args parse at prec 0" {

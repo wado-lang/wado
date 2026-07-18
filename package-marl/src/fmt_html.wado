@@ -81,8 +81,8 @@ impl Renderer {
     fn render_block(&mut self, node: &Node) -> String {
         return match node {
             Node::Heading(h) => self.render_heading(h),
-            Node::Paragraph(p) => `<p>{render_inline_seq(&p.children, &self.refs)}</p>`,
-            Node::BlockQuote(children) => `<blockquote>\n{self.render_blocks(children)}\n</blockquote>`,
+            Node::Paragraph(p) => `<p>${render_inline_seq(&p.children, &self.refs)}</p>`,
+            Node::BlockQuote(children) => `<blockquote>\n${self.render_blocks(children)}\n</blockquote>`,
             Node::CodeBlock(cb) => render_code_block(cb),
             Node::List(list) => self.render_list(list),
             Node::Table(t) => render_table(t, &self.refs),
@@ -97,7 +97,7 @@ impl Renderer {
         let id = self.slugger.slug(slugify(&text));
         let inner = render_inline_seq(&h.children, &self.refs);
         self.headings.push(HeadingInfo { level: h.level as u8, id, text });
-        return `<h{h.level} id="{escape_attr_ref(&id)}">{inner}</h{h.level}>`;
+        return `<h${h.level} id="${escape_attr_ref(&id)}">${inner}</h${h.level}>`;
     }
 
     // --- lists ---
@@ -110,7 +110,7 @@ impl Renderer {
         }
         let inner = parts.join("\n");
         let [open, close] = list_tags(list);
-        return `{open}\n{inner}\n{close}`;
+        return `${open}\n${inner}\n${close}`;
     }
 
     fn render_item(&mut self, item: &MdItem, loose: bool) -> String {
@@ -120,9 +120,9 @@ impl Renderer {
         };
         let content = self.render_item_children(&item.children, loose, marker);
         if loose {
-            return `<li>\n{content}\n</li>`;
+            return `<li>\n${content}\n</li>`;
         }
-        return `<li>{content}</li>`;
+        return `<li>${content}</li>`;
     }
 
     /// In a tight list a paragraph item contributes its inline content
@@ -146,12 +146,12 @@ impl Renderer {
             Node::Paragraph(p) => {
                 let inline = render_inline_seq(&p.children, &self.refs);
                 if loose {
-                    return `<p>{lead}{inline}</p>`;
+                    return `<p>${lead}${inline}</p>`;
                 }
-                return `{lead}{inline}`;
+                return `${lead}${inline}`;
             },
             _ => {
-                return `{lead}{self.render_block(child)}`;
+                return `${lead}${self.render_block(child)}`;
             },
         }
     }
@@ -186,7 +186,7 @@ fn render_code_block(cb: &CodeBlock) -> String {
     let mut out = String::new();
     out.push_str(&"<pre><code");
     if cb.tag.len() > 0 {
-        out.push_str(&` class="language-{escape_attr_ref(&cb.tag)}"`);
+        out.push_str(&` class="language-${escape_attr_ref(&cb.tag)}"`);
     }
     out.push('>');
     out.push_str(&escape_text_ref(&cb.code));
@@ -208,7 +208,7 @@ fn list_tags(list: &MdList) -> [String, String] {
         return ["<ul>", "</ul>"];
     }
     if list.start != 1 {
-        return [`<ol start="{list.start}">`, "</ol>"];
+        return [`<ol start="${list.start}">`, "</ol>"];
     }
     return ["<ol>", "</ol>"];
 }
@@ -238,9 +238,9 @@ fn render_cells(tag: &String, row: &MdTableRow, ncol: i32, align: &List<ColumnAl
         };
         let a = align_str(&align_at(align, c));
         if a.len() > 0 {
-            out.push_str(&`<{tag} align="{a}">{inner}</{tag}>`);
+            out.push_str(&`<${tag} align="${a}">${inner}</${tag}>`);
         } else {
-            out.push_str(&`<{tag}>{inner}</{tag}>`);
+            out.push_str(&`<${tag}>${inner}</${tag}>`);
         }
         out.push('\n');
     }
@@ -280,7 +280,7 @@ fn render_inline_node(node: &Node, refs: &RefTable, out: &mut String) {
         Node::Emphasis(em) => wrap_inline(&"em", &em.children, refs, out),
         Node::Strong(children) => wrap_inline(&"strong", children, refs, out),
         Node::Strikethrough(children) => wrap_inline(&"del", children, refs, out),
-        Node::Code(s) => out.push_str(&`<code>{escape_text_ref(s)}</code>`),
+        Node::Code(s) => out.push_str(&`<code>${escape_text_ref(s)}</code>`),
         Node::InlineLink(link) => render_link(&link.url, &link.title, &link.children, refs, out),
         Node::ReferenceLink(link) => render_reference_link(link, refs, out),
         Node::ShortcutLink(link) => render_reference_link(link, refs, out),
@@ -293,7 +293,7 @@ fn render_inline_node(node: &Node, refs: &RefTable, out: &mut String) {
 }
 
 fn wrap_inline(tag: &String, children: &List<Node>, refs: &RefTable, out: &mut String) {
-    out.push_str(&`<{tag}>{render_inline_seq(children, refs)}</{tag}>`);
+    out.push_str(&`<${tag}>${render_inline_seq(children, refs)}</${tag}>`);
 }
 
 /// HTML-escape text after resolving backslash escapes: the AST keeps the
@@ -343,7 +343,7 @@ fn scheme_is_safe(scheme: &String) -> bool {
 
 fn render_link(url: &String, title: &String, children: &List<Node>, refs: &RefTable, out: &mut String) {
     let href = escape_attr_ref(&sanitize_url(url));
-    out.push_str(&`<a href="{href}"{title_attr(title)}>{render_inline_seq(children, refs)}</a>`);
+    out.push_str(&`<a href="${href}"${title_attr(title)}>${render_inline_seq(children, refs)}</a>`);
 }
 
 fn render_reference_link(link: &ReferenceLinkNode, refs: &RefTable, out: &mut String) {
@@ -357,12 +357,12 @@ fn render_reference_link(link: &ReferenceLinkNode, refs: &RefTable, out: &mut St
 
 fn render_autolink(url: &String, out: &mut String) {
     let href = escape_attr_ref(&sanitize_url(url));
-    out.push_str(&`<a href="{href}">{escape_text_ref(url)}</a>`);
+    out.push_str(&`<a href="${href}">${escape_text_ref(url)}</a>`);
 }
 
 fn render_image(alt: &String, url: &String, title: &String, out: &mut String) {
     let src = escape_attr_ref(&sanitize_url(url));
-    out.push_str(&`<img src="{src}" alt="{escape_attr_ref(alt)}"{title_attr(title)} />`);
+    out.push_str(&`<img src="${src}" alt="${escape_attr_ref(alt)}"${title_attr(title)} />`);
 }
 
 fn render_reference_image(img: &ReferenceImageNode, refs: &RefTable, out: &mut String) {
@@ -376,5 +376,5 @@ fn title_attr(title: &String) -> String {
     if title.len() == 0 {
         return "";
     }
-    return ` title="{escape_attr_ref(title)}"`;
+    return ` title="${escape_attr_ref(title)}"`;
 }
