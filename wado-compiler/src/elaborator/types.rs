@@ -1226,6 +1226,15 @@ pub(super) struct FunctionContext {
     /// Reify-side counterpart to [`Self::assert_capture_ctx`].
     /// Independent so production and reify never share state.
     pub(super) reify_assert_capture_ctx: Option<super::reify::ReifyAssertCaptureContext>,
+    /// Compound-assign once-eval side-channel (annotate side). While
+    /// [`Elaborator::resolve_compound_assign`] reserves the `__caN` locals for
+    /// the target's impure sub-pieces, each such piece's `AstId` maps to its
+    /// resolved type here; [`Elaborator::resolve_expr`] then short-circuits any
+    /// later re-resolution of that exact node to the recorded type, so the
+    /// piece is walked once (its facts recorded, its own internal locals added
+    /// once) — matching reify's single walk under `compound_overrides`. Empty
+    /// outside `resolve_compound_assign`.
+    pub(super) compound_hoist_types: IndexMap<crate::ast::AstId, TypeId>,
 }
 
 impl FunctionContext {
@@ -1252,6 +1261,7 @@ impl FunctionContext {
             for_continue_labels: Vec::new(),
             assert_capture_ctx: None,
             reify_assert_capture_ctx: None,
+            compound_hoist_types: IndexMap::default(),
         }
     }
 
@@ -1311,6 +1321,7 @@ impl FunctionContext {
             for_continue_labels: Vec::new(),
             assert_capture_ctx: None,
             reify_assert_capture_ctx: None,
+            compound_hoist_types: IndexMap::default(),
         }
     }
 

@@ -204,6 +204,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
+        // Compound-assign once-eval hook: a target sub-piece already resolved
+        // and bound to a `__caN` local (in `resolve_compound_assign`) returns
+        // its recorded type without re-walking, so a later re-resolution of the
+        // same node adds no duplicate locals — keeping the annotate/reify local
+        // frames in lock-step. Mirrors reify's `compound_overrides`.
+        if !ctx.compound_hoist_types.is_empty()
+            && let Some(&type_id) = ctx.compound_hoist_types.get(&expr.id())
+        {
+            return type_id;
+        }
+
         // Try literal coercion when expected type is known
         if let Some(target_type) = expected_type
             && let Some(coerced) = self.try_coerce(expr, ctx, target_type)

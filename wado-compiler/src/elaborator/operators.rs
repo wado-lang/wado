@@ -1456,6 +1456,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::CompoundAssignOp::Shl => BinaryOp::Shl,
             ast::CompoundAssignOp::Shr => BinaryOp::Shr,
         };
+        // Reserve the `__caN` locals reify binds for the target's impure
+        // sub-pieces, in a fresh scope, so both walks advance the per-function
+        // local frame identically (walk-order invariant: a closure capturing a
+        // local declared after `arr[bump()] += 1` must see the same index on
+        // both sides). Each piece is resolved once and registered in
+        // `ctx.compound_hoist_types`, so the target/value walks below (and
+        // `assign_to_target`, which re-resolves the target for the write
+        // dispatch) short-circuit it instead of re-walking — matching reify,
+        // which walks each piece once under `compound_overrides`. Reify's
+        // `bind_compound_hoists` is the mirror.
+        ctx.enter_scope();
+        let saved_hoist_types = std::mem::take(&mut ctx.compound_hoist_types);
+        let mut hoists: Vec<&ast::Expr> = Vec::new();
+        super::reify::collect_compound_hoists(&compound.target, &mut hoists);
+        for (idx, piece) in hoists.iter().enumerate() {
+            let piece_type = self.resolve_expr(piece, ctx, None);
+            let _local_index = ctx.add_local(format!("__ca{idx}"), piece_type, false, None);
+            ctx.compound_hoist_types.insert(piece.id(), piece_type);
+        }
+
         let read_type = self.resolve_expr(&compound.target, ctx, None);
         let rhs_type = self.resolve_expr(&compound.value, ctx, Some(read_type));
         let read = placeholder(read_type, compound.target.span());
@@ -1467,14 +1487,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // compound's AstId so reify replays that MethodCall instead of a raw
         // `Binary` (a primitive `/` on struct operands is invalid Wasm).
         let combined = self.build_binary_op_tir(read, op, rhs, compound.span, Some(compound.id));
-        self.assign_to_target(
+        let result = self.assign_to_target(
             &compound.target,
             AssignValue::Resolved {
                 type_id: combined,
                 span: compound.span,
             },
             ctx,
-        )
+        );
+        ctx.compound_hoist_types = saved_hoist_types;
+        ctx.exit_scope();
+        result
     }
 
     /// Build a `TirExpr` for `a OP1 b OP2 c [OP3 d …]` as the equivalent
