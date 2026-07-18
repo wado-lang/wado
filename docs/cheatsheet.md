@@ -98,6 +98,10 @@ foo(100);                      // integer literal coerced to i64
 "Hello,
 world!"         // Multi-line string
 
+// Byte strings (b-prefix) → ByteList, ASCII + \xNN escapes
+b"\x89PNG\r\n"                 // ByteList [137, 80, 78, 71, 13, 10]
+let raw: List<u8> = b"abc";    // newtype literal coercion to the base type
+
 // Characters
 'A'
 '\n'
