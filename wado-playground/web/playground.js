@@ -44,11 +44,13 @@ export async function compile(source, onPhase) {
   const inPtr = wado_alloc(src.length);
   new Uint8Array(memory.buffer, inPtr, src.length).set(src);
 
-  // wado_compile frees inPtr and returns an owned result buffer; copy, then free.
+  // wado_compile frees inPtr and returns an owned result buffer; copy, then
+  // free. Pass reportPhases=0 when no listener wants progress, so the compiler
+  // skips the per-phase debug stream entirely.
   _onPhase = onPhase ?? null;
   let outPtr;
   try {
-    outPtr = wado_compile(inPtr, src.length);
+    outPtr = wado_compile(inPtr, src.length, onPhase ? 1 : 0);
   } finally {
     _onPhase = null;
   }

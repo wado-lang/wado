@@ -9,36 +9,35 @@
 // `{type:"error", text}`.
 
 const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 
 let exports = null;
 let session = 0;
+// Messages that arrive before the wasm finishes instantiating are buffered here
+// and flushed once the engine is ready, so a pre-`ready` send is never dropped.
+const pending = [];
 
-// --- stdout: Content-Length frame parser → postMessage (shared shape with the
-// bytes wado_lsp_send returns, so the parser is transport-agnostic) ---
+// --- parse a self-contained buffer of Content-Length frames → postMessage.
+// wado_lsp_send always returns whole frames, so there is no cross-call state. ---
 
-let stdoutBuf = new Uint8Array(0);
-
-function appendStdout(data) {
-  const merged = new Uint8Array(stdoutBuf.length + data.length);
-  merged.set(stdoutBuf, 0);
-  merged.set(data, stdoutBuf.length);
-  stdoutBuf = merged;
-
-  for (;;) {
-    const headerEnd = findHeaderEnd(stdoutBuf);
-    if (headerEnd < 0) return;
-    const header = new TextDecoder().decode(stdoutBuf.subarray(0, headerEnd));
+function emitFrames(buf) {
+  let off = 0;
+  while (off < buf.length) {
+    const headerEnd = findHeaderEnd(buf, off);
+    if (headerEnd < 0) {
+      postMessage({ type: "error", text: `reply without Content-Length terminator` });
+      return;
+    }
+    const header = decoder.decode(buf.subarray(off, headerEnd));
     const m = /Content-Length:\s*(\d+)/i.exec(header);
     if (!m) {
       postMessage({ type: "error", text: `reply frame without Content-Length: ${header}` });
-      stdoutBuf = stdoutBuf.subarray(headerEnd + 4);
-      continue;
+      return;
     }
-    const len = Number(m[1]);
     const bodyStart = headerEnd + 4;
-    if (stdoutBuf.length < bodyStart + len) return;
-    const body = new TextDecoder().decode(stdoutBuf.subarray(bodyStart, bodyStart + len));
-    stdoutBuf = stdoutBuf.slice(bodyStart + len);
+    const bodyEnd = bodyStart + Number(m[1]);
+    const body = decoder.decode(buf.subarray(bodyStart, bodyEnd));
+    off = bodyEnd;
     try {
       postMessage({ type: "message", msg: JSON.parse(body) });
     } catch (err) {
@@ -47,8 +46,8 @@ function appendStdout(data) {
   }
 }
 
-function findHeaderEnd(buf) {
-  for (let i = 0; i + 3 < buf.length; i++) {
+function findHeaderEnd(buf, start) {
+  for (let i = start; i + 3 < buf.length; i++) {
     if (buf[i] === 13 && buf[i + 1] === 10 && buf[i + 2] === 13 && buf[i + 3] === 10) return i;
   }
   return -1;
@@ -67,16 +66,21 @@ function send(msg) {
   const len = new DataView(memory.buffer, outPtr, 4).getUint32(0, true);
   const framed = new Uint8Array(memory.buffer, outPtr + 4, len).slice();
   wado_free(outPtr, 4 + len);
-  if (framed.length > 0) appendStdout(framed);
+  if (framed.length > 0) emitFrames(framed);
+}
+
+function handle(msg) {
+  try {
+    send(msg);
+  } catch (err) {
+    postMessage({ type: "error", text: String(err?.stack ?? err) });
+  }
 }
 
 self.onmessage = (e) => {
   if (e.data.type !== "send") return;
-  try {
-    send(e.data.msg);
-  } catch (err) {
-    postMessage({ type: "error", text: String(err?.stack ?? err) });
-  }
+  if (exports) handle(e.data.msg);
+  else pending.push(e.data.msg);
 };
 
 async function main() {
@@ -90,6 +94,7 @@ async function main() {
   exports = instance.exports;
   session = exports.wado_lsp_new();
   postMessage({ type: "ready" });
+  for (const msg of pending.splice(0)) handle(msg);
 }
 
 main().catch((err) => postMessage({ type: "error", text: String(err?.stack ?? err) }));

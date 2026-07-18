@@ -67,13 +67,22 @@ export fn run() with Stdout {
         return result;
       }
 
-      $("run").addEventListener("click", () =>
-        go($("src").value).catch((e) => {
+      // Disable the button for the duration of a run: a second click would
+      // spawn another worker whose output races into the same panel.
+      $("run").addEventListener("click", async () => {
+        const btn = $("run");
+        if (btn.disabled) return;
+        btn.disabled = true;
+        try {
+          await go($("src").value);
+        } catch (e) {
           $("out").textContent = String(e.message ?? e);
           $("out").classList.add("err");
           status("error");
-        }),
-      );
+        } finally {
+          btn.disabled = false;
+        }
+      });
 
       // Test hook: lets Playwright drive a run and read the result.
       globalThis.__wadoRun = (source) => run(source ?? $("src").value);

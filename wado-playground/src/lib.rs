@@ -93,14 +93,20 @@ impl<F: Fn(&str) + Send + Sync> CompilerHost for ProgressHost<F> {
 }
 
 /// Compiler options shared by the browser entry point and the tests, so the
-/// playground and its coverage stay in lockstep. `Debug` log level turns on the
-/// per-phase `SpanStart` stream that drives progress reporting.
-fn playground_options() -> CompilerOptions {
+/// playground and its coverage stay in lockstep. `report_phases` raises the log
+/// level to `Debug` to turn on the per-phase `SpanStart` stream; when a caller
+/// wants no progress it stays at `Info`, so the compiler never builds the ~170
+/// span diagnostics per compile that nobody would read.
+fn playground_options(report_phases: bool) -> CompilerOptions {
     CompilerOptions {
         opt_level: OptLevel::O2,
         // V8/browsers do not implement the wide-arithmetic proposal.
         codegen_flags: vec!["no-wide-arithmetic".to_string()],
-        log_level: Some(LogLevel::Debug),
+        log_level: Some(if report_phases {
+            LogLevel::Debug
+        } else {
+            LogLevel::Info
+        }),
         ..CompilerOptions::default()
     }
 }
@@ -129,11 +135,14 @@ pub unsafe extern "C" fn wado_free(ptr: *mut u8, len: usize) {
 
 /// Compile the UTF-8 source at `ptr..ptr+len`, consuming (freeing) that buffer.
 ///
+/// When `report_phases != 0`, each compiler phase is streamed through the
+/// `wado_phase` import for live progress; pass `0` to skip that work entirely.
+///
 /// # Safety
 /// `ptr..ptr+len` must be a valid buffer previously returned by [`wado_alloc`]
 /// and filled with `len` bytes.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn wado_compile(ptr: *mut u8, len: usize) -> *const u8 {
+pub unsafe extern "C" fn wado_compile(ptr: *mut u8, len: usize, report_phases: u32) -> *const u8 {
     let source =
         unsafe { String::from_utf8_lossy(std::slice::from_raw_parts(ptr, len)).into_owned() };
     unsafe { wado_free(ptr, len) };
@@ -144,7 +153,7 @@ pub unsafe extern "C" fn wado_compile(ptr: *mut u8, len: usize) -> *const u8 {
         &source,
         &host,
         Some("playground.wado"),
-        playground_options(),
+        playground_options(report_phases != 0),
     );
     if let Ok(result) = block_on(fut) {
         encode(1, &result.wasm)
@@ -236,12 +245,16 @@ pub unsafe extern "C" fn wado_lsp_send(
         // drops the session instead, so swallow it rather than aborting the wasm.
         Ok(request) if request.method == "exit" => {}
         Ok(request) => {
-            let _ = block_on(dispatch(
+            // `dispatch` only errors when its writer fails; ours is a `Vec`,
+            // which cannot. Surface a broken invariant instead of dropping it —
+            // the worker's try/catch turns the trap into an `error` message.
+            block_on(dispatch(
                 &mut session.engine,
                 &mut out,
                 &mut session.lifecycle,
                 request,
-            ));
+            ))
+            .expect("LSP dispatch cannot fail writing to an in-memory buffer");
         }
         Err(err) => {
             // JSON-RPC 2.0 §5.1: malformed request → ParseError with id null.
@@ -276,13 +289,14 @@ mod tests {
     const HELLO: &str = "use { println, Stdout } from \"core:cli\";\n\nexport fn run() with Stdout {\n    println(\"hi\");\n}\n";
 
     /// Round-trip a source string through the C ABI, exercising the exact
-    /// alloc → compile → free path the browser uses.
-    fn compile_str(src: &str) -> (u32, Vec<u8>) {
+    /// alloc → compile → free path the browser uses. `report_phases` mirrors the
+    /// ABI flag that gates the progress stream.
+    fn compile_str_reporting(src: &str, report_phases: u32) -> (u32, Vec<u8>) {
         let bytes = src.as_bytes();
         let ptr = wado_alloc(bytes.len());
         unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr, bytes.len()) };
 
-        let out = unsafe { wado_compile(ptr, bytes.len()) };
+        let out = unsafe { wado_compile(ptr, bytes.len(), report_phases) };
         let header = unsafe { std::slice::from_raw_parts(out, 8) };
         let status = u32::from_le_bytes(header[0..4].try_into().unwrap());
         let plen = u32::from_le_bytes(header[4..8].try_into().unwrap()) as usize;
@@ -291,12 +305,25 @@ mod tests {
         (status, payload)
     }
 
+    /// Compile with progress reporting on — the browser's usual path.
+    fn compile_str(src: &str) -> (u32, Vec<u8>) {
+        compile_str_reporting(src, 1)
+    }
+
     #[test]
     fn compiles_hello_to_a_component() {
         let (status, payload) = compile_str(HELLO);
         assert_eq!(status, 1, "expected success");
         assert_eq!(&payload[0..4], b"\0asm", "Wasm magic");
         assert_eq!(&payload[6..8], &[0x01, 0x00], "component layer");
+    }
+
+    /// With progress off, a valid program still compiles to the same component.
+    #[test]
+    fn compiles_hello_without_progress() {
+        let (status, payload) = compile_str_reporting(HELLO, 0);
+        assert_eq!(status, 1, "expected success");
+        assert_eq!(&payload[0..4], b"\0asm", "Wasm magic");
     }
 
     #[test]
@@ -329,7 +356,7 @@ mod tests {
             HELLO,
             &host,
             Some("playground.wado"),
-            playground_options(),
+            playground_options(true),
         ));
         assert!(result.is_ok(), "hello compiles");
 
@@ -342,6 +369,24 @@ mod tests {
             phases.iter().any(|p| p == "codegen"),
             "saw codegen: {phases:?}"
         );
+    }
+
+    /// With progress off (`Info` level) the compiler emits no `SpanStart`, so the
+    /// phase callback never fires — the gate that avoids the ~170-diagnostic cost.
+    #[test]
+    fn no_progress_when_not_requested() {
+        let phases = Arc::new(Mutex::new(Vec::<String>::new()));
+        let sink = Arc::clone(&phases);
+        let host = ProgressHost::new(move |name: &str| sink.lock().unwrap().push(name.to_string()));
+
+        let result = block_on(compile_with_options(
+            HELLO,
+            &host,
+            Some("playground.wado"),
+            playground_options(false),
+        ));
+        assert!(result.is_ok(), "hello compiles");
+        assert!(phases.lock().unwrap().is_empty(), "no phases streamed");
     }
 
     /// Phase names are progress, not diagnostics: the debug stream (`SpanStart`
