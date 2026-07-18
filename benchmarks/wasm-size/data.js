@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784370537779,
+  "lastUpdate": 1784377137787,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -41681,6 +41681,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a03bdc016768cecd8b4aca107cbc1c875d71d9bf"
         },
         "date": 1784370537331,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8257,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17261,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271329,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a7864ed0740a985aad332f0faa4dd3ec3de4e00f",
+          "message": "Merge pull request #1622 from wado-lang/claude/package-jade-refactor-gmx13u\n\nrefactor(jade): spell the `type` field directly and split tests out",
+          "timestamp": "2026-07-18T21:08:47+09:00",
+          "tree_id": "c317ae988661293fb12eff0626449602c1d67af0",
+          "url": "https://github.com/wado-lang/wado/commit/a7864ed0740a985aad332f0faa4dd3ec3de4e00f"
+        },
+        "date": 1784377137339,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
