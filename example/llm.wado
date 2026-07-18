@@ -116,7 +116,8 @@ export fn run() with Stdout, Stderr, Environment, Client {
         messages,
     }).unwrap();
 
-    let resp = send_post(api_key, request_body);
+    // `send_post` streams the body out over the CM boundary as `list<u8>`.
+    let resp = send_post(api_key, request_body as List<u8>);
     let status = resp.get_status_code();
     let body = read_body(resp);
 
