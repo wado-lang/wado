@@ -202,8 +202,6 @@ fn build_request_json(method: Method, url: Url, headers: &Headers, body: Option<
 fn json_line<T: Serialize>(value: &T) -> List<u8> {
     let mut b = json::to_bytes_pretty(value).unwrap();
     b.push('\n' as u8);
-    // The router's `RouteResponse.body` is a `List<u8>` (the HTTP/CM
-    // boundary), so hand the byte buffer over as its base type here.
     return b as List<u8>;
 }
 

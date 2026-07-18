@@ -3,7 +3,7 @@ use { Stdin } from "wasi:cli";
 use { inflate_gzip, gzip_compress } from "core:zlib";
 
 test "gzip round-trip" {
-    let mut original: List<u8> = [];
+    let mut original: ByteList = [];
     for let mut i = 0; i < 1024; i = i + 1 {
         original.push((i % 256) as u8);
     }
@@ -19,7 +19,7 @@ export fn run() with Stdout, Stdin {
     let [stdin_stream, _done] = Stdin::read_via_stream();
 
     // Read all gzip data from stdin
-    let mut data: List<u8> = [];
+    let mut data: ByteList = [];
     loop {
         let chunk = stdin_stream.read(4096);
         if chunk.len() == 0 {
@@ -33,5 +33,5 @@ export fn run() with Stdout, Stdin {
 
     // Decompress gzip and write to stdout
     let decompressed = inflate_gzip(&data).unwrap();
-    print_bytes(decompressed);
+    print_bytes(decompressed as List<u8>);
 }
