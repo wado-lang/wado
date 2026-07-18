@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.0.19](https://github.com/wado-lang/wado/compare/v0.0.18...v0.0.19) - 2026-07-18
+
+- chore: cargo update by @gfx in https://github.com/wado-lang/wado/pull/1608
+- ci: add Dependabot for GitHub Actions and cargo by @gfx in https://github.com/wado-lang/wado/pull/1610
+- feat(playground): live compile progress, bundled LSP, and -Os wasm builds by @gfx in https://github.com/wado-lang/wado/pull/1612
+- chore(deps): bump the github-actions group with 7 updates by @dependabot[bot] in https://github.com/wado-lang/wado/pull/1611
+- ci: keep Dependabot cargo updates within Cargo.toml constraints by @gfx in https://github.com/wado-lang/wado/pull/1614
+- docs: remove stale docs and prefix operator-precedence research by @gfx in https://github.com/wado-lang/wado/pull/1617
+- feat!: switch template interpolation from `{expr}` to `${expr}` by @gfx in https://github.com/wado-lang/wado/pull/1619
+- fix(optimize): eliminate optimizer smells — reproduced miscompiles, soundness, and precision by @gfx in https://github.com/wado-lang/wado/pull/1607
+- feat(lsp): surface unused / dead-code diagnostics in the editor by @gfx in https://github.com/wado-lang/wado/pull/1620
+
 ## [v0.0.18](https://github.com/wado-lang/wado/compare/v0.0.17...v0.0.18) - 2026-07-17
 
 - refactor(compiler): identify value-copy helpers by canonical type mangle by @gfx in https://github.com/wado-lang/wado/pull/1589
