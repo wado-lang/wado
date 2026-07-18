@@ -9,12 +9,11 @@ test "ByteList literal coercion and as_byte_slice view" {
     assert s[2] == 3;
 }
 
-test "List<u8> as_byte_slice view" {
-    let data: List<u8> = [1, 2, 3];
-    let s = data.as_byte_slice();
-    assert s.len() == 3;
-    assert s[0] == 1;
-    assert s[2] == 3;
+test "ByteList to_hex renders lowercase hex" {
+    let b: ByteList = [0x00, 0x0f, 0xa0, 0xff];
+    assert b.to_hex() == "000fa0ff";
+    let empty: ByteList = [];
+    assert empty.to_hex() == "";
 }
 
 test "ByteSlice as_byte_slice is identity" {

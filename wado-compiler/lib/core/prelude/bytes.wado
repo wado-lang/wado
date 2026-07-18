@@ -49,12 +49,29 @@ impl AsByteSlice for ByteArray {
     }
 }
 
-// Bridge for byte-producing APIs that still return a plain `List<u8>`
-// (e.g. `core:json` `to_bytes`); remove once the stdlib migrates to the
-// `Byte*` newtypes everywhere (tracked in wado-lang/wado#1349).
-impl AsByteSlice for List<u8> {
-    fn as_byte_slice(&self) -> ByteSlice with stores[self] {
-        return self.as_slice() as ByteSlice;
+/// Byte-buffer methods specific to `ByteList` (not on a generic `List<T>`):
+/// they are what make a byte list first-class rather than an incidental
+/// `List<u8>`.
+impl ByteList {
+    /// Byte at `index` without bounds checking — the `ByteList` parallel to
+    /// `String::get_byte_unchecked`.
+    ///
+    /// The caller must guarantee `0 <= index < len()`; an out-of-range `index`
+    /// reads past the buffer or traps. Intended for hot byte-scanning loops
+    /// that have already range-checked `index`.
+    pub fn get_byte_unchecked(&self, index: i32) -> u8 {
+        return self.get_unchecked(index);
+    }
+
+    /// Renders the bytes as a lowercase hexadecimal string, two digits per
+    /// byte (e.g. `[0x0f, 0xa0]` -> `"0fa0"`).
+    pub fn to_hex(&self) -> String {
+        let mut s = String::with_capacity(self.len() * 2);
+        for let mut i = 0; i < self.len(); i += 1 {
+            let byte = self.get_unchecked(i);
+            s.push_str(&`${byte:02x}`);
+        }
+        return s;
     }
 }
 
@@ -63,6 +80,6 @@ impl AsByteSlice for List<u8> {
 // though `String` still serializes as text (`serialize_string`), not bytes.
 impl AsByteSlice for String {
     fn as_byte_slice(&self) -> ByteSlice with stores[self] {
-        return self.as_bytes() as ByteSlice;
+        return self.as_bytes();
     }
 }

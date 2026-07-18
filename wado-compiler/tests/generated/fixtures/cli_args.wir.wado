@@ -154,7 +154,7 @@ fn "cli_args.wado/__cm_binding__Environment_get_arguments"() with Environment {
         l1: loop {
             break_if b0 __i >= __count;
             __elem_addr = __base + (__i * 8);
-            "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__result, ptr = builtin::load_i32(__elem_addr); len_8 = builtin::load_i32(__elem_addr + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_8); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_8 });
+            "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__result, ptr = builtin::load_i32(__elem_addr); len_8 = builtin::load_i32(__elem_addr + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_8); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(arr); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, arr, 0, __array_clone_len_1); __array_clone_dst_1), used: len_8 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr), builtin::load_i32(__elem_addr + 4), 1, 0));
             __i = __i + 1;
             continue l1;

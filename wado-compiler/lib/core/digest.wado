@@ -18,7 +18,7 @@
 //! ```
 //!
 //! Message bytes are accepted from any `AsByteSlice` source: a `ByteSlice`,
-//! `ByteList`, `ByteArray`, plain `List<u8>`, or a `String` (its UTF-8 bytes).
+//! `ByteList`, `ByteArray`, or a `String` (its UTF-8 bytes).
 
 /// A streaming message-digest algorithm.
 ///
@@ -63,7 +63,7 @@ fn rotr(x: u32, n: u32) -> u32 {
 /// methods, or the free [`sha256`] helper for one-shot hashing.
 pub struct Sha256 {
     h: List<u32>,
-    buffer: List<u8>,
+    buffer: ByteList,
     total_len: u64,  // total number of message bytes absorbed so far
 }
 
@@ -174,7 +174,7 @@ impl Digest for Sha256 {
             self.absorb_pad((bit_len >> shift) as u8);
         }
 
-        let mut out: List<u8> = [];
+        let mut out: ByteList = [];
         for let mut i = 0; i < 8; i += 1 {
             let v = self.h[i];
             out.push((v >> 24) as u8);

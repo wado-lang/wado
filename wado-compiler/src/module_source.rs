@@ -44,6 +44,8 @@ static CORE_PRELUDE_LIST: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("prelude/list.wado"));
 static CORE_PRELUDE_ARRAY: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("prelude/array.wado"));
+static CORE_PRELUDE_BYTES: LazyLock<Arc<str>> =
+    LazyLock::new(|| Arc::<str>::from("prelude/bytes.wado"));
 static CORE_PRELUDE_FORMAT: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("prelude/format.wado"));
 static CORE_PRELUDE_INT128: LazyLock<Arc<str>> =
@@ -80,6 +82,7 @@ fn well_known_arcs() -> Vec<Arc<str>> {
         CORE_PRELUDE_STRING.clone(),
         CORE_PRELUDE_LIST.clone(),
         CORE_PRELUDE_ARRAY.clone(),
+        CORE_PRELUDE_BYTES.clone(),
         CORE_PRELUDE_FORMAT.clone(),
         CORE_PRELUDE_INT128.clone(),
         CORE_PRELUDE_PRIMITIVE.clone(),
@@ -511,6 +514,8 @@ impl ModuleSource {
         pub fn list() = Core { name: CORE_PRELUDE_LIST },
         /// `core:prelude/array.wado` — the raw GC `Array<T>` type.
         pub fn array() = Core { name: CORE_PRELUDE_ARRAY },
+        /// `core:prelude/bytes.wado` — the `Byte*` newtypes (`ByteList`, …).
+        pub fn bytes() = Core { name: CORE_PRELUDE_BYTES },
         /// `core:prelude/format.wado` — format trait helpers.
         pub fn format() = Core { name: CORE_PRELUDE_FORMAT },
         /// `core:prelude/int128.wado` — 128-bit integer types.

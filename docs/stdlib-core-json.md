@@ -40,13 +40,13 @@ Serializes a value to a JSON string. Convenience over `to_bytes` for text
 contexts; serde I/O is bytes-primary, so prefer `to_bytes` when the output
 is consumed as bytes (e.g. an HTTP response body).
 
-### `pub fn to_bytes<T: Serialize>(value: &T) -> Result<List<u8>, SerializeError>`
+### `pub fn to_bytes<T: Serialize>(value: &T) -> Result<ByteList, SerializeError>`
 
 Serializes a value directly to UTF-8 JSON bytes.
 
 Equivalent to `to_string` followed by a byte-buffer conversion, but
 skips the intermediate re-encoding: the serializer's UTF-8 buffer is
-handed back directly as an `List<u8>` with no copy. Prefer this over
+handed back directly as a `ByteList` with no copy. Prefer this over
 `to_string(value).bytes().collect()` whenever the output is consumed
 as bytes (e.g. an HTTP response body).
 
@@ -69,7 +69,7 @@ Accepts any byte source via `AsByteSlice`: a `ByteList`, `ByteArray`,
 borrowed bytes directly (zero-copy); UTF-8 is validated where string content
 is materialized (RFC 8259 §8.1), reporting invalid bytes as `MalformedInput`.
 
-### `pub fn to_bytes_canonical<T: Serialize>(value: &T) -> Result<List<u8>, SerializeError>`
+### `pub fn to_bytes_canonical<T: Serialize>(value: &T) -> Result<ByteList, SerializeError>`
 
 Serializes a value to canonical (deterministic) UTF-8 JSON bytes.
 
@@ -78,7 +78,7 @@ encoded form (RFC 8785-style); equal values produce byte-identical output
 regardless of map insertion order. Use this for signing or content
 addressing; use `to_bytes` for the faster insertion-order form.
 
-### `pub fn to_bytes_pretty<T: Serialize>(value: &T) -> Result<List<u8>, SerializeError>`
+### `pub fn to_bytes_pretty<T: Serialize>(value: &T) -> Result<ByteList, SerializeError>`
 
 Serializes a value to pretty-printed UTF-8 JSON bytes.
 

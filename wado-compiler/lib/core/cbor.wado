@@ -110,7 +110,7 @@ global MSG_EXPECTED_MAP_FOR_STRUCT: String = "expected map for struct";
 /// Write a CBOR head — a major type (0..7) plus its argument in preferred
 /// (shortest) form (RFC 8949 §3). Shared by integers, string/array/map
 /// lengths, and tag numbers.
-fn write_head(buf: &mut List<u8>, major: u8, arg: u64) {
+fn write_head(buf: &mut ByteList, major: u8, arg: u64) {
     let mt: u64 = major as u64 << 5;
     if arg < 24 {
         buf.push((mt | arg) as u8);
@@ -130,7 +130,7 @@ fn write_head(buf: &mut List<u8>, major: u8, arg: u64) {
 }
 
 /// Append the low `nbytes` of `value` in big-endian (network) order.
-fn push_be(buf: &mut List<u8>, value: u64, nbytes: i32) {
+fn push_be(buf: &mut ByteList, value: u64, nbytes: i32) {
     buf.reserve(nbytes);
     let mut i = nbytes - 1;
     while i >= 0 {
@@ -141,12 +141,12 @@ fn push_be(buf: &mut List<u8>, value: u64, nbytes: i32) {
 
 /// Append the UTF-8 bytes of `s` (a `String` is already valid UTF-8, so the
 /// text string is emitted verbatim — RFC 8949 §3.1).
-fn push_text_bytes(buf: &mut List<u8>, s: &String) {
-    buf.extend_from_slice(s.as_bytes());
+fn push_text_bytes(buf: &mut ByteList, s: &String) {
+    buf.extend_from_slice(s.as_bytes() as ArraySlice<u8>);
 }
 
 /// Append a byte string's contents.
-fn push_byte_slice(buf: &mut List<u8>, v: ByteSlice) {
+fn push_byte_slice(buf: &mut ByteList, v: ByteSlice) {
     buf.extend_from_slice(v as ArraySlice<u8>);
 }
 
@@ -154,11 +154,11 @@ fn push_byte_slice(buf: &mut List<u8>, v: ByteSlice) {
 /// `tag` (2 for non-negative, 3 for negative) wrapping a byte string holding
 /// the minimal big-endian magnitude (no leading zero bytes; a zero magnitude
 /// is a single `0x00`).
-fn write_bignum(buf: &mut List<u8>, tag: u64, mag: u128) {
+fn write_bignum(buf: &mut ByteList, tag: u64, mag: u128) {
     // Collect the 16 big-endian bytes, then strip leading zeros.
     let hi = mag.high();
     let lo = mag.low();
-    let mut bytes: List<u8> = List::with_capacity(16);
+    let mut bytes = ByteList::with_capacity(16);
     let mut i = 7;
     while i >= 0 {
         bytes.push((hi >> (i * 8) as u64) as u8);
@@ -187,13 +187,13 @@ fn write_bignum(buf: &mut List<u8>, tag: u64, mag: u128) {
 // scalar difference is the float ladder; everything else is byte-identical).
 
 /// Write a text string head + body (RFC 8949 §3.1).
-fn write_text(buf: &mut List<u8>, s: &String) {
+fn write_text(buf: &mut ByteList, s: &String) {
     write_head(buf, MAJOR_TEXT, s.len() as u64);
     push_text_bytes(buf, s);
 }
 
 /// Write a signed integer as major 0 (`n`) or major 1 (`-1 - n`).
-fn write_int_i64(buf: &mut List<u8>, v: i64) {
+fn write_int_i64(buf: &mut ByteList, v: i64) {
     if v >= 0 {
         write_head(buf, MAJOR_UINT, v as u64);
     } else {
@@ -203,7 +203,7 @@ fn write_int_i64(buf: &mut List<u8>, v: i64) {
 
 /// Write an `i128`: a native major 0/1 head when the magnitude fits a u64,
 /// otherwise a bignum (RFC 8949 §3.4.3).
-fn write_int_i128(buf: &mut List<u8>, v: i128) {
+fn write_int_i128(buf: &mut ByteList, v: i128) {
     if v >= 0 {
         let mag = u128::from_pair(v.low(), v.high() as u64);
         if mag <= U64_MAX_AS_U128 {
@@ -223,7 +223,7 @@ fn write_int_i128(buf: &mut List<u8>, v: i128) {
 }
 
 /// Write a `u128`: a native major 0 head when it fits a u64, else a bignum.
-fn write_int_u128(buf: &mut List<u8>, v: u128) {
+fn write_int_u128(buf: &mut ByteList, v: u128) {
     if v <= U64_MAX_AS_U128 {
         write_head(buf, MAJOR_UINT, v.low());
     } else {
@@ -232,7 +232,7 @@ fn write_int_u128(buf: &mut List<u8>, v: u128) {
 }
 
 /// Write a bool as the major-7 simple value `true` / `false`.
-fn write_bool(buf: &mut List<u8>, v: bool) {
+fn write_bool(buf: &mut ByteList, v: bool) {
     if v {
         buf.push(INIT_TRUE);
     } else {
@@ -241,29 +241,29 @@ fn write_bool(buf: &mut List<u8>, v: bool) {
 }
 
 /// Write a byte string head + body (RFC 8949 §3).
-fn write_bytes(buf: &mut List<u8>, v: ByteSlice) {
+fn write_bytes(buf: &mut ByteList, v: ByteSlice) {
     write_head(buf, MAJOR_BYTES, v.len() as u64);
     push_byte_slice(buf, v);
 }
 
 struct CborSeqSerializer {
-    buf: &mut List<u8>,
+    buf: &mut ByteList,
 }
 
 struct CborMapSerializer {
-    buf: &mut List<u8>,
+    buf: &mut ByteList,
 }
 
 struct CborStructSerializer {
-    buf: &mut List<u8>,
+    buf: &mut ByteList,
 }
 
 struct CborVariantSerializer {
-    buf: &mut List<u8>,
+    buf: &mut ByteList,
 }
 
 pub struct CborSerializer {
-    buf: &mut List<u8>,
+    buf: &mut ByteList,
 }
 
 impl SerializeSeq for CborSeqSerializer {
@@ -452,7 +452,7 @@ impl Serializer for CborSerializer {
 /// in different orders; use `to_bytes_canonical` when byte-exact reproducibility
 /// matters (e.g. COSE/CWT signing).
 pub fn to_bytes<T: Serialize>(value: &T) -> Result<ByteList, SerializeError> {
-    let mut buf: List<u8> = List::with_capacity(SERIALIZE_BUFFER_CAPACITY);
+    let mut buf = ByteList::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = CborSerializer { buf: &mut buf };
     value.serialize(&mut ser)?;
     return Result::Ok(buf as ByteList);
@@ -473,12 +473,12 @@ pub fn to_bytes<T: Serialize>(value: &T) -> Result<ByteList, SerializeError> {
 //      COSE/CWT interoperability caveat; see the WEP).
 
 /// Append a binary32 head + the low 32 bits of `bits`.
-fn push_f32_head(buf: &mut List<u8>, bits: u64) {
+fn push_f32_head(buf: &mut ByteList, bits: u64) {
     buf.push(INIT_F32);
     push_be(buf, bits, 4);
 }
 
-fn write_canonical_f64(buf: &mut List<u8>, v: f64) {
+fn write_canonical_f64(buf: &mut ByteList, v: f64) {
     if v.is_nan() {
         // One canonical NaN (quiet, binary32) since there is no f16.
         push_f32_head(buf, CANONICAL_NAN_F32_BITS);
@@ -493,7 +493,7 @@ fn write_canonical_f64(buf: &mut List<u8>, v: f64) {
     }
 }
 
-fn write_canonical_f32(buf: &mut List<u8>, v: f32) {
+fn write_canonical_f32(buf: &mut ByteList, v: f32) {
     // binary32 is already the shortest form available (no f16).
     if v.is_nan() {
         push_f32_head(buf, CANONICAL_NAN_F32_BITS);
@@ -502,7 +502,7 @@ fn write_canonical_f32(buf: &mut List<u8>, v: f32) {
     push_f32_head(buf, v.to_bits() as u32 as u64);
 }
 
-fn append_all(buf: &mut List<u8>, src: &ByteList) {
+fn append_all(buf: &mut ByteList, src: &ByteList) {
     buf.extend_from_slice(src.as_slice());
 }
 
@@ -533,7 +533,7 @@ fn cmp_bytes(a: &ByteList, b: &ByteList) -> Ordering {
     return Ordering::Equal;
 }
 
-fn emit_sorted_map(buf: &mut List<u8>, entries: &mut List<[ByteList, ByteList]>) {
+fn emit_sorted_map(buf: &mut ByteList, entries: &mut List<[ByteList, ByteList]>) {
     entries.sort_by(|a: &[ByteList, ByteList], b: &[ByteList, ByteList]| cmp_bytes(&a.0, &b.0));
     write_head(buf, MAJOR_MAP, entries.len() as u64);
     for let mut i = 0; i < entries.len(); i += 1 {
@@ -543,33 +543,33 @@ fn emit_sorted_map(buf: &mut List<u8>, entries: &mut List<[ByteList, ByteList]>)
 }
 
 fn canonical_encode<T: Serialize>(value: &T) -> Result<ByteList, SerializeError> {
-    let mut buf: List<u8> = List::with_capacity(16);
+    let mut buf = ByteList::with_capacity(16);
     let mut ser = CanonicalCborSerializer { buf: &mut buf };
     value.serialize(&mut ser)?;
     return Result::Ok(buf as ByteList);
 }
 
 struct CanonicalCborSeqSerializer {
-    buf: &mut List<u8>,
+    buf: &mut ByteList,
 }
 
 struct CanonicalCborMapSerializer {
-    buf: &mut List<u8>,
+    buf: &mut ByteList,
     entries: List<[ByteList, ByteList]>,
     pending_key: ByteList,
 }
 
 struct CanonicalCborStructSerializer {
-    buf: &mut List<u8>,
+    buf: &mut ByteList,
     entries: List<[ByteList, ByteList]>,
 }
 
 struct CanonicalCborVariantSerializer {
-    buf: &mut List<u8>,
+    buf: &mut ByteList,
 }
 
 pub struct CanonicalCborSerializer {
-    buf: &mut List<u8>,
+    buf: &mut ByteList,
 }
 
 impl SerializeSeq for CanonicalCborSeqSerializer {
@@ -605,7 +605,7 @@ impl SerializeMap for CanonicalCborMapSerializer {
 
 impl SerializeStruct for CanonicalCborStructSerializer {
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
-        let mut kbuf: List<u8> = List::with_capacity(name.len() + 1);
+        let mut kbuf = ByteList::with_capacity(name.len() + 1);
         write_text(&mut kbuf, name);
         let vbuf = canonical_encode(value)?;
         self.entries.push([kbuf as ByteList, vbuf]);
@@ -759,7 +759,7 @@ impl Serializer for CanonicalCborSerializer {
 /// binary32. Output is byte-identical to a reference deterministic encoder for
 /// integers, lengths, and map order, but may differ on float-bearing values.
 pub fn to_bytes_canonical<T: Serialize>(value: &T) -> Result<ByteList, SerializeError> {
-    let mut buf: List<u8> = List::with_capacity(SERIALIZE_BUFFER_CAPACITY);
+    let mut buf = ByteList::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = CanonicalCborSerializer { buf: &mut buf };
     value.serialize(&mut ser)?;
     return Result::Ok(buf as ByteList);

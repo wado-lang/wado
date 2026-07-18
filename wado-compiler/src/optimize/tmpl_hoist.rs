@@ -1480,6 +1480,9 @@ fn array_new_has_capacity(body: &Body, e: ExprId, callee_ids: &TmplCalleeIds) ->
         ExprKind::Call { func_id, args, .. } => {
             TmplCalleeIds::is(&callee_ids.array_new, *func_id) && !args.is_empty()
         }
+        ExprKind::Cast { expr: inner, .. } => inner
+            .as_expr()
+            .is_some_and(|ie| array_new_has_capacity(body, ie, callee_ids)),
         _ => false,
     }
 }

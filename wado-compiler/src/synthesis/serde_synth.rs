@@ -1372,17 +1372,21 @@ fn generate_struct_deserialize(
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
     let option_i32 = tt.make_option(TypeTable::I32);
-    // `FieldSchema::lookup(key: ArraySlice<u8>)` — the wire key is a borrowed
-    // byte view. The slice module is taken from the byte-read compiler item so
-    // the synthesiser never hard-codes a stdlib path. Newtype erasure later
-    // collapses `ByteSlice` and `ArraySlice<u8>` to the same type, so building
-    // the base instance here matches the trait's `ByteSlice` spelling.
+    // `FieldSchema::lookup(key: ByteSlice)`: the slice module comes from the
+    // byte-read compiler item, wrapped in the `ByteSlice` newtype to match the
+    // trait signature.
     let key_slice_type = {
         let slice_module = tt
             .compiler_method(crate::compiler_item::CompilerItem::ByteSliceGetUnchecked)
             .0
             .clone();
-        tt.make_generic_instance("ArraySlice".to_string(), slice_module, vec![TypeTable::U8])
+        let base =
+            tt.make_generic_instance("ArraySlice".to_string(), slice_module, vec![TypeTable::U8]);
+        tt.make_newtype(
+            "ByteSlice".to_string(),
+            crate::module_source::ModuleSource::bytes(),
+            base,
+        )
     };
     let deser_error_type = tt.make_struct(names.deserialize_error.clone(), serde_module.clone());
     let deser_error_kind_type = tt

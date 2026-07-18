@@ -279,9 +279,9 @@ fn read_source_file(path: &String) -> String with Stderr, Preopens, Exit {
 /// Read a file to EOF. The stream's completion future is consumed so a
 /// mid-stream error surfaces as `Err` instead of being silently treated as
 /// EOF (truncated input).
-fn read_all(file: &Descriptor) -> Result<List<u8>, ErrorCode> {
+fn read_all(file: &Descriptor) -> Result<ByteList, ErrorCode> {
     let [read_stream, done] = file.read_via_stream(0 as Filesize);
-    let mut result: List<u8> = [];
+    let mut result: ByteList = [];
     loop {
         let chunk = read_stream.read(4096);
         if chunk.len() == 0 {

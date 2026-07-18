@@ -419,20 +419,22 @@ fn "match_char_range_switch.wado/classify"(c) {
 }
 
 fn "match_char_range_switch.wado/run"() with Stdout {
+    let s: ref "core:prelude/string.wado//String";
     let sum: i32;
     let __iter_2: ref "core:prelude/string.wado//StrCharIter";
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
-    let __sroa_s_repr: ref Array<u8>;
+    let __sroa_v_repr: ref Array<u8>;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:match_char_range_switch.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:match_char_range_switch.wado::__modules_initialized = 1;
     };
-    __sroa_s_repr = array.new_data<u8>("Ab_9!");
+    s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Ab_9!"), used: 5 };
     sum = 0;
-    __iter_2 = struct.new "core:prelude/string.wado//StrCharIter" { repr: __sroa_s_repr, used: 5, byte_index: 0 };
+    __sroa_v_repr = s.repr;
+    __iter_2 = struct.new "core:prelude/string.wado//StrCharIter" { repr: __sroa_v_repr, used: 5, byte_index: 0 };
     b77: block {
         l78: loop {
             let __sroa___match_6_discriminant: i32;

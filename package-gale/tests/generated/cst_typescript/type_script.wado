@@ -1753,13 +1753,13 @@ fn edge_lists_eq(a: &List<[i32, i32, i32]>, b: &List<[i32, i32, i32]>) -> bool {
 /// array still traps on a genuine out-of-bounds read, so a malformed blob
 /// still fails loudly.
 #[allow(dead_code)]
-fn atn_read_u8(bytes: &List<u8>, pos: i32) -> i32 {
+fn atn_read_u8(bytes: &ByteList, pos: i32) -> i32 {
     return bytes.get_byte_unchecked(pos) as i32;
 }
 
 /// Little-endian 2-byte value at `pos` (0..=65535).
 #[allow(dead_code)]
-fn atn_read_u16(bytes: &List<u8>, pos: i32) -> i32 {
+fn atn_read_u16(bytes: &ByteList, pos: i32) -> i32 {
     let b0 = bytes.get_byte_unchecked(pos) as i32;
     let b1 = bytes.get_byte_unchecked(pos + 1) as i32;
     return b0 | b1 << 8;
@@ -1771,7 +1771,7 @@ fn atn_read_u16(bytes: &List<u8>, pos: i32) -> i32 {
 /// than the *parser* ATN's small token-kind index, so the shared decoder
 /// must fit the wider case.
 #[allow(dead_code)]
-fn atn_read_u24(bytes: &List<u8>, pos: i32) -> i32 {
+fn atn_read_u24(bytes: &ByteList, pos: i32) -> i32 {
     let b0 = bytes.get_byte_unchecked(pos) as i32;
     let b1 = bytes.get_byte_unchecked(pos + 1) as i32;
     let b2 = bytes.get_byte_unchecked(pos + 2) as i32;
@@ -1788,7 +1788,7 @@ fn atn_read_u24(bytes: &List<u8>, pos: i32) -> i32 {
 /// read directly off the packed bytes into a `with_capacity`-presized
 /// `List`: one pass, no intermediate word array, nothing grows by doubling.
 #[allow(dead_code)]
-pub fn atn_decode(bytes: &List<u8>, lr_tables: bool = true) -> AtnSim {
+pub fn atn_decode(bytes: &ByteList, lr_tables: bool = true) -> AtnSim {
     let mut p = 0;
     let nrules = atn_read_u16(bytes, p);
     p += 2;

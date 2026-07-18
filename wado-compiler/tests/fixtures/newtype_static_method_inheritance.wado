@@ -1,0 +1,31 @@
+// A newtype inherits its base type's associated (static) functions, with the
+// return type viewed as the newtype (repr-identical). `MyBytes::with_capacity`
+// dispatches to `List::<u8>::with_capacity` but yields a `MyBytes`, so the
+// result flows into a `MyBytes` binding with no cast — and NOT into a `List<u8>`
+// one (that would need `as`), proving the return type is the newtype.
+type MyBytes = List<u8>;
+
+fn takes_mybytes(v: MyBytes) -> i32 {
+    return v.len();
+}
+
+export fn run() {
+    let mut a = MyBytes::with_capacity(4);
+    a.push(1);
+    a.push(2);
+    assert a.len() == 2;
+    assert takes_mybytes(a) == 2;
+
+    let b = MyBytes::filled(3, 7);
+    assert b.len() == 3;
+    assert b[0] == 7;
+    assert takes_mybytes(b) == 3;
+
+    let mut c = ByteList::with_capacity(2);
+    c.push(9);
+    assert c.len() == 1;
+    assert c[0] == 9;
+}
+
+__DATA__
+{"stdout": ""}

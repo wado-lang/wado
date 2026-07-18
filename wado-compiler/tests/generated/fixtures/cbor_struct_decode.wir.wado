@@ -944,7 +944,8 @@ fn "core:prelude/string.wado/String::with_capacity"(capacity) {
 }
 
 fn "core:prelude/string.wado/String::as_bytes"(self) {
-    return struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: self.repr, start: 0, end: self.used };
+    let repr: ref Array<u8>;
+    return repr = self.repr, struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: repr, start: 0, end: self.used };
 }
 
 fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
@@ -1238,6 +1239,7 @@ fn "core:cbor/CborDeserializer::read_definite_text"(self, len) {
     let slice: ref "core:prelude/slice.wado//ArraySlice<u8>";
     let v_5: ref "core:prelude/string.wado//String";
     let bytes_10: ref Array<u8>;
+    let len_11: i32;
     if @unlikely(len >u builtin::i64_extend_i32_s((self.input.end - self.input.start) - self.pos)) {
         cold_path;
         return 1, ref.null none, ref.as_non_null("core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(self.pos)));
@@ -1251,7 +1253,8 @@ fn "core:cbor/CborDeserializer::read_definite_text"(self, len) {
         return 1, ref.null none, ref.as_non_null("core:serde/DeserializeError::malformed"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8 in text string"), used: 28 }, builtin::i64_extend_i32_s(self.pos)));
     }
     bytes_10 = "core:prelude/slice.wado/ArraySlice<u8>::to_array"(slice);
-    v_5 = struct.new "core:prelude/string.wado//String" { repr: bytes_10, used: slice.end - slice.start };
+    len_11 = slice.end - slice.start;
+    v_5 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_5: i32; __array_clone_len_5 = builtin::array_len(bytes_10); let __array_clone_dst_5: ref Array<u8>; __array_clone_dst_5 = builtin::array_new<u8>(__array_clone_len_5); builtin::array_copy<u8>(__array_clone_dst_5, 0, bytes_10, 0, __array_clone_len_5); __array_clone_dst_5), used: len_11 };
     self.pos = self.pos + n;
     return 0, v_5, ref.null none;
 }
@@ -2532,10 +2535,11 @@ fn "core:prelude/list.wado/List<u8>::grow_to"(self, min_capacity) {
 fn "core:cbor/CborStructSerializer^SerializeStruct::field<i32>"(self, name, value) {
     let r: ref null "core:serde//SerializeError";
     let buf_5: ref "core:prelude//List<u8>";
+    let repr: ref Array<u8>;
     let __sroa_ser_buf: ref "core:prelude//List<u8>";
     buf_5 = self.buf;
     "core:cbor/write_head"(buf_5, 3, builtin::i64_extend_i32_s(name.used));
-    "core:prelude/list.wado/List<u8>::extend_from_slice"(buf_5, struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: name.repr, start: 0, end: name.used });
+    "core:prelude/list.wado/List<u8>::extend_from_slice"(buf_5, repr = name.repr; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: repr, start: 0, end: name.used });
     __sroa_ser_buf = self.buf;
     "core:cbor/write_int_i64"(__sroa_ser_buf, builtin::i64_extend_i32_s(value));
     r = ref.null none;

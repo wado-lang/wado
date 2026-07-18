@@ -354,7 +354,11 @@ impl TypeSystem {
     pub(crate) fn newtype_base_lookup(&self, name: &str, type_id: TypeId) -> (String, TypeId) {
         let tt = self.type_table.borrow();
         if let Some(base_id) = tt.get_newtype_base(type_id) {
+            let is_builtin_array = matches!(tt.get(base_id), ResolvedType::BuiltinArray(_));
             drop(tt);
+            if is_builtin_array {
+                return (crate::tir::TypeTable::ARRAY_TYPE_NAME.to_string(), base_id);
+            }
             if let Some(base_name) = self.struct_name_for_type(base_id) {
                 return (base_name, base_id);
             }

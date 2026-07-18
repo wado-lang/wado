@@ -1,0 +1,23 @@
+// `type Trailers = Fields` is a newtype over the `wasi:http` `Fields` CM
+// resource, so it inherits the resource's constructor. Calling both
+// `Fields::new()` and the inherited `Trailers::new()` resolves to the one
+// canonical `fields.constructor` binding; the shared adapter must normalize the
+// newtype return to the base resource instead of tripping the "call sites
+// disagree on the return type of shared CM binding" ICE.
+use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let headers = Fields::new();
+
+    let trailers = Trailers::new();
+    let has_marker = trailers.has("x-marker");
+    assert !has_marker;
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(Option::Some(trailers)));
+}
+
+__DATA__
+{"wasi:http/service": {"status": 200}}

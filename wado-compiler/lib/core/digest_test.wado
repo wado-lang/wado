@@ -1,7 +1,7 @@
 use { Sha256, Digest, sha256 } from "core:digest";
 
 test "sha256 empty input" {
-    let digest = sha256(&([] as List<u8>));
+    let digest = sha256(&([] as ByteList));
     assert digest.to_hex() == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 }
 
@@ -44,6 +44,6 @@ test "incremental update matches one-shot" {
 }
 
 test "to_hex zero-pads each byte" {
-    let bytes: List<u8> = [0x00, 0x0f, 0xa0, 0xff] as List<u8>;
+    let bytes: ByteList = [0x00, 0x0f, 0xa0, 0xff];
     assert bytes.to_hex() == "000fa0ff";
 }

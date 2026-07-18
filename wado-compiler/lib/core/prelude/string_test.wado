@@ -1100,22 +1100,22 @@ test "char_at_byte_unchecked multibyte" {
 
 test "push_bytes_unchecked ASCII" {
     let mut s = String::with_capacity(0);
-    let bytes: List<u8> = ['h' as u8, 'i' as u8];
-    s.push_bytes_unchecked(bytes);
+    let bytes: ByteList = ['h' as u8, 'i' as u8];
+    s.push_bytes_unchecked(&bytes);
     assert s == "hi";
 }
 
 test "push_bytes_unchecked empty" {
     let mut s = "abc";
-    let bytes: List<u8> = [];
-    s.push_bytes_unchecked(bytes);
+    let bytes: ByteList = [];
+    s.push_bytes_unchecked(&bytes);
     assert s == "abc";
 }
 
 test "push_bytes_unchecked multibyte" {
     let mut s = "x";
-    let bytes: List<u8> = [0xE6, 0x97, 0xA5];  // "日"
-    s.push_bytes_unchecked(bytes);
+    let bytes: ByteList = [0xE6, 0x97, 0xA5];  // "日"
+    s.push_bytes_unchecked(&bytes);
     assert s == "x日";
 }
 

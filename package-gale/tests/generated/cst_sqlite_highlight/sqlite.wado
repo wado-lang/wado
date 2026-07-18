@@ -18554,7 +18554,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     let root = dirs[0].0;
     let file = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait().unwrap();
     let [read_stream, _done] = file.read_via_stream(0 as Filesize);
-    let mut bytes: List<u8> = [];
+    let mut bytes: ByteList = [];
     loop {
         let chunk = read_stream.read(65536);
         if chunk.len() == 0 {

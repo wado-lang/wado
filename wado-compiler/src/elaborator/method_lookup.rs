@@ -1834,7 +1834,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             loop {
                 match self.tysys.type_table.borrow().get(current).clone() {
                     ResolvedType::Newtype { base_type, .. } => {
-                        let base_name = self.tysys.type_table.borrow().type_name(base_type);
+                        let base_name = match self.tysys.type_table.borrow().get(base_type).clone()
+                        {
+                            ResolvedType::GenericInstance { name, .. }
+                            | ResolvedType::GenericResource { name, .. } => name,
+                            ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
+                            _ => self.tysys.type_table.borrow().type_name(base_type),
+                        };
                         names.push(base_name);
                         current = base_type;
                     }
@@ -1972,6 +1978,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // non-empty `impl_inner`, so the ref impl is not matched.
             _ => String::new(),
         };
+        if impl_inner != receiver_outer
+            && matches!(
+                self.tysys.type_table.borrow().get(rt),
+                ResolvedType::Newtype { .. }
+            )
+        {
+            return self
+                .newtype_chain_names(&receiver_outer)
+                .contains(&impl_inner);
+        }
         impl_inner == receiver_outer
     }
 

@@ -25,7 +25,7 @@ assert from_string::<Point>("[1,2]") matches { Ok(p) && p.x == 1 && p.y == 2 };
 
 ## Functions
 
-### `pub fn to_bytes<T: Serialize>(value: &T) -> Result<List<u8>, SerializeError>`
+### `pub fn to_bytes<T: Serialize>(value: &T) -> Result<ByteList, SerializeError>`
 
 Serializes a value to UTF-8 JSON NSD bytes — the primary entry point.
 

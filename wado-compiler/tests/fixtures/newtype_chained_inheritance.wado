@@ -1,0 +1,26 @@
+// A newtype over a newtype (`Buf -> ByteList -> List<u8>`) inherits the
+// ultimate base's associated functions with the result viewed as the top
+// newtype, and inherits iteration the same way. The dispatch peels to the
+// ultimate base for both the type-arg seed and the return-type remap.
+type Buf = ByteList;
+
+export fn run() {
+    let mut b: Buf = Buf::with_capacity(4);
+    b.push(1);
+    b.push(2);
+    b.push(3);
+    assert b.len() == 3;
+
+    let filled: Buf = Buf::filled(2, 9);
+    assert filled.len() == 2;
+    assert filled.get_unchecked(0) == 9;
+
+    let mut sum = 0;
+    for let x of &b {
+        sum += *x as i32;
+    }
+    assert sum == 6;
+}
+
+__DATA__
+{"stdout": ""}

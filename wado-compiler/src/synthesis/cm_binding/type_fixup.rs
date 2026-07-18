@@ -27,8 +27,8 @@ use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::{
-    CallArg, FunctionRef, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirStmt,
-    TirStmtKind, TypeId, TypeTable,
+    CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal,
+    TirStmt, TirStmtKind, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
@@ -700,6 +700,16 @@ fn fixup_adapter_return_from_call_site(
     if is_streaming {
         return;
     }
+    // A newtype over a CM resource (`type Trailers = Fields`) shares the base's
+    // canonical binding, so normalize to the underlying resource.
+    let call_site_type = {
+        let tt = type_table.borrow();
+        if matches!(tt.get(call_site_type), ResolvedType::Newtype { .. }) {
+            tt.get_ultimate_base_type(call_site_type)
+        } else {
+            call_site_type
+        }
+    };
     if let Some(prev) = record_applied_return(applied_returns, adapter_key, call_site_type) {
         let tt = type_table.borrow();
         panic!(

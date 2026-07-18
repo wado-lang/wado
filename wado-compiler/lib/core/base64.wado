@@ -2,7 +2,7 @@
 //! Base64 encoding and decoding (RFC 4648): standard and URL-safe alphabets,
 //! configurable padding via `Encoding` flags, and lenient decoding that
 //! accepts either alphabet with or without padding. Entry points accept any
-//! `AsByteSlice` source (`ByteList`, `ByteArray`, `ByteSlice`, `List<u8>`, `String`).
+//! `AsByteSlice` source (`ByteList`, `ByteArray`, `ByteSlice`, or `String`).
 
 
 #[synopsis]
@@ -17,7 +17,7 @@ pub flags Encoding {
     NoPadding,
 }
 
-global STANDARD_TABLE: List<u8> = [
+global STANDARD_TABLE: ByteList = [
     'A' as u8, 'B' as u8, 'C' as u8, 'D' as u8, 'E' as u8, 'F' as u8, 'G' as u8, 'H' as u8, 'I' as u8, 'J' as u8,
     'K' as u8, 'L' as u8, 'M' as u8, 'N' as u8, 'O' as u8, 'P' as u8, 'Q' as u8, 'R' as u8, 'S' as u8, 'T' as u8,
     'U' as u8, 'V' as u8, 'W' as u8, 'X' as u8, 'Y' as u8, 'Z' as u8, 'a' as u8, 'b' as u8, 'c' as u8, 'd' as u8,
@@ -27,7 +27,7 @@ global STANDARD_TABLE: List<u8> = [
     '8' as u8, '9' as u8, '+' as u8, '/' as u8,
 ];
 
-global URL_SAFE_TABLE: List<u8> = [
+global URL_SAFE_TABLE: ByteList = [
     'A' as u8, 'B' as u8, 'C' as u8, 'D' as u8, 'E' as u8, 'F' as u8, 'G' as u8, 'H' as u8, 'I' as u8, 'J' as u8,
     'K' as u8, 'L' as u8, 'M' as u8, 'N' as u8, 'O' as u8, 'P' as u8, 'Q' as u8, 'R' as u8, 'S' as u8, 'T' as u8,
     'U' as u8, 'V' as u8, 'W' as u8, 'X' as u8, 'Y' as u8, 'Z' as u8, 'a' as u8, 'b' as u8, 'c' as u8, 'd' as u8,
@@ -37,8 +37,8 @@ global URL_SAFE_TABLE: List<u8> = [
     '8' as u8, '9' as u8, '-' as u8, '_' as u8,
 ];
 
-fn build_decode_table() -> List<u8> {
-    let mut table: List<u8> = List::filled(256, 255);
+fn build_decode_table() -> ByteList {
+    let mut table = ByteList::filled(256, 255);
 
     for let mut i = 0; i < 26; i += 1 {
         table['A' as i32 + i] = i as u8;
@@ -58,9 +58,9 @@ fn build_decode_table() -> List<u8> {
     return table;
 }
 
-global DECODE_TABLE: List<u8> = build_decode_table();
+global DECODE_TABLE: ByteList = build_decode_table();
 
-fn encode_impl(data: ByteSlice, table: &List<u8>, pad: bool) -> String {
+fn encode_impl(data: ByteSlice, table: &ByteList, pad: bool) -> String {
     let len = data.len();
     if len == 0 {
         return "";
@@ -144,7 +144,7 @@ fn decode_impl(input: ByteSlice) -> Option<ByteList> {
         out_len = out_len + 2;
     }
 
-    let mut out: List<u8> = List::with_capacity(out_len);
+    let mut out = ByteList::with_capacity(out_len);
     let table = &DECODE_TABLE;
 
     let mut i = 0;

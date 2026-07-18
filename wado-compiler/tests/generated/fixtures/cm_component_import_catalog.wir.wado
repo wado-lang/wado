@@ -1832,6 +1832,7 @@ fn "cm_component_import_catalog.wado/__cm_binding__CmCatalog_id_char"(v) with Cm
 fn "cm_component_import_catalog.wado/__cm_binding__CmCatalog_id_string"(v) with CmCatalog {
     let __v_packed: i64;
     let __outptr: i32;
+    let __lifted_result_3: ref "core:prelude/string.wado//String";
     let ptr: i32;
     let len_5: i32;
     let arr: ref Array<u8>;
@@ -1841,8 +1842,9 @@ fn "cm_component_import_catalog.wado/__cm_binding__CmCatalog_id_string"(v) with 
     ptr = builtin::load_i32(__outptr);
     len_5 = builtin::load_i32(__outptr + 4);
     arr = "core:rt/memory_to_gc_array"(ptr, len_5);
+    __lifted_result_3 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_29: i32; __array_clone_len_29 = builtin::array_len(arr); let __array_clone_dst_29: ref Array<u8>; __array_clone_dst_29 = builtin::array_new<u8>(__array_clone_len_29); builtin::array_copy<u8>(__array_clone_dst_29, 0, arr, 0, __array_clone_len_29); __array_clone_dst_29), used: len_5 };
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "core:prelude/string.wado//String" { repr: arr, used: len_5 };
+    return __lifted_result_3;
 }
 
 fn "cm_component_import_catalog.wado/__cm_binding__CmCatalog_id_enum"(v) with CmCatalog {
@@ -1925,7 +1927,7 @@ fn "cm_component_import_catalog.wado/__cm_binding__CmCatalog_id_list_string"(v) 
         l66: loop {
             break_if b65 __i >= __count;
             __elem_addr = __base + (__i * 8);
-            "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__result, ptr = builtin::load_i32(__elem_addr); len_26 = builtin::load_i32(__elem_addr + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_26); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_26 });
+            "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__result, ptr = builtin::load_i32(__elem_addr); len_26 = builtin::load_i32(__elem_addr + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_26); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_29: ref Array<u8>; __array_clone_src_29 = arr; let __array_clone_len_29: i32; __array_clone_len_29 = builtin::array_len(__array_clone_src_29); let __array_clone_dst_29: ref Array<u8>; __array_clone_dst_29 = builtin::array_new<u8>(__array_clone_len_29); builtin::array_copy<u8>(__array_clone_dst_29, 0, __array_clone_src_29, 0, __array_clone_len_29); __array_clone_dst_29), used: len_26 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr), builtin::load_i32(__elem_addr + 4), 1, 0));
             __i = __i + 1;
             continue l66;
@@ -1988,7 +1990,7 @@ fn "cm_component_import_catalog.wado/__cm_binding__CmCatalog_id_option_string"(v
     __disc = builtin::load_u8(__outptr);
     __option_result = ref.null none;
     if __disc != 0 {
-        __option_result = ref.as_non_null(ptr = builtin::load_i32(__outptr + 4); len_11 = builtin::load_i32((__outptr + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_11); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_11 });
+        __option_result = ref.as_non_null(ptr = builtin::load_i32(__outptr + 4); len_11 = builtin::load_i32((__outptr + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_11); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_29: i32; __array_clone_len_29 = builtin::array_len(arr); let __array_clone_dst_29: ref Array<u8>; __array_clone_dst_29 = builtin::array_new<u8>(__array_clone_len_29); builtin::array_copy<u8>(__array_clone_dst_29, 0, arr, 0, __array_clone_len_29); __array_clone_dst_29), used: len_11 });
         drop("mem/realloc"(builtin::load_i32(__outptr + 4), builtin::load_i32((__outptr + 4) + 4), 1, 0));
     }
     drop("mem/realloc"(__outptr, 12, 4, 0));
@@ -2025,7 +2027,7 @@ fn "cm_component_import_catalog.wado/__cm_binding__CmCatalog_id_result_both"(v) 
     if __disc == 0 {
         __result_val = struct.new "core:prelude/types.wado//Result<u32,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: builtin::load_i32(__outptr + 4) };
     } else {
-        __result_val = struct.new "core:prelude/types.wado//Result<u32,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: ref.as_non_null(ptr = builtin::load_i32(__outptr + 4); len_12 = builtin::load_i32((__outptr + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_12); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_12 }) };
+        __result_val = struct.new "core:prelude/types.wado//Result<u32,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: ref.as_non_null(ptr = builtin::load_i32(__outptr + 4); len_12 = builtin::load_i32((__outptr + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_12); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_29: i32; __array_clone_len_29 = builtin::array_len(arr); let __array_clone_dst_29: ref Array<u8>; __array_clone_dst_29 = builtin::array_new<u8>(__array_clone_len_29); builtin::array_copy<u8>(__array_clone_dst_29, 0, arr, 0, __array_clone_len_29); __array_clone_dst_29), used: len_12 }) };
     }
     drop("mem/realloc"(__outptr, 12, 4, 0));
     return __result_val;
@@ -2164,7 +2166,7 @@ fn "cm_component_import_catalog.wado/__cm_binding__CmCatalog_id_tuple_pair"(v) w
     ptr = builtin::load_i32(__outptr + 4);
     len_7 = builtin::load_i32((__outptr + 4) + 4);
     arr = "core:rt/memory_to_gc_array"(ptr, len_7);
-    __lifted_result_5 = struct.new "core:prelude/string.wado//String" { repr: arr, used: len_7 };
+    __lifted_result_5 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_29: i32; __array_clone_len_29 = builtin::array_len(arr); let __array_clone_dst_29: ref Array<u8>; __array_clone_dst_29 = builtin::array_new<u8>(__array_clone_len_29); builtin::array_copy<u8>(__array_clone_dst_29, 0, arr, 0, __array_clone_len_29); __array_clone_dst_29), used: len_7 };
     drop("mem/realloc"(__outptr, 12, 4, 0));
     return struct.new "tuple//[u32, core:prelude/string.wado/String]" { 0: __lifted_result_4, 1: __lifted_result_5 };
 }
@@ -2463,7 +2465,7 @@ condition: index < self.used
         }
         __result_val = struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<./sub/cm-catalog.wasm/Point>,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude//List<./sub/cm-catalog.wasm/Point>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "./sub/cm-catalog.wasm//Point">(__result.repr)), used: __result.used } };
     } else {
-        __result_val = struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<./sub/cm-catalog.wasm/Point>,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: ref.as_non_null(ptr = builtin::load_i32(__outptr + 4); len_40 = builtin::load_i32((__outptr + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_40); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_40 }) };
+        __result_val = struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<./sub/cm-catalog.wasm/Point>,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: ref.as_non_null(ptr = builtin::load_i32(__outptr + 4); len_40 = builtin::load_i32((__outptr + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_40); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_29: i32; __array_clone_len_29 = builtin::array_len(arr); let __array_clone_dst_29: ref Array<u8>; __array_clone_dst_29 = builtin::array_new<u8>(__array_clone_len_29); builtin::array_copy<u8>(__array_clone_dst_29, 0, arr, 0, __array_clone_len_29); __array_clone_dst_29), used: len_40 }) };
     }
     drop("mem/realloc"(__outptr, 12, 4, 0));
     return __result_val;
@@ -2520,7 +2522,7 @@ fn "cm_component_import_catalog.wado/__cm_binding__CmCatalog_id_list_tuple"(v) w
             ptr = builtin::load_i32(__elem_addr + 4);
             len_30 = builtin::load_i32((__elem_addr + 4) + 4);
             arr = "core:rt/memory_to_gc_array"(ptr, len_30);
-            __lifted_result_15 = struct.new "core:prelude/string.wado//String" { repr: arr, used: len_30 };
+            __lifted_result_15 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_29: ref Array<u8>; __array_clone_src_29 = arr; let __array_clone_len_29: i32; __array_clone_len_29 = builtin::array_len(__array_clone_src_29); let __array_clone_dst_29: ref Array<u8>; __array_clone_dst_29 = builtin::array_new<u8>(__array_clone_len_29); builtin::array_copy<u8>(__array_clone_dst_29, 0, __array_clone_src_29, 0, __array_clone_len_29); __array_clone_dst_29), used: len_30 };
             "core:prelude/list.wado/List<[u32,core:prelude/string.wado/String]>::push"(__result, struct.new "tuple//[u32, core:prelude/string.wado/String]" { 0: __lifted_result_14, 1: __lifted_result_15 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 4), builtin::load_i32((__elem_addr + 4) + 4), 1, 0));
             __i = __i + 1;
@@ -2584,7 +2586,7 @@ fn "cm_component_import_catalog.wado/__cm_binding__CmCatalog_id_assoc_array"(v) 
             ptr = builtin::load_i32(local.tee __elem_addr(__base + (__i * 12)) + 0);
             len_30 = builtin::load_i32((__elem_addr + 0) + 4);
             arr = "core:rt/memory_to_gc_array"(ptr, len_30);
-            __lifted_result_14 = struct.new "core:prelude/string.wado//String" { repr: arr, used: len_30 };
+            __lifted_result_14 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_29: ref Array<u8>; __array_clone_src_29 = arr; let __array_clone_len_29: i32; __array_clone_len_29 = builtin::array_len(__array_clone_src_29); let __array_clone_dst_29: ref Array<u8>; __array_clone_dst_29 = builtin::array_new<u8>(__array_clone_len_29); builtin::array_copy<u8>(__array_clone_dst_29, 0, __array_clone_src_29, 0, __array_clone_len_29); __array_clone_dst_29), used: len_30 };
             __lifted_result_15 = builtin::load_i32(__elem_addr + 8);
             "core:prelude/list.wado/List<[core:prelude/string.wado/String,u32]>::push"(__result, struct.new "tuple//[core:prelude/string.wado/String, u32]" { 0: __lifted_result_14, 1: __lifted_result_15 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 0), builtin::load_i32((__elem_addr + 0) + 4), 1, 0));

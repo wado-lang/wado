@@ -205,7 +205,7 @@ positional fields in declaration order. Name-only and sequence-only formats
 ignore `positional_at` and stay backward compatible; `core:args` consults it
 to bind bare tokens to positional fields.
 
-#### `fn lookup(key: ArraySlice<u8>) -> Option<i32>`
+#### `fn lookup(key: ByteSlice) -> Option<i32>`
 
 #### `fn positional_at(rank: i32) -> Option<i32>`
 
