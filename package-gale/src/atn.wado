@@ -1000,13 +1000,13 @@ pub fn atn_blob_bytes(atn: &Atn) -> ByteList {
         ntrans_total += st.transitions.len();
     }
 
-    let mut state_kind: ByteList = ByteList::with_capacity(nstates);
-    let mut state_tr_count: ByteList = ByteList::with_capacity(nstates * 2);
-    let mut tr_kind: ByteList = ByteList::with_capacity(ntrans_total);
-    let mut tr_target: ByteList = ByteList::with_capacity(ntrans_total * 2);
-    let mut tr_label: ByteList = ByteList::with_capacity(ntrans_total * 3);
-    let mut tr_follow: ByteList = ByteList::with_capacity(ntrans_total * 3);
-    let mut tr_prec: ByteList = ByteList::with_capacity(ntrans_total * 2);
+    let mut state_kind = ByteList::with_capacity(nstates);
+    let mut state_tr_count = ByteList::with_capacity(nstates * 2);
+    let mut tr_kind = ByteList::with_capacity(ntrans_total);
+    let mut tr_target = ByteList::with_capacity(ntrans_total * 2);
+    let mut tr_label = ByteList::with_capacity(ntrans_total * 3);
+    let mut tr_follow = ByteList::with_capacity(ntrans_total * 3);
+    let mut tr_prec = ByteList::with_capacity(ntrans_total * 2);
     for let st of &atn.states {
         push_u8(&mut state_kind, st.kind);
         push_u16(&mut state_tr_count, st.transitions.len());
@@ -1021,7 +1021,7 @@ pub fn atn_blob_bytes(atn: &Atn) -> ByteList {
 
     let total = 6 + nrules * 2 + ndec * 2 + state_kind.len() + state_tr_count.len() + tr_kind.len() + tr_target.len() + tr_label.len(
     ) + tr_follow.len() + tr_prec.len();
-    let mut bytes: ByteList = ByteList::with_capacity(total);
+    let mut bytes = ByteList::with_capacity(total);
     push_u16(&mut bytes, nrules);
     push_u16(&mut bytes, ndec);
     push_u16(&mut bytes, nstates);

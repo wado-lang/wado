@@ -1449,7 +1449,7 @@ pub fn inflate_zlib(input: &ByteList) -> Result<ByteList, ZlibError> {
 /// Compresses data into raw DEFLATE stored blocks (no actual compression).
 pub fn deflate_stored(input: &ByteList) -> ByteList {
     let total = input.len();
-    let mut output: ByteList = ByteList::with_capacity(total + (total / 65535 + 1) * 5);
+    let mut output = ByteList::with_capacity(total + (total / 65535 + 1) * 5);
 
     let mut pos = 0;
     while pos < total {
@@ -1484,7 +1484,7 @@ pub fn deflate_stored(input: &ByteList) -> ByteList {
 
 /// Wraps data in zlib format using stored blocks (no actual compression).
 pub fn zlib_compress_stored(input: &ByteList) -> ByteList {
-    let mut output: ByteList = ByteList::with_capacity(input.len() + 12);
+    let mut output = ByteList::with_capacity(input.len() + 12);
 
     // zlib header: CMF=0x78 (deflate, 32K window), FLG=0x01 (check bits)
     output.push(0x78);
@@ -1627,7 +1627,7 @@ fn build_fixed_dtree() -> List<EncCode> {
 // Direct lookup table: length_codes[length - 3] = code index (0..28)
 // Built using the zlib tr_static_init algorithm
 fn build_length_codes(extra_lbits: &List<i32>) -> ByteList {
-    let mut table: ByteList = ByteList::filled(256, 0);
+    let mut table = ByteList::filled(256, 0);
     let mut length = 0;
     for let mut code = 0; code < 28; code += 1 {
         let count = 1 << extra_lbits[code];
@@ -1644,7 +1644,7 @@ fn build_length_codes(extra_lbits: &List<i32>) -> ByteList {
 // First 256: direct lookup for dist-1 < 256
 // Next 256: shifted lookup for (dist-1) >> 7 when dist > 256
 fn build_dist_codes(extra_dbits: &List<i32>) -> ByteList {
-    let mut table: ByteList = ByteList::filled(512, 0);
+    let mut table = ByteList::filled(512, 0);
     let mut dist = 0;
     // First 16 codes: direct entries (covers dist 1..256)
     for let mut code = 0; code < 16; code += 1 {
@@ -2189,11 +2189,11 @@ fn write_dynamic_block(
 
     // Build trees
     let mut lit_bl_count: List<i32> = List::filled(16, 0);
-    let mut lit_lengths: ByteList = ByteList::filled(286, 0);
+    let mut lit_lengths = ByteList::filled(286, 0);
     build_huffman_tree(&lit_freq, 286, 15, &mut lit_bl_count, &mut lit_lengths);
 
     let mut dist_bl_count: List<i32> = List::filled(16, 0);
-    let mut dist_lengths: ByteList = ByteList::filled(30, 0);
+    let mut dist_lengths = ByteList::filled(30, 0);
     build_huffman_tree(&dist_freq, 30, 15, &mut dist_bl_count, &mut dist_lengths);
 
     // Generate codes
@@ -2212,7 +2212,7 @@ fn write_dynamic_block(
 
     // RLE encode the combined code lengths
     let total_codes = nlit + ndist;
-    let mut combined: ByteList = ByteList::filled(total_codes, 0);
+    let mut combined = ByteList::filled(total_codes, 0);
     for let mut i = 0; i < nlit; i += 1 {
         combined[i] = lit_lengths[i];
     }
@@ -2274,7 +2274,7 @@ fn write_dynamic_block(
         bl_freq[rle[j] as i32] += 1;
     }
     let mut bl_bl_count: List<i32> = List::filled(MAX_BL_BITS + 1, 0);
-    let mut bl_lengths: ByteList = ByteList::filled(19, 0);
+    let mut bl_lengths = ByteList::filled(19, 0);
     build_huffman_tree(&bl_freq, 19, MAX_BL_BITS, &mut bl_bl_count, &mut bl_lengths);
     let bl_tree = gen_huffman_codes(&bl_lengths, 19, MAX_BL_BITS);
 
@@ -2798,10 +2798,10 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
 
     // Build optimal trees to estimate dynamic cost
     let mut lit_bl_count: List<i32> = List::filled(16, 0);
-    let mut lit_lengths: ByteList = ByteList::filled(286, 0);
+    let mut lit_lengths = ByteList::filled(286, 0);
     build_huffman_tree(&lit_freq, 286, 15, &mut lit_bl_count, &mut lit_lengths);
     let mut dist_bl_count: List<i32> = List::filled(16, 0);
-    let mut dist_lengths: ByteList = ByteList::filled(30, 0);
+    let mut dist_lengths = ByteList::filled(30, 0);
     build_huffman_tree(&dist_freq, 30, 15, &mut dist_bl_count, &mut dist_lengths);
 
     let mut dynamic_data_bits = 0;
@@ -2835,7 +2835,7 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
 
     // RLE-encode the combined code lengths to count header bits
     let total_codes = nlit + ndist;
-    let mut hdr_combined: ByteList = ByteList::filled(total_codes, 0);
+    let mut hdr_combined = ByteList::filled(total_codes, 0);
     for let mut hi = 0; hi < nlit; hi += 1 {
         hdr_combined[hi] = lit_lengths[hi];
     }
@@ -2896,7 +2896,7 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
         hdr_bl_freq[hdr_rle[hj] as i32] += 1;
     }
     let mut hdr_bl_bl_count: List<i32> = List::filled(MAX_BL_BITS + 1, 0);
-    let mut hdr_bl_lengths: ByteList = ByteList::filled(19, 0);
+    let mut hdr_bl_lengths = ByteList::filled(19, 0);
     build_huffman_tree(&hdr_bl_freq, 19, MAX_BL_BITS, &mut hdr_bl_bl_count, &mut hdr_bl_lengths);
     let hdr_bl_tree = gen_huffman_codes(&hdr_bl_lengths, 19, MAX_BL_BITS);
 
@@ -2962,7 +2962,7 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
 
 // Wrap raw deflate data in zlib format
 fn zlib_wrap(input: &ByteList, deflated: &ByteList, level: i32) -> ByteList {
-    let mut output: ByteList = ByteList::with_capacity(deflated.len() + 6);
+    let mut output = ByteList::with_capacity(deflated.len() + 6);
 
     // zlib header: CMF=0x78 (deflate, 32K window)
     // FLG: FCHECK + FLEVEL
@@ -3161,7 +3161,7 @@ pub fn gzip_compress(
     strategy: i32 = Z_DEFAULT_STRATEGY,
 ) -> ByteList {
     let deflated = deflate_with_level(input, level, strategy);
-    let mut output: ByteList = ByteList::with_capacity(deflated.len() + 18);
+    let mut output = ByteList::with_capacity(deflated.len() + 18);
 
     // Gzip header (10 bytes)
     output.push(GZIP_MAGIC1);  // ID1
@@ -3344,7 +3344,7 @@ impl GzipHeader {
 /// caller-supplied header.
 pub fn gzip_compress_with_header(input: &ByteList, level: i32, header: &GzipHeader) -> ByteList {
     let deflated = deflate_with_level(input, level, Z_DEFAULT_STRATEGY);
-    let mut output: ByteList = ByteList::with_capacity(deflated.len() + 64);
+    let mut output = ByteList::with_capacity(deflated.len() + 64);
 
     // Gzip header
     output.push(GZIP_MAGIC1);
@@ -3451,7 +3451,7 @@ pub fn gzip_compress_with_header(input: &ByteList, level: i32, header: &GzipHead
 // non-Latin-1 names. Invalid sequences are replaced with U+FFFD rather than
 // failing the parse, since these fields are best-effort metadata.
 fn bytes_to_string(buf: &ByteList, offset: i32, len: i32) -> String {
-    let mut slice: ByteList = ByteList::with_capacity(len);
+    let mut slice = ByteList::with_capacity(len);
     for let mut i = 0; i < len; i += 1 {
         slice.push(buf[offset + i]);
     }
@@ -3668,7 +3668,7 @@ impl DeflateStream {
     /// Returns an independent copy of this stream, including buffered input
     /// and any attached gzip header.
     pub fn copy(&self) -> DeflateStream {
-        let mut buf_copy: ByteList = ByteList::with_capacity(self.buffer.len());
+        let mut buf_copy = ByteList::with_capacity(self.buffer.len());
         for let mut i = 0; i < self.buffer.len(); i += 1 {
             buf_copy.push(self.buffer[i]);
         }
@@ -3816,7 +3816,7 @@ impl InflateStream {
 
     /// Returns an independent copy of this stream, including buffered input.
     pub fn copy(&self) -> InflateStream {
-        let mut buf_copy: ByteList = ByteList::with_capacity(self.buffer.len());
+        let mut buf_copy = ByteList::with_capacity(self.buffer.len());
         for let mut i = 0; i < self.buffer.len(); i += 1 {
             buf_copy.push(self.buffer[i]);
         }
