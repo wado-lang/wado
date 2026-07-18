@@ -15,6 +15,17 @@ lsp_repr_u32_enum!(
     }
 );
 
+lsp_repr_u32_enum!(
+    /// LSP `DiagnosticTag` (spec §Diagnostic). Serializes as the 1..=2
+    /// integer defined by the LSP wire format. `Unnecessary` asks the
+    /// client to render the range faded/greyed-out (unused code);
+    /// `Deprecated` renders it struck through.
+    pub enum DiagnosticTag {
+        Unnecessary = 1,
+        Deprecated = 2,
+    }
+);
+
 /// Zero-based line/column position in a text document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Position {
@@ -38,6 +49,10 @@ pub struct Diagnostic {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
     pub message: String,
+    /// LSP diagnostic tags (`Unnecessary` / `Deprecated`). Unused / dead-code
+    /// diagnostics carry `Unnecessary` so the editor fades their range.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<DiagnosticTag>,
 }
 
 /// Convert a compiler diagnostic to an LSP-compatible diagnostic.
@@ -69,6 +84,16 @@ pub fn from_compiler_diagnostic(
         CompilerSeverity::Warning => Severity::Warning,
         CompilerSeverity::Info => Severity::Information,
         CompilerSeverity::Debug => return None,
+    };
+
+    // Unused / dead-code lints render as faded ("greyed-out") ranges via the
+    // LSP `Unnecessary` tag, matching the editor experience for rustc's
+    // `dead_code` / `unused_*` lints.
+    let tags = match diag.code {
+        Code::DeadFunction | Code::DeadGlobal | Code::TestOnlyFunction | Code::TestOnlyGlobal => {
+            vec![DiagnosticTag::Unnecessary]
+        }
+        _ => Vec::new(),
     };
 
     let span = diag.span.as_ref()?;
@@ -108,6 +133,7 @@ pub fn from_compiler_diagnostic(
         code: format!("{}", diag.code),
         source: Some("wado".to_string()),
         message: diag.message.clone(),
+        tags,
     })
 }
 
@@ -144,6 +170,63 @@ mod tests {
         assert_eq!(diag.message, "expected i32, found String");
         assert_eq!(diag.range.start.line, 9); // 0-based
         assert_eq!(diag.range.start.character, 4); // 0-based
+    }
+
+    #[test]
+    fn dead_code_diagnostic_carries_unnecessary_tag() {
+        let compiler_diag = CompilerDiagnostic {
+            severity: CompilerSeverity::Warning,
+            code: Code::DeadFunction,
+            message: "function `helper` is never used".to_string(),
+            span: Some(DiagnosticSpan {
+                file: "test.wado".to_string(),
+                line: 1,
+                column: 4,
+                end_line: Some(1),
+                end_column: Some(10),
+            }),
+        };
+        let diag = from_compiler_diagnostic(
+            &compiler_diag,
+            "file:///test.wado",
+            None,
+            PositionEncoding::Utf16,
+        )
+        .unwrap();
+        assert_eq!(diag.tags, vec![DiagnosticTag::Unnecessary]);
+        // Empty tags must be omitted from the wire form; a tagged diagnostic
+        // serializes the array.
+        let json = serde_json::to_string(&diag).unwrap();
+        assert!(json.contains("\"tags\":[1]"), "got {json}");
+    }
+
+    #[test]
+    fn error_diagnostic_has_no_tags() {
+        let compiler_diag = CompilerDiagnostic {
+            severity: CompilerSeverity::Error,
+            code: Code::TypeMismatch,
+            message: "type mismatch".to_string(),
+            span: Some(DiagnosticSpan {
+                file: "test.wado".to_string(),
+                line: 1,
+                column: 1,
+                end_line: Some(1),
+                end_column: Some(2),
+            }),
+        };
+        let diag = from_compiler_diagnostic(
+            &compiler_diag,
+            "file:///test.wado",
+            None,
+            PositionEncoding::Utf16,
+        )
+        .unwrap();
+        assert!(diag.tags.is_empty());
+        let json = serde_json::to_string(&diag).unwrap();
+        assert!(
+            !json.contains("tags"),
+            "empty tags must be omitted, got {json}"
+        );
     }
 
     #[test]

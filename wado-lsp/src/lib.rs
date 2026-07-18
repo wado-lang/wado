@@ -28,7 +28,7 @@ use wado_compiler::{CompilerHost, Diagnostic as CompilerDiagnostic, LogLevel};
 use crate::query::QueryContext;
 
 pub use definition::DefinitionResult;
-pub use diagnostics::{Diagnostic, Position, Range, Severity};
+pub use diagnostics::{Diagnostic, DiagnosticTag, Position, Range, Severity};
 pub use document_highlight::{DocumentHighlight, HighlightKind};
 pub use host::FilesystemCompilerHost;
 pub use hover::{HoverResult, MarkupContent, MarkupKind};
@@ -92,6 +92,10 @@ pub struct Engine {
     /// updates this from the `initialize` request before dispatching any
     /// position-bearing query.
     position_encoding: PositionEncoding,
+    /// Whether to surface source-level unused / dead-code warnings
+    /// (`DeadFunction` / `DeadGlobal` / `TestOnly*`) in `diagnostics`.
+    /// On by default, mirroring `CompilerOptions::unused_diagnostics`.
+    unused_diagnostics: bool,
 }
 
 /// One semantics pass over a document. Bundles the analysis result with
@@ -153,7 +157,14 @@ impl Engine {
         Self {
             documents: IndexMap::new(),
             position_encoding: PositionEncoding::default(),
+            unused_diagnostics: true,
         }
+    }
+
+    /// Toggle source-level unused / dead-code warnings in `diagnostics`.
+    /// Defaults to `true`; mirrors `CompilerOptions::unused_diagnostics`.
+    pub fn set_unused_diagnostics(&mut self, enabled: bool) {
+        self.unused_diagnostics = enabled;
     }
 
     /// Set the LSP position encoding negotiated during `initialize`.
@@ -284,6 +295,15 @@ impl Engine {
         }
         for error in wado_compiler::check_resource_moves_semantic(&sem) {
             diagnostics.push(error.into());
+        }
+        // Source-level unused / dead-code warnings. The compiler computes the
+        // liveness classification on the LSP path too (reify is skipped, but
+        // `liveness` runs before it), so the editor surfaces the same
+        // `DeadFunction` / `DeadGlobal` / `TestOnly*` warnings as a batch
+        // build. The editor runs in the default command world, so test-only
+        // items are reported (`is_test_world = false`).
+        if self.unused_diagnostics {
+            diagnostics.extend(wado_compiler::unused_diagnostics(&sem, false));
         }
         let snapshot = Rc::new(Snapshot { sem, diagnostics });
         *doc.snapshot.borrow_mut() = Some(snapshot.clone());

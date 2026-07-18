@@ -309,50 +309,59 @@ pub async fn compile_with_host<H: CompilerHost>(
 /// This is the main compilation entry point with all options. It runs the full compilation pipeline:
 /// lexer -> parser -> binder -> loader -> analyzer -> elaborator -> lower -> optimize -> `tir_to_wir`
 ///
-/// Emit unused-item warnings for the user-authored items the liveness pass
+/// Build unused-item warnings for the user-authored items the liveness pass
 /// classified: `DeadFunction` / `DeadGlobal` for items reachable from neither
 /// production nor tests, and `TestOnlyFunction` / `TestOnlyGlobal` for items
 /// reachable only from `test` blocks.
-fn emit_unused_diagnostics<H: CompilerHost>(
-    sem: &semantics::Semantics,
-    logger: &Logger<'_, H>,
-    is_test_world: bool,
-) {
+///
+/// Pure over `Semantics`: it reads the liveness classification the elaborator
+/// already computed (available on both the batch and LSP paths, since liveness
+/// runs before reify) and returns the warnings without emitting them. The
+/// batch path forwards them through its [`Logger`]; the LSP path
+/// (`Engine::diagnostics`) pushes them into the snapshot's diagnostic list.
+///
+/// `is_test_world` suppresses the `TestOnly*` warnings during a `wado test`
+/// run, where the reaching `test` blocks are the whole point.
+pub fn unused_diagnostics(sem: &semantics::Semantics, is_test_world: bool) -> Vec<Diagnostic> {
     use crate::ast::Item;
     use crate::compiler_host::{Code, DiagnosticSpan};
 
-    let emit = |ids: &[crate::ast::AstId], fn_code: Code, global_code: Code, reason: &str| {
-        for id in ids {
-            let Some(owning) = sem.module_of_id(*id) else {
-                continue;
-            };
-            let Some(module) = sem.modules.get(owning) else {
-                continue;
-            };
-            let filename = owning.source_path();
-            for item in &module.items {
-                match item {
-                    Item::Function(func) if func.id == *id => {
-                        logger.warn_at(
+    let mut out = Vec::new();
+    let mut collect =
+        |ids: &[crate::ast::AstId], fn_code: Code, global_code: Code, reason: &str| {
+            for id in ids {
+                let Some(owning) = sem.module_of_id(*id) else {
+                    continue;
+                };
+                let Some(module) = sem.modules.get(owning) else {
+                    continue;
+                };
+                let filename = owning.source_path();
+                for item in &module.items {
+                    let (code, message, span) = match item {
+                        Item::Function(func) if func.id == *id => (
                             fn_code,
                             format!("function `{}` {reason}", func.name),
-                            DiagnosticSpan::from_span(&func.name_span, Some(filename.as_str())),
-                        );
-                    }
-                    Item::Global(global) if global.id == *id => {
-                        logger.warn_at(
+                            &func.name_span,
+                        ),
+                        Item::Global(global) if global.id == *id => (
                             global_code,
                             format!("global `{}` {reason}", global.name),
-                            DiagnosticSpan::from_span(&global.name_span, Some(filename.as_str())),
-                        );
-                    }
-                    _ => {}
+                            &global.name_span,
+                        ),
+                        _ => continue,
+                    };
+                    out.push(Diagnostic {
+                        severity: Severity::Warning,
+                        code,
+                        message,
+                        span: Some(DiagnosticSpan::from_span(span, Some(filename.as_str()))),
+                    });
                 }
             }
-        }
-    };
+        };
 
-    emit(
+    collect(
         &sem.liveness.dead_items,
         Code::DeadFunction,
         Code::DeadGlobal,
@@ -364,13 +373,15 @@ fn emit_unused_diagnostics<H: CompilerHost>(
     // point — would be noise. Report it only in non-test builds (`wado
     // compile` / `wado check`).
     if !is_test_world {
-        emit(
+        collect(
             &sem.liveness.test_only_items,
             Code::TestOnlyFunction,
             Code::TestOnlyGlobal,
             "is only used by tests",
         );
     }
+
+    out
 }
 
 /// Synthesize a library [`WorldInfo`] (`--lib`) from the entry module's
@@ -805,7 +816,11 @@ fn compile_after_load<H: CompilerHost>(
     // `semantics_with_logger`; gated on the option (CLI `--no-unused`).
     if options.unused_diagnostics {
         let is_test_world = options.target_world.as_deref() == Some("test");
-        emit_unused_diagnostics(&sem, logger, is_test_world);
+        for diag in unused_diagnostics(&sem, is_test_world) {
+            if let Some(span) = diag.span {
+                logger.warn_at(diag.code, diag.message, span);
+            }
+        }
     }
 
     // === Phase 6b: Effect, Stores, and Default-Purity Checks (Design B) ===

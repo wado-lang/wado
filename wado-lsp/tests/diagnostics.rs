@@ -14,7 +14,7 @@
 //!   `semantics_of`.
 
 use wado_lsp::test_support::MapHost;
-use wado_lsp::{Diagnostic, Engine, Severity};
+use wado_lsp::{Diagnostic, DiagnosticTag, Engine, Severity};
 
 async fn diagnostics_for(path: &str, source: &str) -> Vec<Diagnostic> {
     let uri = format!("file://{path}");
@@ -29,6 +29,120 @@ fn errors(diags: &[Diagnostic]) -> Vec<&Diagnostic> {
         .iter()
         .filter(|d| d.severity == Severity::Error)
         .collect()
+}
+
+fn warnings(diags: &[Diagnostic]) -> Vec<&Diagnostic> {
+    diags
+        .iter()
+        .filter(|d| d.severity == Severity::Warning)
+        .collect()
+}
+
+/// A private function with no caller surfaces as a dead-code warning in the
+/// editor. The compiler already computes source-level liveness on the LSP
+/// path (`build_tir = false`); `Engine::diagnostics` now reads it.
+#[test]
+fn dead_function_is_reported() {
+    futures::executor::block_on(async {
+        let source = "fn unused_helper() -> i32 {\n    return 1;\n}\n\nexport fn run() {}\n";
+        let diags = diagnostics_for("/work/dead_fn.wado", source).await;
+        assert!(
+            warnings(&diags)
+                .iter()
+                .any(|d| d.message.contains("function `unused_helper` is never used")),
+            "expected a dead-function warning, got {diags:#?}"
+        );
+        assert!(
+            !diags
+                .iter()
+                .any(|d| d.message.contains("function `run` is never used")),
+            "the world-export root `run` must not be reported, got {diags:#?}"
+        );
+    });
+}
+
+/// A global with no reader surfaces as a dead-code warning.
+#[test]
+fn dead_global_is_reported() {
+    futures::executor::block_on(async {
+        let source = "global UNUSED: i32 = 42;\n\nexport fn run() {}\n";
+        let diags = diagnostics_for("/work/dead_global.wado", source).await;
+        assert!(
+            warnings(&diags)
+                .iter()
+                .any(|d| d.message.contains("global `UNUSED` is never used")),
+            "expected a dead-global warning, got {diags:#?}"
+        );
+    });
+}
+
+/// A `pub fn` crosses the package boundary and is a liveness root, so it is
+/// never reported even without an in-package caller.
+#[test]
+fn pub_function_is_not_reported() {
+    futures::executor::block_on(async {
+        let source = "pub fn library_api() -> i32 {\n    return 1;\n}\n\nexport fn run() {}\n";
+        let diags = diagnostics_for("/work/pub_fn.wado", source).await;
+        assert!(
+            !diags.iter().any(|d| d.message.contains("library_api")),
+            "a `pub fn` must not be reported as dead, got {diags:#?}"
+        );
+    });
+}
+
+/// A function reached only from a `test` block is reported test-only (the
+/// editor runs in the default command world, so `is_test_world` is false).
+#[test]
+fn test_only_function_is_reported() {
+    futures::executor::block_on(async {
+        let source = "fn helper() -> i32 {\n    return 1;\n}\n\nexport fn run() {}\n\ntest \"uses helper\" {\n    assert helper() == 1;\n}\n";
+        let diags = diagnostics_for("/work/test_only.wado", source).await;
+        assert!(
+            warnings(&diags).iter().any(|d| d
+                .message
+                .contains("function `helper` is only used by tests")),
+            "expected a test-only warning, got {diags:#?}"
+        );
+        assert!(
+            !diags
+                .iter()
+                .any(|d| d.message.contains("function `helper` is never used")),
+            "a test-reached function must not be reported dead, got {diags:#?}"
+        );
+    });
+}
+
+/// Dead-code diagnostics carry the LSP `Unnecessary` tag so the editor fades
+/// their range; ordinary errors do not.
+#[test]
+fn dead_code_diagnostics_carry_unnecessary_tag() {
+    futures::executor::block_on(async {
+        let source = "fn unused_helper() -> i32 {\n    return 1;\n}\n\nexport fn run() {}\n";
+        let diags = diagnostics_for("/work/tag.wado", source).await;
+        let dead = diags
+            .iter()
+            .find(|d| d.message.contains("function `unused_helper` is never used"))
+            .expect("expected a dead-function warning");
+        assert_eq!(
+            dead.tags,
+            vec![DiagnosticTag::Unnecessary],
+            "dead-code warning must carry the Unnecessary tag, got {dead:#?}"
+        );
+    });
+}
+
+/// A clean program whose every item is reached emits no dead-code warnings —
+/// in particular the imported stdlib items are never reported.
+#[test]
+fn fully_used_program_has_no_dead_warnings() {
+    futures::executor::block_on(async {
+        let source = "use { println, Stdout } from \"core:cli\";\n\nexport fn run() with Stdout {\n    println(\"ok\");\n}\n";
+        let diags = diagnostics_for("/work/clean.wado", source).await;
+        assert!(
+            warnings(&diags).is_empty(),
+            "expected no dead-code warnings for a fully-used program, got {diags:#?}"
+        );
+    });
 }
 
 /// Opening `core:prelude/types.wado` is clean: the file declares both
