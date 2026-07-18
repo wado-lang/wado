@@ -726,7 +726,7 @@ fn "wasi_filesystem_symlink.wado/__cm_binding__Preopens_get_directories"() with 
             ptr = builtin::load_i32(__elem_addr + 4);
             len_10 = builtin::load_i32((__elem_addr + 4) + 4);
             arr = "core:rt/memory_to_gc_array"(ptr, len_10);
-            __lifted_result_7 = struct.new "core:prelude/string.wado//String" { repr: arr, used: len_10 };
+            __lifted_result_7 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(arr); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, arr, 0, __array_clone_len_3); __array_clone_dst_3), used: len_10 };
             "core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>::push"(__result, struct.new "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 4), builtin::load_i32((__elem_addr + 4) + 4), 1, 0));
             __i = __i + 1;
@@ -931,7 +931,7 @@ fn "wasi_filesystem_symlink.wado/__cm_lift__Descriptor_unlink_file_at"(__outptr)
             __disc_5 = builtin::load_u8((__outptr + 4) + 4);
             __option_result = ref.null none;
             if __disc_5 != 0 {
-                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_8 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_8); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_8 });
+                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_8 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_8); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(arr); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, arr, 0, __array_clone_len_3); __array_clone_dst_3), used: len_8 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
             __vresult = struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: __option_result };
@@ -1034,7 +1034,7 @@ fn "wasi_filesystem_symlink.wado/__cm_lift__Descriptor_symlink_at"(__outptr) {
             __disc_5 = builtin::load_u8((__outptr + 4) + 4);
             __option_result = ref.null none;
             if __disc_5 != 0 {
-                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_8 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_8); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_8 });
+                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_8 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_8); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(arr); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, arr, 0, __array_clone_len_3); __array_clone_dst_3), used: len_8 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
             __vresult = struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: __option_result };
@@ -1060,7 +1060,7 @@ fn "wasi_filesystem_symlink.wado/__cm_lift__Descriptor_readlink_at"(__outptr) {
     __disc_1 = builtin::load_u8(__outptr);
     __result_val = ref.null none;
     if __disc_1 == 0 {
-        __result_val = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,wasi:filesystem/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: ref.as_non_null(ptr_7 = builtin::load_i32(__outptr + 4); len_8 = builtin::load_i32((__outptr + 4) + 4); arr_9 = "core:rt/memory_to_gc_array"(ptr_7, len_8); struct.new "core:prelude/string.wado//String" { repr: arr_9, used: len_8 }) };
+        __result_val = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,wasi:filesystem/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: ref.as_non_null(ptr_7 = builtin::load_i32(__outptr + 4); len_8 = builtin::load_i32((__outptr + 4) + 4); arr_9 = "core:rt/memory_to_gc_array"(ptr_7, len_8); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = arr_9; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: len_8 }) };
     } else {
         __vdisc = builtin::load_u8(__outptr + 4);
         __vresult = ref.null none;
@@ -1140,7 +1140,7 @@ fn "wasi_filesystem_symlink.wado/__cm_lift__Descriptor_readlink_at"(__outptr) {
             __disc_5 = builtin::load_u8((__outptr + 4) + 4);
             __option_result = ref.null none;
             if __disc_5 != 0 {
-                __option_result = ref.as_non_null(ptr_10 = builtin::load_i32(((__outptr + 4) + 4) + 4); len_11 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr_12 = "core:rt/memory_to_gc_array"(ptr_10, len_11); struct.new "core:prelude/string.wado//String" { repr: arr_12, used: len_11 });
+                __option_result = ref.as_non_null(ptr_10 = builtin::load_i32(((__outptr + 4) + 4) + 4); len_11 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr_12 = "core:rt/memory_to_gc_array"(ptr_10, len_11); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = arr_12; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: len_11 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
             __vresult = struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: __option_result };
@@ -1243,7 +1243,7 @@ fn "wasi_filesystem_symlink.wado/__cm_lift__Descriptor_open_at"(__outptr) {
             __disc_5 = builtin::load_u8((__outptr + 4) + 4);
             __option_result = ref.null none;
             if __disc_5 != 0 {
-                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_8 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_8); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_8 });
+                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_8 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_8); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(arr); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, arr, 0, __array_clone_len_3); __array_clone_dst_3), used: len_8 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
             __vresult = struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: __option_result };
@@ -1311,7 +1311,7 @@ fn "wasi_filesystem_symlink.wado/__cm_lift__Descriptor_stat"(__outptr) {
             __disc_5 = builtin::load_u8((__outptr + 8) + 4);
             __option_result_6 = ref.null none;
             if __disc_5 != 0 {
-                __option_result_6 = ref.as_non_null(ptr_29 = builtin::load_i32(((__outptr + 8) + 4) + 4); len_30 = builtin::load_i32((((__outptr + 8) + 4) + 4) + 4); arr_31 = "core:rt/memory_to_gc_array"(ptr_29, len_30); struct.new "core:prelude/string.wado//String" { repr: arr_31, used: len_30 });
+                __option_result_6 = ref.as_non_null(ptr_29 = builtin::load_i32(((__outptr + 8) + 4) + 4); len_30 = builtin::load_i32((((__outptr + 8) + 4) + 4) + 4); arr_31 = "core:rt/memory_to_gc_array"(ptr_29, len_30); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = arr_31; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: len_30 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 8) + 4) + 4), builtin::load_i32((((__outptr + 8) + 4) + 4) + 4), 1, 0));
             }
             __vresult_4 = struct.new "wasi:filesystem/types.wado//DescriptorType::Other" { discriminant: 7, payload_0: __option_result_6 };
@@ -1423,7 +1423,7 @@ fn "wasi_filesystem_symlink.wado/__cm_lift__Descriptor_stat"(__outptr) {
             __disc_27 = builtin::load_u8((__outptr + 8) + 4);
             __option_result_28 = ref.null none;
             if __disc_27 != 0 {
-                __option_result_28 = ref.as_non_null(ptr_32 = builtin::load_i32(((__outptr + 8) + 4) + 4); len_33 = builtin::load_i32((((__outptr + 8) + 4) + 4) + 4); arr_34 = "core:rt/memory_to_gc_array"(ptr_32, len_33); struct.new "core:prelude/string.wado//String" { repr: arr_34, used: len_33 });
+                __option_result_28 = ref.as_non_null(ptr_32 = builtin::load_i32(((__outptr + 8) + 4) + 4); len_33 = builtin::load_i32((((__outptr + 8) + 4) + 4) + 4); arr_34 = "core:rt/memory_to_gc_array"(ptr_32, len_33); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = arr_34; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: len_33 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 8) + 4) + 4), builtin::load_i32((((__outptr + 8) + 4) + 4) + 4), 1, 0));
             }
             __vresult_26 = struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: __option_result_28 };
@@ -1526,7 +1526,7 @@ fn "wasi_filesystem_symlink.wado/__cm_lift__Descriptor_link_at"(__outptr) {
             __disc_5 = builtin::load_u8((__outptr + 4) + 4);
             __option_result = ref.null none;
             if __disc_5 != 0 {
-                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_8 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_8); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_8 });
+                __option_result = ref.as_non_null(ptr = builtin::load_i32(((__outptr + 4) + 4) + 4); len_8 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_8); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(arr); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, arr, 0, __array_clone_len_3); __array_clone_dst_3), used: len_8 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
             __vresult = struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: __option_result };
@@ -1594,7 +1594,7 @@ fn "wasi_filesystem_symlink.wado/__cm_lift__Descriptor_stat_at"(__outptr) {
             __disc_5 = builtin::load_u8((__outptr + 8) + 4);
             __option_result_6 = ref.null none;
             if __disc_5 != 0 {
-                __option_result_6 = ref.as_non_null(ptr_29 = builtin::load_i32(((__outptr + 8) + 4) + 4); len_30 = builtin::load_i32((((__outptr + 8) + 4) + 4) + 4); arr_31 = "core:rt/memory_to_gc_array"(ptr_29, len_30); struct.new "core:prelude/string.wado//String" { repr: arr_31, used: len_30 });
+                __option_result_6 = ref.as_non_null(ptr_29 = builtin::load_i32(((__outptr + 8) + 4) + 4); len_30 = builtin::load_i32((((__outptr + 8) + 4) + 4) + 4); arr_31 = "core:rt/memory_to_gc_array"(ptr_29, len_30); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = arr_31; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: len_30 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 8) + 4) + 4), builtin::load_i32((((__outptr + 8) + 4) + 4) + 4), 1, 0));
             }
             __vresult_4 = struct.new "wasi:filesystem/types.wado//DescriptorType::Other" { discriminant: 7, payload_0: __option_result_6 };
@@ -1706,7 +1706,7 @@ fn "wasi_filesystem_symlink.wado/__cm_lift__Descriptor_stat_at"(__outptr) {
             __disc_27 = builtin::load_u8((__outptr + 8) + 4);
             __option_result_28 = ref.null none;
             if __disc_27 != 0 {
-                __option_result_28 = ref.as_non_null(ptr_32 = builtin::load_i32(((__outptr + 8) + 4) + 4); len_33 = builtin::load_i32((((__outptr + 8) + 4) + 4) + 4); arr_34 = "core:rt/memory_to_gc_array"(ptr_32, len_33); struct.new "core:prelude/string.wado//String" { repr: arr_34, used: len_33 });
+                __option_result_28 = ref.as_non_null(ptr_32 = builtin::load_i32(((__outptr + 8) + 4) + 4); len_33 = builtin::load_i32((((__outptr + 8) + 4) + 4) + 4); arr_34 = "core:rt/memory_to_gc_array"(ptr_32, len_33); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = arr_34; let __array_clone_len_3: i32; __array_clone_len_3 = builtin::array_len(__array_clone_src_3); let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: len_33 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 8) + 4) + 4), builtin::load_i32((((__outptr + 8) + 4) + 4) + 4), 1, 0));
             }
             __vresult_26 = struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: __option_result_28 };

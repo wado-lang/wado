@@ -3320,7 +3320,7 @@ Read the byte at `index` without bounds checks.
 For safe byte access, use `bytes()` iterator instead. This method is
 reserved for performance-critical code where bounds have been proven.
 
-#### `pub fn as_bytes(&self) -> ArraySlice<u8> with stores[self]`
+#### `pub fn as_bytes(&self) -> ByteSlice with stores[self]`
 
 Zero-copy view of the string's UTF-8 bytes as an `ArraySlice<u8>`.
 No allocation: the slice references the string's backing buffer over
@@ -3354,13 +3354,19 @@ Much faster than a loop for large n (e.g., trailing zeros in large integers).
 Appends another string to this string.
 Grows the string if necessary (O(1) amortized).
 
-#### `pub fn push_bytes_unchecked(&mut self, bytes: List<u8>)`
+#### `pub fn push_bytes_unchecked<S: AsByteSlice>(&mut self, bytes: &S)`
 
 Append all bytes of `bytes` to this string (bulk-copy, single `array_copy`).
 
 # Safety (caller-side preconditions)
 
 - The resulting byte sequence (existing bytes + new bytes) must be valid UTF-8.
+  Append the bytes of any `AsByteSlice` source (`ByteList`, `ByteArray`,
+  `ByteSlice`, or a `String`) in one bulk `array_copy`.
+
+# Safety (caller-side preconditions)
+
+- The resulting byte sequence must remain valid UTF-8.
 
 #### `pub fn push_str_range_unchecked(&mut self, s: &String, start: i32, end: i32)`
 
@@ -3371,14 +3377,6 @@ Append the byte range `[start, end)` of `s` to this string
 
 - `0 <= start <= end <= s.len()`.
 - `start` and `end` must lie on UTF-8 character boundaries of `s`.
-- The resulting byte sequence must remain valid UTF-8.
-
-#### `pub fn push_byte_slice_unchecked(&mut self, bytes: ByteSlice)`
-
-Append the bytes of `bytes` to this string in one bulk `array_copy`.
-
-# Safety (caller-side preconditions)
-
 - The resulting byte sequence must remain valid UTF-8.
 
 #### `pub fn bytes(&self) -> StrUtf8ByteIter with stores[self]`
@@ -4000,21 +3998,6 @@ In-place sort with comparator. Stable, O(n log n) worst case.
 #### `pub fn join(&self, separator: String) -> String`
 
 Joins elements into a string with the given separator.
-
-#### `pub fn get_byte_unchecked(&self, index: i32) -> u8`
-
-Returns the byte at `index` without bounds checking — the `List<u8>`
-parallel to `String::get_byte_unchecked`.
-
-The caller must guarantee `0 <= index < len()`; an out-of-range `index`
-reads past the buffer or traps. Intended for hot byte-scanning loops that
-have already range-checked `index` (e.g. a forthcoming `core:cbor`
-decoder over an owned `ByteList`).
-
-#### `pub fn to_hex(&self) -> String`
-
-Renders the bytes as a lowercase hexadecimal string, two digits per
-byte (e.g. `[0x0f, 0xa0]` -> `"0fa0"`).
 
 #### `impl IndexValue<i32> for List<T>`
 

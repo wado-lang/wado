@@ -1380,8 +1380,13 @@ fn generate_struct_deserialize(
             .compiler_method(crate::compiler_item::CompilerItem::ByteSliceGetUnchecked)
             .0
             .clone();
-        let base = tt.make_generic_instance("ArraySlice".to_string(), slice_module, vec![TypeTable::U8]);
-        tt.make_newtype("ByteSlice".to_string(), crate::module_source::ModuleSource::bytes(), base)
+        let base =
+            tt.make_generic_instance("ArraySlice".to_string(), slice_module, vec![TypeTable::U8]);
+        tt.make_newtype(
+            "ByteSlice".to_string(),
+            crate::module_source::ModuleSource::bytes(),
+            base,
+        )
     };
     let deser_error_type = tt.make_struct(names.deserialize_error.clone(), serde_module.clone());
     let deser_error_kind_type = tt

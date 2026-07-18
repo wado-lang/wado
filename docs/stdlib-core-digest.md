@@ -22,7 +22,7 @@ let digest = h.finalize();
 ```
 
 Message bytes are accepted from any `AsByteSlice` source: a `ByteSlice`,
-`ByteList`, `ByteArray`, `ByteSlice`, or a `String` (its UTF-8 bytes).
+`ByteList`, `ByteArray`, or a `String` (its UTF-8 bytes).
 
 ## Synopsis
 

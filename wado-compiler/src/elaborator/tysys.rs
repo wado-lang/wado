@@ -357,10 +357,7 @@ impl TypeSystem {
             let is_builtin_array = matches!(tt.get(base_id), ResolvedType::BuiltinArray(_));
             drop(tt);
             if is_builtin_array {
-                return (
-                    crate::tir::TypeTable::ARRAY_TYPE_NAME.to_string(),
-                    base_id,
-                );
+                return (crate::tir::TypeTable::ARRAY_TYPE_NAME.to_string(), base_id);
             }
             if let Some(base_name) = self.struct_name_for_type(base_id) {
                 return (base_name, base_id);
