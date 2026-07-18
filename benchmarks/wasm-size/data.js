@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784334431488,
+  "lastUpdate": 1784338742578,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -41329,6 +41329,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/52da04c5cfc39fcd8fe8e96c7d765b9888124bd8"
         },
         "date": 1784334431191,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1923,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8233,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16233,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 265299,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "219d9df27b9af96796f15a6060240cd8e59084e1",
+          "message": "Merge pull request #1612 from wado-lang/claude/wado-playground-logger-debug-slaf15\n\nfeat(playground): live compile progress, bundled LSP, and -Os wasm builds",
+          "timestamp": "2026-07-18T10:29:32+09:00",
+          "tree_id": "6fe32ea2b45d1d9750c8f9630ed8729666c7762e",
+          "url": "https://github.com/wado-lang/wado/commit/219d9df27b9af96796f15a6060240cd8e59084e1"
+        },
+        "date": 1784338742224,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
