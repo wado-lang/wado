@@ -150,17 +150,17 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(55)
 
-type "functype//effect_handler_generic_impl.wado/Holder<bool>^Greeter::greet" = fn(ref "effect_handler_generic_impl.wado//Holder<bool>", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(56)
+type "functype//effect_handler_generic_impl.wado/Holder<bool>^Greeter::greet" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(56)
 
-type "functype//effect_handler_generic_impl.wado/Holder<core:prelude/string.wado/String>^Greeter::greet" = fn(ref "effect_handler_generic_impl.wado//Holder<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(57)
+type "functype//effect_handler_generic_impl.wado/Holder<core:prelude/string.wado/String>^Greeter::greet" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(57)
 
-type "functype//effect_handler_generic_impl.wado/Holder<i32>^Greeter::greet" = fn(ref "effect_handler_generic_impl.wado//Holder<i32>", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(58)
+type "functype//effect_handler_generic_impl.wado/Holder<i32>^Greeter::greet" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(58)
 
-type "functype//effect_handler_generic_impl.wado/__Closure_2::__call" = fn(ref "effect_handler_generic_impl.wado//__Closure_2", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(59)
+type "functype//effect_handler_generic_impl.wado/__Closure_2::__call" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(59)
 
-type "functype//effect_handler_generic_impl.wado/__Closure_3::__call" = fn(ref "effect_handler_generic_impl.wado//__Closure_3", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(60)
+type "functype//effect_handler_generic_impl.wado/__Closure_3::__call" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(60)
 
-type "functype//effect_handler_generic_impl.wado/__Closure_4::__call" = fn(ref "effect_handler_generic_impl.wado//__Closure_4", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(61)
+type "functype//effect_handler_generic_impl.wado/__Closure_4::__call" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(61)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(62)
 
@@ -908,49 +908,43 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     }
 }
 
-fn "effect_handler_generic_impl.wado/Holder<bool>^Greeter::greet"(self, name) {
+fn "effect_handler_generic_impl.wado/Holder<bool>^Greeter::greet"(name) {
     let __local_2: ref "core:prelude/string.wado//String";
     return __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 }, "core:prelude/string.wado/String::push"(__local_2, 104), "core:prelude/string.wado/String::push"(__local_2, 105), "core:prelude/string.wado/String::push"(__local_2, 32), "core:prelude/string.wado/String::push_str"(__local_2, name), __local_2;
 }
 
-fn "effect_handler_generic_impl.wado/Holder<core:prelude/string.wado/String>^Greeter::greet"(self, name) {
+fn "effect_handler_generic_impl.wado/Holder<core:prelude/string.wado/String>^Greeter::greet"(name) {
     let __local_2: ref "core:prelude/string.wado//String";
     return __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 }, "core:prelude/string.wado/String::push"(__local_2, 104), "core:prelude/string.wado/String::push"(__local_2, 105), "core:prelude/string.wado/String::push"(__local_2, 32), "core:prelude/string.wado/String::push_str"(__local_2, name), __local_2;
 }
 
-fn "effect_handler_generic_impl.wado/Holder<i32>^Greeter::greet"(self, name) {
+fn "effect_handler_generic_impl.wado/Holder<i32>^Greeter::greet"(name) {
     let __local_2: ref "core:prelude/string.wado//String";
     return __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 }, "core:prelude/string.wado/String::push"(__local_2, 104), "core:prelude/string.wado/String::push"(__local_2, 105), "core:prelude/string.wado/String::push"(__local_2, 32), "core:prelude/string.wado/String::push_str"(__local_2, name), __local_2;
 }
 
-fn "effect_handler_generic_impl.wado/__Closure_2::__call"(self, name) {
-    return "effect_handler_generic_impl.wado/Holder<i32>^Greeter::greet"(self.__capture_0, name);
+fn "effect_handler_generic_impl.wado/__Closure_2::__call"(name) {
+    return "effect_handler_generic_impl.wado/Holder<i32>^Greeter::greet"(name);
 }
 
-fn "effect_handler_generic_impl.wado/__Closure_3::__call"(self, name) {
-    return "effect_handler_generic_impl.wado/Holder<core:prelude/string.wado/String>^Greeter::greet"(self.__capture_0, name);
+fn "effect_handler_generic_impl.wado/__Closure_3::__call"(name) {
+    return "effect_handler_generic_impl.wado/Holder<core:prelude/string.wado/String>^Greeter::greet"(name);
 }
 
-fn "effect_handler_generic_impl.wado/__Closure_4::__call"(self, name) {
-    return "effect_handler_generic_impl.wado/Holder<bool>^Greeter::greet"(self.__capture_0, name);
+fn "effect_handler_generic_impl.wado/__Closure_4::__call"(name) {
+    return "effect_handler_generic_impl.wado/Holder<bool>^Greeter::greet"(name);
 }
 
 fn "closure/effect_handler_generic_impl.wado/__closure_wrapper_0"(__env, __p0) {
-    let __typed_env: ref "effect_handler_generic_impl.wado//__Closure_2";
-    __typed_env = ref.cast "effect_handler_generic_impl.wado//__Closure_2"(__env);
-    return "effect_handler_generic_impl.wado/__Closure_2::__call"(__typed_env, __p0);
+    return "effect_handler_generic_impl.wado/__Closure_2::__call"(__p0);
 }
 
 fn "closure/effect_handler_generic_impl.wado/__closure_wrapper_1"(__env, __p0) {
-    let __typed_env: ref "effect_handler_generic_impl.wado//__Closure_3";
-    __typed_env = ref.cast "effect_handler_generic_impl.wado//__Closure_3"(__env);
-    return "effect_handler_generic_impl.wado/__Closure_3::__call"(__typed_env, __p0);
+    return "effect_handler_generic_impl.wado/__Closure_3::__call"(__p0);
 }
 
 fn "closure/effect_handler_generic_impl.wado/__closure_wrapper_2"(__env, __p0) {
-    let __typed_env: ref "effect_handler_generic_impl.wado//__Closure_4";
-    __typed_env = ref.cast "effect_handler_generic_impl.wado//__Closure_4"(__env);
-    return "effect_handler_generic_impl.wado/__Closure_4::__call"(__typed_env, __p0);
+    return "effect_handler_generic_impl.wado/__Closure_4::__call"(__p0);
 }
 
 export fn "effect_handler_generic_impl.wado/__cm_export____test_0_generic_impl_handles_an_effect_for_holder_i32_" as "__test_0_generic_impl_handles_an_effect_for_holder_i32_"

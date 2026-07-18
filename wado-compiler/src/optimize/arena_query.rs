@@ -290,14 +290,8 @@ pub(super) fn is_pure_nontrapping_expr_typed(
     is_pure_expr(body, id) && !super::mod_ref::ModRef::of_expr_typed(body, id, types).may_trap
 }
 
-/// [`is_pure_nontrapping_expr`] for an operand: a promoted constant is pure and
-/// cannot trap.
-pub(super) fn is_pure_nontrapping_operand(body: &Body, op: Operand) -> bool {
-    is_pure_nontrapping_operand_typed(body, op, None)
-}
-
-/// [`is_pure_nontrapping_operand`] with a type table (see
-/// [`is_pure_nontrapping_expr_typed`]).
+/// [`is_pure_nontrapping_expr_typed`] for an operand: a promoted constant is
+/// pure and cannot trap.
 pub(super) fn is_pure_nontrapping_operand_typed(
     body: &Body,
     op: Operand,

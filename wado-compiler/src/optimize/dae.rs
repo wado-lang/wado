@@ -266,15 +266,21 @@ fn validate_call_sites(
     project: &NirPackage,
     mut candidates: IndexMap<FnKey, Vec<bool>>,
 ) -> IndexMap<FnKey, Vec<bool>> {
+    let type_table = project.type_table.borrow();
     let mut rejected: IndexSet<FnKey> = IndexSet::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         if let Some(body) = &func.body {
-            validate_in_body(body, &candidates, &mut rejected);
+            validate_in_body(body, &candidates, &mut rejected, &type_table);
         }
     }
     for global in &project.globals {
-        validate_in_body(global.initializer.body(), &candidates, &mut rejected);
+        validate_in_body(
+            global.initializer.body(),
+            &candidates,
+            &mut rejected,
+            &type_table,
+        );
     }
     for r in rejected {
         candidates.shift_remove(&r);
@@ -288,11 +294,12 @@ fn validate_in_body(
     body: &Body,
     candidates: &IndexMap<FnKey, Vec<bool>>,
     rejected: &mut IndexSet<FnKey>,
+    type_table: &crate::tir::TypeTable,
 ) {
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Expr(id) = node {
-            validate_call(body, id, candidates, rejected);
+            validate_call(body, id, candidates, rejected, type_table);
         }
         body.for_each_child(node, |c| stack.push(c));
     }
@@ -303,6 +310,7 @@ fn validate_call(
     id: ExprId,
     candidates: &IndexMap<FnKey, Vec<bool>>,
     rejected: &mut IndexSet<FnKey>,
+    type_table: &crate::tir::TypeTable,
 ) {
     match &body.exprs[id].kind {
         ExprKind::Call { func_id, args, .. } => {
@@ -322,7 +330,9 @@ fn validate_call(
                 // (but side-effect-free) argument must keep the param alive.
                 let pure = match args.get(i).map(|a| a.expr) {
                     Some(Operand::Value(_)) => true,
-                    Some(Operand::Expr(e)) => arena_query::is_pure_nontrapping_expr(body, e),
+                    Some(Operand::Expr(e)) => {
+                        arena_query::is_pure_nontrapping_expr_typed(body, e, Some(type_table))
+                    }
                     None => false,
                 };
                 if !pure {
@@ -348,9 +358,9 @@ fn validate_call(
             // a `Call` and the receiver is discarded — it must be pure.
             let drops_receiver = dead.first() == Some(&true);
             if drops_receiver
-                && !receiver
-                    .as_expr()
-                    .is_none_or(|e| arena_query::is_pure_nontrapping_expr(body, e))
+                && !receiver.as_expr().is_none_or(|e| {
+                    arena_query::is_pure_nontrapping_expr_typed(body, e, Some(type_table))
+                })
             {
                 rejected.insert(key);
             } else {
@@ -361,7 +371,12 @@ fn validate_call(
                         continue;
                     }
                     match args.get(i - 1) {
-                        Some(arg) if arena_query::is_pure_nontrapping_operand(body, arg.expr) => {}
+                        Some(arg)
+                            if arena_query::is_pure_nontrapping_operand_typed(
+                                body,
+                                arg.expr,
+                                Some(type_table),
+                            ) => {}
                         _ => {
                             rejected.insert(key);
                             break;

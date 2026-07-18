@@ -56,7 +56,7 @@ pub fn eliminate_dead_return_values(project: &mut NirPackage, gate: &mut Functio
             continue;
         }
         if let Some(body) = &func.body
-            && has_only_pure_returns_with_explicit_tail(body)
+            && has_only_pure_returns_with_explicit_tail(body, &type_table)
             && let Some(id) = func.id
         {
             candidates.insert(id);
@@ -140,7 +140,7 @@ fn is_heap_alloc_return(type_id: crate::tir::TypeId, type_table: &TypeTable) -> 
 
 /// True when the body ends with an explicit `Return { value: Some(_) }` and
 /// every `Return` in the body (including the tail) carries a pure value.
-fn has_only_pure_returns_with_explicit_tail(body: &Body) -> bool {
+fn has_only_pure_returns_with_explicit_tail(body: &Body, type_table: &TypeTable) -> bool {
     let root = body.root;
     let Some(&last) = body.blocks[root].stmts.last() else {
         return false;
@@ -160,7 +160,7 @@ fn has_only_pure_returns_with_explicit_tail(body: &Body) -> bool {
                     // Voiding the function discards the return value's
                     // evaluation, so a trapping value must keep the function
                     // value-returning (the trap is observable).
-                    if !arena_query::is_pure_nontrapping_operand(body, *v) {
+                    if !arena_query::is_pure_nontrapping_operand_typed(body, *v, Some(type_table)) {
                         return false;
                     }
                 }
