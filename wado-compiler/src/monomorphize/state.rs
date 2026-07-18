@@ -426,12 +426,65 @@ impl Monomorphizer {
         type_table: &TypeTable,
         info: &LocalMethodName,
     ) -> bool {
-        let Some(trait_name) = info.trait_name.as_deref() else {
-            return false;
-        };
-        self.newtype_own_struct_name_with_impl(receiver_type_id, type_table, Some(trait_name))
-            .as_deref()
-            == Some(info.struct_name.as_str())
+        match info.trait_name.as_deref() {
+            Some(trait_name) => {
+                self.newtype_own_struct_name_with_impl(
+                    receiver_type_id,
+                    type_table,
+                    Some(trait_name),
+                )
+                .as_deref()
+                    == Some(info.struct_name.as_str())
+            }
+            // Inherent method: keep the newtype's own name when the newtype has
+            // its own `impl Newtype { fn method }`, so it is not peeled to the
+            // erased base (`ByteList::to_hex`, not `List<u8>::to_hex`).
+            None => {
+                self.newtype_own_inherent_method_name(
+                    receiver_type_id,
+                    type_table,
+                    &info.method_name,
+                )
+                .as_deref()
+                    == Some(info.struct_name.as_str())
+            }
+        }
+    }
+
+    /// Peel refs/newtypes down to the first newtype level whose OWN inherent
+    /// impl declares `method_name`, returning that newtype's mangled name. The
+    /// inherent parallel to [`Self::newtype_own_struct_name_with_impl`] (which
+    /// only covers trait methods).
+    fn newtype_own_inherent_method_name(
+        &self,
+        type_id: TypeId,
+        type_table: &TypeTable,
+        method_name: &str,
+    ) -> Option<String> {
+        let mut tid = type_id;
+        loop {
+            match type_table.get(tid) {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => tid = *inner,
+                ResolvedType::Newtype {
+                    base_type, name, ..
+                } => {
+                    let base = *base_type;
+                    // The newtype's declared head name is the key inherent impls
+                    // are registered under (`impl ByteList`, `impl<T> MyArr<T>`),
+                    // while `mangle_type_name` yields the call-site spelling that
+                    // matches `info.struct_name`.
+                    let has_own = self
+                        .functions
+                        .trait_env
+                        .has_inherent_method(name, method_name);
+                    if has_own {
+                        return Some(type_table.mangle_type_name(tid));
+                    }
+                    tid = base;
+                }
+                _ => return None,
+            }
+        }
     }
 
     /// Build the ordered list of `(mangled_method_name, trait_name)` formats to
