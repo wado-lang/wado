@@ -351,7 +351,6 @@ impl String {
         builtin::array_copy(self.internal_raw_bytes_mut(), self.used, s.internal_raw_bytes(), start, n);
         self.used = new_used;
     }
-
 }
 
 impl Add for String {
@@ -1059,7 +1058,13 @@ impl String {
             self.grow(new_used);
         }
         // Shift bytes right
-        builtin::array_copy(self.internal_raw_bytes_mut(), byte_index + char_len, self.internal_raw_bytes(), byte_index, self.used - byte_index);
+        builtin::array_copy(
+            self.internal_raw_bytes_mut(),
+            byte_index + char_len,
+            self.internal_raw_bytes(),
+            byte_index,
+            self.used - byte_index,
+        );
         // Write encoded char
         if code < 0x80 {
             self.repr[byte_index] = code as u8;
@@ -1101,7 +1106,13 @@ impl String {
             self.grow(new_used);
         }
         // Shift bytes right
-        builtin::array_copy(self.internal_raw_bytes_mut(), byte_index + s_len, self.internal_raw_bytes(), byte_index, self.used - byte_index);
+        builtin::array_copy(
+            self.internal_raw_bytes_mut(),
+            byte_index + s_len,
+            self.internal_raw_bytes(),
+            byte_index,
+            self.used - byte_index,
+        );
         // Copy inserted string
         builtin::array_copy(self.internal_raw_bytes_mut(), byte_index, s.internal_raw_bytes(), 0, s_len);
         self.used = new_used;

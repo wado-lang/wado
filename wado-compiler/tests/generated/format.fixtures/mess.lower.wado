@@ -5903,7 +5903,7 @@ pub fn char::encode_utf8(self: Box<char>) -> List<u8> {
             let mut __b: List<u8> = "core::prelude/list.wado::List<u8>^SequenceLiteralBuilder::new_literal"(1);
             __b."List<u8>^SequenceLiteralBuilder::push_literal"(cp as u8);
             break __seq_lit: __b."List<u8>^SequenceLiteralBuilder::build"();
-        } as List<u8>;
+        } as List<u8> as List<u8>;
     }
     if (cp < 2048) {
         let mut buf: List<u8> = "core::prelude/list.wado::List<u8>::with_capacity"(2);
@@ -16283,6 +16283,10 @@ fn "$value_copy$core:prelude/string.wado/StrCharIter"(v: StrCharIter) -> StrChar
     return StrCharIter { repr: v.repr, used: v.used, byte_index: v.byte_index };
 }
 
+fn "$value_copy$core:prelude/list.wado/List<u8>"(v: List<u8>) -> List<u8> {
+    return List<u8> { repr: core::builtin::array_clone::<u8>(&v.repr), used: v.used };
+}
+
 fn "$value_copy$core:prelude/intparse.wado/ParseFloatError"(v: ParseFloatError) -> ParseFloatError {
     return ParseFloatError { kind: v.kind };
 }
@@ -16360,10 +16364,6 @@ fn "$value_copy$[core:prelude/string.wado/String,core:prelude/string.wado/String
 
 fn "$value_copy$core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>"(v: List<[String, String]>) -> List<[String, String]> {
     return List<[core:prelude/string.wado/String,core:prelude/string.wado/String]> { repr: core::builtin::array_clone::<[String, String]>(&v.repr), used: v.used };
-}
-
-fn "$value_copy$core:prelude/list.wado/List<u8>"(v: List<u8>) -> List<u8> {
-    return List<u8> { repr: core::builtin::array_clone::<u8>(&v.repr), used: v.used };
 }
 
 fn "$value_copy$[Stream<u8>,StreamWritable<u8>]"(v: [Stream<u8>, StreamWritable<u8>]) -> [Stream<u8>, StreamWritable<u8>] {
