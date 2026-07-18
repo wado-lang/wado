@@ -1226,14 +1226,10 @@ pub(super) struct FunctionContext {
     /// Reify-side counterpart to [`Self::assert_capture_ctx`].
     /// Independent so production and reify never share state.
     pub(super) reify_assert_capture_ctx: Option<super::reify::ReifyAssertCaptureContext>,
-    /// Compound-assign once-eval side-channel (annotate side). While
-    /// [`Elaborator::resolve_compound_assign`] reserves the `__caN` locals for
-    /// the target's impure sub-pieces, each such piece's `AstId` maps to its
-    /// resolved type here; [`Elaborator::resolve_expr`] then short-circuits any
-    /// later re-resolution of that exact node to the recorded type, so the
-    /// piece is walked once (its facts recorded, its own internal locals added
-    /// once) — matching reify's single walk under `compound_overrides`. Empty
-    /// outside `resolve_compound_assign`.
+    /// Annotate side-channel: a compound-assign sub-piece's `AstId` → its
+    /// resolved type. [`Elaborator::resolve_expr`] returns this instead of
+    /// re-resolving the node, so it is walked once (matching reify's
+    /// `compound_overrides`). Empty outside `resolve_compound_assign`.
     pub(super) compound_hoist_types: IndexMap<crate::ast::AstId, TypeId>,
 }
 
@@ -1829,6 +1825,9 @@ pub(super) struct IndexTraitInfo {
     pub(super) trait_name: String,
     /// Module where the impl block is defined
     pub(super) impl_module_source: ModuleSource,
+    /// The trait's index (key) type argument (e.g. `List<i32>`), for subscript
+    /// coercion.
+    pub(super) index_type: Option<TypeId>,
 }
 
 /// Info about an `IndexAssign` trait implementation
@@ -1841,6 +1840,9 @@ pub(super) struct IndexAssignTraitInfo {
     pub(super) trait_name: String,
     /// Module where the impl block is defined
     pub(super) impl_module_source: ModuleSource,
+    /// The trait's index (key) type argument (e.g. `List<i32>`), for subscript
+    /// coercion.
+    pub(super) index_type: Option<TypeId>,
 }
 
 /// Info about an `IndexMut` trait implementation
@@ -1853,6 +1855,9 @@ pub(super) struct IndexMutTraitInfo {
     pub(super) trait_name: String,
     /// Module where the impl block is defined
     pub(super) impl_module_source: ModuleSource,
+    /// The trait's index (key) type argument (e.g. `List<i32>`), for subscript
+    /// coercion.
+    pub(super) index_type: Option<TypeId>,
 }
 
 /// Info about an `IndexValue` trait implementation
@@ -1865,6 +1870,9 @@ pub(super) struct IndexValueTraitInfo {
     pub(super) trait_name: String,
     /// Module where the impl block is defined
     pub(super) impl_module_source: ModuleSource,
+    /// The trait's index (key) type argument (e.g. `List<i32>`), for subscript
+    /// coercion.
+    pub(super) index_type: Option<TypeId>,
 }
 
 /// Info about a comparison trait implementation (`Eq` or `Ord`)

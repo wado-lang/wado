@@ -1253,6 +1253,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         |s, n, t| s.find_index_assign_trait_impl(n, t, index_type),
                     );
                     if let Some(trait_info) = assign_info {
+                        if let Some(key_type) = trait_info.index_type
+                            && key_type != index_type
+                        {
+                            let _ = self.resolve_expr(&index_expr.index, ctx, Some(key_type));
+                        }
+
                         // Generate: expr.index_assign(index, value)
                         let value_span = value.span();
                         let value_type = match value {
@@ -1456,24 +1462,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::CompoundAssignOp::Shl => BinaryOp::Shl,
             ast::CompoundAssignOp::Shr => BinaryOp::Shr,
         };
-        // Reserve the `__caN` locals reify binds for the target's impure
-        // sub-pieces, in a fresh scope, so both walks advance the per-function
-        // local frame identically (walk-order invariant: a closure capturing a
-        // local declared after `arr[bump()] += 1` must see the same index on
-        // both sides). Each piece is resolved once and registered in
-        // `ctx.compound_hoist_types`, so the target/value walks below (and
-        // `assign_to_target`, which re-resolves the target for the write
-        // dispatch) short-circuit it instead of re-walking — matching reify,
-        // which walks each piece once under `compound_overrides`. Reify's
-        // `bind_compound_hoists` is the mirror.
+        // Reserve reify's `__caN` locals, resolving each impure sub-piece once
+        // (a subscript against its index key type) so the annotate and reify
+        // frames stay identical; later walks re-encounter each piece via
+        // `compound_hoist_types` instead of re-resolving.
         ctx.enter_scope();
         let saved_hoist_types = std::mem::take(&mut ctx.compound_hoist_types);
-        let mut hoists: Vec<&ast::Expr> = Vec::new();
+        let mut hoists: Vec<super::reify::CompoundHoist<'_>> = Vec::new();
         super::reify::collect_compound_hoists(&compound.target, &mut hoists);
-        for (idx, piece) in hoists.iter().enumerate() {
-            let piece_type = self.resolve_expr(piece, ctx, None);
+        for (idx, hoist) in hoists.iter().enumerate() {
+            let expected = hoist
+                .index_ctx
+                .and_then(|ix| self.compound_index_key_type(ix, ctx));
+            let piece_type = self.resolve_expr(hoist.piece, ctx, expected);
             let _local_index = ctx.add_local(format!("__ca{idx}"), piece_type, false, None);
-            ctx.compound_hoist_types.insert(piece.id(), piece_type);
+            ctx.compound_hoist_types
+                .insert(hoist.piece.id(), piece_type);
         }
 
         let read_type = self.resolve_expr(&compound.target, ctx, None);

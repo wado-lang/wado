@@ -1,17 +1,6 @@
 // Compound assignment `target OP= rhs` must evaluate each target
-// sub-expression exactly once, like Rust / JS / C++ (issue #1179).
-//
-// Mirror of `comparison_chain_side_effects.wado`: side-effect counters
-// pin the once-eval rule for impure l-values. Before the fix,
-// `arr[bump()] += 1` reified the target twice — once for the read and
-// once for the write — so `bump()` ran twice. Reify now hoists impure
-// target sub-pieces to `let __caN` bindings shared by both sides.
-//
-// Design note (issue #1179 trait question): the once-eval rule is
-// realised entirely in reify's lowering via the existing Index /
-// IndexAssign traits; no new `IndexCompoundAssign` trait is introduced.
-// The two-trait split already gives custom types once-eval receiver /
-// subscript semantics, as the `Cell` case below shows.
+// sub-expression exactly once (issue #1179). Side-effect counters pin the
+// rule for impure l-values, like `comparison_chain_side_effects.wado`.
 
 global mut CALL_COUNT: i32 = 0;
 
@@ -20,8 +9,6 @@ fn bump() -> i32 {
     return 0;
 }
 
-// Custom Index + IndexAssign type: the once-eval rule is observable at
-// the user-API level too, not just for builtin arrays.
 struct Cell {
     value: i32,
 }
@@ -57,9 +44,8 @@ struct Holder {
     value: i32,
 }
 
-// A custom `Index` whose `index()` has an observable side effect, to pin
-// that a nested index READ used as a subscript is evaluated once (its
-// result is bound by value before the read/write).
+// A custom `Index` whose `index()` has a side effect, so a nested index
+// read used as a subscript is observably evaluated once.
 global mut IDX_CALLS: i32 = 0;
 
 struct SideIndex {
@@ -127,10 +113,8 @@ test "side-effecting custom Index as subscript is evaluated once" {
     assert a[0] == 0;
 }
 
-// An impure-target compound assign binds a `__caN` local; a closure
-// declared after it must still capture the right frame slot. This pins the
-// annotate/reify local-frame parity (the reserved `__caN` slot must exist on
-// both walks, or the capture index shifts).
+// Frame parity: the `__caN` slot must exist on both the annotate and reify
+// walks, else a later closure's capture index shifts.
 test "closure after an impure compound assign captures the right local" {
     CALL_COUNT = 0;
     let mut arr: List<i32> = [10, 20, 30];
@@ -144,11 +128,8 @@ test "closure after an impure compound assign captures the right local" {
     assert CALL_COUNT == 1;
 }
 
-// A hoisted sub-piece that itself introduces locals (a `match` arm binds
-// `i`, its block binds `_z`) must be walked once on both sides: annotate
-// resolves it once and short-circuits the re-resolution, matching reify's
-// single walk. Otherwise the pattern/block locals are added more times on
-// one side and the later closure capture shifts.
+// A hoisted sub-piece that introduces its own locals (the `match` arm binds
+// `i`, its block binds `_z`) must be walked once on both sides.
 test "match subscript with inner locals keeps frame parity for a later closure" {
     CALL_COUNT = 0;
     let mut arr: List<i32> = [10, 20, 30];

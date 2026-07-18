@@ -204,11 +204,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Compound-assign once-eval hook: a target sub-piece already resolved
-        // and bound to a `__caN` local (in `resolve_compound_assign`) returns
-        // its recorded type without re-walking, so a later re-resolution of the
-        // same node adds no duplicate locals — keeping the annotate/reify local
-        // frames in lock-step. Mirrors reify's `compound_overrides`.
+        // Compound-assign once-eval hook (see `compound_hoist_types`).
         if !ctx.compound_hoist_types.is_empty()
             && let Some(&type_id) = ctx.compound_hoist_types.get(&expr.id())
         {
@@ -1457,6 +1453,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 |s, n, t| s.find_index_trait_impl(n, t, index_type),
             );
             if let Some(trait_info) = index_trait_info {
+                if let Some(key_type) = trait_info.index_type
+                    && key_type != index_type
+                {
+                    let _ = self.resolve_expr(&index.index, ctx, Some(key_type));
+                }
+
                 // Generate: *expr.index(index_expr)
                 let mangled_method_name =
                     MethodName::format_local(&lookup_name, Some(&trait_info.trait_name), "index");
@@ -1508,6 +1510,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 |s, n, t| s.find_index_value_trait_impl(n, t, index_type),
             );
             if let Some(trait_info) = index_value_info {
+                if let Some(key_type) = trait_info.index_type
+                    && key_type != index_type
+                {
+                    let _ = self.resolve_expr(&index.index, ctx, Some(key_type));
+                }
+
                 // Generate: expr.index_value(index_expr)
                 let mangled_method_name = MethodName::format_local(
                     &lookup_name,
@@ -1556,6 +1564,54 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span: index.span,
         });
         TypeTable::UNKNOWN
+    }
+
+    /// The key type of the `Index` / `IndexAssign` impl dispatching
+    /// `index_expr`'s receiver (`Index<K>` and `IndexAssign<K>` share `K`), or
+    /// `None` when there is none. Lets a compound assign resolve a hoisted
+    /// subscript against its key type before the target is walked.
+    pub(super) fn compound_index_key_type(
+        &mut self,
+        index_expr: &ast::IndexExpr,
+        ctx: &mut FunctionContext,
+    ) -> Option<TypeId> {
+        let recv_type = self.resolve_expr(&index_expr.expr, ctx, None);
+        let base_type_id = match self.tysys.type_table.borrow().get(recv_type) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => recv_type,
+        };
+        let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
+            ResolvedType::Struct { name, .. }
+            | ResolvedType::GenericInstance { name, .. }
+            | ResolvedType::Newtype { name, .. }
+            | ResolvedType::Flags { name, .. } => name,
+            ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
+            _ => return None,
+        };
+        if struct_name.is_empty() {
+            return None;
+        }
+        let (lookup_name, lookup_type_id) =
+            self.tysys.newtype_base_lookup(&struct_name, base_type_id);
+        let dummy = TypeTable::UNKNOWN;
+        self.index_lookup_or_newtype_base(
+            &struct_name,
+            base_type_id,
+            &lookup_name,
+            lookup_type_id,
+            |s, n, t| s.find_index_trait_impl(n, t, dummy),
+        )
+        .and_then(|i| i.index_type)
+        .or_else(|| {
+            self.index_lookup_or_newtype_base(
+                &struct_name,
+                base_type_id,
+                &lookup_name,
+                lookup_type_id,
+                |s, n, t| s.find_index_assign_trait_impl(n, t, dummy),
+            )
+            .and_then(|i| i.index_type)
+        })
     }
 
     /// Resolve an if expression

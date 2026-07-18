@@ -114,23 +114,13 @@ macro_rules! reify_annotation_accessors {
     };
 }
 
-/// Whether `expr` may be duplicated freely between a compound assign's read
-/// and write — it must be BOTH side-effect-free AND introduce no reify local.
-///
-/// The second half is a walk-order invariant, not obvious purity: a non-pure
-/// sub-piece is hoisted, so it is walked once on both the annotate and reify
-/// sides (via the `__caN` override); a *pure* sub-piece is left inline, and
-/// since annotate walks the compound target twice (`resolve_expr` for the read
-/// type, then `assign_to_target` for the write dispatch) while reify walks it
-/// once, any local it allocates would be added a different number of times and
-/// desync the per-function frame. Every construct here is therefore also
-/// local-free: idents, literals, struct-field access (never overloaded), and
-/// deref / ref of a pure operand. A list/tuple literal is NOT pure even with
-/// pure elements — under a sequence-coercion context it materialises a `__b`
-/// builder local (see [`Self::reify_sequence_coercion`]) — so it, like any
-/// call, `Index` read (a custom `Index::index` may have side effects),
-/// overloadable `Neg`, assignment, closure, match, or template, is
-/// conservatively impure and bound once.
+/// Whether a compound-assign target sub-piece may be left inline (duplicated
+/// between the read and write) rather than hoisted. It must be side-effect-free
+/// AND allocate no reify local: a pure inline piece is walked twice by annotate
+/// (read type, then write dispatch) but once by reify, so any local it allocated
+/// would desync the frame. Only idents, literals, field access, and deref / ref
+/// of a pure operand qualify — notably NOT a list/tuple literal, which
+/// materialises a `__b` builder local under sequence coercion.
 pub(super) fn ast_expr_is_pure(expr: &ast::Expr) -> bool {
     match expr {
         Expr::Ident(_) | Expr::Literal(_) => true,
@@ -143,10 +133,9 @@ pub(super) fn ast_expr_is_pure(expr: &ast::Expr) -> bool {
     }
 }
 
-/// Whether `expr` is place-shaped: an l-value skeleton node whose write
-/// targets storage, not an owned value. Distinguishes a place chain (recurse
-/// to hoist its impure subscripts, keep the skeleton) from an owned value like
-/// `get_obj()` (bound whole).
+/// Whether `expr` is place-shaped — an l-value skeleton (recurse into it to
+/// hoist impure subscripts) rather than an owned value like `get_obj()` (bound
+/// whole).
 fn ast_expr_is_place(expr: &ast::Expr) -> bool {
     match expr {
         Expr::Ident(_) | Expr::FieldAccess(_) | Expr::Index(_) => true,
@@ -155,23 +144,21 @@ fn ast_expr_is_place(expr: &ast::Expr) -> bool {
     }
 }
 
-/// Collect the side-effecting sub-pieces of a compound-assign target that the
-/// read and write both duplicate, so each is bound once. These are the *value
-/// operands* of the place: index subscripts, deref'd reference operands, and
-/// owned-value bases (`get_obj().field`). The place skeleton (index calls,
-/// field / deref chain) is left inline — duplicating it is harmless once its
-/// impure operands are bound, and it still writes back.
-///
-/// Shared by reify (which binds each piece to a `let __caN` and overrides it)
-/// and annotate (whose `resolve_compound_assign` reserves the matching `__caN`
-/// local-frame slots so the per-function local walk-order invariant holds).
-pub(super) fn collect_compound_hoists<'e>(expr: &'e ast::Expr, out: &mut Vec<&'e ast::Expr>) {
+/// The side-effecting value operands of a compound-assign target — index
+/// subscripts, deref'd references, and owned-value bases (`get_obj().field`) —
+/// each bound once so the inline place skeleton is pure to duplicate. Shared by
+/// reify (binds `let __caN`, overrides) and annotate (reserves the matching
+/// frame slots).
+pub(super) fn collect_compound_hoists<'e>(expr: &'e ast::Expr, out: &mut Vec<CompoundHoist<'e>>) {
     match expr {
         Expr::FieldAccess(f) => collect_hoists_of_base(&f.expr, out),
         Expr::Index(ix) => {
             collect_hoists_of_base(&ix.expr, out);
             if !ast_expr_is_pure(&ix.index) {
-                out.push(&ix.index);
+                out.push(CompoundHoist {
+                    piece: &ix.index,
+                    index_ctx: Some(ix),
+                });
             }
         }
         Expr::Unary(u) if u.op == UnaryOp::Deref => {
@@ -181,13 +168,22 @@ pub(super) fn collect_compound_hoists<'e>(expr: &'e ast::Expr, out: &mut Vec<&'e
     }
 }
 
-/// Handle a place's base / receiver: recurse into a place-shaped base to reach
-/// its impure subscripts, or bind an owned-value base whole.
-fn collect_hoists_of_base<'e>(base: &'e ast::Expr, out: &mut Vec<&'e ast::Expr>) {
+/// One side-effecting sub-piece of a compound-assign target to bind once.
+pub(super) struct CompoundHoist<'e> {
+    pub(super) piece: &'e ast::Expr,
+    /// The enclosing index when `piece` is its subscript; drives key-type
+    /// coercion on the annotate side.
+    pub(super) index_ctx: Option<&'e ast::IndexExpr>,
+}
+
+fn collect_hoists_of_base<'e>(base: &'e ast::Expr, out: &mut Vec<CompoundHoist<'e>>) {
     if ast_expr_is_place(base) {
         collect_compound_hoists(base, out);
     } else if !ast_expr_is_pure(base) {
-        out.push(base);
+        out.push(CompoundHoist {
+            piece: base,
+            index_ctx: None,
+        });
     }
 }
 
@@ -2357,9 +2353,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         }
 
-        // Compound-assign once-eval hook: a target sub-piece bound to a
-        // `let __caN` reifies to its `Local` read wherever it recurs in the
-        // read / write (see `reify_compound_assign`).
+        // Compound-assign once-eval hook (see `compound_overrides`).
         if !self.compound_overrides.is_empty()
             && let Some(tir) = self.compound_overrides.get(&expr.id())
         {
@@ -4880,12 +4874,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// in the reified read / write becomes that `Local` read.
     fn bind_compound_hoists(
         &mut self,
-        hoists: &[&ast::Expr],
+        hoists: &[CompoundHoist<'_>],
         prelude: &mut Vec<TirStmt>,
         ctx: &mut FunctionContext,
     ) {
-        for (counter, piece) in hoists.iter().enumerate() {
-            let value = self.reify_expr(piece, ctx, None);
+        for (counter, hoist) in hoists.iter().enumerate() {
+            let value = self.reify_expr(hoist.piece, ctx, None);
             let span = value.span;
             let type_id = value.type_id;
             let name = format!("__ca{counter}");
@@ -4903,7 +4897,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 span,
             ));
             let local = TirExpr::new(TirExprKind::Local { index, name }, type_id, span);
-            self.compound_overrides.insert(piece.id(), local);
+            self.compound_overrides.insert(hoist.piece.id(), local);
         }
     }
 
@@ -5022,8 +5016,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             dispatch.return_type,
             span,
         );
-        // `Index` returns `&Output`, so `expr[i]` wraps in `*` to yield the
-        // value; `IndexValue` returns `Output` by copy and needs no wrap.
+        // `Index` returns `&Output` (wrap in `*`); `IndexValue` returns
+        // `Output` by copy.
         if dispatch.needs_deref {
             TirExpr::new(
                 TirExprKind::Unary {
@@ -5048,14 +5042,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         span: crate::token::Span,
     ) -> TirExpr {
         let Some(dispatch) = self.ann_operator_dispatch(index_expr.id) else {
-            // Write-only `IndexAssign` type: annotate already diagnosed the
-            // missing read. Match its recovery shape.
+            // Write-only `IndexAssign` type — annotate diagnosed the missing
+            // read; match its recovery shape.
             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
         };
-        // The `*…` result type is the index expr's recorded type, needed only
-        // when the read derefs (`Index`, not `IndexValue`). On the (degenerate)
-        // missing-annotation path, peel the `&Output` return type to `Output`
-        // rather than leaving the `Deref` node ref-typed.
+        // Deref result type: the index expr's recorded type, peeling
+        // `&Output` on the degenerate missing-annotation path.
         let deref_type = if dispatch.needs_deref {
             self.ann_expression_types(index_expr.id).unwrap_or_else(|| {
                 match self.tysys.type_table.borrow().get(dispatch.return_type) {
@@ -5069,26 +5061,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.build_index_read_from_dispatch(recv.clone(), idx.clone(), dispatch, deref_type, span)
     }
 
-    /// Reify a compound assignment `x += y` / `x -= y` / etc. as
-    /// `x = x op y`, evaluating every target sub-expression exactly once.
+    /// Reify a compound assignment `x += y` as `x = x op y`, evaluating each
+    /// target sub-expression once: impure value operands are bound to `let
+    /// __caN` and replayed through an `AstId` override while the place skeleton
+    /// stays inline and writes back. Pure targets bind nothing.
     ///
-    /// The target's side-effecting value operands (index subscripts, deref'd
-    /// references, owned-value bases) are bound to `let __caN` before the
-    /// read/write and replayed through an `AstId` override, so `arr[bump()]
-    /// += 1` calls `bump()` once while the place skeleton (index calls, field
-    /// / deref chain) stays inline and still writes back (like
-    /// `reify_comparison_chain`'s `__mK` bindings). Pure targets (`x += 1`,
-    /// `g += 1`, `a.b.c += 1`) bind nothing and keep their flat WIR shape.
-    ///
-    /// Residual: the place skeleton itself is duplicated between the read and
-    /// the write, so an intermediate `Index` read in the *receiver* of a
-    /// nested index (`m.index(i)` in `m[i][j] += 1`) is evaluated twice. This
-    /// is a no-op for pure reads (builtin arrays), but a custom `Index::index`
-    /// with side effects runs twice. Binding the reference to fix this is not
-    /// possible under value semantics — a `let` copies the referent, so the
-    /// write would target the copy — and there is no `IndexMut` to borrow a
-    /// mutable place. Subscripts and owned-value bases are bound by value, so
-    /// they are unaffected.
+    /// Residual: an intermediate `Index` read in a nested index's *receiver*
+    /// (`m.index(i)` in `m[i][j] += 1`) is still duplicated — harmless for pure
+    /// builtin reads, but a side-effecting custom `Index::index` runs twice.
+    /// Binding the reference can't fix it under value semantics (the `let`
+    /// would copy the referent) and there is no `IndexMut` to borrow.
     fn reify_compound_assign(
         &mut self,
         compound: &ast::CompoundAssignExpr,
@@ -5111,13 +5093,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
         let span = compound.span;
 
-        // Bind the impure target sub-pieces once, activating the `AstId`
-        // overrides for the read/write reify below. Save/restore the map so a
-        // compound assign nested in an operand keeps its own bindings. The
-        // `__caN` temporaries live in their own scope (like
-        // `reify_comparison_chain`'s `__mK`), so their names do not leak into
-        // the enclosing scope's binding map.
-        let mut hoists: Vec<&ast::Expr> = Vec::new();
+        // Save/restore the override map so a nested compound assign keeps its
+        // own bindings; the scope keeps `__caN` names out of the enclosing map.
+        let mut hoists: Vec<CompoundHoist<'_>> = Vec::new();
         collect_compound_hoists(&compound.target, &mut hoists);
         let saved_overrides = std::mem::take(&mut self.compound_overrides);
         ctx.enter_scope();
@@ -5141,11 +5119,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         prelude: Vec<TirStmt>,
         span: crate::token::Span,
     ) -> TirExpr {
-        // `recv[idx] OP= v` on an `IndexAssign` type (custom trait or builtin
-        // array): the read (`*recv.index(idx)`) and the write
-        // (`recv.index_assign(idx, …)`) are different methods, so build each
-        // from the same reified receiver / subscript. Their impure sub-pieces
-        // are already bound, so the shared skeleton is pure to duplicate.
+        // `recv[idx] OP= v` on an `IndexAssign` type: the read
+        // (`*recv.index(idx)`) and the write (`recv.index_assign(idx, …)`) are
+        // different methods built from the same reified receiver / subscript.
         if let ast::Expr::Index(index_expr) = &compound.target
             && let Some(assign_dispatch) = self.ann_index_assign_dispatch(index_expr.id)
         {
@@ -5174,16 +5150,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return self.wrap_prelude(prelude, write, span);
         }
 
-        // General l-values (local, global, field-access, tuple index, deref).
-        // Reify the place; its impure operands are overridden to bound locals,
-        // so the read (a clone) and the write share a pure skeleton that still
-        // targets the original storage.
+        // General l-values (local, global, field-access, tuple index, deref):
+        // the reified place's impure operands are already overridden to bound
+        // locals, so read (a clone) and write share a pure skeleton.
         let place = self.reify_expr(&compound.target, ctx, None);
         let rhs = self.reify_expr(&compound.value, ctx, Some(place.type_id));
         let combined = self.build_compound_combined(place.clone(), rhs, op, compound);
 
-        // Global-var compound-assign lowers to `GlobalVarSet { value: g OP
-        // v }` so codegen actually mutates the global.
         let write = if let TirExprKind::GlobalVarGet {
             module_source,
             name,
@@ -5771,17 +5744,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
-        // Operator-dispatch path: Gap 11's `operator_dispatch[index.id]`
-        // carries the resolved Index / IndexValue trait method. The
-        // `return_type` on the record signals whether the outer
-        // `Deref` wrap applies (Index returns `&Output`; IndexValue
-        // returns `Output`).
-        // `Index` trait returns `&Output`, so the read wraps in a `Deref`
-        // (`expr[i]` → `*expr.index(i)`); `IndexValue` returns `Output` by
-        // copy and does not. Annotate records `needs_deref` explicitly: a
-        // return-type-shape check would misfire for an `IndexValue` whose
-        // `Output` is itself a reference (`List<&i32>::index_value` → `&i32`)
-        // and double-deref. Shared with the compound-assign read.
+        // Operator-dispatch path: `operator_dispatch[index.id]` carries the
+        // resolved Index / IndexValue method and `needs_deref`. Shared with the
+        // compound-assign read via `build_index_read_from_dispatch`.
         if let Some(dispatch) = self.ann_operator_dispatch(index.id) {
             let idx_expr = self.reify_expr(&index.index, ctx, None);
             return self.build_index_read_from_dispatch(
