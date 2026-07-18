@@ -575,9 +575,7 @@ fn "http_client_send_with_body.wado/handle"(request) with Client {
     tx_169 = builtin::i32_wrap_i64(packed_167 >> 32_i64);
     drop("http_client_send_with_body.wado/__cm_binding__Fields_append"(local.tee headers("http_client_send_with_body.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-type"), used: 12 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("text/plain"), used: 10, index: 0 })));
     __pattern_temp_2 = "http_client_send_with_body.wado/__cm_binding__Request_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: rx_165 }, rx_168, struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>" { 1 });
-    out_req = __pattern_temp_2.0;
-    drop(__pattern_temp_2.1);
-    drop("http_client_send_with_body.wado/__cm_binding__Request_set_scheme"(out_req, struct.new "wasi:http/types.wado//Scheme" { 0 }));
+    drop("http_client_send_with_body.wado/__cm_binding__Request_set_scheme"(local.tee out_req(__pattern_temp_2.0), struct.new "wasi:http/types.wado//Scheme" { 0 }));
     drop("http_client_send_with_body.wado/__cm_binding__Request_set_authority"(out_req, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("localhost"), used: 9 }));
     drop("http_client_send_with_body.wado/__cm_binding__Request_set_path_with_query"(out_req, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/upstream"), used: 9 }));
     subtask = "http_client_send_with_body.wado/__cm_binding__Client_send"(out_req);

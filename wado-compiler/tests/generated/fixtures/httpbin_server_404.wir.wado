@@ -521,9 +521,7 @@ fn "httpbin_server_404.wado/handle"(request) {
     rx_173 = builtin::i32_wrap_i64(local.tee packed_172("wasi/stream-new"()));
     tx_174 = builtin::i32_wrap_i64(packed_172 >> 32_i64);
     __pattern_temp_2 = "httpbin_server_404.wado/__cm_binding__Response_new"(local.tee headers("httpbin_server_404.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: rx_173 }, rx_170);
-    response = __pattern_temp_2.0;
-    drop(__pattern_temp_2.1);
-    drop("httpbin_server_404.wado/__cm_binding__Response_set_status_code"(response, status));
+    drop("httpbin_server_404.wado/__cm_binding__Response_set_status_code"(local.tee response(__pattern_temp_2.0), status));
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;
     __tv_2 = 0;

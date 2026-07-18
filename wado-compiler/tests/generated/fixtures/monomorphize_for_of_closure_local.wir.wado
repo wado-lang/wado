@@ -221,12 +221,7 @@ fn "monomorphize_for_of_closure_local.wado/__cm_export____test_1_closure_capturi
 
 fn "monomorphize_for_of_closure_local.wado/monomorphize_for_of_closure_local.wado/sum_capturing<[i32,core:prelude/string.wado/String,bool]>"(items) {
     let acc: i32;
-    acc = 0;
-    acc = 0 + items.0;
-    drop(items.1);
-    acc = acc + 100;
-    drop(items.2);
-    return local.tee acc(acc + 1);
+    return local.tee acc(local.tee acc(local.tee acc(0 + items.0) + 100) + 1);
 }
 
 fn "monomorphize_for_of_closure_local.wado/monomorphize_for_of_closure_local.wado/sum_capturing<[i32,i32,i32]>"(items) {
@@ -237,11 +232,8 @@ fn "monomorphize_for_of_closure_local.wado/monomorphize_for_of_closure_local.wad
 fn "monomorphize_for_of_closure_local.wado/monomorphize_for_of_closure_local.wado/sum_with_closure<[i32,core:prelude/string.wado/String]>"(items) {
     let acc: i32;
     let v_5: i32;
-    acc = 0;
     v_5 = items.0;
-    acc = 0 + (v_5 + 1);
-    drop(items.1);
-    return local.tee acc(acc + 101);
+    return local.tee acc(local.tee acc(0 + (v_5 + 1)) + 101);
 }
 
 fn "monomorphize_for_of_closure_local.wado/monomorphize_for_of_closure_local.wado/sum_with_closure<[i32,i32,i32]>"(items) {

@@ -613,7 +613,6 @@ fn "http_fields_set.wado/handle"(request) {
     tx = builtin::i32_wrap_i64(packed >> 32_i64);
     __pattern_temp_1 = "http_fields_set.wado/__cm_binding__Response_new"(fields, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, rx);
     response = __pattern_temp_1.0;
-    drop(__pattern_temp_1.1);
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;
     __tv_2 = 0;
@@ -1001,7 +1000,6 @@ fn "http_fields_set.wado/__cm_binding__Fields_set"(self, name, value) with Field
     __value_len = value.used;
     __value_base = "mem/realloc"(0, 0, 4, __value_len * 8);
     __value_i = 0;
-    drop(value.used);
     _licm_repr_47 = value.repr;
     b71: block {
         l72: loop {
@@ -1012,7 +1010,6 @@ fn "http_fields_set.wado/__cm_binding__Fields_set"(self, name, value) with Field
             __list_len = __value_elem.used;
             __list_base = "mem/realloc"(0, 0, 1, __list_len * 1);
             __list_i = 0;
-            drop(__value_elem.used);
             _licm_repr_49 = __value_elem.repr;
             b73: block {
                 l74: loop {

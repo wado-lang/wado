@@ -646,9 +646,7 @@ fn "http_client_send_body_read.wado/handle"(request) with Client {
     rx_183 = builtin::i32_wrap_i64(local.tee packed_182("wasi/future-new"()));
     tx_184 = builtin::i32_wrap_i64(packed_182 >> 32_i64);
     __pattern_temp_1 = "http_client_send_body_read.wado/__cm_binding__Request_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, rx_183, struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>" { 1 });
-    out_req = __pattern_temp_1.0;
-    drop(__pattern_temp_1.1);
-    drop("http_client_send_body_read.wado/__cm_binding__Request_set_scheme"(out_req, struct.new "wasi:http/types.wado//Scheme" { 0 }));
+    drop("http_client_send_body_read.wado/__cm_binding__Request_set_scheme"(local.tee out_req(__pattern_temp_1.0), struct.new "wasi:http/types.wado//Scheme" { 0 }));
     drop("http_client_send_body_read.wado/__cm_binding__Request_set_authority"(out_req, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("localhost"), used: 9 }));
     drop("http_client_send_body_read.wado/__cm_binding__Request_set_path_with_query"(out_req, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/upstream"), used: 9 }));
     v_185 = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait"("http_client_send_body_read.wado/__cm_binding__Client_send"(out_req));
@@ -670,7 +668,6 @@ fn "http_client_send_body_read.wado/handle"(request) with Client {
     drop(local.tee tx_190(builtin::i32_wrap_i64(packed_188 >> 32_i64)));
     __pattern_temp_3 = "http_client_send_body_read.wado/__cm_binding__Response_consume_body"(upstream, rx_189);
     body_stream = __pattern_temp_3.0;
-    drop(__pattern_temp_3.1);
     body = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("proxied: "), used: 9 };
     b2: block {
         l3: loop {
@@ -698,7 +695,6 @@ fn "http_client_send_body_read.wado/handle"(request) with Client {
     tx_199 = builtin::i32_wrap_i64(packed_197 >> 32_i64);
     __pattern_temp_6 = "http_client_send_body_read.wado/__cm_binding__Response_new"(local.tee resp_headers("http_client_send_body_read.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: rx_198 }, rx_195);
     response = __pattern_temp_6.0;
-    drop(__pattern_temp_6.1);
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;
     __tv_2 = 0;

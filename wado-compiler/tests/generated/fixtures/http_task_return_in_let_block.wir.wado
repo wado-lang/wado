@@ -445,9 +445,7 @@ fn "http_task_return_in_let_block.wado/handle"(_request) {
     rx = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
     tx = builtin::i32_wrap_i64(packed >> 32_i64);
     __pattern_temp_1 = "http_task_return_in_let_block.wado/__cm_binding__Response_new"(local.tee headers("http_task_return_in_let_block.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, rx);
-    response = __pattern_temp_1.0;
-    drop(__pattern_temp_1.1);
-    drop("http_task_return_in_let_block.wado/__cm_binding__Response_set_status_code"(response, 200));
+    drop("http_task_return_in_let_block.wado/__cm_binding__Response_set_status_code"(local.tee response(__pattern_temp_1.0), 200));
     __local_9 = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __local_11 = 0;
     __local_12 = 0;

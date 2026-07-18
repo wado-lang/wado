@@ -1,0 +1,25 @@
+// A tuple is a non-null `GenericInstance`, so a tuple field read cannot trap.
+// Inlining `find()` folds its for-of first iteration to `let v = t.0; return 0`;
+// the dead `t.0` must drop so the block collapses, the result folds to `0`, and
+// the always-true `assert find() == 0` prunes. If `t.0` is kept as a may-trap
+// statement, the assert and its panic path survive.
+
+fn find() -> i32 {
+    let t = [1, "hello"];
+    for let v of t {
+        return 0;
+    }
+    return 1;
+}
+
+export fn run() {
+    assert find() == 0;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O2": [
+        "condition: find() == 0"
+    ]
+}

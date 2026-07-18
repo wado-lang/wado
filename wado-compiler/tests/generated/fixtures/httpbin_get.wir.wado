@@ -1264,9 +1264,7 @@ fn "httpbin_get.wado/handle"(request) {
     tx_179 = builtin::i32_wrap_i64(packed_177 >> 32_i64);
     drop("httpbin_get.wado/__cm_binding__Fields_append"(local.tee headers("httpbin_get.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-type"), used: 12 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: content_type.repr, used: content_type.used, index: 0 })));
     __pattern_temp_4 = "httpbin_get.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: rx_178 }, rx_175);
-    response = __pattern_temp_4.0;
-    drop(__pattern_temp_4.1);
-    drop("httpbin_get.wado/__cm_binding__Response_set_status_code"(response, status & 65535));
+    drop("httpbin_get.wado/__cm_binding__Response_set_status_code"(local.tee response(__pattern_temp_4.0), status & 65535));
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;
     __tv_2 = 0;
@@ -2367,7 +2365,6 @@ fn "./sub/httpbin_handler.wado/read_body_from_request"(request) {
     drop(local.tee tx(builtin::i32_wrap_i64(packed >> 32_i64)));
     __pattern_temp_1 = "httpbin_get.wado/__cm_binding__Request_consume_body"(request, rx);
     body_stream = __pattern_temp_1.0;
-    drop(__pattern_temp_1.1);
     body = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(256), used: 0 };
     b188: block {
         l189: loop {

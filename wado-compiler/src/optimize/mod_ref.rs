@@ -178,21 +178,22 @@ struct AccumScope<'a> {
     types: Option<&'a crate::tir::TypeTable>,
 }
 
-/// A `FieldAccess` traps only on a null receiver, and a struct / reference base
-/// is non-null in Wado (nullable values are a `Variant`, read via
-/// `VariantPayload`). Provable only with a type table.
+/// A `FieldAccess` traps only on a null receiver, and every type a field access
+/// can name is a non-null heap value in Wado — a struct, a reference, or a
+/// generic instance (tuple / `Box` / `List` / user generic). `Option` is the
+/// one nullable type, and it is read via `VariantPayload`, never `FieldAccess`.
+/// Provable only with a type table.
 fn field_receiver_nonnull(body: &Body, scope: &AccumScope<'_>, base: Operand) -> bool {
+    use crate::tir::ResolvedType;
     let Some(types) = scope.types else {
         return false;
     };
-    matches!(
-        types.get_pruned(body.operand_type(base)),
-        Some(
-            crate::tir::ResolvedType::Struct { .. }
-                | crate::tir::ResolvedType::Ref(_)
-                | crate::tir::ResolvedType::MutRef(_)
-        )
-    )
+    let ty = body.operand_type(base);
+    match types.get_pruned(ty) {
+        Some(ResolvedType::Struct { .. } | ResolvedType::Ref(_) | ResolvedType::MutRef(_)) => true,
+        Some(ResolvedType::GenericInstance { .. }) => types.as_option(ty).is_none(),
+        _ => false,
+    }
 }
 
 impl ModRef {
@@ -1041,6 +1042,28 @@ mod tests {
             "struct receiver is non-null → field access cannot trap"
         );
         assert!(mr.heap.reads);
+    }
+
+    #[test]
+    fn tuple_field_access_receiver_is_nontrapping() {
+        // A tuple field read (`t.0`) has a `GenericInstance` receiver, non-null
+        // like a struct — so it must not trap either. (`Option` is the one
+        // nullable `GenericInstance`, but it is read via `VariantPayload`, never
+        // `FieldAccess`.)
+        use crate::tir::TypeTable;
+        let mut types = TypeTable::new();
+        let tuple_ty = types.make_tuple(vec![TypeTable::I32, TypeTable::I32]);
+        let mut body = Body::empty();
+        let base = body.exprs.push(ExprNode {
+            kind: ExprKind::Local {
+                index: 0,
+                name: "t".to_string(),
+            },
+            type_id: tuple_ty,
+            span: sp(),
+        });
+        let fa = field_access(&mut body, base);
+        assert!(!ModRef::of_expr_typed(&body, fa, Some(&types)).may_trap);
     }
 
     #[test]

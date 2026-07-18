@@ -214,7 +214,6 @@ fn "wasi_tls_mock_recv.wado/run"() with Stdout, Connector, Error {
     let chunk: ref "core:prelude//List<u8>";
     let s: ref "core:prelude/string.wado//String";
     let __local_14: ref "core:prelude/string.wado//String";
-    let __pattern_temp_1: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>]";
     let __pattern_temp_3: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>]";
     let __match_19: ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";
     let __match_20: ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>";
@@ -236,15 +235,12 @@ fn "wasi_tls_mock_recv.wado/run"() with Stdout, Connector, Error {
     conn = "wasi_tls_mock_recv.wado/__cm_binding__Connector_new"();
     rx_22 = builtin::i32_wrap_i64(local.tee packed_21("wasi/stream-new"()));
     tx_23 = builtin::i32_wrap_i64(packed_21 >> 32_i64);
-    __pattern_temp_1 = "wasi_tls_mock_recv.wado/__cm_binding__Connector_send"(conn, rx_22);
-    drop(__pattern_temp_1.0);
-    drop(__pattern_temp_1.1);
+    drop("wasi_tls_mock_recv.wado/__cm_binding__Connector_send"(conn, rx_22));
     "wasi/stream-drop-writable"(tx_23);
     rx_25 = builtin::i32_wrap_i64(local.tee packed_24("wasi/stream-new"()));
     tx_26 = builtin::i32_wrap_i64(packed_24 >> 32_i64);
     __pattern_temp_3 = "wasi_tls_mock_recv.wado/__cm_binding__Connector_receive"(conn, rx_25);
     tls_rx = __pattern_temp_3.0;
-    drop(__pattern_temp_3.1);
     "wasi/stream-drop-writable"(tx_26);
     __match_19 = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait"("wasi_tls_mock_recv.wado/__cm_binding__Connector_connect"(conn, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mock.example"), used: 12 }));
     if @likely(__match_19.discriminant == 0) {

@@ -183,7 +183,6 @@ fn "monomorphize_for_of_local_in_match_arm.wado/monomorphize_for_of_local_in_mat
             continue l3;
         };
     };
-    drop(items.1);
     once_8 = 1;
     b4: block {
         l5: loop {
@@ -193,7 +192,6 @@ fn "monomorphize_for_of_local_in_match_arm.wado/monomorphize_for_of_local_in_mat
             continue l5;
         };
     };
-    drop(items.2);
     once_11 = 1;
     b6: block {
         l7: loop {
@@ -218,12 +216,7 @@ fn "monomorphize_for_of_local_in_match_arm.wado/monomorphize_for_of_local_in_mat
 
 fn "monomorphize_for_of_local_in_match_arm.wado/monomorphize_for_of_local_in_match_arm.wado/sum_in_match<[i32,core:prelude/string.wado/String,bool,i32]>"(items) {
     let acc: i32;
-    acc = 0;
-    acc = 0 + items.0;
-    drop(items.1);
-    acc = acc + 100;
-    drop(items.2);
-    return local.tee acc(local.tee acc(acc + 1) + items.3);
+    return local.tee acc(local.tee acc(local.tee acc(local.tee acc(0 + items.0) + 100) + 1) + items.3);
 }
 
 fn "core:prelude/primitive.wado/count_digits_i64"(val) {
