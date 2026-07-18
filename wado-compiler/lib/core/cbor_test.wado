@@ -7,9 +7,17 @@ use { Serialize, Deserialize, DeserializeError, DeserializeErrorKind } from "cor
 use { Value } from "core:value";
 use { TreeMap } from "core:collections";
 
+// A newtype's inherent method (`ByteList::to_hex`) called directly inside a
+// generic function body currently mis-resolves its owner to the erased base
+// (`List<u8>`); routing through this non-generic helper sidesteps it. See
+// wado-lang/wado#1349 follow-up.
+fn bytes_to_hex(b: ByteList) -> String {
+    return b.to_hex();
+}
+
 fn enc<T: Serialize>(v: &T) -> String {
     return match to_bytes::<T>(v) {
-        Ok(bytes) => bytes.to_hex(),
+        Ok(bytes) => bytes_to_hex(bytes),
         Err(_) => {
             panic("serialize failed");
         },
@@ -577,7 +585,7 @@ test "tuple from an indefinite array consumes the break" {
 
 fn enc_canon<T: Serialize>(v: &T) -> String {
     return match to_bytes_canonical::<T>(v) {
-        Ok(bytes) => bytes.to_hex(),
+        Ok(bytes) => bytes_to_hex(bytes),
         Err(_) => {
             panic("canonical serialize failed");
         },

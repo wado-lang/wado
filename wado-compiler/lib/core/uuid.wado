@@ -91,8 +91,8 @@ impl Uuid {
         // 32. Deriving the hyphen positions from the field structure keeps the
         // canonical layout explicit instead of hardcoding offsets.
         let groups: List<i32> = if len == 36 { [8, 4, 4, 4, 12] } else { [32] };
-        let bytes: List<u8> = s.bytes().collect();
-        let mut out: List<u8> = [];
+        let bytes = s.bytes().collect::<List<u8>>() as ByteList;
+        let mut out: ByteList = [];
         let mut pos = 0;
         for let mut g = 0; g < groups.len(); g += 1 {
             if g > 0 {
@@ -170,15 +170,15 @@ impl Default for Uuid {
 /// Force the RFC 9562 version (high nibble of byte 6) and variant (top two bits
 /// of byte 8) into a 16-byte buffer. `version_byte` is the version nibble
 /// already shifted into the high position (`0x40` for v4, `0x70` for v7).
-fn set_version_and_variant(b: &mut List<u8>, version_byte: u8) {
+fn set_version_and_variant(b: &mut ByteList, version_byte: u8) {
     b[6] = (b[6] as i32 & 0x0F | version_byte as i32) as u8;
     b[8] = (b[8] as i32 & 0x3F | 0x80) as u8;
 }
 
 /// Collect exactly `n` random bytes, looping to tolerate short reads (the
 /// `Random` contract allows returning fewer bytes than requested).
-fn fill_random(n: i32) -> List<u8> with Random {
-    let mut out: List<u8> = [];
+fn fill_random(n: i32) -> ByteList with Random {
+    let mut out: ByteList = [];
     while out.len() < n {
         let chunk = Random::get_random_bytes((n - out.len()) as u64);
         if chunk.is_empty() {
@@ -191,7 +191,7 @@ fn fill_random(n: i32) -> List<u8> with Random {
     return out;
 }
 
-fn from_byte_list(b: &List<u8>) -> Uuid {
+fn from_byte_list(b: &ByteList) -> Uuid {
     let v: u8x16 = [
         b[0] as i32, b[1] as i32, b[2] as i32, b[3] as i32, b[4] as i32, b[5] as i32, b[6] as i32, b[7] as i32,
         b[8] as i32, b[9] as i32, b[10] as i32, b[11] as i32, b[12] as i32, b[13] as i32, b[14] as i32, b[15] as i32,
