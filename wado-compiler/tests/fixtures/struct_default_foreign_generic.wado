@@ -1,0 +1,20 @@
+// Regression: a cross-module struct literal that omits a field defaulted to a
+// generic constructor (`TreeMap::new()`) must resolve that default — including
+// the generic type arguments driving the constructor's inference — in the
+// struct's declaring module. The consumer does not import `TreeMap`.
+//
+// Before the fix, `resolve_generic_type` lacked the `default_scope_module`
+// fallback that `resolve_named_type` has, so the foreign default's return type
+// `TreeMap<K, V>` resolved to UNKNOWN in the consumer's scope and inference
+// failed with "cannot infer type parameter `K`, `V` of `TreeMap::new`".
+use { println, Stdout } from "core:cli";
+use { Registry, registry_len } from "./sub/struct_default_foreign_generic_lib.wado";
+
+export fn run() with Stdout {
+    let r = Registry { name: "reg" };
+    assert registry_len(&r) == 0;
+    println(`${registry_len(&r)}`);
+}
+
+__DATA__
+{ "stdout": "0\n" }
