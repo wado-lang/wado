@@ -356,8 +356,10 @@ fn gen_latn_data_global(w: &mut CodeWriter, atn: &Atn) {
 fn emit_atn_blob_global(w: &mut CodeWriter, atn: &Atn, sim_name: &String, extra_args: &String) {
     let bytes = atn_blob_bytes(atn);
     let mut body = String::with_capacity(bytes.len() * 4);
-    for let b of &bytes {
-        push_hex_byte(&mut body, *b);
+    // Index loop rather than `for-of`: a newtype (`ByteList`) does not yet
+    // inherit `IntoIterator` for the for-of desugar (wado-lang/wado#1616).
+    for let mut i = 0; i < bytes.len(); i += 1 {
+        push_hex_byte(&mut body, bytes.get_unchecked(i));
     }
     w.line(&`global {*sim_name}: AtnSim = atn_decode(&b"{body}"{*extra_args});`);
 }
