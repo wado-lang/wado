@@ -101,9 +101,6 @@ do not cross the registry boundary; supply each field explicitly.
 
 ### Remaining follow-ups
 
-Tracked in
-[the dependency-management plan](../../docs/dependency-management-implementation-plan.md):
-
 - Carrying source-level option defaults across the boundary (so an omitted field
   falls back to the generator's default) needs the component to encode them; see
   the Kiln WEP's "Source vs registry options descriptor" note.
