@@ -922,31 +922,15 @@ fn build_repeat(
 /// Asserts `v` fits `u8` (0..=255) so an overflow fails loudly at generation
 /// time instead of truncating silently. Only the tiny state/transition kind
 /// enums use this width.
-<<<<<<< HEAD
 fn push_u8(bytes: &mut ByteList, v: i32) {
-    assert 0 <= v <= 255, `ATN blob: value {v} exceeds u8 range`;
-||||||| a01010cfd
-fn push_u8(bytes: &mut List<u8>, v: i32) {
-    assert 0 <= v <= 255, `ATN blob: value {v} exceeds u8 range`;
-=======
-fn push_u8(bytes: &mut List<u8>, v: i32) {
     assert 0 <= v <= 255, `ATN blob: value ${v} exceeds u8 range`;
->>>>>>> origin/main
     bytes.push(v as u8);
 }
 
 /// Little-endian; same overflow assert as `push_u8`, widened to `u16`
 /// (0..=65535). Every count and state/rule/token index uses this width.
-<<<<<<< HEAD
 fn push_u16(bytes: &mut ByteList, v: i32) {
-    assert 0 <= v <= 65535, `ATN blob: value {v} exceeds u16 range`;
-||||||| a01010cfd
-fn push_u16(bytes: &mut List<u8>, v: i32) {
-    assert 0 <= v <= 65535, `ATN blob: value {v} exceeds u16 range`;
-=======
-fn push_u16(bytes: &mut List<u8>, v: i32) {
     assert 0 <= v <= 65535, `ATN blob: value ${v} exceeds u16 range`;
->>>>>>> origin/main
     bytes.push((v & 0xff) as u8);
     bytes.push((v >> 8 & 0xff) as u8);
 }
@@ -957,16 +941,8 @@ fn push_u16(bytes: &mut List<u8>, v: i32) {
 /// same fields for a Unicode scalar range (`label` = low, `follow` = high,
 /// up to `CHAR_MAX` = `0x10FFFF`) — one shared decoder, so the field must
 /// fit its widest use.
-<<<<<<< HEAD
 fn push_u24(bytes: &mut ByteList, v: i32) {
-    assert 0 <= v <= 16777215, `ATN blob: value {v} exceeds u24 range`;
-||||||| a01010cfd
-fn push_u24(bytes: &mut List<u8>, v: i32) {
-    assert 0 <= v <= 16777215, `ATN blob: value {v} exceeds u24 range`;
-=======
-fn push_u24(bytes: &mut List<u8>, v: i32) {
     assert 0 <= v <= 16777215, `ATN blob: value ${v} exceeds u24 range`;
->>>>>>> origin/main
     bytes.push((v & 0xff) as u8);
     bytes.push((v >> 8 & 0xff) as u8);
     bytes.push((v >> 16 & 0xff) as u8);
@@ -976,31 +952,15 @@ fn push_u24(bytes: &mut List<u8>, v: i32) {
 /// `u16` encoding; `atn_decode` reverses it with an unconditional `- 1`, no
 /// branch needed. Only the lower bound is asserted — `push_u16` itself
 /// catches `v + 1` overflowing `u16`.
-<<<<<<< HEAD
 fn push_u16_biased(bytes: &mut ByteList, v: i32) {
-    assert v >= -1, `ATN blob: biased value {v} below sentinel -1`;
-||||||| a01010cfd
-fn push_u16_biased(bytes: &mut List<u8>, v: i32) {
-    assert v >= -1, `ATN blob: biased value {v} below sentinel -1`;
-=======
-fn push_u16_biased(bytes: &mut List<u8>, v: i32) {
     assert v >= -1, `ATN blob: biased value ${v} below sentinel -1`;
->>>>>>> origin/main
     push_u16(bytes, v + 1);
 }
 
 /// `label`/`follow` counterpart to `push_u16_biased`; `push_u24` catches
 /// `v + 1` overflow.
-<<<<<<< HEAD
 fn push_u24_biased(bytes: &mut ByteList, v: i32) {
-    assert v >= -1, `ATN blob: biased value {v} below sentinel -1`;
-||||||| a01010cfd
-fn push_u24_biased(bytes: &mut List<u8>, v: i32) {
-    assert v >= -1, `ATN blob: biased value {v} below sentinel -1`;
-=======
-fn push_u24_biased(bytes: &mut List<u8>, v: i32) {
     assert v >= -1, `ATN blob: biased value ${v} below sentinel -1`;
->>>>>>> origin/main
     push_u24(bytes, v + 1);
 }
 
@@ -1040,13 +1000,13 @@ pub fn atn_blob_bytes(atn: &Atn) -> ByteList {
         ntrans_total += st.transitions.len();
     }
 
-    let mut state_kind = ByteList::with_capacity(nstates);
-    let mut state_tr_count = ByteList::with_capacity(nstates * 2);
-    let mut tr_kind = ByteList::with_capacity(ntrans_total);
-    let mut tr_target = ByteList::with_capacity(ntrans_total * 2);
-    let mut tr_label = ByteList::with_capacity(ntrans_total * 3);
-    let mut tr_follow = ByteList::with_capacity(ntrans_total * 3);
-    let mut tr_prec = ByteList::with_capacity(ntrans_total * 2);
+    let mut state_kind: ByteList = ByteList::with_capacity(nstates);
+    let mut state_tr_count: ByteList = ByteList::with_capacity(nstates * 2);
+    let mut tr_kind: ByteList = ByteList::with_capacity(ntrans_total);
+    let mut tr_target: ByteList = ByteList::with_capacity(ntrans_total * 2);
+    let mut tr_label: ByteList = ByteList::with_capacity(ntrans_total * 3);
+    let mut tr_follow: ByteList = ByteList::with_capacity(ntrans_total * 3);
+    let mut tr_prec: ByteList = ByteList::with_capacity(ntrans_total * 2);
     for let st of &atn.states {
         push_u8(&mut state_kind, st.kind);
         push_u16(&mut state_tr_count, st.transitions.len());
@@ -1061,7 +1021,7 @@ pub fn atn_blob_bytes(atn: &Atn) -> ByteList {
 
     let total = 6 + nrules * 2 + ndec * 2 + state_kind.len() + state_tr_count.len() + tr_kind.len() + tr_target.len() + tr_label.len(
     ) + tr_follow.len() + tr_prec.len();
-    let mut bytes = ByteList::with_capacity(total);
+    let mut bytes: ByteList = ByteList::with_capacity(total);
     push_u16(&mut bytes, nrules);
     push_u16(&mut bytes, ndec);
     push_u16(&mut bytes, nstates);
