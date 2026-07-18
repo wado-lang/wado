@@ -367,7 +367,7 @@ syntax which is not yet supported.
 
 Writes a `Display` value into a `String` in place, skipping the temporary
 `String` that a `` `${value}` `` template allocates before copying it in. The
-alloc-free counterpart to `buf.push_str(&`{value}`)` for a single value with
+alloc-free counterpart to `buf.push_str(&`${value}`)` for a single value with
 no format spec — the hot path in the serde numeric encoders.
 
 A trait (not an inherent `impl String`, which the coherence rules forbid on a
