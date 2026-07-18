@@ -955,10 +955,7 @@ impl TraitEnv {
             .unwrap_or_default()
     }
 
-    /// `true` when `type_name` has an **inherent** impl block (`impl Type { … }`)
-    /// declaring a method named `method_name`. Used by the monomorphizer to
-    /// recognise a newtype's own inherent method so it does not peel the
-    /// receiver to the erased base and retarget the inherited base impl.
+    /// Whether `type_name` has an inherent impl declaring `method_name`.
     pub(crate) fn has_inherent_method(&self, type_name: &str, method_name: &str) -> bool {
         self.all_impl_index.get(type_name).is_some_and(|keys| {
             keys.iter().any(|key| {

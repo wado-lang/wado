@@ -857,12 +857,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 (name.clone(), name, vec![], None)
             }
-            // A newtype's own inherent method. A generic newtype instance's
-            // `name` carries type args (`"MyArray<i32>"`) but its
-            // `impl MyArray<T>` is keyed by the head name, so split like a
-            // generic instance: receiver name "MyArray<i32>", owner base
-            // "MyArray", impl args from the base. A non-generic newtype
-            // (`"ByteList"`, no `<`) has no args and keeps its plain name.
             ResolvedType::Newtype { name, .. } if name.contains('<') => {
                 let type_args = {
                     let tt = self.tysys.type_table.borrow();

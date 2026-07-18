@@ -1,12 +1,5 @@
-// Regression test for wado-lang/wado#1615: an inherent method defined on a
-// newtype (`impl Bytes { fn to_hex }`) resolved correctly in a non-generic
-// context but, when the same call appeared inside a *generic* function body,
-// its method owner was mis-resolved to the newtype's erased base type
-// (`List<u8>`) rather than the newtype itself, producing a WIR ICE
-// ("unresolved MethodCall: name=\"List<u8>::to_hex\"").
-//
-// The newtype's own inherent method must be kept through monomorphization
-// instead of being peeled to the erased generic base.
+// Regression test for wado-lang/wado#1615: a newtype's inherent method invoked
+// inside a generic function body.
 type Bytes = List<u8>;
 
 fn hex_digit(nibble: u32) -> char {
@@ -34,8 +27,6 @@ fn make() -> Result<Bytes, String> {
     return Result::Ok([0x0f, 0xa0] as Bytes);
 }
 
-// `enc` is generic — that alone triggered the bug; `make()` being non-generic
-// is irrelevant.
 fn enc<T>(_v: &T) -> String {
     return match make() {
         Ok(bytes) => bytes.to_hex(),
@@ -43,7 +34,6 @@ fn enc<T>(_v: &T) -> String {
     };
 }
 
-// The non-generic form compiled fine before the fix; keep it as a control.
 fn enc_direct(b: Bytes) -> String {
     return b.to_hex();
 }

@@ -521,10 +521,6 @@ impl Monomorphizer {
         {
             // Try trait method name format first (e.g., Triple^IndexValue::index_value)
             let mut possible_keys = Vec::new();
-            // A generic newtype's own inherent method: the struct info peeled the
-            // newtype to its base (`MyArray<i32>` → `List`), but the queued
-            // instance is keyed under the newtype's head name
-            // (`MyArray::second`). Rewrite to that first.
             if let Some(info) = method_func.method_info.as_ref()
                 && info.trait_name.is_none()
                 && info.base_struct_name != base_struct

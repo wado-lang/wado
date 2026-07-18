@@ -522,24 +522,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             // Newtype: first try looking up methods on the newtype itself,
-            // then fall back to the base type for method inheritance. A generic
-            // newtype instance stores its full spelling in `name`
-            // (`"MyArray<i32>"`), but its own inherent impl (`impl MyArray<T>`)
-            // registers under the head name and is parameterized like its base.
-            // Look up by the head name and thread the base's generic args for
-            // impl-arg matching / substitution. A non-generic newtype
-            // (`"ByteList"`) has no `<`, so the head is the name itself and the
-            // threaded args are ignored (`inherent_impl_type_args_match`
-            // short-circuits on a non-generic impl target) — inherited-method
-            // dispatch is unchanged.
+            // then fall back to the base type for method inheritance
             ResolvedType::Newtype {
                 name,
                 module_source,
                 base_type,
             } => {
-                // Only a generic newtype instance carries `<…>` in its name and
-                // needs its head name + base args threaded; a non-generic newtype
-                // keeps its plain name and `None` args (unchanged dispatch).
                 let (head, own_type_args) = if name.contains('<') {
                     let args = {
                         let tt = self.tysys.type_table.borrow();

@@ -405,10 +405,7 @@ impl Monomorphizer {
     }
 
     /// Peel refs/newtypes to the first newtype level satisfying `has_own_impl`
-    /// (evaluated on that level's mangled name), returning that name. A newtype
-    /// without its own impl keeps peeling to the base, so an inner newtype in a
-    /// `type B = A` chain is still found; a non-newtype tail yields `None`. The
-    /// mangled name is the call-site spelling that matches `info.struct_name`.
+    /// (evaluated on that level's mangled name), returning that name.
     fn newtype_own_name(
         &self,
         type_id: TypeId,
@@ -438,13 +435,6 @@ impl Monomorphizer {
         type_table: &TypeTable,
         info: &LocalMethodName,
     ) -> bool {
-        // A trait method keeps the newtype's name when the newtype has its own
-        // `impl Trait for Newtype`; an inherent method when it has its own
-        // `impl Newtype { fn method }`. Either keeps the recorded owner as-is
-        // rather than peeling to the erased base (`ByteList::to_hex`, not
-        // `List<u8>::to_hex`). The inherent check keys by the newtype's head
-        // name (`"MyArray"` from `"MyArray<i32>"`) — impls register under the
-        // head — while the returned mangled name matches `info.struct_name`.
         let own = match info.trait_name.as_deref() {
             Some(trait_name) => self.newtype_own_name(receiver_type_id, type_table, |own| {
                 self.functions

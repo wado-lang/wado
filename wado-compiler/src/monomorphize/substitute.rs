@@ -281,14 +281,7 @@ impl Monomorphizer {
                     stores,
                 )
             }
-            // A generic newtype (`type MyArray<T> = List<T>`) embeds its type
-            // params in its base (`List<T>`) and name (`"MyArray<T>"`), so
-            // substitute the base and re-mangle the head with the base's
-            // concrete args. Without this the newtype's base stays generic and
-            // indexing / element access inside a monomorphized method keeps the
-            // unsubstituted element type (`array_get<T>` → WIR trap). A
-            // non-generic newtype has a param-free base and re-interns
-            // unchanged.
+            // Re-mangling assumes an identity single-arg mapping; see wado-lang/wado#1626.
             ResolvedType::Newtype {
                 name,
                 module_source,
@@ -298,14 +291,6 @@ impl Monomorphizer {
                 if new_base == base_type {
                     return type_id;
                 }
-                // Re-mangle the head with the substituted base's args. This is
-                // exact for the identity single-arg mapping (`type X<T> = List<T>`,
-                // `= Array<T>`, …) — the only shape reachable today, since a
-                // multi-arg (`type M<V> = Map<K, V>`) or chained
-                // (`type B<T> = X<T>`) generic newtype is rejected earlier at
-                // annotate. If those become expressible, the newtype must carry
-                // its own `type_args` (like `GenericInstance`) rather than
-                // re-deriving them from the base (wado-lang/wado#1626).
                 let head = crate::name::split_base_name(&name).to_string();
                 let new_name = match type_table.generic_type_args(new_base) {
                     Some(args) if !args.is_empty() => {

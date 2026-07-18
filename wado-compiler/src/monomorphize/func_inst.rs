@@ -709,11 +709,6 @@ impl Monomorphizer {
                     // Try both regular method and trait method formats
                     // Method names to try: BaseStruct::method, BaseStruct^Trait::method (from method_info)
                     let mut names_to_try = Vec::new();
-                    // A generic newtype's own inherent method:
-                    // `get_struct_info_from_type` peeled the newtype to its base
-                    // (`MyArray<i32>` → `List`), but the template registers under
-                    // the newtype's head name (`MyArray::second`). Try that first
-                    // so the newtype's own impl wins over the erased base.
                     if let Some(ref info) = method_func.method_info
                         && info.trait_name.is_none()
                         && info.base_struct_name != base_struct
