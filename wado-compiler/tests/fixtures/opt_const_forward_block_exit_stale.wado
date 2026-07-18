@@ -1,0 +1,32 @@
+// Regression: WIR const-forwarding treated a labeled block's body as
+// unconditionally executed. A reassignment after a conditional `break`
+// only runs on the fall-through path, so its field facts must not
+// survive the block: `a.len()` below is 3 when `c` breaks early and 4
+// otherwise, and must not fold to either constant.
+
+use { println, Stdout } from "core:cli";
+
+#[inline("never")]
+fn f(c: bool) -> i32 {
+    let mut a: List<i32> = [1, 2, 3];
+    outer: {
+        if c {
+            break outer;
+        }
+        a = [1, 2, 3, 4];
+    }
+    return a.len();
+}
+
+export fn run() with Stdout {
+    println(`${f(true)} ${f(false)}`);
+}
+
+__DATA__
+{
+    "stdout": "3 4\n",
+    "wir_not_expect:O2": [
+        "return 4;",
+        "return 3;"
+    ]
+}

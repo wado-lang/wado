@@ -153,8 +153,7 @@ fn "stream_read_multiple.wado/run"() with Stdout {
         global:stream_read_multiple.wado::__modules_initialized = 1;
     };
     rx_10 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_11 = builtin::i32_wrap_i64(packed >> 32_i64);
-    "wasi/stream-drop-writable"(tx_11);
+    "wasi/stream-drop-writable"(local.tee tx_11(builtin::i32_wrap_i64(packed >> 32_i64)));
     reads = 0;
     b0: block {
         l1: loop {

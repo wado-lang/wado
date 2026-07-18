@@ -25,7 +25,8 @@
 //!
 //! `List::push` is identified by its [`CompilerItem::ListPush`] marker, not
 //! by a canonical path, mirroring `string_push`. `array_new` is identified by
-//! its builtin name.
+//! its builtin identity ([`FunctionRef::builtin_name`]), anchored on the
+//! callee's `ModuleSource` rather than a bare name string.
 //!
 //! Runs *after* `inline` in the fixpoint loop: the `SequenceLiteralBuilder`
 //! `new_literal` / `push_literal` / `build` methods (and, for wrapper builders,
@@ -45,7 +46,7 @@
 
 use crate::compiler_item::{CompilerItem, SeqField};
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::FuncId;
+use crate::nir::{FuncId, FunctionRef, NirFunction};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
@@ -54,8 +55,8 @@ use super::arena_query::{
     is_local_operand, is_pure_operand, operand_mentions_local, stmt_mentions_local,
 };
 
-/// The builtin generic name of the raw array allocation (`builtin::array_new`).
-const ARRAY_NEW: &str = "array_new";
+/// The qualified builtin identity of the raw array allocation.
+const ARRAY_NEW_BUILTIN: &str = "builtin::array_new";
 
 /// The `List<T>` struct's backing-array field and length-counter field.
 const REPR_FIELD: &str = SeqField::Backing.field_name();
@@ -78,18 +79,29 @@ pub(super) fn resolve_array_push_ids(project: &NirPackage) -> IndexSet<FuncId> {
         .collect()
 }
 
-/// Collect the [`FuncId`] of every `builtin::array_new` instance — the bare
-/// callee and each generic monomorphization (`array_new<u8>`, …), recognized by
-/// name on the function record or its `monomorph_info.generic_name`.
+/// Whether `func` is a `builtin::array_new` instance — the bare callee or a
+/// generic monomorphization (`array_new<u8>`, …). Keyed on the function's
+/// builtin identity ([`FunctionRef::builtin_name`] /
+/// [`FunctionRef::monomorphized_builtin_name`], both anchored on the callee's
+/// `ModuleSource`), not a bare `func.name` string match that a user function of
+/// the same name could satisfy. (`array_new` is a `builtin::` free function
+/// with no impl-method `CompilerItem`; a `CompilerItem::ArrayNew` marker keyed
+/// like `ListPush` is left as a follow-up, since minting it edits the
+/// `compiler_item` registry.)
+fn is_array_new(func: &NirFunction) -> bool {
+    let fref = FunctionRef::from_resolved(func, func.module_source.clone());
+    fref.builtin_name().as_deref() == Some(ARRAY_NEW_BUILTIN)
+        || fref.monomorphized_builtin_name().as_deref() == Some(ARRAY_NEW_BUILTIN)
+}
+
+/// Collect the [`FuncId`] of every `builtin::array_new` instance.
 pub(super) fn resolve_array_new_ids(project: &NirPackage) -> IndexSet<FuncId> {
     project
         .functions
         .iter()
         .filter_map(|f| {
             let func = f.borrow();
-            let is_array_new =
-                crate::nir::matches_builtin(&func.name, func.monomorph_info.as_ref(), ARRAY_NEW);
-            (is_array_new).then_some(func.id).flatten()
+            is_array_new(&func).then_some(func.id).flatten()
         })
         .collect()
 }
@@ -233,6 +245,17 @@ impl Collapser<'_> {
                         *element = *value;
                     }
                 }
+            } else if !is_pure_operand(body, *value) {
+                // A single-target window may consume an impure `let temp =
+                // value` (`allow_impure`). Its side effect survives only when
+                // `value` moves into exactly one element slot (`uses == 1`
+                // above). With `uses == 0` the binding is consumed by the
+                // window `drain` yet substituted nowhere, dropping the side
+                // effect; with `uses > 1` the multi-use read guard below would
+                // fire, but its message is about a dangling read, not a lost
+                // effect. Bail for either. Today's lowering never emits an
+                // unread impure element temp, so this is a defensive guard.
+                return 0;
             }
         }
 

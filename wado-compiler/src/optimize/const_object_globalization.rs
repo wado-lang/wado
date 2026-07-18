@@ -344,8 +344,17 @@ fn let_stmt_qualifies(body: &Body, stmt: StmtId, gate: &Gate<'_>) -> bool {
 }
 
 fn is_globalizable_const_operand(body: &Body, op: Operand, bound: &mut IndexSet<u32>) -> bool {
-    op.as_expr()
-        .is_none_or(|e| is_globalizable_const(body, e, bound))
+    match op {
+        // A promoted operand is a closed constant only if its value graph node is
+        // a constant literal. `promote_pure_values_early` (and the born-as-operands
+        // path) can freeze a runtime-dependent pure value — e.g. `depth * 2` over a
+        // recursion parameter — into an `Operand::Value`; hoisting such a `let`
+        // into a shared global would re-initialize it per activation, so an outer
+        // recursive frame would observe an inner frame's value. Only a genuine
+        // constant is safe.
+        Operand::Value(v) => crate::nir_value_graph::builder::is_const_value(&body.values, v),
+        Operand::Expr(e) => is_globalizable_const(body, e, bound),
+    }
 }
 
 /// Recursively true when `expr` is a closed constant aggregate value.
@@ -357,10 +366,14 @@ fn is_globalizable_const(body: &Body, expr: ExprId, bound: &mut IndexSet<u32>) -
         ExprKind::PackedArray(_) => true,
         ExprKind::Local { index, .. } => bound.contains(index),
         ExprKind::StructLiteral { fields, .. } => {
-            let fields: Vec<ExprId> = fields.iter().filter_map(|f| f.value.as_expr()).collect();
-            fields
+            // Each field's operand must itself be a closed constant. A promoted
+            // `Operand::Value` field must be checked (not skipped): `filter_map`
+            // over `as_expr` would silently drop a runtime-dependent promoted
+            // field, wrongly classifying the aggregate as const.
+            let field_ops: Vec<Operand> = fields.iter().map(|f| f.value).collect();
+            field_ops
                 .iter()
-                .all(|&v| is_globalizable_const(body, v, bound))
+                .all(|&op| is_globalizable_const_operand(body, op, bound))
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             let elements = elements.clone();

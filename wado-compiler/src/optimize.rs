@@ -100,7 +100,7 @@ mod value_copy;
 mod value_copy_demote;
 
 use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
-use const_folding::{fold_constants, fold_constants_all};
+use const_folding::{ConstFoldCache, fold_constants, fold_constants_all};
 use const_object_globalization::globalize_const_objects;
 use container_sroa::scalarize_containers;
 use copy_prop::propagate_copies;
@@ -321,12 +321,8 @@ pub fn optimize(
         // cond-impl could not see; pair with `const_branch_prune` so the
         // now-`false` checks' panic blocks are removed. Must precede
         // `select_lowering`, which reshapes conditions out of matcher form.
-        run_pass("nir/cond_impl_post_promote", &mut project, profiler, |p| {
-            let mut changed = false;
-            while condition_implication::eliminate_post_promote(p) | prune_constant_branches(p) {
-                changed = true;
-            }
-            changed
+        run_bounded_fixpoint("nir/cond_impl_post_promote", &mut project, profiler, |p| {
+            condition_implication::eliminate_post_promote(p) | prune_constant_branches(p)
         });
         // Loop-versioned BCE: a check whose bound is loop-invariant but not
         // statically related to the loop guard (the relation lives at the
@@ -393,6 +389,40 @@ fn run_dce(project: &mut NirPackage, profiler: &dyn SpanEmitter) {
     remove_unreachable_closure_functors(project);
     project.rebuild_variant_indices();
     profiler.span_end("nir/dce");
+}
+
+/// Defensive iteration cap for the post-loop cleanup fixpoints
+/// (`cond_impl_post_promote`, `branch_prune_final`, `const_fold_post_global`).
+/// In practice these converge in a handful of rounds; the cap exists only so an
+/// oscillating rewrite pair cannot hang compilation, mirroring the bounded
+/// iteration count of the main fixed-point loop.
+const POST_LOOP_FIXPOINT_CAP: u32 = 100;
+
+/// Run `step` to a fixed point under [`run_pass`] instrumentation, bounded by
+/// [`POST_LOOP_FIXPOINT_CAP`]. Returns whether any round changed the IR; emits a
+/// debug diagnostic if the cap is reached (a sign of an oscillating rewrite).
+fn run_bounded_fixpoint(
+    name: &'static str,
+    project: &mut NirPackage,
+    profiler: &dyn SpanEmitter,
+    mut step: impl FnMut(&mut NirPackage) -> bool,
+) -> bool {
+    run_pass(name, project, profiler, |p| {
+        let mut changed = false;
+        for i in 0..POST_LOOP_FIXPOINT_CAP {
+            if !step(p) {
+                break;
+            }
+            changed = true;
+            if i + 1 == POST_LOOP_FIXPOINT_CAP {
+                profiler.debug(&format!(
+                    "{name} hit the post-loop fixpoint cap ({POST_LOOP_FIXPOINT_CAP}); \
+                     stopping (possible oscillating rewrite)"
+                ));
+            }
+        }
+        changed
+    })
 }
 
 /// Run a single optimization pass with profiling, returning whether it changed anything.
@@ -558,6 +588,10 @@ fn run_optimization_passes(
     // an interprocedural pass scans all functions but reports exactly the ones
     // it touched. Both go through `&mut gate`.
     let mut gate = gate::FunctionGate::new(project);
+    // Cross-iteration cache for `const_fold`'s whole-program maps (CalleeMap /
+    // GlobalEnv / GlobalFieldEnv). Rebuilt only when the function or global count
+    // changes; see `ConstFoldCache`.
+    let mut const_fold_cache: Option<ConstFoldCache> = None;
     // Dense `Match` → `Switch` in global initializer bodies. Functions are
     // lowered by `MatchToSwitchRule` inside the unified peephole session; the
     // function-level loop never mutates global initializer bodies, so a single
@@ -701,7 +735,17 @@ fn run_optimization_passes(
         // chain of pushes folds in a single iteration. The alias and
         // value-copy-helper analyses migrated to
         // `optimize::alias`.
-        gated!("nir/const_fold", fold_constants);
+        {
+            let c = run_pass("nir/const_fold", project, profiler, |p| {
+                fold_constants(p, &mut gate, &mut const_fold_cache)
+            });
+            if c {
+                changed = true;
+                if trace_loop {
+                    iter_changed.push("nir/const_fold");
+                }
+            }
+        }
         // Trivial-block / dead-statement pruning moved into the pre-inline
         // `nir/peephole` run above; the post-loop `branch_prune_final` and the
         // post-globalization `const_fold_post_global` keep their own engine
@@ -755,12 +799,8 @@ fn run_optimization_passes(
     // body directly. Iterate until convergence because one flatten can
     // expose another (e.g. single-stmt Block collapse on a freshly
     // produced `Block { Expr(tail) }`).
-    run_pass("nir/branch_prune_final", project, profiler, |p| {
-        let mut any_changed = false;
-        while prune_template_block_wrappers(p) {
-            any_changed = true;
-        }
-        any_changed
+    run_bounded_fixpoint("nir/branch_prune_final", project, profiler, |p| {
+        prune_template_block_wrappers(p)
     });
     // Body globalization: hoist constant, read-only aggregate `let` bindings
     // into shared immutable module globals so they build once at instantiation
@@ -780,12 +820,8 @@ fn run_optimization_passes(
     // `branch_prune` run here — re-entering the full loop is unsafe, since the
     // nullable `GlobalVarGet`s globalization emits are not meant to flow back
     // through `value_copy` / `sroa` (which is why globalization runs last).
-    run_pass("nir/const_fold_post_global", project, profiler, |p| {
-        let mut changed = false;
-        while fold_constants_all(p) | prune_constant_branches(p) {
-            changed = true;
-        }
-        changed
+    run_bounded_fixpoint("nir/const_fold_post_global", project, profiler, |p| {
+        fold_constants_all(p) | prune_constant_branches(p)
     });
     // Forward the inliner's leftover single-use pure-scalar value-parameter
     // temps into their uses. Runs last, after every scalarization / globalization

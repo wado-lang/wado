@@ -859,26 +859,51 @@ fn collect_ref_arg_escapes(
     let NodeRef::Expr(e) = node else {
         return;
     };
-    let args = match &body.exprs[e].kind {
-        ExprKind::Call { args, .. } | ExprKind::MethodCall { args, .. } => args,
-        _ => return,
+    match &body.exprs[e].kind {
+        ExprKind::Call { args, .. } | ExprKind::MethodCall { args, .. } => {
+            for arg in args {
+                // `is_mut` args are already aliased/escaped by the collectors
+                // above.
+                if arg.is_mut {
+                    continue;
+                }
+                escape_ref_arg(body, arg.expr, call_immutability, aliased, syntactic_mut);
+            }
+        }
+        // Indirect (closure) and CM raw calls carry `Operand` args with no
+        // parameter-mutability flag. A `&mut` operand is picked up as its own
+        // `MutRef` node by `collect_mut_escaped_node`, but a by-value or `&T`
+        // argument of a mutable type still shares heap state with the callee, so
+        // it escapes exactly as for a direct call.
+        ExprKind::IndirectCall { args, .. } | ExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                escape_ref_arg(body, *arg, call_immutability, aliased, syntactic_mut);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Mark an argument that carries shared mutable state into a callee: a value or
+/// `&T` argument whose type is not call-immutable aliases and syntactically
+/// escapes its root local.
+fn escape_ref_arg(
+    body: &Body,
+    arg: crate::nir_arena::Operand,
+    call_immutability: &CallImmutability,
+    aliased: &mut LocalSet,
+    syntactic_mut: &mut IndexSet<u32>,
+) {
+    let Some(ae) = arg.as_expr() else {
+        return;
     };
-    for arg in args {
-        // `is_mut` args are already aliased/escaped by the collectors above.
-        if arg.is_mut {
-            continue;
-        }
-        let Some(ae) = arg.expr.as_expr() else {
-            continue;
-        };
-        // A value / immutable-`&T` argument cannot carry a write back.
-        if call_immutability.is_call_immutable(body.exprs[ae].type_id) {
-            continue;
-        }
-        if let Some(r) = storage_root(body, ae) {
-            aliased.insert(r);
-            syntactic_mut.insert(r);
-        }
+    // A value / immutable-`&T` argument cannot carry a write back.
+    if call_immutability.is_call_immutable(body.exprs[ae].type_id) {
+        return;
+    }
+    if let Some(r) = storage_root(body, ae) {
+        aliased.insert(r);
+        syntactic_mut.insert(r);
     }
 }
 
@@ -948,6 +973,10 @@ fn collect_mut_escaped_node(
                 }
             }
         }
+        // `IndirectCall` / `CmRawCall` carry no `mut` parameter flag: a `&mut x`
+        // operand reaches `out` through the `MutRef` arm above, and a by-value
+        // mutable-typed argument through `collect_ref_arg_escapes`, so no
+        // call-node arm is needed here.
         _ => {}
     }
 }
@@ -1076,11 +1105,15 @@ fn alias_groups_from_edges(edges: Vec<(u32, u32)>) -> IndexMap<u32, IndexSet<u32
 /// (pre-monomorphization) or as concrete monomorphized `Struct`
 /// records carrying the original generic name in `base_name`.
 fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
+    let items = type_table.compiler_items();
+    let box_name = items.struct_name(crate::compiler_item::CompilerItem::Box);
+    let list_name = items.struct_name(crate::compiler_item::CompilerItem::List);
+    let is_box_or_list_name = |n: &str| n == box_name || n == list_name;
     match type_table.get(type_id) {
         ResolvedType::Ref(_) => true,
-        ResolvedType::GenericInstance { name, .. } if name == "Box" || name == "List" => true,
+        ResolvedType::GenericInstance { name, .. } if is_box_or_list_name(name) => true,
         ResolvedType::Struct { base_name, .. }
-            if base_name.as_deref() == Some("Box") || base_name.as_deref() == Some("List") =>
+            if base_name.as_deref().is_some_and(is_box_or_list_name) =>
         {
             true
         }

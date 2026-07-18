@@ -1,0 +1,33 @@
+// Template buffer hoisting for loops nested under match/switch arms: the
+// block walker reaches loops through the generic child walk, so a template
+// in a loop inside a match arm still gets its buffer hoisted (previously only
+// loops under if/labeled-block statements were visited).
+use { println, Stdout } from "core:cli";
+
+global mut MODE: i32 = 2;
+
+export fn run() with Stdout {
+    let mode = MODE;
+    let mut total = 0;
+    match mode {
+        1 => {
+            total = -1;
+        },
+        2 => {
+            for let mut i = 0; i < 4; i += 1 {
+                let s = `m=${i}`;
+                total += s.len();
+            }
+        },
+        _ => {
+            total = -2;
+        },
+    }
+    println(`total=${total}`);
+}
+
+__DATA__
+{
+    "stdout": "total=12\n",
+    "wir_expect:O2": ["__tmpl_buf_"]
+}

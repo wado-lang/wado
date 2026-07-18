@@ -1,0 +1,28 @@
+// Inlining `w.convert(100)` (which ignores `&self`) leaves a dead `w.value`
+// read. A struct receiver is non-null, so it cannot trap and `elide_local` must
+// drop it — letting `x` fold to `100` and the always-true assert prune. If the
+// read is kept as a may-trap statement, the assert's panic path survives.
+
+struct Wrapper {
+    value: i32,
+}
+
+impl Wrapper {
+    fn convert<U>(&self, other: U) -> U {
+        return other;
+    }
+}
+
+export fn run() {
+    let w = Wrapper { value: 42 };
+    let x = w.convert::<i64>(100 as i64);
+    assert x == 100 as i64;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O2": [
+        "condition: x == 100"
+    ]
+}

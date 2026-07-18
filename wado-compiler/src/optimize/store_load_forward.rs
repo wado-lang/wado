@@ -139,10 +139,10 @@ impl Rule for StoreLoadForwardRule {
     }
 }
 
-/// Forward stored literals to later reads at the body root. Shared by the
-/// standalone rule and the combined cse+forward session, which runs it on a
-/// `ValueGraph` cse already built (both passes are graph-preserving).
-pub(super) fn forward_at_root(
+/// Forward stored literals to later reads at the body root. Its sole caller is
+/// [`StoreLoadForwardRule::apply_block`], which runs it once on the standalone
+/// session's already-built (graph-preserving) `ValueGraph`.
+fn forward_at_root(
     engine: &mut Engine,
     unsafe_locals: &IndexSet<u32>,
     consts: &crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId>,
@@ -160,9 +160,12 @@ pub(super) fn forward_at_root(
         {
             continue;
         }
-        // Skip `Assign` LHS reads — they are writes, not reads. For a
-        // `FieldAccess` this also skips the `obj.f` place of `obj.f = …`.
-        if is_assign_target(engine, expr) {
+        // Skip place-position reads — a `&`/`&mut`/deref referent, a `.field` /
+        // `[index]` / method receiver, or an `Assign` LHS. There the storage,
+        // not the value, is used; forwarding the stored literal would destroy
+        // the place and lose a callee's write-back (`g(&mut obj.f)` → `g(&mut
+        // 5)`). Mirrors the sibling `extract::freeze_pure_arith` guard.
+        if super::extract::is_place_read(engine, expr) {
             continue;
         }
         // Born-as-operands: every forwardable read carries its reaching constant
@@ -183,8 +186,8 @@ pub(super) fn forward_at_root(
 
 /// Collect value-position `Local` and `FieldAccess` read expressions. A
 /// `Local` yields `(id, Some(index))`; a `FieldAccess` yields `(id, None)`.
-/// Assign-target filtering happens later (`is_assign_target`), so write
-/// places are gathered here but rejected before rewriting.
+/// Place-position filtering happens later (`extract::is_place_read`), so write
+/// / reference places are gathered here but rejected before rewriting.
 fn collect_candidate_reads(body: &Body, out: &mut Vec<(ExprId, Option<u32>)>) {
     collect_candidate_reads_node(body, NodeRef::Block(body.root), out);
 }
@@ -202,16 +205,4 @@ fn collect_candidate_reads_node(body: &Body, node: NodeRef, out: &mut Vec<(ExprI
     for c in kids {
         collect_candidate_reads_node(body, c, out);
     }
-}
-
-/// True when `expr`'s immediate parent is an `Assign` and `expr` is the
-/// assign's `target` (LHS).
-fn is_assign_target(engine: &Engine, expr: ExprId) -> bool {
-    let Some(NodeRef::Expr(parent)) = engine.parent_of(NodeRef::Expr(expr)) else {
-        return false;
-    };
-    matches!(
-        &engine.body.exprs[parent].kind,
-        ExprKind::Assign { target, .. } if *target == expr
-    )
 }

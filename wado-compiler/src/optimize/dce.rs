@@ -228,13 +228,16 @@ fn extend_reachable_for_optimizer_passes(
 ) {
     use crate::compiler_item::CompilerItem;
 
-    let mut push_str_id: Option<FunctionId> = None;
+    let mut push_str: Option<(FunctionId, crate::nir::FuncId)> = None;
     let mut push_char_id: Option<FunctionId> = None;
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         match func.compiler_item {
             Some(CompilerItem::StringPushStr) => {
-                push_str_id = Some(function_id_for(&func));
+                push_str = Some((
+                    function_id_for(&func),
+                    func.id.expect("func_id assigned at lower"),
+                ));
             }
             Some(CompilerItem::StringPushChar) => {
                 push_char_id = Some(function_id_for(&func));
@@ -242,9 +245,22 @@ fn extend_reachable_for_optimizer_passes(
             _ => {}
         }
     }
-    if let (Some(str_id), Some(char_id)) = (push_str_id, push_char_id)
+    // Keep `String::push` (`string_push_char`) reachable only while a
+    // `nir/string_push` rewrite could still fire: the rule turns a short
+    // constant `buf.push_str("abc")` into per-byte `buf.push(c)` calls, so its
+    // target must survive the DCE that runs *before* the optimization loop.
+    // The rule consumes each eligible call, so once the loop has run to
+    // fixpoint (the final DCE), no eligible candidate remains — and re-seeding
+    // `push_char` there keeps it and its callees alive as pure output bloat.
+    // Gating on a surviving candidate makes the virtual edge self-limiting:
+    // present at the pre-loop DCE (and at -O0, where the rule never runs), gone
+    // at the final DCE. The `$value_copy$` half below is *not* gated this way —
+    // its helpers are referenced by name at WIR build (after the final DCE), so
+    // both invocations must seed them.
+    if let (Some((str_id, str_func_id)), Some(char_id)) = (push_str, push_char_id)
         && reachable.contains(&str_id)
         && !reachable.contains(&char_id)
+        && has_short_push_str_candidate(project, str_func_id)
     {
         reachable.extend(compute_reachable(call_graph, &char_id));
     }
@@ -355,6 +371,62 @@ fn extend_reachable_for_optimizer_passes(
             break;
         }
     }
+}
+
+/// Whether any function body still holds a `nir/string_push`-rewritable call:
+/// `buf.push_str(&"…")` with a 1..=[`SHORT_PUSH_STR_MAX_LEN`]-byte ASCII
+/// constant literal. This mirrors the match shape of
+/// `optimize::string_push::try_split_stmt` (minus its receiver-duplicability
+/// refinement, which only ever narrows the set — so this stays a sound
+/// superset that never drops `push_char` while a rewrite could still fire).
+/// The pre-loop DCE sees such candidates; the final DCE, after the loop has
+/// consumed them, sees none — which is what gates the `String::push` virtual
+/// root to the invocation that needs it.
+fn has_short_push_str_candidate(project: &NirPackage, push_str_id: crate::nir::FuncId) -> bool {
+    project.functions.iter().any(|func_rc| {
+        let func = func_rc.borrow();
+        func.body
+            .as_ref()
+            .is_some_and(|body| body_has_short_push_str(body, push_str_id))
+    })
+}
+
+/// Byte-length ceiling for a `push_str` literal the `nir/string_push` rule
+/// expands. Must stay in sync with `string_push::MAX_SHORT_PUSH_STR_LEN`; a
+/// value at least as large keeps [`has_short_push_str_candidate`] a sound gate
+/// (an over-estimate only risks a little residual bloat, never a dropped
+/// rewrite target).
+const SHORT_PUSH_STR_MAX_LEN: usize = 8;
+
+fn body_has_short_push_str(body: &Body, push_str_id: crate::nir::FuncId) -> bool {
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(e) = node
+            && let ExprKind::MethodCall { func_id, args, .. } = &body.exprs[e].kind
+            && *func_id == push_str_id
+            && args.len() == 1
+            && let Some(arg) = args[0].expr.as_expr()
+            && let ExprKind::Unary {
+                op: crate::nir::NirUnaryOp::Ref,
+                expr: inner,
+            } = &body.exprs[arg].kind
+            && let Some(inner_e) = inner.as_expr()
+            && let ExprKind::StructLiteral { fields, .. } = &body.exprs[inner_e].kind
+            && let Some(repr) = fields
+                .iter()
+                .find(|f| f.name == crate::compiler_item::SeqField::Backing.field_name())
+                .map(|f| f.value)
+            && let Some(repr_e) = repr.as_expr()
+            && let ExprKind::PackedArray(bytes) = &body.exprs[repr_e].kind
+            && !bytes.is_empty()
+            && bytes.len() <= SHORT_PUSH_STR_MAX_LEN
+            && bytes.is_ascii()
+        {
+            return true;
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    false
 }
 
 /// Walk `block`'s expression tree and collect every `T` such that
@@ -974,12 +1046,7 @@ impl<'a> DceWalker<'a> {
             let callee_id = if func.is_monomorphized() {
                 let base_name = func
                     .base_struct_name()
-                    .map(|base| {
-                        func_name
-                            .find("::")
-                            .map(|pos| format!("{}::{}", base, &func_name[pos + 2..]))
-                            .unwrap_or_else(|| base)
-                    })
+                    .map(|base| crate::name::rebase_monomorph_method(&func_name, &base))
                     .unwrap_or_else(|| func_name.clone());
                 FunctionId::Free(FreeFunctionName::with_monomorph_info(
                     func.module_source.clone(),
@@ -988,15 +1055,9 @@ impl<'a> DceWalker<'a> {
                 ))
             } else {
                 let callee_module = original_callee_module;
-                if let Some(sep_pos) = func_name.find("::") {
-                    let prefix = &func_name[..sep_pos];
-                    let method_name = &func_name[sep_pos + 2..];
-                    let (struct_name, trait_name): (&str, Option<&str>) =
-                        if let Some(caret_pos) = prefix.find('^') {
-                            (&prefix[..caret_pos], Some(&prefix[caret_pos + 1..]))
-                        } else {
-                            (prefix, None)
-                        };
+                if let Some((struct_name, trait_name, method_name)) =
+                    crate::name::split_local_method_name(&func_name)
+                {
                     FunctionId::Method(MethodName::new(
                         callee_module,
                         struct_name.to_string(),
@@ -1016,10 +1077,8 @@ impl<'a> DceWalker<'a> {
             let module_path = func.module_path();
             if module_path.len() >= 2
                 && module_path[0] == "wasi"
-                && let Some(pos) = func_name.find("::")
+                && let Some((resource_name, method_name)) = func_name.split_once("::")
             {
-                let resource_name = &func_name[..pos];
-                let method_name = &func_name[pos + 2..];
                 self.analysis
                     .effect_calls
                     .insert((resource_name.to_string(), method_name.to_string()));
@@ -1055,12 +1114,7 @@ impl<'a> DceWalker<'a> {
         if func.is_monomorphized() {
             let base_name = func
                 .base_struct_name()
-                .map(|base| {
-                    func_name
-                        .find("::")
-                        .map(|pos| format!("{}::{}", base, &func_name[pos + 2..]))
-                        .unwrap_or_else(|| base)
-                })
+                .map(|base| crate::name::rebase_monomorph_method(&func_name, &base))
                 .unwrap_or_else(|| func_name.clone());
 
             // Use the func's actual module_source — monomorphized functions
@@ -1657,9 +1711,11 @@ fn populate_type_reachability(
     graph: &AnalysisGraph,
     analysis: &mut DceAnalysis,
 ) {
-    // Always include primitive types (TypeId 0-17)
-    for i in 0..18 {
-        analysis.types.insert(TypeId(i));
+    // Always include the pre-interned builtin scalar types (`I8` .. `UNKNOWN`).
+    // Anchored on the `TypeTable` constants rather than a literal `0..18` so
+    // adding or removing a primitive can never silently desync the range.
+    for id in TypeTable::I8.0..=TypeTable::UNKNOWN.0 {
+        analysis.types.insert(TypeId(id));
     }
 
     // Always include BuiltinArray(U8) as it's fundamental for String operations
@@ -1986,11 +2042,12 @@ pub fn remove_unreachable_globals(
         used_globals.contains(&(global_module_key, global.name.clone()))
     });
 
+    let type_table = project.type_table.borrow();
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(body) = func.body.as_mut() {
             let root = body.root;
-            remove_dead_global_sets_block(body, root, used_globals);
+            remove_dead_global_sets_block(body, root, used_globals, &type_table);
         }
     }
 }
@@ -2005,10 +2062,11 @@ fn remove_dead_global_sets_block(
     body: &mut Body,
     block: BlockId,
     used: &IndexSet<(String, String)>,
+    type_table: &TypeTable,
 ) {
     // Recurse into sub-statements first.
     for s in body.blocks[block].stmts.clone() {
-        remove_dead_global_sets_stmt(body, s, used);
+        remove_dead_global_sets_stmt(body, s, used, type_table);
     }
 
     // Process GlobalVarSet statements for dead globals.
@@ -2033,11 +2091,13 @@ fn remove_dead_global_sets_block(
             None
         };
         if let Some((value, span)) = dead {
-            // Dead global: keep the value expression only if it has side
-            // effects (e.g. panic() / unreachable — detected via never type).
+            // Dead global: keep the value expression when it is not provably
+            // pure-and-nontrapping, so an initializer that calls a function
+            // (writing another global, printing, asserting) or that can trap
+            // keeps its effect/trap even though the global itself is gone.
             // The discarded GlobalVarSet owned `value`, so reuse its id here.
             if let Some(ve) = value.as_expr()
-                && expr_has_side_effects(body, ve)
+                && !super::arena_query::is_pure_nontrapping_expr_typed(body, ve, Some(type_table))
             {
                 let new_s = body.stmts.push(StmtNode {
                     kind: StmtKind::Expr(ve.into()),
@@ -2052,83 +2112,12 @@ fn remove_dead_global_sets_block(
     body.blocks[block].stmts = new_stmts;
 }
 
-/// Side-effect check for an operand. A promoted `Operand::Value` is a pure
-/// constant — no side effects, nothing to walk.
-fn operand_has_side_effects(body: &Body, op: Operand) -> bool {
-    op.as_expr().is_some_and(|e| expr_has_side_effects(body, e))
-}
-
-/// Check whether an expression tree contains observable side effects.
-///
-/// Only diverging expressions (type `never` — e.g. `panic()`, `unreachable()`) are
-/// considered side effects. Pure function calls like array construction are not.
-fn expr_has_side_effects(body: &Body, e: ExprId) -> bool {
-    if body.exprs[e].type_id == TypeTable::NEVER {
-        return true;
-    }
-    match &body.exprs[e].kind {
-        ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
-            block_has_side_effects(body, *block)
-        }
-        ExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            operand_has_side_effects(body, *condition)
-                || block_has_side_effects(body, *then_branch)
-                || else_branch.is_some_and(|b| block_has_side_effects(body, b))
-        }
-        ExprKind::Match { expr, arms } => {
-            operand_has_side_effects(body, *expr)
-                || arms.iter().any(|a| {
-                    a.guard.is_some_and(|g| operand_has_side_effects(body, g))
-                        || operand_has_side_effects(body, a.body)
-                })
-        }
-        ExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            operand_has_side_effects(body, *scrutinee)
-                || arms.iter().any(|a| block_has_side_effects(body, *a))
-                || block_has_side_effects(body, *default)
-        }
-        _ => false,
-    }
-}
-
-fn block_has_side_effects(body: &Body, block: BlockId) -> bool {
-    body.blocks[block]
-        .stmts
-        .iter()
-        .any(|s| match &body.stmts[*s].kind {
-            StmtKind::Expr(e) => e.as_expr().is_some_and(|e| expr_has_side_effects(body, e)),
-            StmtKind::Let { value, .. } => operand_has_side_effects(body, *value),
-            StmtKind::Return { value } => value.is_some_and(|v| operand_has_side_effects(body, v)),
-            StmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                operand_has_side_effects(body, *condition)
-                    || block_has_side_effects(body, *then_block)
-                    || else_block.is_some_and(|b| block_has_side_effects(body, b))
-            }
-            StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
-                block_has_side_effects(body, *b)
-            }
-            StmtKind::Break { value, .. } => {
-                value.is_some_and(|v| operand_has_side_effects(body, v))
-            }
-            StmtKind::Continue => false,
-            StmtKind::LetDestructure { value, .. } => operand_has_side_effects(body, *value),
-        })
-}
-
-fn remove_dead_global_sets_stmt(body: &mut Body, s: StmtId, used: &IndexSet<(String, String)>) {
+fn remove_dead_global_sets_stmt(
+    body: &mut Body,
+    s: StmtId,
+    used: &IndexSet<(String, String)>,
+    type_table: &TypeTable,
+) {
     enum W {
         Expr(ExprId),
         Blocks(BlockId, Option<BlockId>),
@@ -2149,11 +2138,11 @@ fn remove_dead_global_sets_stmt(body: &mut Body, s: StmtId, used: &IndexSet<(Str
         StmtKind::Continue | StmtKind::LetDestructure { .. } => W::None,
     };
     match w {
-        W::Expr(e) => remove_dead_global_sets_expr(body, e, used),
+        W::Expr(e) => remove_dead_global_sets_expr(body, e, used, type_table),
         W::Blocks(b0, b1) => {
-            remove_dead_global_sets_block(body, b0, used);
+            remove_dead_global_sets_block(body, b0, used, type_table);
             if let Some(b1) = b1 {
-                remove_dead_global_sets_block(body, b1, used);
+                remove_dead_global_sets_block(body, b1, used, type_table);
             }
         }
         W::None => {}
@@ -2161,7 +2150,12 @@ fn remove_dead_global_sets_stmt(body: &mut Body, s: StmtId, used: &IndexSet<(Str
 }
 
 /// Recursively remove dead `GlobalVarSet` from expressions that contain blocks.
-fn remove_dead_global_sets_expr(body: &mut Body, e: ExprId, used: &IndexSet<(String, String)>) {
+fn remove_dead_global_sets_expr(
+    body: &mut Body,
+    e: ExprId,
+    used: &IndexSet<(String, String)>,
+    type_table: &TypeTable,
+) {
     enum W {
         Block(BlockId),
         If(Option<ExprId>, BlockId, Option<BlockId>),
@@ -2184,29 +2178,29 @@ fn remove_dead_global_sets_expr(body: &mut Body, e: ExprId, used: &IndexSet<(Str
         _ => W::None,
     };
     match w {
-        W::Block(b) => remove_dead_global_sets_block(body, b, used),
+        W::Block(b) => remove_dead_global_sets_block(body, b, used, type_table),
         W::If(cond, then_b, else_b) => {
             if let Some(cond) = cond {
-                remove_dead_global_sets_expr(body, cond, used);
+                remove_dead_global_sets_expr(body, cond, used, type_table);
             }
-            remove_dead_global_sets_block(body, then_b, used);
+            remove_dead_global_sets_block(body, then_b, used, type_table);
             if let Some(eb) = else_b {
-                remove_dead_global_sets_block(body, eb, used);
+                remove_dead_global_sets_block(body, eb, used, type_table);
             }
         }
         W::Match(scrutinee, bodies) => {
             if let Some(scrutinee) = scrutinee {
-                remove_dead_global_sets_expr(body, scrutinee, used);
+                remove_dead_global_sets_expr(body, scrutinee, used, type_table);
             }
             for b in bodies {
-                remove_dead_global_sets_expr(body, b, used);
+                remove_dead_global_sets_expr(body, b, used, type_table);
             }
         }
         W::Switch(arms, default) => {
             for a in arms {
-                remove_dead_global_sets_block(body, a, used);
+                remove_dead_global_sets_block(body, a, used, type_table);
             }
-            remove_dead_global_sets_block(body, default, used);
+            remove_dead_global_sets_block(body, default, used, type_table);
         }
         W::None => {}
     }

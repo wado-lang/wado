@@ -29,12 +29,9 @@ use crate::nir_visitor::NirRefVisitor;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
-use super::arena_query::{has_break_to, is_local, is_local_operand, single_payload_binding};
-
-/// `expr_has_break_to` arena adapter.
-fn expr_has_break_to(body: &Body, label: &str, e: ExprId) -> bool {
-    has_break_to(body, NodeRef::Expr(e), label)
-}
+use super::arena_query::{
+    block_contains_loop, has_break_to, is_local, is_local_operand, single_payload_binding,
+};
 
 /// Block-level fusion rule for the unified post-inline peephole session.
 /// The rule keeps no per-function state: every precondition is re-derived from
@@ -74,6 +71,17 @@ impl Rule for LabeledBlockFusionRule {
             else {
                 continue;
             };
+            // `perform_fusion` deletes the `let temp = LB` binding, so the temp
+            // is dead afterwards. The precondition check only inspects the
+            // consumer's arms; a use of the temp anywhere else in the function
+            // (a later statement, another branch) would then read a deleted
+            // local. Fuse only when every mention of the temp lives inside the
+            // consumer statement.
+            let consumer_uses =
+                count_local_uses_in_stmt(engine.body, stmts[i + 1], info.temp_local);
+            if engine.local_reads(info.temp_local).len() != consumer_uses {
+                continue;
+            }
             if yields && i + 2 == stmts.len() {
                 continue;
             }
@@ -390,6 +398,15 @@ fn check_fusion_preconditions_match(
     })
 }
 
+// `find_break_case_index_for_name` deliberately keeps its own narrow traversal
+// rather than folding onto the shared [`walk_exits`]: it is a best-effort
+// locator run *before* [`check_lb_breaks_and_get_payload`] on the
+// value-discarding path, whose transform (`transform_lb_stmt`) does not rewrite
+// an exit nested in an `if` condition. The shared walk visits those positions
+// (the threading transform does rewrite them); locating a case index there
+// would let value-discarding fusion fire on a break the transform leaves
+// dangling. Keeping the locator narrow preserves the original fusion decisions.
+
 /// Walk `block` looking for `break label: VariantConstruct { case_name }`
 /// and return the embedded `case_index`.
 fn find_break_case_index_for_name(
@@ -546,6 +563,173 @@ fn arm_body_operand_into_block(
     }
 }
 
+// ---------------------------------------------------------------------------
+// Shared label-exit walk
+// ---------------------------------------------------------------------------
+//
+// One traversal drives the two full-coverage exit checks — the value-discarding
+// break check ([`BreakChecker`]) and the threading exit validator
+// ([`ExitValidator`]) — whose former hand-rolled twins diverged and caused the
+// P0 fusion miscompiles. `walk_exits` visits each exit, honouring label
+// shadowing (a nested `LabeledBlock` rebinding the label hides its exits), and
+// hands it to an [`ExitSink`] encoding the per-check policy. `walk_exit_operand`
+// accepts a promoted `Operand::Value` vacuously (`is_none_or`): it carries no
+// skeleton subtree, hence no break, so it can never invalidate a check.
+// (`find_break_case_index_for_name` deliberately stays off this walk; see its
+// note below.)
+
+/// Per-exit policy for the shared [`walk_exits`] traversal.
+trait ExitSink {
+    /// Handle one `break <label>: value` exit. Returning `false` aborts the
+    /// walk with an overall `false`.
+    fn visit(&mut self, body: &Body, value: Option<Operand>) -> bool;
+    /// Descend structurally into `Match` / `Switch` arms (the coverage the
+    /// threading walkers rewrite) rather than treating the node as opaque.
+    fn descend_branches(&self) -> bool;
+    /// A `break <label>` hidden inside an opaque expression the structured walk
+    /// cannot resolve: `true` rejects it (a check that must account for every
+    /// exit), `false` ignores it (a best-effort locator).
+    fn reject_hidden_break(&self) -> bool;
+}
+
+fn walk_exits<S: ExitSink>(body: &Body, block: BlockId, label: &str, sink: &mut S) -> bool {
+    body.blocks[block]
+        .stmts
+        .clone()
+        .iter()
+        .all(|s| walk_exit_stmt(body, *s, label, sink))
+}
+
+fn walk_exit_stmt<S: ExitSink>(body: &Body, s: StmtId, label: &str, sink: &mut S) -> bool {
+    match &body.stmts[s].kind {
+        StmtKind::Break {
+            label: Some(l),
+            value,
+        } if l == label => sink.visit(body, *value),
+        StmtKind::LabeledBlock { label: l, .. } if l == label => true,
+        StmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
+            walk_exit_operand(body, condition, label, sink)
+                && walk_exits(body, then_block, label, sink)
+                && else_block.is_none_or(|eb| walk_exits(body, eb, label, sink))
+        }
+        StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
+            walk_exits(body, *b, label, sink)
+        }
+        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
+            walk_exit_operand(body, *value, label, sink)
+        }
+        // A `break L: <value>` can hide under a statement-position match/switch,
+        // and the transform walkers still rewrite it, so descend here too.
+        StmtKind::Expr(op) => walk_exit_operand(body, *op, label, sink),
+        StmtKind::Return { value } | StmtKind::Break { value, .. } => {
+            value.is_none_or(|v| walk_exit_operand(body, v, label, sink))
+        }
+        StmtKind::Continue => true,
+    }
+}
+
+fn walk_exit_operand<S: ExitSink>(body: &Body, op: Operand, label: &str, sink: &mut S) -> bool {
+    op.as_expr()
+        .is_none_or(|e| walk_exit_expr(body, e, label, sink))
+}
+
+fn walk_exit_expr<S: ExitSink>(body: &Body, e: ExprId, label: &str, sink: &mut S) -> bool {
+    match &body.exprs[e].kind {
+        ExprKind::LabeledBlock {
+            label: l, block, ..
+        } => l == label || walk_exits(body, *block, label, sink),
+        ExprKind::Block(block) => walk_exits(body, *block, label, sink),
+        ExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
+            walk_exit_operand(body, condition, label, sink)
+                && walk_exits(body, then_branch, label, sink)
+                && else_branch.is_none_or(|eb| walk_exits(body, eb, label, sink))
+        }
+        ExprKind::Match { expr, arms } if sink.descend_branches() => {
+            let (expr, arms) = (*expr, arms.clone());
+            walk_exit_operand(body, expr, label, sink)
+                && arms.iter().all(|arm| {
+                    walk_exit_operand(body, arm.body, label, sink)
+                        && arm
+                            .guard
+                            .is_none_or(|g| walk_exit_operand(body, g, label, sink))
+                })
+        }
+        ExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } if sink.descend_branches() => {
+            let (scrutinee, arms, default) = (*scrutinee, arms.clone(), *default);
+            walk_exit_operand(body, scrutinee, label, sink)
+                && arms.iter().all(|b| walk_exits(body, *b, label, sink))
+                && walk_exits(body, default, label, sink)
+        }
+        // Opaque expression: any exit hidden inside is unresolved by this walk.
+        _ => !(sink.reject_hidden_break() && has_break_to(body, NodeRef::Expr(e), label)),
+    }
+}
+
+/// [`ExitSink`] for `check_lb_breaks_and_get_payload`: every `break L:` must
+/// carry `null` or a `VariantConstruct`, and the matching case's payload type
+/// is recorded. Value-discarding fusion does not descend `Match` / `Switch`
+/// (kept opaque, as before) but rejects any hidden break.
+struct BreakChecker<'a> {
+    label: &'a str,
+    case_index: u32,
+    payload_type: &'a mut Option<TypeId>,
+}
+
+impl ExitSink for BreakChecker<'_> {
+    fn visit(&mut self, body: &Body, value: Option<Operand>) -> bool {
+        // A break carrying no value, or a promoted `Null` placeholder, is the
+        // empty/None break the fusion accepts.
+        let Some(e) = value.and_then(Operand::as_expr) else {
+            return value.is_none_or(|v| {
+                v.as_value()
+                    .is_some_and(|vid| matches!(body.values.kind(vid), ValueKind::Null))
+            });
+        };
+        let ExprKind::VariantConstruct {
+            case_index: ci,
+            payload,
+            ..
+        } = &body.exprs[e].kind
+        else {
+            return false;
+        };
+        let (ci, payload) = (*ci, *payload);
+        if let Some(p) = payload
+            && p.as_expr()
+                .is_some_and(|pe| has_break_to(body, NodeRef::Expr(pe), self.label))
+        {
+            return false;
+        }
+        if ci == self.case_index
+            && let Some(p) = payload
+        {
+            *self.payload_type = Some(body.operand_type(p));
+        }
+        true
+    }
+    fn descend_branches(&self) -> bool {
+        false
+    }
+    fn reject_hidden_break(&self) -> bool {
+        true
+    }
+}
+
 /// Verify that all `break L: v` in `block` have `v` as either `null` or
 /// `VariantConstruct`. Returns the payload type of the matching case.
 fn check_lb_breaks_and_get_payload(
@@ -555,149 +739,15 @@ fn check_lb_breaks_and_get_payload(
     case_index: u32,
 ) -> Option<TypeId> {
     let mut payload_type: Option<TypeId> = None;
-    if !check_lb_breaks_in_block(body, block, label, case_index, &mut payload_type) {
+    let mut sink = BreakChecker {
+        label,
+        case_index,
+        payload_type: &mut payload_type,
+    };
+    if !walk_exits(body, block, label, &mut sink) {
         return None;
     }
     payload_type
-}
-
-fn check_lb_breaks_in_block(
-    body: &Body,
-    block: BlockId,
-    label: &str,
-    case_index: u32,
-    payload_type: &mut Option<TypeId>,
-) -> bool {
-    body.blocks[block]
-        .stmts
-        .clone()
-        .iter()
-        .all(|s| check_lb_breaks_in_stmt(body, *s, label, case_index, payload_type))
-}
-
-fn check_lb_breaks_in_stmt(
-    body: &Body,
-    s: StmtId,
-    label: &str,
-    case_index: u32,
-    payload_type: &mut Option<TypeId>,
-) -> bool {
-    match &body.stmts[s].kind {
-        StmtKind::Break {
-            label: Some(l),
-            value,
-        } if l == label => {
-            // A break carrying no value, or a promoted `Null` placeholder, is
-            // the empty/None break the fusion accepts.
-            let Some(e) = value.and_then(super::super::nir_arena::Operand::as_expr) else {
-                return value.is_none_or(|v| {
-                    v.as_value().is_some_and(|vid| {
-                        matches!(
-                            body.values.kind(vid),
-                            crate::nir_value_graph::ValueKind::Null
-                        )
-                    })
-                });
-            };
-            match &body.exprs[e].kind {
-                ExprKind::VariantConstruct {
-                    case_index: ci,
-                    payload,
-                    ..
-                } => {
-                    let ci = *ci;
-                    let payload = *payload;
-                    if let Some(p) = payload
-                        && expr_has_break_to_operand(body, label, p)
-                    {
-                        return false;
-                    }
-                    if ci == case_index
-                        && let Some(p) = payload
-                    {
-                        *payload_type = Some(body.operand_type(p));
-                    }
-                    true
-                }
-                _ => false,
-            }
-        }
-        StmtKind::LabeledBlock { label: l, .. } if l == label => true,
-        StmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            let condition = *condition;
-            let then_block = *then_block;
-            let else_block = *else_block;
-            check_lb_breaks_in_operand(body, condition, label, case_index, payload_type)
-                && check_lb_breaks_in_block(body, then_block, label, case_index, payload_type)
-                && else_block.is_none_or(|eb| {
-                    check_lb_breaks_in_block(body, eb, label, case_index, payload_type)
-                })
-        }
-        StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
-            check_lb_breaks_in_block(body, *b, label, case_index, payload_type)
-        }
-        StmtKind::Let { value, .. } => {
-            check_lb_breaks_in_operand(body, *value, label, case_index, payload_type)
-        }
-        StmtKind::Break { value, .. } => value
-            .is_none_or(|v| check_lb_breaks_in_operand(body, v, label, case_index, payload_type)),
-        StmtKind::Return { value } => value
-            .is_none_or(|v| check_lb_breaks_in_operand(body, v, label, case_index, payload_type)),
-        _ => true,
-    }
-}
-
-fn check_lb_breaks_in_operand(
-    body: &Body,
-    op: Operand,
-    label: &str,
-    case_index: u32,
-    payload_type: &mut Option<TypeId>,
-) -> bool {
-    op.as_expr()
-        .is_some_and(|e| check_lb_breaks_in_expr(body, e, label, case_index, payload_type))
-}
-
-fn check_lb_breaks_in_expr(
-    body: &Body,
-    e: ExprId,
-    label: &str,
-    case_index: u32,
-    payload_type: &mut Option<TypeId>,
-) -> bool {
-    match &body.exprs[e].kind {
-        ExprKind::LabeledBlock {
-            label: l, block, ..
-        } => {
-            if l == label {
-                true
-            } else {
-                check_lb_breaks_in_block(body, *block, label, case_index, payload_type)
-            }
-        }
-        ExprKind::Block(block) => {
-            check_lb_breaks_in_block(body, *block, label, case_index, payload_type)
-        }
-        ExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            let condition = *condition;
-            let then_branch = *then_branch;
-            let else_branch = *else_branch;
-            check_lb_breaks_in_operand(body, condition, label, case_index, payload_type)
-                && check_lb_breaks_in_block(body, then_branch, label, case_index, payload_type)
-                && else_branch.is_none_or(|eb| {
-                    check_lb_breaks_in_block(body, eb, label, case_index, payload_type)
-                })
-        }
-        _ => !expr_has_break_to(body, label, e),
-    }
 }
 
 struct LocalUseCounter {
@@ -723,6 +773,15 @@ fn count_local_uses_in_block(body: &Body, block: BlockId, local_idx: u32) -> usi
         count: 0,
     };
     v.visit_node(body, NodeRef::Block(block));
+    v.count
+}
+
+fn count_local_uses_in_stmt(body: &Body, stmt: StmtId, local_idx: u32) -> usize {
+    let mut v = LocalUseCounter {
+        local_idx,
+        count: 0,
+    };
+    v.visit_node(body, NodeRef::Stmt(stmt));
     v.count
 }
 
@@ -779,13 +838,6 @@ fn count_variant_payload_uses_in_block(
 fn expr_has_free_unlabeled_loop_exit_operand(body: &Body, op: Operand, loop_depth: u32) -> bool {
     op.as_expr()
         .is_some_and(|e| expr_has_free_unlabeled_loop_exit(body, e, loop_depth))
-}
-fn expr_has_break_to_operand(body: &Body, label: &str, op: Operand) -> bool {
-    op.as_expr()
-        .is_some_and(|e| expr_has_break_to(body, label, e))
-}
-fn expr_contains_loop_operand(body: &Body, op: Operand) -> bool {
-    op.as_expr().is_some_and(|e| expr_contains_loop(body, e))
 }
 
 // ---------------------------------------------------------------------------
@@ -1527,43 +1579,6 @@ fn subst_variant_payload_in_expr(
     }
 }
 
-/// Returns `true` if `block` contains a `Loop` statement at any nesting depth.
-pub(super) fn block_contains_loop(body: &Body, block: BlockId) -> bool {
-    body.blocks[block]
-        .stmts
-        .iter()
-        .any(|s| stmt_contains_loop(body, *s))
-}
-
-fn stmt_contains_loop(body: &Body, s: StmtId) -> bool {
-    match &body.stmts[s].kind {
-        StmtKind::Loop { .. } => true,
-        StmtKind::LabeledBlock { block, .. } => block_contains_loop(body, *block),
-        StmtKind::If {
-            then_block,
-            else_block,
-            ..
-        } => {
-            block_contains_loop(body, *then_block)
-                || else_block.is_some_and(|b| block_contains_loop(body, b))
-        }
-        StmtKind::Let { value, .. }
-        | StmtKind::LetDestructure { value, .. }
-        | StmtKind::Return { value: Some(value) } => expr_contains_loop_operand(body, *value),
-        StmtKind::Expr(value) => expr_contains_loop_operand(body, *value),
-        _ => false,
-    }
-}
-
-fn expr_contains_loop(body: &Body, e: ExprId) -> bool {
-    match &body.exprs[e].kind {
-        ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
-            block_contains_loop(body, *block)
-        }
-        _ => false,
-    }
-}
-
 /// Returns `true` if `block` contains a "free" unlabeled `break;` or `continue`
 /// — one not nested inside a `loop {}` within the block itself.
 fn block_has_free_unlabeled_loop_exit(body: &Body, block: BlockId) -> bool {
@@ -1833,9 +1848,65 @@ fn arm_body_decomposable(body: &Body, e: ExprId) -> bool {
     )
 }
 
-// Exit validation: mirrors the `check_lb_breaks_*` break checker above, but
-// resolves each `break L:` exit to the arm it selects (marking `selected`).
+/// [`ExitSink`] for threading: resolves each `break L:` exit to the arm it
+/// selects (marking `selected`) and checks the arm's payload binding type.
+/// Descends `Match` / `Switch` arms (the threading transform rewrites them) and
+/// rejects any hidden break.
+struct ExitValidator<'a> {
+    label: &'a str,
+    arms: &'a [ArmInfo],
+    locals: &'a [NirLocal],
+    selected: &'a mut [bool],
+}
 
+impl ExitSink for ExitValidator<'_> {
+    fn visit(&mut self, body: &Body, value: Option<Operand>) -> bool {
+        let Some(vc) = value.and_then(Operand::as_expr) else {
+            // A value-less or promoted (`null`) break has no static case.
+            return false;
+        };
+        let ExprKind::VariantConstruct {
+            case_name, payload, ..
+        } = &body.exprs[vc].kind
+        else {
+            return false;
+        };
+        let (case_name, payload) = (case_name.clone(), *payload);
+        if payload.is_some_and(|p| {
+            p.as_expr()
+                .is_some_and(|e| has_break_to(body, NodeRef::Expr(e), self.label))
+        }) {
+            return false;
+        }
+        let Some(idx) = select_arm(self.arms, &case_name) else {
+            return false;
+        };
+        if let Some(binding) = self.arms[idx].binding {
+            let Some(p) = payload else {
+                return false;
+            };
+            if self
+                .locals
+                .get(binding as usize)
+                .is_none_or(|local| local.type_id != body.operand_type(p))
+            {
+                return false;
+            }
+        }
+        self.selected[idx] = true;
+        true
+    }
+    fn descend_branches(&self) -> bool {
+        true
+    }
+    fn reject_hidden_break(&self) -> bool {
+        true
+    }
+}
+
+/// Validate every `break L:` exit and mark which arm each selects, mirroring
+/// the value-discarding [`check_lb_breaks_and_get_payload`] but resolving to
+/// arms rather than a single payload type.
 fn validate_exits_in_block(
     body: &Body,
     block: BlockId,
@@ -1844,153 +1915,13 @@ fn validate_exits_in_block(
     locals: &[NirLocal],
     selected: &mut [bool],
 ) -> bool {
-    body.blocks[block]
-        .stmts
-        .iter()
-        .all(|s| validate_exits_in_stmt(body, *s, label, arms, locals, selected))
-}
-
-fn validate_exits_in_stmt(
-    body: &Body,
-    s: StmtId,
-    label: &str,
-    arms: &[ArmInfo],
-    locals: &[NirLocal],
-    selected: &mut [bool],
-) -> bool {
-    match &body.stmts[s].kind {
-        StmtKind::Break {
-            label: Some(l),
-            value,
-        } if l == label => {
-            let Some(vc) = value.and_then(Operand::as_expr) else {
-                // A value-less or promoted (`null`) break has no static case.
-                return false;
-            };
-            let ExprKind::VariantConstruct {
-                case_name, payload, ..
-            } = &body.exprs[vc].kind
-            else {
-                return false;
-            };
-            if payload.is_some_and(|p| {
-                p.as_expr()
-                    .is_some_and(|e| has_break_to(body, NodeRef::Expr(e), label))
-            }) {
-                return false;
-            }
-            let Some(idx) = select_arm(arms, case_name) else {
-                return false;
-            };
-            if let Some(binding) = arms[idx].binding {
-                let Some(p) = payload else {
-                    return false;
-                };
-                if locals
-                    .get(binding as usize)
-                    .is_none_or(|local| local.type_id != body.operand_type(*p))
-                {
-                    return false;
-                }
-            }
-            selected[idx] = true;
-            true
-        }
-        StmtKind::LabeledBlock { label: l, .. } if l == label => true,
-        StmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            validate_exits_in_operand(body, *condition, label, arms, locals, selected)
-                && validate_exits_in_block(body, *then_block, label, arms, locals, selected)
-                && else_block.is_none_or(|eb| {
-                    validate_exits_in_block(body, eb, label, arms, locals, selected)
-                })
-        }
-        StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
-            validate_exits_in_block(body, *b, label, arms, locals, selected)
-        }
-        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            validate_exits_in_operand(body, *value, label, arms, locals, selected)
-        }
-        StmtKind::Expr(value) => {
-            validate_exits_in_operand(body, *value, label, arms, locals, selected)
-        }
-        StmtKind::Return { value } | StmtKind::Break { value, .. } => {
-            value.is_none_or(|v| validate_exits_in_operand(body, v, label, arms, locals, selected))
-        }
-        StmtKind::Continue => true,
-    }
-}
-
-fn validate_exits_in_operand(
-    body: &Body,
-    op: Operand,
-    label: &str,
-    arms: &[ArmInfo],
-    locals: &[NirLocal],
-    selected: &mut [bool],
-) -> bool {
-    op.as_expr()
-        .is_none_or(|e| validate_exits_in_expr(body, e, label, arms, locals, selected))
-}
-
-fn validate_exits_in_expr(
-    body: &Body,
-    e: ExprId,
-    label: &str,
-    arms: &[ArmInfo],
-    locals: &[NirLocal],
-    selected: &mut [bool],
-) -> bool {
-    match &body.exprs[e].kind {
-        ExprKind::LabeledBlock {
-            label: l, block, ..
-        } => l == label || validate_exits_in_block(body, *block, label, arms, locals, selected),
-        ExprKind::Block(block) => {
-            validate_exits_in_block(body, *block, label, arms, locals, selected)
-        }
-        ExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            validate_exits_in_operand(body, *condition, label, arms, locals, selected)
-                && validate_exits_in_block(body, *then_branch, label, arms, locals, selected)
-                && else_branch.is_none_or(|eb| {
-                    validate_exits_in_block(body, eb, label, arms, locals, selected)
-                })
-        }
-        // A nested `Match` / `Switch` hosts exits in its arms; descend them.
-        ExprKind::Match {
-            expr: scrut,
-            arms: inner_arms,
-        } => {
-            validate_exits_in_operand(body, *scrut, label, arms, locals, selected)
-                && inner_arms.iter().all(|arm| {
-                    validate_exits_in_operand(body, arm.body, label, arms, locals, selected)
-                        && arm.guard.is_none_or(|g| {
-                            validate_exits_in_operand(body, g, label, arms, locals, selected)
-                        })
-                })
-        }
-        ExprKind::Switch {
-            scrutinee,
-            arms: switch_arms,
-            default,
-            ..
-        } => {
-            validate_exits_in_operand(body, *scrutinee, label, arms, locals, selected)
-                && switch_arms
-                    .iter()
-                    .all(|b| validate_exits_in_block(body, *b, label, arms, locals, selected))
-                && validate_exits_in_block(body, *default, label, arms, locals, selected)
-        }
-        // Other expression kinds (calls, literals, …) are opaque here: any
-        // exit hidden inside bails.
-        _ => !has_break_to(body, NodeRef::Expr(e), label),
-    }
+    let mut sink = ExitValidator {
+        label,
+        arms,
+        locals,
+        selected,
+    };
+    walk_exits(body, block, label, &mut sink)
 }
 
 fn perform_threading(engine: &mut Engine, match_id: ExprId, plan: ThreadPlan) {

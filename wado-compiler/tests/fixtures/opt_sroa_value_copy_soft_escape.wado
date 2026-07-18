@@ -1,0 +1,44 @@
+// Precision test: SROA's soft-escape walk peels `$value_copy$T` wrappers.
+//
+// `s` is field-mutated (`s.x = ...`) and then consumed BY VALUE by a mutating
+// callee, which forces a defensive `$value_copy$P(s)` at the call site; `s.y` is
+// read afterward, so this is a *non-move* consumption. The old soft-escape walk
+// stopped at the value-copy wrapper and hard-escaped `s`, blocking SROA entirely
+// (the struct stayed on the heap with struct.set / struct.get). Peeling the
+// wrapper makes the wrapped bare-local use a soft, reconstructible position, so
+// `s` decomposes into `__sroa_s_x` / `__sroa_s_y` scalars and the literal is
+// reconstructed only inside the copy (which then copies a fresh literal — a
+// redundant, sound no-op that later passes demote).
+use { println, Stdout } from "core:cli";
+
+struct P { x: i32, y: i32 }
+
+#[inline("never")]
+fn consume(mut p: P) -> i32 {
+    p.x = p.x + 1;   // mutates its own copy -> caller must defensively copy
+    return p.x * 100 + p.y;
+}
+
+#[inline("never")]
+fn f(n: i32) -> i32 {
+    let mut s = P { x: n, y: 7 };
+    s.x = s.x + 1;
+    let a = consume(s);   // by-value + mutating callee -> $value_copy$P(s)
+    return a + s.y;       // non-move: s.y read after consume
+}
+
+export fn run() with Stdout {
+    assert f(5) == 714;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_expect:O2": [
+        "__sroa_s_x"
+    ],
+    "wir_not_expect:O0": [
+        "__sroa_s_x"
+    ]
+}

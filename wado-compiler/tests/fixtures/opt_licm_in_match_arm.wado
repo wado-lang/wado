@@ -1,0 +1,50 @@
+// Precision: LICM reaches loops nested under match/switch arms. The block
+// walker recurses through every child block (match and switch arms,
+// expression blocks), so `cref.threshold` hoists out of the loop inside the
+// `0 =>` arm; store-load forwarding then folds the hoisted load to `t`,
+// leaving `t * i` in the loop with no `config.threshold` read anywhere.
+
+use { println, Stdout } from "core:cli";
+
+struct Config {
+    threshold: i32,
+    scale: i32,
+}
+
+#[inline(never)]
+fn probe(c: &Config) -> i32 {
+    return c.scale;
+}
+
+#[inline(never)]
+fn accumulate(mode: i32, n: i32, t: i32) -> i32 {
+    let config = Config { threshold: t, scale: 2 };
+    let cref = &config;
+    let mut sum = 0;
+    match mode {
+        0 => {
+            for let mut i = 0; i < n; i += 1 {
+                let _ = probe(cref);
+                sum += cref.threshold * i;
+            }
+        },
+        1 => { sum = cref.scale; },
+        2 => { sum = cref.threshold + 1; },
+        _ => { sum = -1; },
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    println(`${accumulate(0, 5, 100)}`);
+    println(`${accumulate(1, 5, 100)}`);
+    println(`${accumulate(2, 5, 100)}`);
+    println(`${accumulate(9, 5, 100)}`);
+}
+
+__DATA__
+{
+    "stdout": "1000\n2\n101\n-1\n",
+    "wir_expect:O2": ["t * i"],
+    "wir_not_expect:O2": ["config.threshold"]
+}

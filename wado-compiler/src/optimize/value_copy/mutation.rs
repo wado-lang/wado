@@ -1,6 +1,6 @@
-//! The mutation-witness recognizer shared by the value-copy elision, copy
-//! propagation, alias, and condition-implication analyses, plus the callee
-//! oracle they consult.
+//! The mutation-witness recognizer behind copy propagation's mutation
+//! analyses (consumed via `arena_query::for_each_mutated_root`), plus the
+//! callee oracle it consults.
 //!
 //! The verdict is a callee's declared `&mut` parameter bit (`param_mut`,
 //! captured before boxing erases the `&mut`/`&` distinction) — never a
@@ -93,7 +93,13 @@ pub(in crate::optimize) fn expr_witnesses(
             ExprKind::Local { index, .. } => sink(Witness::Rebind(*index)),
             ExprKind::FieldAccess { expr: inner, .. }
             | ExprKind::Index { expr: inner, .. }
-            | ExprKind::VariantPayload { expr: inner, .. } => sink(Witness::Write(*inner)),
+            | ExprKind::VariantPayload { expr: inner, .. }
+            | ExprKind::Unary {
+                op: NirUnaryOp::Deref,
+                expr: inner,
+            } => sink(Witness::Write(*inner)),
+            // The only other legal target is a global (`GlobalVarGet`),
+            // which touches no local storage.
             _ => {}
         },
         ExprKind::Unary {

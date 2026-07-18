@@ -611,43 +611,63 @@ fn "./sub/two_parser_b.wado/CstChild^Inspect::inspect"(self, f) {
     let __inspect_Skipped_4: i32;
     let __inspect_Node_5: ref "./sub/two_parser_b.wado//CstNode";
     let __match_6: ref "./sub/two_parser_b.wado//CstChild";
-    let s_8: ref "core:prelude/string.wado//String";
+    let v_7: ref "./sub/two_parser_b.wado//CstChild";
+    let __vc_payload_0: i32;
+    let __vc_payload_1: i32;
+    let __vc_payload_2: i32;
+    let __vc_payload_3: ref "./sub/two_parser_b.wado//CstNode";
     let s_14: ref "core:prelude/string.wado//String";
-    let s_16: ref "core:prelude/string.wado//String";
+    let s_20: ref "core:prelude/string.wado//String";
     let s_22: ref "core:prelude/string.wado//String";
-    let s_24: ref "core:prelude/string.wado//String";
+    let s_28: ref "core:prelude/string.wado//String";
     let s_30: ref "core:prelude/string.wado//String";
-    let s_32: ref "core:prelude/string.wado//String";
-    let s_34: ref "core:prelude/string.wado//String";
-    __match_6 = "two_parser_conflict.wado/$value_copy$./sub/two_parser_b.wado/CstChild"(self.value);
+    let s_36: ref "core:prelude/string.wado//String";
+    let s_38: ref "core:prelude/string.wado//String";
+    let s_40: ref "core:prelude/string.wado//String";
+    let v_41: ref "./sub/two_parser_b.wado//Span";
+    let v_42: ref "core:prelude//List<./sub/two_parser_b.wado/CstChild>";
+    v_7 = self.value;
+    __match_6 = (if ref.test "./sub/two_parser_b.wado//CstChild::Token"(v_7) -> ref "./sub/two_parser_b.wado//CstChild" {
+        __vc_payload_0 = ref.cast "./sub/two_parser_b.wado//CstChild::Token"(v_7).payload_0;
+        struct.new "./sub/two_parser_b.wado//CstChild::Token" { discriminant: 0, payload_0: __vc_payload_0 };
+    } else if ref.test "./sub/two_parser_b.wado//CstChild::Missing"(v_7) -> ref "./sub/two_parser_b.wado//CstChild" {
+        __vc_payload_1 = ref.cast "./sub/two_parser_b.wado//CstChild::Missing"(v_7).payload_0;
+        struct.new "./sub/two_parser_b.wado//CstChild::Missing" { discriminant: 1, payload_0: __vc_payload_1 };
+    } else if ref.test "./sub/two_parser_b.wado//CstChild::Skipped"(v_7) -> ref "./sub/two_parser_b.wado//CstChild" {
+        __vc_payload_2 = ref.cast "./sub/two_parser_b.wado//CstChild::Skipped"(v_7).payload_0;
+        struct.new "./sub/two_parser_b.wado//CstChild::Skipped" { discriminant: 2, payload_0: __vc_payload_2 };
+    } else {
+        __vc_payload_3 = ref.cast "./sub/two_parser_b.wado//CstChild::Node"(v_7).payload_0;
+        struct.new "./sub/two_parser_b.wado//CstChild::Node" { discriminant: 3, payload_0: struct.new "./sub/two_parser_b.wado//CstNode" { kind: __vc_payload_3.kind, span: ref.as_non_null(v_41 = __vc_payload_3.span; struct.new "./sub/two_parser_b.wado//Span" { start: v_41.start, end: v_41.end }), children: ref.as_non_null(v_42 = __vc_payload_3.children; struct.new "core:prelude//List<./sub/two_parser_b.wado/CstChild>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "./sub/two_parser_b.wado//CstChild">(v_42.repr)), used: v_42.used }), flags: __vc_payload_3.flags, alt: __vc_payload_3.alt } };
+    });
     if ref.test "./sub/two_parser_b.wado//CstChild::Token"(__match_6) {
         __inspect_Token_2 = ref.cast "./sub/two_parser_b.wado//CstChild::Token"(__match_6).payload_0;
-        s_8 = global:./sub/two_parser_b.wado::__const_obj_24;
-        "core:prelude/string.wado/String::push_str"(f.buf, s_8);
-        "core:prelude/primitive.wado/i32::fmt_decimal"(__inspect_Token_2, f);
-        s_14 = global:./sub/two_parser_b.wado::__const_obj_17;
+        s_14 = global:./sub/two_parser_b.wado::__const_obj_24;
         "core:prelude/string.wado/String::push_str"(f.buf, s_14);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__inspect_Token_2, f);
+        s_20 = global:./sub/two_parser_b.wado::__const_obj_17;
+        "core:prelude/string.wado/String::push_str"(f.buf, s_20);
     } else if ref.test "./sub/two_parser_b.wado//CstChild::Missing"(__match_6) {
         __inspect_Missing_3 = ref.cast "./sub/two_parser_b.wado//CstChild::Missing"(__match_6).payload_0;
-        s_16 = global:./sub/two_parser_b.wado::__const_obj_22;
-        "core:prelude/string.wado/String::push_str"(f.buf, s_16);
-        "core:prelude/primitive.wado/i32::fmt_decimal"(__inspect_Missing_3, f);
-        s_22 = global:./sub/two_parser_b.wado::__const_obj_17;
+        s_22 = global:./sub/two_parser_b.wado::__const_obj_22;
         "core:prelude/string.wado/String::push_str"(f.buf, s_22);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__inspect_Missing_3, f);
+        s_28 = global:./sub/two_parser_b.wado::__const_obj_17;
+        "core:prelude/string.wado/String::push_str"(f.buf, s_28);
     } else if ref.test "./sub/two_parser_b.wado//CstChild::Skipped"(__match_6) {
         __inspect_Skipped_4 = ref.cast "./sub/two_parser_b.wado//CstChild::Skipped"(__match_6).payload_0;
-        s_24 = global:./sub/two_parser_b.wado::__const_obj_20;
-        "core:prelude/string.wado/String::push_str"(f.buf, s_24);
-        "core:prelude/primitive.wado/i32::fmt_decimal"(__inspect_Skipped_4, f);
-        s_30 = global:./sub/two_parser_b.wado::__const_obj_17;
+        s_30 = global:./sub/two_parser_b.wado::__const_obj_20;
         "core:prelude/string.wado/String::push_str"(f.buf, s_30);
+        "core:prelude/primitive.wado/i32::fmt_decimal"(__inspect_Skipped_4, f);
+        s_36 = global:./sub/two_parser_b.wado::__const_obj_17;
+        "core:prelude/string.wado/String::push_str"(f.buf, s_36);
     } else {
         __inspect_Node_5 = ref.cast "./sub/two_parser_b.wado//CstChild::Node"(__match_6).payload_0;
-        s_32 = global:./sub/two_parser_b.wado::__const_obj_18;
-        "core:prelude/string.wado/String::push_str"(f.buf, s_32);
+        s_38 = global:./sub/two_parser_b.wado::__const_obj_18;
+        "core:prelude/string.wado/String::push_str"(f.buf, s_38);
         "./sub/two_parser_b.wado/CstNode^Inspect::inspect"(__inspect_Node_5, f);
-        s_34 = global:./sub/two_parser_b.wado::__const_obj_17;
-        "core:prelude/string.wado/String::push_str"(f.buf, s_34);
+        s_40 = global:./sub/two_parser_b.wado::__const_obj_17;
+        "core:prelude/string.wado/String::push_str"(f.buf, s_40);
     }
 }
 
@@ -754,12 +774,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b43: block {
-        l44: loop {
-            break_if b43 i >= n;
+    b46: block {
+        l47: loop {
+            break_if b46 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l44;
+            continue l47;
         };
     };
 }

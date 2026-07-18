@@ -145,27 +145,54 @@ pub fn optimize_wir(
     // `StructNew List<T> { repr: array.new_fixed, used: N }`, so bounds-check
     // elimination keys on that shape.
     profiler.span_start("wir/phase3_data_flow");
-    forward_struct_field_constants(module);
+    wir_pass(
+        "wir/forward_struct_field_constants",
+        module,
+        profiler,
+        |m| {
+            forward_struct_field_constants(m);
+        },
+    );
     profiler.span_end("wir/phase3_data_flow");
 
     // Phase 4: rewrite library call patterns into tighter instruction sequences.
     profiler.span_start("wir/phase4_lib_rewrites");
-    promote_constant_arrays_to_data(module);
-    split_large_array_literals(module);
+    wir_pass(
+        "wir/promote_constant_arrays_to_data",
+        module,
+        profiler,
+        |m| {
+            promote_constant_arrays_to_data(m);
+        },
+    );
+    wir_pass("wir/split_large_array_literals", module, profiler, |m| {
+        split_large_array_literals(m);
+    });
     profiler.span_end("wir/phase4_lib_rewrites");
 
     // Phase 5: peephole (const fold, copy elision, multi-value struct elision),
     // then flatten seq assignments to expose multi-field struct locals. Leftover
     // Nops/dead locals are cleaned in phase 7.
     profiler.span_start("wir/phase5_peephole");
-    let types = &module.types;
-    for func in &mut module.functions {
-        if let Some(body) = &mut func.body {
-            run_peephole(body, types);
+    wir_pass("wir/run_peephole", module, profiler, |m| {
+        let types = &m.types;
+        for func in &mut m.functions {
+            if let Some(body) = &mut func.body {
+                run_peephole(body, types);
+            }
         }
-    }
-    flatten_seq_assignments(module);
-    elide_multi_field_struct_locals(module);
+    });
+    wir_pass("wir/flatten_seq_assignments", module, profiler, |m| {
+        flatten_seq_assignments(m);
+    });
+    wir_pass(
+        "wir/elide_multi_field_struct_locals",
+        module,
+        profiler,
+        |m| {
+            elide_multi_field_struct_locals(m);
+        },
+    );
     // Re-run copy propagation: elision rewrote destructures into fresh
     // `LocalSet alias = LocalGet temp` copies the phase-1 run never saw.
     wir_pass(
@@ -205,8 +232,12 @@ pub fn optimize_wir(
     wir_pass("wir/dedupe_const_globals", module, profiler, |m| {
         dedupe_const_globals(m);
     });
-    remove_trivial_init_globals(module);
-    cleanup(module);
+    wir_pass("wir/remove_trivial_init_globals", module, profiler, |m| {
+        remove_trivial_init_globals(m);
+    });
+    wir_pass("wir/cleanup", module, profiler, |m| {
+        cleanup(m);
+    });
     // Drop data segments `register_literal_data` registered speculatively
     // but no surviving `array.new_data` ended up reading (a bounded
     // force-eager global promoted to `array.new_fixed` instead).
@@ -225,9 +256,12 @@ pub fn optimize_wir(
     }
     profiler.span_end("wir/phase7_global_cleanup");
 
-    // Phase 8: mark functions/types orphaned by earlier passes dead, then compact.
+    // Phase 8: mark functions/types/globals orphaned by earlier passes dead,
+    // then compact. Globals are marked after functions so a global read only by
+    // an already-dead function is itself pruned.
     profiler.span_start("wir/phase8_dce_compact");
     dce::mark_unreachable_defined_functions(module);
+    dce::mark_unreferenced_globals(module);
     dce_unreachable_types(module);
     dce::compact_dead_items(module);
     profiler.span_end("wir/phase8_dce_compact");

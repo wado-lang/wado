@@ -221,8 +221,7 @@ fn "matches_merged.wado/__test_1_guard"() {
         unreachable;
     }
     __cond_6 = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(opt2) -> bool {
-        x_5 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(opt2).payload_0;
-        x_5 > 5;
+        local.tee x_5(ref.cast "core:prelude/types.wado//Option<i32>::Some"(opt2).payload_0) > 5;
     } else {
         0;
     }) == 0;
@@ -232,8 +231,7 @@ fn "matches_merged.wado/__test_1_guard"() {
         unreachable;
     }
     __cond_8 = let __match_scrut_2: ref "core:prelude/types.wado//Option<i32>"; __match_scrut_2 = struct.new "core:prelude/types.wado//Option<i32>" { 1 }; (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_2) -> bool {
-        x_7 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_2).payload_0;
-        x_7 > 5;
+        local.tee x_7(ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_2).payload_0) > 5;
     } else {
         0;
     }) == 0;
@@ -247,6 +245,7 @@ fn "matches_merged.wado/__test_1_guard"() {
 fn "matches_merged.wado/__test_2_option_guard_char"() {
     let ch_1: char;
     let __cond_2: bool;
+    let ch_4: char;
     let __cond_5: bool;
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
@@ -269,7 +268,7 @@ fn "matches_merged.wado/__test_2_option_guard_char"() {
     let __sroa_d_payload_0: char;
     multivalue_bind [__sroa_d_discriminant, __sroa_d_payload_0] = "core:prelude/primitive.wado/char::from_u32"(65);
     __cond_5 = (if __sroa_d_discriminant == 0 -> bool {
-        __sroa_d_payload_0 == 46;
+        local.tee ch_4(__sroa_d_payload_0) == 46;
     } else {
         0;
     }) == 0;

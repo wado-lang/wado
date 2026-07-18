@@ -89,7 +89,15 @@ pub(super) fn run_peephole(
 
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
-    gate.run_gated(GatedPass::Peephole, len, |fid| {
+    // The pre- and post-inline runs apply different rule sets, so they keep
+    // separate watermark columns: a function quiescent for one must still be
+    // revisited by the other.
+    let gated_pass = if pre_inline {
+        GatedPass::PeepholePre
+    } else {
+        GatedPass::PeepholePost
+    };
+    gate.run_gated(gated_pass, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
         // `stores_aliased_locals` is per-function, so the ref-elimination rule is
         // rebuilt for each body.

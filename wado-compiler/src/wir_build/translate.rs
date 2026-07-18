@@ -100,17 +100,26 @@ fn resolve_local_names(raw: &IndexMap<u32, String>, params: &[NirParam]) -> Inde
     }
 
     let mut out = IndexMap::default();
+    let mut used: IndexSet<String> = IndexSet::default();
     for (idx, name) in raw {
         let needs_suffix = if param_indices.contains(idx) {
             param_per_name.get(name.as_str()).copied().unwrap_or(0) > 1
         } else {
             total_per_name.get(name.as_str()).copied().unwrap_or(0) > 1
         };
-        let final_name = if needs_suffix {
+        let mut final_name = if needs_suffix {
             format!("{name}_{idx}")
         } else {
             name.clone()
         };
+        // The `_{idx}` suffix is not collision-free: it can equal another local's
+        // literal name (`e` at index 2 -> `e_2`, colliding with a source `e_2`).
+        // Codegen keys locals by name, so a duplicate silently merges two
+        // differently-typed slots into one. Extend with the unique index until
+        // the name is free.
+        while !used.insert(final_name.clone()) {
+            final_name = format!("{final_name}_{idx}");
+        }
         out.insert(*idx, final_name);
     }
     out
@@ -170,11 +179,21 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         // typed-fn callers that dispatch through it.
         let user_param_count = functor.canonical_user_params.len();
         let type_table = &*ctx.package.type_table.borrow();
-        let user_params: Vec<WirType> = functor
-            .canonical_user_params
-            .iter()
-            .map(|(_, ty)| ctx.type_id_to_wir_type(type_table, *ty))
-            .collect();
+        // Unit params are erased from the canonical signature and the wrapper
+        // (matching the function-signature convention and every other
+        // canonical-key site); `canonical_to_wrapper` maps each canonical
+        // param position to its surviving wrapper slot.
+        let mut user_params: Vec<WirType> = Vec::with_capacity(user_param_count);
+        let mut canonical_to_wrapper: Vec<Option<usize>> = Vec::with_capacity(user_param_count);
+        for (_, ty) in &functor.canonical_user_params {
+            let wir_type = ctx.type_id_to_wir_type(type_table, *ty);
+            if matches!(wir_type, WirType::Unit) {
+                canonical_to_wrapper.push(None);
+            } else {
+                canonical_to_wrapper.push(Some(user_params.len()));
+                user_params.push(wir_type);
+            }
+        }
         let result_wirs: Vec<WirType> = if functor.canonical_return == crate::tir::TypeTable::UNIT
             || functor.canonical_return == crate::tir::TypeTable::NEVER
         {
@@ -230,28 +249,29 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
             .params
             .iter()
             .enumerate()
-            .map(|(i, p)| {
+            .filter_map(|(i, p)| {
                 if i == 0 && p.name == "self" && p.type_id == functor.ref_type_id {
-                    CallWrapperArg::TypedEnv
-                } else {
-                    let idx = functor
-                        .canonical_user_params
-                        .iter()
-                        .position(|(name, _)| name == &p.name)
-                        .unwrap_or_else(|| {
-                            panic!(
-                                "closure {functor_name}::__call param `{}` has no matching \
-                                 canonical user param (canonical: {:?})",
-                                p.name,
-                                functor
-                                    .canonical_user_params
-                                    .iter()
-                                    .map(|(n, _)| n)
-                                    .collect::<Vec<_>>(),
-                            )
-                        });
-                    CallWrapperArg::UserParam(idx)
+                    return Some(CallWrapperArg::TypedEnv);
                 }
+                let idx = functor
+                    .canonical_user_params
+                    .iter()
+                    .position(|(name, _)| name == &p.name)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "closure {functor_name}::__call param `{}` has no matching \
+                             canonical user param (canonical: {:?})",
+                            p.name,
+                            functor
+                                .canonical_user_params
+                                .iter()
+                                .map(|(n, _)| n)
+                                .collect::<Vec<_>>(),
+                        )
+                    });
+                // A unit-typed param is erased from both the wrapper and
+                // `__call`'s own WIR signature, so nothing is forwarded.
+                canonical_to_wrapper[idx].map(CallWrapperArg::UserParam)
             })
             .collect();
         drop(call_func);
@@ -265,7 +285,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
             call_fn_type_id,
             functor_struct_type_id.clone(),
             functor_wir_type.clone(),
-            user_param_count,
+            user_params_clone.len(),
             user_params_clone,
             !result_wirs.is_empty(),
             call_func_id,
@@ -1265,6 +1285,70 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    /// Translate `*r = v` for an in-place aggregate referent (struct /
+    /// `String` / `List<T>` / tuple): copy `v` into the shared handle
+    /// field by field, through two temps so each side is evaluated once.
+    ///
+    /// Statement-position deref-assigns are already expanded at lower
+    /// (`lower::translate::try_expand_deref_aggregate_assign`); this covers
+    /// the expression-position shape (`let u = (*r = v);`) that reaches WIR
+    /// as a plain `Assign { target: Deref, .. }`. Box-shaped referents never
+    /// arrive here — the lower boxing rewrite folds them to a `.value`
+    /// field assignment.
+    fn translate_deref_assign(&mut self, ref_expr: Operand, val: WirInstr) -> WirInstr {
+        let recv = self.translate_operand(ref_expr);
+        let wir_type = self.wir_type(self.operand_type_id(ref_expr));
+        let WirType::Ref { type_id, .. } = wir_type else {
+            panic!("[WIR] deref-assign referent expected Ref WirType, got {wir_type:?}");
+        };
+        let Some(WirTypeDef::Struct(st)) = self.ctx.types.get(type_id.index() as usize) else {
+            panic!("[WIR] deref-assign referent is not a struct type: {type_id:?}");
+        };
+        let fields: Vec<(String, WirType)> = st
+            .fields
+            .iter()
+            .map(|f| (f.name.clone(), f.ty.clone()))
+            .collect();
+
+        // WIR-unique prefix: codegen dedups `DeclareLocal` by name, so this must
+        // not clash with the lower path's `__deref_ref_{nir_idx}` temps.
+        self.local_counter += 1;
+        let ref_local = format!("__expr_deref_ref_{}", self.local_counter);
+        let val_local = format!("__expr_deref_val_{}", self.local_counter);
+        let ref_ty = WirType::Ref {
+            type_id: type_id.clone(),
+            nullable: false,
+        };
+        let mut instrs = Vec::with_capacity(4 + fields.len());
+        instrs.extend(declare_and_set_local(
+            ref_local.clone(),
+            ref_ty.clone(),
+            recv,
+        ));
+        instrs.extend(declare_and_set_local(
+            val_local.clone(),
+            ref_ty.clone(),
+            val,
+        ));
+        for (field_name, field_ty) in fields {
+            let target = WirInstr::LocalGet {
+                name: ref_local.clone(),
+                result_ty: ref_ty.clone(),
+            };
+            let source = WirInstr::StructGet {
+                type_id: type_id.clone(),
+                field_name: field_name.clone(),
+                expr: Box::new(WirInstr::LocalGet {
+                    name: val_local.clone(),
+                    result_ty: ref_ty.clone(),
+                }),
+                result_ty: field_ty,
+            };
+            instrs.push(self.struct_set(type_id.clone(), field_name, target, source));
+        }
+        WirInstr::Seq(instrs)
+    }
+
     /// Wrap each field value with `RefAsNonNull` where the struct definition
     /// declares a non-nullable reference field.
     fn cast_nonnull_fields(&self, type_id: &WirTypeId, fields: Vec<WirInstr>) -> Vec<WirInstr> {
@@ -1808,6 +1892,87 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    /// Translate a call's operands (receiver first, if any), erasing
+    /// unit-typed parameters from the emitted call while preserving every
+    /// argument's evaluation and the left-to-right order. A unit argument
+    /// still evaluates (`touch(p.f = 5)`, `touch(bump())`): its (void)
+    /// instruction joins the returned prelude, and every non-unit argument to
+    /// its left spills into a temp so it evaluates first. A unit argument
+    /// with no evaluation of its own — a promoted pure value or a bare local
+    /// read — is simply dropped.
+    ///
+    /// Returns `(prelude, call_args)`; wrap a non-empty prelude around the
+    /// call with [`Self::wrap_call_with_prelude`].
+    pub(super) fn translate_args_erasing_unit(
+        &mut self,
+        ordered: &[Operand],
+    ) -> (Vec<WirInstr>, Vec<WirInstr>) {
+        let unit_needs_eval = |this: &Self, op: Operand| match op {
+            Operand::Value(_) => false,
+            Operand::Expr(e) => !matches!(this.body.exprs[e].kind, ExprKind::Local { .. }),
+        };
+        let last_effectful_unit = ordered
+            .iter()
+            .enumerate()
+            .filter(|(_, op)| {
+                self.operand_type_id(**op) == TypeTable::UNIT && unit_needs_eval(self, **op)
+            })
+            .map(|(i, _)| i)
+            .next_back();
+
+        let mut prelude = Vec::new();
+        let mut call_args = Vec::new();
+        for (i, &op) in ordered.iter().enumerate() {
+            if self.operand_type_id(op) == TypeTable::UNIT {
+                if unit_needs_eval(self, op) {
+                    // Unit-typed expressions translate to void instructions
+                    // (the `StmtKind::Expr` discipline), so they slot straight
+                    // into the prelude.
+                    prelude.push(self.translate_operand(op));
+                }
+            } else if last_effectful_unit.is_some_and(|last| i < last) {
+                let ty = self
+                    .ctx
+                    .type_id_to_wir_type(self.type_table, self.operand_type_id(op));
+                self.local_counter += 1;
+                let name = format!("__arg_spill_{}", self.local_counter);
+                let value = self.translate_operand(op);
+                prelude.extend(declare_and_set_local(name.clone(), ty.clone(), value));
+                call_args.push(WirInstr::LocalGet {
+                    name,
+                    result_ty: ty,
+                });
+            } else {
+                call_args.push(self.translate_operand(op));
+            }
+        }
+        (prelude, call_args)
+    }
+
+    /// Run `prelude` before `call`, preserving the call's value: a `Seq` for a
+    /// void call, a value-typed `Block` otherwise.
+    pub(super) fn wrap_call_with_prelude(
+        &mut self,
+        mut prelude: Vec<WirInstr>,
+        call: WirInstr,
+        result_type: TypeId,
+    ) -> WirInstr {
+        if prelude.is_empty() {
+            return call;
+        }
+        prelude.push(call);
+        if result_type == TypeTable::UNIT || result_type == TypeTable::NEVER {
+            WirInstr::Seq(prelude)
+        } else {
+            let result_wir = self.ctx.type_id_to_wir_type(self.type_table, result_type);
+            WirInstr::Block {
+                label: None,
+                result: Some(result_wir),
+                body: prelude,
+            }
+        }
+    }
+
     /// The NIR type of an operand — the `ExprNode` type for a skeleton subtree,
     /// or the pool-recorded source type for a promoted pure value.
     pub(super) fn operand_type_id(&self, op: Operand) -> crate::tir::TypeId {
@@ -2142,21 +2307,15 @@ impl FunctionTranslator<'_, '_> {
                     return instr;
                 }
 
-                let kept: Vec<Operand> = args
-                    .iter()
-                    .filter(|a| self.operand_type_id(a.expr) != TypeTable::UNIT)
-                    .map(|a| a.expr)
-                    .collect();
-                let translated_args: Vec<WirInstr> = kept
-                    .into_iter()
-                    .map(|op| self.translate_operand(op))
-                    .collect();
+                let ordered: Vec<Operand> = args.iter().map(|a| a.expr).collect();
+                let (prelude, translated_args) = self.translate_args_erasing_unit(&ordered);
 
                 if let Some(wir_func_id) = self.resolve_call(func, *func_id) {
-                    WirInstr::Call {
+                    let call = WirInstr::Call {
                         func_id: wir_func_id,
                         args: translated_args,
-                    }
+                    };
+                    self.wrap_call_with_prelude(prelude, call, expr.type_id)
                 } else {
                     self.unresolved_trait_call_or_trap(&func.name, expr.span, || {
                         format!(
@@ -2176,22 +2335,19 @@ impl FunctionTranslator<'_, '_> {
                 // `func_id` (Phase 5); the call node carries no `FunctionRef`.
                 let func = &self.callee_descriptor(*func_id);
 
-                let mut translated_args: Vec<WirInstr> = Vec::new();
-                // Receiver is always included (self/&self/&mut self is never unit).
-                // Receivers are always reference types — do not copy them.
-                translated_args.push(self.translate_operand(*receiver));
-                // params[0] is self; args[i] corresponds to params[i+1]
-                for arg in args {
-                    if self.operand_type_id(arg.expr) != TypeTable::UNIT {
-                        translated_args.push(self.translate_operand(arg.expr));
-                    }
-                }
+                // Receiver first (self/&self/&mut self is never unit, so it
+                // always stays a call argument); args[i] maps to params[i+1].
+                let ordered: Vec<Operand> = std::iter::once(*receiver)
+                    .chain(args.iter().map(|a| a.expr))
+                    .collect();
+                let (prelude, translated_args) = self.translate_args_erasing_unit(&ordered);
 
                 if let Some(wir_func_id) = self.resolve_call(func, *func_id) {
-                    WirInstr::Call {
+                    let call = WirInstr::Call {
                         func_id: wir_func_id,
                         args: translated_args,
-                    }
+                    };
+                    self.wrap_call_with_prelude(prelude, call, expr.type_id)
                 } else {
                     self.unresolved_trait_call_or_trap(&func.name, expr.span, || {
                         format!(
@@ -2342,10 +2498,14 @@ impl FunctionTranslator<'_, '_> {
                         expr: array_expr,
                         index: index_expr,
                     } => self.translate_index_assign(*array_expr, *index_expr, val),
-                    _ => {
-                        // Unhandled assignment target
-                        WirInstr::Drop(Box::new(val))
-                    }
+                    ExprKind::Unary {
+                        op: NirUnaryOp::Deref,
+                        expr: ref_expr,
+                    } => self.translate_deref_assign(*ref_expr, val),
+                    other => panic!(
+                        "[WIR] unhandled assignment target shape: {other:?} (type_id={:?})",
+                        arena.exprs[target].type_id
+                    ),
                 }
             }
 
@@ -2756,5 +2916,29 @@ fn rewrite_struct_new_br_to_return(instrs: &mut [WirInstr], target_depth: u32) {
         *last = WirInstr::Return {
             value: Some(Box::new(WirInstr::Seq(fields))),
         };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_local_names_are_globally_unique() {
+        // Two `e` locals force the `_{idx}` suffix (`e` at index 2 -> `e_2`),
+        // which must not collide with a distinct local literally named `e_2`.
+        // Codegen keys locals by name, so a collision silently merges two
+        // differently-typed slots into one (an invalid-Wasm ICE at -O3).
+        let mut raw: IndexMap<u32, String> = IndexMap::default();
+        raw.insert(2, "e".to_string());
+        raw.insert(5, "e".to_string());
+        raw.insert(10, "e_2".to_string());
+        let out = resolve_local_names(&raw, &[]);
+        let unique: IndexSet<&str> = out.values().map(String::as_str).collect();
+        assert_eq!(
+            unique.len(),
+            out.len(),
+            "resolved names must be unique: {out:?}"
+        );
     }
 }

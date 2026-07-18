@@ -1,0 +1,32 @@
+// Regression: `mod_ref::may_clobber` recorded a call only as `calls = true`
+// with no read/write channel bits, so when the call sat in the MOVED
+// expression, `can_move_past` approved moving it past a global write.
+// `elide_box_local` then hoisted `read_g()` (inside `let r = &read_g()`,
+// a `Box { value: <call> }` binding) past `G = 7` to `r`'s single `.value`
+// read, making `*r` observe 7 instead of 1. A call now carries read AND
+// write effects on the global/heap/memory channels, and `may_trap`.
+use { println, Stdout } from "core:cli";
+
+global mut G: i32 = 0;
+
+#[inline(never)]
+fn read_g() -> i32 {
+    return G;
+}
+
+export fn run() with Stdout {
+    G = 1;
+    let r = &read_g();
+    G = 7;
+    let got = *r;
+    println(`${got}`);
+    if got != 1 {
+        panic("call moved past global write");
+    }
+    if G != 7 {
+        panic("global write lost");
+    }
+}
+
+__DATA__
+{"stdout": "1\n"}

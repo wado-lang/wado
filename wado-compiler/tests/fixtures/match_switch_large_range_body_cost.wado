@@ -1,0 +1,27 @@
+// A dense, in-range `match` whose arm body is large stays a comparison
+// cascade: expanding a 256-value range would clone the big body once per
+// value, exploding the IR. The clone-cost budget in `match_to_switch` rejects
+// the `br_table` rewrite here (the same shape with a tiny arm body still
+// lowers to a `Switch`).
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn classify(n: i32) -> i32 {
+    return match n {
+        0..=255 => n * 2 + n * 3 + n * 4 + n * 5 + n * 6 + n * 7 + n * 8 + n * 9 + n * 10 + n * 11 + n * 12 + n * 13 + n * 14 + n * 15 + n * 16 + n * 17 + n * 18 + n * 19 + n * 20 + n * 21,
+        256 => 1,
+        _ => 0,
+    };
+}
+
+export fn run() with Stdout {
+    println(`${classify(1)}`);
+    println(`${classify(256)}`);
+    println(`${classify(999)}`);
+}
+
+__DATA__
+{
+    "stdout": "230\n1\n0\n",
+    "wir_not_expect:O2": ["br_table"]
+}

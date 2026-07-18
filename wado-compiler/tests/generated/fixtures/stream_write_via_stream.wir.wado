@@ -82,8 +82,7 @@ fn "stream_write_via_stream.wado/run"() with Stdout {
         global:stream_write_via_stream.wado::__modules_initialized = 1;
     };
     rx = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx = builtin::i32_wrap_i64(packed >> 32_i64);
-    "wasi/stream-drop-writable"(tx);
+    "wasi/stream-drop-writable"(local.tee tx(builtin::i32_wrap_i64(packed >> 32_i64)));
     "wasi/stream-drop-readable"(rx);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("via stream ok"), used: 13 });
 }

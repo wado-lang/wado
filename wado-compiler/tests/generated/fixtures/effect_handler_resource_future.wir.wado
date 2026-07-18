@@ -303,8 +303,7 @@ fn "effect_handler_resource_future.wado/run"() with Stdout {
     global:effect_handler_resource_future.wado::__effect_FutureWritable<i32> = __d_FutureWritable<i32>;
     v = "effect_handler_resource_future.wado/__effect_dispatch__Future<i32>__new"();
     __sroa___pattern_temp_0_0 = v.0;
-    __sroa___pattern_temp_0_1 = v.1;
-    "effect_handler_resource_future.wado/__effect_dispatch__FutureWritable<i32>__write"(__sroa___pattern_temp_0_1, 42);
+    "effect_handler_resource_future.wado/__effect_dispatch__FutureWritable<i32>__write"(local.tee __sroa___pattern_temp_0_1(v.1), 42);
     value = "effect_handler_resource_future.wado/__effect_dispatch__Future<i32>__read"(__sroa___pattern_temp_0_0);
     __cond_4 = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(value) -> i32 {
         local.tee __local_23(ref.cast "core:prelude/types.wado//Option<i32>::Some"(value).payload_0) == 42;
@@ -854,7 +853,7 @@ fn "effect_handler_resource_future.wado/__Closure_2::__call"() {
 
 fn "effect_handler_resource_future.wado/__Closure_3::__call"(self_0, self_1) {
     let self_2: ref "effect_handler_resource_future.wado//MockFuture";
-    return self_2 = self_0.__capture_0, drop(self_1), self_2.read_count = self_2.read_count + 1, self_2.stored;
+    return self_2 = self_0.__capture_0, self_2.read_count = self_2.read_count + 1, self_2.stored;
 }
 
 fn "effect_handler_resource_future.wado/__Closure_4::__call"() {

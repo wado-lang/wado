@@ -165,7 +165,7 @@ pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) ->
         // `monomorph_info` / `method_info`.
         let (new_name, existing_ref) = {
             let deep = project.functions[deep_key.index()].borrow();
-            let new_name = format!("{}$shallow", deep.name);
+            let new_name = crate::name::shallow_copy_helper_name(&deep.name);
             let existing_ref = FunctionRef {
                 module_source: deep.module_source.clone(),
                 name: new_name.clone(),
@@ -389,31 +389,26 @@ fn wrapper_call_key(body: &Body, value: ExprId, wrappers: &IndexSet<FuncKey>) ->
 }
 
 /// The `(value, target-local)` binding a statement establishes, when it is a
-/// `let x = …` or a `x = …` whose target is a plain local.
+/// The `(value, target-local)` a `let x = …` establishes.
+///
+/// Only the `let` form participates: a whole-handle rebind `x = $value_copy$T(…)`
+/// is never eligible — `handle_is_element_clean` sees the reassignment of `x` as
+/// a mutation, so `demote_candidate` always rejects it — so collecting the
+/// `Assign` form would only add a dead, always-false site.
 fn stmt_binding(body: &Body, s: StmtId) -> Option<(ExprId, u32)> {
     match &body.stmts[s].kind {
         StmtKind::Let {
             local_index, value, ..
         } => value.as_expr().map(|e| (e, *local_index)),
-        StmtKind::Expr(Operand::Expr(e)) => {
-            if let ExprKind::Assign { target, value } = &body.exprs[*e].kind
-                && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
-            {
-                value.as_expr().map(|e| (e, *index))
-            } else {
-                None
-            }
-        }
         _ => None,
     }
 }
 
-/// For every `let x = $value_copy$T(arg)` (and `Assign` form) binding to a
-/// value-copy-wrapper helper, AND-combine its eligibility into
-/// `site_elig[(fi, x)]`. The per-`(fi, x)` key and the AND-combine are both
-/// order-independent (a local's value-copy wrapper is fixed by its type), so a
-/// flat sweep over every reachable statement matches the former depth-first
-/// descent exactly.
+/// For every `let x = $value_copy$T(arg)` binding to a value-copy-wrapper
+/// helper, AND-combine its eligibility into `site_elig[(fi, x)]`. The
+/// per-`(fi, x)` key and the AND-combine are both order-independent (a local's
+/// value-copy wrapper is fixed by its type), so a flat sweep over every
+/// reachable statement matches the former depth-first descent exactly.
 fn collect_sites(
     body: &Body,
     wrappers: &IndexSet<FuncKey>,
@@ -453,6 +448,20 @@ fn is_immutable_ref_param(
     })
 }
 
+/// Whether `e` is a provably-fresh rvalue: a value materialized here that
+/// aliases no pre-existing storage, so a shallow copy of it shares elements with
+/// nothing observable. Conservative — only structurally-fresh aggregate literals
+/// qualify; a call / index / field read may return an alias and does not.
+fn rvalue_is_fresh(body: &Body, e: ExprId) -> bool {
+    matches!(
+        &body.exprs[e].kind,
+        ExprKind::ArrayLiteral { .. }
+            | ExprKind::StructLiteral { .. }
+            | ExprKind::TupleLiteral { .. }
+            | ExprKind::VariantConstruct { .. }
+    )
+}
+
 /// True when the binding `target_idx` and the source `value` reads from are
 /// both element-clean — i.e. demoting `value` (an array-wrapper value copy)
 /// to a shallow copy is observably equivalent to the deep copy.
@@ -475,13 +484,20 @@ fn demote_candidate(
         );
         return false;
     }
-    // The argument side: a fresh rvalue (`None` root) is uniquely owned;
-    // an immutable-ref parameter cannot be mutated; otherwise every use of
-    // the root local must itself be element-clean.
-    // A promoted `Operand::Value` arg is a constant: a fresh, uniquely-owned
-    // rvalue with no root local — the `None` (clean) case.
-    match arg0.as_expr().and_then(|e| storage_root(body, e)) {
-        None => true,
+    // The argument side: an immutable-ref parameter cannot be mutated; a rvalue
+    // rooted at a local requires every use of that root to be element-clean;
+    // and an unrooted rvalue is clean only when it is *provably fresh* — a
+    // missing storage root does NOT imply freshness (`container.index_value(i)`
+    // returns `None` yet aliases the container, whose elements a later mutation
+    // could change under a shared shallow copy).
+    let arg_expr = arg0.as_expr();
+    match arg_expr.and_then(|e| storage_root(body, e)) {
+        None => match arg_expr {
+            // A promoted `Operand::Value` arg (no skeleton expr) is an immutable
+            // constant — genuinely fresh.
+            None => true,
+            Some(e) => rvalue_is_fresh(body, e),
+        },
         Some(root) => {
             let clean = is_immutable_ref_param(params, an.type_table, root)
                 || an.arg_local_is_element_clean(body, root);
@@ -497,11 +513,12 @@ fn demote_candidate(
     }
 }
 
-/// Phase 2b mechanical rewrite: for each `let x = …` / `x = …` binding whose
-/// `(fi, x)` is marked eligible, retarget the value-copy-wrapper call to its
-/// shallow sibling. Pure rewrite — no analysis, so it cannot conflict with the
-/// `&mut` borrow of the function. Targets are gathered first (an immutable
-/// sweep), then rewritten, since each retarget is independent.
+/// Phase 2b mechanical rewrite: for each `let x = …` binding whose `(fi, x)` is
+/// marked eligible, retarget the value-copy-wrapper call to its shallow sibling.
+/// Pure rewrite — no analysis, so it cannot conflict with the `&mut` borrow of
+/// the function. Targets are gathered first (an immutable sweep), then
+/// rewritten, since each retarget is independent. Only `let` bindings are
+/// eligible (see [`stmt_binding`]).
 fn retarget_block(
     body: &mut Body,
     fi: usize,
@@ -512,19 +529,8 @@ fn retarget_block(
     let mut targets: Vec<ExprId> = Vec::new();
     for block in reachable_blocks(body) {
         for s in &body.blocks[block].stmts {
-            let target = match &body.stmts[*s].kind {
-                StmtKind::Let { local_index, .. } => Some(*local_index),
-                StmtKind::Expr(Operand::Expr(e)) => match &body.exprs[*e].kind {
-                    ExprKind::Assign { target, .. } => match &body.exprs[*target].kind {
-                        ExprKind::Local { index, .. } => Some(*index),
-                        _ => None,
-                    },
-                    _ => None,
-                },
-                _ => None,
-            };
-            if let Some(target) = target
-                && site_elig.get(&(fi, target)) == Some(&true)
+            if let StmtKind::Let { local_index, .. } = &body.stmts[*s].kind
+                && site_elig.get(&(fi, *local_index)) == Some(&true)
                 && let Some(value) = stmt_binding_value(body, *s)
             {
                 targets.push(value);
@@ -536,18 +542,12 @@ fn retarget_block(
     }
 }
 
-/// The binding value of a `let` / `Assign` statement.
+/// The binding value of a `let` statement (a promoted-constant binding has no
+/// skeleton value to demote). Only `let` bindings are demote sites; see
+/// [`stmt_binding`].
 fn stmt_binding_value(body: &Body, s: StmtId) -> Option<ExprId> {
     match &body.stmts[s].kind {
-        // A promoted-constant binding has no skeleton value to demote.
         StmtKind::Let { value, .. } => value.as_expr(),
-        StmtKind::Expr(Operand::Expr(e)) => {
-            if let ExprKind::Assign { value, .. } = &body.exprs[*e].kind {
-                value.as_expr()
-            } else {
-                None
-            }
-        }
         _ => None,
     }
 }
@@ -638,6 +638,14 @@ impl Analyzer<'_> {
         visiting.swap_remove(&key);
         self.eimm_memo.insert(key, result);
         result
+    }
+
+    /// True when `callee` is a builtin intrinsic. No builtin mutates an
+    /// element's pointee (`array_set` rewrites a spine slot; `array_get` /
+    /// `select` forward values), so a by-value argument moved into one cannot
+    /// reach the demoted spine's shared elements.
+    fn callee_is_builtin(&self, callee: FuncKey) -> bool {
+        builtin_gname(super::dce::callee_descriptor(self.descriptors, callee)).is_some()
     }
 
     /// True when every use of local `idx` in `body` keeps the array's
@@ -766,20 +774,25 @@ impl ElementClean<'_, '_> {
                         }
                     }
                 }
+                // A by-value handle argument is a MOVE at last use; only a
+                // builtin callee provably cannot mutate its elements.
+                let clean = self.analyzer.callee_is_builtin(callee);
                 for a in args {
                     if let Some(ae) = a.as_expr() {
-                        self.visit_call_arg(body, ae);
+                        self.visit_call_arg(body, ae, clean);
                         if !self.clean {
                             return;
                         }
                     }
                 }
             }
-            ExprKind::Call { args, .. } => {
+            ExprKind::Call { func_id, args, .. } => {
+                let callee = *func_id;
+                let clean = self.analyzer.callee_is_builtin(callee);
                 let args: Vec<Operand> = args.iter().map(|a| a.expr).collect();
                 for a in args {
                     let Some(a) = a.as_expr() else { continue };
-                    self.visit_call_arg(body, a);
+                    self.visit_call_arg(body, a, clean);
                     if !self.clean {
                         return;
                     }
@@ -794,9 +807,11 @@ impl ElementClean<'_, '_> {
                         return;
                     }
                 }
+                // The closure body is unverified, so a by-value move into it may
+                // mutate elements: never treat its arguments as element-clean.
                 for a in args {
                     let Some(ae) = a.as_expr() else { continue };
-                    self.visit_call_arg(body, ae);
+                    self.visit_call_arg(body, ae, false);
                     if !self.clean {
                         return;
                     }
@@ -861,14 +876,19 @@ impl ElementClean<'_, '_> {
         }
     }
 
-    /// `idx` passed as a call argument: by-value or `&` is element-clean;
-    /// `&mut idx` is not.
-    fn visit_call_arg(&mut self, body: &Body, arg: ExprId) {
+    /// `idx` passed as a call argument: `&` is element-clean, `&mut idx` is not,
+    /// and by-value is clean only when the callee cannot mutate that parameter's
+    /// elements (`callee_param_immutable`) — last-use lowering turns a by-value
+    /// argument into a MOVE, so a mutating callee would reach the demoted spine's
+    /// shared elements rather than an independent copy.
+    fn visit_call_arg(&mut self, body: &Body, arg: ExprId, callee_param_immutable: bool) {
         let idx = self.idx;
         match &body.exprs[arg].kind {
-            // Passing the handle by value hands the callee an independent
-            // (deep) copy, so it cannot reach our elements.
-            ExprKind::Local { .. } => {}
+            ExprKind::Local { index, .. } => {
+                if *index == idx && !callee_param_immutable {
+                    self.clean = false;
+                }
+            }
             ExprKind::Unary {
                 op: NirUnaryOp::MutRef,
                 expr: inner,
@@ -1006,7 +1026,7 @@ impl ElementImmutable<'_, '_, '_> {
                     let value = *value;
                     if let ExprKind::Local { index, .. } = &body.exprs[target].kind {
                         let index = *index;
-                        if is_self_derived_operand(
+                        if is_self_derived_op(
                             body,
                             value,
                             &self.tainted,
@@ -1037,13 +1057,7 @@ impl ElementImmutable<'_, '_, '_> {
                 expr: inner,
             } => {
                 let inner = *inner;
-                if is_self_derived_operand(
-                    body,
-                    inner,
-                    &self.tainted,
-                    tt,
-                    self.analyzer.descriptors,
-                ) {
+                if is_self_derived_op(body, inner, &self.tainted, tt, self.analyzer.descriptors) {
                     crate::compiler_trace!("demote", "verify reject: &mut of self-derived");
                     self.clean = false;
                     return;
@@ -1061,17 +1075,12 @@ impl ElementImmutable<'_, '_, '_> {
                         let base = *base;
                         // A promoted base is never self-derived, so the guard
                         // short-circuits before the node lookup.
-                        is_self_derived_operand(
-                            body,
-                            base,
-                            &self.tainted,
-                            tt,
-                            self.analyzer.descriptors,
-                        ) && base.as_expr().is_some_and(|be| {
-                            !matches!(&body.exprs[be].kind, ExprKind::Local { index: 0, .. })
-                        })
+                        is_self_derived_op(body, base, &self.tainted, tt, self.analyzer.descriptors)
+                            && base.as_expr().is_some_and(|be| {
+                                !matches!(&body.exprs[be].kind, ExprKind::Local { index: 0, .. })
+                            })
                     }
-                    ExprKind::Index { expr: base, .. } => is_self_derived_operand(
+                    ExprKind::Index { expr: base, .. } => is_self_derived_op(
                         body,
                         *base,
                         &self.tainted,
@@ -1106,13 +1115,8 @@ impl ElementImmutable<'_, '_, '_> {
                 // unless the callee is known `&self` (cannot mutate) or a
                 // verified element-immutable `&mut self` method. An
                 // unresolvable callee is conservatively unsafe.
-                if is_self_derived_operand(
-                    body,
-                    receiver,
-                    &self.tainted,
-                    tt,
-                    self.analyzer.descriptors,
-                ) {
+                if is_self_derived_op(body, receiver, &self.tainted, tt, self.analyzer.descriptors)
+                {
                     let ok = match self.analyzer.callee_mutates_self(callee) {
                         Some(false) => true,
                         Some(true) => self.analyzer.verify(callee, self.visiting),
@@ -1191,13 +1195,7 @@ impl ElementImmutable<'_, '_, '_> {
                 // its (unverified) body with access to `self`'s elements.
                 let callee = *callee;
                 let args = args.clone();
-                if is_self_derived_operand(
-                    body,
-                    callee,
-                    &self.tainted,
-                    tt,
-                    self.analyzer.descriptors,
-                ) {
+                if is_self_derived_op(body, callee, &self.tainted, tt, self.analyzer.descriptors) {
                     crate::compiler_trace!(
                         "demote",
                         "verify reject: indirect call of self-capturing closure"
@@ -1258,17 +1256,6 @@ impl ElementImmutable<'_, '_, '_> {
 
 /// [`is_self_derived`] for an operand: a promoted constant is never self-derived.
 fn is_self_derived_op(
-    body: &Body,
-    op: Operand,
-    tainted: &IndexSet<u32>,
-    tt: &Rc<RefCell<TypeTable>>,
-    descriptors: &[FunctionRef],
-) -> bool {
-    op.as_expr()
-        .is_some_and(|e| is_self_derived(body, e, tainted, tt, descriptors))
-}
-
-fn is_self_derived_operand(
     body: &Body,
     op: Operand,
     tainted: &IndexSet<u32>,

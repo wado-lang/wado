@@ -341,8 +341,6 @@ fn "core:prelude/intparse.wado/parse_i64_radix_range"(s, start, end, radix, max,
     let is_negative: bool;
     let kind_12: "core:prelude/intparse.wado//enum:IntErrorKind";
     let __pattern_temp_0: ref "tuple//[bool, i32]";
-    let kind_16: "core:prelude/intparse.wado//enum:IntErrorKind";
-    let kind_17: "core:prelude/intparse.wado//enum:IntErrorKind";
     if @unlikely((if radix <u 2 -> i32 {
         1;
     } else {
@@ -369,12 +367,12 @@ fn "core:prelude/intparse.wado/parse_i64_radix_range"(s, start, end, radix, max,
     if __sroa___match_scrut_1_discriminant == 0 {
         if is_negative {
             if __sroa___match_scrut_1_case0_payload_0 >u min_abs {
-                return 1, 0_i64, ref.as_non_null(kind_16 = 3; struct.new "core:prelude/intparse.wado//ParseIntError" { kind: 3 });
+                return 1, 0_i64, ref.as_non_null(struct.new "core:prelude/intparse.wado//ParseIntError" { kind: 3 });
             } else {
                 return 0, 0_i64 - __sroa___match_scrut_1_case0_payload_0, ref.null none;
             }
         } else if __sroa___match_scrut_1_case0_payload_0 >u max {
-            return 1, 0_i64, ref.as_non_null(kind_17 = 2; struct.new "core:prelude/intparse.wado//ParseIntError" { kind: 2 });
+            return 1, 0_i64, ref.as_non_null(struct.new "core:prelude/intparse.wado//ParseIntError" { kind: 2 });
         } else {
             return 0, __sroa___match_scrut_1_case0_payload_0, ref.null none;
         }

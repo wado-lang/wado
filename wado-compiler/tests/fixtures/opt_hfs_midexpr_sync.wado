@@ -1,0 +1,34 @@
+// HFS mid-expression sync: in `let x = advance(&mut c) + c.pos;` the
+// re-read of `c.pos` must run between the call and the read — not hoisted
+// before the whole statement, where it would capture the pre-call value.
+
+struct Cursor {
+    pos: i32,
+    data: i32,
+}
+
+#[inline(never)]
+fn advance(c: &mut Cursor) -> i32 {
+    let old = c.pos;
+    c.pos = c.pos + 1;
+    return old;
+}
+
+export fn run() {
+    let mut c = Cursor { pos: 0, data: 0 };
+    let mut total = 0;
+    for let mut i = 0; i < 4; i += 1 {
+        c.pos += 1;
+        let x = advance(&mut c) + c.pos;
+        total += x;
+        total += c.pos;
+    }
+    assert total == 56, `expected 56, got {total}`;
+    assert c.pos == 8, `expected 8, got {c.pos}`;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["__hfs_pos"]
+}

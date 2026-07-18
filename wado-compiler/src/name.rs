@@ -134,6 +134,37 @@ pub fn value_copy_helper_name(mangled_type: &str) -> String {
     format!("$value_copy${mangled_type}")
 }
 
+/// The name of the shallow-copy sibling `value_copy_demote` synthesizes for a
+/// deep value-copy helper: the deep helper's name with a `$shallow` suffix.
+pub fn shallow_copy_helper_name(deep_name: &str) -> String {
+    format!("{deep_name}$shallow")
+}
+
+/// Field name of the discriminant slot on a variant's base struct (the tag
+/// every case subtype inherits). Single source of truth for the WIR variant
+/// GC representation: the builder (`wir_build/types.rs`, `pattern_match.rs`,
+/// `translate.rs`), the multi-value SROA (`sroa_variant_return.rs`), the codegen
+/// field map (`codegen/emit.rs`), and the `nullable_ref` lowering all key on
+/// this exact name, so a literal drift would produce invalid Wasm. Builder-side
+/// call sites should adopt this constant (and [`variant_payload_field`] /
+/// [`is_variant_payload_field`]) so the convention cannot silently diverge.
+pub const VARIANT_DISCRIMINANT_FIELD: &str = "discriminant";
+
+/// Field name of the `index`-th payload slot on a variant case subtype
+/// (`payload_0`, `payload_1`, ...). Paired with [`VARIANT_DISCRIMINANT_FIELD`]
+/// as the canonical variant-field naming; see that constant's note.
+pub fn variant_payload_field(index: usize) -> String {
+    format!("payload_{index}")
+}
+
+/// Whether `field_name` is a variant case payload slot (see
+/// [`variant_payload_field`]). Matches the `payload_` prefix; the multi-value
+/// SROA's `case{N}_payload_{M}` slots carry a `case` prefix and so are
+/// deliberately not matched.
+pub fn is_variant_payload_field(field_name: &str) -> bool {
+    field_name.starts_with("payload_")
+}
+
 /// Convert a Wado identifier (`snake_case` / `PascalCase` / `camelCase`) to
 /// Component Model kebab-case (`my-api`, `http-server`, `error-code`).
 ///
@@ -557,6 +588,42 @@ pub fn split_trait_method_receiver(name: &str) -> Option<(&str, &str)> {
     let (ty, rest) = name.split_once('^')?;
     let trait_name = rest.split_once("::").map_or(rest, |(t, _)| t);
     Some((ty, trait_name))
+}
+
+/// Decompose a local method mangle into `(receiver, trait, method)`.
+///
+/// - `Point::sum` → `("Point", None, "sum")`
+/// - `Point^Display::fmt` → `("Point", Some("Display"), "fmt")`
+/// - `Stdout::write_via_stream` → `("Stdout", None, "write_via_stream")`
+///
+/// Returns `None` when there is no `::` method separator (a bare
+/// free-function name). The receiver / trait may still carry type-argument
+/// mangling (`Box<i32>^Ord::cmp`); this splits only on the `^` and `::`
+/// separators and does not strip type args.
+pub fn split_local_method_name(name: &str) -> Option<(&str, Option<&str>, &str)> {
+    let sep = name.find("::")?;
+    let (prefix, method) = (&name[..sep], &name[sep + 2..]);
+    let (receiver, trait_name) = match prefix.find('^') {
+        Some(caret) => (&prefix[..caret], Some(&prefix[caret + 1..])),
+        None => (prefix, None),
+    };
+    Some((receiver, trait_name, method))
+}
+
+/// Rebuild a monomorphized method's base-name key: replace everything up to
+/// and including the first `::` with `base::`, keeping only the method suffix.
+///
+/// - `rebase_monomorph_method("Box<i32>::get", "Box")` → `"Box::get"`
+/// - `rebase_monomorph_method("List<i32>^Ord::cmp", "List")` → `"List::cmp"`
+///
+/// When `mangled` has no `::` (a bare name), returns `base` unchanged. Used by
+/// the DCE call-graph keying to keep a monomorphized method mergeable with its
+/// generic template.
+pub fn rebase_monomorph_method(mangled: &str, base: &str) -> String {
+    match mangled.find("::") {
+        Some(pos) => format!("{base}::{}", &mangled[pos + 2..]),
+        None => base.to_string(),
+    }
 }
 
 impl LocalMethodName {

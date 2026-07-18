@@ -1,0 +1,42 @@
+// `clone_forward` soundness regression: a snapshot taken before a mutating
+// method call must be a true deep copy.
+//
+// `clone_forward` forwards a read-only `array_clone(&place)` binding into a
+// later `array_clone(&t)`, re-reading `place` at the use site. That is only
+// sound when nothing in the binding→use interval mutates `place`. A mutating
+// method receiver (`b.data.push(99)`) has a bare-`Local` receiver with no
+// `MutRef` node, so it was previously invisible to the interval check — the
+// forward would then re-read `b.data` *after* the push, changing the snapshot.
+//
+// Here `t` snapshots `b.data` as `[1, 2, 3]`; `b.data.push(99)` then mutates it.
+// The snapshot must stay `[1, 2, 3]`, and `b.data` must have grown to length 4.
+
+use { println, Stdout } from "core:cli";
+
+struct Buf {
+    data: List<i32>,
+}
+
+impl Buf {
+    fn snapshot(&self) -> List<i32> {
+        return self.data;
+    }
+}
+
+export fn run() with Stdout {
+    let mut b = Buf { data: [1, 2, 3] };
+    let t = b.snapshot();
+    b.data.push(99);
+    let u = t;
+    assert u.len() == 3;
+    assert u[0] == 1;
+    assert u[2] == 3;
+    assert b.data.len() == 4;
+    assert b.data[3] == 99;
+    println(`${u.len()} ${b.data.len()}`);
+}
+
+__DATA__
+{
+    "stdout": "3 4\n"
+}

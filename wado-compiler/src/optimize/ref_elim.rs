@@ -89,7 +89,7 @@ pub(super) fn build_ref_elim(body: &Body) -> RefElimRule {
         };
         let replaced = facts.replacements.iter().any(|r| {
             replaces_capture(r, &referent)
-                && (info.inherited || in_capture_interval(r.pos, local, &facts))
+                && (info.inherited || invalidates_capture(r, local, &facts))
         });
         if replaced {
             info.eliminable = false;
@@ -299,6 +299,13 @@ struct CaptureFacts {
     binding_pos: IndexMap<u32, usize>,
     last_use: IndexMap<u32, usize>,
     replacements: Vec<Replacement>,
+    /// Position range `[entry, exit]` of every `Loop` body (inclusive). Pre-order
+    /// numbering makes a loop's statements a contiguous range, so a position `p`
+    /// is inside the loop iff `entry <= p <= exit`. Used to extend a captured
+    /// ref's live region across a loop's back-edge: a use inside a loop is
+    /// re-evaluated every iteration, so a write later in the loop body (in
+    /// pre-order) still precedes that use on the next iteration.
+    loops: Vec<(usize, usize)>,
 }
 
 /// Walk the body in pre-order, numbering statements, and collect the
@@ -310,6 +317,7 @@ fn collect_capture_facts(body: &Body, refs: &IndexMap<u32, RefInfo>) -> CaptureF
         binding_pos: IndexMap::default(),
         last_use: IndexMap::default(),
         replacements: Vec::new(),
+        loops: Vec::new(),
     };
     let mut pos = 0;
     capture_walk(
@@ -331,14 +339,17 @@ fn capture_walk(
     refs: &IndexMap<u32, RefInfo>,
     facts: &mut CaptureFacts,
 ) {
+    let mut loop_start: Option<usize> = None;
     let here = match node {
         NodeRef::Stmt(s) => {
             let p = *pos;
             *pos += 1;
-            if let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
-                && refs.contains_key(local_index)
-            {
-                facts.binding_pos.insert(*local_index, p);
+            match &body.stmts[s].kind {
+                StmtKind::Let { local_index, .. } if refs.contains_key(local_index) => {
+                    facts.binding_pos.insert(*local_index, p);
+                }
+                StmtKind::Loop { .. } => loop_start = Some(p),
+                _ => {}
             }
             p
         }
@@ -377,6 +388,9 @@ fn capture_walk(
         }
     }
     body.for_each_child(node, |c| capture_walk(body, c, here, pos, refs, facts));
+    if let Some(start) = loop_start {
+        facts.loops.push((start, pos.saturating_sub(1)));
+    }
 }
 
 /// Whether `replacement` replaces the handle observed through a reference to
@@ -392,17 +406,44 @@ fn replaces_capture(r: &Replacement, referent: &Place) -> bool {
     }
 }
 
-/// Whether statement position `pos` falls in ref `local`'s live capture interval
-/// `(binding, last_use]`. An unused ref has no interval (nothing to invalidate);
-/// a missing binding position is treated conservatively as always live.
-fn in_capture_interval(pos: usize, local: u32, facts: &CaptureFacts) -> bool {
-    let Some(&k) = facts.binding_pos.get(&local) else {
-        return true;
-    };
+/// A captured ref's live region ends at its last use, extended across every
+/// enclosing loop whose entry follows the binding: a use inside such a loop is
+/// re-evaluated each iteration, so the ref is effectively live through the whole
+/// loop body (a later-in-pre-order write reaches the use on the back-edge). A
+/// loop that also contains the binding is *not* extended — the binding re-runs
+/// each iteration, so a fresh capture observes any earlier write.
+fn extended_live_end(binding: usize, last_use: usize, loops: &[(usize, usize)]) -> usize {
+    let mut end = last_use;
+    for &(entry, exit) in loops {
+        if entry <= last_use && last_use <= exit && binding < entry {
+            end = end.max(exit);
+        }
+    }
+    end
+}
+
+/// Whether replacement `r` invalidates ref `local`'s capture (making the
+/// `r.field → re-read referent` fold unsound). An unused ref has no live region
+/// and cannot be invalidated; a missing binding position is treated
+/// conservatively as bound at the body entry.
+///
+/// - A direct `Assign` write invalidates only when it falls strictly after the
+///   binding and within the (loop-extended) live region: `binding < pos <= end`.
+/// - A `&mut` alias (`via_borrow`) invalidates whenever it is created at or
+///   before the end of the live region (`pos <= end`), regardless of the
+///   binding: the alias stays live past its creation and can write through the
+///   referent at any later point, including one the creation position predates.
+fn invalidates_capture(r: &Replacement, local: u32, facts: &CaptureFacts) -> bool {
     let Some(&last_use) = facts.last_use.get(&local) else {
         return false;
     };
-    k < pos && pos <= last_use
+    let binding = facts.binding_pos.get(&local).copied().unwrap_or(0);
+    let end = extended_live_end(binding, last_use, &facts.loops);
+    if r.via_borrow {
+        r.pos <= end
+    } else {
+        binding < r.pos && r.pos <= end
+    }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

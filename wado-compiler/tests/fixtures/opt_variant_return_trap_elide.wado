@@ -1,0 +1,30 @@
+// Test: return-only temp elision must not relocate a trapping value past a
+// conditional early return.
+//
+// `sroa_variant_return`'s Phase 0 collapses `t = <value>; [intervening];
+// return t` into `return <value>`. When `<value>` can trap (the division
+// below) and a conditional `return` intervenes, the collapse moves the trap
+// onto the final return path — with `c == true` the program would return
+// `Err("c")` instead of trapping. The division must trap at every
+// optimization level, before `c` is ever tested.
+
+#[inline("never")]
+fn div_then_pick(a: i32, b: i32, c: bool) -> Result<i32, String> {
+    let t = Result::<i32, String>::Ok(a / b);
+    if c {
+        return Result::<i32, String>::Err("c");
+    }
+    return t;
+}
+
+export fn run() {
+    let r = div_then_pick(1, 0, true);
+    if let Err(e) = r {
+        assert e == "c";
+    }
+}
+
+__DATA__
+{
+    "trapped": true
+}

@@ -1,0 +1,36 @@
+// HFS match-guard join: a &mut call inside a guard leaves the
+// guard-ran-but-failed path FieldOnly at runtime. The accumulated-pre join
+// for later arms must not resolve {ScalarOnly, FieldOnly} to ScalarOnly
+// without convergence sync at the guard's end.
+
+struct Counter {
+    x: i32,
+    y: i32,
+}
+
+#[inline(never)]
+fn check(c: &mut Counter) -> bool {
+    c.x = c.x * 2;
+    return false;
+}
+
+export fn run() {
+    let mut c = Counter { x: 1, y: 0 };
+    let mut total = 0;
+    for let mut i = 0; i < 2; i += 1 {
+        c.x += 1;
+        let v = match i % 2 {
+            0 && check(&mut c) => c.x,
+            _ => c.x,
+        };
+        total += v;
+    }
+    assert total == 9, `expected 9, got {total}`;
+    assert c.x == 5, `expected 5, got {c.x}`;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["__hfs_x"]
+}

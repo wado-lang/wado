@@ -29,7 +29,7 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{FunctionKind, NirFunction, NirUnaryOp};
+use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -47,8 +47,6 @@ type FnKey = crate::nir::FuncId;
 struct SroaInfo {
     /// Canonical struct identity — `(struct_name, module_source)`.
     struct_key: (String, ModuleSource),
-    #[allow(dead_code)]
-    struct_type_id: TypeId,
     /// Type of the wrapper's sole field — the new scalar parameter type.
     inner_type_id: TypeId,
     /// Field name of the wrapper struct's sole field.
@@ -118,11 +116,14 @@ fn collect_and_validate(
 ) -> IndexMap<(FnKey, usize), SroaInfo> {
     let type_table = project.type_table.borrow();
     let single_field = build_single_field_index(project);
+    let struct_fields = build_struct_fields_index(project);
+    let global_writes = transitive_global_writes(project);
+    let global_types = global_type_index(project);
 
     let mut candidates: IndexMap<(FnKey, usize), SroaInfo> = IndexMap::default();
     for fid in gate.dirty_funcs(GatedPass::SroaParam, project.functions.len()) {
         let func = project.functions[fid.index()].borrow();
-        if !is_eligible(&func) || func.body.is_none() {
+        if !is_eligible(&func) {
             continue;
         }
         let Some(key) = func.id else { continue };
@@ -149,7 +150,21 @@ fn collect_and_validate(
             let Some(info) = candidate_info_for(param.type_id, &type_table, &single_field) else {
                 continue;
             };
-            if param_may_alias_sibling(&func, pi, &info.struct_key, &type_table) {
+            let writes_global = writes_aliasing_global(
+                &global_writes[key.index()],
+                &info.struct_key,
+                &global_types,
+                &type_table,
+                &struct_fields,
+            );
+            if param_snapshot_unsound(
+                &func,
+                pi,
+                &info.struct_key,
+                &type_table,
+                &struct_fields,
+                writes_global,
+            ) {
                 continue;
             }
             candidates.insert((key, pi), info);
@@ -210,7 +225,6 @@ fn candidate_info_for(
     }
     Some(SroaInfo {
         struct_key: key,
-        struct_type_id,
         inner_type_id,
         field_name,
     })
@@ -244,11 +258,25 @@ fn reference_param_struct_key(
     }
 }
 
-fn param_may_alias_sibling(
+/// Reject a reference candidate whose call-time value snapshot could be
+/// invalidated during the callee's execution — because some other access path
+/// the callee holds can mutate the pointee `*p`:
+///
+/// - a mutable-global write (the pointee may live in a global), or
+/// - a `&mut` sibling param whose pointee type *transitively contains* the
+///   wrapper struct (a write through it can reach a wrapper-typed location that
+///   the same call site may have aliased with `p`, e.g. `f(&s.m, &mut s)` where
+///   `S { m: M }`). This subsumes the same-type sibling case (`X == W` contains
+///   `W` trivially).
+///
+/// A by-value struct candidate is already a copy, so it is never affected.
+fn param_snapshot_unsound(
     func: &NirFunction,
     pi: usize,
     struct_key: &(String, ModuleSource),
     type_table: &TypeTable,
+    struct_fields: &StructFieldsIndex,
+    writes_global: bool,
 ) -> bool {
     let candidate_is_ref = func
         .params
@@ -258,11 +286,212 @@ fn param_may_alias_sibling(
     if !candidate_is_ref {
         return false;
     }
+    if writes_global {
+        return true;
+    }
     func.params.iter().enumerate().any(|(pj, other)| {
-        pj != pi
-            && matches!(type_table.get(other.type_id), ResolvedType::MutRef(_))
-            && reference_param_struct_key(other.type_id, type_table).as_ref() == Some(struct_key)
+        if pj == pi {
+            return false;
+        }
+        let ResolvedType::MutRef(inner) = type_table.get(other.type_id) else {
+            return false;
+        };
+        let mut visited = IndexSet::default();
+        type_transitively_contains(*inner, struct_key, type_table, struct_fields, &mut visited)
     })
+}
+
+/// Map a struct's identity → its field types, for transitive-containment queries.
+type StructFieldsIndex = IndexMap<(String, ModuleSource), Vec<TypeId>>;
+
+fn build_struct_fields_index(project: &NirPackage) -> StructFieldsIndex {
+    let mut out: StructFieldsIndex = IndexMap::default();
+    for s in &project.structs {
+        out.insert(
+            (s.name.clone(), s.module_source.clone()),
+            s.fields.iter().map(|f| f.type_id).collect(),
+        );
+    }
+    out
+}
+
+/// Whether `ty` can reach a location of the `target` struct type — directly, or
+/// transitively through fields, references, newtypes, arrays, or generic type
+/// arguments. `visited` breaks cycles over recursive types.
+fn type_transitively_contains(
+    ty: TypeId,
+    target: &(String, ModuleSource),
+    type_table: &TypeTable,
+    struct_fields: &StructFieldsIndex,
+    visited: &mut IndexSet<TypeId>,
+) -> bool {
+    if !visited.insert(ty) {
+        return false;
+    }
+    match type_table.get(ty) {
+        ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } => {
+            let key = (name.clone(), module_source.clone());
+            if &key == target {
+                return true;
+            }
+            let Some(fields) = struct_fields.get(&key) else {
+                return false;
+            };
+            fields.iter().any(|&ft| {
+                type_transitively_contains(ft, target, type_table, struct_fields, visited)
+            })
+        }
+        ResolvedType::Ref(inner)
+        | ResolvedType::MutRef(inner)
+        | ResolvedType::Reactive(inner)
+        | ResolvedType::BuiltinArray(inner)
+        | ResolvedType::Newtype {
+            base_type: inner, ..
+        } => type_transitively_contains(*inner, target, type_table, struct_fields, visited),
+        ResolvedType::GenericInstance { type_args, .. }
+        | ResolvedType::GenericResource { type_args, .. } => type_args
+            .iter()
+            .any(|&t| type_transitively_contains(t, target, type_table, struct_fields, visited)),
+        _ => false,
+    }
+}
+
+#[derive(Clone)]
+enum GlobalWrites {
+    /// An indirect call whose target cannot be resolved: any global is possible.
+    Any,
+    Known(IndexSet<(ModuleSource, String)>),
+}
+
+impl GlobalWrites {
+    fn absorb(&mut self, other: &GlobalWrites) -> bool {
+        match (&mut *self, other) {
+            (GlobalWrites::Any, _) => false,
+            (slot, GlobalWrites::Any) => {
+                *slot = GlobalWrites::Any;
+                true
+            }
+            (GlobalWrites::Known(acc), GlobalWrites::Known(more)) => {
+                let before = acc.len();
+                for g in more {
+                    acc.insert(g.clone());
+                }
+                acc.len() != before
+            }
+        }
+    }
+}
+
+/// The global a write-target place is rooted at, seeing through projections, so
+/// an in-place `G.field = …` counts as a write to `G`, not only a `GlobalVarSet`.
+fn global_place_root(body: &Body, target: ExprId) -> Option<(ModuleSource, String)> {
+    match &body.exprs[target].kind {
+        ExprKind::GlobalVarGet {
+            module_source,
+            name,
+        } => Some((module_source.clone(), name.clone())),
+        ExprKind::FieldAccess { expr: inner, .. }
+        | ExprKind::Index { expr: inner, .. }
+        | ExprKind::VariantPayload { expr: inner, .. }
+        | ExprKind::Cast { expr: inner, .. }
+        | ExprKind::Unary {
+            op: NirUnaryOp::Deref,
+            expr: inner,
+        } => inner.as_expr().and_then(|e| global_place_root(body, e)),
+        _ => None,
+    }
+}
+
+/// Per-function global-write summary (indexed by function position): a caller
+/// inherits every global its callees may write. A monotone worklist over the
+/// reverse call graph.
+fn transitive_global_writes(project: &NirPackage) -> Vec<GlobalWrites> {
+    let n = project.functions.len();
+    let mut writes: Vec<GlobalWrites> = Vec::with_capacity(n);
+    let mut callers: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for i in 0..n {
+        let func = project.functions[i].borrow();
+        let mut direct: IndexSet<(ModuleSource, String)> = IndexSet::default();
+        let mut indirect = false;
+        if let Some(body) = func.body.as_ref() {
+            for node in body.exprs.values() {
+                match &node.kind {
+                    ExprKind::GlobalVarSet {
+                        module_source,
+                        name,
+                        ..
+                    } => {
+                        direct.insert((module_source.clone(), name.clone()));
+                    }
+                    ExprKind::Assign { target, .. } => {
+                        if let Some(g) = global_place_root(body, *target) {
+                            direct.insert(g);
+                        }
+                    }
+                    ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } => {
+                        let c = func_id.index();
+                        if c < n {
+                            callers[c].push(i);
+                        }
+                    }
+                    ExprKind::IndirectCall { .. } => indirect = true,
+                    _ => {}
+                }
+            }
+        }
+        writes.push(if indirect {
+            GlobalWrites::Any
+        } else {
+            GlobalWrites::Known(direct)
+        });
+    }
+    let mut queued = vec![true; n];
+    let mut work: Vec<usize> = (0..n).collect();
+    while let Some(c) = work.pop() {
+        queued[c] = false;
+        let callee_set = writes[c].clone();
+        for k in 0..callers[c].len() {
+            let caller = callers[c][k];
+            if writes[caller].absorb(&callee_set) && !queued[caller] {
+                queued[caller] = true;
+                work.push(caller);
+            }
+        }
+    }
+    writes
+}
+
+fn global_type_index(project: &NirPackage) -> IndexMap<(ModuleSource, String), TypeId> {
+    let mut out: IndexMap<(ModuleSource, String), TypeId> = IndexMap::default();
+    for g in &project.globals {
+        out.insert((g.module_source.clone(), g.name.clone()), g.ty);
+    }
+    out
+}
+
+/// Whether `writes` includes a global whose type can alias a `&target` pointee —
+/// the only writes that can stale a call-time snapshot of that reference param.
+fn writes_aliasing_global(
+    writes: &GlobalWrites,
+    target: &(String, ModuleSource),
+    global_types: &IndexMap<(ModuleSource, String), TypeId>,
+    type_table: &TypeTable,
+    struct_fields: &StructFieldsIndex,
+) -> bool {
+    match writes {
+        GlobalWrites::Any => true,
+        GlobalWrites::Known(set) => set.iter().any(|g| match global_types.get(g) {
+            Some(&ty) => {
+                let mut visited = IndexSet::default();
+                type_transitively_contains(ty, target, type_table, struct_fields, &mut visited)
+            }
+            None => true,
+        }),
+    }
 }
 
 // -----------------------------------------------------------------------
@@ -394,11 +623,11 @@ fn rewrite_callees(
     for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
         let Some(key) = func.id else { continue };
-        let mut affected: Vec<(u32, String)> = Vec::new();
+        let mut affected: Vec<u32> = Vec::new();
         for pi in 0..func.params.len() {
             if let Some(info) = candidates.get(&(key, pi)) {
                 let local_index = func.params[pi].local_index;
-                affected.push((local_index, info.field_name.clone()));
+                affected.push(local_index);
                 func.params[pi].type_id = info.inner_type_id;
                 if let Some(local) = func.locals.get_mut(local_index as usize) {
                     local.type_id = info.inner_type_id;
@@ -416,20 +645,23 @@ fn rewrite_callees(
     }
 }
 
-/// Pre-order: replace `FieldAccess(Local(idx), field)` for a SROA'd `(idx,
-/// field)` with the bare scalar `Local`, before children are reshaped.
-fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[(u32, String)]) {
+/// Pre-order: replace `FieldAccess(Local(idx), field_index: 0)` for a SROA'd
+/// param `idx` with the bare scalar `Local`, before children are reshaped. The
+/// wrapper is a single-field struct, so its sole field is index 0 — matching by
+/// index (not name) avoids over-stripping a same-named field of the inner type
+/// (e.g. `b.value.value` where the inner `.value` belongs to a different struct).
+fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[u32]) {
     if let NodeRef::Expr(id) = node {
         // The SROA'd field access whose inner `Local` should replace it, if any.
         let local_inner = if let ExprKind::FieldAccess {
             expr: inner,
-            field_name,
+            field_index: 0,
             ..
         } = &body.exprs[id].kind
         {
             inner.as_expr().filter(|&e| {
                 matches!(&body.exprs[e].kind, ExprKind::Local { index, .. }
-                if affected.iter().any(|(li, fname)| li == index && fname == field_name))
+                if affected.contains(index))
             })
         } else {
             None
@@ -690,38 +922,18 @@ fn lookup_function<'a>(
     project.functions.get(key.index())
 }
 
-/// Pinning rules close to DAE's (`optimize::dae::is_eligible`), but — unlike
-/// DAE — concrete trait-impl methods are NOT pinned here: rewriting a
-/// single-field-struct parameter and its call sites is sound after
-/// monomorphization (see the note by the `is_closure_call` guard).
+/// Pinning rules, shared with DAE via [`super::dae::is_dae_sroa_eligible`].
+/// `relax_closure_call = false` keeps closure `__call` functors pinned (their
+/// function-table wrapper snapshots the signature); unlike DAE there is no
+/// relaxation here. `sroa_param` adds one pin the shared predicate does not
+/// carry — a `$value_copy$T` helper is never a rewrite target.
+///
+/// Concrete trait-impl methods are eligible: after monomorphization every call
+/// site carries a resolved `func_id` and `rewrite_call_sites` rewrites them all,
+/// so scalarizing a single-field-struct parameter (and its call-site
+/// allocation) is sound. This unwraps the `Box<Scalar>` that `&T` reference
+/// parameters box the value into — e.g. every scalar `serde` field / element
+/// (`SerializeStruct::field<i32>`, `SerializeSeq::element<f64>`).
 fn is_eligible(func: &NirFunction) -> bool {
-    if func.is_cm_export || func.is_cm_binding || func.is_dispatch_wrapper || func.is_ambient {
-        return false;
-    }
-    if !matches!(func.kind, FunctionKind::Regular) {
-        return false;
-    }
-    if func.module_source.is_core_builtin() || func.module_source.is_wasm_asset() {
-        return false;
-    }
-    if func.allocator_tag.is_some() {
-        return false;
-    }
-    // A concrete trait-impl method is a plain function after monomorphization:
-    // Wado has no dynamic dispatch, every call site carries the resolved
-    // `func_id`, and `rewrite_call_sites` rewrites all of them, so scalarizing a
-    // single-field-struct parameter (and its call-site allocation) is sound.
-    // This unwraps the `Box<Scalar>` that `&T` reference parameters box the
-    // value into — e.g. every scalar `serde` field/element (`SerializeStruct::
-    // field<i32>`, `SerializeSeq::element<f64>`). The genuinely-pinned shapes —
-    // closure `__call` functors (their function-table wrapper snapshots the
-    // signature), CM bindings, dispatch wrappers, non-`Regular` kinds — are
-    // still excluded by the checks above and below.
-    if func.is_closure_call() {
-        return false;
-    }
-    if func.is_value_copy() {
-        return false;
-    }
-    true
+    super::dae::is_dae_sroa_eligible(func, false) && !func.is_value_copy()
 }

@@ -348,10 +348,8 @@ fn "core:prelude/primitive.wado/u64::fmt_base"(self, f, base, upper, prefix) {
     let self_10: ref "core:prelude/string.wado//String";
     bits_per_digit = (if base == 2 -> i32 {
         1;
-    } else if base == 8 -> i32 {
-        3;
     } else {
-        4;
+        select i32(base == 8, 3, 4);
     });
     mask = base - 1;
     digit_count = "core:prelude/primitive.wado/count_digits_u64_base"(self, bits_per_digit);
@@ -430,69 +428,69 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 }
 
 fn "core:simd/u8x16::extract_lane"(self, lane) {
-    return b29: block -> i32 {
-        b30: block {
-            b31: block {
-                b32: block {
-                    b33: block {
-                        b34: block {
-                            b35: block {
-                                b36: block {
-                                    b37: block {
-                                        b38: block {
-                                            b39: block {
-                                                b40: block {
-                                                    b41: block {
-                                                        b42: block {
-                                                            b43: block {
-                                                                b44: block {
-                                                                    b45: block {
+    return b28: block -> i32 {
+        b29: block {
+            b30: block {
+                b31: block {
+                    b32: block {
+                        b33: block {
+                            b34: block {
+                                b35: block {
+                                    b36: block {
+                                        b37: block {
+                                            b38: block {
+                                                b39: block {
+                                                    b40: block {
+                                                        b41: block {
+                                                            b42: block {
+                                                                b43: block {
+                                                                    b44: block {
                                                                         br_table lane [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] default=0;
                                                                     };
                                                                     i8x16.extract_lane_u(15, self);
-                                                                    break b29;
+                                                                    break b28;
                                                                 };
                                                                 i8x16.extract_lane_u(0, self);
-                                                                break b29;
+                                                                break b28;
                                                             };
                                                             i8x16.extract_lane_u(1, self);
-                                                            break b29;
+                                                            break b28;
                                                         };
                                                         i8x16.extract_lane_u(2, self);
-                                                        break b29;
+                                                        break b28;
                                                     };
                                                     i8x16.extract_lane_u(3, self);
-                                                    break b29;
+                                                    break b28;
                                                 };
                                                 i8x16.extract_lane_u(4, self);
-                                                break b29;
+                                                break b28;
                                             };
                                             i8x16.extract_lane_u(5, self);
-                                            break b29;
+                                            break b28;
                                         };
                                         i8x16.extract_lane_u(6, self);
-                                        break b29;
+                                        break b28;
                                     };
                                     i8x16.extract_lane_u(7, self);
-                                    break b29;
+                                    break b28;
                                 };
                                 i8x16.extract_lane_u(8, self);
-                                break b29;
+                                break b28;
                             };
                             i8x16.extract_lane_u(9, self);
-                            break b29;
+                            break b28;
                         };
                         i8x16.extract_lane_u(10, self);
-                        break b29;
+                        break b28;
                     };
                     i8x16.extract_lane_u(11, self);
-                    break b29;
+                    break b28;
                 };
                 i8x16.extract_lane_u(12, self);
-                break b29;
+                break b28;
             };
             i8x16.extract_lane_u(13, self);
-            break b29;
+            break b28;
         };
         i8x16.extract_lane_u(14, self);
     };
@@ -501,69 +499,69 @@ fn "core:simd/u8x16::extract_lane"(self, lane) {
 fn "core:simd/U8x16Builder^SequenceLiteralBuilder::push_literal"(self, value) {
     let i: i32;
     i = self.index;
-    self.vec = b46: block -> v128 {
-        b47: block {
-            b48: block {
-                b49: block {
-                    b50: block {
-                        b51: block {
-                            b52: block {
-                                b53: block {
-                                    b54: block {
-                                        b55: block {
-                                            b56: block {
-                                                b57: block {
-                                                    b58: block {
-                                                        b59: block {
-                                                            b60: block {
-                                                                b61: block {
-                                                                    b62: block {
+    self.vec = b45: block -> v128 {
+        b46: block {
+            b47: block {
+                b48: block {
+                    b49: block {
+                        b50: block {
+                            b51: block {
+                                b52: block {
+                                    b53: block {
+                                        b54: block {
+                                            b55: block {
+                                                b56: block {
+                                                    b57: block {
+                                                        b58: block {
+                                                            b59: block {
+                                                                b60: block {
+                                                                    b61: block {
                                                                         br_table i [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] default=0;
                                                                     };
                                                                     i8x16.replace_lane(15, self.vec, value);
-                                                                    break b46;
+                                                                    break b45;
                                                                 };
                                                                 i8x16.replace_lane(0, self.vec, value);
-                                                                break b46;
+                                                                break b45;
                                                             };
                                                             i8x16.replace_lane(1, self.vec, value);
-                                                            break b46;
+                                                            break b45;
                                                         };
                                                         i8x16.replace_lane(2, self.vec, value);
-                                                        break b46;
+                                                        break b45;
                                                     };
                                                     i8x16.replace_lane(3, self.vec, value);
-                                                    break b46;
+                                                    break b45;
                                                 };
                                                 i8x16.replace_lane(4, self.vec, value);
-                                                break b46;
+                                                break b45;
                                             };
                                             i8x16.replace_lane(5, self.vec, value);
-                                            break b46;
+                                            break b45;
                                         };
                                         i8x16.replace_lane(6, self.vec, value);
-                                        break b46;
+                                        break b45;
                                     };
                                     i8x16.replace_lane(7, self.vec, value);
-                                    break b46;
+                                    break b45;
                                 };
                                 i8x16.replace_lane(8, self.vec, value);
-                                break b46;
+                                break b45;
                             };
                             i8x16.replace_lane(9, self.vec, value);
-                            break b46;
+                            break b45;
                         };
                         i8x16.replace_lane(10, self.vec, value);
-                        break b46;
+                        break b45;
                     };
                     i8x16.replace_lane(11, self.vec, value);
-                    break b46;
+                    break b45;
                 };
                 i8x16.replace_lane(12, self.vec, value);
-                break b46;
+                break b45;
             };
             i8x16.replace_lane(13, self.vec, value);
-            break b46;
+            break b45;
         };
         i8x16.replace_lane(14, self.vec, value);
     };
@@ -581,16 +579,16 @@ fn "core:simd/v128^Inspect::inspect"(self, f) {
     s_8 = global:core:simd::__const_obj_0;
     "core:prelude/string.wado/String::push_str"(f.buf, s_8);
     i = 0;
-    b63: block {
-        l64: loop {
-            break_if b63 i >= 16;
+    b62: block {
+        l63: loop {
+            break_if b62 i >= 16;
             byte = "core:simd/u8x16::extract_lane"(bytes, i);
             __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
             __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 48, align: 2, sign_plus: 0, zero_pad: 1, width: 2, precision: -2, indent: 0, buf: __local_5 };
             "core:prelude/primitive.wado/u64::fmt_base"(builtin::i64_extend_i32_u(byte), __local_6, 16, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 });
             "core:prelude/string.wado/String::push_str"(f.buf, __local_5);
             i = i + 1;
-            continue l64;
+            continue l63;
         };
     };
     "core:prelude/string.wado/String::push"(f.buf, 41);
@@ -617,12 +615,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b65: block {
-        l66: loop {
-            break_if b65 i >= n;
+    b64: block {
+        l65: loop {
+            break_if b64 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l66;
+            continue l65;
         };
     };
 }

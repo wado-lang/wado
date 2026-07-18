@@ -1,0 +1,32 @@
+// A field store followed by a `&mut` escape into a callee that writes through
+// the reference. Store-to-load forwarding must not forward the stored constant
+// into the `&mut` referent place (`mutate(&mut o.inner)` must not become
+// `mutate(&mut 5)`) nor across the escaping write-back, or the later read keeps
+// the pre-call value and the assert fails. `#[inline(never)]` keeps the `&mut`
+// call from being inlined away, so a real place-position escape survives to the
+// post-scalarize forwarding pass.
+
+struct Inner {
+    v: i32,
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+#[inline(never)]
+fn mutate(r: &mut Inner) {
+    r.v = r.v + 100;
+}
+
+export fn run() {
+    let mut o = Outer { inner: Inner { v: 0 } };
+    o.inner.v = 5;
+    mutate(&mut o.inner);
+    assert o.inner.v == 105;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

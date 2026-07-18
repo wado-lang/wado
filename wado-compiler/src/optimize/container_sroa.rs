@@ -87,6 +87,7 @@ use crate::token::Span;
 
 use cranelift_entity::EntityRef;
 
+use super::arena_query::reachable_blocks;
 use super::gate::{FunctionGate, GatedPass};
 
 /// Signature key for a monomorphized `List<T>` method: (`trait_name`, `method_name`).
@@ -219,12 +220,15 @@ type IdKindIndex = IndexMap<crate::nir::FuncId, ListMethodKind>;
 
 /// The method-signature classification, bundled so it threads as one borrow.
 struct MethodSig {
-    sig_kinds: SigKindIndex,
     id_kinds: IdKindIndex,
     /// A `List` method's [`FuncId`](crate::nir::FuncId) → its `SigKey`, so the
     /// rewriter recovers the callee's `(trait, method)` by id (for catalog
     /// retargeting) instead of reading the call node's `FunctionRef`.
     id_sigkeys: IndexMap<crate::nir::FuncId, SigKey>,
+    /// Element type `T` and [`ListMethodKind`] → the [`SigKey`] of a
+    /// monomorphized `List<T>` method of that kind. Direct index so
+    /// [`find_sig_key_for_kind`] is a single lookup, not a per-call catalog scan.
+    kind_index: IndexMap<(TypeId, ListMethodKind), SigKey>,
 }
 
 /// Lookup table: (element type `T_k`, (trait, method)) → `FunctionRef` for
@@ -237,8 +241,6 @@ struct Candidate {
     local_index: u32,
     /// Original local name (for generating new local names)
     local_name: String,
-    /// Whether the original let was `mut`
-    is_mut: bool,
     /// Element types of the container (for tuples: the tuple element types;
     /// for structs: the struct field types in declaration order).
     element_types: Vec<TypeId>,
@@ -393,6 +395,7 @@ fn build_method_catalog(
     let mut sig_kinds = SigKindIndex::default();
     let mut id_kinds = IdKindIndex::default();
     let mut id_sigkeys: IndexMap<crate::nir::FuncId, SigKey> = IndexMap::default();
+    let mut kind_index: IndexMap<(TypeId, ListMethodKind), SigKey> = IndexMap::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         // Skip dead/extern declarations: a bodyless function's signature types
@@ -441,6 +444,9 @@ fn build_method_catalog(
             .copied()
             .or_else(|| classify_array_method_sig(&func, type_table));
         if let Some(kind) = kind {
+            kind_index
+                .entry((element_ty, kind))
+                .or_insert_with(|| sig_key.clone());
             sig_kinds.entry(sig_key).or_insert(kind);
             id_kinds.insert(func_id, kind);
         }
@@ -448,9 +454,9 @@ fn build_method_catalog(
     (
         catalog,
         MethodSig {
-            sig_kinds,
             id_kinds,
             id_sigkeys,
+            kind_index,
         },
     )
 }
@@ -491,7 +497,7 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
         .filter(|c| safe_indices.contains(&c.local_index))
         .filter(|c| {
             let used = used_kinds_map.get(&c.local_index).unwrap_or(&empty_used);
-            required_methods_available(c, used, rule.catalog, rule.sig)
+            required_methods_available(c, used, rule.sig)
         })
         .collect();
     if safe_candidates.is_empty() {
@@ -525,7 +531,6 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
                     element_types: c.element_types.clone(),
                     all_scalar: c.all_scalar,
                     layout: c.layout.clone(),
-                    is_mut: c.is_mut,
                     span: c.span,
                     init: CandidateInit {
                         capacity: c.init.capacity,
@@ -556,7 +561,6 @@ struct CandidateRewriteInfo {
     element_types: Vec<TypeId>,
     all_scalar: bool,
     layout: ElementLayout,
-    is_mut: bool,
     span: Span,
     init: CandidateInit,
 }
@@ -597,17 +601,21 @@ struct RewriteCtx<'a> {
 fn required_methods_available(
     c: &Candidate,
     used_kinds: &IndexSet<ListMethodKind>,
-    catalog: &MethodCatalog,
     sig: &MethodSig,
 ) -> bool {
-    let mut required: IndexSet<ListMethodKind> = IndexSet::default();
-    required.insert(ListMethodKind::Constructor);
-    for &k in used_kinds {
-        required.insert(k);
-    }
-    for &t in &c.element_types {
-        for &kind in &required {
-            if find_sig_key_for_kind(catalog, sig, t, kind).is_none() {
+    for (fi, &t) in c.element_types.iter().enumerate() {
+        // Constructor is always needed for every field's initializer.
+        if find_sig_key_for_kind(sig, t, ListMethodKind::Constructor).is_none() {
+            return false;
+        }
+        for &kind in used_kinds {
+            // `Query` (len / is_empty / capacity) dispatches to field 0 only, so
+            // only field 0 needs its monomorphization. Element writers/readers
+            // operate per field and are required for every field.
+            if kind == ListMethodKind::Query && fi != 0 {
+                continue;
+            }
+            if find_sig_key_for_kind(sig, t, kind).is_none() {
                 return false;
             }
         }
@@ -615,26 +623,17 @@ fn required_methods_available(
     true
 }
 
-/// Locate the `SigKey` of a monomorphized `List<elem_ty>` method whose signature
-/// classifies as `kind`. Returns the first match, or `None` if no such method is
-/// monomorphized in this project.
-fn find_sig_key_for_kind(
-    catalog: &MethodCatalog,
-    sig: &MethodSig,
-    elem_ty: TypeId,
-    kind: ListMethodKind,
-) -> Option<SigKey> {
-    for ((t, sig_key), _) in catalog {
-        if *t == elem_ty && sig.sig_kinds.get(sig_key).copied() == Some(kind) {
-            return Some(sig_key.clone());
-        }
-    }
-    None
+/// The `SigKey` of a monomorphized `List<elem_ty>` method classified as `kind`,
+/// or `None` if no such method is monomorphized in this project. O(1) via the
+/// pre-built `(TypeId, ListMethodKind)` index.
+fn find_sig_key_for_kind(sig: &MethodSig, elem_ty: TypeId, kind: ListMethodKind) -> Option<SigKey> {
+    sig.kind_index.get(&(elem_ty, kind)).cloned()
 }
 
-/// Collect candidate `let` bindings in the function body. Only looks at top-level
-/// statements (not nested blocks/loops) because P0a restricts scope to simple
-/// function-body locals — enough for the zlib insertion-sort pattern.
+/// Collect candidate `let` bindings across the whole function body. The escape
+/// analysis and rewriter both walk every reachable block, so a `List<Tuple>` /
+/// `List<Struct>` local bound inside a nested block (an `if` arm, loop body, or
+/// labeled block) is a valid candidate too — locals are function-scoped.
 fn collect_candidates(
     body: &Body,
     type_table: &TypeTable,
@@ -643,46 +642,47 @@ fn collect_candidates(
     value_copy_ids: &IndexSet<crate::nir::FuncId>,
 ) -> Vec<Candidate> {
     let mut out = Vec::new();
-    for s in &body.blocks[body.root].stmts {
-        let StmtKind::Let {
-            name,
-            local_index,
-            is_mut,
-            type_id,
-            value,
-            ..
-        } = &body.stmts[*s].kind
-        else {
-            continue;
-        };
-        // Type must be List<Tuple<...>> or List<UserStruct>.
-        let Some(elem_ty) = type_table.as_list(*type_id) else {
-            continue;
-        };
-        let Some((layout, element_types)) = element_layout_of(elem_ty, type_table, struct_index)
-        else {
-            continue;
-        };
-        if element_types.is_empty() {
-            continue;
+    for block in reachable_blocks(body) {
+        for s in &body.blocks[block].stmts {
+            let StmtKind::Let {
+                name,
+                local_index,
+                type_id,
+                value,
+                ..
+            } = &body.stmts[*s].kind
+            else {
+                continue;
+            };
+            // Type must be List<Tuple<...>> or List<UserStruct>.
+            let Some(elem_ty) = type_table.as_list(*type_id) else {
+                continue;
+            };
+            let Some((layout, element_types)) =
+                element_layout_of(elem_ty, type_table, struct_index)
+            else {
+                continue;
+            };
+            if element_types.is_empty() {
+                continue;
+            }
+            // Initializer must be one of the recognized forms.
+            let Some(init) = recognize_init_operand(body, *value, sig, value_copy_ids) else {
+                continue;
+            };
+            let all_scalar = element_types
+                .iter()
+                .all(|t| !crate::lower::plan::value_copy::needs_value_copy(*t, type_table));
+            out.push(Candidate {
+                local_index: *local_index,
+                local_name: name.clone(),
+                element_types,
+                all_scalar,
+                layout,
+                span: body.stmts[*s].span,
+                init,
+            });
         }
-        // Initializer must be one of the recognized forms.
-        let Some(init) = recognize_init_operand(body, *value, sig, value_copy_ids) else {
-            continue;
-        };
-        let all_scalar = element_types
-            .iter()
-            .all(|t| !crate::lower::plan::value_copy::needs_value_copy(*t, type_table));
-        out.push(Candidate {
-            local_index: *local_index,
-            local_name: name.clone(),
-            is_mut: *is_mut,
-            element_types,
-            all_scalar,
-            layout,
-            span: body.stmts[*s].span,
-            init,
-        });
     }
     out
 }
@@ -737,8 +737,9 @@ fn recognize_init_operand(
 
 /// Strip a single `$value_copy$T(inner)` wrapper, returning its inner
 /// expression, or `None` when `e` is not a one-argument value-copy call. Shared
-/// by every SROA site that sees through a value copy.
-fn strip_one_value_copy(
+/// by every SROA site that sees through a value copy (including `sroa`'s
+/// soft-escape walk).
+pub(super) fn strip_one_value_copy(
     body: &Body,
     e: ExprId,
     value_copy_ids: &IndexSet<crate::nir::FuncId>,
@@ -1344,11 +1345,17 @@ impl Rewriter<'_, '_> {
             return;
         }
 
-        // Candidate push/index_assign as an ExprStmt at the statement level.
+        // Candidate push/index_assign as an ExprStmt at the statement level:
+        // expand flat (no wrapping block). A whitelisted writer that fails to
+        // expand is analysis/rewrite drift — panic rather than leave the removed
+        // candidate binding dangling.
         if let StmtKind::Expr(Operand::Expr(expr)) = &engine.body.stmts[s].kind {
             let expr = *expr;
-            let span = engine.body.stmts[s].span;
-            if let Some(expanded) = self.try_expand_call_stmt(engine, expr, span) {
+            if self.is_decomposed_writer_call(engine, expr) {
+                let span = engine.body.stmts[s].span;
+                let expanded = self
+                    .try_expand_call_stmt(engine, expr, span)
+                    .expect("decomposed-candidate writer call must expand");
                 out.extend(expanded);
                 return;
             }
@@ -1368,7 +1375,6 @@ impl Rewriter<'_, '_> {
             .get(&local_index)
             .expect("candidate data must exist for decomposed local");
         let element_types = info.element_types.clone();
-        let is_mut = info.is_mut;
         let span = info.span;
         let capacity = info.init.capacity;
         for (k, elem_ty) in element_types.into_iter().enumerate() {
@@ -1385,7 +1391,11 @@ impl Rewriter<'_, '_> {
                 StmtKind::Let {
                     name: new_name,
                     local_index: new_local_index,
-                    is_mut,
+                    // The per-field list local is allocated `is_mut: false` — the
+                    // slots are single-assignment (reassignment goes through
+                    // `push` / `index_assign` on the same binding), so the `Let`
+                    // must agree.
+                    is_mut: false,
                     is_reactive: false,
                     type_id: arr_ty,
                     value: init.into(),
@@ -1395,6 +1405,26 @@ impl Rewriter<'_, '_> {
             );
             out.push(let_stmt);
         }
+    }
+
+    /// True when `e` is a `MethodCall` on a decomposed candidate classified as a
+    /// writer (`ElementWriter` / `IndexWriter`) — a call the rewrite must expand
+    /// (flat at statement level, or into a `Block` at an expression position).
+    fn is_decomposed_writer_call(&self, engine: &Engine, e: ExprId) -> bool {
+        let ExprKind::MethodCall {
+            receiver, func_id, ..
+        } = &engine.body.exprs[e].kind
+        else {
+            return false;
+        };
+        let Some(rec_local) = receiver_local(engine.body, *receiver) else {
+            return false;
+        };
+        self.ctx.decomposed.contains(&rec_local)
+            && matches!(
+                list_method_kind(*func_id, self.ctx.sig),
+                Some(ListMethodKind::ElementWriter | ListMethodKind::IndexWriter)
+            )
     }
 
     /// Try to expand an expression-statement into multiple per-field statements.
@@ -1682,9 +1712,28 @@ impl Rewriter<'_, '_> {
     }
 
     /// Rewrite an expression in place: `v.len()`/`v.is_empty()` → field-0 call;
-    /// `v.index_value(i).K` → `v_K.index_value(i)`. All other expressions recurse.
+    /// `v.index_value(i).K` → `v_K.index_value(i)`; a writer call (`push` /
+    /// `index_assign`) at an expression position → a unit-valued `Block` of the
+    /// per-field statements. All other expressions recurse.
     fn rewrite_expr(&self, engine: &mut Engine, e: ExprId) {
         let ctx = self.ctx;
+
+        // Writer call (`push` / `index_assign`) reaching an expression position —
+        // e.g. a bare `v.push(x)` match-arm / if-branch body (`Operand::Expr`).
+        // The whitelist accepts writers at any position; statement-level writers
+        // are expanded flat by `process_stmt`, but a nested one must expand here
+        // into a unit-valued `Block` of the per-field statements, or the removed
+        // candidate binding is left dangling. A whitelisted writer that fails to
+        // expand is analysis/rewrite drift — panic rather than miscompile.
+        if self.is_decomposed_writer_call(engine, e) {
+            let span = engine.body.exprs[e].span;
+            let stmts = self
+                .try_expand_call_stmt(engine, e, span)
+                .expect("decomposed-candidate writer call must expand");
+            let block = engine.alloc_block(stmts, span);
+            engine.replace_expr_kind(e, ExprKind::Block(block));
+            return;
+        }
 
         // Handle FieldAccess on IndexValue first (read pattern).
         let field_read = if let ExprKind::FieldAccess {
@@ -1860,7 +1909,7 @@ fn build_with_capacity_call(
     span: Span,
     ctx: &RewriteCtx,
 ) -> ExprId {
-    let sig = find_sig_key_for_kind(ctx.catalog, ctx.sig, elem_ty, ListMethodKind::Constructor)
+    let sig = find_sig_key_for_kind(ctx.sig, elem_ty, ListMethodKind::Constructor)
         .expect("Constructor checked by required_methods_available");
     let (_, func_id) = ctx
         .catalog

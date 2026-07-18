@@ -25,9 +25,9 @@ use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
-use super::arena_query::{place_root_local, storage_root};
+use super::arena_query::{MutRefAliases, RootMutation, for_each_mutated_root};
 use super::gate::{FunctionGate, GatedPass};
-use super::value_copy::mutation::{MutationOracle, Witness, expr_witnesses};
+use super::value_copy::mutation::MutationOracle;
 
 #[derive(Debug, Clone)]
 struct CopyBinding {
@@ -35,12 +35,15 @@ struct CopyBinding {
     source: CopySource,
     type_id: TypeId,
     /// Whether the source value is stable across the target's scope: the source
-    /// local is never *mutated* (re-assigned, field-mutated, `&mut`-borrowed, or
-    /// passed as a mutable argument) anywhere in the binding block's statements
-    /// after the binding. The target's uses are confined to that scope, so a
-    /// stable source can be propagated even when the source is reassigned
-    /// elsewhere in the function (e.g. a loop counter copied inside the loop
-    /// body). Always `true` for a promoted-value source.
+    /// local is never *mutated* (re-assigned, field-mutated, `&mut`-borrowed,
+    /// passed as a mutable argument, or written through a `&mut` alias — see
+    /// [`MutRefAliases`]) anywhere in the binding block's statements after the
+    /// binding, and every read of the target sits after the binding (a
+    /// backward read would cross a loop iteration the interval cannot reason
+    /// about). The target's uses are confined to that scope, so a stable
+    /// source can be propagated even when the source is reassigned elsewhere
+    /// in the function (e.g. a loop counter copied inside the loop body).
+    /// Always `true` for a promoted-value source.
     source_scope_stable: bool,
 }
 
@@ -211,24 +214,133 @@ struct AnalysisResult {
     usage: IndexMap<u32, LocalUsage>,
 }
 
-fn analyze_function_body(
+/// Per-round analysis inputs: the callee oracle, the function-wide
+/// `&mut`-alias map, and the per-block mutation/read index scans, all built
+/// once per fixpoint round and shared across every nesting level.
+struct AnalysisCtx<'a> {
+    type_table: &'a TypeTable,
+    oracle: &'a MutationOracle<'a>,
+    copy_value_id: Option<FuncId>,
+    aliases: MutRefAliases,
+    scans: IndexMap<BlockId, BlockScan>,
+}
+
+/// Per-block mutation / read positions, keyed by the block's own statement
+/// indices.
+///
+/// `mut_indices`: per-local sorted statement indices whose subtree mutates it.
+/// `.last()` is the last mutation — a binding at `k` is source-scope-stable
+/// iff its source has none after `k`. The full list additionally lets the
+/// projection-source check ask whether any mutation falls in the open
+/// interval `(binding, use]`.
+///
+/// `first_read`: per-local earliest statement index whose subtree reads it.
+/// For a single-use projection temp this is its unique use, bounding the
+/// interval the projection stability check scans for root mutations; for
+/// every source kind it guards against backward (cross-iteration) reads.
+#[derive(Default)]
+struct BlockScan {
+    mut_indices: IndexMap<u32, Vec<usize>>,
+    first_read: IndexMap<u32, usize>,
+}
+
+/// Build every block's [`BlockScan`] in ONE top-down walk: each read /
+/// mutation event is recorded into all enclosing blocks at their current
+/// statement index, instead of re-walking full subtrees at every nesting
+/// level (O(N²) on deep bodies — #1472 follow-up).
+///
+/// A method receiver is a mutation only when the callee actually writes
+/// through it, and a write through a `&mut` alias is attributed to the
+/// aliased root too — both via [`for_each_mutated_root`], the same dispatch
+/// `analyze_expr`'s usage marking uses — so a read-only receiver (`x.len()`)
+/// does not end the scope-stability interval of `x`-sourced bindings, while
+/// `let r = &mut y; …; r.f = v` does.
+fn scan_blocks(
     body: &Body,
     type_table: &TypeTable,
     oracle: &MutationOracle<'_>,
-    copy_value_id: Option<FuncId>,
-) -> AnalysisResult {
+    aliases: &MutRefAliases,
+) -> IndexMap<BlockId, BlockScan> {
+    let mut scans = IndexMap::default();
+    let mut frames: Vec<(BlockId, usize)> = Vec::new();
+    scan_node(
+        body,
+        NodeRef::Block(body.root),
+        type_table,
+        oracle,
+        aliases,
+        &mut frames,
+        &mut scans,
+    );
+    scans
+}
+
+fn scan_node(
+    body: &Body,
+    node: NodeRef,
+    type_table: &TypeTable,
+    oracle: &MutationOracle<'_>,
+    aliases: &MutRefAliases,
+    frames: &mut Vec<(BlockId, usize)>,
+    scans: &mut IndexMap<BlockId, BlockScan>,
+) {
+    if let NodeRef::Block(b) = node {
+        scans.entry(b).or_default();
+        let stmts = body.blocks[b].stmts.clone();
+        for (i, &s) in stmts.iter().enumerate() {
+            frames.push((b, i));
+            scan_node(
+                body,
+                NodeRef::Stmt(s),
+                type_table,
+                oracle,
+                aliases,
+                frames,
+                scans,
+            );
+            frames.pop();
+        }
+        return;
+    }
+    if let NodeRef::Expr(id) = node {
+        if let ExprKind::Local { index, .. } = &body.exprs[id].kind {
+            for &(b, i) in frames.iter() {
+                scans
+                    .get_mut(&b)
+                    .expect("enclosing block was scanned")
+                    .first_read
+                    .entry(*index)
+                    .or_insert(i);
+            }
+        }
+        for_each_mutated_root(body, id, type_table, oracle, aliases, &mut |rm| {
+            let l = rm.local();
+            for &(b, i) in frames.iter() {
+                let v = scans
+                    .get_mut(&b)
+                    .expect("enclosing block was scanned")
+                    .mut_indices
+                    .entry(l)
+                    .or_default();
+                if v.last() != Some(&i) {
+                    v.push(i);
+                }
+            }
+        });
+    }
+    let mut kids = Vec::new();
+    body.for_each_child(node, |c| kids.push(c));
+    for c in kids {
+        scan_node(body, c, type_table, oracle, aliases, frames, scans);
+    }
+}
+
+fn analyze_function_body(body: &Body, ctx: &AnalysisCtx<'_>) -> AnalysisResult {
     let mut result = AnalysisResult {
         bindings: Vec::new(),
         usage: IndexMap::default(),
     };
-    analyze_block(
-        body,
-        body.root,
-        &mut result,
-        type_table,
-        oracle,
-        copy_value_id,
-    );
+    analyze_block(body, body.root, &mut result, ctx);
     // A local read only through a promoted `Operand::Value` (`Opaque(Local)`) is
     // invisible to the skeleton walk above; count it so copy-prop does not treat
     // the local as dead / single-use and eliminate it out from under the promoted
@@ -245,41 +357,8 @@ fn promoted_reads_set(body: &crate::nir_arena::Body) -> crate::hashmap::IndexSet
     body.values.opaque_local_sources().collect()
 }
 
-fn analyze_block(
-    body: &Body,
-    block: BlockId,
-    result: &mut AnalysisResult,
-    type_table: &TypeTable,
-    oracle: &MutationOracle<'_>,
-    copy_value_id: Option<FuncId>,
-) {
+fn analyze_block(body: &Body, block: BlockId, result: &mut AnalysisResult, ctx: &AnalysisCtx<'_>) {
     let stmts = body.blocks[block].stmts.clone();
-    // Per-local sorted statement indices whose subtree mutates it (one pass over
-    // the block; ascending, since we scan in order). `.last()` is the last
-    // mutation — a binding at `k` is source-scope-stable iff its source has none
-    // after `k`. The full list additionally lets the projection-source check ask
-    // whether any mutation falls in the open interval `(binding, use]`.
-    // Precomputing this avoids the per-binding `stmts[k+1..]` rescan, which is
-    // O(N²) when a block holds many copy bindings (e.g. a large sequence-literal
-    // builder chain — #1472 follow-up).
-    let mut mut_indices: IndexMap<u32, Vec<usize>> = IndexMap::default();
-    for (i, &stmt) in stmts.iter().enumerate() {
-        collect_mutated_locals(
-            body,
-            NodeRef::Stmt(stmt),
-            &mut mut_indices,
-            i,
-            type_table,
-            oracle,
-        );
-    }
-    // Per-local earliest statement index whose subtree reads it. For a
-    // single-use projection temp this is its unique use, bounding the interval
-    // the projection stability check scans for root mutations.
-    let mut first_read: IndexMap<u32, usize> = IndexMap::default();
-    for (i, &stmt) in stmts.iter().enumerate() {
-        collect_first_reads(body, NodeRef::Stmt(stmt), &mut first_read, i);
-    }
     for (k, &stmt) in stmts.iter().enumerate() {
         match &body.stmts[stmt].kind {
             StmtKind::Let { local_index, .. } => {
@@ -290,115 +369,43 @@ fn analyze_block(
             }
             _ => {}
         }
-        if let Some(mut binding) = analyze_copy_binding(body, stmt, copy_value_id) {
+        if let Some(mut binding) = analyze_copy_binding(body, stmt, ctx.copy_value_id) {
             // The target's uses are confined to this block from `k` onward, so
-            // the source is stable iff it is not mutated in those statements (a
+            // the source is stable iff every read of the target sits after the
+            // binding AND the source is not mutated in those statements (a
             // promoted value is unconditionally stable). A `RefProjection` needs
             // the precise capture-at-binding condition — see `refproj_scope_stable`.
+            let scan = ctx.scans.get(&block).expect("block was scanned");
             binding.source_scope_stable = match &binding.source {
                 CopySource::RefProjection { root_local, .. } => refproj_scope_stable(
                     *root_local,
                     binding.target_local,
                     k,
-                    &mut_indices,
-                    &first_read,
+                    &scan.mut_indices,
+                    &scan.first_read,
                 ),
                 _ => match binding.source.local_index() {
-                    Some(src) => mut_indices
-                        .get(&src)
-                        .and_then(|v| v.last())
-                        .is_none_or(|&i| i <= k),
+                    Some(src) => {
+                        // A target read at or before the binding is a
+                        // backward / cross-iteration read the "mutations
+                        // after `k`" interval cannot reason about — the same
+                        // guard the `RefProjection` path applies.
+                        scan.first_read
+                            .get(&binding.target_local)
+                            .is_none_or(|&u| u > k)
+                            && scan
+                                .mut_indices
+                                .get(&src)
+                                .and_then(|v| v.last())
+                                .is_none_or(|&i| i <= k)
+                    }
                     None => true,
                 },
             };
             result.bindings.push(binding);
         }
-        analyze_stmt(body, stmt, result, type_table, oracle, copy_value_id);
+        analyze_stmt(body, stmt, result, ctx);
     }
-}
-
-/// Record, into `mut_indices`, statement index `idx` for every local whose
-/// subtree `node` mutates. Called with ascending `idx`, so each local's list
-/// stays sorted; `.last()` is its final mutation and the list supports interval
-/// queries, collecting all roots in one walk instead of testing a single local.
-///
-/// A method receiver is a mutation only when the callee actually writes
-/// through it (`method_mutates_receiver`, the same oracle `analyze_expr`'s
-/// `has_field_mutation` marking uses) — a read-only receiver (`x.len()`)
-/// must not end the scope-stability interval of `x`-sourced bindings.
-fn collect_mutated_locals(
-    body: &Body,
-    node: NodeRef,
-    mut_indices: &mut IndexMap<u32, Vec<usize>>,
-    idx: usize,
-    type_table: &TypeTable,
-    oracle: &MutationOracle<'_>,
-) {
-    let mut note = |l: u32| {
-        let v = mut_indices.entry(l).or_default();
-        if v.last() != Some(&idx) {
-            v.push(idx);
-        }
-    };
-    if let NodeRef::Expr(id) = node {
-        expr_witnesses(body, id, oracle, &mut |w| match w {
-            Witness::Rebind(l) => note(l),
-            Witness::Write(inner) => {
-                if let Some(l) = inner.as_expr().and_then(|ie| place_root_local(body, ie)) {
-                    note(l);
-                }
-            }
-            Witness::MutBorrow(e) => {
-                if let Some(l) = place_root_local(body, e) {
-                    note(l);
-                }
-            }
-            Witness::CalleeArg {
-                expr,
-                verdict,
-                is_mut,
-            } => {
-                if verdict.unwrap_or(is_mut)
-                    && let Some(l) = place_root_local(body, expr)
-                {
-                    note(l);
-                }
-            }
-            Witness::Receiver { expr, verdict } => {
-                if verdict.unwrap_or_else(|| may_mutate_through_arg(body, expr, type_table))
-                    && let Some(l) = place_root_local(body, expr)
-                {
-                    note(l);
-                }
-            }
-            Witness::IndirectArg(e) => {
-                if may_mutate_through_arg(body, e, type_table)
-                    && let Some(l) = place_root_local(body, e)
-                {
-                    note(l);
-                }
-            }
-        });
-    }
-    body.for_each_child(node, |c| {
-        collect_mutated_locals(body, c, mut_indices, idx, type_table, oracle);
-    });
-}
-
-/// Record, into `first_read`, the earliest statement index `idx` whose subtree
-/// reads each local. `or_insert` keeps the first (smallest) index seen.
-fn collect_first_reads(
-    body: &Body,
-    node: NodeRef,
-    first_read: &mut IndexMap<u32, usize>,
-    idx: usize,
-) {
-    if let NodeRef::Expr(id) = node
-        && let ExprKind::Local { index, .. } = &body.exprs[id].kind
-    {
-        first_read.entry(*index).or_insert(idx);
-    }
-    body.for_each_child(node, |c| collect_first_reads(body, c, first_read, idx));
 }
 
 /// Stability for a `RefProjection` source rooted at `root`, bound at statement
@@ -455,87 +462,46 @@ fn count_pattern_defs(body: &Body, pat: PatId, result: &mut AnalysisResult) {
     }
 }
 
-fn analyze_stmt(
-    body: &Body,
-    stmt: StmtId,
-    result: &mut AnalysisResult,
-    type_table: &TypeTable,
-    oracle: &MutationOracle<'_>,
-    copy_value_id: Option<FuncId>,
-) {
+fn analyze_stmt(body: &Body, stmt: StmtId, result: &mut AnalysisResult, ctx: &AnalysisCtx<'_>) {
     let mut kids = Vec::new();
     body.for_each_child(NodeRef::Stmt(stmt), |c| kids.push(c));
     for c in kids {
         match c {
-            NodeRef::Expr(e) => analyze_expr(body, e, result, type_table, oracle, copy_value_id),
-            NodeRef::Block(b) => analyze_block(body, b, result, type_table, oracle, copy_value_id),
-            _ => {}
+            NodeRef::Expr(e) => analyze_expr(body, e, result, ctx),
+            NodeRef::Block(b) => analyze_block(body, b, result, ctx),
+            NodeRef::Stmt(_) | NodeRef::Pat(_) => {}
         }
     }
 }
 
-fn analyze_expr_operand(
-    body: &Body,
-    op: Operand,
-    result: &mut AnalysisResult,
-    type_table: &TypeTable,
-    oracle: &MutationOracle<'_>,
-    copy_value_id: Option<FuncId>,
-) {
-    if let Some(e) = op.as_expr() {
-        analyze_expr(body, e, result, type_table, oracle, copy_value_id);
-    }
-}
-
-fn analyze_expr(
-    body: &Body,
-    id: ExprId,
-    result: &mut AnalysisResult,
-    type_table: &TypeTable,
-    oracle: &MutationOracle<'_>,
-    copy_value_id: Option<FuncId>,
-) {
-    // Bodyless-callee fallbacks keep this pass's historical defaults: a `mut`
-    // argument or receiver counts only when its own type is `&mut`.
-    expr_witnesses(body, id, oracle, &mut |w| match w {
-        Witness::Rebind(index) => {
-            result.usage.entry(index).or_default().is_assigned = true;
-        }
-        Witness::Write(inner) => {
-            mark_potentially_mutated_local_operand(body, inner, result);
-        }
-        Witness::MutBorrow(e) => {
-            mark_potentially_mutated_local(body, e, result);
-        }
-        Witness::CalleeArg {
-            expr,
-            verdict,
-            is_mut,
-        } => {
-            if verdict.unwrap_or_else(|| is_mut && may_mutate_through_arg(body, expr, type_table)) {
-                mark_potentially_mutated_local(body, expr, result);
+fn analyze_expr(body: &Body, id: ExprId, result: &mut AnalysisResult, ctx: &AnalysisCtx<'_>) {
+    // The shared witness→root dispatch (`arena_query::for_each_mutated_root`)
+    // — one root resolution and one bodyless-callee fallback, shared with the
+    // scope-stability scan.
+    for_each_mutated_root(
+        body,
+        id,
+        ctx.type_table,
+        ctx.oracle,
+        &ctx.aliases,
+        &mut |rm| match rm {
+            RootMutation::Rebind(l) => {
+                result.usage.entry(l).or_default().is_assigned = true;
             }
-        }
-        Witness::Receiver { expr, verdict } => {
-            if verdict.unwrap_or_else(|| may_mutate_through_arg(body, expr, type_table)) {
-                mark_potentially_mutated_local(body, expr, result);
+            RootMutation::Through(l) => {
+                result.usage.entry(l).or_default().has_field_mutation = true;
             }
-        }
-        Witness::IndirectArg(e) => {
-            if may_mutate_through_arg(body, e, type_table) {
-                mark_potentially_mutated_local(body, e, result);
-            }
-        }
-    });
+        },
+    );
     match &body.exprs[id].kind {
         ExprKind::Local { index, .. } => {
             result.usage.entry(*index).or_default().read_count += 1;
         }
         ExprKind::Assign { target, value } => {
             let (target, value) = (*target, *value);
-            analyze_expr(body, target, result, type_table, oracle, copy_value_id);
+            analyze_expr(body, target, result, ctx);
             if let Some(ve) = value.as_expr() {
-                analyze_expr(body, ve, result, type_table, oracle, copy_value_id);
+                analyze_expr(body, ve, result, ctx);
             }
         }
         ExprKind::Unary { op, expr: inner } => {
@@ -546,43 +512,22 @@ fn analyze_expr(
             {
                 result.usage.entry(*index).or_default().address_taken = true;
             }
-            analyze_expr_operand(body, inner, result, type_table, oracle, copy_value_id);
+            if let Some(ie) = inner.as_expr() {
+                analyze_expr(body, ie, result, ctx);
+            }
         }
         _ => {
             let mut kids = Vec::new();
             body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
             for c in kids {
                 match c {
-                    NodeRef::Expr(e) => {
-                        analyze_expr(body, e, result, type_table, oracle, copy_value_id);
-                    }
-                    NodeRef::Block(b) => {
-                        analyze_block(body, b, result, type_table, oracle, copy_value_id);
-                    }
-                    _ => {}
+                    NodeRef::Expr(e) => analyze_expr(body, e, result, ctx),
+                    NodeRef::Block(b) => analyze_block(body, b, result, ctx),
+                    NodeRef::Stmt(_) | NodeRef::Pat(_) => {}
                 }
             }
         }
     }
-}
-
-fn mark_potentially_mutated_local_operand(body: &Body, op: Operand, result: &mut AnalysisResult) {
-    if let Some(e) = op.as_expr() {
-        mark_potentially_mutated_local(body, e, result);
-    }
-}
-
-fn mark_potentially_mutated_local(body: &Body, expr: ExprId, result: &mut AnalysisResult) {
-    if let Some(root) = storage_root(body, expr) {
-        result.usage.entry(root).or_default().has_field_mutation = true;
-    }
-}
-
-fn may_mutate_through_arg(body: &Body, expr: ExprId, type_table: &TypeTable) -> bool {
-    matches!(
-        type_table.get(body.exprs[expr].type_id),
-        ResolvedType::MutRef(_)
-    )
 }
 
 /// Over-approximation of `lower::plan::value_copy::needs_value_copy`;
@@ -814,10 +759,20 @@ fn propagate_at_root(
     type_table: &TypeTable,
     oracle: &MutationOracle<'_>,
     copy_value_id: Option<FuncId>,
+    param_count: usize,
 ) -> bool {
     let mut ever_changed = false;
     loop {
-        let analysis = analyze_function_body(engine.body, type_table, oracle, copy_value_id);
+        let aliases = MutRefAliases::of_body(engine.body, engine.locals(), param_count, type_table);
+        let scans = scan_blocks(engine.body, type_table, oracle, &aliases);
+        let ctx = AnalysisCtx {
+            type_table,
+            oracle,
+            copy_value_id,
+            aliases,
+            scans,
+        };
+        let analysis = analyze_function_body(engine.body, &ctx);
         if analysis.bindings.is_empty() {
             break;
         }
@@ -868,6 +823,9 @@ pub(super) struct CopyPropRule<'a> {
     type_table: &'a TypeTable,
     oracle: MutationOracle<'a>,
     copy_value_id: Option<FuncId>,
+    /// Locals `0..param_count` are the function's parameters (external
+    /// storage the `&mut`-alias map treats as rooting no function local).
+    param_count: usize,
     applied: Cell<bool>,
 }
 
@@ -879,7 +837,13 @@ impl Rule for CopyPropRule<'_> {
         if self.applied.replace(true) {
             return false;
         }
-        propagate_at_root(engine, self.type_table, &self.oracle, self.copy_value_id)
+        propagate_at_root(
+            engine,
+            self.type_table,
+            &self.oracle,
+            self.copy_value_id,
+            self.param_count,
+        )
     }
 }
 
@@ -898,6 +862,7 @@ pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bo
             type_table: &type_table,
             oracle: MutationOracle::new(&param_mut),
             copy_value_id,
+            param_count: func.params.len(),
             applied: Cell::new(false),
         };
         let NirFunction { body, locals, .. } = &mut *func;
@@ -905,4 +870,266 @@ pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bo
         let mut engine = Engine::new(body, &mut buffers, locals);
         engine.run(&[&rule])
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::module_source::ModuleSource;
+    use crate::nir::NirLocal;
+    use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
+    use crate::nir_value_graph::ValueKind;
+    use crate::token::Span;
+
+    struct Setup {
+        body: Body,
+        locals: Vec<NirLocal>,
+        type_table: TypeTable,
+        mut_ref_ty: TypeId,
+    }
+
+    impl Setup {
+        fn new(local_types: &[LocalKind]) -> Self {
+            let mut type_table = TypeTable::new();
+            let struct_ty = type_table.make_struct("P".to_string(), ModuleSource::prelude());
+            let mut_ref_ty = type_table.make_mut_ref(struct_ty);
+            let locals = local_types
+                .iter()
+                .enumerate()
+                .map(|(i, k)| NirLocal {
+                    name: format!("__l{i}"),
+                    type_id: match k {
+                        LocalKind::Struct => struct_ty,
+                        LocalKind::MutRef => mut_ref_ty,
+                    },
+                    is_mut: true,
+                })
+                .collect();
+            Self {
+                body: Body::empty(),
+                locals,
+                type_table,
+                mut_ref_ty,
+            }
+        }
+
+        fn local(&mut self, index: u32) -> ExprId {
+            let type_id = self.locals[index as usize].type_id;
+            self.expr(
+                ExprKind::Local {
+                    index,
+                    name: format!("__l{index}"),
+                },
+                type_id,
+            )
+        }
+
+        fn expr(&mut self, kind: ExprKind, type_id: TypeId) -> ExprId {
+            self.body.exprs.push(ExprNode {
+                kind,
+                type_id,
+                span: Span::default(),
+            })
+        }
+
+        fn let_stmt(&mut self, index: u32, value: impl Into<Operand>) -> StmtId {
+            let type_id = self.locals[index as usize].type_id;
+            self.body.stmts.push(StmtNode {
+                kind: StmtKind::Let {
+                    name: format!("__l{index}"),
+                    local_index: index,
+                    is_mut: true,
+                    is_reactive: false,
+                    type_id,
+                    value: value.into(),
+                    skip_value_copy: false,
+                },
+                span: Span::default(),
+            })
+        }
+
+        fn mut_borrow(&mut self, index: u32) -> ExprId {
+            let inner = self.local(index);
+            self.expr(
+                ExprKind::Unary {
+                    op: NirUnaryOp::MutRef,
+                    expr: inner.into(),
+                },
+                self.mut_ref_ty,
+            )
+        }
+
+        /// `<ref_local>.f = 0;` as an expression statement.
+        fn field_write_stmt(&mut self, ref_local: u32) -> StmtId {
+            let recv = self.local(ref_local);
+            let target = self.expr(
+                ExprKind::FieldAccess {
+                    expr: recv.into(),
+                    field_index: 0,
+                    field_name: "f".to_string(),
+                },
+                TypeTable::I32,
+            );
+            let zero = Operand::Value(
+                self.body
+                    .values
+                    .alloc_unshared(ValueKind::Int(0, TypeTable::I32), TypeTable::I32),
+            );
+            let assign = self.expr(
+                ExprKind::Assign {
+                    target,
+                    value: zero,
+                },
+                TypeTable::UNIT,
+            );
+            self.body.stmts.push(StmtNode {
+                kind: StmtKind::Expr(assign.into()),
+                span: Span::default(),
+            })
+        }
+
+        fn read_stmt(&mut self, index: u32) -> StmtId {
+            let l = self.local(index);
+            self.body.stmts.push(StmtNode {
+                kind: StmtKind::Expr(l.into()),
+                span: Span::default(),
+            })
+        }
+
+        fn finish(&mut self, stmts: Vec<StmtId>) {
+            let root = self.body.blocks.push(BlockNode {
+                stmts,
+                span: Span::default(),
+            });
+            self.body.root = root;
+        }
+
+        fn analyze(&self) -> AnalysisResult {
+            let param_mut = IndexMap::default();
+            let oracle = MutationOracle::new(&param_mut);
+            let aliases = MutRefAliases::of_body(&self.body, &self.locals, 0, &self.type_table);
+            let scans = scan_blocks(&self.body, &self.type_table, &oracle, &aliases);
+            let ctx = AnalysisCtx {
+                type_table: &self.type_table,
+                oracle: &oracle,
+                copy_value_id: None,
+                aliases,
+                scans,
+            };
+            analyze_function_body(&self.body, &ctx)
+        }
+    }
+
+    enum LocalKind {
+        Struct,
+        MutRef,
+    }
+    use LocalKind::{MutRef, Struct};
+
+    fn binding_for(analysis: &AnalysisResult, target: u32) -> &CopyBinding {
+        analysis
+            .bindings
+            .iter()
+            .find(|b| b.target_local == target)
+            .expect("copy binding for target")
+    }
+
+    fn propagates(setup: &Setup, analysis: &AnalysisResult, target: u32) -> bool {
+        can_propagate_copy(
+            binding_for(analysis, target),
+            &analysis.usage,
+            &setup.type_table,
+            &IndexSet::default(),
+        )
+    }
+
+    // `let r = &mut y; let x = y; r.f = 0; use(x)` — the write through the
+    // alias lands AFTER the copy binding, so the binding must NOT be
+    // scope-stable, and the coarse `has_field_mutation` gate must see `y`.
+    #[test]
+    fn alias_write_after_binding_blocks_propagation() {
+        let mut s = Setup::new(&[Struct, MutRef, Struct]);
+        let (y, r, x) = (0, 1, 2);
+        let borrow = s.mut_borrow(y);
+        let s0 = s.let_stmt(r, borrow);
+        let ysrc = s.local(y);
+        let s1 = s.let_stmt(x, ysrc);
+        let s2 = s.field_write_stmt(r);
+        let s3 = s.read_stmt(x);
+        s.finish(vec![s0, s1, s2, s3]);
+
+        let analysis = s.analyze();
+        assert!(
+            !binding_for(&analysis, x).source_scope_stable,
+            "write through the &mut alias after the binding must end the stability interval"
+        );
+        assert!(
+            analysis.usage.get(&y).is_some_and(|u| u.has_field_mutation),
+            "through-alias write must mark the aliased root"
+        );
+        assert!(!propagates(&s, &analysis, x));
+    }
+
+    // Same shape but the alias is never written through: the borrow is a
+    // point event before the binding, so the copy still propagates
+    // (precision pin: a bare `&mut` borrow must not poison the source).
+    #[test]
+    fn unwritten_alias_before_binding_keeps_propagation() {
+        let mut s = Setup::new(&[Struct, MutRef, Struct]);
+        let (y, r, x) = (0, 1, 2);
+        let borrow = s.mut_borrow(y);
+        let s0 = s.let_stmt(r, borrow);
+        let ysrc = s.local(y);
+        let s1 = s.let_stmt(x, ysrc);
+        let s2 = s.read_stmt(x);
+        s.finish(vec![s0, s1, s2]);
+
+        let analysis = s.analyze();
+        assert!(binding_for(&analysis, x).source_scope_stable);
+        assert!(propagates(&s, &analysis, x));
+    }
+
+    // The alias flows through a ref-to-ref copy (`let r2 = r`): the fixpoint
+    // must attribute a write through `r2` back to `y`.
+    #[test]
+    fn alias_copy_chain_write_blocks_propagation() {
+        let mut s = Setup::new(&[Struct, MutRef, Struct, MutRef]);
+        let (y, r, x, r2) = (0, 1, 2, 3);
+        let borrow = s.mut_borrow(y);
+        let s0 = s.let_stmt(r, borrow);
+        let rsrc = s.local(r);
+        let s1 = s.let_stmt(r2, rsrc);
+        let ysrc = s.local(y);
+        let s2 = s.let_stmt(x, ysrc);
+        let s3 = s.field_write_stmt(r2);
+        let s4 = s.read_stmt(x);
+        s.finish(vec![s0, s1, s2, s3, s4]);
+
+        let analysis = s.analyze();
+        assert!(!binding_for(&analysis, x).source_scope_stable);
+        assert!(
+            analysis.usage.get(&y).is_some_and(|u| u.has_field_mutation),
+            "write through the copied alias must reach y through the fixpoint"
+        );
+    }
+
+    // A target read at or before the binding index (the shape a
+    // cross-iteration read produces) must reject the fast path — the same
+    // guard the `RefProjection` source already had.
+    #[test]
+    fn backward_target_read_rejects_stability() {
+        let mut s = Setup::new(&[Struct, Struct]);
+        let (y, x) = (0, 1);
+        let s0 = s.read_stmt(x);
+        let ysrc = s.local(y);
+        let s1 = s.let_stmt(x, ysrc);
+        let s2 = s.read_stmt(x);
+        s.finish(vec![s0, s1, s2]);
+
+        let analysis = s.analyze();
+        assert!(
+            !binding_for(&analysis, x).source_scope_stable,
+            "a read of the target before its binding is a cross-iteration read"
+        );
+    }
 }

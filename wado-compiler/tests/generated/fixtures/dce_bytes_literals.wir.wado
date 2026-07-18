@@ -105,7 +105,6 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 global mut global:dce_bytes_literals.wado::__modules_initialized: bool = 0;
 
 fn "dce_bytes_literals.wado/run"() with Stdout {
-    let data: ref "core:prelude//List<u8>";
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     let __sroa_v_repr: ref Array<u8>;
@@ -117,8 +116,8 @@ fn "dce_bytes_literals.wado/run"() with Stdout {
     };
     __sroa_v_repr = array.new_data<u8>("Hello, World!
 ");
-    data = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__sroa_v_repr); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __sroa_v_repr, 0, __array_clone_len_1); __array_clone_dst_1), used: 14 };
-    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; "core:prelude/primitive.wado/i32::fmt_decimal"(data.used, __local_2); __local_1);
+    drop(struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__sroa_v_repr); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __sroa_v_repr, 0, __array_clone_len_1); __array_clone_dst_1), used: 14 });
+    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; "core:prelude/primitive.wado/i32::fmt_decimal"(14, __local_2); __local_1);
 }
 
 fn "dce_bytes_literals.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

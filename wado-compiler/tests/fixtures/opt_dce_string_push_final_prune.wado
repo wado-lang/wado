@@ -1,0 +1,21 @@
+// The `nir/string_push` rewrite expands a short constant `push_str` into
+// per-byte `push` calls, so `String::push` is force-kept through the DCE that
+// runs *before* the optimization loop. This program calls `push_str` only with
+// a long literal (22 bytes, above the rewrite's 8-byte ceiling), so the rewrite
+// never fires and `String::push` is genuinely unused. The final DCE (after the
+// loop) must therefore drop it: at -O0 the virtual root keeps it alive, at -O2
+// the post-loop DCE no longer sees a rewrite candidate and prunes it.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut s = "";
+    s.push_str(&"this is a long literal");
+    println(s);
+}
+
+__DATA__
+{
+    "stdout": "this is a long literal\n",
+    "wir_expect:O0": ["String::push\"(self, c)"],
+    "wir_not_expect:O2": ["String::push\"(self, c)"]
+}

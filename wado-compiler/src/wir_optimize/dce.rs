@@ -19,6 +19,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{
     WirExportDesc, WirFuncId, WirImportDesc, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId,
 };
+use crate::wir_optimize::util::{for_each_type_id_slot, value_copy_helper_mangles};
 
 fn collect_func_refs_from_body(body: &[WirInstr], out: &mut IndexSet<u32>) {
     for instr in body {
@@ -63,45 +64,76 @@ fn collect_array_clone_helper_refs_recursive<F>(
 
 fn collect_func_refs_recursive(instr: &WirInstr, out: &mut IndexSet<u32>) {
     match instr {
-        WirInstr::Call { func_id, args } => {
+        WirInstr::Call { func_id, .. } | WirInstr::RefFunc { func_id } => {
             out.insert(func_id.index());
-            for arg in args {
-                collect_func_refs_recursive(arg, out);
-            }
-            return;
-        }
-        WirInstr::RefFunc { func_id } => {
-            out.insert(func_id.index());
-            return;
         }
         _ => {}
     }
-    // For other variants, clone to use the mutable child traversal.
-    // This is acceptable for the mem-module which has small function bodies.
-    let mut clone = instr.clone();
-    clone.for_each_boxed_child_mut(&mut |child| {
-        collect_func_refs_recursive_mut(child, out);
+    instr.for_each_child(&mut |child| {
+        collect_func_refs_recursive(child, out);
     });
 }
 
-fn collect_func_refs_recursive_mut(instr: &mut WirInstr, out: &mut IndexSet<u32>) {
+fn collect_global_refs_recursive(instr: &WirInstr, out: &mut IndexSet<String>) {
     match instr {
-        WirInstr::Call { func_id, args } => {
-            out.insert(func_id.index());
-            for arg in args {
-                collect_func_refs_recursive_mut(arg, out);
-            }
-            return;
-        }
-        WirInstr::RefFunc { func_id } => {
-            out.insert(func_id.index());
-            return;
+        WirInstr::GlobalGet { name, .. } | WirInstr::GlobalSet { name, .. } => {
+            out.insert(name.fq.clone());
         }
         _ => {}
     }
-    instr.for_each_boxed_child_mut(&mut |child| {
-        collect_func_refs_recursive_mut(child, out);
-    });
+    instr.for_each_child(&mut |child| collect_global_refs_recursive(child, out));
+}
+
+/// Mark globals referenced by no `GlobalGet`/`GlobalSet` (in any function body,
+/// global initializer, or active data-segment offset) and by no export as dead
+/// (`dead_global_indices`), so
+/// [`compact_dead_items`] drops them. A global read nowhere and written nowhere
+/// affects nothing observable — its value can never be seen. This reclaims the
+/// synthesized const-object globals (`const_object_globalization` lazy-fill
+/// targets) whose only uses were a now-folded cold assert/bounds-check panic
+/// branch: the peephole eliminates the dead branch (taking the `GlobalSet` fill
+/// and `GlobalGet` read with it) before `promote_const_global_inits` can turn
+/// the fill into an eager initializer, leaving an unreferenced `global mut`
+/// declaration that `dedupe_const_globals` (immutable-only) never merges.
+///
+/// Only fully-unreferenced globals are removed, so any global still read or
+/// written — including a write-only user `global mut` whose store survives —
+/// stays. `GlobalGet`/`GlobalSet` address globals by name, so removal needs no
+/// instruction patching.
+pub fn mark_unreferenced_globals(module: &mut WirPackage) {
+    let mut referenced: IndexSet<String> = IndexSet::default();
+    for (i, func) in module.functions.iter().enumerate() {
+        // A global read only by an already-dead function is itself dead.
+        if module.dead_func_indices.contains(&(i as u32)) {
+            continue;
+        }
+        if let Some(body) = &func.body {
+            for instr in body {
+                collect_global_refs_recursive(instr, &mut referenced);
+            }
+        }
+    }
+    for global in &module.globals {
+        collect_global_refs_recursive(&global.init, &mut referenced);
+    }
+    // Active data-segment offsets are const-expressions that may `GlobalGet`.
+    for data in &module.data {
+        if let Some(offset) = &data.offset {
+            collect_global_refs_recursive(offset, &mut referenced);
+        }
+    }
+    for export in &module.exports {
+        if let WirExportDesc::Global { name } = &export.desc {
+            referenced.insert(name.fq.clone());
+        }
+    }
+
+    for (i, global) in module.globals.iter().enumerate() {
+        let idx = i as u32;
+        if !module.dead_global_indices.contains(&idx) && !referenced.contains(&global.name.fq) {
+            module.dead_global_indices.insert(idx);
+        }
+    }
 }
 
 fn remap_func_ids(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
@@ -159,19 +191,18 @@ pub fn mark_unreachable_defined_functions(module: &mut WirPackage) {
     // `WirInstr::ArrayClone` references its per-element copy helper by the
     // element type's canonical mangle (`element_copy_mangle`), not by a
     // `WirFuncId` the generic body walker following `WirInstr::Call` /
-    // `RefFunc` could see. Pre-build a `mangle → array index` map from each
-    // helper's `value_copy_mangle` metadata so the per-instruction collector
-    // below can resolve those edges and fold them into each function's callee
-    // set; without this the helper is dropped by DCE, then the codegen call
-    // site can't resolve it and panics.
-    let helper_mangle_to_idx: IndexMap<&str, u32> = module
-        .functions
-        .iter()
-        .enumerate()
-        .filter_map(|(i, func)| Some((func.value_copy_mangle.as_deref()?, u32::try_from(i).ok()?)))
-        .collect();
-    let resolve_helper_name =
-        |copy_mangle: &str| -> Option<u32> { helper_mangle_to_idx.get(copy_mangle).copied() };
+    // `RefFunc` could see. Resolve those edges through the shared
+    // `util::value_copy_helper_mangles` map (absolute indices, converted to
+    // array indices here) and fold them into each function's callee set;
+    // without this the helper is dropped by DCE, then the codegen call site
+    // can't resolve it and panics.
+    let helper_mangle_to_abs = value_copy_helper_mangles(module);
+    let resolve_helper_name = |copy_mangle: &str| -> Option<u32> {
+        helper_mangle_to_abs
+            .get(copy_mangle)
+            .copied()
+            .and_then(to_array_idx)
+    };
 
     let mut callees_of: Vec<IndexSet<u32>> = Vec::with_capacity(module.functions.len());
     for func in &module.functions {
@@ -264,12 +295,13 @@ pub fn dce_unreachable_types(module: &mut WirPackage) {
 
     // Seed: collect type indices referenced from live function signatures and bodies.
     // Skip functions that have been extracted into separate wasm_modules (dead_func_indices).
-    for (i, func) in module.functions.iter().enumerate() {
-        if module.dead_func_indices.contains(&(i as u32)) {
+    let dead_funcs = &module.dead_func_indices;
+    for (i, func) in module.functions.iter_mut().enumerate() {
+        if dead_funcs.contains(&(i as u32)) {
             continue;
         }
         reachable.insert(func.type_id.index());
-        if let Some(body) = &func.body {
+        if let Some(body) = &mut func.body {
             for instr in body {
                 collect_instr_type_refs(instr, &mut reachable);
             }
@@ -290,9 +322,9 @@ pub fn dce_unreachable_types(module: &mut WirPackage) {
     }
 
     // Seed: globals
-    for global in &module.globals {
+    for global in &mut module.globals {
         collect_wir_type_ref(&global.ty, &mut reachable);
-        collect_instr_type_refs(&global.init, &mut reachable);
+        collect_instr_type_refs(&mut global.init, &mut reachable);
     }
 
     // Transitive closure: for each reachable type, add the types it references.
@@ -373,58 +405,12 @@ fn collect_wir_type_ref_into(ty: &WirType, out: &mut Vec<u32>) {
 }
 
 /// Recursively collect all `WirTypeId` references from a `WirInstr` tree.
-///
-/// Handles the type-bearing instruction variants explicitly, then delegates
-/// to `for_each_child` for recursive traversal of child instructions.
-fn collect_instr_type_refs(instr: &WirInstr, out: &mut IndexSet<u32>) {
-    match instr {
-        WirInstr::StructNew { type_id, .. }
-        | WirInstr::StructGet { type_id, .. }
-        | WirInstr::StructSet { type_id, .. }
-        | WirInstr::ArrayNew { type_id, .. }
-        | WirInstr::ArrayNewDefault { type_id, .. }
-        | WirInstr::ArrayNewData { type_id, .. }
-        | WirInstr::ArrayNewFixed { type_id, .. }
-        | WirInstr::ArrayGet { type_id, .. }
-        | WirInstr::ArrayGetS { type_id, .. }
-        | WirInstr::ArrayGetU { type_id, .. }
-        | WirInstr::ArraySet { type_id, .. }
-        | WirInstr::ArrayFill { type_id, .. }
-        | WirInstr::RefCast { type_id, .. }
-        | WirInstr::RefTest { type_id, .. }
-        | WirInstr::CallIndirect { type_id, .. }
-        | WirInstr::CallRef { type_id, .. } => {
-            out.insert(type_id.index());
-        }
-        WirInstr::ArrayCopy {
-            dest_type_id,
-            src_type_id,
-            ..
-        } => {
-            out.insert(dest_type_id.index());
-            out.insert(src_type_id.index());
-        }
-        WirInstr::ArrayClone { type_id, .. } => {
-            out.insert(type_id.index());
-        }
-        WirInstr::DeclareLocal { ty, .. } => {
-            collect_wir_type_ref(ty, out);
-        }
-        WirInstr::Block { result, .. } | WirInstr::If { result, .. } => {
-            if let Some(ty) = result {
-                collect_wir_type_ref(ty, out);
-            }
-        }
-        WirInstr::Select { ty, .. } => {
-            if let Some(ty) = ty {
-                collect_wir_type_ref(ty, out);
-            }
-        }
-        _ => {}
-    }
-    // Recurse into child instructions.
-    instr.for_each_child(&mut |child| {
-        collect_instr_type_refs(child, out);
+/// One face of `util::for_each_type_id_slot` — the same walk
+/// [`remap_type_ids_in_instr`] uses, so collection and remapping can never
+/// cover different variants.
+fn collect_instr_type_refs(instr: &mut WirInstr, out: &mut IndexSet<u32>) {
+    for_each_type_id_slot(instr, &mut |type_id| {
+        out.insert(type_id.index());
     });
 }
 
@@ -648,53 +634,10 @@ fn remap_typedef(typedef: &mut WirTypeDef, remap: &IndexMap<u32, u32>) {
     }
 }
 
+/// Remap every `WirTypeId` reference in a `WirInstr` tree. The other face of
+/// `util::for_each_type_id_slot` — see [`collect_instr_type_refs`].
 fn remap_type_ids_in_instr(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
-    match instr {
-        WirInstr::StructNew { type_id, .. }
-        | WirInstr::StructGet { type_id, .. }
-        | WirInstr::StructSet { type_id, .. }
-        | WirInstr::ArrayNew { type_id, .. }
-        | WirInstr::ArrayNewDefault { type_id, .. }
-        | WirInstr::ArrayNewData { type_id, .. }
-        | WirInstr::ArrayNewFixed { type_id, .. }
-        | WirInstr::ArrayGet { type_id, .. }
-        | WirInstr::ArrayGetS { type_id, .. }
-        | WirInstr::ArrayGetU { type_id, .. }
-        | WirInstr::ArraySet { type_id, .. }
-        | WirInstr::ArrayFill { type_id, .. }
-        | WirInstr::RefCast { type_id, .. }
-        | WirInstr::RefTest { type_id, .. }
-        | WirInstr::CallIndirect { type_id, .. }
-        | WirInstr::CallRef { type_id, .. } => {
-            remap_type_id(type_id, remap);
-        }
-        WirInstr::ArrayCopy {
-            dest_type_id,
-            src_type_id,
-            ..
-        } => {
-            remap_type_id(dest_type_id, remap);
-            remap_type_id(src_type_id, remap);
-        }
-        WirInstr::ArrayClone { type_id, .. } => {
-            remap_type_id(type_id, remap);
-        }
-        WirInstr::DeclareLocal { ty, .. } => {
-            remap_wir_type(ty, remap);
-        }
-        WirInstr::Block { result, .. } | WirInstr::If { result, .. } => {
-            if let Some(ty) = result {
-                remap_wir_type(ty, remap);
-            }
-        }
-        WirInstr::Select { ty, .. } => {
-            if let Some(ty) = ty {
-                remap_wir_type(ty, remap);
-            }
-        }
-        _ => {}
-    }
-    instr.for_each_boxed_child_mut(&mut |child| {
-        remap_type_ids_in_instr(child, remap);
+    for_each_type_id_slot(instr, &mut |type_id| {
+        remap_type_id(type_id, remap);
     });
 }

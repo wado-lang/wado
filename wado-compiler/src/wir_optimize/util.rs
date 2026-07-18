@@ -1,7 +1,7 @@
 //! Shared utility functions for WIR optimization passes.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::wir::{WirExportDesc, WirInstr, WirPackage};
+use crate::wir::{WirExportDesc, WirInstr, WirPackage, WirType, WirTypeId};
 
 /// Collect all `func_ids` that must NOT be SROA'd or otherwise transformed
 /// (exports, element tables, `RefFunc` references, and helpers referenced
@@ -43,20 +43,7 @@ pub(super) fn collect_pinned_func_ids(module: &WirPackage) -> IndexSet<u32> {
     // that emit path, leaving the call expecting a single (ref T) while the
     // rewritten helper now returns multi-value. Pin every helper that any
     // ArrayClone refers to so the rewrites skip them.
-    //
-    // Build the copied-type-mangle → id map once from each helper's metadata.
-    // Linear-scanning per `ArrayClone` site would otherwise be O(N²).
-    let helper_mangle_to_idx: IndexMap<&str, u32> = module
-        .functions
-        .iter()
-        .enumerate()
-        .filter_map(|(i, func)| {
-            Some((
-                func.value_copy_mangle.as_deref()?,
-                u32::try_from(i).expect("func index fits u32") + module.defined_func_base,
-            ))
-        })
-        .collect();
+    let helper_mangle_to_idx = value_copy_helper_mangles(module);
     for func in &module.functions {
         if let Some(body) = &func.body {
             collect_array_clone_helpers(body, &helper_mangle_to_idx, &mut pinned);
@@ -270,4 +257,101 @@ pub(super) fn may_trap(instr: &WirInstr) -> bool {
         }
     });
     trap
+}
+
+/// Index of the first non-`Nop` statement at or after `from`.
+pub(super) fn next_non_nop(stmts: &[WirInstr], from: usize) -> Option<usize> {
+    (from..stmts.len()).find(|&k| !matches!(stmts[k], WirInstr::Nop))
+}
+
+/// Count every `LocalGet` in an expression tree, per local name.
+pub(super) fn count_local_gets(instr: &WirInstr, counts: &mut IndexMap<String, u32>) {
+    if let WirInstr::LocalGet { name, .. } = instr {
+        *counts.entry(name.clone()).or_insert(0) += 1;
+    }
+    instr.for_each_child(&mut |child| {
+        count_local_gets(child, counts);
+    });
+}
+
+/// Map each synthesized `$value_copy$` helper's copied-type mangle
+/// (`value_copy_mangle` metadata) to its absolute `WirFuncId` index
+/// (array index + [`WirPackage::defined_func_base`]). Built once — a
+/// linear scan per `ArrayClone` site would be O(N²).
+pub(super) fn value_copy_helper_mangles(module: &WirPackage) -> IndexMap<&str, u32> {
+    module
+        .functions
+        .iter()
+        .enumerate()
+        .filter_map(|(i, func)| {
+            Some((
+                func.value_copy_mangle.as_deref()?,
+                u32::try_from(i).expect("func index fits u32") + module.defined_func_base,
+            ))
+        })
+        .collect()
+}
+
+/// Visit every `WirTypeId` slot nested in a `WirType`.
+pub(super) fn for_each_type_id_in_wir_type(ty: &mut WirType, f: &mut impl FnMut(&mut WirTypeId)) {
+    match ty {
+        WirType::Ref { type_id, .. } | WirType::Enum { type_id } | WirType::Flags { type_id } => {
+            f(type_id);
+        }
+        _ => {}
+    }
+}
+
+/// Visit every `WirTypeId` slot in `instr`'s subtree: the type-bearing
+/// instruction fields plus ids nested in `WirType` fields (`DeclareLocal`,
+/// `Block`/`If` results, `Select`). The single authority both DCE walks
+/// (type-reachability collection and post-compaction remapping) derive from,
+/// so a type-bearing variant cannot be visited by one and missed by the other.
+pub(super) fn for_each_type_id_slot(instr: &mut WirInstr, f: &mut impl FnMut(&mut WirTypeId)) {
+    match instr {
+        WirInstr::StructNew { type_id, .. }
+        | WirInstr::StructGet { type_id, .. }
+        | WirInstr::StructSet { type_id, .. }
+        | WirInstr::ArrayNew { type_id, .. }
+        | WirInstr::ArrayNewDefault { type_id, .. }
+        | WirInstr::ArrayNewData { type_id, .. }
+        | WirInstr::ArrayNewFixed { type_id, .. }
+        | WirInstr::ArrayGet { type_id, .. }
+        | WirInstr::ArrayGetS { type_id, .. }
+        | WirInstr::ArrayGetU { type_id, .. }
+        | WirInstr::ArraySet { type_id, .. }
+        | WirInstr::ArrayFill { type_id, .. }
+        | WirInstr::ArrayClone { type_id, .. }
+        | WirInstr::RefCast { type_id, .. }
+        | WirInstr::RefTest { type_id, .. }
+        | WirInstr::CallIndirect { type_id, .. }
+        | WirInstr::CallRef { type_id, .. } => {
+            f(type_id);
+        }
+        WirInstr::ArrayCopy {
+            dest_type_id,
+            src_type_id,
+            ..
+        } => {
+            f(dest_type_id);
+            f(src_type_id);
+        }
+        WirInstr::DeclareLocal { ty, .. } => {
+            for_each_type_id_in_wir_type(ty, f);
+        }
+        WirInstr::Block { result, .. } | WirInstr::If { result, .. } => {
+            if let Some(ty) = result {
+                for_each_type_id_in_wir_type(ty, f);
+            }
+        }
+        WirInstr::Select { ty, .. } => {
+            if let Some(ty) = ty {
+                for_each_type_id_in_wir_type(ty, f);
+            }
+        }
+        _ => {}
+    }
+    instr.for_each_boxed_child_mut(&mut |child| {
+        for_each_type_id_slot(child, f);
+    });
 }

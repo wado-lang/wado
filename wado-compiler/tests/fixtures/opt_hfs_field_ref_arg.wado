@@ -1,0 +1,41 @@
+// HFS &mut of a GC-typed scalarized field: `swap_out(&mut b.s)` is rewritten
+// to `swap_out(&mut __hfs_s)`. Sound because a GC field's reference is the
+// object handle the scalar shares — `*v = x` mutates the object in place and
+// never rebinds the field — but this locks the behavior: the callee's
+// replacement must be observable through the field after &mut-struct calls
+// and after the loop.
+
+struct Buf {
+    s: String,
+    n: i32,
+}
+
+#[inline(never)]
+fn swap_out(v: &mut String) {
+    *v = "0123456789";
+}
+
+#[inline(never)]
+fn field_len(b: &mut Buf) -> i32 {
+    return b.s.len();
+}
+
+export fn run() {
+    let mut b = Buf { s: "z", n: 0 };
+    let mut total = 0;
+    for let mut i = 0; i < 2; i += 1 {
+        swap_out(&mut b.s);
+        total += field_len(&mut b);
+        total += b.s.len();
+        total += b.s.len();
+        b.s = "z";
+    }
+    assert total == 60, `expected 60, got {total}`;
+    assert b.s == "z", `expected z, got {b.s}`;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["__hfs_s"]
+}

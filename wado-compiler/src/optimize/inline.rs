@@ -8,7 +8,6 @@ use std::rc::Rc;
 
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
-use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, InlineHint, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
@@ -111,7 +110,12 @@ fn count_stmt(
         StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
             count_block_exprs(body, *b, type_table, descriptors)
         }
-        StmtKind::Break { .. } | StmtKind::Continue => 0,
+        // A `break L: <expr>` carries a value just like a `return`; cost it so
+        // labeled-block-valued callees are not systematically undercounted.
+        StmtKind::Break { value, .. } => {
+            value.map_or(0, |v| count_operand(body, v, type_table, descriptors))
+        }
+        StmtKind::Continue => 0,
     }
 }
 
@@ -270,52 +274,6 @@ fn count_block_exprs(
     total
 }
 
-/// Build the canonical inliner key for a function identity.
-///
-/// We key the call graph on `(module_source, post-mono mangled name)` so that
-/// the function-definition side and the call-site side agree on a single
-/// identity. `FuncRef::full_name()` / `MethodInfo::to_mangled_name()` cannot
-/// be used here because they derive the struct portion from
-/// `MethodInfo.struct_name`, which is populated by different code paths with
-/// different mangling rules:
-///
-///  - The monomorphizer's `func_inst.rs` rebuilds `MethodInfo.struct_name`
-///    with qualified type args (`mangle_type_arg_for_generic`) on the
-///    function-definition side.
-///  - `synthesis/traits.rs::decompose_type_for_method_name` builds call-site
-///    `MethodInfo.struct_name` with unqualified `mangle_type_name`. The
-///    monomorphizer's `call_rewrite` later rewrites `FuncRef.name` to the
-///    post-mono canonical mangled name but **preserves** the original
-///    `method_info` unchanged.
-///
-/// So the call site has `name = "List<{mod}/Node>^Eq::eq"` (qualified) but
-/// `method_info.to_mangled_name() = "List<Node>^Eq::eq"` (unqualified). Two
-/// representations of the same logical call. The function-definition side
-/// after monomorphization has both fields qualified, so a key based on
-/// `to_mangled_name()` misses the recursive cycle. Keying on
-/// `(module_source, func.name)` sidesteps the divergence because both sides
-/// pull `func.name` from the same `Monomorphizer::functions.instantiated`
-/// map.
-///
-/// Mirrors the same fix `wir_build/functions.rs::build_mangled_name` adopted
-/// in commit 2b005695b for exactly this divergence.
-fn function_inline_key(module_source: &ModuleSource, name: &str) -> String {
-    let path = module_source.to_path();
-    format!("{}/{}", path.join("/"), name)
-}
-
-/// Compute the call-graph key for a `NirFunction` definition.  Must agree
-/// with `func_ref_inline_key` so call sites resolve to the same node.
-fn tir_function_full_name(func: &NirFunction) -> String {
-    function_inline_key(&func.module_source, &func.name)
-}
-
-/// Compute the call-graph key for a `FunctionRef` call site.  Must agree
-/// with `tir_function_full_name`.
-fn func_ref_inline_key(func: &crate::nir::FunctionRef) -> String {
-    function_inline_key(&func.module_source, &func.name)
-}
-
 fn collect_inner_labels(callee: &Body, node: NodeRef, labels: &mut IndexSet<String>) {
     match node {
         NodeRef::Stmt(s) => {
@@ -340,8 +298,7 @@ fn collect_inner_labels(callee: &Body, node: NodeRef, labels: &mut IndexSet<Stri
 /// Check if a function is eligible for inlining.
 fn is_inline_eligible(
     func: &NirFunction,
-    recursive_functions: &IndexSet<String>,
-    _module_source: &ModuleSource,
+    recursive_functions: &IndexSet<FuncId>,
     type_table: &TypeTable,
     inline_threshold: usize,
     descriptors: &[FunctionRef],
@@ -362,7 +319,19 @@ fn is_inline_eligible(
         return false;
     }
 
-    // #[inline(always)] skips all heuristic checks (but still requires a body and non-adapter)
+    // Not recursive — keyed on the function's `FuncId` (its store position),
+    // the same identity the recursive set is built on, so cross-module recursive
+    // functions are not missed. This precedes the `#[inline(always)]`
+    // short-circuit: inlining a recursive call only exposes the next recursive
+    // call, so an unconditional force would re-inline every fixed-point iteration
+    // and expand without bound (a compiler stack overflow at higher iteration
+    // counts).
+    if func.id.is_some_and(|id| recursive_functions.contains(&id)) {
+        return false;
+    }
+
+    // #[inline(always)] skips the remaining heuristic checks (but still requires
+    // a body, a non-adapter, and non-recursion, all checked above)
     if func.inline_hint == InlineHint::Always {
         return true;
     }
@@ -370,12 +339,6 @@ fn is_inline_eligible(
     // Don't inline functions that return Never (!)
     // These are error/abort paths that are never hot, so no performance benefit to inlining
     if type_table.is_never(func.return_type) {
-        return false;
-    }
-
-    // Not recursive — compare using the same fully qualified name used to build
-    // the recursive set, so that cross-module recursive functions are not missed.
-    if recursive_functions.contains(&tir_function_full_name(func)) {
         return false;
     }
 
@@ -399,297 +362,116 @@ fn is_inline_eligible(
     count_block_exprs(body, body.root, type_table, descriptors) <= effective_threshold
 }
 
-/// Detect recursive functions using call graph analysis
-fn find_recursive_functions(
-    functions: &[Rc<RefCell<NirFunction>>],
-    descriptors: &[FunctionRef],
-) -> IndexSet<String> {
-    // Phase 1: Build fully-qualified-name→index mapping.  Keys come from
-    // `tir_function_full_name` / `func_ref_inline_key`, both of which hash
-    // `(module_source, func.name)`.  See `function_inline_key`'s docstring
-    // for why we deliberately ignore `MethodInfo::to_mangled_name()` here.
-    let mut name_to_idx: IndexMap<String, usize> =
-        IndexMap::with_capacity_and_hasher(functions.len(), rustc_hash::FxBuildHasher);
-    let mut idx_to_name: Vec<String> = Vec::with_capacity(functions.len());
-
-    for func_rc in functions {
-        let func = func_rc.borrow();
-        let name = tir_function_full_name(&func);
-        if !name_to_idx.contains_key(&name) {
-            let idx = idx_to_name.len();
-            idx_to_name.push(name.clone());
-            name_to_idx.insert(name, idx);
-        }
-    }
-
-    let n = idx_to_name.len();
-    // Phase 2: Build call graph using indices (no String allocations in inner loop)
+/// Detect recursive functions using call graph analysis.
+///
+/// Every function's `FuncId` equals its store position in `project.functions`
+/// (`FuncId == position`, asserted end-to-end at WIR build), and every call
+/// site's stamped `func_id` resolves to that same position. So the call graph
+/// is indexed directly by position: a node is a function, its edges are the
+/// `func_id.index()` of each callee — no name-keyed identity table, and no
+/// dedup that could collapse two distinct functions onto one node.
+fn find_recursive_functions(functions: &[Rc<RefCell<NirFunction>>]) -> IndexSet<FuncId> {
+    let n = functions.len();
     let mut call_graph: Vec<Vec<usize>> = vec![Vec::new(); n];
 
-    for func_rc in functions {
+    for (i, func_rc) in functions.iter().enumerate() {
         let func = func_rc.borrow();
-        let full_name = tir_function_full_name(&func);
-        if let Some(caller_idx) = name_to_idx.get(&full_name) {
-            let mut callee_names: IndexSet<String> = IndexSet::default();
-            if let Some(body) = &func.body {
-                collect_callees_from_block(body, descriptors, body.root, &mut callee_names);
+        if let Some(body) = &func.body {
+            let mut callee_ids: IndexSet<usize> = IndexSet::default();
+            collect_callees(body, &mut callee_ids);
+            call_graph[i] = callee_ids.into_iter().collect();
+        }
+    }
+
+    // A function is recursive iff it lies on a call cycle — i.e. it is a member
+    // of a non-trivial strongly-connected component, or has a self-edge. One
+    // iterative Tarjan pass computes every SCC in O(V + E), versus the old
+    // per-function reachability DFS at O(V·(V + E)).
+    let recursive_idx = recursive_scc_members(&call_graph);
+    (0..n)
+        .filter(|&i| recursive_idx[i])
+        .map(FuncId::new)
+        .collect()
+}
+
+/// Iterative Tarjan SCC. Returns one bool per node: `true` when the node lies on
+/// a call cycle (a non-singleton SCC member, or a node with a self-edge).
+fn recursive_scc_members(call_graph: &[Vec<usize>]) -> Vec<bool> {
+    let n = call_graph.len();
+    const UNVISITED: usize = usize::MAX;
+    let mut index_of = vec![UNVISITED; n];
+    let mut lowlink = vec![0usize; n];
+    let mut on_stack = vec![false; n];
+    let mut scc_stack: Vec<usize> = Vec::new();
+    let mut recursive = vec![false; n];
+    let mut next_index = 0usize;
+    // Explicit DFS stack: (node, next child position).
+    let mut work: Vec<(usize, usize)> = Vec::new();
+
+    for start in 0..n {
+        if index_of[start] != UNVISITED {
+            continue;
+        }
+        work.push((start, 0));
+        while let Some(&(v, ci)) = work.last() {
+            if ci == 0 {
+                index_of[v] = next_index;
+                lowlink[v] = next_index;
+                next_index += 1;
+                scc_stack.push(v);
+                on_stack[v] = true;
             }
-            let callees: Vec<usize> = callee_names
-                .iter()
-                .filter_map(|name| name_to_idx.get(name).copied())
-                .collect();
-            call_graph[*caller_idx] = callees;
+            if ci < call_graph[v].len() {
+                let w = call_graph[v][ci];
+                work.last_mut().unwrap().1 += 1;
+                if index_of[w] == UNVISITED {
+                    work.push((w, 0));
+                } else if on_stack[w] {
+                    lowlink[v] = lowlink[v].min(index_of[w]);
+                }
+                continue;
+            }
+            // All of `v`'s children are done. If `v` roots an SCC, pop it.
+            if lowlink[v] == index_of[v] {
+                let mut size = 0usize;
+                loop {
+                    let w = scc_stack.pop().unwrap();
+                    on_stack[w] = false;
+                    recursive[w] = true;
+                    size += 1;
+                    if w == v {
+                        break;
+                    }
+                }
+                // A singleton SCC is only recursive through a self-edge.
+                if size == 1 && !call_graph[v].contains(&v) {
+                    recursive[v] = false;
+                }
+            }
+            work.pop();
+            if let Some(&(parent, _)) = work.last() {
+                lowlink[parent] = lowlink[parent].min(lowlink[v]);
+            }
         }
     }
-
-    // Phase 3: Find functions that can reach themselves using index-based DFS
-    let mut recursive = IndexSet::default();
-    let mut visited = vec![false; n];
-
-    for func_idx in 0..n {
-        visited.fill(false);
-        if can_reach_idx(&call_graph, func_idx, func_idx, &mut visited) {
-            recursive.insert(idx_to_name[func_idx].clone());
-        }
-    }
-
     recursive
 }
 
-fn can_reach_idx(
-    call_graph: &[Vec<usize>],
-    start: usize,
-    target: usize,
-    visited: &mut [bool],
-) -> bool {
-    if visited[start] {
-        return false;
-    }
-    visited[start] = true;
-
-    for &callee in &call_graph[start] {
-        if callee == target {
-            return true;
+/// Collect the store position (`func_id.index()`) of every `Call` /
+/// `MethodCall` callee reachable in `body`, via the shared `for_each_child`
+/// walk (order is irrelevant — the result is a set feeding the recursion call
+/// graph). Each stamped `func_id` is total and resolves to a position in
+/// `project.functions`, which is exactly the call-graph node index.
+fn collect_callees(body: &Body, callees: &mut IndexSet<usize>) {
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(id) = node
+            && let ExprKind::Call { func_id, .. } | ExprKind::MethodCall { func_id, .. } =
+                &body.exprs[id].kind
+        {
+            callees.insert(func_id.index());
         }
-        if can_reach_idx(call_graph, callee, target, visited) {
-            return true;
-        }
-    }
-
-    false
-}
-
-fn collect_callees_from_block(
-    body: &Body,
-    descriptors: &[FunctionRef],
-    block: BlockId,
-    callees: &mut IndexSet<String>,
-) {
-    for i in 0..body.blocks[block].stmts.len() {
-        let sid = body.blocks[block].stmts[i];
-        collect_callees_from_stmt(body, descriptors, sid, callees);
-    }
-}
-
-fn collect_callees_from_stmt(
-    body: &Body,
-    descriptors: &[FunctionRef],
-    stmt: StmtId,
-    callees: &mut IndexSet<String>,
-) {
-    match &body.stmts[stmt].kind {
-        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            collect_callees_from_operand(body, descriptors, *value, callees);
-        }
-        StmtKind::Expr(value) => {
-            if let Some(e) = value.as_expr() {
-                collect_callees_from_expr(body, descriptors, e, callees);
-            }
-        }
-        StmtKind::Return { value } => {
-            if let Some(expr) = *value {
-                collect_callees_from_operand(body, descriptors, expr, callees);
-            }
-        }
-        StmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-            collect_callees_from_operand(body, descriptors, condition, callees);
-            collect_callees_from_block(body, descriptors, then_block, callees);
-            if let Some(else_blk) = else_block {
-                collect_callees_from_block(body, descriptors, else_blk, callees);
-            }
-        }
-        StmtKind::Loop { body: b } => {
-            collect_callees_from_block(body, descriptors, *b, callees);
-        }
-        StmtKind::LabeledBlock { block, .. } => {
-            collect_callees_from_block(body, descriptors, *block, callees);
-        }
-        StmtKind::Break { .. } | StmtKind::Continue => {}
-    }
-}
-
-fn collect_callees_from_operand(
-    body: &Body,
-    descriptors: &[FunctionRef],
-    op: Operand,
-    callees: &mut IndexSet<String>,
-) {
-    if let Some(e) = op.as_expr() {
-        collect_callees_from_expr(body, descriptors, e, callees);
-    }
-}
-
-fn collect_callees_from_expr(
-    body: &Body,
-    descriptors: &[FunctionRef],
-    id: ExprId,
-    callees: &mut IndexSet<String>,
-) {
-    match &body.exprs[id].kind {
-        ExprKind::Call { func_id, args, .. } => {
-            callees.insert(func_ref_inline_key(callee_descriptor(
-                descriptors,
-                *func_id,
-            )));
-            for aid in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
-                collect_callees_from_operand(body, descriptors, aid, callees);
-            }
-        }
-        ExprKind::MethodCall {
-            receiver,
-            func_id,
-            args,
-            ..
-        } => {
-            callees.insert(func_ref_inline_key(callee_descriptor(
-                descriptors,
-                *func_id,
-            )));
-            let receiver = *receiver;
-            let arg_ids: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-            collect_callees_from_operand(body, descriptors, receiver, callees);
-            for aid in arg_ids {
-                collect_callees_from_operand(body, descriptors, aid, callees);
-            }
-        }
-        ExprKind::Binary { left, right, .. } => {
-            let (left, right) = (*left, *right);
-            collect_callees_from_operand(body, descriptors, left, callees);
-            collect_callees_from_operand(body, descriptors, right, callees);
-        }
-        ExprKind::Unary { expr, .. } => {
-            collect_callees_from_operand(body, descriptors, *expr, callees);
-        }
-        ExprKind::Assign { target, value } => {
-            let (target, value) = (*target, *value);
-            collect_callees_from_expr(body, descriptors, target, callees);
-            collect_callees_from_operand(body, descriptors, value, callees);
-        }
-        ExprKind::Cast { expr, .. } => {
-            collect_callees_from_operand(body, descriptors, *expr, callees);
-        }
-        ExprKind::FieldAccess { expr, .. } => {
-            collect_callees_from_operand(body, descriptors, *expr, callees);
-        }
-        ExprKind::Index { expr, index } => {
-            let (expr, index) = (*expr, *index);
-            collect_callees_from_operand(body, descriptors, expr, callees);
-            collect_callees_from_operand(body, descriptors, index, callees);
-        }
-        ExprKind::Block(block) => {
-            collect_callees_from_block(body, descriptors, *block, callees);
-        }
-        ExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
-            collect_callees_from_operand(body, descriptors, condition, callees);
-            collect_callees_from_block(body, descriptors, then_branch, callees);
-            if let Some(else_blk) = else_branch {
-                collect_callees_from_block(body, descriptors, else_blk, callees);
-            }
-        }
-        ExprKind::StructLiteral { fields, .. } => {
-            for fid in fields.iter().map(|f| f.value).collect::<Vec<_>>() {
-                collect_callees_from_operand(body, descriptors, fid, callees);
-            }
-        }
-        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-            for eid in elements.clone() {
-                collect_callees_from_operand(body, descriptors, eid, callees);
-            }
-        }
-        ExprKind::IndirectCall { callee, args } => {
-            let callee = *callee;
-            let arg_ids = args.clone();
-            collect_callees_from_operand(body, descriptors, callee, callees);
-            for aid in arg_ids {
-                collect_callees_from_operand(body, descriptors, aid, callees);
-            }
-        }
-        ExprKind::ClosureToCanonical { functor, .. } => {
-            collect_callees_from_operand(body, descriptors, *functor, callees);
-        }
-        ExprKind::CmRawCall { args, .. } => {
-            for aid in args.clone() {
-                collect_callees_from_operand(body, descriptors, aid, callees);
-            }
-        }
-        ExprKind::Match { expr, arms } => {
-            let expr = *expr;
-            let arms = arms.clone();
-            collect_callees_from_operand(body, descriptors, expr, callees);
-            for arm in &arms {
-                if let Some(guard) = arm.guard {
-                    collect_callees_from_operand(body, descriptors, guard, callees);
-                }
-                collect_callees_from_operand(body, descriptors, arm.body, callees);
-            }
-        }
-        ExprKind::VariantConstruct { payload, .. } => {
-            if let Some(payload_expr) = *payload {
-                collect_callees_from_operand(body, descriptors, payload_expr, callees);
-            }
-        }
-        ExprKind::LabeledBlock { block, .. } => {
-            collect_callees_from_block(body, descriptors, *block, callees);
-        }
-        ExprKind::GlobalVarSet { value, .. } => {
-            collect_callees_from_operand(body, descriptors, *value, callees);
-        }
-        ExprKind::VariantTag { expr }
-        | ExprKind::VariantTest { expr, .. }
-        | ExprKind::VariantPayload { expr, .. } => {
-            collect_callees_from_operand(body, descriptors, *expr, callees);
-        }
-        ExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            let scrutinee = *scrutinee;
-            let default = *default;
-            let arms = arms.clone();
-            collect_callees_from_operand(body, descriptors, scrutinee, callees);
-            for arm in arms {
-                collect_callees_from_block(body, descriptors, arm, callees);
-            }
-            collect_callees_from_block(body, descriptors, default, callees);
-        }
-        // Leaf nodes
-        ExprKind::PackedArray(_)
-        | ExprKind::Dead
-        | ExprKind::Local { .. }
-        | ExprKind::GlobalVarGet { .. }
-        | ExprKind::EnumConstruct { .. } => {}
+        body.for_each_child(node, |c| stack.push(c));
     }
 }
 
@@ -706,33 +488,37 @@ pub fn inline_functions(
     // borrow-safe), so a call site is recognized by its stamped id rather than the
     // call node's `FunctionRef`. Indexed by `func_id.index()` (== store position).
     let descriptors = super::dce::build_callee_descriptors(project);
-    let recursive_functions = find_recursive_functions(&project.functions, &descriptors);
+    let recursive_functions = find_recursive_functions(&project.functions);
 
-    // Collect inline candidates from all modules
-    // Key: (module_source, func_name), Value: cloned function
-    let mut inline_candidates: IndexMap<(ModuleSource, String), NirFunction> = IndexMap::default();
+    // Collect inline candidates from all modules, keyed by `FuncId` (the
+    // function's store position). A call site resolves its candidate by its
+    // stamped `func_id` directly, so the key is the exact callee identity — no
+    // `(module, name)` lookup, no entry-point fallback, no collision between two
+    // functions that happen to share a name.
+    let mut inline_candidates: IndexMap<FuncId, NirFunction> = IndexMap::default();
 
-    // Also collect function_strings for each candidate (to update caller's strings after inlining)
-    let mut candidate_strings: IndexMap<(ModuleSource, String), Vec<String>> = IndexMap::default();
+    // Also collect function_strings for each candidate (to update caller's
+    // strings after inlining). `function_strings` is keyed by `(module, name)`;
+    // map each candidate's strings onto its `FuncId` here.
+    let mut candidate_strings: IndexMap<FuncId, Vec<String>> = IndexMap::default();
 
     let type_table = project.type_table.borrow();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        let module_source = &func.module_source;
-        let key = (module_source.clone(), func.name.clone());
         if is_inline_eligible(
             &func,
             &recursive_functions,
-            module_source,
             &type_table,
             inline_threshold,
             &descriptors,
         ) {
-            inline_candidates.insert(key.clone(), func.clone());
+            let id = func.id.expect("func_id assigned at lower");
+            let string_key = (func.module_source.clone(), func.name.clone());
             // Get the strings used by this function
-            if let Some(strings) = project.function_strings.get(&key) {
-                candidate_strings.insert(key, strings.clone());
+            if let Some(strings) = project.function_strings.get(&string_key) {
+                candidate_strings.insert(id, strings.clone());
             }
+            inline_candidates.insert(id, func.clone());
         }
     }
     drop(type_table);
@@ -766,8 +552,8 @@ pub fn inline_functions(
         let caller_module_source = func.module_source.clone();
         let func_name = func.name.clone();
         if func.body.is_some() {
-            // Track which functions were inlined into this function
-            let mut inlined_funcs: Vec<(ModuleSource, String)> = Vec::new();
+            // Track which functions (by `FuncId`) were inlined into this function
+            let mut inlined_funcs: Vec<FuncId> = Vec::new();
             // Splice-point re-valuation records (Method A): one per inlined block.
             let mut reval: Vec<InlineRevalInfo> = Vec::new();
             // Take ownership of local_count and locals to avoid borrow conflicts
@@ -796,7 +582,6 @@ pub fn inline_functions(
                     root,
                     &inline_candidates,
                     &descriptors,
-                    &caller_module_source,
                     &mut local_count,
                     &mut locals,
                     &project.type_table.borrow(),
@@ -821,7 +606,8 @@ pub fn inline_functions(
                 // reads across the splice.
                 let preserving = func.body.as_ref().is_some_and(|b| {
                     reval.iter().all(|i| {
-                        pure_set.contains(&i.call_expr) && !block_contains_loop(b, i.block)
+                        pure_set.contains(&i.call_expr)
+                            && !arena_query::block_contains_loop(b, i.block)
                     })
                 });
                 if !preserving
@@ -889,13 +675,12 @@ pub fn inline_functions(
 fn inline_calls_in_block(
     body: &mut Body,
     block: BlockId,
-    candidates: &IndexMap<(ModuleSource, String), NirFunction>,
+    candidates: &IndexMap<FuncId, NirFunction>,
     descriptors: &[FunctionRef],
-    current_module: &ModuleSource,
     local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
     type_table: &TypeTable,
-    inlined_funcs: &mut Vec<(ModuleSource, String)>,
+    inlined_funcs: &mut Vec<FuncId>,
     inline_counter: &mut u32,
     reval: &mut Vec<InlineRevalInfo>,
     mut cold: bool,
@@ -940,7 +725,6 @@ fn inline_calls_in_block(
                     value,
                     candidates,
                     descriptors,
-                    current_module,
                     local_count,
                     locals,
                     type_table,
@@ -961,7 +745,6 @@ fn inline_calls_in_block(
                 value,
                 candidates,
                 descriptors,
-                current_module,
                 local_count,
                 locals,
                 type_table,
@@ -977,7 +760,6 @@ fn inline_calls_in_block(
                         cond,
                         candidates,
                         descriptors,
-                        current_module,
                         local_count,
                         locals,
                         type_table,
@@ -992,7 +774,6 @@ fn inline_calls_in_block(
                     tb,
                     candidates,
                     descriptors,
-                    current_module,
                     local_count,
                     locals,
                     type_table,
@@ -1007,7 +788,6 @@ fn inline_calls_in_block(
                         eb,
                         candidates,
                         descriptors,
-                        current_module,
                         local_count,
                         locals,
                         type_table,
@@ -1023,7 +803,6 @@ fn inline_calls_in_block(
                 b,
                 candidates,
                 descriptors,
-                current_module,
                 local_count,
                 locals,
                 type_table,
@@ -1044,13 +823,12 @@ fn inline_calls_in_block(
 fn inline_top_level(
     body: &mut Body,
     value: ExprId,
-    candidates: &IndexMap<(ModuleSource, String), NirFunction>,
+    candidates: &IndexMap<FuncId, NirFunction>,
     descriptors: &[FunctionRef],
-    current_module: &ModuleSource,
     local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
     type_table: &TypeTable,
-    inlined_funcs: &mut Vec<(ModuleSource, String)>,
+    inlined_funcs: &mut Vec<FuncId>,
     inline_counter: &mut u32,
     reval: &mut Vec<InlineRevalInfo>,
     cold: bool,
@@ -1059,11 +837,8 @@ fn inline_top_level(
         body,
         value,
         candidates,
-        descriptors,
-        current_module,
         local_count,
         locals,
-        type_table,
         inline_counter,
         reval,
         cold,
@@ -1073,8 +848,6 @@ fn inline_top_level(
             body,
             value,
             candidates,
-            descriptors,
-            current_module,
             local_count,
             locals,
             type_table,
@@ -1092,7 +865,6 @@ fn inline_top_level(
             new_id,
             candidates,
             descriptors,
-            current_module,
             local_count,
             locals,
             type_table,
@@ -1108,7 +880,6 @@ fn inline_top_level(
             value,
             candidates,
             descriptors,
-            current_module,
             local_count,
             locals,
             type_table,
@@ -1129,110 +900,17 @@ fn inline_top_level(
 fn inline_expr_children(body: &Body, e: ExprId) -> (Vec<ExprId>, Vec<BlockId>) {
     let mut exprs = Vec::new();
     let mut blocks = Vec::new();
-    let push_op = |exprs: &mut Vec<ExprId>, o: Operand| {
-        if let Some(x) = o.as_expr() {
-            exprs.push(x);
-        }
-    };
-    match &body.exprs[e].kind {
-        ExprKind::Binary { left, right, .. }
-        | ExprKind::Index {
-            expr: left,
-            index: right,
-        } => {
-            push_op(&mut exprs, *left);
-            push_op(&mut exprs, *right);
-        }
-        ExprKind::Assign { target, value } => {
-            exprs.push(*target);
-            push_op(&mut exprs, *value);
-        }
-        ExprKind::Unary { expr: inner, .. }
-        | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::FieldAccess { expr: inner, .. }
-        | ExprKind::ClosureToCanonical { functor: inner, .. }
-        | ExprKind::GlobalVarSet { value: inner, .. }
-        | ExprKind::VariantTag { expr: inner }
-        | ExprKind::VariantTest { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. } => push_op(&mut exprs, *inner),
-        ExprKind::CmRawCall { args, .. } => {
-            for a in args {
-                push_op(&mut exprs, *a);
-            }
-        }
-        ExprKind::IndirectCall { callee, args } => {
-            push_op(&mut exprs, *callee);
-            for a in args {
-                push_op(&mut exprs, *a);
-            }
-        }
-        ExprKind::StructLiteral { fields, .. } => {
-            for f in fields {
-                push_op(&mut exprs, f.value);
-            }
-        }
-        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-            for el in elements {
-                push_op(&mut exprs, *el);
-            }
-        }
-        ExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = payload {
-                push_op(&mut exprs, *p);
-            }
-        }
-        ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => blocks.push(*block),
-        ExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            push_op(&mut exprs, *condition);
-            blocks.push(*then_branch);
-            if let Some(eb) = else_branch {
-                blocks.push(*eb);
-            }
-        }
-        ExprKind::Match { expr, arms } => {
-            push_op(&mut exprs, *expr);
-            for arm in arms {
-                if let Some(g) = arm.guard {
-                    push_op(&mut exprs, g);
-                }
-                push_op(&mut exprs, arm.body);
-            }
-        }
-        ExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            push_op(&mut exprs, *scrutinee);
-            blocks.extend(arms.iter().copied());
-            blocks.push(*default);
-        }
-        _ => {}
-    }
+    // `for_each_child` yields expression children before block children for every
+    // `ExprKind` (`If`/`Switch` emit condition/scrutinee ahead of their blocks),
+    // so splitting into two ordered vecs preserves the exact visitation order the
+    // splice's label / local numbering depends on. Pattern / statement children
+    // carry no inlinable call in this walk and are skipped.
+    body.for_each_child(NodeRef::Expr(e), |c| match c {
+        NodeRef::Expr(x) => exprs.push(x),
+        NodeRef::Block(b) => blocks.push(b),
+        NodeRef::Stmt(_) | NodeRef::Pat(_) => {}
+    });
     (exprs, blocks)
-}
-
-/// Look up an inline candidate by module path and function name.
-fn find_inline_candidate<'a>(
-    candidates: &'a IndexMap<(ModuleSource, String), NirFunction>,
-    call_module_source: &ModuleSource,
-    current_module: &ModuleSource,
-    func_name: &str,
-) -> Option<(&'a NirFunction, (ModuleSource, String))> {
-    // Use the call's module_source directly; fall back to caller's module for local calls
-    let target_module = if call_module_source.is_entry_point() {
-        current_module.clone()
-    } else {
-        call_module_source.clone()
-    };
-
-    let key = (target_module, func_name.to_string());
-    candidates.get(&key).map(|c| (c, key))
 }
 
 /// Binding for a single parameter during inlining.
@@ -1289,23 +967,6 @@ pub(super) struct InlineRevalInfo {
     pub block: BlockId,
     /// The original `Call` expr being inlined, keyed against `pure_calls`.
     pub call_expr: ExprId,
-}
-
-/// Whether any node under `block` (statements and nested expression blocks) is a
-/// `Loop`. A loop-free splice introduces no new value-graph back-edge, so the
-/// caller's `loop_entry_values` stay valid across the inline (see the
-/// graph-preserving gate at the splice site).
-fn block_contains_loop(body: &Body, block: BlockId) -> bool {
-    let mut stack = vec![NodeRef::Block(block)];
-    while let Some(n) = stack.pop() {
-        if let NodeRef::Stmt(s) = n
-            && matches!(body.stmts[s].kind, StmtKind::Loop { .. })
-        {
-            return true;
-        }
-        body.for_each_child(n, |c| stack.push(c));
-    }
-    false
 }
 
 /// Core inlining routine: builds a labeled block (in the caller arena) that
@@ -1422,30 +1083,20 @@ fn build_inlined_labeled_block(
 fn try_inline_call_expr(
     caller: &mut Body,
     call_id: ExprId,
-    candidates: &IndexMap<(ModuleSource, String), NirFunction>,
-    descriptors: &[FunctionRef],
-    current_module: &ModuleSource,
+    candidates: &IndexMap<FuncId, NirFunction>,
     local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
-    _type_table: &TypeTable,
     inline_counter: &mut u32,
     reval: &mut Vec<InlineRevalInfo>,
     cold: bool,
-) -> Option<(ExprId, (ModuleSource, String))> {
-    let (module_source, func_name, arg_ops): (ModuleSource, String, Vec<Operand>) =
-        match &caller.exprs[call_id].kind {
-            ExprKind::Call { func_id, args, .. } => {
-                let d = callee_descriptor(descriptors, *func_id);
-                (
-                    d.module_source.clone(),
-                    d.name.clone(),
-                    args.iter().map(|a| a.expr).collect(),
-                )
-            }
-            _ => return None,
-        };
-    let (candidate, inlined_key) =
-        find_inline_candidate(candidates, &module_source, current_module, &func_name)?;
+) -> Option<(ExprId, FuncId)> {
+    let (func_id, arg_ops): (FuncId, Vec<Operand>) = match &caller.exprs[call_id].kind {
+        ExprKind::Call { func_id, args, .. } => (*func_id, args.iter().map(|a| a.expr).collect()),
+        _ => return None,
+    };
+    // The call's stamped `func_id` is the exact callee identity; look the
+    // candidate up directly (no `(module, name)` resolution).
+    let candidate = candidates.get(&func_id)?;
     // A cold call site keeps the call: inlining there only bloats the hot
     // caller. An explicit `#[inline(always)]` wins over the suppression.
     if cold && candidate.inline_hint != InlineHint::Always {
@@ -1473,7 +1124,7 @@ fn try_inline_call_expr(
         caller,
         candidate,
         callee,
-        &func_name,
+        &candidate.name,
         bindings,
         call_span,
         call_id,
@@ -1482,7 +1133,7 @@ fn try_inline_call_expr(
         inline_counter,
         reval,
     );
-    Some((inlined, inlined_key))
+    Some((inlined, func_id))
 }
 
 /// Try to inline a method call `call_id` in `caller`.
@@ -1490,41 +1141,28 @@ fn try_inline_call_expr(
 fn try_inline_method_call_expr(
     caller: &mut Body,
     call_id: ExprId,
-    candidates: &IndexMap<(ModuleSource, String), NirFunction>,
-    descriptors: &[FunctionRef],
-    current_module: &ModuleSource,
+    candidates: &IndexMap<FuncId, NirFunction>,
     local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
     type_table: &TypeTable,
     inline_counter: &mut u32,
     reval: &mut Vec<InlineRevalInfo>,
     cold: bool,
-) -> Option<(ExprId, (ModuleSource, String))> {
-    let (module_source, func_name, receiver_op, arg_ops): (
-        ModuleSource,
-        String,
-        Operand,
-        Vec<Operand>,
-    ) = match &caller.exprs[call_id].kind {
-        ExprKind::MethodCall {
-            receiver,
-            func_id,
-            args,
-            ..
-        } => {
-            let d = callee_descriptor(descriptors, *func_id);
-            (
-                d.module_source.clone(),
-                d.name.clone(),
-                *receiver,
-                args.iter().map(|a| a.expr).collect(),
-            )
-        }
-        _ => return None,
-    };
+) -> Option<(ExprId, FuncId)> {
+    let (func_id, receiver_op, arg_ops): (FuncId, Operand, Vec<Operand>) =
+        match &caller.exprs[call_id].kind {
+            ExprKind::MethodCall {
+                receiver,
+                func_id,
+                args,
+                ..
+            } => (*func_id, *receiver, args.iter().map(|a| a.expr).collect()),
+            _ => return None,
+        };
     let call_span = caller.exprs[call_id].span;
-    let (candidate, inlined_key) =
-        find_inline_candidate(candidates, &module_source, current_module, &func_name)?;
+    // The call's stamped `func_id` is the exact callee identity; look the
+    // candidate up directly (no `(module, name)` resolution).
+    let candidate = candidates.get(&func_id)?;
     // A cold call site keeps the call: inlining there only bloats the hot
     // caller. An explicit `#[inline(always)]` wins over the suppression.
     if cold && candidate.inline_hint != InlineHint::Always {
@@ -1579,7 +1217,7 @@ fn try_inline_method_call_expr(
         caller,
         candidate,
         callee,
-        &func_name,
+        &candidate.name,
         bindings,
         call_span,
         call_id,
@@ -1588,7 +1226,7 @@ fn try_inline_method_call_expr(
         inline_counter,
         reval,
     );
-    Some((inlined, inlined_key))
+    Some((inlined, func_id))
 }
 
 /// Remap a local index from the callee frame into the caller frame.
@@ -2265,13 +1903,12 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
 fn inline_calls_in_expr(
     body: &mut Body,
     e: ExprId,
-    candidates: &IndexMap<(ModuleSource, String), NirFunction>,
+    candidates: &IndexMap<FuncId, NirFunction>,
     descriptors: &[FunctionRef],
-    current_module: &ModuleSource,
     local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
     type_table: &TypeTable,
-    inlined_funcs: &mut Vec<(ModuleSource, String)>,
+    inlined_funcs: &mut Vec<FuncId>,
     inline_counter: &mut u32,
     reval: &mut Vec<InlineRevalInfo>,
     cold: bool,
@@ -2300,7 +1937,6 @@ fn inline_calls_in_expr(
                     a,
                     candidates,
                     descriptors,
-                    current_module,
                     local_count,
                     locals,
                     type_table,
@@ -2314,11 +1950,8 @@ fn inline_calls_in_expr(
                 body,
                 e,
                 candidates,
-                descriptors,
-                current_module,
                 local_count,
                 locals,
-                type_table,
                 inline_counter,
                 reval,
                 cold,
@@ -2356,7 +1989,6 @@ fn inline_calls_in_expr(
                     receiver,
                     candidates,
                     descriptors,
-                    current_module,
                     local_count,
                     locals,
                     type_table,
@@ -2373,7 +2005,6 @@ fn inline_calls_in_expr(
                     a,
                     candidates,
                     descriptors,
-                    current_module,
                     local_count,
                     locals,
                     type_table,
@@ -2387,8 +2018,6 @@ fn inline_calls_in_expr(
                 body,
                 e,
                 candidates,
-                descriptors,
-                current_module,
                 local_count,
                 locals,
                 type_table,
@@ -2424,7 +2053,6 @@ fn inline_calls_in_expr(
                     ex,
                     candidates,
                     descriptors,
-                    current_module,
                     local_count,
                     locals,
                     type_table,
@@ -2440,7 +2068,6 @@ fn inline_calls_in_expr(
                     b,
                     candidates,
                     descriptors,
-                    current_module,
                     local_count,
                     locals,
                     type_table,
