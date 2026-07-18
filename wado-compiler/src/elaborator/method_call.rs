@@ -869,7 +869,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let ultimate = tt.get_ultimate_base_type(method_impl_type_id);
                     tt.generic_type_args(ultimate).unwrap_or_default()
                 };
-                let head = name.split('<').next().unwrap_or(&name).to_string();
+                let head = crate::name::split_base_name(&name).to_string();
                 let type_arg_names: Vec<String> = type_args
                     .iter()
                     .map(|t| {

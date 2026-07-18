@@ -453,7 +453,7 @@ impl Monomorphizer {
                     .is_some()
             }),
             None => self.newtype_own_name(receiver_type_id, type_table, |own| {
-                let head = own.split('<').next().unwrap_or(own);
+                let head = crate::name::split_base_name(own);
                 self.functions
                     .trait_env
                     .has_inherent_method(head, &info.method_name)

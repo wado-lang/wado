@@ -298,7 +298,15 @@ impl Monomorphizer {
                 if new_base == base_type {
                     return type_id;
                 }
-                let head = name.split('<').next().unwrap_or(&name).to_string();
+                // Re-mangle the head with the substituted base's args. This is
+                // exact for the identity single-arg mapping (`type X<T> = List<T>`,
+                // `= Array<T>`, …) — the only shape reachable today, since a
+                // multi-arg (`type M<V> = Map<K, V>`) or chained
+                // (`type B<T> = X<T>`) generic newtype is rejected earlier at
+                // annotate. If those become expressible, the newtype must carry
+                // its own `type_args` (like `GenericInstance`) rather than
+                // re-deriving them from the base (wado-lang/wado#1626).
+                let head = crate::name::split_base_name(&name).to_string();
                 let new_name = match type_table.generic_type_args(new_base) {
                     Some(args) if !args.is_empty() => {
                         let arg_names: Vec<String> = args
