@@ -296,15 +296,6 @@ impl Engine {
         for error in wado_compiler::check_resource_moves_semantic(&sem) {
             diagnostics.push(error.into());
         }
-        // Source-level unused / dead-code warnings. The compiler computes the
-        // liveness classification on the LSP path too (reify is skipped, but
-        // `liveness` runs before it), so the editor surfaces the same
-        // `DeadFunction` / `DeadGlobal` / `TestOnly*` warnings as a batch
-        // build. The editor runs in the default command world, so test-only
-        // items are reported (`is_test_world = false`).
-        if self.unused_diagnostics {
-            diagnostics.extend(wado_compiler::unused_diagnostics(&sem, false));
-        }
         let snapshot = Rc::new(Snapshot { sem, diagnostics });
         *doc.snapshot.borrow_mut() = Some(snapshot.clone());
         Some(snapshot)
@@ -630,6 +621,14 @@ impl Engine {
     /// `span.file` — cross-file diagnostics keep the compiler's codepoint
     /// columns, the entry document is re-expressed in the negotiated
     /// position encoding.
+    ///
+    /// Source-level unused / dead-code warnings are computed here rather
+    /// than baked into the snapshot: the classification is a cheap walk
+    /// over the liveness lists the compiler already produced, and applying
+    /// it at query time keeps [`Engine::set_unused_diagnostics`] live
+    /// without invalidating the cache. Only items in the entry document
+    /// are reported — dead code in an imported module belongs to that
+    /// module's own `publishDiagnostics`, not this one.
     pub async fn diagnostics<H: CompilerHost>(&self, uri: &str, host: &H) -> Vec<Diagnostic> {
         let Some(snapshot) = self.snapshot(uri, host).await else {
             return Vec::new();
@@ -637,24 +636,30 @@ impl Engine {
         let filename = Uri::new(uri).to_filename();
         let encoding = self.position_encoding;
         let entry_text = self.documents.get(uri).map(|d| d.text.as_str());
-        snapshot
-            .diagnostics
-            .iter()
-            .filter_map(|d| {
-                // Only re-encode against the entry document's text when
-                // the diagnostic actually points at it. Diagnostics from
-                // imported modules carry codepoint columns relative to
-                // the OTHER module's source, which we don't have on
-                // hand; passing `None` keeps them as raw codepoint
-                // indices (correct under UTF-32 / ASCII).
-                let source = d
-                    .span
-                    .as_ref()
-                    .filter(|s| s.file == filename)
-                    .and(entry_text);
-                diagnostics::from_compiler_diagnostic(d, uri, source, encoding)
-            })
-            .collect()
+        let reencode = |d: &CompilerDiagnostic| {
+            // Only re-encode against the entry document's text when the
+            // diagnostic actually points at it. Diagnostics from imported
+            // modules carry codepoint columns relative to the OTHER
+            // module's source, which we don't have on hand; passing `None`
+            // keeps them as raw codepoint indices (correct under UTF-32 /
+            // ASCII).
+            let source = d
+                .span
+                .as_ref()
+                .filter(|s| s.file == filename)
+                .and(entry_text);
+            diagnostics::from_compiler_diagnostic(d, uri, source, encoding)
+        };
+        let mut out: Vec<Diagnostic> = snapshot.diagnostics.iter().filter_map(&reencode).collect();
+        if self.unused_diagnostics {
+            out.extend(
+                wado_compiler::unused_diagnostics(&snapshot.sem, false)
+                    .iter()
+                    .filter(|d| d.span.as_ref().is_some_and(|s| s.file == filename))
+                    .filter_map(&reencode),
+            );
+        }
+        out
     }
 }
 

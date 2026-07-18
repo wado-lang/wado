@@ -86,14 +86,14 @@ pub fn from_compiler_diagnostic(
         CompilerSeverity::Debug => return None,
     };
 
-    // Unused / dead-code lints render as faded ("greyed-out") ranges via the
-    // LSP `Unnecessary` tag, matching the editor experience for rustc's
-    // `dead_code` / `unused_*` lints.
-    let tags = match diag.code {
-        Code::DeadFunction | Code::DeadGlobal | Code::TestOnlyFunction | Code::TestOnlyGlobal => {
-            vec![DiagnosticTag::Unnecessary]
-        }
-        _ => Vec::new(),
+    let is_unused_lint = matches!(
+        diag.code,
+        Code::DeadFunction | Code::DeadGlobal | Code::TestOnlyFunction | Code::TestOnlyGlobal
+    );
+    let tags = if is_unused_lint {
+        vec![DiagnosticTag::Unnecessary]
+    } else {
+        Vec::new()
     };
 
     let span = diag.span.as_ref()?;

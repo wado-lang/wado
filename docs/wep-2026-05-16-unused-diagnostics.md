@@ -350,8 +350,11 @@ land with stage 6 of the rearchitecture (see
       `DeadFunction` / `DeadGlobal` / `TestOnly*` in the editor. The LSP runs
       in the default command world (`is_test_world = false`, so test-only
       items are reported); `Engine::set_unused_diagnostics` mirrors
-      `CompilerOptions::unused_diagnostics`. Diagnostics carry the LSP
-      `Unnecessary` tag so editors fade the range. Covered by
+      `CompilerOptions::unused_diagnostics`. `Engine::diagnostics` applies the
+      builder at query time (not baked into the snapshot, so the toggle is
+      live) and keeps only entry-document items — dead code in an imported
+      module belongs to that module's own `publishDiagnostics`. Diagnostics
+      carry the LSP `Unnecessary` tag so editors fade the range. Covered by
       `wado-lsp/tests/diagnostics.rs`.
 
 #### Phase 3b — reify gating (Design B)

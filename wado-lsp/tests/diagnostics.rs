@@ -131,6 +131,63 @@ fn dead_code_diagnostics_carry_unnecessary_tag() {
     });
 }
 
+/// Dead code in an *imported* user module belongs to that module's own
+/// `publishDiagnostics`, not the importer's: opening `foo.wado` must not
+/// surface `bar.wado`'s dead function (whose range would otherwise be mapped
+/// onto the wrong document). Opening `bar.wado` directly still reports it.
+#[test]
+fn imported_module_dead_code_stays_off_the_importer() {
+    futures::executor::block_on(async {
+        let bar = "pub fn helper() -> i32 {\n    return 1;\n}\n\ninternal fn dead_in_bar() -> i32 {\n    return 2;\n}\n";
+        let foo =
+            "use { helper } from \"./bar.wado\";\n\nexport fn run() {\n    let _ = helper();\n}\n";
+        let host = MapHost::with_files(&[("/work/bar.wado", bar)]);
+        let mut engine = Engine::new();
+        engine.open_document("file:///work/foo.wado", foo.to_string());
+        engine.open_document("file:///work/bar.wado", bar.to_string());
+
+        let foo_diags = engine.diagnostics("file:///work/foo.wado", &host).await;
+        assert!(
+            !foo_diags.iter().any(|d| d.message.contains("dead_in_bar")),
+            "imported module's dead code must not appear on the importer, got {foo_diags:#?}"
+        );
+
+        let bar_diags = engine.diagnostics("file:///work/bar.wado", &host).await;
+        assert!(
+            bar_diags
+                .iter()
+                .any(|d| d.message.contains("function `dead_in_bar` is never used")),
+            "bar.wado's own diagnostics must report its dead code, got {bar_diags:#?}"
+        );
+    });
+}
+
+/// `set_unused_diagnostics(false)` takes effect at the next query without a
+/// document edit: the classification is applied at query time, not baked into
+/// the cached snapshot.
+#[test]
+fn toggling_unused_diagnostics_takes_effect_without_reopen() {
+    futures::executor::block_on(async {
+        let source = "fn unused_helper() -> i32 {\n    return 1;\n}\n\nexport fn run() {}\n";
+        let host = MapHost::empty();
+        let mut engine = Engine::new();
+        engine.open_document("file:///work/toggle.wado", source.to_string());
+
+        let before = engine.diagnostics("file:///work/toggle.wado", &host).await;
+        assert!(
+            before.iter().any(|d| d.message.contains("unused_helper")),
+            "dead code should be reported while enabled, got {before:#?}"
+        );
+
+        engine.set_unused_diagnostics(false);
+        let after = engine.diagnostics("file:///work/toggle.wado", &host).await;
+        assert!(
+            !after.iter().any(|d| d.message.contains("unused_helper")),
+            "disabling must suppress dead code at the next query, got {after:#?}"
+        );
+    });
+}
+
 /// A clean program whose every item is reached emits no dead-code warnings —
 /// in particular the imported stdlib items are never reported.
 #[test]

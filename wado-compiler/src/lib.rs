@@ -817,8 +817,9 @@ fn compile_after_load<H: CompilerHost>(
     if options.unused_diagnostics {
         let is_test_world = options.target_world.as_deref() == Some("test");
         for diag in unused_diagnostics(&sem, is_test_world) {
-            if let Some(span) = diag.span {
-                logger.warn_at(diag.code, diag.message, span);
+            match diag.span {
+                Some(span) => logger.warn_at(diag.code, diag.message, span),
+                None => logger.warn(diag.code, diag.message),
             }
         }
     }
