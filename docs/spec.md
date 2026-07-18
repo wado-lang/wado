@@ -1567,10 +1567,12 @@ let path = "path/to/file.txt";
 let escaped = "Line 1\nLine 2\tTabbed";
 ```
 
-**Byte strings** use a `b` prefix and create a constant `List<u8>`:
+**Byte strings** use a `b` prefix and create a constant `ByteList` (the
+first-class byte-buffer newtype over `List<u8>`):
 
 ```wado
-let magic: List<u8> = b"\x89PNG\r\n";   // Type: List<u8>, value [137, 80, 78, 71, 13, 10]
+let magic = b"\x89PNG\r\n";             // Type: ByteList, value [137, 80, 78, 71, 13, 10]
+let raw: List<u8> = b"\x89PNG\r\n";     // Also OK: newtype literal coercion to the base
 ```
 
 The content must be ASCII; each `\xNN` escape (two hex digits) or source
@@ -1578,7 +1580,9 @@ character contributes one byte, and the standard escapes (`\n`, `\t`, `\\`,
 `\"`, `\0`, `\r`, `\'`) are also accepted. A byte string lowers directly to a
 constant data segment — never an element-by-element builder — so a large blob
 costs nothing to optimize. (`#include_bytes("path")` produces the same
-`List<u8>` from a file.)
+`ByteList` from a file.) The default type is `ByteList`, but newtype literal
+coercion lets it flow into a `List<u8>` context (or any type whose base is
+`List<u8>`) with no cast.
 
 #### Escape Sequences
 

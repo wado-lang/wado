@@ -1261,7 +1261,7 @@ let func = #function;       // current function name (String)
 let data = #data;           // __DATA__ section content (String)
 
 let src = #include_str("./runtime.wado");  // include file as String
-let icon = #include_bytes("./icon.png");   // include file as List<u8>
+let icon = #include_bytes("./icon.png");   // include file as ByteList
 ```
 
 Paths in `#include_str` and `#include_bytes` are resolved relative to the source file. See [WEP: Compile-Time File Inclusion](./wep-2026-03-02-include-str.md).

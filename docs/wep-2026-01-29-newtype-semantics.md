@@ -90,6 +90,23 @@ let x: f64 = 1.0;
 x.to_degrees();  // ERROR: f64 has no method 'to_degrees'
 ```
 
+### Associated Functions Are Inherited
+
+A newtype inherits its base type's associated (static) functions, and the
+result is viewed as the newtype (they share a representation):
+
+```wado
+type ByteList = List<u8>;
+
+let mut b = ByteList::with_capacity(16);   // dispatches to List::<u8>::with_capacity
+b.push(0xff);                              // b: ByteList
+let filled = ByteList::filled(4, 0);       // filled: ByteList
+```
+
+When the base function's return type is its own type (`-> Self` / `-> List<T>`),
+the call yields the newtype; the base's concrete type arguments (here `u8`) seed
+the instantiation, so no turbofish is needed.
+
 ### Base Type Implementations Are Inherited
 
 When you add methods to the base type, all newtypes derived from it can use those methods:
@@ -225,6 +242,9 @@ impl UserId {
 - [x] Trait bounds with newtypes (`fn compare<T: Ord>(a: T, b: T)` with newtype) — implemented
 - [x] Methods on primitive newtypes (`impl UserId { ... }` where `type UserId = i32`) — implemented
 - [x] `List<Newtype>.sort()` via Ord inheritance — implemented
+- [x] Associated-function inheritance (`ByteList::with_capacity`) with newtype return — implemented
+- [ ] A newtype's own inherent method called inside a generic function body mis-resolves its owner to the erased base (wado-lang/wado#1615)
+- [ ] `for-of` does not inherit `IntoIterator` on a newtype (wado-lang/wado#1616)
 
 ## See Also
 
