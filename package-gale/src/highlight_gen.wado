@@ -310,7 +310,7 @@ fn gen_highlight_run(w: &mut CodeWriter) {
         &"let file = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait().unwrap();",
     );
     w.line(&"let [read_stream, _done] = file.read_via_stream(0 as Filesize);");
-    w.line(&"let mut bytes: List<u8> = [];");
+    w.line(&"let mut bytes: ByteList = [];");
     w.begin(&"loop");
     w.line(&"let chunk = read_stream.read(65536);");
     w.begin(&"if chunk.len() == 0");
