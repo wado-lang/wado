@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784365081987,
+  "lastUpdate": 1784368443675,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -41593,6 +41593,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6757b8357a4bd19bbcf684fa80945645865ae570"
         },
         "date": 1784365081476,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8257,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17261,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271329,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d98cd78b1506ed129cc635f7fe6daf1a1f5ead36",
+          "message": "Merge pull request #1620 from wado-lang/claude/wado-lsp-unused-support-exn6io\n\nfeat(lsp): surface unused / dead-code diagnostics in the editor",
+          "timestamp": "2026-07-18T18:44:23+09:00",
+          "tree_id": "03448439ed9f1f552a15c16706aefc5cf9e0d56a",
+          "url": "https://github.com/wado-lang/wado/commit/d98cd78b1506ed129cc635f7fe6daf1a1f5ead36"
+        },
+        "date": 1784368442925,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
