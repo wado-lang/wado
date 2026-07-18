@@ -148,6 +148,21 @@ fn compare<T: Ord>(a: T, b: T) -> bool { ... }
 compare(d1, d2);  // OK: Duration satisfies Ord bound
 ```
 
+### Iteration Is Inherited
+
+`for-of` desugars to `IntoIterator`, a trait, so a newtype over an iterable
+inherits it. The associated iterator/item types resolve against the base's type
+args (peeled from the newtype), and a `&newtype` receiver reaches the base's
+by-reference impl (`impl IntoIterator for &List<T>`, `Item = &T`):
+
+```wado
+type ByteList = List<u8>;
+
+let bytes: ByteList = ...;
+for let b of bytes {  b: u8   }   // impl IntoIterator for List<u8>
+for let b of &bytes { b: &u8  }   // impl IntoIterator for &List<u8>
+```
+
 ### Cast Rules
 
 | From          | To                      | Allowed       |
@@ -244,8 +259,9 @@ impl UserId {
 - [x] `List<Newtype>.sort()` via Ord inheritance — implemented
 - [x] Associated-function inheritance (`ByteList::with_capacity`) with newtype return — implemented
 - [x] A newtype over the raw GC `Array<T>` inherits its `Index` traits (`ByteArray`) — implemented
+- [x] `for-of` inherits `IntoIterator` on a newtype, by value (`Item = T`) and by
+      reference (`Item = &T`) (wado-lang/wado#1616) — implemented
 - [ ] A newtype's own inherent method called inside a generic function body mis-resolves its owner to the erased base (wado-lang/wado#1615)
-- [ ] `for-of` does not inherit `IntoIterator` on a newtype (wado-lang/wado#1616)
 
 ## See Also
 

@@ -219,9 +219,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ),
         };
 
-        // Extract receiver type args for generic types (used for resolving associated types)
+        // Extract receiver type args for generic types (used for resolving associated types).
+        // A newtype (e.g. `ByteList = List<u8>`) carries no type args of its own, so peel it
+        // to its ultimate base and read them there — otherwise an inherited trait method's
+        // associated types (`IntoIterator::IntoIter` / `Item`) resolve against nothing and
+        // the return type collapses to `unknown` (wado-lang/wado#1616).
+        let type_args_source_id = {
+            let tt = self.tysys.type_table.borrow();
+            if matches!(tt.get(base_type_id), ResolvedType::Newtype { .. }) {
+                tt.get_ultimate_base_type(base_type_id)
+            } else {
+                base_type_id
+            }
+        };
         let receiver_type_args_for_trait: Option<Vec<TypeId>> =
-            match self.tysys.type_table.borrow().get(base_type_id).clone() {
+            match self.tysys.type_table.borrow().get(type_args_source_id).clone() {
                 ResolvedType::GenericInstance { type_args, .. } if !type_args.is_empty() => {
                     Some(type_args)
                 }

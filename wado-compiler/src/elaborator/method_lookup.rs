@@ -1834,7 +1834,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             loop {
                 match self.tysys.type_table.borrow().get(current).clone() {
                     ResolvedType::Newtype { base_type, .. } => {
-                        let base_name = self.tysys.type_table.borrow().type_name(base_type);
+                        // Trait impls are keyed by the bare struct name, so a
+                        // newtype over a generic instance (`ByteList = List<u8>`)
+                        // must contribute "List", not the `type_name` spelling
+                        // "List<u8>" — otherwise `impl<T> IntoIterator for List<T>`
+                        // is unreachable through the alias (wado-lang/wado#1616).
+                        let base_name = match self.tysys.type_table.borrow().get(base_type).clone() {
+                            ResolvedType::GenericInstance { name, .. } => name,
+                            ResolvedType::BuiltinArray(_) => {
+                                TypeTable::ARRAY_TYPE_NAME.to_string()
+                            }
+                            _ => self.tysys.type_table.borrow().type_name(base_type),
+                        };
                         names.push(base_name);
                         current = base_type;
                     }
@@ -1972,6 +1983,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // non-empty `impl_inner`, so the ref impl is not matched.
             _ => String::new(),
         };
+        // A newtype ref receiver (`&ByteList`) matches a ref impl on any type in
+        // its base chain (`impl IntoIterator for &List<T>`), so its by-ref
+        // iteration inherits the base's `Item = &T` rather than falling through
+        // to the by-value impl (wado-lang/wado#1616).
+        if impl_inner != receiver_outer
+            && matches!(self.tysys.type_table.borrow().get(rt), ResolvedType::Newtype { .. })
+        {
+            return self.newtype_chain_names(&receiver_outer).contains(&impl_inner);
+        }
         impl_inner == receiver_outer
     }
 

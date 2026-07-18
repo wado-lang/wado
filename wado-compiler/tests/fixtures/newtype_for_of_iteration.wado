@@ -1,0 +1,48 @@
+// A newtype over a container inherits the base's `IntoIterator`, so `for-of`
+// works through the alias — both by value (`Item = T`) and by reference
+// (`Item = &T`, from `impl IntoIterator for &List<T>`). The associated iterator
+// type resolves against the base's type args, peeled from the newtype
+// (wado-lang/wado#1616).
+type ByteBag = List<u8>;
+
+export fn run() {
+    let mut bag: ByteBag = ByteBag::with_capacity(4);
+    bag.push(1);
+    bag.push(2);
+    bag.push(3);
+
+    // By value: Item = u8.
+    let mut sum = 0;
+    for let b of bag {
+        sum += b as i32;
+    }
+    assert sum == 6;
+
+    // By reference: Item = &u8.
+    let mut ref_sum = 0;
+    for let b of &bag {
+        ref_sum += *b as i32;
+    }
+    assert ref_sum == 6;
+
+    // The prelude `ByteList` newtype behaves the same.
+    let mut bl: ByteList = ByteList::with_capacity(2);
+    bl.push(10);
+    bl.push(20);
+    let mut bl_sum = 0;
+    for let b of &bl {
+        bl_sum += *b as i32;
+    }
+    assert bl_sum == 30;
+
+    // A newtype over the raw GC `Array<T>` iterates by reference too.
+    let ba: ByteArray = ByteArray::filled(3, 7);
+    let mut ba_sum = 0;
+    for let b of &ba {
+        ba_sum += *b as i32;
+    }
+    assert ba_sum == 21;
+}
+
+__DATA__
+{"stdout": ""}
