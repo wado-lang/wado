@@ -4,7 +4,7 @@ use { println, Stdout } from "core:cli";
 trait Greet {
     fn name(&self) -> String;
     fn greet(&self) -> String {
-        return `Hello, {self.name()}!`;
+        return `Hello, ${self.name()}!`;
     }
 }
 
@@ -14,7 +14,7 @@ struct Person {
 
 impl Greet for Person {
     fn greet(&self) -> String {
-        return `Hi, {self.name()}!`;
+        return `Hi, ${self.name()}!`;
     }
 
     fn name(&self) -> String {
@@ -29,7 +29,7 @@ struct Robot {
 // Robot uses the default greet() method
 impl Greet for Robot {
     fn name(&self) -> String {
-        return `Robot-{self.id}`;
+        return `Robot-${self.id}`;
     }
 }
 
@@ -37,10 +37,10 @@ impl Greet for Robot {
 trait Describable {
     fn label(&self) -> String;
     fn short_desc(&self) -> String {
-        return `[{self.label()}]`;
+        return `[${self.label()}]`;
     }
     fn full_desc(&self) -> String {
-        return `Description: {self.short_desc()}`;
+        return `Description: ${self.short_desc()}`;
     }
 }
 
@@ -59,7 +59,7 @@ impl Describable for Item {
 trait Summary {
     fn title(&self) -> String;
     fn summary(&self) -> String {
-        return `Title: {self.title()}`;
+        return `Title: ${self.title()}`;
     }
 }
 
@@ -75,7 +75,7 @@ impl Summary for Article {
     }
 
     fn summary(&self) -> String {
-        return `{self.headline} - {self.content}`;
+        return `${self.headline} - ${self.content}`;
     }
 }
 
@@ -113,7 +113,7 @@ fn trait_default_count() with Stdout {
     let mut iter = arr.iter().copied();
     iter.next();
     let remaining = iter.count();
-    println(`{remaining}`);
+    println(`${remaining}`);
 }
 
 // from trait_default_override.wado

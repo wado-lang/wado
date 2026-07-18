@@ -13,10 +13,10 @@ test "a lexer set_type action retypes the emitted token" {
     // 'a' matches rule A, whose action retypes it to B; the parser reports B.
     let retyped = lst::parse(&"a");
     assert retyped.ok(), "clean parse of 'a'";
-    assert retyped.output == "B", `output: '{retyped.output}'`;
+    assert retyped.output == "B", `output: '${retyped.output}'`;
 
     // 'b' matches B directly — no action, plain B.
     let plain = lst::parse(&"b");
     assert plain.ok(), "clean parse of 'b'";
-    assert plain.output == "B", `output: '{plain.output}'`;
+    assert plain.output == "B", `output: '${plain.output}'`;
 }

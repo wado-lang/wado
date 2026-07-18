@@ -129,16 +129,16 @@ fn assert_sim_matches_atn(sim: &AtnSim, atn: &Atn) {
     assert sim.state_kind.len() == atn.states.len(), "state count";
     for let mut i = 0; i < atn.states.len(); i += 1 {
         let st = &atn.states[i];
-        assert sim.state_kind[i] == st.kind, `state {i} kind`;
-        assert sim.state_tr_count[i] == st.transitions.len(), `state {i} tr count`;
+        assert sim.state_kind[i] == st.kind, `state ${i} kind`;
+        assert sim.state_tr_count[i] == st.transitions.len(), `state ${i} tr count`;
         let base = sim.state_tr_start[i];
         for let mut j = 0; j < st.transitions.len(); j += 1 {
             let t = &st.transitions[j];
-            assert sim.tr_kind[base + j] == t.kind, `state {i} tr {j} kind`;
-            assert sim.tr_target[base + j] == t.target, `state {i} tr {j} target`;
-            assert sim.tr_label[base + j] == t.label, `state {i} tr {j} label`;
-            assert sim.tr_follow[base + j] == t.follow, `state {i} tr {j} follow`;
-            assert sim.tr_prec[base + j] == t.prec, `state {i} tr {j} prec`;
+            assert sim.tr_kind[base + j] == t.kind, `state ${i} tr ${j} kind`;
+            assert sim.tr_target[base + j] == t.target, `state ${i} tr ${j} target`;
+            assert sim.tr_label[base + j] == t.label, `state ${i} tr ${j} label`;
+            assert sim.tr_follow[base + j] == t.follow, `state ${i} tr ${j} follow`;
+            assert sim.tr_prec[base + j] == t.prec, `state ${i} tr ${j} prec`;
         }
     }
 }
@@ -204,11 +204,11 @@ test "LR rule builds in rewritten loop-entry form" {
     let st = &atn.states[entry];
     assert st.decision >= 0, "loop entry must be a decision";
     // Two precedence-guarded enter edges (one per LR alt), then the exit.
-    assert st.transitions.len() == 3, `expected 3 loop-entry edges, got {st.transitions.len()}`;
+    assert st.transitions.len() == 3, `expected 3 loop-entry edges, got ${st.transitions.len()}`;
     assert st.transitions[0].kind == ATN_TR_PRECEDENCE, "first enter edge is a precedence predicate";
-    assert st.transitions[0].prec == 2, `'*' alt own_prec should be 2, got {st.transitions[0].prec}`;
+    assert st.transitions[0].prec == 2, `'*' alt own_prec should be 2, got ${st.transitions[0].prec}`;
     assert st.transitions[1].kind == ATN_TR_PRECEDENCE, "second enter edge is a precedence predicate";
-    assert st.transitions[1].prec == 1, `'+' alt own_prec should be 1, got {st.transitions[1].prec}`;
+    assert st.transitions[1].prec == 1, `'+' alt own_prec should be 1, got ${st.transitions[1].prec}`;
     // Greedy ordering: the exit epsilon is last and lands on a LoopEnd.
     assert st.transitions[2].kind == ATN_TR_EPSILON, "exit edge is epsilon";
     assert atn.states[st.transitions[2].target].kind == ATN_LOOP_END, "exit lands on LoopEnd";
@@ -260,7 +260,7 @@ test "P4.2a: call sites map to distinct ATN return states (between shape)" {
     //   cs2 = expr alt0 trailing 'and' operand
     //   cs3 = 'between' first operand
     //   cs4 = 'between' second operand
-    assert csr.len() == 5, `expected 5 call sites, got {csr.len()}`;
+    assert csr.len() == 5, `expected 5 call sites, got ${csr.len()}`;
     assert csr[0] >= 0, "stat->expr call site should have a return state";
     // The leading LR self-ref is the precedence-climb entry, not a real call
     // in the rewritten form, so it never gets a return state.
@@ -339,7 +339,7 @@ test "build_atn builds a precedence edge for a `~X`-led LR suffix" {
             prec_edges += 1;
         }
     }
-    assert prec_edges >= 2, `expected precedence edges for every real LR suffix, got {prec_edges}`;
+    assert prec_edges >= 2, `expected precedence edges for every real LR suffix, got ${prec_edges}`;
 }
 
 // An LR suffix whose recursive operand is nested inside a Repeat (`('and' e)+`).
@@ -387,7 +387,7 @@ test "two ?? in a rule map to distinct ATN decisions" {
     let ds = &atn.decision_sites;
     // Sites: 0 = first `??` Repeat, 1 = its single-alt group (-1, no decision),
     // 2 = second `??` Repeat; the list stops at the highest recorded site (2).
-    assert ds.len() == 3, `expected 3 decision sites, got {ds.len()}`;
+    assert ds.len() == 3, `expected 3 decision sites, got ${ds.len()}`;
     assert ds[0] >= 0, "first ?? has an ATN decision";
     assert ds[1] == -1, "single-alt group marks no decision";
     assert ds[2] >= 0, "second ?? has an ATN decision";
@@ -418,5 +418,5 @@ test "decision sites are recorded for a node inside an LR suffix" {
     let ds = &atn.decision_sites;
     // Site 0 is the `('x')??` Repeat in alt0's LR suffix.
     assert ds.len() >= 1, "expected at least one decision site";
-    assert ds[0] >= 0, `LR-suffix decision must be recorded, got {ds[0]}`;
+    assert ds[0] >= 0, `LR-suffix decision must be recorded, got ${ds[0]}`;
 }

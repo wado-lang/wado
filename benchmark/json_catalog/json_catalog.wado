@@ -20,7 +20,7 @@ fn read_file_bytes(path: String) -> ByteList with Preopens {
     let root = dirs[0].0;
     let open_result = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait();
     if let Err(_) = open_result {
-        panic(`failed to open {path}`);
+        panic(`failed to open ${path}`);
     }
     let file = match open_result {
         Ok(f) => f,
@@ -64,5 +64,5 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     b.run("ser", || to_bytes::<CitmCatalog>(&catalog).unwrap().len());
     let events = b.run("de", || event_count(&from_bytes::<CitmCatalog, _>(json_data).unwrap()));
     assert events == 184;
-    b.println(`round-tripped {events} events`);
+    b.println(`round-tripped ${events} events`);
 }

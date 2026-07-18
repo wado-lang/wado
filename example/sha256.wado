@@ -161,7 +161,7 @@ fn sha256(data: &List<u8>) -> List<u8> {
 fn to_hex(digest: &List<u8>) -> String {
     let mut s = String::with_capacity(digest.len() * 2);
     for let mut i = 0; i < digest.len(); i += 1 {
-        s.push_str(&`{digest[i]:02x}`);
+        s.push_str(&`${digest[i]:02x}`);
     }
     return s;
 }
@@ -209,6 +209,6 @@ export fn run() with Stdout {
     println("SHA-256 (FIPS 180-4 / RFC 6234)");
     for let s of inputs {
         let digest = sha256(&bytes_of(&s));
-        println(`  "{s}" -> {to_hex(&digest)}`);
+        println(`  "${s}" -> ${to_hex(&digest)}`);
     }
 }

@@ -10,17 +10,17 @@ use ps from "./grammars/wado_pred_select.g4"
 test "an alt-initial predicate selects the alternative in prediction" {
     let result = ps::parse_item(&"a b");
     assert result.ok(), "clean parse under a true predicate";
-    assert result.output == "alt1", `output: '{result.output}'`;
+    assert result.output == "alt1", `output: '${result.output}'`;
 }
 
 test "a distinct-token alt stays a plain token-led branch" {
     let result = ps::parse_item(&"c d");
     assert result.ok(), "clean parse of the third alt";
-    assert result.output == "alt2", `output: '{result.output}'`;
+    assert result.output == "alt2", `output: '${result.output}'`;
 }
 
 test "a failed predicate falls through to the unpredicated alt" {
     let result = ps::parse_fallback(&"a b");
     assert result.ok(), "clean parse via the fallback alt";
-    assert result.output == "fb1", `output: '{result.output}'`;
+    assert result.output == "fb1", `output: '${result.output}'`;
 }

@@ -81,14 +81,14 @@ fn tag(input: String) -> T {
 pub fn base64(input: String) -> List<u8> {
     match decode_base64_impl(input) {
         Ok(data) => data,
-        Err(e) => panic(`Invalid base64 encoding: {e}`),
+        Err(e) => panic(`Invalid base64 encoding: ${e}`),
     }
 }
 
 pub fn hex(input: String) -> List<u8> {
     match decode_hex_impl(input) {
         Ok(data) => data,
-        Err(e) => panic(`Invalid hex encoding: {e}`),
+        Err(e) => panic(`Invalid hex encoding: ${e}`),
     }
 }
 ```
@@ -100,7 +100,7 @@ pub fn hex(input: String) -> List<u8> {
 fn regex(pattern: String) -> Regex {
     match compile_regex(pattern) {
         Ok(r) => r,
-        Err(e) => panic(`Invalid regex pattern: {e}`),
+        Err(e) => panic(`Invalid regex pattern: ${e}`),
     }
 }
 
@@ -110,7 +110,7 @@ let email_pattern = regex`^[a-z]+@[a-z]+\.[a-z]+$`;  // Validated at compile tim
 fn sql(query: String) -> SqlQuery {
     match parse_sql(query) {
         Ok(q) => q,
-        Err(e) => panic(`Invalid SQL syntax: {e}`),
+        Err(e) => panic(`Invalid SQL syntax: ${e}`),
     }
 }
 
@@ -152,7 +152,7 @@ let query = sql`SELECT * FROM users WHERE id = ?`;  // Validated at compile time
 
 ### Phase 2: Interpolation support (Future)
 
-- Support syntax: `` tag`text {expr} more` ``
+- Support syntax: `` tag`text ${expr} more` ``
 - Function signature: `fn(CookedStrings/RawStrings, Values) -> T` where `Values` is a tuple type
 - See [String Template Desugaring](./wep-2026-01-20-string-template-desugaring.md) for the full interpolation design
 - See [Compile-Time Tuple Enumeration](./wep-2026-02-10-compile-time-tuple-enumeration.md) for iterating over heterogeneous values

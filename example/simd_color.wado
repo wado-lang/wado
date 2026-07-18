@@ -107,7 +107,7 @@ impl Color {
         let g = (self.g() * 255.0) as i32;
         let b = (self.b() * 255.0) as i32;
         let a = (self.a() * 255.0) as i32;
-        return `rgba({r}, {g}, {b}, {a})`;
+        return `rgba(${r}, ${g}, ${b}, ${a})`;
     }
 }
 
@@ -214,12 +214,12 @@ export fn run() with Stdout {
     let sky_blue = Color::new(0.53, 0.81, 0.92, 1.0);
     let sunset = Color::new(1.0, 0.55, 0.0, 1.0);
 
-    println(`Sky blue:   {sky_blue.to_string()}`);
-    println(`Sunset:     {sunset.to_string()}`);
+    println(`Sky blue:   ${sky_blue.to_string()}`);
+    println(`Sunset:     ${sunset.to_string()}`);
 
     // Grayscale
     let gray = sky_blue.grayscale();
-    println(`Grayscale:  {gray.to_string()}`);
+    println(`Grayscale:  ${gray.to_string()}`);
 
     // Color lerp (gradient)
     println("");
@@ -227,20 +227,20 @@ export fn run() with Stdout {
     for let mut i = 0; i <= 4; i += 1 {
         let t = i as f32 / 4.0;
         let c = sky_blue.lerp(&sunset, t);
-        println(`  t={t}: {c.to_string()}`);
+        println(`  t=${t}: ${c.to_string()}`);
     }
 
     // Alpha compositing
     println("");
     let overlay = Color::new(1.0, 1.0, 0.0, 0.3);
     let composited = overlay.over(&sky_blue);
-    println(`Overlay yellow (30%) over sky: {composited.to_string()}`);
+    println(`Overlay yellow (30%) over sky: ${composited.to_string()}`);
 
     // Brighten + clamp
     let bright = sky_blue.brighten(1.5).clamp();
-    println(`Brightened sky (1.5x):         {bright.to_string()}`);
+    println(`Brightened sky (1.5x):         ${bright.to_string()}`);
 
     // Invert
     let inv = sunset.invert();
-    println(`Inverted sunset:               {inv.to_string()}`);
+    println(`Inverted sunset:               ${inv.to_string()}`);
 }

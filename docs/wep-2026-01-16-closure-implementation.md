@@ -167,7 +167,7 @@ No state of affairs requires single-use closures, so `FnOnce` is unmotivated and
 Closure types carry effects with the same `with` syntax as functions:
 
 ```wado
-let f: fn(i32) -> i32 with Stdout = |x| { println(`{x}`); x };
+let f: fn(i32) -> i32 with Stdout = |x| { println(`${x}`); x };
 ```
 
 ### Effect Generics

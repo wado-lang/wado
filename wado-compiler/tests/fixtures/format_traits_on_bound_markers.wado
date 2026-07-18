@@ -12,7 +12,7 @@ impl InspectAlt for Point;
 
 test "inspect markers validate and debug formatting works" {
     let p = Point { x: 1, y: 2 };
-    assert `{p:?}` == "Point { x: 1, y: 2 }";
+    assert `${p:?}` == "Point { x: 1, y: 2 }";
 }
 
 struct Custom {
@@ -29,9 +29,9 @@ impl DisplayAlt for Custom;
 
 test "manual Display drives {x} and {x:#}; Inspect drives {x:?}" {
     let c = Custom { v: 1 };
-    assert `{c}` == "custom!";
-    assert `{c:#}` == "custom!";
-    assert `{c:?}` == "Custom { v: 1 }";
+    assert `${c}` == "custom!";
+    assert `${c:#}` == "custom!";
+    assert `${c:?}` == "Custom { v: 1 }";
 }
 
 __DATA__

@@ -55,7 +55,7 @@ but the generated Wado code also uses `{}` for blocks. Every brace in the output
 escaped as `\{` and `\}`:
 
 ```wado
-out.push_str(`{indent}if pos >= chars.len() \{ {fail_action}; \}\n`);
+out.push_str(`${indent}if pos >= chars.len() \{ ${fail_action}; \}\n`);
 ```
 
 **5. Duplicated logic.** `dedup_name` / `get_count` / `increment_count` are implemented
@@ -472,7 +472,7 @@ w.emit_fn("new", [Param::new("input", "&String")], "Lexer", || {
 });
 
 // Complex control flow still uses the writer
-w.block(`if pos >= chars.len() {`, || {
+w.block(`if pos >= chars.len() ${`, || {
     w.line(`{fail_action};`);
 });
 ```
@@ -572,9 +572,9 @@ fn gen_lexer_struct(out: &mut String) {
 }
 
 fn gen_if_check(out: &mut String, indent: &String, ctr: &mut i32, ...) {
-    let inner = `{indent}    `;
+    let inner = `${indent}    `;
     *ctr += 1;
-    out.push_str(`{indent}if pos >= chars.len() \{ {fail_action}; \}\n`);
+    out.push_str(`${indent}if pos >= chars.len() \{ ${fail_action}; \}\n`);
 }
 ```
 
@@ -598,7 +598,7 @@ fn gen_lexer_struct(w: &mut CodeWriter) {
 fn gen_if_check(w: &mut CodeWriter, ...) {
     let id = w.next_id();
     w.begin("if pos >= chars.len()");
-    w.line(`{fail_action};`);
+    w.line(`${fail_action};`);
     w.end();
 }
 ```

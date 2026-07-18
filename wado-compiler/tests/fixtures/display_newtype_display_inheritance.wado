@@ -21,23 +21,23 @@ type L = Local;
 
 test "newtype over a cross-module enum inherits its bare-name Display" {
     let c = DepColor::Green as C;
-    assert `{c}` == "Green";
+    assert `${c}` == "Green";
     // `{c:#}` (DisplayAlt) inherits the enum's DisplayAlt (enums have one).
-    assert `{c:#}` == "Green";
+    assert `${c:#}` == "Green";
     // Inspect keeps the `as Name` tag; Display is transparent.
-    assert `{c:?}` == "DepColor::Green as C";
+    assert `${c:?}` == "DepColor::Green as C";
 }
 
 test "newtype chain inherits the base primitive Display" {
     let a = (3.14 as Meters) as A;
-    assert `{a}` == "3.14";
+    assert `${a}` == "3.14";
     // `{a:#}` would inherit `f64`'s (absent) DisplayAlt — a compile error, like
     // `{3.14:#}` — so it is intentionally not asserted here.
 }
 
 test "newtype over a same-module enum inherits Display" {
     let l = Local::Off as L;
-    assert `{l}` == "Off";
+    assert `${l}` == "Off";
 }
 
 __DATA__

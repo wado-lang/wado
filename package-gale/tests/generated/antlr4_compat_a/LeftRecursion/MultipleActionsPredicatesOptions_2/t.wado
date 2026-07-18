@@ -424,9 +424,9 @@ impl ParseError {
 
 impl Display for ParseError {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(&`parse error at {self.line}:{self.col}: {self.message}`);
+        f.write_str(&`parse error at ${self.line}:${self.col}: ${self.message}`);
         if !self.rule_stack.is_empty() {
-            f.write_str(&`\n  in rule: {self.rule_path()}`);
+            f.write_str(&`\n  in rule: ${self.rule_path()}`);
         }
     }
 }
@@ -533,9 +533,9 @@ impl Diagnostic {
 
 impl Display for Diagnostic {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(&`{self.severity.label()}[{self.code.name()}] at {self.line}:{self.col}: {self.message}`);
+        f.write_str(&`${self.severity.label()}[${self.code.name()}] at ${self.line}:${self.col}: ${self.message}`);
         for let r of &self.related {
-            f.write_str(&`\n  note: {r.message}`);
+            f.write_str(&`\n  note: ${r.message}`);
         }
     }
 }
@@ -807,7 +807,7 @@ fn cst_to_string_tree_impl(
                 c += 1;
             },
             Miss => {
-                out.push_str(&` <missing {token_names[toks.kind_at(s.a[c])]}>`);
+                out.push_str(&` <missing ${token_names[toks.kind_at(s.a[c])]}>`);
                 c += 1;
             },
             Skip => {
@@ -1141,7 +1141,7 @@ fn render_builder_node(
                 c += 1;
             },
             Miss => {
-                out.push_str(&` <missing {token_names[toks.kind_at(a[c])]}>`);
+                out.push_str(&` <missing ${token_names[toks.kind_at(a[c])]}>`);
                 c += 1;
             },
             Skip => {
@@ -1304,8 +1304,8 @@ fn emit_lexer_token(
     let line = line_col.0;
     let col = line_col.1;
     let end_inclusive = end - 1;
-    let channel_attr = if channel != 0 { `channel={channel},` } else { String::from("") };
-    out.push_str(&`[@{index},{start}:{end_inclusive}='{text_buf}',<{type_id}>,{channel_attr}{line}:{col}]\n`);
+    let channel_attr = if channel != 0 { `channel=${channel},` } else { String::from("") };
+    out.push_str(&`[@${index},${start}:${end_inclusive}='${text_buf}',<${type_id}>,${channel_attr}${line}:${col}]\n`);
 }
 
 /// Compute (line, column) at a 0-based char index in `chars`, with
@@ -1548,7 +1548,7 @@ impl Display for NodeKind {
 impl Inspect for NodeKind {
     fn inspect(&self, f: &mut Formatter) {
         self.fmt(f);
-        f.write_str(&`({*self as i32})`);
+        f.write_str(&`(${*self as i32})`);
     }
 }
 
@@ -1689,20 +1689,20 @@ impl Parser {
     fn report_extra(&mut self, span: Span) {
         if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
         let lc = line_col(self.tokens.chars, span.start);
-        self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "{self.tokens.token_text(self.pos)}"`, span, lc.0, lc.1));
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "${self.tokens.token_text(self.pos)}"`, span, lc.0, lc.1));
     }
 
     fn report_missing(&mut self, kind: i32, span: Span) {
         if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
         let lc = line_col(self.tokens.chars, span.start);
         let name = token_kind_name(kind);
-        self.diagnostics.push(Diagnostic::error(DiagnosticCode::MissingToken, `missing {name}`, span, lc.0, lc.1));
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::MissingToken, `missing ${name}`, span, lc.0, lc.1));
     }
 
     fn report_unexpected(&mut self, span: Span) {
         if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
         let lc = line_col(self.tokens.chars, span.start);
-        self.diagnostics.push(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input "{self.tokens.token_text(self.pos)}"`, span, lc.0, lc.1));
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input "${self.tokens.token_text(self.pos)}"`, span, lc.0, lc.1));
     }
 
     fn peek_start(&self) -> i32 {
@@ -1747,7 +1747,7 @@ impl Parser {
         }
         if self.speculating {
             let name = token_kind_name(kind);
-            self.fail(`expected {name}, got "{self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [name], DiagnosticCode::UnexpectedToken);
+            self.fail(`expected ${name}, got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [name], DiagnosticCode::UnexpectedToken);
             return self.pos;
         }
         if self.peek_at(1) == kind {
@@ -1797,7 +1797,7 @@ impl Parser {
         }
         let name = token_kind_name(kind);
         self.fail(
-            `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
+            `expected ${name}, got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             [name],
             DiagnosticCode::UnexpectedToken,
@@ -1813,7 +1813,7 @@ impl Parser {
             return _i;
         }
         self.fail(
-            `expected any token, got "{self.tokens.token_text(self.pos)}"`,
+            `expected any token, got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["any token"],
             DiagnosticCode::UnexpectedToken,
@@ -1839,7 +1839,7 @@ impl Parser {
             }
         }
         self.fail(
-            `unexpected token "{self.tokens.token_text(self.pos)}"`,
+            `unexpected token "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["set complement"],
             DiagnosticCode::UnexpectedToken,
@@ -1862,7 +1862,7 @@ impl Parser {
             }
         }
         self.fail(
-            `unexpected token "{self.tokens.token_text(self.pos)}"`,
+            `unexpected token "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["token set"],
             DiagnosticCode::UnexpectedToken,
@@ -1992,7 +1992,7 @@ fn _parse_s__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     let e = _parse_e(p);
     if !p.speculating {
-        p.emit(`{p.rule_string_tree()}\n`);
+        p.emit(`${p.rule_string_tree()}\n`);
     }
     return;
 }
@@ -2108,7 +2108,7 @@ fn _parse_e(p: &mut Parser, min_prec: i32 = 0) -> () {
 }
 
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
-    assert max_errors >= 1, `max_errors must be >= 1, got {max_errors}`;
+    assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
     p.max_errors = max_errors;

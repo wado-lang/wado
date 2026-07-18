@@ -40,7 +40,7 @@ pub fn translate_action(
             let env = JEnv { this_bind: PARSER_HANDLE, grammar: *grammar_name, methods: *member_methods };
             translate_java_stmts(rule, rules, body, vals_in_scope, bindings, &env);
         },
-        Other(name) => Result::Err(`unsupported action language '{*name}' for action '{*body}'`),
+        Other(name) => Result::Err(`unsupported action language '${*name}' for action '${*body}'`),
     };
 }
 
@@ -62,7 +62,7 @@ pub fn translate_predicate(
             let env = JEnv { this_bind: PARSER_HANDLE, grammar: *grammar_name, methods: *member_methods };
             translate_java_expr(rule, rules, body, vals_in_scope, bindings, &env);
         },
-        Other(name) => Result::Err(`unsupported action language '{*name}' for predicate '{*body}'`),
+        Other(name) => Result::Err(`unsupported action language '${*name}' for predicate '${*body}'`),
     };
 }
 
@@ -72,7 +72,7 @@ pub fn translate_members(lang: &ActionLanguage, body: &String, grammar_name: &St
     return match lang {
         Java => translate_java_members(body, grammar_name),
         Wado => Result::Err("java2wado: Wado @members translation is not yet implemented"),
-        Other(name) => Result::Err(`unsupported action language '{*name}' for @members`),
+        Other(name) => Result::Err(`unsupported action language '${*name}' for @members`),
     };
 }
 

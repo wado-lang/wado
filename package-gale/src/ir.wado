@@ -246,7 +246,7 @@ pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
                 if !found {
                     return Result::Err(
                         ParseError::new(
-                            `reference to undefined rule "{r.referenced_name}" in "{r.containing_rule}"`,
+                            `reference to undefined rule "${r.referenced_name}" in "${r.containing_rule}"`,
                             r.span,
                             ["defined rule name"],
                         ),
@@ -273,7 +273,7 @@ pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
                 if !found {
                     return Result::Err(
                         ParseError::new(
-                            `reference to undefined token "{r.referenced_name}" in "{r.containing_rule}"`,
+                            `reference to undefined token "${r.referenced_name}" in "${r.containing_rule}"`,
                             r.span,
                             ["defined token name"],
                         ),
@@ -300,7 +300,7 @@ pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
                 if !found {
                     return Result::Err(
                         ParseError::new(
-                            `reference to undefined lexer rule "{r.referenced_name}" in "{r.containing_rule}"`,
+                            `reference to undefined lexer rule "${r.referenced_name}" in "${r.containing_rule}"`,
                             r.span,
                             ["defined lexer rule name"],
                         ),
@@ -348,7 +348,7 @@ pub struct ParserRule {
     /// when the rule itself appears as a field (e.g. the LR self-ref slot in
     /// the precedence-climbing helper struct).
     pub field_name: String = "",
-    /// Cached `{to_pascal_case(name)}Node` — the rule's CST type name.
+    /// Cached `${to_pascal_case(name)}Node` — the rule's CST type name.
     /// Equivalent to `rule_type_name(name)`; populated so codegen never
     /// re-runs `to_pascal_case` for the same rule name.
     pub type_name: String = "",
@@ -374,7 +374,7 @@ impl ParserRule {
     ) -> ParserRule {
         let snake_name = to_snake_case(&name);
         let field_name = escape_ident(&snake_name);
-        let type_name = `{to_pascal_case(&name)}Node`;
+        let type_name = `${to_pascal_case(&name)}Node`;
         return ParserRule { name, visibility, options, alternatives, snake_name, field_name, type_name };
     }
 }
@@ -490,7 +490,7 @@ pub struct TokenRefElement {
     /// Cached `escape_ident(lower_name)` — standalone field name in CST structs.
     pub field_name: String = "",
     /// Canonical token kind id (`token_slot_order` position, i.e. the value of
-    /// the emitted `TK_{name}` global). Resolved once by `resolve_kind_ids` on
+    /// the emitted `TK_${name}` global). Resolved once by `resolve_kind_ids` on
     /// the `generate()` path so FIRST-set analysis carries the integer, not the
     /// name. -1 until resolved (or for an unresolved reference).
     pub kind_id: i32 = -1,
@@ -870,7 +870,7 @@ pub fn normalize_caches(grammar: &mut Grammar) {
             rule.field_name = escape_ident(&rule.snake_name);
         }
         if rule.type_name.is_empty() {
-            rule.type_name = `{to_pascal_case(&rule.name)}Node`;
+            rule.type_name = `${to_pascal_case(&rule.name)}Node`;
         }
         for let mut ai = 0; ai < rule.alternatives.len(); ai += 1 {
             let alt = &mut rule.alternatives[ai];

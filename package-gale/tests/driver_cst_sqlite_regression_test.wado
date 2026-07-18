@@ -9,7 +9,7 @@ test "m1 select c.id" {
     let r = sqlite::parse(&sql);
     if !r.ok() {
         let d = &r.diagnostics[0];
-        panic(`m1: [{d.span.start},{d.span.end}): {d.message}`);
+        panic(`m1: [${d.span.start},${d.span.end}): ${d.message}`);
     }
 }
 
@@ -19,7 +19,7 @@ test "m2 select f(c.id)" {
     let r = sqlite::parse(&sql);
     if !r.ok() {
         let d = &r.diagnostics[0];
-        panic(`m2: [{d.span.start},{d.span.end}): {d.message}`);
+        panic(`m2: [${d.span.start},${d.span.end}): ${d.message}`);
     }
 }
 
@@ -28,7 +28,7 @@ test "m3 select count c.id as comment_count" {
     let r = sqlite::parse(&sql);
     if !r.ok() {
         let d = &r.diagnostics[0];
-        panic(`m3: [{d.span.start},{d.span.end}): {d.message}`);
+        panic(`m3: [${d.span.start},${d.span.end}): ${d.message}`);
     }
 }
 
@@ -37,6 +37,6 @@ test "m4 select * from users where active=1" {
     let r = sqlite::parse(&sql);
     if !r.ok() {
         let d = &r.diagnostics[0];
-        panic(`m4: [{d.span.start},{d.span.end}): {d.message}`);
+        panic(`m4: [${d.span.start},${d.span.end}): ${d.message}`);
     }
 }

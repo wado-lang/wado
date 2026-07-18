@@ -30,7 +30,7 @@ impl Parser {
         }
         let tok = &self.tokens[self.pos];
         return Result::<Token, ParseError>::Err(ParseError::new(
-            `expected {name}, got "{tok.text}"`,
+            `expected ${name}, got "${tok.text}"`,
             tok.span,
             [name],
         ));
@@ -263,8 +263,8 @@ export fn run() {
     ];
     let mut p = Parser { tokens, pos: 0 };
     let r = parse_expr(&mut p);
-    if let Err(e) = &r { panic(`parse failed: {e.message}`); }
-    assert p.pos == 3, `expected pos=3, got pos={p.pos}`;
+    if let Err(e) = &r { panic(`parse failed: ${e.message}`); }
+    assert p.pos == 3, `expected pos=3, got pos=${p.pos}`;
 }
 
 __DATA__

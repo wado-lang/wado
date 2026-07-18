@@ -132,7 +132,7 @@ test "array slice and windows and chunks" {
 
 test "inspect empty array" {
     let a: Array<i32> = Array::new(0);
-    assert `{a:?}` == "[]";
+    assert `${a:?}` == "[]";
 }
 
 test "inspect array" {
@@ -140,7 +140,7 @@ test "inspect array" {
     a[0] = 1;
     a[1] = 2;
     a[2] = 3;
-    assert `{a:?}` == "[1, 2, 3]";
+    assert `${a:?}` == "[1, 2, 3]";
 }
 
 test "display array" {
@@ -148,12 +148,12 @@ test "display array" {
     a[0] = 1;
     a[1] = 2;
     a[2] = 3;
-    assert `{a}` == "[1, 2, 3]";
+    assert `${a}` == "[1, 2, 3]";
 }
 
 test "pretty-print empty array" {
     let a: Array<i32> = Array::new(0);
-    assert `{a:#?}` == "[]";
+    assert `${a:#?}` == "[]";
 }
 
 test "pretty-print array" {
@@ -161,7 +161,7 @@ test "pretty-print array" {
     a[0] = 1;
     a[1] = 2;
     a[2] = 3;
-    assert `{a:#?}` == "[
+    assert `${a:#?}` == "[
   1,
   2,
   3,
@@ -174,7 +174,7 @@ test "inspect truncates at precision limit" {
     a[1] = 2;
     a[2] = 3;
     a[3] = 4;
-    assert `{a:.2?}` == "[1, 2, ...]";
+    assert `${a:.2?}` == "[1, 2, ...]";
 }
 
 test "pretty-print truncates at precision limit" {
@@ -183,7 +183,7 @@ test "pretty-print truncates at precision limit" {
     a[1] = 2;
     a[2] = 3;
     a[3] = 4;
-    assert `{a:#.2?}` == "[
+    assert `${a:#.2?}` == "[
   1,
   2,
   ...

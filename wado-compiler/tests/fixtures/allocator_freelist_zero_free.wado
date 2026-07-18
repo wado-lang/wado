@@ -11,12 +11,12 @@ export fn run() with Stdout {
 
     // Allocate again — the freed block is reclaimed.
     let ptr2 = builtin::realloc(0, 0, 4, 16);
-    assert ptr2 == ptr, `expected recycled: ptr={ptr}, ptr2={ptr2}`;
+    assert ptr2 == ptr, `expected recycled: ptr=${ptr}, ptr2=${ptr2}`;
 
     // Free normally, then re-allocate — still reclaimed.
     builtin::realloc(ptr2, 16, 4, 0);
     let ptr3 = builtin::realloc(0, 0, 4, 16);
-    assert ptr3 == ptr2, `expected recycled: ptr2={ptr2}, ptr3={ptr3}`;
+    assert ptr3 == ptr2, `expected recycled: ptr2=${ptr2}, ptr3=${ptr3}`;
 
     println("ok");
 }

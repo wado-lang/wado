@@ -14,9 +14,9 @@ r : e[100] ;
 e[i32 base]
     @init { $acc = $base; }
     returns [i32 acc]
-    : A B { p.emit(`sum={$acc}`); $acc = $acc + 1; }
-    | A C { p.emit(`alt2 {$acc}`); }
-    | D { p.emit(`d {$acc}`); }
+    : A B { p.emit(`sum=${$acc}`); $acc = $acc + 1; }
+    | A C { p.emit(`alt2 ${$acc}`); }
+    | D { p.emit(`d ${$acc}`); }
     ;
 
 A : 'a' ;

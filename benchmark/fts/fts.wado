@@ -22,7 +22,7 @@ fn fts_run(n: i32) -> FtsResult {
     for let mut i = 0; i < n; i += 1 {
         state = state * 1103515245 + 12345 & 0x7FFFFFFF;
         let x = state as f64 / 2147483648.0;
-        let s = `{x:0.6f}`;
+        let s = `${x:0.6f}`;
         total_bytes += s.len() as u64;
         for let b of s.bytes() {
             byte_sum += b as u64;
@@ -40,10 +40,10 @@ test "smoke" {
 export fn run() with Stdout, MonotonicClock {
     let n = 1000000;
     let mut b = Benchmark {
-        name: `fts: {n} f64 conversions (%.6f)`,
+        name: `fts: ${n} f64 conversions (%.6f)`,
         work_per_iter: Option::Some(n as f64),
         unit: "conversions",
     };
     let r = b.run("", || fts_run(n));
-    b.println(`total bytes = {r.total_bytes}, byte sum = {r.byte_sum}`);
+    b.println(`total bytes = ${r.total_bytes}, byte sum = ${r.byte_sum}`);
 }

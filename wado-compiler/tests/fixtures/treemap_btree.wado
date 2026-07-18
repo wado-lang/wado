@@ -342,26 +342,26 @@ export fn run() with Stdout {
     map.insert("elderberry", 5);
 
     println("=== After insertion ===");
-    println(`Size: {map.len()}`);
+    println(`Size: ${map.len()}`);
 
     // Test retrieval
     if let Some(val) = map.get(&"banana") {
-        println(`banana = {val}`);
+        println(`banana = ${val}`);
     }
     if let Some(val2) = map.get(&"date") {
-        println(`date = {val2}`);
+        println(`date = ${val2}`);
     }
 
     // Test update
     map.insert("banana", 20);
     if let Some(val3) = map.get(&"banana") {
-        println(`banana (updated) = {val3}`);
+        println(`banana (updated) = ${val3}`);
     }
 
     // Test deletion
     println("\n=== After deleting cherry ===");
     map.delete(&"cherry");
-    println(`Size: {map.len()}`);
+    println(`Size: ${map.len()}`);
     if let None = map.get(&"cherry") {
         println("cherry = (not found)");
     }
@@ -372,7 +372,7 @@ export fn run() with Stdout {
     for let entry of entries {
         let key = entry[0];
         let value = entry[1];
-        println(`{key} = {value}`);
+        println(`${key} = ${value}`);
     }
 
     // Test compaction
@@ -381,8 +381,8 @@ export fn run() with Stdout {
         println("Compaction needed, running...");
         map.compact();
     }
-    println(`Size: {map.len()}`);
-    println(`Deleted count: {map.deleted_count}`);
+    println(`Size: ${map.len()}`);
+    println(`Deleted count: ${map.deleted_count}`);
 
     // Final iteration
     println("\n=== Final iteration ===");
@@ -390,7 +390,7 @@ export fn run() with Stdout {
     for let entry of final_entries {
         let key = entry[0];
         let value = entry[1];
-        println(`{key} = {value}`);
+        println(`${key} = ${value}`);
     }
 }
 

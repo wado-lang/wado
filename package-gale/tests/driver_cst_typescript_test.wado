@@ -18,76 +18,76 @@ fn assert_tree(input: &String, expected: &String) {
     let result = ts::parse(input);
     let actual = ts::to_string_tree(&result);
     let norm = normalize_tree(expected);
-    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+    assert actual == norm, `\ninput:    ${*input}\nexpected: ${norm}\nactual:   ${actual}`;
 }
 
 fn assert_parses(input: &String) {
     let result = ts::parse(input);
     if !result.ok() {
-        panic(`parse failed: {result.diagnostics[0].message}`);
+        panic(`parse failed: ${result.diagnostics[0].message}`);
     }
 }
 
 test "tokenize variable declaration" {
     let tokens = ts::tokenize(&"let x = 42;");
-    assert tokens.len() >= 4, `expected at least 4 tokens, got {tokens.len()}`;
+    assert tokens.len() >= 4, `expected at least 4 tokens, got ${tokens.len()}`;
     let first = ts::token_kind_name(tokens.kinds[0]);
-    assert first == "Let", `expected Let, got {first}`;
+    assert first == "Let", `expected Let, got ${first}`;
 }
 
 test "tokenize const declaration" {
     let tokens = ts::tokenize(&"const name = \"hello\";");
-    assert tokens.len() >= 4, `expected at least 4 tokens, got {tokens.len()}`;
+    assert tokens.len() >= 4, `expected at least 4 tokens, got ${tokens.len()}`;
     let first = ts::token_kind_name(tokens.kinds[0]);
-    assert first == "Const", `expected Const, got {first}`;
+    assert first == "Const", `expected Const, got ${first}`;
 }
 
 test "tokenize function declaration" {
     let tokens = ts::tokenize(&"function add(a, b) { return a + b; }");
-    assert tokens.len() >= 10, `expected at least 10 tokens, got {tokens.len()}`;
+    assert tokens.len() >= 10, `expected at least 10 tokens, got ${tokens.len()}`;
     let first = ts::token_kind_name(tokens.kinds[0]);
-    assert first == "Function_", `expected Function_, got {first}`;
+    assert first == "Function_", `expected Function_, got ${first}`;
 }
 
 test "tokenize class declaration" {
     let tokens = ts::tokenize(&"class Foo extends Bar { constructor() {} }");
-    assert tokens.len() >= 8, `expected at least 8 tokens, got {tokens.len()}`;
+    assert tokens.len() >= 8, `expected at least 8 tokens, got ${tokens.len()}`;
     let first = ts::token_kind_name(tokens.kinds[0]);
-    assert first == "Class", `expected Class, got {first}`;
+    assert first == "Class", `expected Class, got ${first}`;
 }
 
 test "tokenize arrow function" {
     let tokens = ts::tokenize(&"const f = (x) => x + 1;");
-    assert tokens.len() >= 8, `expected at least 8 tokens, got {tokens.len()}`;
+    assert tokens.len() >= 8, `expected at least 8 tokens, got ${tokens.len()}`;
 }
 
 test "tokenize import statement" {
     let tokens = ts::tokenize(&"import { foo } from 'bar';");
-    assert tokens.len() >= 6, `expected at least 6 tokens, got {tokens.len()}`;
+    assert tokens.len() >= 6, `expected at least 6 tokens, got ${tokens.len()}`;
     let first = ts::token_kind_name(tokens.kinds[0]);
-    assert first == "Import", `expected Import, got {first}`;
+    assert first == "Import", `expected Import, got ${first}`;
 }
 
 test "tokenize template literal" {
     let tokens = ts::tokenize(&"let s = `hello ${name}`;");
-    assert tokens.len() >= 4, `expected at least 4 tokens, got {tokens.len()}`;
+    assert tokens.len() >= 4, `expected at least 4 tokens, got ${tokens.len()}`;
 }
 
 test "tokenize operators" {
     let tokens = ts::tokenize(&"a === b && c !== d || e > f");
-    assert tokens.len() >= 9, `expected at least 9 tokens, got {tokens.len()}`;
+    assert tokens.len() >= 9, `expected at least 9 tokens, got ${tokens.len()}`;
 }
 
 test "tokenize interface" {
     let tokens = ts::tokenize(&"interface Foo { x: number; }");
-    assert tokens.len() >= 6, `expected at least 6 tokens, got {tokens.len()}`;
+    assert tokens.len() >= 6, `expected at least 6 tokens, got ${tokens.len()}`;
 }
 
 test "tokenize enum" {
     let tokens = ts::tokenize(&"enum Color { Red, Green, Blue }");
-    assert tokens.len() >= 8, `expected at least 8 tokens, got {tokens.len()}`;
+    assert tokens.len() >= 8, `expected at least 8 tokens, got ${tokens.len()}`;
     let first = ts::token_kind_name(tokens.kinds[0]);
-    assert first == "Enum", `expected Enum, got {first}`;
+    assert first == "Enum", `expected Enum, got ${first}`;
 }
 
 // The TypeScript grammar's generated entry rule is `initializer: '=' singleExpression`,
@@ -330,7 +330,7 @@ test "type override: BackTickInside rewrites kind to BackTick" {
             backtick_count += 1;
         }
     }
-    assert backtick_count == 2, `expected 2 BackTick tokens (open + close), got {backtick_count}`;
+    assert backtick_count == 2, `expected 2 BackTick tokens (open + close), got ${backtick_count}`;
 }
 
 test "HIDDEN channel: TypeScript WhiteSpaces routed to trivia" {
@@ -344,13 +344,13 @@ test "HIDDEN channel: TypeScript WhiteSpaces routed to trivia" {
         assert tokens.kinds[i] != TK_WhiteSpaces, "WhiteSpaces leaked into main stream — HIDDEN routing dropped";
     }
     // `let` must be the first main-channel token.
-    assert tokens.kinds[0] == TK_Let, `expected first token = Let, got kind {tokens.kinds[0]}`;
+    assert tokens.kinds[0] == TK_Let, `expected first token = Let, got kind ${tokens.kinds[0]}`;
     // The second token (the `x` identifier) must carry the HIDDEN
     // whitespace as leading trivia on channel 1.
     let mut found_hidden = false;
     for let mut j = tokens.triv_lo[1]; j < tokens.triv_hi[1]; j += 1 {
         if tokens.triv_kinds[j] == TK_WhiteSpaces {
-            assert tokens.triv_chans[j] == 1, `expected HIDDEN channel 1, got {tokens.triv_chans[j]}`;
+            assert tokens.triv_chans[j] == 1, `expected HIDDEN channel 1, got ${tokens.triv_chans[j]}`;
             found_hidden = true;
         }
     }

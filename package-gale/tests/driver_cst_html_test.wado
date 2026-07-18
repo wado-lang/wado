@@ -13,19 +13,19 @@ fn assert_tree(input: &String, expected: &String) {
     let result = html::parse(input);
     let actual = html::to_string_tree(&result);
     let norm = normalize_tree(expected);
-    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+    assert actual == norm, `\ninput:    ${*input}\nexpected: ${norm}\nactual:   ${actual}`;
 }
 
 fn assert_parses(input: &String) {
     let result = html::parse(input);
     if !result.ok() {
-        panic(`parse failed: {result.diagnostics[0].message}`);
+        panic(`parse failed: ${result.diagnostics[0].message}`);
     }
 }
 
 test "tokenize simple html" {
     let tokens = html::tokenize(&"<p>hello</p>");
-    assert tokens.len() >= 3, `expected at least 3 tokens, got {tokens.len()}`;
+    assert tokens.len() >= 3, `expected at least 3 tokens, got ${tokens.len()}`;
 }
 
 test "parse simple tag" {
@@ -122,14 +122,14 @@ test "HIDDEN channel: TAG_WHITESPACE routed to trivia" {
             if tag_name_count == 2 {
                 for let mut j = tokens.triv_lo[i]; j < tokens.triv_hi[i]; j += 1 {
                     if tokens.triv_kinds[j] == TK_TAG_WHITESPACE {
-                        assert tokens.triv_chans[j] == 1, `expected HIDDEN channel 1, got {tokens.triv_chans[j]}`;
+                        assert tokens.triv_chans[j] == 1, `expected HIDDEN channel 1, got ${tokens.triv_chans[j]}`;
                         found_hidden_ws = true;
                     }
                 }
             }
         }
     }
-    assert tag_name_count >= 2, `expected >=2 TAG_NAME tokens, got {tag_name_count}`;
+    assert tag_name_count >= 2, `expected >=2 TAG_NAME tokens, got ${tag_name_count}`;
     assert found_hidden_ws, "TAG_WHITESPACE trivia not found on second TAG_NAME token";
 }
 

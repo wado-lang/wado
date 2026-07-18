@@ -36,7 +36,7 @@ test "collect_literal_tokens: plain top-level literals" {
     let g = parse_grammar("grammar T; a : 'x' 'y' ;");
     let lits = collect_literal_tokens(&g.parser_rules);
     let names = const_names(&lits);
-    assert names.len() == 2, `len={names.len()}`;
+    assert names.len() == 2, `len=${names.len()}`;
     assert names[0] == "TK_LIT_X", names[0];
     assert names[1] == "TK_LIT_Y", names[1];
 }
@@ -49,9 +49,9 @@ test "collect_literal_tokens: case-folding collision is disambiguated" {
     let g = parse_grammar("grammar T; a : 'and' 'AND' ;");
     let lits = collect_literal_tokens(&g.parser_rules);
     let names = const_names(&lits);
-    assert names.len() == 2, `len={names.len()}`;
+    assert names.len() == 2, `len=${names.len()}`;
     assert names[0] == "TK_LIT_AND", names[0];
-    assert names[1] != names[0], `collision: both named {names[0]}`;
+    assert names[1] != names[0], `collision: both named ${names[0]}`;
 }
 
 test "collect_literal_tokens: literals inside Group alternatives" {
@@ -60,7 +60,7 @@ test "collect_literal_tokens: literals inside Group alternatives" {
     let g = parse_grammar("grammar T; a : ('x' | 'y') 'z' ;");
     let lits = collect_literal_tokens(&g.parser_rules);
     let names = const_names(&lits);
-    assert names.len() == 3, `len={names.len()}`;
+    assert names.len() == 3, `len=${names.len()}`;
     assert names[0] == "TK_LIT_X", names[0];
     assert names[1] == "TK_LIT_Y", names[1];
     assert names[2] == "TK_LIT_Z", names[2];
@@ -75,7 +75,7 @@ test "collect_literal_tokens: literal inside Not — single token" {
     let g = parse_grammar("grammar T; a : ~'x' 'z' ;");
     let lits = collect_literal_tokens(&g.parser_rules);
     let names = const_names(&lits);
-    assert names.len() == 2, `expected ['TK_LIT_X', 'TK_LIT_Z'], got len={names.len()}`;
+    assert names.len() == 2, `expected ['TK_LIT_X', 'TK_LIT_Z'], got len=${names.len()}`;
     assert names[0] == "TK_LIT_X", names[0];
     assert names[1] == "TK_LIT_Z", names[1];
 }
@@ -86,7 +86,7 @@ test "collect_literal_tokens: literals inside Not(Group(...)) — multi-alt set"
     let g = parse_grammar("grammar T; a : ~('x' | 'y') 'z' ;");
     let lits = collect_literal_tokens(&g.parser_rules);
     let names = const_names(&lits);
-    assert names.len() == 3, `len={names.len()}`;
+    assert names.len() == 3, `len=${names.len()}`;
     assert names[0] == "TK_LIT_X", names[0];
     assert names[1] == "TK_LIT_Y", names[1];
     assert names[2] == "TK_LIT_Z", names[2];
@@ -98,7 +98,7 @@ test "collect_literal_tokens: literal inside Label(Not(Literal)) — labeled com
     let g = parse_grammar("grammar T; a : t=~'x' 'z' ;");
     let lits = collect_literal_tokens(&g.parser_rules);
     let names = const_names(&lits);
-    assert names.len() == 2, `len={names.len()}`;
+    assert names.len() == 2, `len=${names.len()}`;
     assert names[0] == "TK_LIT_X", names[0];
     assert names[1] == "TK_LIT_Z", names[1];
 }
@@ -109,7 +109,7 @@ test "collect_literal_tokens: literal inside Wildcard is ignored" {
     let g = parse_grammar("grammar T; a : 'x' . ;");
     let lits = collect_literal_tokens(&g.parser_rules);
     let names = const_names(&lits);
-    assert names.len() == 1, `len={names.len()}`;
+    assert names.len() == 1, `len=${names.len()}`;
     assert names[0] == "TK_LIT_X", names[0];
 }
 
@@ -223,7 +223,7 @@ fn rule_first_chars(g: &Grammar, name: &String) -> [bool, List<[char, char]>] {
             return [r.0, out];
         }
     }
-    panic(`lexer rule {*name} not found`);
+    panic(`lexer rule ${*name} not found`);
 }
 
 test "compute_elem_first_chars: nullable leading element keeps a bounded first set" {

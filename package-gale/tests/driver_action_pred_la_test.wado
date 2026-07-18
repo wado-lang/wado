@@ -11,11 +11,11 @@ use pl from "./grammars/wado_pred_la.g4"
 test "a p-reading predicate gates the token-led branch" {
     let num = pl::parse_takes(&"5");
     assert num.ok(), "clean parse when p.la(1) == TK_NUM holds";
-    assert num.output == "num", `output: '{num.output}'`;
+    assert num.output == "num", `output: '${num.output}'`;
 
     let id = pl::parse_takes(&"x");
     assert id.ok(), "the unpredicated ID branch is unaffected";
-    assert id.output == "id", `output: '{id.output}'`;
+    assert id.output == "id", `output: '${id.output}'`;
 }
 
 test "a false p-reading predicate fails the selected branch" {

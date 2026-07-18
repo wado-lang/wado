@@ -115,7 +115,7 @@ The compiler inserts default values at the call site as a desugaring pass. This 
 
 ```wado
 fn greet(name: String, greeting: String = "Hello") -> String {
-    return `{greeting}, {name}!`;
+    return `${greeting}, ${name}!`;
 }
 
 // Source:
@@ -188,14 +188,14 @@ Closures cannot declare default parameters. Closures are first-class values whos
 
 ```wado
 // Compile error: closure parameters cannot have defaults.
-let greet = |name: String, greeting: String = "Hello"| `{greeting}, {name}!`;
+let greet = |name: String, greeting: String = "Hello"| `${greeting}, ${name}!`;
 ```
 
 The parser still accepts the `= expr` syntax for closure parameters so that recovery is uniform with named functions, but the elaborator rejects it with an error that points at the default expression. Use a wrapper function with defaults instead:
 
 ```wado
 fn greet(name: String, greeting: String = "Hello") -> String {
-    return `{greeting}, {name}!`;
+    return `${greeting}, ${name}!`;
 }
 ```
 

@@ -6984,7 +6984,7 @@ mod tests {
     fn test_assert_with_template_message() {
         let source = r"
             fn test() {
-                assert x > 0, `x must be positive, got {x}`;
+                assert x > 0, `x must be positive, got ${x}`;
             }
         ";
 

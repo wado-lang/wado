@@ -24,7 +24,7 @@ fn collect_lits(elem: &Elem, seen: &mut TreeSet<String>, result: &mut List<LitTo
     if let Lit(text) = elem {
         if !seen.contains(*text) {
             seen.insert(*text);
-            result.push(LitToken { text: *text, const_name: `TK_{text}` });
+            result.push(LitToken { text: *text, const_name: `TK_${text}` });
         }
     }
     if let Group(alts) = elem {
@@ -59,9 +59,9 @@ export fn run() with Stdout {
     collect_lits_from_elements(&elems, &mut seen, &mut result);
 
     // Should have exactly [",", ";"] — no duplicates
-    assert result.len() == 2, `expected 2 lits, got {result.len()}`;
-    assert result[0].text == ",", `expected ',', got {result[0].text}`;
-    assert result[1].text == ";", `expected ';', got {result[1].text}`;
+    assert result.len() == 2, `expected 2 lits, got ${result.len()}`;
+    assert result[0].text == ",", `expected ',', got ${result[0].text}`;
+    assert result[1].text == ";", `expected ';', got ${result[1].text}`;
     println("treeset dedup deep: ok");
 }
 

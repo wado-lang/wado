@@ -11,9 +11,9 @@ use lp from "./grammars/wado_lr_p.g4"
 test "$_p reads the invocation's precedence threshold" {
     let one = lp::parse(&"5");
     assert one.ok(), "clean parse of a single atom";
-    assert one.output == "_p=0 v=5 ", `output: '{one.output}'`;
+    assert one.output == "_p=0 v=5 ", `output: '${one.output}'`;
 
     let add = lp::parse(&"5 + 3");
     assert add.ok(), "clean parse of a sum";
-    assert add.output == "_p=0 _p=2 v=8 ", `output: '{add.output}'`;
+    assert add.output == "_p=0 _p=2 v=8 ", `output: '${add.output}'`;
 }

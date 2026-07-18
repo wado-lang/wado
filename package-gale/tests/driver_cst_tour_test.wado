@@ -9,9 +9,9 @@ use t from "./grammars/amb_tour.g4"
 
 fn assert_tree(input: &String, expected: &String) {
     let result = t::parse(input);
-    assert result.ok(), `unexpected diagnostics for {*input}`;
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
     let actual = t::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
 }
 
 test "tournament: assignment wins on '='" {

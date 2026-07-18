@@ -9,11 +9,11 @@ e returns [int v] : ID ;
     let rule = &g.parser_rules[0];
     let body = &" $v = $a.v; ";
     let refs = resolve_attrs(body, rule, &g.parser_rules).unwrap();
-    assert refs.len() == 2, `count: {refs.len()}`;
+    assert refs.len() == 2, `count: ${refs.len()}`;
     assert refs[0].name == "v" && refs[0].target matches { RuleAttr }, "v is a returns attr";
     assert refs[1].name == "a" && refs[1].target matches { RuleLabel }, "a is a rule label";
     if let Some(m) = &refs[1].member {
-        assert *m == "v", `member: {*m}`;
+        assert *m == "v", `member: ${*m}`;
     }
 }
 
@@ -70,10 +70,10 @@ e returns [int v] : ID ;
     let refs = resolve_attrs(&" print($e.v); ", &g.parser_rules[0], &g.parser_rules).unwrap();
     assert refs.len() == 1;
     assert refs[0].target matches { RuleLabel }, "e resolves through the label q=e";
-    assert refs[0].name == "q", `binding name should be the label q: {refs[0].name}`;
-    assert refs[0].rule_name == "e", `rule_name: {refs[0].rule_name}`;
+    assert refs[0].name == "q", `binding name should be the label q: ${refs[0].name}`;
+    assert refs[0].rule_name == "e", `rule_name: ${refs[0].rule_name}`;
     if let Some(m) = &refs[0].member {
-        assert *m == "v", `member: {*m}`;
+        assert *m == "v", `member: ${*m}`;
     }
 }
 
@@ -85,7 +85,7 @@ e : ID ;
     let refs = resolve_attrs(&" $e = 0; ", &g.parser_rules[0], &g.parser_rules).unwrap();
     assert refs.len() == 1;
     assert refs[0].target matches { RuleAttr }, "declared returns attr e wins, not the q=e label";
-    assert refs[0].name == "e", `name: {refs[0].name}`;
+    assert refs[0].name == "e", `name: ${refs[0].name}`;
 }
 
 test "resolve_attrs: $TOKEN resolves to its label binding when the token is labeled (x=ID)" {
@@ -95,7 +95,7 @@ s : x=ID { print($ID.text); } ;
     let refs = resolve_attrs(&" print($ID.text); ", &g.parser_rules[0], &g.parser_rules).unwrap();
     assert refs.len() == 1;
     assert refs[0].target matches { TokenLabel }, "ID resolves through the label x=ID";
-    assert refs[0].name == "x", `binding name should be the label x: {refs[0].name}`;
+    assert refs[0].name == "x", `binding name should be the label x: ${refs[0].name}`;
 }
 
 test "resolve_attrs: $rule stays ambiguous (unresolved) with two labeled refs to the same rule" {

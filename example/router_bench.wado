@@ -115,13 +115,13 @@ fn verify_engines_agree(
         let expected = req.expected_handler_id;
         if l.handler_id != expected || r.handler_id != expected || d.handler_id != expected {
             println(
-                `MISMATCH on {req.path}: expected={expected} linear={l.handler_id} radix={r.handler_id} dfa={d.handler_id}`,
+                `MISMATCH on ${req.path}: expected=${expected} linear=${l.handler_id} radix=${r.handler_id} dfa=${d.handler_id}`,
             );
             all_ok = false;
             continue;
         }
         if !maps_equal(&l.params, &r.params) || !maps_equal(&l.params, &d.params) {
-            println(`PARAMS MISMATCH on {req.path}: linear={l.params:?} radix={r.params:?} dfa={d.params:?}`);
+            println(`PARAMS MISMATCH on ${req.path}: linear=${l.params:?} radix=${r.params:?} dfa=${d.params:?}`);
             all_ok = false;
         }
     }
@@ -136,7 +136,7 @@ export fn run() with Stdout, MonotonicClock {
     let routes = build_routes();
     let pattern = build_access_pattern();
 
-    println(`router-bench: {routes.len()} routes, {pattern.len()} access samples per outer iter`);
+    println(`router-bench: ${routes.len()} routes, ${pattern.len()} access samples per outer iter`);
 
     // Build phase (untimed) and engine cross-check.
     let linear = LinearRouter::build(&routes);
@@ -152,11 +152,11 @@ export fn run() with Stdout, MonotonicClock {
 
     // Mixed access pattern (9 hits + 1 miss) for the engines that
     // realistically share work across patterns.
-    let mut bmix = Benchmark { name: `mixed pattern x {OUTER_ITERATIONS} outer iter (10 lookups each)` };
+    let mut bmix = Benchmark { name: `mixed pattern x ${OUTER_ITERATIONS} outer iter (10 lookups each)` };
     let acc_l = bmix.run("linear (mixed)", || run_mixed_linear(&linear, &pattern));
     let acc_r = bmix.run("radix         ", || run_mixed_radix(&radix, &pattern));
     let acc_d = bmix.run("dfa           ", || run_mixed_dfa(&dfa, &pattern));
-    bmix.println(`accumulators: linear={acc_l} radix={acc_r} dfa={acc_d}`);
+    bmix.println(`accumulators: linear=${acc_l} radix=${acc_r} dfa=${acc_d}`);
     if acc_l != acc_r || acc_l != acc_d {
         panic("accumulator mismatch between engines");
     }
@@ -164,8 +164,8 @@ export fn run() with Stdout, MonotonicClock {
     // Linear-only best/worst spread.
     let best_path = "/health";  // first route in build_routes()
     let worst_path = "/api/v1/does/not/exist";  // miss => full N-route walk
-    let mut blin = Benchmark { name: `linear best/worst x {LINEAR_REPEAT} iter` };
+    let mut blin = Benchmark { name: `linear best/worst x ${LINEAR_REPEAT} iter` };
     let acc_b = blin.run("linear (best ) ", || run_linear_one(&linear, Method::Get, &best_path, LINEAR_REPEAT));
     let acc_w = blin.run("linear (worst) ", || run_linear_one(&linear, Method::Get, &worst_path, LINEAR_REPEAT));
-    blin.println(`accumulators: best={acc_b} worst={acc_w}`);
+    blin.println(`accumulators: best=${acc_b} worst=${acc_w}`);
 }

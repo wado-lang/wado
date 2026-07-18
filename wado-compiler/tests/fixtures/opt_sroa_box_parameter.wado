@@ -12,19 +12,19 @@
 use { println, Stdout } from "core:cli";
 
 fn check_i32(x: i32, expected: String) {
-    assert `{x}` == expected;
+    assert `${x}` == expected;
 }
 
 fn check_i64(x: i64, expected: String) {
-    assert `{x}` == expected;
+    assert `${x}` == expected;
 }
 
 fn check_f32(x: f32, expected: String) {
-    assert `{x}` == expected;
+    assert `${x}` == expected;
 }
 
 fn check_f64(x: f64, expected: String) {
-    assert `{x}` == expected;
+    assert `${x}` == expected;
 }
 
 export fn run() with Stdout {
@@ -42,22 +42,22 @@ export fn run() with Stdout {
     let bool_val = true;
     let char_val = 'Z';
 
-    assert `{i8_val}` == "42";
-    assert `{i16_val}` == "1000";
-    assert `{i32_val}` == "100000";
-    assert `{i64_val}` == "999999999";
-    assert `{u8_val}` == "255";
-    assert `{u16_val}` == "60000";
-    assert `{u32_val}` == "4000000000";
-    assert `{u64_val}` == "18000000000000000000";
-    assert `{f32_val}` == "3.14";
-    assert `{f64_val}` == "2.71828";
-    assert `{bool_val}` == "true";
-    assert `{char_val}` == "Z";
+    assert `${i8_val}` == "42";
+    assert `${i16_val}` == "1000";
+    assert `${i32_val}` == "100000";
+    assert `${i64_val}` == "999999999";
+    assert `${u8_val}` == "255";
+    assert `${u16_val}` == "60000";
+    assert `${u32_val}` == "4000000000";
+    assert `${u64_val}` == "18000000000000000000";
+    assert `${f32_val}` == "3.14";
+    assert `${f64_val}` == "2.71828";
+    assert `${bool_val}` == "true";
+    assert `${char_val}` == "Z";
 
     // Format specifiers also go through Box<T> paths
-    assert `{f64_val:0.2f}` == "2.72";
-    assert `{i32_val:x}` == "186a0";
+    assert `${f64_val:0.2f}` == "2.72";
+    assert `${i32_val:x}` == "186a0";
 
     // === 1. Inside if blocks ===
     if true {
@@ -66,18 +66,18 @@ export fn run() with Stdout {
         let c: f32 = 1.5;
         let d: f64 = 2.5;
         let e = false;
-        assert `{a}` == "42";
-        assert `{b}` == "9999999999";
-        assert `{c}` == "1.5";
-        assert `{d}` == "2.5";
-        assert `{e}` == "false";
+        assert `${a}` == "42";
+        assert `${b}` == "9999999999";
+        assert `${c}` == "1.5";
+        assert `${d}` == "2.5";
+        assert `${e}` == "false";
     }
 
     if i32_val > 0 {
-        assert `{i32_val}` == "100000";
-        assert `{f64_val:0.1f}` == "2.7";
+        assert `${i32_val}` == "100000";
+        assert `${f64_val:0.1f}` == "2.7";
     } else {
-        assert `{i32_val}` == "negative";
+        assert `${i32_val}` == "negative";
     }
 
     // === 2. Match arms ===
@@ -88,72 +88,72 @@ export fn run() with Stdout {
     let opt_bool: Option<bool> = Option::<bool>::Some(true);
 
     let r1 = match opt_i32 {
-        Some(v) => `{v}`,
+        Some(v) => `${v}`,
         None => "none",
     };
     assert r1 == "77";
 
     let r2 = match opt_i64 {
-        Some(v) => `{v}`,
+        Some(v) => `${v}`,
         None => "none",
     };
     assert r2 == "123456789";
 
     let r3 = match opt_f32 {
-        Some(v) => `{v}`,
+        Some(v) => `${v}`,
         None => "none",
     };
     assert r3 == "6.28";
 
     let r4 = match opt_f64 {
-        Some(v) => `{v}`,
+        Some(v) => `${v}`,
         None => "none",
     };
     assert r4 == "1.414";
 
     let r5 = match opt_bool {
-        Some(v) => `{v}`,
+        Some(v) => `${v}`,
         None => "none",
     };
     assert r5 == "true";
 
     // === 3. if-let chain with condition ===
-    if let s = `{i32_val}` && s == "100000" {
+    if let s = `${i32_val}` && s == "100000" {
         assert s == "100000";
     } else {
         panic("i32 if-let failed");
     }
 
-    if let s = `{i64_val}` && s == "999999999" {
+    if let s = `${i64_val}` && s == "999999999" {
         assert s == "999999999";
     } else {
         panic("i64 if-let failed");
     }
 
-    if let s = `{f32_val}` && s == "3.14" {
+    if let s = `${f32_val}` && s == "3.14" {
         assert s == "3.14";
     } else {
         panic("f32 if-let failed");
     }
 
-    if let s = `{f64_val}` && s == "2.71828" {
+    if let s = `${f64_val}` && s == "2.71828" {
         assert s == "2.71828";
     } else {
         panic("f64 if-let failed");
     }
 
-    if let s = `{bool_val}` && s == "true" {
+    if let s = `${bool_val}` && s == "true" {
         assert s == "true";
     } else {
         panic("bool if-let failed");
     }
 
     // === 4. In closures ===
-    let fmt_i32 = |x: i32| `{x}`;
-    let fmt_i64 = |x: i64| `{x}`;
-    let fmt_f32 = |x: f32| `{x}`;
-    let fmt_f64 = |x: f64| `{x}`;
-    let fmt_bool = |x: bool| `{x}`;
+    let fmt_i32 = |x: i32| `${x}`;
+    let fmt_i64 = |x: i64| `${x}`;
+    let fmt_f32 = |x: f32| `${x}`;
+    let fmt_f64 = |x: f64| `${x}`;
+    let fmt_bool = |x: bool| `${x}`;
 
     assert fmt_i32(42) == "42";
     assert fmt_i64(123456789) == "123456789";
@@ -164,7 +164,7 @@ export fn run() with Stdout {
     // Closure capturing outer variable
     let captured_i32: i32 = 999;
     let captured_f64: f64 = 1.618;
-    let fmt_captured = || `{captured_i32}, {captured_f64}`;
+    let fmt_captured = || `${captured_i32}, ${captured_f64}`;
     assert fmt_captured() == "999, 1.618";
 
     // Passed to higher-order function

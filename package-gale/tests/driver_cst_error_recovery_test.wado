@@ -11,7 +11,7 @@ use errrec from "./grammars/error_recovery.g4"
 
 fn first_diag_col(input: &String) -> i32 {
     let r = errrec::parse(input);
-    assert !r.ok(), `expected a diagnostic for {*input}`;
+    assert !r.ok(), `expected a diagnostic for ${*input}`;
     return r.diagnostics[0].col;
 }
 
@@ -33,7 +33,7 @@ test "error position: non-item token stays put" {
 fn assert_single(input: &String, expected: &String) {
     let r = errrec::parse_single(input);
     let actual = errrec::to_string_tree(&r);
-    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
 }
 
 // `item : 'let' ID '=' ID ';'`; the second ID is absent. The current token (`;`)
@@ -65,7 +65,7 @@ test "tree: error region resyncs to FOLLOW" {
 // first and folds.
 test "max_errors caps recovery diagnostics" {
     let full = errrec::parse_double(&"let x = ; let y = ;");
-    assert full.diagnostics.len() == 2, `expected 2, got {full.diagnostics.len()}`;
+    assert full.diagnostics.len() == 2, `expected 2, got ${full.diagnostics.len()}`;
     let capped = errrec::parse_double(&"let x = ; let y = ;", 1);
-    assert capped.diagnostics.len() == 1, `expected 1, got {capped.diagnostics.len()}`;
+    assert capped.diagnostics.len() == 1, `expected 1, got ${capped.diagnostics.len()}`;
 }

@@ -4,14 +4,14 @@ internal resource Widget {
 }
 
 test "resource inspect renders the handle in hex" {
-    assert `{(255 as Widget):?}` == "Widget#0xff";
-    assert `{(16 as Widget):?}` == "Widget#0x10";
-    assert `{(0 as Widget):?}` == "Widget#0x0";
+    assert `${(255 as Widget):?}` == "Widget#0xff";
+    assert `${(16 as Widget):?}` == "Widget#0x10";
+    assert `${(0 as Widget):?}` == "Widget#0x0";
 }
 
 test "resource flows through Result::unwrap_err inspect" {
     let r: Result<i32, Widget> = Result::<i32, Widget>::Err(0xab as Widget);
-    assert `{r.unwrap_err():?}` == "Widget#0xab";
+    assert `${r.unwrap_err():?}` == "Widget#0xab";
 }
 
 __DATA__

@@ -259,14 +259,14 @@ use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
     let [lo1, hi1] = builtin::i64_mul_wide_u(0xFFFFFFFFFFFFFFFF as i64, 3 as i64);
-    println(`{lo1} {hi1}`);
+    println(`${lo1} ${hi1}`);
     let [lo2, hi2] = builtin::i64_mul_wide_s(0 - 5, 7);
-    println(`{lo2} {hi2}`);
+    println(`${lo2} ${hi2}`);
     let [lo3, hi3] = builtin::i64_add128(0xFFFFFFFFFFFFFFFF as i64, 0, 2, 0);
-    println(`{lo3} {hi3}`);
+    println(`${lo3} ${hi3}`);
     let [lo4, hi4] = builtin::i64_sub128(1, 5, 2, 2);
-    println(`{lo4} {hi4}`);
-    println(`{3.141592653589793}`);
+    println(`${lo4} ${hi4}`);
+    println(`${3.141592653589793}`);
 }
 "#;
 
@@ -296,7 +296,7 @@ const WIDE_OPS: [&str; 4] = [
 fn default_emits_wide_arithmetic() {
     let wat = wasmprinter::print_bytes(compile_wide_arith(Vec::new())).expect("disassemble");
     for op in WIDE_OPS {
-        assert!(wat.contains(op), "default codegen must emit `{op}`");
+        assert!(wat.contains(op), "default codegen must emit `${op}`");
     }
 }
 
@@ -307,7 +307,7 @@ fn no_wide_arithmetic_flag_lowers_to_plain_i64() {
     for op in WIDE_OPS {
         assert!(
             !wat.contains(op),
-            "`-f no-wide-arithmetic` must not emit `{op}` (V8 has no wide-arithmetic support)"
+            "`-f no-wide-arithmetic` must not emit `${op}` (V8 has no wide-arithmetic support)"
         );
     }
 }

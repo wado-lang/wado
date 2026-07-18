@@ -15,13 +15,13 @@ use { unreachable } from "core:rt";
 /// Text alignment for padding.
 #[compiler_item("alignment")]
 internal enum Alignment {
-    /// Left-aligned: `{x:<5}` -> "42   "
+    /// Left-aligned: `${x:<5}` -> "42   "
     #[compiler_item("alignment_left")]
     Left,
-    /// Center-aligned: `{x:^5}` -> " 42  "
+    /// Center-aligned: `${x:^5}` -> " 42  "
     #[compiler_item("alignment_center")]
     Center,
-    /// Right-aligned (default for numbers): `{x:>5}` -> "   42"
+    /// Right-aligned (default for numbers): `${x:>5}` -> "   42"
     #[compiler_item("alignment_right")]
     Right,
 }
@@ -333,8 +333,8 @@ impl Display for String {
 }
 
 /// Writes a `Display` value into a `String` in place, skipping the temporary
-/// `String` that a `` `{value}` `` template allocates before copying it in. The
-/// alloc-free counterpart to `buf.push_str(&`{value}`)` for a single value with
+/// `String` that a `` `${value}` `` template allocates before copying it in. The
+/// alloc-free counterpart to `buf.push_str(&`${value}`)` for a single value with
 /// no format spec — the hot path in the serde numeric encoders.
 ///
 /// A trait (not an inherent `impl String`, which the coherence rules forbid on a
@@ -389,7 +389,7 @@ impl Inspect for String {
                 if code < 0x20 || code == 0x7f {
                     // Control char with no named escape: `\u{HEX}`, never raw.
                     f.write_str(&"\\u{");
-                    f.write_str(&`{code:x}`);
+                    f.write_str(&`${code:x}`);
                     f.write_char('}');
                 } else {
                     f.write_char(c);

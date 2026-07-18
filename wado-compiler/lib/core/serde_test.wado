@@ -90,7 +90,7 @@ impl SerializeStruct for MockStructSerializer {
         if self.count > 0 {
             self.w.buf.push_str(&",");
         }
-        self.w.buf.push_str(&`"{*name}":`);
+        self.w.buf.push_str(&`"${*name}":`);
         let mut ser = MockSerializer { w: self.w };
         let r = value.serialize::<MockSerializer>(&mut ser);
         self.count += 1;
@@ -123,32 +123,32 @@ impl Serializer for MockSerializer {
     type VariantSerializer = MockVariantSerializer;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&`{v}`);
+        self.w.buf.push_str(&`${v}`);
         return Result::Ok(());
     }
 
     fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&`{v}`);
+        self.w.buf.push_str(&`${v}`);
         return Result::Ok(());
     }
 
     fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&`{v}`);
+        self.w.buf.push_str(&`${v}`);
         return Result::Ok(());
     }
 
     fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&`{v}`);
+        self.w.buf.push_str(&`${v}`);
         return Result::Ok(());
     }
 
     fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&`{v as f64}`);
+        self.w.buf.push_str(&`${v as f64}`);
         return Result::Ok(());
     }
 
     fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&`{v}`);
+        self.w.buf.push_str(&`${v}`);
         return Result::Ok(());
     }
 
@@ -162,12 +162,12 @@ impl Serializer for MockSerializer {
     }
 
     fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&`"{v}"`);
+        self.w.buf.push_str(&`"${v}"`);
         return Result::Ok(());
     }
 
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&`"{*v}"`);
+        self.w.buf.push_str(&`"${*v}"`);
         return Result::Ok(());
     }
 
@@ -201,7 +201,7 @@ impl Serializer for MockSerializer {
         variant_name: &String,
         disc: i32,
     ) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&`"{*variant_name}"`);
+        self.w.buf.push_str(&`"${*variant_name}"`);
         return Result::Ok(());
     }
 
@@ -211,7 +211,7 @@ impl Serializer for MockSerializer {
         variant_name: &String,
         disc: i32,
     ) -> Result<MockVariantSerializer, SerializeError> with stores[self] {
-        self.w.buf.push_str(&`\{"{*variant_name}":`);
+        self.w.buf.push_str(&`\{"${*variant_name}":`);
         return Result::Ok(MockVariantSerializer { w: self.w });
     }
 }

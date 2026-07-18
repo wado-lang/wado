@@ -340,7 +340,7 @@ fn fibonacci() -> impl Iterator<i32> {
 
 for let n of fibonacci() {
     if n > 1000 { break; }
-    println(`{n}`);
+    println(`${n}`);
 }
 ```
 

@@ -11,25 +11,25 @@ use lp from "./grammars/wado_lex_mid_pred.g4"
 test "a mid-alt predicate gates the match partway through" {
     let cat = lp::parse(&"cat");
     assert cat.ok(), "clean parse of 'cat'";
-    assert cat.output == "kw", `output: '{cat.output}'`;
+    assert cat.output == "kw", `output: '${cat.output}'`;
 
     let cot = lp::parse(&"cot");
     assert cot.ok(), "clean parse of 'cot'";
-    assert cot.output == "kw", `output: '{cot.output}'`;
+    assert cot.output == "kw", `output: '${cot.output}'`;
 
     let dog = lp::parse(&"dog");
     assert dog.ok(), "clean parse of 'dog'";
-    assert dog.output == "id", `output: '{dog.output}'`;
+    assert dog.output == "id", `output: '${dog.output}'`;
 }
 
 test "a predicate after a non-greedy repeat is still emitted" {
     // `qaz`: one letter after `q` → pos-start == 2 at `z` holds → NG.
     let qaz = lp::parse(&"qaz");
     assert qaz.ok(), "clean parse of 'qaz'";
-    assert qaz.output == "ng", `output: '{qaz.output}'`;
+    assert qaz.output == "ng", `output: '${qaz.output}'`;
 
     // `qz`: zero letters after `q` → predicate false → falls through to ID.
     let qz = lp::parse(&"qz");
     assert qz.ok(), "clean parse of 'qz'";
-    assert qz.output == "id", `output: '{qz.output}'`;
+    assert qz.output == "id", `output: '${qz.output}'`;
 }

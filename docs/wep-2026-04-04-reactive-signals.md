@@ -52,12 +52,12 @@ let reactive mut count = 0;
 let reactive doubled = || count * 2;
 
 observe(|| {
-    println(`Count is now: {count}`);
+    println(`Count is now: ${count}`);
     // Dependencies: count
 });
 
 observe(|| {
-    println(`Doubled is now: {doubled}`);
+    println(`Doubled is now: ${doubled}`);
     // Dependencies: doubled (and transitively, count)
 });
 ```
@@ -68,12 +68,12 @@ Return a cleanup function to run when the observation is disposed or before re-r
 
 ```wado
 observe(|| {
-    let subscription = external_api.subscribe(`event-{count}`);
-    println(`Subscribed to event-{count}`);
+    let subscription = external_api.subscribe(`event-${count}`);
+    println(`Subscribed to event-${count}`);
 
     return || {
         subscription.unsubscribe();
-        println(`Cleaned up subscription for event-{count}`);
+        println(`Cleaned up subscription for event-${count}`);
     };
 });
 ```
@@ -88,7 +88,7 @@ The cleanup function runs:
 
 ```wado
 let dispose = observe(|| {
-    println(`Count: {count}`);
+    println(`Count: ${count}`);
 });
 
 // Later, stop observing
@@ -125,7 +125,7 @@ let reactive mut count = 0;
 let reactive doubled = || count * 2;
 
 observe(|| {
-    println(`doubled = {doubled}`);
+    println(`doubled = ${doubled}`);
 });
 
 count = 5;
@@ -152,7 +152,7 @@ fn Counter() -> Element with Dom {
     let reactive doubled = || count * 2;
 
     observe(|| {
-        println(`Count changed to {count}`);
+        println(`Count changed to ${count}`);
     });
 
     return <div>
@@ -263,7 +263,7 @@ let reactive tripled = || count * 3;
 let reactive sum = || doubled + tripled;
 
 observe(|| {
-    println(`sum = {sum}`);
+    println(`sum = ${sum}`);
     // Never sees doubled-updated + tripled-stale:
     // Pull reads sum → pulls doubled (recomputes) → pulls tripled (recomputes) → sum recomputes
 });
@@ -284,7 +284,7 @@ This prevents unnecessary cascading recomputation:
 ```wado
 let reactive mut x = 5;
 let reactive clamped = || i32::min(x, 10);  // clamps to max 10
-let reactive display = || `value: {clamped}`;
+let reactive display = || `value: ${clamped}`;
 
 observe(|| { println(display); });
 

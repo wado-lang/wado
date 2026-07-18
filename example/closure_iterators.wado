@@ -25,11 +25,11 @@ export fn run() with Stdout {
 
     // fold the survivors into a sum, then average.
     let total = passing.iter().copied().fold(0, |acc: i32, s: i32| acc + s);
-    println(`{passing.len()} passed, average {total / passing.len()}`);
+    println(`${passing.len()} passed, average ${total / passing.len()}`);
 
     // any / all take a predicate closure, here written inline in the template.
-    println(`all passed? {players.iter().copied().all(|p: Player| p.score >= 70)}`);
-    println(`any perfect? {players.iter().copied().any(|p: Player| p.score == 100)}`);
+    println(`all passed? ${players.iter().copied().all(|p: Player| p.score >= 70)}`);
+    println(`any perfect? ${players.iter().copied().any(|p: Player| p.score == 100)}`);
 
     // sort_by takes a comparator closure: rank by score, descending.
     let mut ranked = players;
@@ -37,7 +37,7 @@ export fn run() with Stdout {
 
     let mut rank = 1;
     for let p of ranked.iter().copied() {
-        println(`{rank}. {p.name} ({p.score})`);
+        println(`${rank}. ${p.name} (${p.score})`);
         rank += 1;
     }
 }

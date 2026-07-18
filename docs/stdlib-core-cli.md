@@ -11,10 +11,10 @@ WASI CLI interfaces, use `wasi:cli` directly.
 ```wado
 println("Hello, Wado!");
 for let arg of args() {
-    println(`arg: {arg}`);
+    println(`arg: ${arg}`);
 }
 if let Some(home) = env("HOME") {
-    println(`HOME={home}`);
+    println(`HOME=${home}`);
 }
 ```
 

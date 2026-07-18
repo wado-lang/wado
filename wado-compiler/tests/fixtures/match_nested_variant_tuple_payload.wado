@@ -11,8 +11,8 @@ variant Tree {
 export fn run() with Stdout {
     let tree = Tree::Branch([Tree::Leaf(10), Tree::Leaf(20)]);
     let result = match tree {
-        Leaf(n) => `leaf:{n}`,
-        Branch([Leaf(a), Leaf(b)]) => `branch:{a},{b}`,
+        Leaf(n) => `leaf:${n}`,
+        Branch([Leaf(a), Leaf(b)]) => `branch:${a},${b}`,
         Branch(_) => "branch:other",
         Empty => "empty",
     };
@@ -20,7 +20,7 @@ export fn run() with Stdout {
 
     let tree2 = Tree::Branch([Tree::Branch([Tree::Leaf(1), Tree::Empty]), Tree::Leaf(2)]);
     let result2 = match tree2 {
-        Branch([Branch(_), Leaf(n)]) => `deep-right:{n}`,
+        Branch([Branch(_), Leaf(n)]) => `deep-right:${n}`,
         Branch([Leaf(_), Branch(_)]) => "deep-left",
         _ => "other",
     };

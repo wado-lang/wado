@@ -204,25 +204,25 @@ export fn run() with Stdout {
 
     let s = compute_stats(&temps);
     println("Daily temperatures (15 days):");
-    println(`  Count:    {s.count}`);
-    println(`  Sum:      {s.sum:0.2f}`);
-    println(`  Mean:     {s.mean:0.2f}`);
-    println(`  Std Dev:  {std_dev(&s):0.4f}`);
-    println(`  Min:      {s.min:0.2f}`);
-    println(`  Max:      {s.max:0.2f}`);
-    println(`  Range:    {s.max - s.min:0.2f}`);
+    println(`  Count:    ${s.count}`);
+    println(`  Sum:      ${s.sum:0.2f}`);
+    println(`  Mean:     ${s.mean:0.2f}`);
+    println(`  Std Dev:  ${std_dev(&s):0.4f}`);
+    println(`  Min:      ${s.min:0.2f}`);
+    println(`  Max:      ${s.max:0.2f}`);
+    println(`  Range:    ${s.max - s.min:0.2f}`);
 
     // Z-score normalization
     println("");
     println("Z-score normalization (first 5):");
     let norm = normalize(&temps);
     for let mut i = 0; i < 5; i += 1 {
-        println(`  {temps[i]:0.1f} -> {norm[i]:0.4f}`);
+        println(`  ${temps[i]:0.1f} -> ${norm[i]:0.4f}`);
     }
 
     // Dot product (correlation-like computation)
     println("");
     let weights: List<f64> = [0.05, 0.05, 0.05, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.05, 0.02, 0.02, 0.03, 0.03];
     let weighted_avg = dot_product(&temps, &weights);
-    println(`Weighted average temp: {weighted_avg:0.2f}`);
+    println(`Weighted average temp: ${weighted_avg:0.2f}`);
 }

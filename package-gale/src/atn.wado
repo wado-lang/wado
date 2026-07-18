@@ -248,7 +248,7 @@ pub fn build_token_kinds(grammar: &Grammar) -> [TreeMap<String, i32>, i32] {
     let mut idx = 0;
     for let slot of &slots {
         match *slot {
-            Rule(ri) => map[`TK_{grammar.lexer_rules[ri].name}`] = idx,
+            Rule(ri) => map[`TK_${grammar.lexer_rules[ri].name}`] = idx,
             Eof => map["TK_EOF"] = idx,
             Error => map["TK_ERROR"] = idx,
             Lit(li) => map[lit_tokens[li].const_name] = idx,
@@ -633,7 +633,7 @@ fn build_repeat_prec(
 /// is never wrongly dropped to prec 0 when an operator might follow.
 fn element_first_has_lr(elem: &Element, lr_first: &List<String>) -> bool {
     return match *elem {
-        TokenRef(t) => lr_first.contains(&`TK_{t.name}`),
+        TokenRef(t) => lr_first.contains(&`TK_${t.name}`),
         Literal(l) => lr_first.contains(&literal_const_name(&l.text)),
         RuleRef(_) => true,
         Wildcard(_) => true,
@@ -795,7 +795,7 @@ fn build_sequence(
 /// Build a single element, returning its `[entry, exit]` state pair.
 fn build_element(b: &mut AtnBuilder, elem: &Element, rule: i32, rule_index: &TreeMap<String, i32>) -> [i32, i32] {
     return match *elem {
-        TokenRef(t) => atom_segment(b, b.kind_of(&`TK_{t.name}`), rule),
+        TokenRef(t) => atom_segment(b, b.kind_of(&`TK_${t.name}`), rule),
         Literal(l) => atom_segment(b, b.kind_of(&literal_const_name(&l.text)), rule),
         Wildcard(_) => {
             let from = b.new_state(ATN_BASIC, rule);
@@ -842,7 +842,7 @@ fn not_segment(b: &mut AtnBuilder, inner: &Element, rule: i32) -> [i32, i32] {
     let from = b.new_state(ATN_BASIC, rule);
     let to = b.new_state(ATN_BASIC, rule);
     let label = match *inner {
-        TokenRef(t) => b.kind_of(&`TK_{t.name}`),
+        TokenRef(t) => b.kind_of(&`TK_${t.name}`),
         Literal(l) => b.kind_of(&literal_const_name(&l.text)),
         _ => -1,
     };
@@ -923,14 +923,14 @@ fn build_repeat(
 /// time instead of truncating silently. Only the tiny state/transition kind
 /// enums use this width.
 fn push_u8(bytes: &mut List<u8>, v: i32) {
-    assert 0 <= v <= 255, `ATN blob: value {v} exceeds u8 range`;
+    assert 0 <= v <= 255, `ATN blob: value ${v} exceeds u8 range`;
     bytes.push(v as u8);
 }
 
 /// Little-endian; same overflow assert as `push_u8`, widened to `u16`
 /// (0..=65535). Every count and state/rule/token index uses this width.
 fn push_u16(bytes: &mut List<u8>, v: i32) {
-    assert 0 <= v <= 65535, `ATN blob: value {v} exceeds u16 range`;
+    assert 0 <= v <= 65535, `ATN blob: value ${v} exceeds u16 range`;
     bytes.push((v & 0xff) as u8);
     bytes.push((v >> 8 & 0xff) as u8);
 }
@@ -942,7 +942,7 @@ fn push_u16(bytes: &mut List<u8>, v: i32) {
 /// up to `CHAR_MAX` = `0x10FFFF`) — one shared decoder, so the field must
 /// fit its widest use.
 fn push_u24(bytes: &mut List<u8>, v: i32) {
-    assert 0 <= v <= 16777215, `ATN blob: value {v} exceeds u24 range`;
+    assert 0 <= v <= 16777215, `ATN blob: value ${v} exceeds u24 range`;
     bytes.push((v & 0xff) as u8);
     bytes.push((v >> 8 & 0xff) as u8);
     bytes.push((v >> 16 & 0xff) as u8);
@@ -953,14 +953,14 @@ fn push_u24(bytes: &mut List<u8>, v: i32) {
 /// branch needed. Only the lower bound is asserted — `push_u16` itself
 /// catches `v + 1` overflowing `u16`.
 fn push_u16_biased(bytes: &mut List<u8>, v: i32) {
-    assert v >= -1, `ATN blob: biased value {v} below sentinel -1`;
+    assert v >= -1, `ATN blob: biased value ${v} below sentinel -1`;
     push_u16(bytes, v + 1);
 }
 
 /// `label`/`follow` counterpart to `push_u16_biased`; `push_u24` catches
 /// `v + 1` overflow.
 fn push_u24_biased(bytes: &mut List<u8>, v: i32) {
-    assert v >= -1, `ATN blob: biased value {v} below sentinel -1`;
+    assert v >= -1, `ATN blob: biased value ${v} below sentinel -1`;
     push_u24(bytes, v + 1);
 }
 
@@ -1097,26 +1097,26 @@ fn trans_kind_name(kind: i32) -> String {
 /// Human-readable dump of the ATN, surfaced by `gale dump --atn`.
 pub fn dump_atn(atn: &Atn, grammar: &Grammar) -> String {
     let mut out = String::with_capacity(1024);
-    out.push_str(&`ATN: {atn.states.len()} states, {atn.decision_state.len()} decisions, {atn.num_tokens} tokens\n`);
+    out.push_str(&`ATN: ${atn.states.len()} states, ${atn.decision_state.len()} decisions, ${atn.num_tokens} tokens\n`);
     for let mut r = 0; r < grammar.parser_rules.len(); r += 1 {
         out.push_str(
-            &`rule {r} '{grammar.parser_rules[r].name}': start=s{atn.rule_start[r]} stop=s{atn.rule_stop[r]}\n`,
+            &`rule ${r} '${grammar.parser_rules[r].name}': start=s${atn.rule_start[r]} stop=s${atn.rule_stop[r]}\n`,
         );
     }
     for let mut i = 0; i < atn.states.len(); i += 1 {
         let st = &atn.states[i];
-        let dec = if st.decision >= 0 { ` decision={st.decision}` } else { String::from("") };
-        out.push_str(&`  s{i} {state_kind_name(st.kind)} rule={st.rule}{dec}\n`);
+        let dec = if st.decision >= 0 { ` decision=${st.decision}` } else { String::from("") };
+        out.push_str(&`  s${i} ${state_kind_name(st.kind)} rule=${st.rule}${dec}\n`);
         for let t of &st.transitions {
             let mut detail = String::from("");
             if t.kind == ATN_TR_ATOM || t.kind == ATN_TR_NOT_ATOM {
-                detail = ` tk={t.label}`;
+                detail = ` tk=${t.label}`;
             } else if t.kind == ATN_TR_RULE {
-                detail = ` rule={t.label} follow=s{t.follow} prec={t.prec}`;
+                detail = ` rule=${t.label} follow=s${t.follow} prec=${t.prec}`;
             } else if t.kind == ATN_TR_PRECEDENCE {
-                detail = ` prec={t.prec}`;
+                detail = ` prec=${t.prec}`;
             }
-            out.push_str(&`    -{trans_kind_name(t.kind)}-> s{t.target}{detail}\n`);
+            out.push_str(&`    -${trans_kind_name(t.kind)}-> s${t.target}${detail}\n`);
         }
     }
     return out;

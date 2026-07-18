@@ -1,23 +1,25 @@
 # WEP: Template Format Specifiers
 
+> Interpolation was originally `{foo}`; it migrated to `${foo}` on 2026-07-18 to drop the brace-escaping cost against JSON-like content. Format specifiers are unchanged — `${expr:spec}`.
+
 ## Context
 
-Template strings in Wado support interpolation with format specifiers: `` `value: {x:spec}` ``. Different languages provide different sets of format specifiers:
+Template strings in Wado support interpolation with format specifiers: `` `value: ${x:spec}` ``. Different languages provide different sets of format specifiers:
 
 ### Language Comparison
 
 | Feature                   | Go         | Python     | Rust           | Wado    |
 | ------------------------- | ---------- | ---------- | -------------- | ------- |
 | Fixed-point float         | `%f`, `%F` | `:f`, `:F` | `{}` (default) | `{}`    |
-| Exponential (lower)       | `%e`       | `:e`       | `{:e}`         | `{:e}`  |
-| Exponential (upper)       | `%E`       | `:E`       | `{:E}`         | `{:E}`  |
+| Exponential (lower)       | `%e`       | `:e`       | `{:e}`         | `${:e}` |
+| Exponential (upper)       | `%E`       | `:E`       | `{:E}`         | `${:E}` |
 | General format (adaptive) | `%g`, `%G` | `:g`, `:G` | ❌ None        | ❌ None |
-| Binary                    | `%b`       | `:b`       | `{:b}`         | `{:b}`  |
-| Octal                     | `%o`       | `:o`       | `{:o}`         | `{:o}`  |
-| Hex (lower)               | `%x`       | `:x`       | `{:x}`         | `{:x}`  |
-| Hex (upper)               | `%X`       | `:X`       | `{:X}`         | `{:X}`  |
+| Binary                    | `%b`       | `:b`       | `{:b}`         | `${:b}` |
+| Octal                     | `%o`       | `:o`       | `{:o}`         | `${:o}` |
+| Hex (lower)               | `%x`       | `:x`       | `{:x}`         | `${:x}` |
+| Hex (upper)               | `%X`       | `:X`       | `{:X}`         | `${:X}` |
 | Pointer                   | `%p`       | N/A        | `{:p}`         | ❌ None |
-| Debug                     | `%#v`      | `!r`       | `{:?}`         | `{:?}`  |
+| Debug                     | `%#v`      | `!r`       | `{:?}`         | `${:?}` |
 
 ### The Problem with General Format (`g`/`G`)
 
@@ -42,65 +44,65 @@ This avoided the unpredictability of `g` while still providing readable output f
 ### Format Specifier Syntax
 
 ```wado
-`{expr}`           // Default (Display trait)
-`{expr:spec}`      // With format specifier
+`${expr}`           // Default (Display trait)
+`${expr:spec}`      // With format specifier
 ```
 
 Where `spec` follows Rust's format specification mini-language.
 
 ### Supported Format Types
 
-| Specifier | Trait      | Description           | Example              |
-| --------- | ---------- | --------------------- | -------------------- |
-| (none)    | Display    | Default display       | `{x}` → `"42"`       |
-| `?`       | Inspect    | Debug representation  | `{x:?}` → `"42"`     |
-| `#?`      | InspectAlt | Pretty-print debug    | `{x:#?}` (indented)  |
-| `b`       | Binary     | Binary integers       | `{x:b}` → `"101010"` |
-| `o`       | Octal      | Octal integers        | `{x:o}` → `"52"`     |
-| `x`       | LowerHex   | Lowercase hex         | `{x:x}` → `"2a"`     |
-| `X`       | UpperHex   | Uppercase hex         | `{x:X}` → `"2A"`     |
-| `e`       | LowerExp   | Lowercase exponential | `{x:e}` → `"4.2e1"`  |
-| `E`       | UpperExp   | Uppercase exponential | `{x:E}` → `"4.2E1"`  |
+| Specifier | Trait      | Description           | Example               |
+| --------- | ---------- | --------------------- | --------------------- |
+| (none)    | Display    | Default display       | `${x}` → `"42"`       |
+| `?`       | Inspect    | Debug representation  | `${x:?}` → `"42"`     |
+| `#?`      | InspectAlt | Pretty-print debug    | `${x:#?}` (indented)  |
+| `b`       | Binary     | Binary integers       | `${x:b}` → `"101010"` |
+| `o`       | Octal      | Octal integers        | `${x:o}` → `"52"`     |
+| `x`       | LowerHex   | Lowercase hex         | `${x:x}` → `"2a"`     |
+| `X`       | UpperHex   | Uppercase hex         | `${x:X}` → `"2A"`     |
+| `e`       | LowerExp   | Lowercase exponential | `${x:e}` → `"4.2e1"`  |
+| `E`       | UpperExp   | Uppercase exponential | `${x:E}` → `"4.2E1"`  |
 
 **Notes**:
 
-- No `g`/`G` format specifiers. Users must explicitly choose between default `{}` and exponential `{:e}/{:E}`.
+- No `g`/`G` format specifiers. Users must explicitly choose between default `{}` and exponential `${:e}/${:E}`.
 - No `p` (Pointer) format specifier. Wado does not have pointer types.
-- Negative signed integers format as the two's complement bit pattern of the value's own width under `b`/`o`/`x`/`X` (e.g. `{-1 as i32:x}` → `"ffffffff"`), matching Rust.
+- Negative signed integers format as the two's complement bit pattern of the value's own width under `b`/`o`/`x`/`X` (e.g. `${-1 as i32:x}` → `"ffffffff"`), matching Rust.
 
 ### Format Parameters
 
 Format specifiers can include additional parameters in this order:
 
 ```
-{expr:[[fill]align][sign][#][0][width][.precision]type}
+${expr:[[fill]align][sign][#][0][width][.precision]type}
 ```
 
 #### Alignment and Width
 
-| Syntax    | Description                | Example    | Output    |
-| --------- | -------------------------- | ---------- | --------- |
-| `{x:5}`   | Width 5, default align     | `{42:5}`   | `"   42"` |
-| `{x:<5}`  | Left align                 | `{42:<5}`  | `"42   "` |
-| `{x:^5}`  | Center align               | `{42:^5}`  | `" 42  "` |
-| `{x:>5}`  | Right align                | `{42:>5}`  | `"   42"` |
-| `{x:05}`  | Zero-padding               | `{42:05}`  | `"00042"` |
-| `{x:_>5}` | Fill with `_`, right align | `{42:_>5}` | `"___42"` |
+| Syntax     | Description                | Example     | Output    |
+| ---------- | -------------------------- | ----------- | --------- |
+| `${x:5}`   | Width 5, default align     | `${42:5}`   | `"   42"` |
+| `${x:<5}`  | Left align                 | `${42:<5}`  | `"42   "` |
+| `${x:^5}`  | Center align               | `${42:^5}`  | `" 42  "` |
+| `${x:>5}`  | Right align                | `${42:>5}`  | `"   42"` |
+| `${x:05}`  | Zero-padding               | `${42:05}`  | `"00042"` |
+| `${x:_>5}` | Fill with `_`, right align | `${42:_>5}` | `"___42"` |
 
 #### Precision
 
 For floating-point numbers, precision specifies decimal places:
 
 ```wado
-println(`{3.14159:.2}`);    // => "3.14"
-println(`{100.0:.4}`);      // => "100.0000"
-println(`{1.23e5:.1e}`);    // => "1.2e5"
+println(`${3.14159:.2}`);    // => "3.14"
+println(`${100.0:.4}`);      // => "100.0000"
+println(`${1.23e5:.1e}`);    // => "1.2e5"
 ```
 
 For integers in exponential notation, precision specifies significant digits:
 
 ```wado
-println(`{12345:.2e}`);     // => "1.23e4"
+println(`${12345:.2e}`);     // => "1.23e4"
 ```
 
 For strings, precision specifies the maximum length in characters, matching
@@ -110,9 +112,9 @@ actually happened. The marker does not count toward the precision:
 
 ```wado
 let s = "hello world";
-println(`{s:.5}`);          // => "hello"
-println(`{s:.5?}`);         // => "hello"...   (note: with surrounding quotes)
-println(`{s:.20}`);         // => "hello world" (precision >= length: unchanged)
+println(`${s:.5}`);          // => "hello"
+println(`${s:.5?}`);         // => "hello"...   (note: with surrounding quotes)
+println(`${s:.20}`);         // => "hello world" (precision >= length: unchanged)
 ```
 
 For arrays, precision specifies the maximum number of elements. `Display`
@@ -120,8 +122,8 @@ truncates silently; `Inspect` appends `, ...` when elements are dropped:
 
 ```wado
 let a: List<i32> = [1, 2, 3, 4, 5];
-println(`{a:.3?}`);         // => "[1, 2, 3, ...]"
-println(`{a:.3}`);          // => "[1, 2, 3]"
+println(`${a:.3?}`);         // => "[1, 2, 3, ...]"
+println(`${a:.3}`);          // => "[1, 2, 3]"
 ```
 
 The truncation point is uniform across collection-like types: precision caps the
@@ -136,7 +138,7 @@ but their `String` / `List` fields still honor the active precision.
 `Inspect` / `InspectAlt` (`:?` / `:#?`) of a `String` or `List` apply a default
 length cap of `DEFAULT_SEQ_LIMIT` (256 items) even when no precision is given, so
 debug output — including power-assert operand dumps — stays readable. `Display`
-never applies the default cap: a plain `{s}` renders the full value.
+never applies the default cap: a plain `${s}` renders the full value.
 
 To make this work, `Formatter.precision` uses two negative sentinels instead of a
 single "unspecified" value:
@@ -155,73 +157,73 @@ affecting non-sequence operands.
 
 #### Sign
 
-| Syntax    | Description                 | Example   | Output  |
-| --------- | --------------------------- | --------- | ------- |
-| `{x:+}`   | Always show sign            | `{42:+}`  | `"+42"` |
-| `{x:+}`   | Always show sign (negative) | `{-42:+}` | `"-42"` |
-| (default) | Only negative sign          | `{42}`    | `"42"`  |
+| Syntax    | Description                 | Example    | Output  |
+| --------- | --------------------------- | ---------- | ------- |
+| `${x:+}`  | Always show sign            | `${42:+}`  | `"+42"` |
+| `${x:+}`  | Always show sign (negative) | `${-42:+}` | `"-42"` |
+| (default) | Only negative sign          | `${42}`    | `"42"`  |
 
 #### Alternate Form
 
 The `#` flag provides alternate representations:
 
-| Type     | Effect          | Example   | Output       |
-| -------- | --------------- | --------- | ------------ |
-| `x`, `X` | Add `0x` prefix | `{42:#x}` | `"0x2a"`     |
-| `b`      | Add `0b` prefix | `{42:#b}` | `"0b101010"` |
-| `o`      | Add `0o` prefix | `{42:#o}` | `"0o52"`     |
+| Type     | Effect          | Example    | Output       |
+| -------- | --------------- | ---------- | ------------ |
+| `x`, `X` | Add `0x` prefix | `${42:#x}` | `"0x2a"`     |
+| `b`      | Add `0b` prefix | `${42:#b}` | `"0b101010"` |
+| `o`      | Add `0o` prefix | `${42:#o}` | `"0o52"`     |
 
 ### Complete Examples
 
 ```wado
 // Basic formatting
 let x = 42;
-println(`{x}`);          // => "42"
-println(`{x:?}`);        // => "42"
-println(`{x:b}`);        // => "101010"
-println(`{x:o}`);        // => "52"
-println(`{x:x}`);        // => "2a"
-println(`{x:X}`);        // => "2A"
-println(`{x:#x}`);       // => "0x2a"
+println(`${x}`);          // => "42"
+println(`${x:?}`);        // => "42"
+println(`${x:b}`);        // => "101010"
+println(`${x:o}`);        // => "52"
+println(`${x:x}`);        // => "2a"
+println(`${x:X}`);        // => "2A"
+println(`${x:#x}`);       // => "0x2a"
 
 // Width and alignment
-println(`{x:5}`);        // => "   42"
-println(`{x:<5}`);       // => "42   "
-println(`{x:^5}`);       // => " 42  "
-println(`{x:>5}`);       // => "   42"
-println(`{x:05}`);       // => "00042"
+println(`${x:5}`);        // => "   42"
+println(`${x:<5}`);       // => "42   "
+println(`${x:^5}`);       // => " 42  "
+println(`${x:>5}`);       // => "   42"
+println(`${x:05}`);       // => "00042"
 
 // Floating-point
 let pi = 3.14159;
-println(`{pi}`);         // => "3.14159"
-println(`{pi:.2}`);      // => "3.14"
-println(`{pi:+.2}`);     // => "+3.14"
-println(`{pi:8.2}`);     // => "    3.14" (width 8, precision 2)
-println(`{pi:e}`);       // => "3.14159e0"
-println(`{pi:.2e}`);     // => "3.14e0"
-println(`{pi:E}`);       // => "3.14159E0"
+println(`${pi}`);         // => "3.14159"
+println(`${pi:.2}`);      // => "3.14"
+println(`${pi:+.2}`);     // => "+3.14"
+println(`${pi:8.2}`);     // => "    3.14" (width 8, precision 2)
+println(`${pi:e}`);       // => "3.14159e0"
+println(`${pi:.2e}`);     // => "3.14e0"
+println(`${pi:E}`);       // => "3.14159E0"
 
 // Structs
 let p = Point { x: 10, y: 20 };
-println(`{p}`);          // => "(10, 20)" (if Display implemented)
-println(`{p:?}`);        // => "Point { x: 10, y: 20 }" (inspect)
+println(`${p}`);          // => "(10, 20)" (if Display implemented)
+println(`${p:?}`);        // => "Point { x: 10, y: 20 }" (inspect)
 
 // Arbitrary expressions (Wado extension)
-println(`{x + 1}`);      // => "43"
-println(`{x * 2:x}`);    // => "54" (84 in hex)
-println(`{p.x + p.y}`);  // => "30"
-println(`{arr.len()}`);  // => "5"
+println(`${x + 1}`);      // => "43"
+println(`${x * 2:x}`);    // => "54" (84 in hex)
+println(`${p.x + p.y}`);  // => "30"
+println(`${arr.len()}`);  // => "5"
 ```
 
 ### Interaction with Type Stringification
 
 This WEP extends [WEP: Type Stringification](./wep-2026-01-16-type-stringification.md):
 
-1. **`{expr}`**: Uses Display trait, falls back to inspect
-2. **`{expr:?}`**: Always uses inspect (compiler intrinsic)
-3. **`{expr:spec}`**: Uses appropriate trait for `spec` (e.g., Binary, LowerHex, LowerExp)
+1. **`${expr}`**: Uses Display trait, falls back to inspect
+2. **`${expr:?}`**: Always uses inspect (compiler intrinsic)
+3. **`${expr:spec}`**: Uses appropriate trait for `spec` (e.g., Binary, LowerHex, LowerExp)
 
-Resolution order for `{expr:spec}`:
+Resolution order for `${expr:spec}`:
 
 1. If type does not support the format trait → **compile error**
 2. Apply format parameters (width, precision, alignment)
@@ -229,16 +231,16 @@ Resolution order for `{expr:spec}`:
 
 **Key differences from Rust**:
 
-1. **Arbitrary expressions**: Wado allows any expression in `{expr}`, while Rust only allows simple value expressions (no method calls, operators, etc. without parentheses)
-2. **Inspect fallback**: Wado provides inspect as a fallback for `{}` and `{:?}`, while Rust requires explicit trait implementations
-3. **Other format specifiers**: Format specifiers like `{:x}` still require the type to support that trait (or be a primitive)
+1. **Arbitrary expressions**: Wado allows any expression in `${expr}`, while Rust only allows simple value expressions (no method calls, operators, etc. without parentheses)
+2. **Inspect fallback**: Wado provides inspect as a fallback for `{}` and `${:?}`, while Rust requires explicit trait implementations
+3. **Other format specifiers**: Format specifiers like `${:x}` still require the type to support that trait (or be a primitive)
 4. **No `:p` specifier**: Wado excludes `:p` since it has no pointer types
 
 **Syntax disambiguation**: The parser distinguishes `::` (scope resolution/turbofish) from `:` (format specifier) by lookahead:
 
-- `{foo::bar}` - `::` is part of the expression
-- `{foo::<T>}` - `::<` is turbofish syntax
-- `{foo:x}` - `:` starts format specifier
+- `${foo::bar}` - `::` is part of the expression
+- `${foo::<T>}` - `::<` is turbofish syntax
+- `${foo:x}` - `:` starts format specifier
 
 ## Consequences
 
@@ -248,13 +250,13 @@ Resolution order for `{expr:spec}`:
 2. **Predictable output**: No surprise switches to exponential notation
 3. **Explicit intent**: Developers explicitly choose the format they want
 4. **Type safety**: Format specifiers that don't apply to a type cause compile errors
-5. **Extensible**: Supports `{:#?}` for pretty-print and other Rust-compatible specifiers
+5. **Extensible**: Supports `${:#?}` for pretty-print and other Rust-compatible specifiers
 6. **Language coherence**: Excluding `:p` aligns with Wado's lack of pointer types
 
 ### Negative
 
-1. **No convenience format**: Developers must choose between `{}` and `{:e}` for floats
-   - **Mitigation**: Default `{}` works well for most cases; `{:e}` is explicit for scientific notation
+1. **No convenience format**: Developers must choose between `{}` and `${:e}` for floats
+   - **Mitigation**: Default `{}` works well for most cases; `${:e}` is explicit for scientific notation
 2. **Learning curve**: Developers from Python/Go may need to learn Rust's format syntax
    - **Mitigation**: Rust's format syntax is well-documented and widely used
 3. **Implementation complexity**: Requires implementing all Rust format traits
@@ -262,28 +264,28 @@ Resolution order for `{expr:spec}`:
 
 ### Implemented Extensions
 
-1. **Pretty-print**: `{:#?}` for indented multi-line debug output via `InspectAlt` trait
+1. **Pretty-print**: `${:#?}` for indented multi-line debug output via `InspectAlt` trait
 
 ### Future Extensions
 
 Following Rust's ecosystem, we can add:
 
-1. **Dynamic width and precision**: Allow runtime values using nested `{}` syntax
-   - Syntax: `{value:{width}.{precision}}` (Python-style)
-   - Rationale: Python's nested `{}` approach is more consistent with Wado's "arbitrary expressions" philosophy than Rust's `$` syntax, which requires argument lists. Variables in the current scope can be referenced directly.
-   - Example: `let w = 8; let p = 2; println(\`{pi:{w}.{p}}\`);`→`" 3.14"`
+1. **Dynamic width and precision**: Allow runtime values using nested `${}` syntax
+   - Syntax: `${value:${width}.${precision}}` (Python-style)
+   - Rationale: Python's nested-interpolation approach is more consistent with Wado's "arbitrary expressions" philosophy than Rust's `width$` syntax, which requires argument lists. Variables in the current scope can be referenced directly.
+   - Example: `let w = 8; let p = 2; println(\`${pi:${w}.${p}}\`);`→`" 3.14"`
 
 ### Migration from Other Languages
 
 For developers coming from other languages:
 
-| From                      | To Wado                      | Notes                |
-| ------------------------- | ---------------------------- | -------------------- |
-| Python `f"{x:.2f}"`       | `` `{x:.2}` ``               | No `f` suffix needed |
-| Go `fmt.Printf("%d", x)`  | `` `{x}` ``                  | Type inferred        |
-| Go `fmt.Printf("%x", x)`  | `` `{x:x}` ``                | Same specifier       |
-| Python `f"{x:g}"`         | `` `{x}` `` or `` `{x:e}` `` | Choose explicitly    |
-| Rust `format!("{:?}", x)` | `` `{x:?}` ``                | Identical            |
+| From                      | To Wado                        | Notes                |
+| ------------------------- | ------------------------------ | -------------------- |
+| Python `f"{x:.2f}"`       | `` `${x:.2}` ``                | No `f` suffix needed |
+| Go `fmt.Printf("%d", x)`  | `` `${x}` ``                   | Type inferred        |
+| Go `fmt.Printf("%x", x)`  | `` `${x:x}` ``                 | Same specifier       |
+| Python `f"{x:g}"`         | `` `${x}` `` or `` `${x:e}` `` | Choose explicitly    |
+| Rust `format!("{:?}", x)` | `` `${x:?}` ``                 | Identical            |
 
 ## References
 

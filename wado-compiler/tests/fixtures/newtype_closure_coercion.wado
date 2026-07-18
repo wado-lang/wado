@@ -24,15 +24,15 @@ fn fold(arr: List<i32>, init: i32, op: Reducer) -> i32 {
 export fn run() with Stdout {
     // Case 1: closure literal as function argument with newtype param
     let doubled = apply(|n: i32| n * 2, 21);
-    println(`{doubled}`);
+    println(`${doubled}`);
 
     // Case 2: closure literal on rhs of `let` with newtype annotation
     let inc: IntFn = |n: i32| n + 1;
-    println(`{inc(41)}`);
+    println(`${inc(41)}`);
 
     // Case 3: closure with unannotated params, inferred via newtype expected
     let sum = fold([1, 2, 3, 4, 5] as List<i32>, 0, |a, b| a + b);
-    println(`{sum}`);
+    println(`${sum}`);
 }
 
 __DATA__

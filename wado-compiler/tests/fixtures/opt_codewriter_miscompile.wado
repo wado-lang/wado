@@ -91,9 +91,9 @@ impl Writer {
 
 #[inline(never)]
 fn emit_body(w: &mut Writer, tag: &String) {
-    w.line(&`pos = saved_{*tag};`);
-    w.line(&`body_{*tag};`);
-    w.line(&`ok_{*tag} = true;`);
+    w.line(&`pos = saved_${*tag};`);
+    w.line(&`body_${*tag};`);
+    w.line(&`ok_${*tag} = true;`);
 }
 
 // emit_alts's outer for-loop gets label __for_1 in this module's counter
@@ -104,29 +104,29 @@ fn emit_body(w: &mut Writer, tag: &String) {
 #[inline(never)]
 fn emit_alts(w: &mut Writer, n: i32) {
     let id = w.next_id();
-    w.line(&`let saved_{id} = pos;`);
-    w.line(&`let mut ok_{id} = false;`);
+    w.line(&`let saved_${id} = pos;`);
+    w.line(&`let mut ok_${id} = false;`);
     for let mut i = 0; i < n; i += 1 {
         if i > 0 {
-            w.begin(&`if !ok_{id}`);
+            w.begin(&`if !ok_${id}`);
         }
-        w.begin(&`label_{id}:`);
+        w.begin(&`label_${id}:`);
         emit_decorations(&mut w.buf, 1, 0);
-        emit_body(w, &`{id}`);
+        emit_body(w, &`${id}`);
         w.end();
     }
     for let mut i = 1; i < n; i += 1 {
         w.end();
     }
-    w.line(&`if !ok_{id} \{ return -1; \}`);
+    w.line(&`if !ok_${id} \{ return -1; \}`);
 }
 
 export fn run() {
     let mut w = Writer::new();
     emit_alts(&mut w, 3);
-    assert w.indent_level == 0, `expected level=0, got {w.indent_level}`;
+    assert w.indent_level == 0, `expected level=0, got ${w.indent_level}`;
     emit_alts(&mut w, 4);
-    assert w.indent_level == 0, `expected level=0, got {w.indent_level}`;
+    assert w.indent_level == 0, `expected level=0, got ${w.indent_level}`;
 }
 
 __DATA__

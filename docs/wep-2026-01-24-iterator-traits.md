@@ -476,7 +476,7 @@ Usage:
 ```wado
 // Iterate from 0 to 9
 for let i of 0..<10 {
-    println(`{i}`);
+    println(`${i}`);
 }
 
 // With combinators
@@ -577,7 +577,7 @@ impl Iterator for Enumerate<I> {
 
 // Usage
 for let [i, x] of arr.iter().enumerate() {
-    println(`{i}: {x}`);
+    println(`${i}: ${x}`);
 }
 ```
 
@@ -699,13 +699,13 @@ fn run() with Stdout {
 
     // Using for-of (desugars to IntoIterator)
     for let x of arr {
-        println(`{x}`);
+        println(`${x}`);
     }
 
     // Explicit iterator
     let mut iter = arr.iter();
     while let Some(x) = iter.next() {
-        println(`{x}`);
+        println(`${x}`);
     }
 }
 ```
@@ -725,12 +725,12 @@ fn run() with Stdout {
 
     // [4, 16, 36, 64, 100]
     for let x of even_squares {
-        println(`{x}`);
+        println(`${x}`);
     }
 
     // Sum using fold
     let sum = numbers.iter().fold(0, |acc, x| acc + x);
-    println(`Sum: {sum}`);  // Sum: 55
+    println(`Sum: ${sum}`);  // Sum: 55
 }
 ```
 
@@ -740,7 +740,7 @@ fn run() with Stdout {
 fn run() with Stdout {
     // Sum of 1 to 100
     let sum = (1..<101).fold(0, |acc: i32, x: i32| acc + x);
-    println(`Sum 1-100: {sum}`);  // 5050
+    println(`Sum 1-100: ${sum}`);  // 5050
 
     // Generate squares
     let squares: List<i32> = (1..<6)
@@ -781,7 +781,7 @@ fn run() with Stdout {
     // Take first 10 Fibonacci numbers
     let fibs: List<i64> = fib.take(10).collect();
     for let f of fibs {
-        println(`{f}`);
+        println(`${f}`);
     }
 }
 ```
@@ -843,7 +843,7 @@ fn run() with Stdout {
     stack.push(3);
 
     for let x of stack {
-        println(`{x}`);  // 3, 2, 1
+        println(`${x}`);  // 3, 2, 1
     }
 }
 ```

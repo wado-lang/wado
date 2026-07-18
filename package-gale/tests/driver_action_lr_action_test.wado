@@ -10,13 +10,13 @@ use la from "./grammars/wado_lr_action.g4"
 test "atom and LR suffix actions emit in parse order" {
     let add = la::parse(&"1 + 2 + 3");
     assert add.ok(), "clean parse of a + chain";
-    assert add.output == "ii+i+", `output: '{add.output}'`;
+    assert add.output == "ii+i+", `output: '${add.output}'`;
 
     let mul = la::parse(&"2 * 3");
     assert mul.ok(), "clean parse of a product";
-    assert mul.output == "ii*", `output: '{mul.output}'`;
+    assert mul.output == "ii*", `output: '${mul.output}'`;
 
     let mixed = la::parse(&"1 + 2 * 3");
     assert mixed.ok(), "clean parse with precedence";
-    assert mixed.output == "iii*+", `output: '{mixed.output}'`;
+    assert mixed.output == "iii*+", `output: '${mixed.output}'`;
 }

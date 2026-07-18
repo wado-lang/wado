@@ -439,11 +439,11 @@ fn pipeline_invocations_feed_compiler_options_for_use_redirect() {
         .expect("redirect must be populated for the inline decl_file + from pair");
     assert!(
         redirect.starts_with("kiln:"),
-        "redirect URI must use the kiln: scheme, got `{redirect}`"
+        "redirect URI must use the kiln: scheme, got `${redirect}`"
     );
     assert!(
         redirect.ends_with("/build/kiln/kiln-abc12345/schema.wado"),
-        "redirect URI must point at the generated entry path, got `{redirect}`"
+        "redirect URI must point at the generated entry path, got `${redirect}`"
     );
 }
 
@@ -489,11 +489,11 @@ fn inline_invocation_populates_invocation_index_for_redirect() {
         .expect("inline decl_file + from should redirect to the generated entry path");
     assert!(
         redirect.starts_with("kiln:"),
-        "redirect URI must use the kiln: scheme, got `{redirect}`"
+        "redirect URI must use the kiln: scheme, got `${redirect}`"
     );
     assert!(
         redirect.ends_with("/build/kiln/kiln-deadbeef/sample.wado"),
-        "redirect URI must point at the generated entry path, got `{redirect}`"
+        "redirect URI must point at the generated entry path, got `${redirect}`"
     );
 }
 

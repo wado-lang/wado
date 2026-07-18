@@ -348,7 +348,7 @@ test "Diagnostic::error fills severity and position, defaults the rest" {
     assert d.expected.is_empty();
     assert d.found == -1;
     assert d.recovery matches { None };
-    assert `{d}` == "error[missing-token] at 3:7: expected ',' but found ')'";
+    assert `${d}` == "error[missing-token] at 3:7: expected ',' but found ')'";
 }
 
 test "Diagnostic renders related notes" {
@@ -361,5 +361,5 @@ test "Diagnostic renders related notes" {
     );
     d.recovery = RecoveryAction::FilledMissing;
     d.related.push(RelatedInfo { message: "'(' opened here", span: Span::new(4, 5) });
-    assert `{d}` == "error[unterminated-construct] at 5:0: unterminated group\n  note: '(' opened here";
+    assert `${d}` == "error[unterminated-construct] at 5:0: unterminated group\n  note: '(' opened here";
 }

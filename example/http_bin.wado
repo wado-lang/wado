@@ -371,7 +371,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
     let trailers = Trailers::new() as Trailers;
     trailers.append(
         "server-timing",
-        `app;dur={elapsed_ms:0.3f}`.bytes().collect() as FieldValue,
+        `app;dur=${elapsed_ms:0.3f}`.bytes().collect() as FieldValue,
     );
     trailers_tx.write(Result::Ok(Option::Some(trailers)));
 

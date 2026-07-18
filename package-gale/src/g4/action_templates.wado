@@ -159,7 +159,7 @@ fn eval_template(chars: &List<char>, lt: i32) -> Result<Expanded, String> {
     let chain = eval_chain(chars, lt + 1)?;
     let mut j = skip_ws(chars, chain.end);
     if j >= chars.len() || chars[j] != '>' {
-        return Result::Err(`template at index {lt}: expected '>' to close the reference`);
+        return Result::Err(`template at index ${lt}: expected '>' to close the reference`);
     }
     return Result::Ok(Expanded { text: chain.text, end: j + 1 });
 }
@@ -184,7 +184,7 @@ fn eval_call(chars: &List<char>, start: i32, receiver: Option<String>) -> Result
     let n = chars.len();
     let mut j = start;
     if j >= n || !is_id_start_char(chars[j]) {
-        return Result::Err(`template call at index {start}: expected a helper name`);
+        return Result::Err(`template call at index ${start}: expected a helper name`);
     }
     let mut name = String::with_capacity(16);
     while j < n && is_id_continue_char(chars[j]) {
@@ -192,7 +192,7 @@ fn eval_call(chars: &List<char>, start: i32, receiver: Option<String>) -> Result
         j += 1;
     }
     if j >= n || chars[j] != '(' {
-        return Result::Err(`template helper '{name}': expected '('`);
+        return Result::Err(`template helper '${name}': expected '('`);
     }
     j += 1;
     let mut args: List<String> = [];
@@ -210,7 +210,7 @@ fn eval_call(chars: &List<char>, start: i32, receiver: Option<String>) -> Result
         }
     }
     if j >= n || chars[j] != ')' {
-        return Result::Err(`template helper '{name}': expected ')'`);
+        return Result::Err(`template helper '${name}': expected ')'`);
     }
     let text = expand_helper(&name, &receiver, &args)?;
     return Result::Ok(Expanded { text, end: j + 1 });
@@ -236,7 +236,7 @@ fn eval_arg(chars: &List<char>, start: i32) -> Result<Expanded, String> {
             text.push(chars[j]);
             j += 1;
         }
-        return Result::Err(`template string argument at index {start} is unterminated`);
+        return Result::Err(`template string argument at index ${start} is unterminated`);
     }
     if c == '{' {
         // Subtemplate: literal text with nested `<template>` references.
@@ -264,14 +264,14 @@ fn eval_arg(chars: &List<char>, start: i32) -> Result<Expanded, String> {
             j += 1;
         }
         if j >= n {
-            return Result::Err(`template block argument at index {start} is unterminated`);
+            return Result::Err(`template block argument at index ${start} is unterminated`);
         }
         return Result::Ok(Expanded { text, end: j + 1 });
     }
     if is_id_start_char(c) {
         return eval_chain(chars, start);
     }
-    return Result::Err(`template argument at index {start}: expected a string, block, or helper call`);
+    return Result::Err(`template argument at index ${start}: expected a string, block, or helper call`);
 }
 
 /// The Java-target expansion table. `recv` is the chained receiver
@@ -282,29 +282,29 @@ fn expand_helper(name: &String, recv: &Option<String>, args: &List<String>) -> R
     // non-match falls through to the receiver-free table below.
     match *name {
         "writeln" => {
-            return Result::Ok(`System.out.println({chain_or_arg(recv, args, name)?});`);
+            return Result::Ok(`System.out.println(${chain_or_arg(recv, args, name)?});`);
         },
         "write" => {
-            return Result::Ok(`System.out.print({chain_or_arg(recv, args, name)?});`);
+            return Result::Ok(`System.out.print(${chain_or_arg(recv, args, name)?});`);
         },
         "Invoke_pred" => {
-            return Result::Ok(`this.pred({require_receiver(recv, name)?})`);
+            return Result::Ok(`this.pred(${require_receiver(recv, name)?})`);
         },
         "Assert" => {
-            return Result::Ok(`assert {require_receiver(recv, name)?};`);
+            return Result::Ok(`assert ${require_receiver(recv, name)?};`);
         },
         "Not" => {
-            return Result::Ok(`!({require_receiver(recv, name)?})`);
+            return Result::Ok(`!(${require_receiver(recv, name)?})`);
         },
         "Concat" => {
             let r = require_receiver(recv, name)?;
             require_args(args, 1, name)?;
-            return Result::Ok(`{r}{args[0]}`);
+            return Result::Ok(`${r}${args[0]}`);
         },
         "SubContextLocal" => {
             let r = require_receiver(recv, name)?;
             require_args(args, 2, name)?;
-            return Result::Ok(`{r}.{args[0]}.{args[1]}`);
+            return Result::Ok(`${r}.${args[0]}.${args[1]}`);
         },
         _ => {
         },
@@ -312,7 +312,7 @@ fn expand_helper(name: &String, recv: &Option<String>, args: &List<String>) -> R
 
     // Everything below is receiver-free.
     if recv matches { Some(_) } {
-        return Result::Err(`template helper '{*name}' does not take a chained receiver`);
+        return Result::Err(`template helper '${*name}' does not take a chained receiver`);
     }
 
     return match *name {
@@ -340,32 +340,32 @@ fn expand_helper(name: &String, recv: &Option<String>, args: &List<String>) -> R
         // One argument.
         "ToStringTree" => {
             require_args(args, 1, name)?;
-            Result::Ok(`{args[0]}.toStringTree(this)`);
+            Result::Ok(`${args[0]}.toStringTree(this)`);
         },
         "PlusText" => {
             require_args(args, 1, name)?;
-            Result::Ok(`"{args[0]}" + getText()`);
+            Result::Ok(`"${args[0]}" + getText()`);
         },
         "TokenStartColumnEquals" => {
             require_args(args, 1, name)?;
-            Result::Ok(`_tokenStartCharPositionInLine == {args[0]}`);
+            Result::Ok(`_tokenStartCharPositionInLine == ${args[0]}`);
         },
         // Compile-time check that the expression has a List type.
         "AssertIsList" => {
             require_args(args, 1, name)?;
-            Result::Ok(`java.util.List<?> __assertIsList = {args[0]};`);
+            Result::Ok(`java.util.List<?> __assertIsList = ${args[0]};`);
         },
         "TextEquals" => {
             require_args(args, 1, name)?;
-            Result::Ok(`getText().equals("{args[0]}")`);
+            Result::Ok(`getText().equals("${args[0]}")`);
         },
         "GetMember" => {
             require_args(args, 1, name)?;
-            Result::Ok(`this.{args[0]}`);
+            Result::Ok(`this.${args[0]}`);
         },
         "IntArg" => {
             require_args(args, 1, name)?;
-            Result::Ok(`int {args[0]}`);
+            Result::Ok(`int ${args[0]}`);
         },
         "Production" | "Result" | "VarRef" => {
             require_args(args, 1, name)?;
@@ -374,78 +374,78 @@ fn expand_helper(name: &String, recv: &Option<String>, args: &List<String>) -> R
         // Two arguments.
         "Cast" => {
             require_args(args, 2, name)?;
-            Result::Ok(`(({args[0]}){args[1]})`);
+            Result::Ok(`((${args[0]})${args[1]})`);
         },
         "ContextRuleFunction" | "ParserToken" => {
             require_args(args, 2, name)?;
-            Result::Ok(`{args[0]}.{args[1]}`);
+            Result::Ok(`${args[0]}.${args[1]}`);
         },
         "ContextListFunction" => {
             require_args(args, 2, name)?;
-            Result::Ok(`{args[0]}.{args[1]}()`);
+            Result::Ok(`${args[0]}.${args[1]}()`);
         },
         "LANotEquals" => {
             require_args(args, 2, name)?;
-            Result::Ok(`_input.LA({args[0]}) != {args[1]}`);
+            Result::Ok(`_input.LA(${args[0]}) != ${args[1]}`);
         },
         "LTEquals" => {
             require_args(args, 2, name)?;
-            Result::Ok(`_input.LT({args[0]}).getText().equals({args[1]})`);
+            Result::Ok(`_input.LT(${args[0]}).getText().equals(${args[1]})`);
         },
         "ValEquals" => {
             require_args(args, 2, name)?;
-            Result::Ok(`{args[0]} == {args[1]}`);
+            Result::Ok(`${args[0]} == ${args[1]}`);
         },
         "AssignLocal" => {
             require_args(args, 2, name)?;
-            Result::Ok(`{args[0]} = {args[1]};`);
+            Result::Ok(`${args[0]} = ${args[1]};`);
         },
         "InitIntVar" | "InitIntMember" => {
             require_args(args, 2, name)?;
-            Result::Ok(`int {args[0]} = {args[1]};`);
+            Result::Ok(`int ${args[0]} = ${args[1]};`);
         },
         "InitBooleanMember" => {
             require_args(args, 2, name)?;
-            Result::Ok(`boolean {args[0]} = {args[1]};`);
+            Result::Ok(`boolean ${args[0]} = ${args[1]};`);
         },
         "SetMember" => {
             require_args(args, 2, name)?;
-            Result::Ok(`this.{args[0]} = {args[1]};`);
+            Result::Ok(`this.${args[0]} = ${args[1]};`);
         },
         "AddMember" => {
             require_args(args, 2, name)?;
-            Result::Ok(`this.{args[0]} += {args[1]};`);
+            Result::Ok(`this.${args[0]} += ${args[1]};`);
         },
         "MemberEquals" => {
             require_args(args, 2, name)?;
-            Result::Ok(`this.{args[0]} == {args[1]}`);
+            Result::Ok(`this.${args[0]} == ${args[1]}`);
         },
         "Append" | "AppendStr" => {
             require_args(args, 2, name)?;
-            Result::Ok(`{args[0]} + {args[1]}`);
+            Result::Ok(`${args[0]} + ${args[1]}`);
         },
         // Three arguments.
         "ModMemberEquals" => {
             require_args(args, 3, name)?;
-            Result::Ok(`this.{args[0]} % {args[1]} == {args[2]}`);
+            Result::Ok(`this.${args[0]} % ${args[1]} == ${args[2]}`);
         },
         "ModMemberNotEquals" => {
             require_args(args, 3, name)?;
-            Result::Ok(`this.{args[0]} % {args[1]} != {args[2]}`);
+            Result::Ok(`this.${args[0]} % ${args[1]} != ${args[2]}`);
         },
-        _ => Result::Err(`unknown template helper '{*name}'`),
+        _ => Result::Err(`unknown template helper '${*name}'`),
     };
 }
 
 fn chain_or_arg(recv: &Option<String>, args: &List<String>, name: &String) -> Result<String, String> {
     if let Some(r) = recv {
         if !args.is_empty() {
-            return Result::Err(`template helper '{*name}' takes a receiver or one argument, not both`);
+            return Result::Err(`template helper '${*name}' takes a receiver or one argument, not both`);
         }
         return Result::Ok(*r);
     }
     if args.len() != 1 {
-        return Result::Err(`template helper '{*name}' expects exactly one argument`);
+        return Result::Err(`template helper '${*name}' expects exactly one argument`);
     }
     return Result::Ok(args[0]);
 }
@@ -453,7 +453,7 @@ fn chain_or_arg(recv: &Option<String>, args: &List<String>, name: &String) -> Re
 fn require_receiver(recv: &Option<String>, name: &String) -> Result<String, String> {
     return match recv {
         Some(r) => Result::Ok(*r),
-        None => Result::Err(`template helper '{*name}' requires a chained receiver`),
+        None => Result::Err(`template helper '${*name}' requires a chained receiver`),
     };
 }
 
@@ -461,7 +461,7 @@ fn require_receiver(recv: &Option<String>, name: &String) -> Result<String, Stri
 /// list copy). `?`-propagates the arity error.
 fn require_args(args: &List<String>, count: i32, name: &String) -> Result<(), String> {
     if args.len() != count {
-        return Result::Err(`template helper '{*name}' expects {count} argument(s), got {args.len()}`);
+        return Result::Err(`template helper '${*name}' expects ${count} argument(s), got ${args.len()}`);
     }
     return Result::Ok(());
 }

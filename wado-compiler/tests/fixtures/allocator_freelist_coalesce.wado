@@ -8,8 +8,8 @@ export fn run() with Stdout {
     let a = builtin::realloc(0, 0, 8, 64);
     let b = builtin::realloc(0, 0, 8, 64);
     let c = builtin::realloc(0, 0, 8, 64);
-    assert b == a + 80, `b={b}, a={a}`;
-    assert c == a + 160, `c={c}, a={a}`;
+    assert b == a + 80, `b=${b}, a=${a}`;
+    assert c == a + 160, `c=${c}, a=${a}`;
 
     // Free b, then a — freeing a merges forward into b's free block.
     builtin::realloc(b, 64, 8, 0);
@@ -18,7 +18,7 @@ export fn run() with Stdout {
     // A 120-byte payload does not fit either freed 64-byte block alone,
     // only their coalesced 160-byte block. Reuse must land back at `a`.
     let merged = builtin::realloc(0, 0, 8, 120);
-    assert merged == a, `expected coalesced reuse: a={a}, merged={merged}`;
+    assert merged == a, `expected coalesced reuse: a=${a}, merged=${merged}`;
 
     builtin::realloc(c, 64, 8, 0);
     println("ok");

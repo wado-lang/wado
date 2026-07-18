@@ -6,8 +6,8 @@ fn nested_array_3deep_iterate_test() with Stdout {
     let deep: List<List<List<i32>>> = [[[1, 2], [3]], [[4, 5, 6]]];
 
     // Access inner elements
-    println(`{deep[0][0][1]}`);
-    println(`{deep[1][0][2]}`);
+    println(`${deep[0][0][1]}`);
+    println(`${deep[1][0][2]}`);
 
     // Nested iteration
     let mut total = 0;
@@ -18,7 +18,7 @@ fn nested_array_3deep_iterate_test() with Stdout {
             }
         }
     }
-    println(`{total}`);
+    println(`${total}`);
 
     println("ok");
 }
@@ -29,13 +29,13 @@ fn nested_array_iterate_test() with Stdout {
 
     // Index access on nested array
     let first_row = matrix[0];
-    println(`{first_row[0]}`);
+    println(`${first_row[0]}`);
 
     // For-of iteration over nested array
     let mut buf = "";
     for let row of matrix {
         for let val of row {
-            buf = buf + `{val} `;
+            buf = buf + `${val} `;
         }
         buf = buf + "\n";
     }
@@ -50,10 +50,10 @@ fn nested_array_method_test() with Stdout {
 
     // len() on retrieved element
     let row0 = matrix[0];
-    println(`{row0.len()}`);
+    println(`${row0.len()}`);
 
     // Direct method chain
-    println(`{matrix[1].len()}`);
+    println(`${matrix[1].len()}`);
 
     println("ok");
 }
@@ -65,12 +65,12 @@ fn nested_array_mutate_test() with Stdout {
     // Append to inner array
     let mut row = matrix[0];
     row.push(99);
-    println(`{row:?}`);
+    println(`${row:?}`);
 
     // Replace inner array
     let new_row: List<i32> = [10, 20, 30];
     matrix[0] = new_row;
-    println(`{matrix:?}`);
+    println(`${matrix:?}`);
 
     println("ok");
 }
@@ -84,7 +84,7 @@ fn nested_array_option_access_test() with Stdout {
 
     // Index and pattern match
     if let Some(x) = arr[0] {
-        println(`first: {x}`);
+        println(`first: ${x}`);
     }
     if let None = arr[1] {
         println("second: null");
@@ -93,7 +93,7 @@ fn nested_array_option_access_test() with Stdout {
     // For-of and match
     for let item of arr {
         let s = match item {
-            Some(n) => `Some({n})`,
+            Some(n) => `Some(${n})`,
             None => "None",
         };
         println(s);

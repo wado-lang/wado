@@ -10,9 +10,9 @@ use g from "./grammars/at_end_alt_gaps.g4"
 
 fn assert_tree(input: &String, expected: &String) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for {*input}`;
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
 }
 
 test "at-end: paren entry with a bare typespec" {

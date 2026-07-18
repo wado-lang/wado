@@ -13,7 +13,7 @@ use { is_self_ref_element } from "./lr_util.wado";
 
 /// Name of a rule's value-channel struct (`e` -> `EVals`).
 pub fn vals_struct_name(rule: &ParserRule) -> String {
-    return `{to_pascal_case(&rule.name)}Vals`;
+    return `${to_pascal_case(&rule.name)}Vals`;
 }
 
 /// The recognizer handle in emitted context-API calls (`p.token_text(...)`):
@@ -196,28 +196,28 @@ fn action_attr_expr(
             if is_arg(rule, &r.name) {
                 if !rule_threads_args(rule) {
                     Result::Err(
-                        `${r.name}: rule arguments are threaded only for single-alt rules with defaultable arg types`,
+                        `$${r.name}: rule arguments are threaded only for single-alt rules with defaultable arg types`,
                     );
                 } else if !vals_in_scope {
-                    Result::Err(`${r.name}: no value channel in the enclosing rule`);
+                    Result::Err(`$${r.name}: no value channel in the enclosing rule`);
                 } else {
-                    Result::Ok(`vals.{r.name}`);
+                    Result::Ok(`vals.${r.name}`);
                 }
             } else if field_default(rule, &r.name) matches { None } {
                 Result::Err(
-                    `${r.name}: value-channel field type '{field_type(rule, &r.name)}' has no Wado default`,
+                    `$${r.name}: value-channel field type '${field_type(rule, &r.name)}' has no Wado default`,
                 );
             } else if !vals_in_scope {
-                Result::Err(`${r.name}: no value channel in the enclosing rule`);
+                Result::Err(`$${r.name}: no value channel in the enclosing rule`);
             } else {
-                Result::Ok(`vals.{r.name}`);
+                Result::Ok(`vals.${r.name}`);
             }
         },
         RuleLabel => rule_member_expr(rules, r, bindings),
         RuleRef => rule_member_expr(rules, r, bindings),
         TokenLabel => token_member_expr(r, bindings, handle),
         TokenRef => token_member_expr(r, bindings, handle),
-        _ => Result::Err(`${r.name}: this attribute form is not yet emitted`),
+        _ => Result::Err(`$${r.name}: this attribute form is not yet emitted`),
     };
 }
 
@@ -230,16 +230,16 @@ fn action_attr_expr(
 fn parser_special_expr(r: &ResolvedAttr, is_lr: bool, handle: &String) -> Result<String, String> {
     return match r.name {
         "text" && r.member matches { None } => Result::Ok(
-            `{*handle}.rule_text({RULE_START_TOK_LOCAL})`,
+            `${*handle}.rule_text(${RULE_START_TOK_LOCAL})`,
         ),
         "start" => token_member_of(&RULE_START_TOK_LOCAL, &r.member, handle),
-        "stop" => token_member_of(&`({*handle}.pos - 1)`, &r.member, handle),
+        "stop" => token_member_of(&`(${*handle}.pos - 1)`, &r.member, handle),
         "ctx" && r.member matches { Some("toStringTree") } => {
             let method = if is_lr { "rule_string_tree_final" } else { "rule_string_tree" };
-            Result::Ok(`{*handle}.{method}()`);
+            Result::Ok(`${*handle}.${method}()`);
         },
         "_p" && r.member matches { None } => Result::Ok(if is_lr { MIN_PREC_LOCAL } else { "0" }),
-        _ => Result::Err(`${r.name}: this parser special is not yet emitted`),
+        _ => Result::Err(`$${r.name}: this parser special is not yet emitted`),
     };
 }
 
@@ -283,7 +283,7 @@ fn lexer_attr_expr(r: &AttrRef) -> Result<String, String> {
     if r.name == "text" && r.member matches { None } {
         return Result::Ok("LexerSlice::new(chars, start, pos).to_string()");
     }
-    return Result::Err(`${r.name}: this lexer attribute is not yet emitted`);
+    return Result::Err(`$${r.name}: this lexer attribute is not yet emitted`);
 }
 
 /// The local a call site binds a rule / label / token result to, matching
@@ -312,14 +312,14 @@ fn token_member_of(idx: &String, member: &Option<String>, handle: &String) -> Re
         },
     };
     return match m {
-        "text" => Result::Ok(`{*handle}.token_text({*idx})`),
-        "int" => Result::Ok(`{*handle}.token_int({*idx})`),
-        "type" => Result::Ok(`{*handle}.token_kind({*idx})`),
-        "line" => Result::Ok(`{*handle}.token_line({*idx})`),
-        "pos" => Result::Ok(`{*handle}.token_col({*idx})`),
+        "text" => Result::Ok(`${*handle}.token_text(${*idx})`),
+        "int" => Result::Ok(`${*handle}.token_int(${*idx})`),
+        "type" => Result::Ok(`${*handle}.token_kind(${*idx})`),
+        "line" => Result::Ok(`${*handle}.token_line(${*idx})`),
+        "pos" => Result::Ok(`${*handle}.token_col(${*idx})`),
         "index" => Result::Ok(*idx),
         "channel" => Result::Ok(String::from("0")),
-        _ => Result::Err(`.{m}: unknown token member`),
+        _ => Result::Err(`.${m}: unknown token member`),
     };
 }
 
@@ -332,20 +332,20 @@ fn rule_member_expr(
     let target = match find_rule(rules, &r.rule_name) {
         Some(t) => t,
         None => {
-            return Result::Err(`${r.name}: unknown referenced rule '{r.rule_name}'`);
+            return Result::Err(`$${r.name}: unknown referenced rule '${r.rule_name}'`);
         },
     };
     if !rule_returns_vals(&target) {
         return Result::Err(
-            `${r.name}: rule '{r.rule_name}' does not expose a value channel (needs single-alt + defaultable returns/locals)`,
+            `$${r.name}: rule '${r.rule_name}' does not expose a value channel (needs single-alt + defaultable returns/locals)`,
         );
     }
     return match &r.member {
         Some(m) => {
             if field_default(&target, m) matches { Some(_) } {
-                Result::Ok(`{binding}.{*m}`);
+                Result::Ok(`${binding}.${*m}`);
             } else {
-                Result::Err(`${r.name}.{*m}: not an emittable value-channel field of '{r.rule_name}'`);
+                Result::Err(`$${r.name}.${*m}: not an emittable value-channel field of '${r.rule_name}'`);
             }
         },
         None => Result::Ok(binding),

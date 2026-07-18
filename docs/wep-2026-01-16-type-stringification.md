@@ -37,10 +37,10 @@ The compiler automatically generates inspect logic for all types. This is not a 
 
 Template strings support two interpolation modes:
 
-| Syntax     | Behavior                                  | Use Case       |
-| ---------- | ----------------------------------------- | -------------- |
-| `{expr}`   | Display if implemented, otherwise inspect | General output |
-| `{expr:?}` | Always inspect (compiler-generated)       | Debugging      |
+| Syntax      | Behavior                                  | Use Case       |
+| ----------- | ----------------------------------------- | -------------- |
+| `${expr}`   | Display if implemented, otherwise inspect | General output |
+| `${expr:?}` | Always inspect (compiler-generated)       | Debugging      |
 
 ```wado
 struct Point { x: i32, y: i32 }
@@ -48,18 +48,18 @@ struct Point { x: i32, y: i32 }
 let p = Point { x: 10, y: 20 };
 
 // Without Display trait
-println(`{p}`);      // => "Point { x: 10, y: 20 }" (fallback to inspect)
-println(`{p:?}`);    // => "Point { x: 10, y: 20 }" (explicit inspect)
+println(`${p}`);      // => "Point { x: 10, y: 20 }" (fallback to inspect)
+println(`${p:?}`);    // => "Point { x: 10, y: 20 }" (explicit inspect)
 
 // With Display trait
 impl Display for Point {
     fn display(&self) -> String {
-        return `({self.x}, {self.y})`;
+        return `(${self.x}, ${self.y})`;
     }
 }
 
-println(`{p}`);      // => "(10, 20)" (Display)
-println(`{p:?}`);    // => "Point { x: 10, y: 20 }" (still inspect)
+println(`${p}`);      // => "(10, 20)" (Display)
+println(`${p:?}`);    // => "Point { x: 10, y: 20 }" (still inspect)
 ```
 
 ### 3. Output Format (Wado Syntax)
@@ -113,21 +113,21 @@ Standard library types implement `Display`:
 
 ```wado
 // Primitives have built-in Display (via to_string methods)
-println(`{42}`);        // => "42"
-println(`{3.14}`);      // => "3.14"
-println(`{true}`);      // => "true"
+println(`${42}`);        // => "42"
+println(`${3.14}`);      // => "3.14"
+println(`${true}`);      // => "true"
 
 // String displays without quotes
-println(`{"hello"}`);   // => "hello" (not "\"hello\"")
+println(`${"hello"}`);   // => "hello" (not "\"hello\"")
 
 // Arrays use inspect format (no Display by default)
 let arr: List<i32> = [1, 2, 3];
-println(`{arr}`);       // => "[1, 2, 3]" (fallback to inspect)
+println(`${arr}`);       // => "[1, 2, 3]" (fallback to inspect)
 ```
 
-### 5. Resolution Order for `{expr}`
+### 5. Resolution Order for `${expr}`
 
-When evaluating `{expr}` in a template string:
+When evaluating `${expr}` in a template string:
 
 1. If `expr` is `String` type → use directly
 2. If `expr` has `Display` trait → call `display()`
@@ -139,8 +139,8 @@ This ensures template strings always produce output without requiring explicit t
 
 | Aspect                 | Rust                            | Wado                                  |
 | ---------------------- | ------------------------------- | ------------------------------------- |
-| `{x}` without trait    | Compile error                   | Falls back to inspect                 |
-| `{x:?}` without trait  | Compile error                   | Always works (compiler intrinsic)     |
+| `${x}` without trait   | Compile error                   | Falls back to inspect                 |
+| `${x:?}` without trait | Compile error                   | Always works (compiler intrinsic)     |
 | Debug implementation   | `#[derive(Debug)]` macro        | Compiler-generated inspect            |
 | Display implementation | Manual `impl Display`           | Manual `impl Display`                 |
 | Inspect function       | `dbg!` macro (prints file:line) | `builtin::inspect()` (returns String) |
@@ -151,7 +151,7 @@ This ensures template strings always produce output without requiring explicit t
 
 1. **Zero-friction debugging**: `println(\`{any_value}\`)` always works
 2. **Progressive enhancement**: Add `Display` only when user-facing output matters
-3. **Reliable escape hatch**: `{x:?}` always shows structure, even if `Display` is buggy
+3. **Reliable escape hatch**: `${x:?}` always shows structure, even if `Display` is buggy
 4. **No macro dependency**: Works without macro system
 5. **Familiar to Elixir/Ruby developers**: Similar "always inspectable" philosophy
 
@@ -164,12 +164,12 @@ This ensures template strings always produce output without requiring explicit t
 
 ### Implemented Extensions
 
-1. **Pretty-print specifier**: `{x:#?}` for indented multi-line output via `InspectAlt` trait
+1. **Pretty-print specifier**: `${x:#?}` for indented multi-line output via `InspectAlt` trait
 
 ### Future Extensions
 
-1. **Depth limit**: `{x:?3}` to limit nesting depth
-2. **Width limit**: Integration with format specifiers like `{x:?.80}` for truncation
+1. **Depth limit**: `${x:?3}` to limit nesting depth
+2. **Width limit**: Integration with format specifiers like `${x:?.80}` for truncation
 
 ## References
 

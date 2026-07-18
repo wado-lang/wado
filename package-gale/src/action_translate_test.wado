@@ -18,7 +18,7 @@ r returns [i32 v] : ID { $v = 1; } ;
 ").unwrap();
     let rule = &g.parser_rules[0];
     let out = translate_wado_action(rule, &g.parser_rules, &" $v = 1; ", true, &NO_BINDINGS).unwrap();
-    assert out == " vals.v = 1; ", `out: '{out}'`;
+    assert out == " vals.v = 1; ", `out: '${out}'`;
 }
 
 test "translate rewrites a cross-rule $a.v to a child binding" {
@@ -28,7 +28,7 @@ e returns [i32 v] : ID ;
 ").unwrap();
     let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" print($a.v); ", false, &NO_BINDINGS).unwrap(
     );
-    assert out == " print(a.v); ", `out: '{out}'`;
+    assert out == " print(a.v); ", `out: '${out}'`;
 }
 
 test "translate rewrites a token label member to the context API" {
@@ -37,7 +37,7 @@ r : x=ID { print($x.text); } ;
 ").unwrap();
     let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" print($x.text); ", false, &NO_BINDINGS).unwrap(
     );
-    assert out == " print(p.token_text(x)); ", `out: '{out}'`;
+    assert out == " print(p.token_text(x)); ", `out: '${out}'`;
 }
 
 test "translate rewrites token members to the context API" {
@@ -52,7 +52,7 @@ NUM : [0-9]+ ;
         false,
         &NO_BINDINGS,
     ).unwrap();
-    assert out == " print(p.token_int(x) + p.token_line(x) + p.token_col(x) + p.token_kind(x) + x); ", `out: '{out}'`;
+    assert out == " print(p.token_int(x) + p.token_line(x) + p.token_col(x) + p.token_kind(x) + x); ", `out: '${out}'`;
 }
 
 test "translate rewrites $text / $start / $stop to the captured rule span" {
@@ -67,7 +67,7 @@ NUM : [0-9]+ ;
         false,
         &NO_BINDINGS,
     ).unwrap();
-    assert out == " print(p.rule_text(_rule_start_tok)); print(p.token_int(_rule_start_tok)); print(p.token_line((p.pos - 1))); ", `out: '{out}'`;
+    assert out == " print(p.rule_text(_rule_start_tok)); print(p.token_int(_rule_start_tok)); print(p.token_line((p.pos - 1))); ", `out: '${out}'`;
 }
 
 test "translate rejects a value-channel ref with no vals in scope" {
@@ -85,7 +85,7 @@ ID : [a-z]+ ;
 ").unwrap();
     let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" print($myTok.text); ", false, &NO_BINDINGS).unwrap(
     );
-    assert out == " print(p.token_text(my_tok)); ", `out: '{out}'`;
+    assert out == " print(p.token_text(my_tok)); ", `out: '${out}'`;
 }
 
 test "translate rejects a cross-rule member when the child has no channel" {
@@ -110,7 +110,7 @@ test "translate threads a single-alt rule argument through the value channel" {
 r[i32 n] : ID { $n = 2; } ;
 ").unwrap();
     let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" $n = 2; ", true, &NO_BINDINGS).unwrap();
-    assert out == " vals.n = 2; ", `out: '{out}'`;
+    assert out == " vals.n = 2; ", `out: '${out}'`;
 }
 
 test "translate threads a multi-alt rule argument through the value channel" {
@@ -118,7 +118,7 @@ test "translate threads a multi-alt rule argument through the value channel" {
 r[i32 n] : A { $n = 1; } | B { $n = 2; } ;
 ").unwrap();
     let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, &" $n = 1; ", true, &NO_BINDINGS).unwrap();
-    assert out == " vals.n = 1; ", `out: '{out}'`;
+    assert out == " vals.n = 1; ", `out: '${out}'`;
 }
 
 test "translate rejects a rule argument on a left-recursive rule" {
@@ -139,7 +139,7 @@ plain : ID ;
     assert rule_returns_vals(&g.parser_rules[0]), "single-alt r returns vals";
     assert rule_returns_vals(&g.parser_rules[1]), "multi-alt non-LR rule returns vals";
     assert !rule_value_channel_ready(&g.parser_rules[2]), "plain has no channel";
-    assert vals_struct_name(&g.parser_rules[0]) == "RVals", `name: {vals_struct_name(&g.parser_rules[0])}`;
+    assert vals_struct_name(&g.parser_rules[0]) == "RVals", `name: ${vals_struct_name(&g.parser_rules[0])}`;
 }
 
 test "left-recursive rules expose the value channel (threaded through the loop)" {
@@ -161,19 +161,19 @@ e : ID ;
     // Empty parens.
     let a = translate_wado_action(rule, &g.parser_rules, &" p.emit($ctx.toStringTree()); ", false, &NO_BINDINGS).unwrap(
     );
-    assert a == " p.emit(p.rule_string_tree()); ", `a: '{a}'`;
+    assert a == " p.emit(p.rule_string_tree()); ", `a: '${a}'`;
     // ANTLR / java2wado idiom `toStringTree(this)` — the `(this)` argument is absorbed.
     let b = translate_wado_action(rule, &g.parser_rules, &" p.emit($ctx.toStringTree(this)); ", false, &NO_BINDINGS).unwrap(
     );
-    assert b == " p.emit(p.rule_string_tree()); ", `b: '{b}'`;
+    assert b == " p.emit(p.rule_string_tree()); ", `b: '${b}'`;
     // Bare reference (no parens) still emits a complete call.
     let c = translate_wado_action(rule, &g.parser_rules, &" let t = $ctx.toStringTree; print(t); ", false, &NO_BINDINGS).unwrap(
     );
-    assert c == " let t = p.rule_string_tree(); print(t); ", `c: '{c}'`;
+    assert c == " let t = p.rule_string_tree(); print(t); ", `c: '${c}'`;
     // Any ASCII whitespace (incl. a newline) before the call is absorbed.
     let d = translate_wado_action(rule, &g.parser_rules, &" p.emit($ctx.toStringTree\n  (this)); ", false, &NO_BINDINGS).unwrap(
     );
-    assert d == " p.emit(p.rule_string_tree()); ", `d: '{d}'`;
+    assert d == " p.emit(p.rule_string_tree()); ", `d: '${d}'`;
 }
 
 test "translate maps $_p to the min_prec precedence parameter" {
@@ -187,7 +187,7 @@ e : e '+' e { print($_p); } | INT ;
         false,
         &NO_BINDINGS,
     ).unwrap();
-    assert out == " print(min_prec); ", `out: '{out}'`;
+    assert out == " print(min_prec); ", `out: '${out}'`;
 }
 
 test "translate maps $_p to 0 in a non-left-recursive rule" {
@@ -203,7 +203,7 @@ r : X { print($_p); } ;
         false,
         &NO_BINDINGS,
     ).unwrap();
-    assert out == " print(0); ", `out: '{out}'`;
+    assert out == " print(0); ", `out: '${out}'`;
 }
 
 test "translate maps $ctx.toStringTree in a left-recursive rule to the final-node render" {
@@ -217,17 +217,17 @@ e @after { p.emit($ctx.toStringTree()); } : e '+' e | INT ;
         false,
         &NO_BINDINGS,
     ).unwrap();
-    assert out == " p.emit(p.rule_string_tree_final()); ", `out: '{out}'`;
+    assert out == " p.emit(p.rule_string_tree_final()); ", `out: '${out}'`;
 }
 
 test "translate_lexer_predicate maps $text to the matched slice" {
     let out = translate_lexer_predicate(&" $text == \"enum\" ").unwrap();
-    assert out == " LexerSlice::new(chars, start, pos).to_string() == \"enum\" ", `out: '{out}'`;
+    assert out == " LexerSlice::new(chars, start, pos).to_string() == \"enum\" ", `out: '${out}'`;
 }
 
 test "translate_lexer_predicate leaves a $-free body verbatim" {
     let out = translate_lexer_predicate(&" pos - start == 4 ").unwrap();
-    assert out == " pos - start == 4 ", `out: '{out}'`;
+    assert out == " pos - start == 4 ", `out: '${out}'`;
 }
 
 test "translate_lexer_predicate rejects an unsupported lexer attribute" {

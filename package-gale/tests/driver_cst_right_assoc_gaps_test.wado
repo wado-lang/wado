@@ -9,9 +9,9 @@ use ra from "./grammars/right_assoc_gaps.g4"
 
 fn assert_tree(input: &String, expected: &String) {
     let result = ra::parse(input);
-    assert result.ok(), `unexpected diagnostics for {*input}`;
+    assert result.ok(), `unexpected diagnostics for ${*input}`;
     let actual = ra::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
 }
 
 test "right-assoc: single atom" {

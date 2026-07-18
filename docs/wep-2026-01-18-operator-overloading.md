@@ -452,7 +452,7 @@ trait Debug {
 
 **Usage**:
 
-- `Display` is for user-facing output, used in template strings: `{value}`
+- `Display` is for user-facing output, used in template strings: `${value}`
 - `Debug` is for developer-facing output, used in debug printing
 
 ### 3. Non-Overloadable Operators
@@ -753,7 +753,7 @@ impl Neg for Vec3 {
 
 impl Display for Vec3 {
     fn display(&self) -> String {
-        return `Vec3({self.x}, {self.y}, {self.z})`;
+        return `Vec3(${self.x}, ${self.y}, ${self.z})`;
     }
 }
 
@@ -762,19 +762,19 @@ fn run() with Stdout {
     let v2 = Vec3::new(4.0, 5.0, 6.0);
 
     let sum = v1 + v2;
-    println(`v1 + v2 = {sum}`);  // Vec3(5.0, 7.0, 9.0)
+    println(`v1 + v2 = ${sum}`);  // Vec3(5.0, 7.0, 9.0)
 
     let diff = v1 - v2;
-    println(`v1 - v2 = {diff}`);  // Vec3(-3.0, -3.0, -3.0)
+    println(`v1 - v2 = ${diff}`);  // Vec3(-3.0, -3.0, -3.0)
 
     let scaled = v1 * 2.0;
-    println(`v1 * 2.0 = {scaled}`);  // Vec3(2.0, 4.0, 6.0)
+    println(`v1 * 2.0 = ${scaled}`);  // Vec3(2.0, 4.0, 6.0)
 
     let negated = -v1;
-    println(`-v1 = {negated}`);  // Vec3(-1.0, -2.0, -3.0)
+    println(`-v1 = ${negated}`);  // Vec3(-1.0, -2.0, -3.0)
 
     let dot = v1.dot(&v2);
-    println(`v1 · v2 = {dot}`);  // 32.0
+    println(`v1 · v2 = ${dot}`);  // 32.0
 }
 ```
 

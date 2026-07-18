@@ -38,8 +38,8 @@ test "alt-scan does not short-circuit a self-ref at a partial-prefix boundary" {
     gen_alt_scan_op_elements(&mut w, &elems, 2, &"r", &mut ctx);
     let out = w.to_string();
 
-    assert out.contains("scan_r(tokens, pos, 0)"), `inner self-ref must scan its full LR climb (min_prec 0): {out}`;
-    assert !out.contains("2147483647"), `inner self-ref was short-circuited with i32::MAX: {out}`;
+    assert out.contains("scan_r(tokens, pos, 0)"), `inner self-ref must scan its full LR climb (min_prec 0): ${out}`;
+    assert !out.contains("2147483647"), `inner self-ref was short-circuited with i32::MAX: ${out}`;
 }
 
 // Companion: when the walk covers the whole alternative, a trailing
@@ -57,5 +57,5 @@ test "alt-scan short-circuits a genuinely trailing self-ref" {
     gen_alt_scan_op_elements(&mut w, &elems, 3, &"r", &mut ctx);
     let out = w.to_string();
 
-    assert out.contains("scan_r(tokens, pos, 2147483647)"), `trailing self-ref must short-circuit the LR climb (i32::MAX): {out}`;
+    assert out.contains("scan_r(tokens, pos, 2147483647)"), `trailing self-ref must short-circuit the LR climb (i32::MAX): ${out}`;
 }

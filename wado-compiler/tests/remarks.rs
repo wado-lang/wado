@@ -49,7 +49,7 @@ export fn run() with Stdout {
     let a: List<i32> = [1, 2, 3];
     let mut b = a;
     b.push(4);
-    println(`{a.len()} {b.len()}`);
+    println(`${a.len()} ${b.len()}`);
 }
 "#,
     );
@@ -84,7 +84,7 @@ export fn run() with Stdout {
     let a = Point { x: 1, y: 2 };
     let mut b = a;
     b.x = 9;
-    println(`{a.x} {b.x}`);
+    println(`${a.x} ${b.x}`);
 }
 "#,
     );
@@ -111,7 +111,7 @@ export fn run() with Stdout {
     let a = Bag { items: [1, 2, 3] };
     let mut b = a;
     b.items.push(4);
-    println(`{a.items.len()} {b.items.len()}`);
+    println(`${a.items.len()} ${b.items.len()}`);
 }
 "#,
     );

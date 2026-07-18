@@ -6,13 +6,13 @@ use { parse_highlight_query, HighlightRule, TokenSelector } from "./highlight_qu
 fn parse_ok(src: String) -> List<HighlightRule> {
     return match parse_highlight_query(&src) {
         Ok(rules) => rules,
-        Err(e) => panic(`unexpected parse error at {e.line}:{e.col}: {e.message}`),
+        Err(e) => panic(`unexpected parse error at ${e.line}:${e.col}: ${e.message}`),
     };
 }
 
 fn parse_err(src: String) -> String {
     return match parse_highlight_query(&src) {
-        Ok(_) => panic(`expected a parse error for: {src}`),
+        Ok(_) => panic(`expected a parse error for: ${src}`),
         Err(e) => e.message,
     };
 }
