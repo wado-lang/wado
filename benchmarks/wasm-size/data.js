@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784357008986,
+  "lastUpdate": 1784365081987,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -41569,6 +41569,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 265299,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6757b8357a4bd19bbcf684fa80945645865ae570",
+          "message": "Merge pull request #1607 from wado-lang/claude/wado-compiler-optimize-smells-q5b3t6\n\nfix(optimize): eliminate optimizer smells — reproduced miscompiles, soundness, and precision",
+          "timestamp": "2026-07-18T17:48:22+09:00",
+          "tree_id": "6820da9435323ad36e739a0ac17f89818a35bafb",
+          "url": "https://github.com/wado-lang/wado/commit/6757b8357a4bd19bbcf684fa80945645865ae570"
+        },
+        "date": 1784365081476,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8257,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17261,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271329,
             "unit": "bytes"
           }
         ]
