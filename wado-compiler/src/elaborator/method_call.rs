@@ -230,7 +230,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let receiver_type_args_for_trait: Option<Vec<TypeId>> =
             match self.tysys.type_table.borrow().get(type_args_source_id).clone() {
-                ResolvedType::GenericInstance { type_args, .. } if !type_args.is_empty() => {
+                ResolvedType::GenericInstance { type_args, .. }
+                | ResolvedType::GenericResource { type_args, .. }
+                    if !type_args.is_empty() =>
+                {
                     Some(type_args)
                 }
                 // The raw GC array `Array<T>` carries its element as a single
@@ -3235,7 +3238,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     (struct_name.to_string(), mangled_func_name.to_string())
                 } else {
                     let base_type_id = match self.tysys.type_table.borrow().get(newtype_id).clone() {
-                        ResolvedType::Newtype { base_type, .. } => Some(base_type),
+                        ResolvedType::Newtype { .. } => {
+                            Some(self.tysys.type_table.borrow().get_ultimate_base_type(newtype_id))
+                        }
                         _ => None,
                     };
                     let base_name = base_type_id

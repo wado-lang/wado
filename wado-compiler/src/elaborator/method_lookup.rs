@@ -1835,7 +1835,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 match self.tysys.type_table.borrow().get(current).clone() {
                     ResolvedType::Newtype { base_type, .. } => {
                         let base_name = match self.tysys.type_table.borrow().get(base_type).clone() {
-                            ResolvedType::GenericInstance { name, .. } => name,
+                            ResolvedType::GenericInstance { name, .. }
+                            | ResolvedType::GenericResource { name, .. } => name,
                             ResolvedType::BuiltinArray(_) => {
                                 TypeTable::ARRAY_TYPE_NAME.to_string()
                             }
