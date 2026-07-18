@@ -1,0 +1,26 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    # Only update within the version constraints declared in Cargo.toml, never
+    # widen them. Keeps the wasm-tools crates pinned to wasmtime's generation
+    # (see the workspace Cargo.toml note and `mise run check-deps`).
+    versioning-strategy: "lockfile-only"
+    cooldown:
+      default-days: 7
+    groups:
+      cargo:
+        patterns:
+          - "*"

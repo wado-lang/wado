@@ -13,19 +13,20 @@ cd "$ROOT"
 echo "==> installing jco + esbuild + binaryen (if needed)"
 { [ -d "$JCO/node_modules/@bytecodealliance/jco-transpile" ] && [ -d "$JCO/node_modules/esbuild" ] && [ -x "$WASM_OPT" ]; } || (cd "$JCO" && npm install)
 
-echo "==> compiling wado-playground (wasm32-unknown-unknown, release)"
-cargo build --release -p wado-playground --target wasm32-unknown-unknown
+# The playground cdylib also bundles the wado-lsp engine (same wasm32-u-u
+# module), so the browser needs no separate LSP build. The VS Code extension
+# keeps its own wasip1 stdio build via `mise run build-vscode-lsp`.
+#
+# Build for size (-Os + LTO, mirroring wado-bundled-libm): the module is large
+# and download-bound, and the browser tolerates a slightly slower compiler.
+echo "==> compiling wado-playground (wasm32-unknown-unknown, release -Os + LTO)"
+CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true \
+  cargo build --release -p wado-playground --target wasm32-unknown-unknown
 
-echo "==> compiling wado-lsp (wasm32-wasip1, release)"
-cargo build --release -p wado-lsp --bin wado-lsp --target wasm32-wasip1
-
-echo "==> optimizing with wasm-opt -O2"
-"$WASM_OPT" -O2 --strip-debug -all \
+echo "==> optimizing with wasm-opt -Os"
+"$WASM_OPT" -Os --strip-debug -all \
   target/wasm32-unknown-unknown/release/wado_playground.wasm \
   -o "$WEB/wado-playground.wasm"
-"$WASM_OPT" -O2 --strip-debug -all \
-  target/wasm32-wasip1/release/wado-lsp.wasm \
-  -o "$WEB/wado-lsp.wasm"
 
 echo "==> bundling jco transpileBytes for the browser"
 mkdir -p "$WEB/vendor"

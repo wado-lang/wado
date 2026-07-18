@@ -3,6 +3,7 @@
 // terminates the worker to stop a runaway program.
 //
 // Inbound: `{type:"run", source}`. Outbound: `{type:"status", phase}`,
+// `{type:"phase", name}` (fine-grained compiler phase, for progress),
 // `{type:"stdout"|"stderr", text}`, `{type:"done", ms}`, `{type:"error", text}`.
 
 import { compile, transpileToModule } from "./playground.js";
@@ -14,7 +15,9 @@ self.onmessage = async (e) => {
   globalThis._wadoWrite = (kind, text) => postMessage({ type: kind, text });
   try {
     postMessage({ type: "status", phase: "compiling" });
-    const component = await compile(source);
+    // Stream each compiler phase so the page can show live progress; on a slow
+    // (mobile) client this is the only sign the frozen-looking compile is alive.
+    const component = await compile(source, (name) => postMessage({ type: "phase", name }));
     postMessage({ type: "status", phase: "transpiling" });
     const moduleUrl = await transpileToModule(component);
     postMessage({ type: "status", phase: "running" });

@@ -199,7 +199,7 @@ test "parse_document reads a GFM table with alignment" {
 test "parse_document does not split a table row on a pipe inside a code span" {
     // A `|` inside `` `...` `` must not be mistaken for a column boundary —
     // found via a real corpus idempotency check against
-    // docs/operator-precedence-research.md's "`&` (8), `^` (9), `|` (10)"
+    // docs/research-operator-precedence.md's "`&` (8), `^` (9), `|` (10)"
     // cell.
     let source = "| a | b |\n| - | - |\n| `x \\| y` | 2 |";
     let children = doc_children(&source);
@@ -218,7 +218,7 @@ test "parse_document keeps a backslash-escaped pipe in a table cell's plain text
     // inline content (not resolve to a bare `|`, which would itself look
     // like an unintended column separator once printed back out) — found
     // via a real corpus idempotency check against
-    // docs/operator-precedence-research.md's "Mixed (& > ==, \| < =)" cell.
+    // docs/research-operator-precedence.md's "Mixed (& > ==, \| < =)" cell.
     let source = "| a | b |\n| - | - |\n| x \\| y | 2 |";
     let children = doc_children(&source);
     if let Some(Node::Table(t)) = children.get(0) {
