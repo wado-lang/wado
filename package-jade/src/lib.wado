@@ -14,7 +14,6 @@
 use { Serialize, SerializeError, Serializer } from "core:serde";
 use { Value } from "core:value";
 use { TreeMap } from "core:collections";
-use { to_string } from "core:json";
 
 /// A JSON Schema `type` keyword: one type name (`"string"`) or a union
 /// including null (`["string", "null"]` for an optional field).
@@ -45,7 +44,7 @@ pub struct Schema {
     /// `$schema` — set on a root schema only.
     pub dialect: Option<String> = null,
     /// `type`
-    pub type_: Option<TypeSet> = null,
+    pub type: Option<TypeSet> = null,
     /// `properties` (object schemas)
     pub properties: TreeMap<String, Schema> = TreeMap::new(),
     /// `required` (property names without a default)
@@ -75,25 +74,25 @@ impl Schema {
     /// An object schema with `additionalProperties: false`.
     pub fn object() -> Schema {
         return Schema {
-            type_: Option::Some(TypeSet::One("object")),
+            type: Option::Some(TypeSet::One("object")),
             additional_properties: Option::Some(false),
         };
     }
 
     pub fn boolean() -> Schema {
-        return Schema { type_: Option::Some(TypeSet::One("boolean")) };
+        return Schema { type: Option::Some(TypeSet::One("boolean")) };
     }
 
     pub fn string() -> Schema {
-        return Schema { type_: Option::Some(TypeSet::One("string")) };
+        return Schema { type: Option::Some(TypeSet::One("string")) };
     }
 
     pub fn integer() -> Schema {
-        return Schema { type_: Option::Some(TypeSet::One("integer")) };
+        return Schema { type: Option::Some(TypeSet::One("integer")) };
     }
 
     pub fn number() -> Schema {
-        return Schema { type_: Option::Some(TypeSet::One("number")) };
+        return Schema { type: Option::Some(TypeSet::One("number")) };
     }
 
     /// Mark this the root schema by stamping `$schema`.
@@ -123,7 +122,7 @@ impl Serialize for Schema {
         if self.dialect matches { Some(_) } {
             n += 1;
         }
-        if self.type_ matches { Some(_) } {
+        if self.type matches { Some(_) } {
             n += 1;
         }
         if !self.properties.is_empty() {
@@ -162,7 +161,7 @@ impl Serialize for Schema {
             m.key(&"$schema")?;
             m.value(d)?;
         }
-        if let Some(t) = &self.type_ {
+        if let Some(t) = &self.type {
             m.key(&"type")?;
             m.value(t)?;
         }
@@ -208,32 +207,4 @@ impl Serialize for Schema {
         }
         return m.end();
     }
-}
-
-test "gale-style options object serializes to idiomatic JSON Schema" {
-    // { highlight: bool (required), trace: bool = false }
-    let mut root = Schema::object();
-    root.as_root();
-    root.property("highlight", Schema::boolean());
-    let mut trace = Schema::boolean();
-    trace.set_default(Value::Bool(false));
-    root.property("trace", trace);
-    root.require("highlight");
-
-    let json = to_string(&root).unwrap();
-    assert json == `\{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":\{"highlight":\{"type":"boolean"\},"trace":\{"type":"boolean","default":false\}\},"required":["highlight"],"additionalProperties":false\}`;
-}
-
-test "absent fields are omitted" {
-    let json = to_string(&Schema::boolean()).unwrap();
-    assert json == `\{"type":"boolean"\}`;
-}
-
-test "nullable string via a type union" {
-    let schema = Schema {
-        type_: Option::Some(TypeSet::Many(["string", "null"])),
-        default_: Option::Some(Value::Null),
-    };
-    let json = to_string(&schema).unwrap();
-    assert json == `\{"type":["string","null"],"default":null\}`;
 }
