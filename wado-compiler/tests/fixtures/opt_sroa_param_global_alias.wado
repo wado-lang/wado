@@ -53,22 +53,22 @@ export fn run() with Stdout {
     G.value = 1;
     let a = f(&G);
     if a != 101 {
-        panic(`transitive alias: expected 101, got {a}`);
+        panic(`transitive alias: expected 101, got ${a}`);
     }
 
     G.value = 1;
     let b = h(&G);
     if b != 1001 {
-        panic(`direct alias: expected 1001, got {b}`);
+        panic(`direct alias: expected 1001, got ${b}`);
     }
 
     let w = W { value: 42 };
     let c = k(&w);
     if c != 42 {
-        panic(`non-aliasing: expected 42, got {c}`);
+        panic(`non-aliasing: expected 42, got ${c}`);
     }
 
-    println(`ok {COUNTER}`);
+    println(`ok ${COUNTER}`);
 }
 
 __DATA__
