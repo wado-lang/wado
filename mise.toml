@@ -363,14 +363,18 @@ description = "Run wado-vscode tests"
 run = "cd wado-vscode && npm install && npm run test:unit && npm run test"
 
 [tasks.build-wado-lsp-wasm-rust]
-description = "Build the wado-lsp wasm32-wasip1 binary into wado-vscode/out/ (Rust only)"
+description = "Build the wado-lsp wasm32-wasip1 binary (-Os) into wado-vscode/out/ (Rust only)"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 # @vscode/wasm-wasi-lsp hosts wasm32-wasip1 modules only; the p2 component
 # target is not yet consumable by the VS Code Wasm host. See
 # docs/wep-2026-04-18-lsp-architecture.md (fallback noted in Prerequisites).
-cargo build -p wado-lsp --bin wado-lsp --target wasm32-wasip1 --release
+# Build for size (-Os + LTO, mirroring wado-bundled-libm and the browser
+# playground): the bundled server ships in the VSIX and gains nothing from
+# speed-oriented codegen.
+CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true \
+  cargo build -p wado-lsp --bin wado-lsp --target wasm32-wasip1 --release
 mkdir -p wado-vscode/out
 cp target/wasm32-wasip1/release/wado-lsp.wasm wado-vscode/out/wado_lsp.wasm
 """
