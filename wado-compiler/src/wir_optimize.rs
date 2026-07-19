@@ -65,7 +65,7 @@ use init_guard::remove_trivial_init_globals;
 use nullable_ref::lower_nullable_refs;
 use peephole::run_peephole;
 use prune_dead_data::prune_dead_data;
-use sroa_variant_return::{flatten_nested_variant_slots, sroa_variant_returns};
+use sroa_variant_return::{flatten_variant_slots, sroa_variant_returns};
 
 /// Run a single WIR optimization pass with profiling.
 ///
@@ -203,13 +203,15 @@ pub fn optimize_wir(
             peephole::propagate_trivial_copies(m);
         },
     );
-    // Nested variant-slot flattening: now that `flatten_seq_assignments` +
-    // copy propagation have exposed the clean `multivalue_bind […] = call;
-    // x = if Ok { payload } else { return Err }` shape, split a `ref
-    // Option<scalar>` result slot into `[inner_disc, scalar]`, removing the
-    // per-element inner box that single-level variant-return SROA leaves boxed.
-    wir_pass("wir/flatten_nested_variant_slots", module, profiler, |m| {
-        flatten_nested_variant_slots(m);
+    // Variant-slot flattening: now that `flatten_seq_assignments` + copy
+    // propagation have exposed the clean `multivalue_bind […] = call;
+    // x = if Ok { payload } else { return Err }` shape, split a `ref W` result
+    // slot into `W`'s multi-value layout (`compute_variant_layout`, the same
+    // engine single-level SROA uses), removing the per-element inner box that
+    // single-level variant-return SROA leaves boxed. Runs to a fix-point, so
+    // nested-in-nested slots peel one level per round.
+    wir_pass("wir/flatten_variant_slots", module, profiler, |m| {
+        flatten_variant_slots(m);
     });
     profiler.span_end("wir/phase5_peephole");
 

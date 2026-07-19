@@ -1,0 +1,76 @@
+// Test: variant-slot flattening generalizes past `Option<scalar>` to any
+// eligible inner variant. Here the inner slot is a `Result<i64, i32>` — two
+// payload-bearing cases, a per-case inner layout — which the original
+// Option-only nested pass could not flatten. The unified layout engine expands
+// the `ref Result<i64, i32>` slot into `[inner_disc, i64, i32]` in place.
+//
+// After single-level SROA, `step` returns `[outer_disc, ref Result<i64,i32>,
+// ref OuterErr]` and still builds a `struct.new Result<i64,i32>::{Ok,Err}` at
+// every return. The flatten pass splits the inner slot away, so `step` returns
+// a fully scalarised vector with no inner allocation, and the `if let Ok(v)`
+// at the call site reads the flattened locals directly.
+
+variant OuterErr {
+    Bad,
+}
+
+struct Cursor {
+    data: List<i64>,
+    pos: i32,
+}
+
+impl Cursor {
+    // Returns Ok(Ok(v)) for a value, Ok(Err(-1)) as the end sentinel, and
+    // Err(OuterErr::Bad) for a negative element.
+    #[inline("never")]
+    fn step(&mut self) -> Result<Result<i64, i32>, OuterErr> {
+        if self.pos >= self.data.len() {
+            return Result::Ok(Result::Err(-1));
+        }
+        let v = self.data[self.pos];
+        if v < 0 {
+            return Result::Err(OuterErr::Bad);
+        }
+        self.pos += 1;
+        return Result::Ok(Result::Ok(v));
+    }
+}
+
+fn sum_all(data: List<i64>) -> Result<i64, OuterErr> {
+    let mut cur = Cursor { data, pos: 0 };
+    let mut total: i64 = 0;
+    loop {
+        let inner = cur.step()?;
+        if let Ok(v) = inner {
+            total += v;
+        } else {
+            break;
+        }
+    }
+    return Result::Ok(total);
+}
+
+export fn run() {
+    let ok = sum_all([10, 20, 30, 40]);
+    assert ok matches { Ok(100) };
+
+    // Error path: `?` propagates OuterErr::Bad through the flattened slot.
+    let bad = sum_all([10, -5, 30]);
+    assert bad matches { Err(OuterErr::Bad) };
+
+    // Empty: first `step()` yields Ok(Err(-1)) → break → total 0.
+    let empty = sum_all([] as List<i64>);
+    assert empty matches { Ok(0) };
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "Cursor::step\" = fn(ref \"",
+        "-> [i32, i32, i64, i32, ref null \""
+    ],
+    "wir_not_expect:O2": [
+        "struct.new \"core:prelude/types.wado//Result<i64,i32>"
+    ]
+}
