@@ -176,13 +176,22 @@ pub(super) fn is_root_observable(instr: &WirInstr) -> bool {
 /// to enable CSE / dead-load elimination of trapping operations whose
 /// result IS used.
 pub(super) fn may_trap(instr: &WirInstr) -> bool {
+    may_trap_in(instr, &IndexMap::default())
+}
+
+/// [`may_trap`] that reads a `LocalGet` receiver's nullability from the local's
+/// declared type (`local_types`), not the read site's `result_ty` — inlining can
+/// leave the latter stale-nullable for a non-null local. Rewriting `result_ty`
+/// instead would cost a codegen `ref.as_non_null` per read, so it is consulted
+/// only here. An empty map recovers [`may_trap`].
+pub(super) fn may_trap_in(instr: &WirInstr, local_types: &IndexMap<String, WirType>) -> bool {
     // Operand-dependent: `ref.as_non_null(inner)` only traps when `inner`
-    // could itself produce null. `is_nonnull_result` recognises
+    // could itself produce null. `receiver_nonnull` recognises
     // `struct.new`/`array.new*`/`ref.func`/`ref.i31`/already-non-null
-    // typed locals, so a `ref.as_non_null(ref.func "…")` produced by
+    // typed reads, so a `ref.as_non_null(ref.func "…")` produced by
     // closure lowering doesn't keep the surrounding `Drop` alive.
     if let WirInstr::RefAsNonNull(inner) = instr {
-        return may_trap(inner) || !inner.is_nonnull_result();
+        return may_trap_in(inner, local_types) || !receiver_nonnull(inner, local_types);
     }
     // Operand-dependent: `ref.cast T(struct.new T { … })` is identity
     // (`struct.new` always produces exactly `T`), so the cast can't
@@ -194,7 +203,15 @@ pub(super) fn may_trap(instr: &WirInstr) -> bool {
         } = expr.as_ref()
         && src_type == type_id
     {
-        return may_trap(expr);
+        return may_trap_in(expr, local_types);
+    }
+    // Operand-dependent: `struct.get` traps only on a null receiver (field
+    // indices are statically in range), `array.len` only on a null array.
+    if let WirInstr::StructGet { expr, .. } = instr {
+        return may_trap_in(expr, local_types) || !receiver_nonnull(expr, local_types);
+    }
+    if let WirInstr::ArrayLen(inner) = instr {
+        return may_trap_in(inner, local_types) || !receiver_nonnull(inner, local_types);
     }
     if matches!(
         instr,
@@ -202,13 +219,9 @@ pub(super) fn may_trap(instr: &WirInstr) -> bool {
         WirInstr::ArrayGet { .. }
         | WirInstr::ArrayGetS { .. }
         | WirInstr::ArrayGetU { .. }
-        // `array.len` traps when the array reference is null.
-        | WirInstr::ArrayLen(_)
         // `array.new_data` traps when offset + len overruns the data
         // segment.
         | WirInstr::ArrayNewData { .. }
-        // GC struct reads trap on null receiver.
-        | WirInstr::StructGet { .. }
         // Ref cast / non-null assertion trap on failure. The
         // operand-dependent early returns above peel off the
         // statically-safe shapes; whatever's left here is the
@@ -252,11 +265,33 @@ pub(super) fn may_trap(instr: &WirInstr) -> bool {
     }
     let mut trap = false;
     instr.for_each_child(&mut |child| {
-        if !trap && may_trap(child) {
+        if !trap && may_trap_in(child, local_types) {
             trap = true;
         }
     });
     trap
+}
+
+fn receiver_nonnull(expr: &WirInstr, local_types: &IndexMap<String, WirType>) -> bool {
+    expr.is_nonnull_result()
+        || matches!(expr, WirInstr::LocalGet { name, .. }
+            if local_types.get(name).is_some_and(WirType::is_nonnull_ref))
+}
+
+/// Each local's declared (`DeclareLocal`) type, keyed by name.
+pub(super) fn collect_declared_local_types(body: &[WirInstr]) -> IndexMap<String, WirType> {
+    let mut types = IndexMap::default();
+    for instr in body {
+        collect_declared_local_types_deep(instr, &mut types);
+    }
+    types
+}
+
+fn collect_declared_local_types_deep(instr: &WirInstr, out: &mut IndexMap<String, WirType>) {
+    if let WirInstr::DeclareLocal { name, ty } = instr {
+        out.insert(name.clone(), ty.clone());
+    }
+    instr.for_each_child(&mut |child| collect_declared_local_types_deep(child, out));
 }
 
 /// Index of the first non-`Nop` statement at or after `from`.

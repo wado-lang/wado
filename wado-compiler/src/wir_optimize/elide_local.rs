@@ -30,20 +30,24 @@
 //! cleanup pass for write-only locals only.
 
 use crate::hashmap::IndexMap;
-use crate::wir::{WirInstr, WirPackage};
+use crate::wir::{WirInstr, WirPackage, WirType};
 use crate::wir_visitor::WirMutVisitor;
 
-use super::util::{count_local_gets, is_side_effect_free, may_trap};
+use super::util::{collect_declared_local_types, count_local_gets, is_side_effect_free, may_trap_in};
 
 pub(super) fn elide_write_only_locals(module: &mut WirPackage) {
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
-            while elide_write_only_locals_in_body(body) {}
+            let local_types = collect_declared_local_types(body);
+            while elide_write_only_locals_in_body(body, &local_types) {}
         }
     }
 }
 
-fn elide_write_only_locals_in_body(body: &mut [WirInstr]) -> bool {
+fn elide_write_only_locals_in_body(
+    body: &mut [WirInstr],
+    local_types: &IndexMap<String, WirType>,
+) -> bool {
     let mut read_counts: IndexMap<String, u32> = IndexMap::default();
     for instr in body.iter() {
         count_local_gets(instr, &mut read_counts);
@@ -51,6 +55,7 @@ fn elide_write_only_locals_in_body(body: &mut [WirInstr]) -> bool {
 
     let mut visitor = ElideWriteOnly {
         read_counts: &read_counts,
+        local_types,
         changed: false,
     };
     for instr in body.iter_mut() {
@@ -65,6 +70,7 @@ struct ElideWriteOnly<'a> {
     /// — a store can be kept a round too long, never wrongly elided; the
     /// fixed-point loop converges the leftovers.
     read_counts: &'a IndexMap<String, u32>,
+    local_types: &'a IndexMap<String, WirType>,
     changed: bool,
 }
 
@@ -95,7 +101,7 @@ impl WirMutVisitor for ElideWriteOnly<'_> {
             // target is unused. Drops them through a `Drop` so the
             // peephole-level `Drop(may_trap)` guard in path 2 below
             // keeps them out of harm's way.
-            if is_side_effect_free(&value_expr) && !may_trap(&value_expr) {
+            if is_side_effect_free(&value_expr) && !may_trap_in(&value_expr, self.local_types) {
                 *instr = WirInstr::Nop;
             } else {
                 *instr = WirInstr::Drop(Box::new(value_expr));
@@ -118,7 +124,7 @@ impl WirMutVisitor for ElideWriteOnly<'_> {
         // satisfies `is_side_effect_free` is genuinely dead.
         if let WirInstr::Drop(value) = instr
             && is_side_effect_free(value)
-            && !may_trap(value)
+            && !may_trap_in(value, self.local_types)
         {
             *instr = WirInstr::Nop;
             self.changed = true;
@@ -160,7 +166,7 @@ mod tests {
     #[test]
     fn self_referencing_dead_store_elides() {
         let mut body = vec![increment("x")];
-        assert!(elide_write_only_locals_in_body(&mut body));
+        assert!(elide_write_only_locals_in_body(&mut body, &IndexMap::default()));
         assert!(matches!(body[0], WirInstr::Nop));
     }
 
@@ -168,7 +174,7 @@ mod tests {
     #[test]
     fn externally_read_store_is_kept() {
         let mut body = vec![increment("x"), lset("sink", lget("x"))];
-        assert!(elide_write_only_locals_in_body(&mut body));
+        assert!(elide_write_only_locals_in_body(&mut body, &IndexMap::default()));
         assert!(
             matches!(&body[0], WirInstr::LocalSet { name, .. } if name == "x"),
             "x is read by the sink copy and must survive: {:?}",
@@ -196,7 +202,7 @@ mod tests {
                 value: Some(Box::new(lget("z"))),
             },
         ];
-        assert!(elide_write_only_locals_in_body(&mut body));
+        assert!(elide_write_only_locals_in_body(&mut body, &IndexMap::default()));
         let WirInstr::LocalSet { value, .. } = &body[0] else {
             panic!("z is read by the return and must survive");
         };
