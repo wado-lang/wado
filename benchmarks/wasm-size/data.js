@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784429088308,
+  "lastUpdate": 1784433127565,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -41945,6 +41945,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1f8c4ba9e5d38268b45014243ec399dfcab5dbd8"
         },
         "date": 1784429087611,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8257,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16526,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271337,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7b5fae77ce46b88f793d60499c2ca1c2a84dc3af",
+          "message": "Merge pull request #1633 from wado-lang/gfx/rust-1_97\n\nchore: rust 1.97, applying clippy-fix with it",
+          "timestamp": "2026-07-19T12:39:06+09:00",
+          "tree_id": "de60e9ad717b696ee73123d9002e6d7c94ff8461",
+          "url": "https://github.com/wado-lang/wado/commit/7b5fae77ce46b88f793d60499c2ca1c2a84dc3af"
+        },
+        "date": 1784433127252,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
