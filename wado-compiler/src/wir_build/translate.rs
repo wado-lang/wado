@@ -2466,7 +2466,6 @@ impl FunctionTranslator<'_, '_> {
                     }
                     ExprKind::FieldAccess {
                         expr: receiver,
-                        field_name: _,
                         ..
                     } if arena.exprs[target].type_id == TypeTable::UNIT => {
                         // Unit-typed field assignment: the field has no Wasm
