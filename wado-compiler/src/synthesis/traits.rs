@@ -503,56 +503,22 @@ fn generate_struct_reflect_impls(
         return;
     }
 
-    let (
-        string_type,
-        list_string_type,
-        string_type_name,
-        from_tuple,
-        type_name_method,
-        field_names_method,
-        fields_method,
-    ) = {
-        let mut tt = module.type_table.borrow_mut();
-        let string_type = tt.make_compiler_struct(CompilerItem::String);
-        let list_string_type = tt.make_list(string_type);
-        let string_type_name = tt.mangle_type_name(string_type);
-        let items = tt.compiler_items();
-        let (module_source, owner, name) = items.require_method(CompilerItem::ListFromTuple);
-        let from_tuple = FromTupleItem {
-            module_source: module_source.clone(),
-            owner: owner.to_string(),
-            name: name.to_string(),
-        };
-        let type_name_method = items.method_name(CompilerItem::ReflectTypeName).to_string();
-        let field_names_method = items
-            .method_name(CompilerItem::ReflectFieldNames)
-            .to_string();
-        let fields_method = items.method_name(CompilerItem::ReflectFields).to_string();
-        (
-            string_type,
-            list_string_type,
-            string_type_name,
-            from_tuple,
-            type_name_method,
-            field_names_method,
-            fields_method,
-        )
-    };
+    let env = ReflectSynthEnv::resolve(&mut module.type_table.borrow_mut());
 
     let mut generated = Vec::new();
     for (name, fields, span) in &infos {
         let field_names: Vec<String> = fields.iter().map(|(n, _, _)| n.clone()).collect();
         let type_name_fn = generate_struct_type_name_fn(
             name,
-            string_type,
+            env.string_type,
             reflect_trait_name,
-            &type_name_method,
+            &env.type_name_method,
             *span,
         );
         let (field_names_fn, fields_fn) = {
             let mut tt = module.type_table.borrow_mut();
             let names_tuple_type =
-                tt.make_tuple(std::iter::repeat_n(string_type, field_names.len()).collect());
+                tt.make_tuple(std::iter::repeat_n(env.string_type, field_names.len()).collect());
             let struct_type = tt.make_struct(name.clone(), module_source.clone());
             let ref_struct_type = tt.make_ref(struct_type);
             let fields_tuple_type = tt.make_tuple(fields.iter().map(|(_, ty, _)| *ty).collect());
@@ -567,13 +533,13 @@ fn generate_struct_reflect_impls(
             let field_names_fn = generate_struct_field_names_fn(
                 name,
                 &field_names,
-                string_type,
+                env.string_type,
                 names_tuple_type,
-                list_string_type,
+                env.list_string_type,
                 reflect_trait_name,
-                &string_type_name,
-                &from_tuple,
-                &field_names_method,
+                &env.string_type_name,
+                &env.from_tuple,
+                &env.field_names_method,
                 *span,
             );
             let fields_fn = generate_struct_fields_fn(
@@ -582,7 +548,7 @@ fn generate_struct_reflect_impls(
                 ref_struct_type,
                 fields_tuple_type,
                 reflect_trait_name,
-                &fields_method,
+                &env.fields_method,
                 *span,
             );
             (field_names_fn, fields_fn)
@@ -599,6 +565,45 @@ fn generate_struct_reflect_impls(
 /// The `Reflect` trait's associated-type name (`type Fields`). Sealed and
 /// compiler-defined, so its spelling is fixed rather than registry-driven.
 const REFLECT_FIELDS_ASSOC: &str = "Fields";
+
+/// Module-level types and method names resolved once from the compiler-item
+/// registry and reused across every struct's `Reflect` synthesis in that
+/// module.
+struct ReflectSynthEnv {
+    string_type: TypeId,
+    list_string_type: TypeId,
+    string_type_name: String,
+    from_tuple: FromTupleItem,
+    type_name_method: String,
+    field_names_method: String,
+    fields_method: String,
+}
+
+impl ReflectSynthEnv {
+    fn resolve(tt: &mut TypeTable) -> Self {
+        let string_type = tt.make_compiler_struct(CompilerItem::String);
+        let list_string_type = tt.make_list(string_type);
+        let string_type_name = tt.mangle_type_name(string_type);
+        let items = tt.compiler_items();
+        let (module_source, owner, name) = items.require_method(CompilerItem::ListFromTuple);
+        let from_tuple = FromTupleItem {
+            module_source: module_source.clone(),
+            owner: owner.to_string(),
+            name: name.to_string(),
+        };
+        Self {
+            string_type,
+            list_string_type,
+            string_type_name,
+            from_tuple,
+            type_name_method: items.method_name(CompilerItem::ReflectTypeName).to_string(),
+            field_names_method: items
+                .method_name(CompilerItem::ReflectFieldNames)
+                .to_string(),
+            fields_method: items.method_name(CompilerItem::ReflectFields).to_string(),
+        }
+    }
+}
 
 /// The `List::from_tuple` constructor, resolved from
 /// [`CompilerItem::ListFromTuple`] so synthesis never hard-codes its owner /
