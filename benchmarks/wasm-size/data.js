@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784463264315,
+  "lastUpdate": 1784464829858,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -42209,6 +42209,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5125b7be77bd07502e290fd7fec2581eea31661e"
         },
         "date": 1784463263620,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8257,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16526,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271337,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8f3a20810fa3a144aaddfa36f79ab4a9eeceb8c7",
+          "message": "Merge pull request #1637 from wado-lang/claude/byte-literal-design-v6ahx4\n\nfeat!: byte literals (`b'x'`)",
+          "timestamp": "2026-07-19T21:29:41+09:00",
+          "tree_id": "e560f3b74d627308d280c703f59ab153f5d94a1b",
+          "url": "https://github.com/wado-lang/wado/commit/8f3a20810fa3a144aaddfa36f79ab4a9eeceb8c7"
+        },
+        "date": 1784464829390,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
