@@ -1,0 +1,9 @@
+// A byte literal coerces like an integer literal, so a value that overflows the
+// target type is a range error (255 does not fit i8).
+export fn run() {
+    let x: i8 = b'\xff';
+    assert x == 0;
+}
+
+__DATA__
+{"compile_error": "out of range"}

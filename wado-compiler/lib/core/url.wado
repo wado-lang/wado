@@ -174,7 +174,7 @@ fn percent_decode_query_component(input: &String) -> String {
     while i < len {
         let c = input.get_byte_unchecked(i) as char;
         if c == '+' {
-            bytes.push(' ' as u8);
+            bytes.push(b' ');
             i += 1;
         } else if c == '%' && i + 2 < len {
             let hi = input.get_byte_unchecked(i + 1) as char;
@@ -183,7 +183,7 @@ fn percent_decode_query_component(input: &String) -> String {
                 bytes.push((hi.hex_digit_value() << 4 | lo.hex_digit_value()) as u8);
                 i += 3;
             } else {
-                bytes.push('%' as u8);
+                bytes.push(b'%');
                 i += 1;
             }
         } else {

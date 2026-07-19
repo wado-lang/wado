@@ -96,7 +96,7 @@ impl Uuid {
         let mut pos = 0;
         for let mut g = 0; g < groups.len(); g += 1 {
             if g > 0 {
-                if bytes[pos] != '-' as u8 {
+                if bytes[pos] != b'-' {
                     return null;
                 }
                 pos += 1;
@@ -202,14 +202,14 @@ fn from_byte_list(b: &ByteList) -> Uuid {
 /// The value of a single ASCII hex digit byte (`0`–`9`, `a`–`f`, `A`–`F`), or
 /// `-1` when the byte is not a hex digit.
 fn hex_value(byte: u8) -> i32 {
-    if byte >= '0' as u8 && byte <= '9' as u8 {
-        return (byte - '0' as u8) as i32;
+    if byte >= b'0' && byte <= b'9' {
+        return (byte - b'0') as i32;
     }
-    if byte >= 'a' as u8 && byte <= 'f' as u8 {
-        return (byte - 'a' as u8) as i32 + 10;
+    if byte >= b'a' && byte <= b'f' {
+        return (byte - b'a') as i32 + 10;
     }
-    if byte >= 'A' as u8 && byte <= 'F' as u8 {
-        return (byte - 'A' as u8) as i32 + 10;
+    if byte >= b'A' && byte <= b'F' {
+        return (byte - b'A') as i32 + 10;
     }
     return -1;
 }

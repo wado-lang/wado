@@ -38,7 +38,7 @@ fn to_lowercase_simd(input: String) -> String {
     // Handle remaining bytes
     while i < len {
         let b = input.get_byte_unchecked(i);
-        if b >= 'A' as u8 && b <= 'Z' as u8 {
+        if b >= b'A' && b <= b'Z' {
             result.push(char::from_u32_unchecked((b + 0x20 as u8) as u32));
         } else {
             result.push(char::from_u32_unchecked(b as u32));
@@ -136,7 +136,7 @@ fn count_digits_simd(input: String) -> i32 {
 
     while i < len {
         let b = input.get_byte_unchecked(i);
-        if b >= '0' as u8 && b <= '9' as u8 {
+        if b >= b'0' && b <= b'9' {
             count = count + 1;
         }
         i = i + 1;
@@ -167,16 +167,16 @@ test "to_lowercase long string" {
 
 test "count_byte newlines" {
     let text = "line1\nline2\nline3\n";
-    assert count_byte_simd(text, '\n' as u8) == 3;
+    assert count_byte_simd(text, b'\n') == 3;
 }
 
 test "count_byte spaces in long text" {
     let text = "this is a test string with many spaces in it";
-    assert count_byte_simd(text, ' ' as u8) == 9;
+    assert count_byte_simd(text, b' ') == 9;
 }
 
 test "count_byte no matches" {
-    assert count_byte_simd("hello", 'z' as u8) == 0;
+    assert count_byte_simd("hello", b'z') == 0;
 }
 
 test "is_ascii_printable" {
@@ -215,8 +215,8 @@ export fn run() with Stdout {
     println("");
     let code = "fn main() { let x = 42; println(x); }";
     println(`Code: "${code}"`);
-    println(`  Spaces:     ${count_byte_simd(code, ' ' as u8)}`);
-    println(`  Semicolons: ${count_byte_simd(code, ';' as u8)}`);
+    println(`  Spaces:     ${count_byte_simd(code, b' ')}`);
+    println(`  Semicolons: ${count_byte_simd(code, b';')}`);
     println(`  Digits:     ${count_digits_simd(code)}`);
 
     // Printable check
@@ -229,5 +229,5 @@ export fn run() with Stdout {
     // Newline counting (common in log/text processing)
     println("");
     let log = "INFO: started\nWARN: slow query\nERROR: timeout\nINFO: recovered\n";
-    println(`Log lines: ${count_byte_simd(log, '\n' as u8)}`);
+    println(`Log lines: ${count_byte_simd(log, b'\n')}`);
 }

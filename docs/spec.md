@@ -1577,12 +1577,26 @@ let raw: List<u8> = b"\x89PNG\r\n";     // Also OK: newtype literal coercion to 
 
 The content must be ASCII; each `\xNN` escape (two hex digits) or source
 character contributes one byte, and the standard escapes (`\n`, `\t`, `\\`,
-`\"`, `\0`, `\r`, `\'`) are also accepted. A byte string lowers directly to a
-constant data segment — never an element-by-element builder — so a large blob
-costs nothing to optimize. (`#include_bytes("path")` produces the same
-`ByteList` from a file.) The default type is `ByteList`, but newtype literal
-coercion lets it flow into a `List<u8>` context (or any type whose base is
-`List<u8>`) with no cast.
+`\"`, `\0`, `\r`, `\'`) are also accepted. Unicode escapes (`\u{...}` /
+`\uHHHH`) are rejected — a Unicode escape denotes a scalar, not a byte; use
+`\xNN` for a raw byte. A byte string lowers directly to a constant data segment
+— never an element-by-element builder — so a large blob costs nothing to
+optimize. (`#include_bytes("path")` produces the same `ByteList` from a file.)
+The default type is `ByteList`, but newtype literal coercion lets it flow into a
+`List<u8>` context (or any type whose base is `List<u8>`) with no cast.
+
+**Byte literals** are the single-byte analog: `b'x'` is one `u8`.
+
+```wado
+let a = b'A';              // u8, 65
+let hi = b'\xff';          // u8, 255
+let n: i32 = b'A';         // 65 — coerces like an integer literal
+```
+
+A byte literal is an integer literal defaulting to `u8`, so it coerces like any
+integer literal (its value is always `0..=255`). Its content follows the same
+one-byte rule as a byte string (`\xNN` for `0x80..=0xFF`; no `\u`); use a char
+literal `'…'` for a Unicode scalar.
 
 #### Escape Sequences
 

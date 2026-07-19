@@ -169,13 +169,13 @@ pub variant Segment {
 pub fn parse_pattern(path: &String) -> List<Segment> {
     let mut out: List<Segment> = [];
     let bytes = path.len();
-    if bytes == 0 || path.get_byte_unchecked(0) != '/' as u8 {
+    if bytes == 0 || path.get_byte_unchecked(0) != b'/' {
         panic("route pattern must start with '/'");
     }
     let mut i = 1;
     while i < bytes {
         let mut j = i;
-        while j < bytes && path.get_byte_unchecked(j) != '/' as u8 {
+        while j < bytes && path.get_byte_unchecked(j) != b'/' {
             j += 1;
         }
         let seg = path.substr_bytes(i, j);

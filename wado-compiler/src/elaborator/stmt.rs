@@ -1953,6 +1953,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Pattern::Literal(Literal::Char(raw)) => {
                 util::unescape_char(raw).ok().map(|c| c as i128)
             }
+            Pattern::Literal(Literal::Byte(raw)) => util::unescape_byte(raw).ok().map(i128::from),
             Pattern::Variant {
                 variant_name,
                 variant_qualifier,

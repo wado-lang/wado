@@ -2955,6 +2955,10 @@ impl Parser {
             // Literal pattern: 'a'
             self.advance();
             Ok(Pattern::Literal(Literal::Char(raw)))
+        } else if let TokenKind::ByteCharLit(raw) = self.peek_kind().clone() {
+            // Literal pattern: b'a'
+            self.advance();
+            Ok(Pattern::Literal(Literal::Byte(raw)))
         } else if self.check(&TokenKind::True) {
             // Literal pattern: true
             self.advance();
@@ -3941,6 +3945,7 @@ impl Parser {
             TokenKind::ByteStringLit(raw) => {
                 Ok(self.consume_literal(Literal::Bytes(raw), start_span))
             }
+            TokenKind::ByteCharLit(raw) => Ok(self.consume_literal(Literal::Byte(raw), start_span)),
             TokenKind::TemplateStringLit(parts) => {
                 self.advance();
                 self.parse_template_string_parts(parts, start_span)

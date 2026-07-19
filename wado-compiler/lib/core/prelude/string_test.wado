@@ -62,11 +62,11 @@ test "chars iter for-of" {
 test "bytes iter ASCII" {
     let bytes: List<u8> = "Hello".bytes().collect();
     assert bytes.len() == 5;
-    assert bytes[0] == 'H' as u8;
-    assert bytes[1] == 'e' as u8;
-    assert bytes[2] == 'l' as u8;
-    assert bytes[3] == 'l' as u8;
-    assert bytes[4] == 'o' as u8;
+    assert bytes[0] == b'H';
+    assert bytes[1] == b'e';
+    assert bytes[2] == b'l';
+    assert bytes[3] == b'l';
+    assert bytes[4] == b'o';
 }
 
 test "bytes iter empty string" {
@@ -151,9 +151,9 @@ test "collect bytes then chars" {
     let s = "Hi!";
     let bytes: List<u8> = s.bytes().collect();
     assert bytes.len() == 3;
-    assert bytes[0] == 'H' as u8;
-    assert bytes[1] == 'i' as u8;
-    assert bytes[2] == '!' as u8;
+    assert bytes[0] == b'H';
+    assert bytes[1] == b'i';
+    assert bytes[2] == b'!';
 
     let chars: List<char> = s.chars().collect();
     assert chars.len() == 3;
@@ -1100,7 +1100,7 @@ test "char_at_byte_unchecked multibyte" {
 
 test "push_bytes_unchecked ASCII" {
     let mut s = String::with_capacity(0);
-    let bytes: ByteList = ['h' as u8, 'i' as u8];
+    let bytes: ByteList = [b'h', b'i'];
     s.push_bytes_unchecked(&bytes);
     assert s == "hi";
 }

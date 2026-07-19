@@ -64,7 +64,7 @@ impl RadixRouter {
         // against root.handler_id directly before falling back to walk —
         // walk still handles a wildcard registered at root (`/*x`).
         if plen == 1
-            && path.get_byte_unchecked(0) == '/' as u8
+            && path.get_byte_unchecked(0) == b'/'
             && self.nodes[0].handler_id >= 0
             && self.nodes[0].method == method {
             return MatchResult { handler_id: self.nodes[0].handler_id, params };
@@ -230,7 +230,7 @@ impl RadixRouter {
         // allocation-free, unlike a full keys() snapshot.
         if self.nodes[node_id].param_target >= 0 {
             let mut end = pos;
-            while end < plen && path.get_byte_unchecked(end) != '/' as u8 {
+            while end < plen && path.get_byte_unchecked(end) != b'/' {
                 end += 1;
             }
             if end > pos {

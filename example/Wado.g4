@@ -706,7 +706,7 @@ BACKTICK
     ;
 
 CHAR_LITERAL
-    : '\'' (UNICODE_ESCAPE | '\\' . | ~['\\\r\n]) '\''
+    : 'b'? '\'' (UNICODE_ESCAPE | '\\' . | ~['\\\r\n]) '\''
     ;
 
 fragment UNICODE_ESCAPE

@@ -1,0 +1,73 @@
+// Byte literal `b'x'`: a `u8`-valued integer literal that coerces, does
+// arithmetic, and matches (including range patterns) like any integer literal.
+
+fn takes_u8(b: u8) -> u8 {
+    return b;
+}
+
+fn classify(b: u8) -> i32 {
+    return match b {
+        b'0'..=b'9' => 1,
+        b'a'..=b'z' | b'A'..=b'Z' => 2,
+        b' ' | b'\t' | b'\n' | b'\r' => 3,
+        _ => 0,
+    };
+}
+
+fn matches_signed_wide(x: i128) -> bool {
+    return match x {
+        b'A' => true,
+        _ => false,
+    };
+}
+
+fn matches_unsigned_wide(x: u128) -> bool {
+    return match x {
+        b'A' => true,
+        _ => false,
+    };
+}
+
+fn id<T>(x: T) -> T {
+    return x;
+}
+
+export fn run() {
+    let a = b'A';
+    assert a == 65;
+    assert takes_u8(b'B') == 66;
+
+    assert b'\n' == 10;
+    assert b'\t' == 9;
+    assert b'\r' == 13;
+    assert b'\\' == 92;
+    assert b'\'' == 39;
+    assert b'\"' == 34;
+    assert b'\0' == 0;
+
+    assert b'\x00' == 0;
+    assert b'\x7f' == 127;
+    assert b'\xff' == 255;
+
+    let n: i32 = b'A';
+    assert n == 65;
+    let w: u32 = b'\xff';
+    assert w == 255;
+
+    assert b'A' + 1 == b'B';
+
+    assert classify(b'5') == 1;
+    assert classify(b'q') == 2;
+    assert classify(b'\t') == 3;
+    assert classify(b'!') == 0;
+    assert b'7' matches { b'0'..=b'9' };
+
+    assert matches_signed_wide(65 as i128);
+    assert !matches_signed_wide(66 as i128);
+    assert matches_unsigned_wide(65 as u128);
+
+    assert takes_u8(id(b'A')) == 65;
+}
+
+__DATA__
+{"stdout": ""}

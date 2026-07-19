@@ -9339,6 +9339,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let ch = super::util::unescape_char(s).unwrap_or('\0');
                 TirExprKind::CharLiteral(ch)
             }
+            ast::Literal::Byte(s) => {
+                let byte = super::util::unescape_byte(s).unwrap_or(0);
+                let byte_type = if recorded_type == crate::tir::TypeTable::UNKNOWN {
+                    crate::tir::TypeTable::U8
+                } else {
+                    recorded_type
+                };
+                return TirExpr::new(
+                    TirExprKind::IntLiteral {
+                        value: u64::from(byte),
+                        repr: s.clone(),
+                    },
+                    byte_type,
+                    lit.span,
+                );
+            }
             ast::Literal::Bool(b) => TirExprKind::BoolLiteral(*b),
             ast::Literal::Null => TirExprKind::Null,
             ast::Literal::Unit => TirExprKind::Unit,
@@ -9774,31 +9790,38 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // string literals decode their escapes. `null` on a
                 // variant scrutinee with a `None` case lowers to that
                 // case.
+                let scrutinee_is_unsigned = {
+                    let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
+                    matches!(
+                        resolved,
+                        ResolvedType::Primitive(
+                            PrimitiveType::U8
+                                | PrimitiveType::U16
+                                | PrimitiveType::U32
+                                | PrimitiveType::U64
+                                | PrimitiveType::U128
+                        )
+                    ) || matches!(resolved, ResolvedType::Struct { ref name, .. } if name == "u128")
+                };
+                let int_pattern = |value: u128| {
+                    if scrutinee_is_unsigned {
+                        TirLiteralPattern::U128(value)
+                    } else {
+                        TirLiteralPattern::I128(value as i128)
+                    }
+                };
                 let tir_lit = match lit {
                     ast::Literal::Number(repr) => {
-                        let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
-                        let is_unsigned = matches!(
-                            resolved,
-                            ResolvedType::Primitive(
-                                PrimitiveType::U8
-                                    | PrimitiveType::U16
-                                    | PrimitiveType::U32
-                                    | PrimitiveType::U64
-                                    | PrimitiveType::U128
-                            )
-                        ) || matches!(
-                            resolved,
-                            ResolvedType::Struct { ref name, .. } if name == "u128"
-                        );
-                        if is_unsigned {
-                            TirLiteralPattern::U128(
-                                super::util::parse_u128_literal(repr).unwrap_or(0),
-                            )
+                        if scrutinee_is_unsigned {
+                            int_pattern(super::util::parse_u128_literal(repr).unwrap_or(0))
                         } else {
                             TirLiteralPattern::I128(
                                 super::util::parse_i128_literal(repr).unwrap_or(0),
                             )
                         }
+                    }
+                    ast::Literal::Byte(raw) => {
+                        int_pattern(u128::from(super::util::unescape_byte(raw).unwrap_or(0)))
                     }
                     ast::Literal::Bool(b) => TirLiteralPattern::Bool(*b),
                     ast::Literal::Char(raw) => {
@@ -10192,6 +10215,9 @@ fn pattern_endpoint_to_i128(endpoint: &ast::Pattern) -> i128 {
             let ch = super::util::unescape_char(s).unwrap_or('\0');
             i128::from(ch as u32)
         }
+        ast::Pattern::Literal(ast::Literal::Byte(s)) => {
+            i128::from(super::util::unescape_byte(s).unwrap_or(0))
+        }
         _ => panic!(
             "pattern_endpoint_to_i128: non-literal range endpoint {endpoint:?} \
              (annotate should have diagnosed)"
@@ -10229,6 +10255,9 @@ fn ast_literal_to_pattern(lit: &ast::Literal) -> crate::tir::TirLiteralPattern {
         ast::Literal::String(s) => TirLiteralPattern::String(s.clone()),
         ast::Literal::Char(s) => {
             TirLiteralPattern::Char(super::util::unescape_char(s).unwrap_or('\0'))
+        }
+        ast::Literal::Byte(_) => {
+            panic!("ast_literal_to_pattern: byte literal must be reified scrutinee-aware")
         }
         ast::Literal::Bool(b) => TirLiteralPattern::Bool(*b),
         ast::Literal::Null => TirLiteralPattern::Null,
