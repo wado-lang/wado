@@ -211,6 +211,14 @@ describe('Tokenization Tests', () => {
                 'Should have string scopes'
             );
         });
+
+        it('should tokenize byte literals', () => {
+            const scopes = getScopes("b'A'");
+            assert.ok(
+                scopes.some(s => s.some(scope => scope.includes('string.quoted.single.byte'))),
+                `Should have byte-literal scope, got: ${JSON.stringify(scopes)}`
+            );
+        });
     });
 
     describe('Declaration keywords scope mapping', () => {
