@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784467652715,
+  "lastUpdate": 1784505134701,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -42297,6 +42297,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7386643fd4399d9effd98e90ebdf93b244bee4b6"
         },
         "date": 1784467652332,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8257,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16526,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271337,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "761b84e7c30ece755a7c53dc277e4d47c45494ee",
+          "message": "Merge pull request #1641 from wado-lang/claude/newtype-wep-remaining-tasks-oauwef\n\nfeat(compiler): collect() can target a newtype over List (#1623)",
+          "timestamp": "2026-07-20T08:42:33+09:00",
+          "tree_id": "0a1aa321e2f596ba13598cc695b827c37bdb11a5",
+          "url": "https://github.com/wado-lang/wado/commit/761b84e7c30ece755a7c53dc277e4d47c45494ee"
+        },
+        "date": 1784505134276,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
