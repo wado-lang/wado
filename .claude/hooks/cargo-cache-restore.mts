@@ -6,6 +6,7 @@
 // and contains only registry/index + registry/cache (never credentials).
 //
 // Auth uses a read-only service-account key provided via the environment:
+//   WADO_CACHE_SA_KEY_B64   base64 of the JSON key (for stores that reject raw JSON), or
 //   WADO_CACHE_SA_KEY       inline service-account JSON, or
 //   WADO_CACHE_SA_KEY_FILE  path to the JSON key file
 // Optional overrides: WADO_CACHE_BUCKET, WADO_CACHE_OBJECT.
@@ -31,8 +32,10 @@ const log = (m: string): void => console.error(`[cargo-cache] ${m}`);
 
 function loadKey(): ServiceAccountKey | null {
   const file = process.env.WADO_CACHE_SA_KEY_FILE;
+  const b64 = process.env.WADO_CACHE_SA_KEY_B64;
   const inline = process.env.WADO_CACHE_SA_KEY;
   if (file) return JSON.parse(readFileSync(file, "utf8"));
+  if (b64) return JSON.parse(Buffer.from(b64, "base64").toString("utf8"));
   if (inline) return JSON.parse(inline);
   return null;
 }
