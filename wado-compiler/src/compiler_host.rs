@@ -194,10 +194,6 @@ pub enum Code {
 }
 
 impl Code {
-    /// Whether this code is an unused / dead-code lint — the diagnostic marks
-    /// code that is never reached, so a client may fade the range. Kept next to
-    /// the enum as the single source of truth; `wado-lsp` maps this to the LSP
-    /// `DiagnosticTag::Unnecessary` rather than re-listing the codes itself.
     pub fn is_unused_lint(&self) -> bool {
         matches!(
             self,
