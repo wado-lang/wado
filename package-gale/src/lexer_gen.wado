@@ -20,9 +20,6 @@ use {
 use { literal_const_name, gen_visibility_comment } from "./gen_util.wado";
 use { translate_lexer_predicate, translate_lexer_action } from "./action_translate.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec, Vis, char_lit, char_range_pat } from "./wadopoet.wado";
-use { GenContext } from "./gen_context.wado";
-use { DiagnosticKind } from "./gir.wado";
-use { translate_members, is_lexer_members } from "./java2wado.wado";
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
 use { TreeMap } from "core:collections";
 
@@ -302,18 +299,17 @@ pub fn gen_lexer(
     grammar: &Grammar,
     lit_tokens: &List<LitToken>,
     atn_class: &TreeMap<String, i32>,
-    ctx: &mut GenContext,
+    members: &MemberDecls,
+    has_members: bool,
 ) {
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(&grammar.options, &empty_opts);
     let keywords = collect_keyword_rules(&grammar.lexer_rules, &grammar.options);
     let ea = grammar.action_language matches { Wado };
-    let members = collect_lexer_members(grammar, ctx);
-    let has_members = members_present(&members);
     let act_rule_names = executed_action_rule_names(grammar);
     let has_actions = !act_rule_names.is_empty();
     let uses_modes = has_modes(&grammar.mode_names);
-    gen_lexer_struct(w, &members, has_actions, uses_modes);
+    gen_lexer_struct(w, members, has_actions, uses_modes);
     if has_actions {
         if uses_modes {
             gen_mode_constants(w, &grammar.mode_names);
@@ -334,38 +330,6 @@ pub fn gen_lexer(
         has_members,
     );
     gen_token_kind_name_fn(w, &grammar.lexer_rules, lit_tokens);
-}
-
-fn members_present(members: &MemberDecls) -> bool {
-    return !members.fields.is_empty() || !members.methods.is_empty();
-}
-
-fn collect_lexer_members(grammar: &Grammar, ctx: &mut GenContext) -> MemberDecls {
-    let mut fields: List<MemberField> = [];
-    let mut methods: List<String> = [];
-    if !ctx.emit_actions() || !ctx.action_language() matches { Wado } {
-        return MemberDecls { fields, methods };
-    }
-    let lang = ctx.action_language();
-    for let act of &grammar.named_actions {
-        if !is_lexer_members(act, &grammar.kind) {
-            continue;
-        }
-        match translate_members(&lang, &act.body.text, &grammar.name) {
-            Ok(m) => {
-                for let f of &m.fields {
-                    fields.push(*f);
-                }
-                for let mm of &m.methods {
-                    methods.push(*mm);
-                }
-            },
-            Err(msg) => {
-                ctx.warn(&"@lexer::members", DiagnosticKind::UnsupportedAction, msg);
-            },
-        }
-    }
-    return MemberDecls { fields, methods };
 }
 
 fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, has_actions: bool, uses_modes: bool) {
