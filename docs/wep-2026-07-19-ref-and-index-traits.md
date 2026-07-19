@@ -1,19 +1,20 @@
 # WEP: The `Ref` Marker Trait and Index-Trait Gating
 
 Defines `Ref` — the sealed marker for reference-identity types — and uses it to
-gate the reference-returning index traits (`Index` / `IndexMut`). Supersedes the
-`Reference`-bound sketch in
+gate the reference-returning index traits (`IndexRef` / `IndexMutRef`).
+Supersedes the `Reference`-bound sketch and the `Index` / `IndexMut` names in
 [Indexing Traits Design](./wep-2026-01-20-indexing-traits.md) and corrects the
 type classification implied by
 [Reference Representation](./wep-2026-06-13-reference-representation.md).
 
 ## Context
 
-`Index<I>` returns `&Self::Output` and `IndexMut<I>` returns `&mut Self::Output`.
-Handing out `&T` into a container element is only meaningful when the element
-_is_ a reference you can alias — a Wasm GC handle. For `List<i32>` there is no
-addressable cell to reference (`array.get` yields the scalar by value); for
-`List<Point>` the element is a GC struct reference that `&Point` names directly.
+`IndexRef<I>` returns `&Self::Output` and `IndexMutRef<I>` returns
+`&mut Self::Output`. Handing out `&T` into a container element is only meaningful
+when the element _is_ a reference you can alias — a Wasm GC handle. For
+`List<i32>` there is no addressable cell to reference (`array.get` yields the
+scalar by value); for `List<Point>` the element is a GC struct reference that
+`&Point` names directly.
 
 So the index traits need a predicate: _which `T` can back a real `&T` element
 reference?_ The old [Indexing Traits](./wep-2026-01-20-indexing-traits.md) WEP
@@ -27,7 +28,7 @@ axis. This WEP separates them and names the right one `Ref`.
 These are not the same question, and earlier docs treated them as one:
 
 1. Reference identity — is a `T` value a Wasm GC reference (a heap-object
-   handle), so `&T` aliases the very same object? This is what `Index` needs.
+   handle), so `&T` aliases the very same object? This is what `IndexRef` needs.
 2. In-place mutability — can a write _through_ `&mut T` land on the existing
    object (`r.f = v`, `r[i] = v`), versus needing to replace the whole value
    (`*r = v`)? This is [Reference Representation](./wep-2026-06-13-reference-representation.md)'s
@@ -73,6 +74,11 @@ they have reference identity even though they are boxed for `&mut`. The `&mut`
 write-back soundness for those is a _separate_ gate (see below), not a reason to
 exclude them from `Ref`.
 
+Note `Ref` is _reference identity_, unrelated to whether a value _holds_ a
+reference: a `struct` with `&T` fields is `Ref` because the struct itself is a GC
+object, and a scalar `i32` is not `Ref` even though `&i32` (which is `Ref`) can
+point at one.
+
 ### Sealed, prelude-declared, compiler-synthesized
 
 `Ref` is a marker trait declared in `core:prelude/traits`, anchored by
@@ -93,7 +99,8 @@ generic resources, `unit`, and `never`.
 
 ## Decision: the index traits
 
-Four traits, factored by _value vs reference_ and _read vs write_:
+Four traits, named by what indexing yields — `Value`, `Ref`, `MutRef`, or a
+write (`Assign`) — so the surface is symmetric and self-describing:
 
 ```wado
 // Value-semantics core — every indexable container. No `Ref` bound: reads copy
@@ -104,22 +111,28 @@ internal trait IndexAssign<I> { type Input;  fn index_assign(&mut self, i: I, v:
 // Reference indexing — `Output` must have reference identity. The `Ref` bound
 // lives on the associated type, so returning `&Output` is only well-typed when
 // the element is actually a reference.
-internal trait Index<I>    { type Output: Ref; fn index(&self, i: I) -> &Self::Output; }
-internal trait IndexMut<I> { type Output: Ref; fn index_mut(&mut self, i: I) -> &mut Self::Output; }
+internal trait IndexRef<I>    { type Output: Ref; fn index_ref(&self, i: I) -> &Self::Output; }
+internal trait IndexMutRef<I> { type Output: Ref; fn index_mut_ref(&mut self, i: I) -> &mut Self::Output; }
 ```
+
+`IndexRef` / `IndexMutRef` rename Rust's `Index` / `IndexMut`: the `Value` /
+`Ref` / `MutRef` suffixes read off the return shape, matching `IndexValue` /
+`IndexAssign` (Wado already diverges from Rust's two-trait `Index` model, so
+in-Wado symmetry wins over Rust familiarity). Methods follow the same rule:
+`index_value` / `index_ref` / `index_mut_ref` / `index_assign`.
 
 Anchoring `Ref` on `type Output` (rather than as a `where T: Ref` on each impl)
 makes "you may return `&Output` only when `Output` is a reference" a property of
-the trait itself: `impl Index<i32> for List<i32>` fails to type-check because
+the trait itself: `impl IndexRef<i32> for List<i32>` fails to type-check because
 `i32: Ref` does not hold, with no per-container special-casing.
 
 `List<T>`:
 
 ```wado
-impl IndexValue<i32>  for List<T> { type Output = T; /* array.get */ }        // all T
-impl IndexAssign<i32> for List<T> { type Input  = T; /* array.set */ }        // all T
-impl<T: Ref> Index<i32>    for List<T> { type Output = T; /* element ref */ } // T: Ref
-impl<T: Ref> IndexMut<i32> for List<T> { type Output = T; /* element ref */ } // T: Ref
+impl IndexValue<i32>  for List<T> { type Output = T; /* array.get */ }           // all T
+impl IndexAssign<i32> for List<T> { type Input  = T; /* array.set */ }           // all T
+impl<T: Ref> IndexRef<i32>    for List<T> { type Output = T; /* element ref */ } // T: Ref
+impl<T: Ref> IndexMutRef<i32> for List<T> { type Output = T; /* element ref */ } // T: Ref
 ```
 
 ### Resolution
@@ -129,32 +142,32 @@ The compiler desugars `container[i]` by which traits resolve:
 - `let x = a[i]` (value read) → `IndexValue::index_value` (a copy — value
   semantics). `List` always has this, so scalar-element reads are unaffected.
 - `a[i] = v` → `IndexAssign::index_assign`.
-- `&a[i]` → `Index::index`. If `Output` is not `Ref` (e.g. `&nums[i]` on
+- `&a[i]` → `IndexRef::index_ref`. If `Output` is not `Ref` (e.g. `&nums[i]` on
   `List<i32>`) this is a type error: a value-typed element has no reference
   identity to borrow. Diagnostic names the fix (bind by value: `let x = nums[i]`).
-- `a[i].m()` with `m(&self)` → `Index::index` receiver when `Output: Ref`, else
-  `IndexValue::index_value` on a temporary copy.
-- `&mut a[i]` / `a[i].m()` with `m(&mut self)` → `IndexMut::index_mut`, subject
-  to the write-back gate below.
+- `a[i].m()` with `m(&self)` → `IndexRef::index_ref` receiver when `Output: Ref`,
+  else `IndexValue::index_value` on a temporary copy.
+- `&mut a[i]` / `a[i].m()` with `m(&mut self)` → `IndexMutRef::index_mut_ref`,
+  subject to the write-back gate below.
 
-### The `IndexMut` write-back gate
+### The `IndexMutRef` write-back gate
 
 Because `Ref` includes the replace-on-assign GC types (`variant`, `fn`),
-`IndexMut` is _offered_ for them, but a `&mut variant` / `&mut fn` into an array
-slot cannot support `*r = v` replacement — there is no stable box cell for the
-element. This is precisely
+`IndexMutRef` is _offered_ for them, but a `&mut variant` / `&mut fn` into an
+array slot cannot support `*r = v` replacement — there is no stable box cell for
+the element. This is precisely
 [Reference Representation](./wep-2026-06-13-reference-representation.md)'s domain.
 
 Normative requirement: the reference-representation forbid / carve-out is
 evaluated on the `container[i]` **place**, so `&mut a[i]` and `a[i].m()`
 (`&mut self`) are rejected — or lowered via the non-escaping temp + write-back
 carve-out — identically for replace-on-assign elements, whether the element ref
-comes from the built-in `List` intrinsic or an `IndexMut` impl. `Ref` is the
+comes from the built-in `List` intrinsic or an `IndexMutRef` impl. `Ref` is the
 _necessary_ gate (it excludes scalars, `enum`, `flags`, `resource`);
 reference-representation is the _additional_ gate for `&mut` write-back
 soundness.
 
-Statically refusing to even _offer_ `IndexMut` for replace-on-assign elements
+Statically refusing to even _offer_ `IndexMutRef` for replace-on-assign elements
 would need a second sealed marker (in-place-mutability, the boxing-set
 complement). That is deferred: the place-level reference-representation check
 already makes the design sound, so a second marker is not yet warranted.
@@ -164,7 +177,7 @@ already makes the design sound, so a second marker is not yet warranted.
 - One user-facing marker, `Ref`, with a crisp definition (reference identity =
   GC reference) that matches the backend representation exactly and resolves the
   two long-standing ambiguities: `resource ∉ Ref`, `&T ∈ Ref`.
-- `Index` / `IndexMut` enforce element referenceability through `type Output:
+- `IndexRef` / `IndexMutRef` enforce element referenceability through `type Output:
   Ref`, killing the C++ `vector<bool>` fake-reference class of bug by
   construction rather than by convention.
 - No proxy objects, no fake `&i32` into scalar arrays; `IndexValue` /
@@ -178,11 +191,14 @@ already makes the design sound, so a second marker is not yet warranted.
       prelude, sealed alongside `Reflect`.
 - [ ] `Ref` eligibility synthesis (reference-identity predicate), so `T: Ref`
       resolves; correct `resource ∉ Ref`, `&T ∈ Ref`, `variant`/`fn` ∈ `Ref`.
-- [ ] `type Output: Ref` bound on `Index` / `IndexMut`.
-- [ ] `impl<T: Ref> Index / IndexMut for List<T>`, and route `&a[i]` /
+- [ ] Rename the prelude `Index` / `IndexMut` traits to `IndexRef` /
+      `IndexMutRef` (methods `index_ref` / `index_mut_ref`) and update the
+      elaborator's index-desugaring lookups.
+- [ ] `type Output: Ref` bound on `IndexRef` / `IndexMutRef`.
+- [ ] `impl<T: Ref> IndexRef / IndexMutRef for List<T>`, and route `&a[i]` /
       `a[i].m()` through them (or keep the `List` intrinsic and use `Ref` only as
       the diagnostic gate — decide during implementation).
-- [ ] Place-level reference-representation check on `IndexMut` receivers.
+- [ ] Place-level reference-representation check on `IndexMutRef` receivers.
 
 ## References
 

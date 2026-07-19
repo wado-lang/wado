@@ -178,9 +178,10 @@ This keeps the semantic layer clean while allowing low-level optimization.
 
 ### The `Ref` marker trait
 
-The bound gating `Index` / `IndexMut` is `Ref` — the sealed marker for
-_reference identity_ (a value that is a Wasm GC reference). It is not the
-in-place-vs-replace axis of
+The reference-returning traits `Index` / `IndexMut` are renamed `IndexRef` /
+`IndexMutRef` (see the superseding WEP below) and gated by `Ref` — the sealed
+marker for _reference identity_ (a value that is a Wasm GC reference). It is not
+the in-place-vs-replace axis of
 [Reference Representation](./wep-2026-06-13-reference-representation.md): a
 `variant` is `Ref` (a live GC handle you can read) yet replace-on-assign. `Ref`
 excludes `resource` (an `i32` handle, not a GC reference) and includes `&T`.
