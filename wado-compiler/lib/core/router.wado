@@ -395,12 +395,12 @@ impl<H> Router<H> {
     /// makes returning a ref derived from `&self` and `path` legal here.
     fn match_dynamic(&self, method: &Method, path: &String) -> Option<&RouteMatch<H>> with stores[self, path] {
         let plen = path.len();
-        let mut pos = if plen > 0 && path.get_byte_unchecked(0) == '/' as u8 { 1 } else { 0 };
+        let mut pos = if plen > 0 && path.get_byte_unchecked(0) == b'/' { 1 } else { 0 };
         let mut state: i32 = 0;
         let mut ranges: List<i32> = [];
         while pos < plen {
             let mut end = pos;
-            while end < plen && path.get_byte_unchecked(end) != '/' as u8 {
+            while end < plen && path.get_byte_unchecked(end) != b'/' {
                 end += 1;
             }
             if end == pos {
@@ -511,11 +511,11 @@ impl<H> Router<H> {
 
     fn allowed_methods_dynamic(&self, path: &String) -> List<Method> {
         let plen = path.len();
-        let mut pos = if plen > 0 && path.get_byte_unchecked(0) == '/' as u8 { 1 } else { 0 };
+        let mut pos = if plen > 0 && path.get_byte_unchecked(0) == b'/' { 1 } else { 0 };
         let mut state: i32 = 0;
         while pos < plen {
             let mut end = pos;
-            while end < plen && path.get_byte_unchecked(end) != '/' as u8 {
+            while end < plen && path.get_byte_unchecked(end) != b'/' {
                 end += 1;
             }
             if end == pos {
@@ -694,7 +694,7 @@ fn strip_query(s: String) -> String {
     let len = s.len();
     for let mut i = 0; i < len; i += 1 {
         let b = s.get_byte_unchecked(i);
-        if b == '?' as u8 || b == '#' as u8 {
+        if b == b'?' || b == b'#' {
             return s.substr_bytes(0, i);
         }
     }
@@ -705,10 +705,10 @@ fn strip_query(s: String) -> String {
 /// malformed input.
 fn parse_pattern(path: &String) -> List<Segment> {
     let bytes = path.len();
-    if bytes == 0 || path.get_byte_unchecked(0) != '/' as u8 {
+    if bytes == 0 || path.get_byte_unchecked(0) != b'/' {
         panic("route pattern must start with '/'");
     }
-    if bytes > 1 && path.get_byte_unchecked(bytes - 1) == '/' as u8 {
+    if bytes > 1 && path.get_byte_unchecked(bytes - 1) == b'/' {
         panic("route pattern must not contain empty segments (no '//' or trailing '/')");
     }
     let mut out: List<Segment> = [];
@@ -716,7 +716,7 @@ fn parse_pattern(path: &String) -> List<Segment> {
     let mut i = 1;
     while i < bytes {
         let mut j = i;
-        while j < bytes && path.get_byte_unchecked(j) != '/' as u8 {
+        while j < bytes && path.get_byte_unchecked(j) != b'/' {
             j += 1;
         }
         if wildcard_seen {

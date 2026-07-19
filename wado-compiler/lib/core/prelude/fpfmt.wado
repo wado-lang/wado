@@ -572,7 +572,7 @@ fn write_digits_at(buf: &mut String, offset: i32, val: u64, nd: i32) {
     let mut v = val;
     let mut idx = offset + nd - 1;
     while idx >= offset {
-        buf.set_byte_unchecked(idx, '0' as u8 + (v % 10) as u8);
+        buf.set_byte_unchecked(idx, b'0' + (v % 10) as u8);
         v = v / 10;
         idx = idx - 1;
     }
@@ -580,7 +580,7 @@ fn write_digits_at(buf: &mut String, offset: i32, val: u64, nd: i32) {
 
 // Pre-fill n characters of '0' into buf using array.fill (fast bulk operation)
 fn fill_zeros(buf: &mut String, n: i32) {
-    buf.append_byte_filled('0' as u8, n);
+    buf.append_byte_filled(b'0', n);
 }
 
 // Write decimal representation directly into buf (appends to existing content).
@@ -608,7 +608,7 @@ pub fn write_decimal(buf: &mut String, d: u64, p: i32, nd: i32) {
         // Shift fractional part right by 1 and insert '.'
         let raw = buf.internal_raw_bytes_mut();
         builtin::array_copy(raw, start + decimal_pos + 1, raw, start + decimal_pos, nd - decimal_pos);
-        buf.set_byte_unchecked(start + decimal_pos, '.' as u8);
+        buf.set_byte_unchecked(start + decimal_pos, b'.');
     }
 }
 
@@ -638,7 +638,7 @@ pub fn write_exp(buf: &mut String, d: u64, p: i32, nd: i32, upper: bool) {
         write_digits_at(buf, start, d, nd);
         let raw = buf.internal_raw_bytes_mut();
         builtin::array_copy(raw, start + 2, raw, start + 1, nd - 1);
-        buf.set_byte_unchecked(start + 1, '.' as u8);
+        buf.set_byte_unchecked(start + 1, b'.');
     } else {
         let start = buf.len();
         fill_zeros(buf, 1);
@@ -733,7 +733,7 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
             write_digits_at(buf, start, trim_d, output_nd);
             let raw = buf.internal_raw_bytes_mut();
             builtin::array_copy(raw, start + decimal_pos + 1, raw, start + decimal_pos, output_nd - decimal_pos);
-            buf.set_byte_unchecked(start + decimal_pos, '.' as u8);
+            buf.set_byte_unchecked(start + decimal_pos, b'.');
             return;
         }
         let trailing = precision - after_decimal;
@@ -742,7 +742,7 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
         write_digits_at(buf, start, d, nd);
         let raw = buf.internal_raw_bytes_mut();
         builtin::array_copy(raw, start + decimal_pos + 1, raw, start + decimal_pos, nd - decimal_pos);
-        buf.set_byte_unchecked(start + decimal_pos, '.' as u8);
+        buf.set_byte_unchecked(start + decimal_pos, b'.');
         fill_zeros(buf, trailing);
     }
 }
@@ -778,7 +778,7 @@ pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32,
         write_digits_at(buf, start, trim_d, digit_count);
         let raw = buf.internal_raw_bytes_mut();
         builtin::array_copy(raw, start + 2, raw, start + 1, digit_count - 1);
-        buf.set_byte_unchecked(start + 1, '.' as u8);
+        buf.set_byte_unchecked(start + 1, b'.');
         fill_zeros(buf, trailing);
     } else {
         let start = buf.len();
@@ -925,10 +925,10 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
     let mut sign = 1.0;
     let mut i = start;
     let first = s.get_byte_unchecked(start);
-    if first == '-' as u8 {
+    if first == b'-' {
         sign = -1.0;
         i = start + 1;
-    } else if first == '+' as u8 {
+    } else if first == b'+' {
         i = start + 1;
     }
 
@@ -941,12 +941,12 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
     let c0 = s.get_byte_unchecked(i);
 
     // "inf" or "infinity"
-    if (c0 == 'i' as u8 || c0 == 'I' as u8) && remaining >= 3 {
+    if (c0 == b'i' || c0 == b'I') && remaining >= 3 {
         builtin::cold_path();
 
         let c1 = s.get_byte_unchecked(i + 1);
         let c2 = s.get_byte_unchecked(i + 2);
-        if (c1 == 'n' as u8 || c1 == 'N' as u8) && (c2 == 'f' as u8 || c2 == 'F' as u8) {
+        if (c1 == b'n' || c1 == b'N') && (c2 == b'f' || c2 == b'F') {
             if remaining == 3 {
                 return Option::Some(builtin::f64_copysign(f64::INFINITY, sign));
             }
@@ -956,11 +956,11 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
                 let c5 = s.get_byte_unchecked(i + 5);
                 let c6 = s.get_byte_unchecked(i + 6);
                 let c7 = s.get_byte_unchecked(i + 7);
-                if (c3 == 'i' as u8 || c3 == 'I' as u8)
-                    && (c4 == 'n' as u8 || c4 == 'N' as u8)
-                    && (c5 == 'i' as u8 || c5 == 'I' as u8)
-                    && (c6 == 't' as u8 || c6 == 'T' as u8)
-                    && (c7 == 'y' as u8 || c7 == 'Y' as u8) {
+                if (c3 == b'i' || c3 == b'I')
+                    && (c4 == b'n' || c4 == b'N')
+                    && (c5 == b'i' || c5 == b'I')
+                    && (c6 == b't' || c6 == b'T')
+                    && (c7 == b'y' || c7 == b'Y') {
                     return Option::Some(builtin::f64_copysign(f64::INFINITY, sign));
                 }
             }
@@ -969,12 +969,12 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
     }
 
     // "nan" (sign is ignored for NaN)
-    if (c0 == 'n' as u8 || c0 == 'N' as u8) && remaining == 3 {
+    if (c0 == b'n' || c0 == b'N') && remaining == 3 {
         builtin::cold_path();
 
         let c1 = s.get_byte_unchecked(i + 1);
         let c2 = s.get_byte_unchecked(i + 2);
-        if (c1 == 'a' as u8 || c1 == 'A' as u8) && (c2 == 'n' as u8 || c2 == 'N' as u8) {
+        if (c1 == b'a' || c1 == b'A') && (c2 == b'n' || c2 == b'N') {
             return Option::Some(f64::NAN);
         }
         return null;
@@ -987,20 +987,20 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
     let digit_start = i;
 
     // Read integer digits
-    for ; i < len && s.get_byte_unchecked(i) >= '0' as u8 && s.get_byte_unchecked(i) <= '9' as u8; i += 1 {
-        d = d * 10 + (s.get_byte_unchecked(i) - '0' as u8) as u64;
+    for ; i < len && s.get_byte_unchecked(i) >= b'0' && s.get_byte_unchecked(i) <= b'9'; i += 1 {
+        d = d * 10 + (s.get_byte_unchecked(i) - b'0') as u64;
     }
     let int_digits = i - digit_start;
 
     // Read fractional digits
-    if i < len && s.get_byte_unchecked(i) == '.' as u8 {
+    if i < len && s.get_byte_unchecked(i) == b'.' {
         if int_digits == 0 {
             return null;  // leading dot not allowed
         }
         i += 1;
         let frac_start = i;
-        for ; i < len && s.get_byte_unchecked(i) >= '0' as u8 && s.get_byte_unchecked(i) <= '9' as u8; i += 1 {
-            d = d * 10 + (s.get_byte_unchecked(i) - '0' as u8) as u64;
+        for ; i < len && s.get_byte_unchecked(i) >= b'0' && s.get_byte_unchecked(i) <= b'9'; i += 1 {
+            d = d * 10 + (s.get_byte_unchecked(i) - b'0') as u64;
             frac += 1;
         }
         if i == frac_start {
@@ -1015,14 +1015,14 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
 
     // Read exponent
     let mut p = 0;
-    if i < len && (s.get_byte_unchecked(i) == 'e' as u8 || s.get_byte_unchecked(i) == 'E' as u8) {
+    if i < len && (s.get_byte_unchecked(i) == b'e' || s.get_byte_unchecked(i) == b'E') {
         i += 1;
         let mut exp_sign = 1;
         if i < len {
-            if s.get_byte_unchecked(i) == '-' as u8 {
+            if s.get_byte_unchecked(i) == b'-' {
                 exp_sign = -1;
                 i += 1;
-            } else if s.get_byte_unchecked(i) == '+' as u8 {
+            } else if s.get_byte_unchecked(i) == b'+' {
                 i += 1;
             }
         }
@@ -1030,8 +1030,8 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
         if i >= len || len - i > 3 {
             return null;
         }
-        for ; i < len && s.get_byte_unchecked(i) >= '0' as u8 && s.get_byte_unchecked(i) <= '9' as u8; i += 1 {
-            p = p * 10 + (s.get_byte_unchecked(i) - '0' as u8) as i32;
+        for ; i < len && s.get_byte_unchecked(i) >= b'0' && s.get_byte_unchecked(i) <= b'9'; i += 1 {
+            p = p * 10 + (s.get_byte_unchecked(i) - b'0') as i32;
         }
         if i == exp_start {
             return null;

@@ -245,20 +245,20 @@ fn format_zoned(zdt: &ZonedDateTime, f: &mut Formatter, default_digits: i32) {
 /// name) traps with a clear message.
 fn parse_fixed_offset(zone: &String) -> i64 {
     let n = zone.len();
-    if n == 1 && (zone.get_byte_unchecked(0) == 'Z' as u8 || zone.get_byte_unchecked(0) == 'z' as u8) {
+    if n == 1 && (zone.get_byte_unchecked(0) == b'Z' || zone.get_byte_unchecked(0) == b'z') {
         return 0;
     }
     if n == 3
-        && zone.get_byte_unchecked(0) == 'U' as u8
-        && zone.get_byte_unchecked(1) == 'T' as u8
-        && zone.get_byte_unchecked(2) == 'C' as u8 {
+        && zone.get_byte_unchecked(0) == b'U'
+        && zone.get_byte_unchecked(1) == b'T'
+        && zone.get_byte_unchecked(2) == b'C' {
         return 0;
     }
     let well_formed = n == 6
-        && (zone.get_byte_unchecked(0) == '+' as u8 || zone.get_byte_unchecked(0) == '-' as u8)
+        && (zone.get_byte_unchecked(0) == b'+' || zone.get_byte_unchecked(0) == b'-')
         && is_ascii_digit(zone.get_byte_unchecked(1))
         && is_ascii_digit(zone.get_byte_unchecked(2))
-        && zone.get_byte_unchecked(3) == ':' as u8
+        && zone.get_byte_unchecked(3) == b':'
         && is_ascii_digit(zone.get_byte_unchecked(4))
         && is_ascii_digit(zone.get_byte_unchecked(5));
     if !well_formed {
@@ -266,10 +266,10 @@ fn parse_fixed_offset(zone: &String) -> i64 {
             `core:temporal: cannot Display a ZonedDateTime whose time zone "${zone}" is not a fixed UTC offset; only "Z", "UTC", and ±HH:MM are supported (IANA zone offset resolution is future work)`,
         );
     }
-    let hours = (zone.get_byte_unchecked(1) - '0' as u8) as i64 * 10 + (zone.get_byte_unchecked(2) - '0' as u8) as i64;
-    let minutes = (zone.get_byte_unchecked(4) - '0' as u8) as i64 * 10 + (zone.get_byte_unchecked(5) - '0' as u8) as i64;
+    let hours = (zone.get_byte_unchecked(1) - b'0') as i64 * 10 + (zone.get_byte_unchecked(2) - b'0') as i64;
+    let minutes = (zone.get_byte_unchecked(4) - b'0') as i64 * 10 + (zone.get_byte_unchecked(5) - b'0') as i64;
     let magnitude = hours * 3600 + minutes * 60;
-    if zone.get_byte_unchecked(0) == '-' as u8 {
+    if zone.get_byte_unchecked(0) == b'-' {
         return -magnitude;
     }
     return magnitude;
@@ -387,8 +387,8 @@ impl ZonedDateTime {
         let mut year_sign: i64 = 1;
         if i < len {
             let c = text.get_byte_unchecked(i);
-            if c == '+' as u8 || c == '-' as u8 {
-                if c == '-' as u8 {
+            if c == b'+' || c == b'-' {
+                if c == b'-' {
                     year_sign = -1;
                 }
                 i += 1;
@@ -404,18 +404,18 @@ impl ZonedDateTime {
         let mut year: i64 = 0;
         let mut yi = year_start;
         while yi < i {
-            year = year * 10 + (text.get_byte_unchecked(yi) - '0' as u8) as i64;
+            year = year * 10 + (text.get_byte_unchecked(yi) - b'0') as i64;
             yi += 1;
         }
         year = year * year_sign;
 
-        i = expect_byte(&text, i, '-' as u8)?;
+        i = expect_byte(&text, i, b'-')?;
         let month = read_two_digits(&text, i)?;
         if month < 1 || month > 12 {
             return Result::Err(DeserializeError::invalid_value("month out of range", i as i64));
         }
         i += 2;
-        i = expect_byte(&text, i, '-' as u8)?;
+        i = expect_byte(&text, i, b'-')?;
         let day = read_two_digits(&text, i)?;
         if day < 1 || day > days_in_month_value(year, month) {
             return Result::Err(DeserializeError::invalid_value("day out of range", i as i64));
@@ -427,7 +427,7 @@ impl ZonedDateTime {
             return Result::Err(DeserializeError::eof(i as i64));
         }
         let sep = text.get_byte_unchecked(i);
-        if sep != 'T' as u8 && sep != 't' as u8 && sep != ' ' as u8 {
+        if sep != b'T' && sep != b't' && sep != b' ' {
             return Result::Err(DeserializeError::malformed("expected a date/time separator", i as i64));
         }
         i += 1;
@@ -437,13 +437,13 @@ impl ZonedDateTime {
             return Result::Err(DeserializeError::invalid_value("hour out of range", i as i64));
         }
         i += 2;
-        i = expect_byte(&text, i, ':' as u8)?;
+        i = expect_byte(&text, i, b':')?;
         let minute = read_two_digits(&text, i)?;
         if minute > 59 {
             return Result::Err(DeserializeError::invalid_value("minute out of range", i as i64));
         }
         i += 2;
-        i = expect_byte(&text, i, ':' as u8)?;
+        i = expect_byte(&text, i, b':')?;
         let second = read_two_digits(&text, i)?;
         if second > 59 {
             return Result::Err(DeserializeError::invalid_value("second out of range", i as i64));
@@ -452,13 +452,13 @@ impl ZonedDateTime {
 
         // Optional fractional seconds, truncated to nanosecond precision.
         let mut nanoseconds: i64 = 0;
-        if i < len && text.get_byte_unchecked(i) == '.' as u8 {
+        if i < len && text.get_byte_unchecked(i) == b'.' {
             i += 1;
             let frac_start = i;
             let mut scale: i64 = 100_000_000;
             while i < len && is_ascii_digit(text.get_byte_unchecked(i)) {
                 if scale >= 1 {
-                    nanoseconds = nanoseconds + (text.get_byte_unchecked(i) - '0' as u8) as i64 * scale;
+                    nanoseconds = nanoseconds + (text.get_byte_unchecked(i) - b'0') as i64 * scale;
                     scale = scale / 10;
                 }
                 i += 1;
@@ -655,8 +655,8 @@ fn read_two_digits(text: &String, i: i32) -> Result<i64, DeserializeError> {
         || !is_ascii_digit(text.get_byte_unchecked(i + 1)) {
         return Result::Err(DeserializeError::malformed("expected two digits", i as i64));
     }
-    let tens = (text.get_byte_unchecked(i) - '0' as u8) as i64;
-    let ones = (text.get_byte_unchecked(i + 1) - '0' as u8) as i64;
+    let tens = (text.get_byte_unchecked(i) - b'0') as i64;
+    let ones = (text.get_byte_unchecked(i + 1) - b'0') as i64;
     return Result::Ok(tens * 10 + ones);
 }
 
@@ -667,28 +667,28 @@ fn parse_zone_designator(text: &String, start: i32, end: i32) -> Result<i64, Des
     let span = end - start;
     if span == 1 {
         let c = text.get_byte_unchecked(start);
-        if c == 'Z' as u8 || c == 'z' as u8 {
+        if c == b'Z' || c == b'z' {
             return Result::Ok(0);
         }
         return Result::Err(DeserializeError::malformed("expected 'Z' or a ±hh:mm offset", start as i64));
     }
     let well_formed = span == 6
-        && (text.get_byte_unchecked(start) == '+' as u8 || text.get_byte_unchecked(start) == '-' as u8)
+        && (text.get_byte_unchecked(start) == b'+' || text.get_byte_unchecked(start) == b'-')
         && is_ascii_digit(text.get_byte_unchecked(start + 1))
         && is_ascii_digit(text.get_byte_unchecked(start + 2))
-        && text.get_byte_unchecked(start + 3) == ':' as u8
+        && text.get_byte_unchecked(start + 3) == b':'
         && is_ascii_digit(text.get_byte_unchecked(start + 4))
         && is_ascii_digit(text.get_byte_unchecked(start + 5));
     if !well_formed {
         return Result::Err(DeserializeError::malformed("expected 'Z' or a ±hh:mm offset", start as i64));
     }
-    let hours = (text.get_byte_unchecked(start + 1) - '0' as u8) as i64 * 10 + (text.get_byte_unchecked(start + 2) - '0' as u8) as i64;
-    let minutes = (text.get_byte_unchecked(start + 4) - '0' as u8) as i64 * 10 + (text.get_byte_unchecked(start + 5) - '0' as u8) as i64;
+    let hours = (text.get_byte_unchecked(start + 1) - b'0') as i64 * 10 + (text.get_byte_unchecked(start + 2) - b'0') as i64;
+    let minutes = (text.get_byte_unchecked(start + 4) - b'0') as i64 * 10 + (text.get_byte_unchecked(start + 5) - b'0') as i64;
     if hours > 23 || minutes > 59 {
         return Result::Err(DeserializeError::invalid_value("time-zone offset out of range", start as i64));
     }
     let magnitude = hours * 3600 + minutes * 60;
-    if text.get_byte_unchecked(start) == '-' as u8 {
+    if text.get_byte_unchecked(start) == b'-' {
         return Result::Ok(-magnitude);
     }
     return Result::Ok(magnitude);

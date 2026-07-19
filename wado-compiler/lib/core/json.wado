@@ -1396,7 +1396,7 @@ impl JsonDeserializer {
                 // digit appended. Append it with an overflow check — no String
                 // round-trip (the token is `[pos - int_digits, pos)`, so the
                 // final digit is the byte just before `pos`).
-                let last = (self.input.get_unchecked(self.pos - 1) - '0' as u8) as u64;
+                let last = (self.input.get_unchecked(self.pos - 1) - b'0') as u64;
                 if n.digits > (u64::MAX - last) / 10 {
                     builtin::cold_path();
                     return Result::Err(DeserializeError::overflow(

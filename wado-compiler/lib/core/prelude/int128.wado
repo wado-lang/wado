@@ -318,7 +318,7 @@ impl u128 {
         if *self == 0 {
             let offset = f.prepare_int_write(false, "", 1);
             let arr = f.buf.internal_raw_bytes_mut();
-            builtin::array_set_u8(arr, offset, '0' as u8);
+            builtin::array_set_u8(arr, offset, b'0');
             return;
         }
 
@@ -370,7 +370,7 @@ impl u128 {
         let arr = f.buf.internal_raw_bytes_mut();
 
         if is_zero {
-            builtin::array_set_u8(arr, offset, '0' as u8);
+            builtin::array_set_u8(arr, offset, b'0');
         } else {
             let mut pos = offset + digit_count;
             let mut lo: u64 = self.low;

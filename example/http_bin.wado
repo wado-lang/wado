@@ -199,7 +199,7 @@ fn build_request_json(method: Method, url: Url, headers: &Headers, body: Option<
 /// Serialize `value` to pretty UTF-8 JSON bytes with a trailing newline.
 fn json_line<T: Serialize>(value: &T) -> ByteList {
     let mut b = json::to_bytes_pretty(value).unwrap();
-    b.push('\n' as u8);
+    b.push(b'\n');
     return b;
 }
 

@@ -29,22 +29,22 @@ internal fn lenient_int_preprocess(s: &String) -> Result<[String, u32], LenientP
         return Result::Err(LenientParseError::new("empty integer string"));
     }
     let first = s.get_byte_unchecked(0);
-    let is_negative = first == '-' as u8;
-    let has_sign = is_negative || first == '+' as u8;
+    let is_negative = first == b'-';
+    let has_sign = is_negative || first == b'+';
     let mut i = if has_sign { 1 } else { 0 };
     if i >= len {
         return Result::Err(LenientParseError::new("integer string has a sign but no digits"));
     }
     let mut radix: u32 = 10;
-    if s.get_byte_unchecked(i) == '0' as u8 && i + 2 <= len {
+    if s.get_byte_unchecked(i) == b'0' && i + 2 <= len {
         let marker = s.get_byte_unchecked(i + 1);
-        if marker == 'x' as u8 || marker == 'X' as u8 {
+        if marker == b'x' || marker == b'X' {
             radix = 16;
             i += 2;
-        } else if marker == 'o' as u8 || marker == 'O' as u8 {
+        } else if marker == b'o' || marker == b'O' {
             radix = 8;
             i += 2;
-        } else if marker == 'b' as u8 || marker == 'B' as u8 {
+        } else if marker == b'b' || marker == b'B' {
             radix = 2;
             i += 2;
         }
@@ -56,7 +56,7 @@ internal fn lenient_int_preprocess(s: &String) -> Result<[String, u32], LenientP
     let mut digit_count = 0;
     for let mut j = i; j < len; j += 1 {
         let b = s.get_byte_unchecked(j);
-        if b == '_' as u8 {
+        if b == b'_' {
             continue;
         }
         cleaned.push(char::from_u32_unchecked(b as u32));
@@ -99,7 +99,7 @@ internal fn lenient_float_error(e: ParseFloatError) -> LenientParseError {
 /// through unchanged, so a `_` inside it (`i_nf`) stays invalid.
 internal fn lenient_float_preprocess(s: &String) -> String {
     let len = s.len();
-    let head = if len > 0 && (s.get_byte_unchecked(0) == '+' as u8 || s.get_byte_unchecked(0) == '-' as u8) {
+    let head = if len > 0 && (s.get_byte_unchecked(0) == b'+' || s.get_byte_unchecked(0) == b'-') {
         1;
     } else {
         0;
@@ -108,14 +108,14 @@ internal fn lenient_float_preprocess(s: &String) -> String {
         return *s;
     }
     let first = s.get_byte_unchecked(head);
-    let is_numeric = first >= '0' as u8 && first <= '9' as u8 || first == '.' as u8;
+    let is_numeric = first >= b'0' && first <= b'9' || first == b'.';
     if !is_numeric {
         return *s;
     }
     let mut cleaned = String::with_capacity(len);
     for let mut j = 0; j < len; j += 1 {
         let b = s.get_byte_unchecked(j);
-        if b == '_' as u8 {
+        if b == b'_' {
             continue;
         }
         cleaned.push(char::from_u32_unchecked(b as u32));
@@ -266,8 +266,8 @@ internal fn parse_signed_prefix_range(s: &String, start: i32, end: i32) -> Resul
         return Result::Err(IntErrorKind::Empty);
     }
     let first = s.get_byte_unchecked(start);
-    let is_negative = first == '-' as u8;
-    let has_sign = is_negative || first == '+' as u8;
+    let is_negative = first == b'-';
+    let has_sign = is_negative || first == b'+';
     if has_sign && start + 1 >= end {
         return Result::Err(IntErrorKind::InvalidDigit);
     }
@@ -286,7 +286,7 @@ internal fn parse_unsigned_prefix_range(s: &String, start: i32, end: i32) -> Res
         return Result::Err(IntErrorKind::Empty);
     }
     let first = s.get_byte_unchecked(start);
-    if first == '+' as u8 {
+    if first == b'+' {
         if start + 1 >= end {
             return Result::Err(IntErrorKind::InvalidDigit);
         }
