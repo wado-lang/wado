@@ -209,9 +209,10 @@ impl<'a> Lexer<'a> {
         };
 
         let kind = match ch {
-            // Byte-string literal `b"..."` (before the identifier rule so the
-            // leading `b` is not lexed as an identifier).
+            // Byte-string literal `b"..."` and byte literal `b'x'` (before the
+            // identifier rule so the leading `b` is not lexed as an identifier).
             'b' if self.peek_second() == Some('"') => self.lex_byte_string(),
+            'b' if self.peek_second() == Some('\'') => self.lex_byte_char(),
 
             // Identifiers and keywords
             'a'..='z' | 'A'..='Z' | '_' => self.lex_ident_or_keyword(),
@@ -954,6 +955,20 @@ impl<'a> Lexer<'a> {
     /// Only scans — does not validate or interpret escape values.
     fn skip_escape(&mut self) {
         match self.peek_char() {
+            Some('x') => {
+                // \xNN — skip up to 2 hex digits. Valid in byte literals /
+                // byte strings; the elaborator rejects it in char / string
+                // literals when it decodes escapes.
+                self.advance();
+                for _ in 0..2 {
+                    match self.peek_char() {
+                        Some(c) if c.is_ascii_hexdigit() => {
+                            self.advance();
+                        }
+                        _ => break,
+                    }
+                }
+            }
             Some('u') => {
                 self.advance();
                 if self.peek_char() == Some('{') {
@@ -1219,6 +1234,22 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_char(&mut self) -> TokenKind {
+        TokenKind::CharLit(self.scan_char_raw())
+    }
+
+    /// Lex a byte literal `b'x'`. The leading `b` is still pending (dispatched
+    /// here because the next char is `'`, so it cannot be an identifier). Same
+    /// raw scan as a char; lowers to a `u8` integer literal.
+    fn lex_byte_char(&mut self) -> TokenKind {
+        self.advance(); // consume `b`
+        TokenKind::ByteCharLit(self.scan_char_raw())
+    }
+
+    /// Scan a single-quoted literal, with the opening `'` as the current char.
+    /// Returns the raw source between the quotes (escapes not interpreted).
+    /// Shared by char (`'x'`) and byte (`b'x'`) literals; byte-range and
+    /// escape validation are deferred to the elaborator.
+    fn scan_char_raw(&mut self) -> String {
         let start = self.pos;
         let start_line = self.line;
         let start_column = self.column;
@@ -1233,7 +1264,7 @@ impl<'a> Lexer<'a> {
                     kind: LexErrorKind::UnterminatedChar,
                     span: self.span_from(start, start_line, start_column),
                 });
-                return TokenKind::CharLit(String::new());
+                return String::new();
             }
             Some((_, '\'')) => {
                 // `''` — empty char. Consume the closing quote so the lexer
@@ -1243,7 +1274,7 @@ impl<'a> Lexer<'a> {
                     kind: LexErrorKind::EmptyCharLiteral,
                     span: self.span_from(start, start_line, start_column),
                 });
-                return TokenKind::CharLit(String::new());
+                return String::new();
             }
             Some((_, '\\')) => {
                 self.advance();
@@ -1257,7 +1288,7 @@ impl<'a> Lexer<'a> {
         if self.peek_char() == Some('\'') {
             let raw = self.input[inner_start..self.pos].to_string();
             self.advance(); // consume closing '
-            return TokenKind::CharLit(raw);
+            return raw;
         }
 
         // Scan forward to the next `'`, newline, or EOF so the literal
@@ -1284,7 +1315,7 @@ impl<'a> Lexer<'a> {
             kind,
             span: self.span_from(start, start_line, start_column),
         });
-        TokenKind::CharLit(raw)
+        raw
     }
 }
 
@@ -1373,6 +1404,36 @@ mod tests {
         let suffixed = tokens(r#"ab"x""#);
         assert!(matches!(&suffixed[0].kind, TokenKind::Ident(s) if s == "ab"));
         assert!(matches!(&suffixed[1].kind, TokenKind::StringLit(raw) if raw == "x"));
+    }
+
+    #[test]
+    fn test_byte_literal() {
+        // `b'x'` is a byte literal; raw content is kept (escapes uninterpreted).
+        let a = tokens("b'A'");
+        assert!(
+            matches!(&a[0].kind, TokenKind::ByteCharLit(raw) if raw == "A"),
+            "got {:?}",
+            a[0].kind
+        );
+
+        let esc = tokens(r"b'\xff'");
+        assert!(
+            matches!(&esc[0].kind, TokenKind::ByteCharLit(raw) if raw == r"\xff"),
+            "got {:?}",
+            esc[0].kind
+        );
+
+        // An identifier ending in `b` (e.g. `crab`) greedily consumes the `b`,
+        // so a following `'A'` is a plain char literal, not a byte literal.
+        let suffixed = tokens("crab'A'");
+        assert!(matches!(&suffixed[0].kind, TokenKind::Ident(s) if s == "crab"));
+        assert!(matches!(&suffixed[1].kind, TokenKind::CharLit(raw) if raw == "A"));
+
+        // A bare `b` followed by a char literal only becomes a byte literal when
+        // the `b` starts a token: `foo b'A'` → Ident, ByteCharLit.
+        let spaced = tokens("foo b'A'");
+        assert!(matches!(&spaced[0].kind, TokenKind::Ident(s) if s == "foo"));
+        assert!(matches!(&spaced[1].kind, TokenKind::ByteCharLit(raw) if raw == "A"));
     }
 
     #[test]

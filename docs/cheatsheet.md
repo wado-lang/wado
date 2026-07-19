@@ -98,9 +98,14 @@ foo(100);                      // integer literal coerced to i64
 "Hello,
 world!"         // Multi-line string
 
-// Byte strings (b-prefix) → ByteList, ASCII + \xNN escapes
+// Byte strings (b-prefix) → ByteList, ASCII + \xNN escapes (no \u)
 b"\x89PNG\r\n"                 // ByteList [137, 80, 78, 71, 13, 10]
 let raw: List<u8> = b"abc";    // newtype literal coercion to the base type
+
+// Byte literal (b-prefix on a char) → u8, ASCII + \xNN escapes (no \u)
+b'A'                           // u8 = 65 (default type u8; coerces like an int literal)
+b'\xff'                        // u8 = 255 (\xNN is the only way to write a high byte)
+let n: i32 = b'A';             // 65 (numeric-literal coercion)
 
 // Characters
 'A'

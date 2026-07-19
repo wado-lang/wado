@@ -400,6 +400,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 byte_list_type
             }
+            Literal::Byte(raw) => {
+                if let Err(message) = util::unescape_byte(raw) {
+                    let _ = self.emit(TypeError::InvalidLiteral {
+                        message,
+                        span: lit.span,
+                    });
+                }
+                TypeTable::U8
+            }
             Literal::Null => self
                 .tysys
                 .type_table
@@ -2441,6 +2450,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Literal::Char(raw) => {
                 ExhPattern::IntLit(util::unescape_char(raw).unwrap_or('\0') as i128)
             }
+            Literal::Byte(raw) => ExhPattern::IntLit(i128::from(util::unescape_byte(raw).unwrap_or(0))),
             Literal::Null => {
                 // `null` coerces to a `None` variant pattern when the scrutinee
                 // has a `None` case; otherwise it is an opaque `Null` literal.
@@ -2530,6 +2540,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             let c = util::unescape_char(raw).unwrap_or('\0');
                             return ExhPattern::IntLit(c as i128);
                         }
+                        Literal::Byte(raw) => {
+                            return ExhPattern::IntLit(i128::from(
+                                util::unescape_byte(raw).unwrap_or(0),
+                            ));
+                        }
                         _ => {}
                     }
                 }
@@ -2618,6 +2633,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             ast::Pattern::Literal(Literal::Char(raw)) => {
                 util::unescape_char(raw).ok().map(|c| c as i128)
+            }
+            ast::Pattern::Literal(Literal::Byte(raw)) => {
+                util::unescape_byte(raw).ok().map(i128::from)
             }
             ast::Pattern::Variant {
                 variant_name,
@@ -4457,6 +4475,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Literal::Char(s) => super::util::unescape_char(s)
                     .ok()
                     .map(|c| LiteralOrdValue::Char(c as u32)),
+                Literal::Byte(s) => super::util::unescape_byte(s)
+                    .ok()
+                    .map(|b| LiteralOrdValue::Int(i128::from(b))),
                 _ => None,
             },
             Expr::Unary(unary) if unary.op == ast::UnaryOp::Neg => {

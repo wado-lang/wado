@@ -9339,6 +9339,25 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let ch = super::util::unescape_char(s).unwrap_or('\0');
                 TirExprKind::CharLiteral(ch)
             }
+            ast::Literal::Byte(s) => {
+                // A byte literal is an integer literal whose value is the byte.
+                // Lower to `IntLiteral` (default type `u8`, or the coerced
+                // integer type) so it rejoins the ordinary integer pipeline.
+                let byte = super::util::unescape_byte(s).unwrap_or(0);
+                let byte_type = if recorded_type == crate::tir::TypeTable::UNKNOWN {
+                    crate::tir::TypeTable::U8
+                } else {
+                    recorded_type
+                };
+                return TirExpr::new(
+                    TirExprKind::IntLiteral {
+                        value: byte as u64,
+                        repr: s.clone(),
+                    },
+                    byte_type,
+                    lit.span,
+                );
+            }
             ast::Literal::Bool(b) => TirExprKind::BoolLiteral(*b),
             ast::Literal::Null => TirExprKind::Null,
             ast::Literal::Unit => TirExprKind::Unit,
@@ -10192,6 +10211,9 @@ fn pattern_endpoint_to_i128(endpoint: &ast::Pattern) -> i128 {
             let ch = super::util::unescape_char(s).unwrap_or('\0');
             i128::from(ch as u32)
         }
+        ast::Pattern::Literal(ast::Literal::Byte(s)) => {
+            i128::from(super::util::unescape_byte(s).unwrap_or(0))
+        }
         _ => panic!(
             "pattern_endpoint_to_i128: non-literal range endpoint {endpoint:?} \
              (annotate should have diagnosed)"
@@ -10229,6 +10251,9 @@ fn ast_literal_to_pattern(lit: &ast::Literal) -> crate::tir::TirLiteralPattern {
         ast::Literal::String(s) => TirLiteralPattern::String(s.clone()),
         ast::Literal::Char(s) => {
             TirLiteralPattern::Char(super::util::unescape_char(s).unwrap_or('\0'))
+        }
+        ast::Literal::Byte(s) => {
+            TirLiteralPattern::U128(u128::from(super::util::unescape_byte(s).unwrap_or(0)))
         }
         ast::Literal::Bool(b) => TirLiteralPattern::Bool(*b),
         ast::Literal::Null => TirLiteralPattern::Null,

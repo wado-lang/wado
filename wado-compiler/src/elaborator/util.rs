@@ -154,8 +154,8 @@ pub(super) fn unescape_string(raw: &str) -> Result<String, String> {
 ///
 /// `\xNN` (two hex digits) yields one raw byte; every other escape shares the
 /// string decoder ([`unescape_one`]) and must resolve to an ASCII value.
-/// Non-ASCII source characters and escapes above U+007F (e.g. `\u{100}`) are
-/// rejected — a byte string is ASCII plus `\xNN`.
+/// Unicode escapes (`\u{...}` / `\uHHHH`), non-ASCII source characters, and
+/// escapes above U+007F are rejected — a byte string is ASCII plus `\xNN`.
 pub(super) fn unescape_bytes(raw: &str) -> Result<Vec<u8>, String> {
     let mut out = Vec::new();
     let mut chars = raw.chars().peekable();
@@ -172,6 +172,12 @@ pub(super) fn unescape_bytes(raw: &str) -> Result<Vec<u8>, String> {
                 let byte = u8::from_str_radix(&format!("{hi}{lo}"), 16)
                     .map_err(|_| format!("invalid `\\x` escape: \\x{hi}{lo}"))?;
                 out.push(byte);
+            } else if chars.peek() == Some(&'u') {
+                // A Unicode escape denotes a scalar, not a byte. Reject it in
+                // both `b"..."` and `b'x'`; `\xNN` writes a raw byte.
+                return Err(
+                    "unicode escape `\\u` is not allowed in a byte literal; use `\\xNN`".to_string(),
+                );
             } else {
                 let decoded = unescape_one(&mut chars)? as u32;
                 if decoded > 0x7f {
@@ -190,6 +196,17 @@ pub(super) fn unescape_bytes(raw: &str) -> Result<Vec<u8>, String> {
         }
     }
     Ok(out)
+}
+
+/// Interpret the raw content of a byte literal `b'x'` (between quotes, without
+/// the quotes) into the single byte it denotes. Shares the byte-string decoder
+/// ([`unescape_bytes`]) and requires exactly one byte.
+pub(super) fn unescape_byte(raw: &str) -> Result<u8, String> {
+    match unescape_bytes(raw)?.as_slice() {
+        [b] => Ok(*b),
+        [] => Err("empty byte literal".to_string()),
+        _ => Err("byte literal must be exactly one byte".to_string()),
+    }
 }
 
 /// Interpret the raw content of a char literal (between quotes, without the quotes).

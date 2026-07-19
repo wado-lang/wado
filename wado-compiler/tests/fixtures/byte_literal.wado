@@ -1,0 +1,57 @@
+// Rust-style byte literal `b'x'` is an integer literal whose value is one byte
+// and whose default type is `u8`. It reuses the integer-literal pipeline: it
+// coerces into any integer type whose range holds the value, takes part in
+// arithmetic, and works as a (range) pattern.
+
+fn takes_u8(b: u8) -> u8 {
+    return b;
+}
+
+fn classify(b: u8) -> i32 {
+    return match b {
+        b'0'..=b'9' => 1,
+        b'a'..=b'z' | b'A'..=b'Z' => 2,
+        b' ' | b'\t' | b'\n' | b'\r' => 3,
+        _ => 0,
+    };
+}
+
+export fn run() {
+    // Default type u8.
+    let a = b'A';
+    assert a == 65;
+    assert takes_u8(b'B') == 66;
+
+    // Every standard single-byte escape.
+    assert b'\n' == 10;
+    assert b'\t' == 9;
+    assert b'\r' == 13;
+    assert b'\\' == 92;
+    assert b'\'' == 39;
+    assert b'\"' == 34;
+    assert b'\0' == 0;
+
+    // `\xNN`, including a high byte only expressible via the escape.
+    assert b'\x00' == 0;
+    assert b'\x7f' == 127;
+    assert b'\xff' == 255;
+
+    // Coercion into other integer types (value always fits 0..=255).
+    let n: i32 = b'A';
+    assert n == 65;
+    let w: u32 = b'\xff';
+    assert w == 255;
+
+    // Arithmetic behaves like any integer literal.
+    assert b'A' + 1 == b'B';
+
+    // Pattern matching, individual and range, plus `matches`.
+    assert classify(b'5') == 1;
+    assert classify(b'q') == 2;
+    assert classify(b'\t') == 3;
+    assert classify(b'!') == 0;
+    assert b'7' matches { b'0'..=b'9' };
+}
+
+__DATA__
+{"stdout": ""}

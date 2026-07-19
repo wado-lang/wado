@@ -89,6 +89,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
+        // Byte literal coercion to integer: `let n: i32 = b'A'`. A byte literal
+        // is an integer literal whose value is always 0..=255, so it takes the
+        // same range check as a non-negative number literal.
+        if let Expr::Literal(lit) = expr
+            && let Literal::Byte(raw) = &lit.value
+            && self.tysys.type_table.borrow().is_integer(target_type)
+        {
+            return Some(match util::unescape_byte(raw) {
+                Ok(byte) => {
+                    if let Some(err_msg) = util::check_int_range_positive(
+                        byte as u128,
+                        target_type,
+                        &self.tysys.type_table.borrow(),
+                        &byte.to_string(),
+                    ) {
+                        let _ = self.emit(TypeError::InvalidLiteral {
+                            message: err_msg,
+                            span: lit.span,
+                        });
+                    }
+                    placeholder(target_type, lit.span)
+                }
+                Err(message) => {
+                    let _ = self.emit(TypeError::InvalidLiteral {
+                        message,
+                        span: lit.span,
+                    });
+                    placeholder(target_type, lit.span)
+                }
+            });
+        }
+
         // Negated number literal coercion to integer: -42 as i64
         if let Expr::Unary(unary) = expr
             && unary.op == UnaryOp::Neg
@@ -377,6 +409,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow()
                 .get_ultimate_base_type(target_type);
             if base_id == list_u8 {
+                // Validate the escapes here too: this coercion path is taken
+                // before `resolve_literal`, so without it an invalid byte
+                // string (e.g. a `\u` escape) coerced to `List<u8>` would go
+                // unreported and reify silently to empty bytes.
+                if let Expr::Literal(lit) = expr
+                    && let Literal::Bytes(raw) = &lit.value
+                    && let Err(message) = util::unescape_bytes(raw)
+                {
+                    let _ = self.emit(TypeError::InvalidLiteral {
+                        message,
+                        span: lit.span,
+                    });
+                }
                 self.record_coercion(
                     expr.id(),
                     super::sem::types::CoercionKind::BytesNewtype,
