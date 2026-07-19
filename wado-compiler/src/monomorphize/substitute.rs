@@ -281,12 +281,13 @@ impl Monomorphizer {
                     stores,
                 )
             }
-            // Re-mangling assumes an identity single-arg mapping; see wado-lang/wado#1626.
+            // Only a param-embedding base is re-mangled; a concrete-base newtype
+            // keeps its identity so its trait impls resolve. See wado-lang/wado#1626.
             ResolvedType::Newtype {
                 name,
                 module_source,
                 base_type,
-            } => {
+            } if type_table.contains_type_param(base_type) => {
                 let new_base = self.substitute_type(base_type, substitution, type_table);
                 if new_base == base_type {
                     return type_id;
