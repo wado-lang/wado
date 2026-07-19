@@ -22,7 +22,6 @@ lockfile = true
 verbose = false
 
 [env]
-RUSTFLAGS = "-D warnings"
 _.path = ["vendor/wasmtime/target/release"]
 
 [tasks.on-task-started]
@@ -54,8 +53,13 @@ if [ ! -d "$SCCACHE_DIR" ] || [ -z "$(ls -A "$SCCACHE_DIR" 2>/dev/null)" ]; then
   echo "no restored sccache cache at $SCCACHE_DIR; skipping warm-cache"
   exit 0
 fi
-# 1) Reconstruct dependency artifacts fast from the content-addressed cache.
-RUSTC_WRAPPER=sccache CARGO_INCREMENTAL=0 cargo build --workspace --locked
+# 1) Reconstruct dependency artifacts from the content-addressed cache.
+#    sccache hashes every CARGO_* env var into the Rust cache key, so expose
+#    exactly the CARGO_* set the cargo-cache.yml runner used — this container
+#    otherwise leaks CARGO_HTTP_CAINFO and drops the runner's three.
+unset $(compgen -e | grep '^CARGO_' || true)
+env CARGO_HOME="$HOME/.cargo" CARGO_TARGET_DIR="$PWD/target" CARGO_INCREMENTAL=0 \
+  RUSTC_WRAPPER=sccache cargo build --workspace --locked
 sccache --show-stats || true
 # 2) Hand off to incremental so the first real edit is a fast relink rather
 #    than a full non-incremental recompile (sccache and incremental are
@@ -184,7 +188,8 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 # vendor/wasmtime is a separate workspace tracking upstream dev; its source is
-# not warning-clean, so drop the repo-wide `-D warnings` for this build.
+# not warning-clean, so build it with an empty RUSTFLAGS to ignore any
+# deny-warnings flags inherited from the environment.
 RUSTFLAGS= cargo build --release -p wasmtime-cli --manifest-path vendor/wasmtime/Cargo.toml
 """
 

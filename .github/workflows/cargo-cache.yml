@@ -18,6 +18,11 @@
 # /home/user/wado/target. sccache itself is the distro build on both sides
 # (Ubuntu 24.04 `apt` sccache) so the on-disk cache format matches.
 #
+# CARGO_* ENV PARITY IS ALSO LOAD-BEARING. sccache hashes every CARGO_* env var
+# into the Rust cache key, so this job's CARGO_* set (CARGO_HOME,
+# CARGO_TARGET_DIR, CARGO_INCREMENTAL) must match the container's warm-cache
+# build (mise.toml) exactly.
+#
 # Required repo variables (none are secret — all are plain identifiers):
 #   vars.GCP_WIF_PROVIDER    workload identity provider resource name
 #   vars.GCP_CACHE_WRITER_SA writer service-account email (roles/storage.objectAdmin on the bucket)
@@ -48,7 +53,8 @@ env:
   CARGO_TARGET_DIR: /home/user/wado/target
   RUSTC_WRAPPER: sccache
   CARGO_INCREMENTAL: "0"
-  RUSTFLAGS: -D warnings # must match the container's mise [env]
+  # RUSTFLAGS is a sccache cache-key input; keep it identical to the container's
+  # mise [env] (both unset).
 
 jobs:
   upload:
@@ -67,6 +73,9 @@ jobs:
           sudo mkdir -p "$CONTAINER_REPO" "$CARGO_HOME"
           sudo cp -a "$GITHUB_WORKSPACE/." "$CONTAINER_REPO/"
           sudo chown -R "$(id -u):$(id -g)" "$CONTAINER_REPO" "$CARGO_HOME"
+          # cargo runs as the unprivileged runner user but writes $CARGO_HOME
+          # under /root (0700); make /root traversable so it can.
+          sudo chmod o+x /root
 
       - name: Fetch registry, then compile through sccache
         working-directory: /home/user/wado
