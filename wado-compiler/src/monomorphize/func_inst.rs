@@ -1177,15 +1177,20 @@ impl Monomorphizer {
         if base == tid {
             return tid;
         }
-        if let Some(trait_name) = &info.trait_name {
-            let newtype_name = type_table.mangle_type_name(tid);
-            if self
-                .functions
-                .trait_env
-                .has_any_methodful_impl(&newtype_name, trait_name)
-            {
-                return tid;
-            }
+        // Without a trait we cannot check whether the newtype defines its own
+        // member for this dispatch, so keep the newtype rather than risk peeling
+        // past an own impl (matches the pre-peel `base_type_name` behavior).
+        let Some(trait_name) = &info.trait_name else {
+            return tid;
+        };
+        // A newtype with its own impl of the bound trait shadows the base.
+        let newtype_name = type_table.mangle_type_name(tid);
+        if self
+            .functions
+            .trait_env
+            .has_any_methodful_impl(&newtype_name, trait_name)
+        {
+            return tid;
         }
         base
     }

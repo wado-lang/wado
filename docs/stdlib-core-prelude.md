@@ -274,6 +274,7 @@ Returns None when iteration is complete.
 Collects the remaining elements into any `FromIterator` target, chosen
 by the expected type (annotation or turbofish) — a `List<Self::Item>` or
 any newtype over it — defaulting to `List<Self::Item>` when unconstrained.
+Advances `self` to exhaustion, like calling `next()` until `None`.
 
 #### `fn count(&mut self) -> i32`
 
@@ -363,7 +364,7 @@ Trait for creating a collection from any iterable of `Elem`.
 A newtype over a `FromIterator` base inherits this impl, so `collect()`
 can target the newtype directly.
 
-#### `fn from_iter<I: Iterator<Item = Self::Elem>>(iter: I) -> Self`
+#### `fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self`
 
 ### `pub trait PushDisplay`
 
@@ -618,6 +619,7 @@ Returns None when iteration is complete.
 Collects the remaining elements into any `FromIterator` target, chosen
 by the expected type (annotation or turbofish) — a `List<Self::Item>` or
 any newtype over it — defaulting to `List<Self::Item>` when unconstrained.
+Advances `self` to exhaustion, like calling `next()` until `None`.
 
 #### `fn count(&mut self) -> i32`
 
@@ -707,7 +709,7 @@ Trait for creating a collection from any iterable of `Elem`.
 A newtype over a `FromIterator` base inherits this impl, so `collect()`
 can target the newtype directly.
 
-#### `fn from_iter<I: Iterator<Item = Self::Elem>>(iter: I) -> Self`
+#### `fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self`
 
 ### `pub trait AsByteSlice`
 
@@ -4033,7 +4035,7 @@ Joins elements into a string with the given separator.
 
 #### `impl FromIterator for List<T>`
 
-##### `fn from_iter<I: Iterator<Item = T>>(iter: I) -> List<T>`
+##### `fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> List<T>`
 
 #### `impl SequenceLiteralBuilder for List<T>`
 

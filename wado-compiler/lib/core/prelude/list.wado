@@ -566,10 +566,9 @@ impl<T: Display> List<T> {
 impl FromIterator for List<T> {
     type Elem = T;
 
-    fn from_iter<I: Iterator<Item = T>>(iter: I) -> List<T> {
+    fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> List<T> {
         let mut result: List<T> = [];
-        let mut it = iter;
-        while let Some(item) = it.next() {
+        while let Some(item) = iter.next() {
             result.push(item);
         }
         return result;

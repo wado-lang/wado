@@ -175,17 +175,17 @@ fn "opt_hfs_immut_ref_method_reread.wado/run"() {
     let __local_11: ref "core:prelude/string.wado//String";
     let __local_12: ref "core:prelude/string.wado//String";
     let __local_13: ref "core:prelude/format.wado//Formatter";
+    let self_15: ref "core:prelude/string.wado//StrCharIter";
     let len_a_18: i32;
+    let self_24: ref "core:prelude/string.wado//StrCharIter";
     let len_a_27: i32;
-    let __sroa_v_repr_36: ref Array<u8>;
-    let __sroa_v_repr_39: ref Array<u8>;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:opt_hfs_immut_ref_method_reread.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:opt_hfs_immut_ref_method_reread.wado::__modules_initialized = 1;
     };
-    lx = struct.new "opt_hfs_immut_ref_method_reread.wado//Lexer" { chars: ref.as_non_null("core:prelude/list.wado/List<char>^FromIterator::from_iter<core:prelude/string.wado/StrCharIter>"(__sroa_v_repr_39 = array.new_data<u8>("[^\"\\n]"); struct.new "core:prelude/string.wado//StrCharIter" { repr: __sroa_v_repr_39, used: 6, byte_index: 0 })), pos: 0 };
+    lx = struct.new "opt_hfs_immut_ref_method_reread.wado//Lexer" { chars: ref.as_non_null(self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: array.new_data<u8>("[^\"\\n]"), used: 6, byte_index: 0 }; "core:prelude/list.wado/List<char>^FromIterator::from_iter<core:prelude/string.wado/StrCharIter>"(self_15)), pos: 0 };
     tok = "opt_hfs_immut_ref_method_reread.wado/Lexer::read_char_class"(lx);
     __cond_3 = __inline_String_Eq__eq_3: block -> bool {
         len_a_18 = tok.used;
@@ -199,7 +199,7 @@ fn "opt_hfs_immut_ref_method_reread.wado/run"() {
         "core:rt/panic"(__local_9 = "core:prelude/string.wado/String::with_capacity"(143); "core:prelude/string.wado/String::push_str"(__local_9, global:opt_hfs_immut_ref_method_reread.wado::__const_obj_5); "core:prelude/string.wado/String::push"(__local_9, 114); "core:prelude/string.wado/String::push"(__local_9, 117); "core:prelude/string.wado/String::push"(__local_9, 110); "core:prelude/string.wado/String::push"(__local_9, 32); "core:prelude/string.wado/String::push"(__local_9, 97); "core:prelude/string.wado/String::push"(__local_9, 116); "core:prelude/string.wado/String::push"(__local_9, 32); "core:prelude/string.wado/String::push_str"(__local_9, global:opt_hfs_immut_ref_method_reread.wado::__const_obj_14); "core:prelude/string.wado/String::push"(__local_9, 58); __local_10 = "core:prelude/format.wado/Formatter::new"(__local_9); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 64 }, __local_10); "core:prelude/string.wado/String::push"(__local_9, 58); "core:prelude/string.wado/String::push"(__local_9, 32); "core:prelude/string.wado/String::push_str"(__local_9, __local_8 = "core:prelude/string.wado/String::with_capacity"(36); "core:prelude/string.wado/String::push_str"(__local_8, global:opt_hfs_immut_ref_method_reread.wado::__const_obj_17); "core:prelude/string.wado/String::push_str"(__local_8, tok); __local_8); "core:prelude/string.wado/String::push_str"(__local_9, global:opt_hfs_immut_ref_method_reread.wado::__const_obj_16); "core:prelude/string.wado/String::push"(__local_9, 116); "core:prelude/string.wado/String::push"(__local_9, 111); "core:prelude/string.wado/String::push"(__local_9, 107); "core:prelude/string.wado/String::push"(__local_9, 58); "core:prelude/string.wado/String::push"(__local_9, 32); __local_10 = "core:prelude/format.wado/Formatter::new"(__local_9); "core:prelude/format.wado/String^Inspect::inspect"(tok, __local_10); "core:prelude/string.wado/String::push"(__local_9, 10); __local_9);
         unreachable;
     }
-    lx2 = struct.new "opt_hfs_immut_ref_method_reread.wado//Lexer" { chars: ref.as_non_null("core:prelude/list.wado/List<char>^FromIterator::from_iter<core:prelude/string.wado/StrCharIter>"(__sroa_v_repr_36 = array.new_data<u8>("[\\t\\n]"); struct.new "core:prelude/string.wado//StrCharIter" { repr: __sroa_v_repr_36, used: 6, byte_index: 0 })), pos: 0 };
+    lx2 = struct.new "opt_hfs_immut_ref_method_reread.wado//Lexer" { chars: ref.as_non_null(self_24 = struct.new "core:prelude/string.wado//StrCharIter" { repr: array.new_data<u8>("[\\t\\n]"), used: 6, byte_index: 0 }; "core:prelude/list.wado/List<char>^FromIterator::from_iter<core:prelude/string.wado/StrCharIter>"(self_24)), pos: 0 };
     tok2 = "opt_hfs_immut_ref_method_reread.wado/Lexer::read_char_class"(lx2);
     __cond_7 = __inline_String_Eq__eq_10: block -> bool {
         len_a_27 = tok2.used;
@@ -866,11 +866,11 @@ fn "core:prelude/list.wado/List<char>^FromIterator::from_iter<core:prelude/strin
     __b = struct.new "core:prelude//List<char>" { repr: builtin::array_new<char>(0), used: 0 };
     b86: block {
         l87: loop {
-            let __sroa___match_5_discriminant: i32;
-            let __sroa___match_5_payload_0: char;
-            multivalue_bind [__sroa___match_5_discriminant, __sroa___match_5_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(iter);
-            if __sroa___match_5_discriminant == 0 {
-                "core:prelude/list.wado/List<char>::push"(__b, __sroa___match_5_payload_0);
+            let __sroa___match_4_discriminant: i32;
+            let __sroa___match_4_payload_0: char;
+            multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(iter);
+            if __sroa___match_4_discriminant == 0 {
+                "core:prelude/list.wado/List<char>::push"(__b, __sroa___match_4_payload_0);
             } else {
                 break b86;
             }

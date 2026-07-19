@@ -1232,11 +1232,11 @@ fn "httpbin_status.wado/handle"(request) {
     let packed_177: i64;
     let rx_178: i32;
     let tx_179: i32;
+    let self_181: ref "core:prelude/string.wado//StrUtf8ByteIter";
     let v_182: ref "wasi:http/types.wado//FieldSizePayload";
     let v_183: ref null "core:prelude/string.wado//String";
     let __vc_payload_0: ref "core:prelude/string.wado//String";
-    let __sroa_v_repr_196: ref Array<u8>;
-    let __sroa_v_repr_199: ref Array<u8>;
+    let self_186: ref "core:prelude/string.wado//StrUtf8ByteIter";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:httpbin_status.wado::__modules_initialized);
         cold_path;
@@ -1264,7 +1264,7 @@ fn "httpbin_status.wado/handle"(request) {
     tx_176 = builtin::i32_wrap_i64(packed_174 >> 32_i64);
     rx_178 = builtin::i32_wrap_i64(local.tee packed_177("wasi/stream-new"()));
     tx_179 = builtin::i32_wrap_i64(packed_177 >> 32_i64);
-    drop("httpbin_status.wado/__cm_binding__Fields_append"(local.tee headers("httpbin_status.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-type"), used: 12 }, "core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(__sroa_v_repr_199 = content_type.repr; struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __sroa_v_repr_199, used: content_type.used, index: 0 })));
+    drop("httpbin_status.wado/__cm_binding__Fields_append"(local.tee headers("httpbin_status.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-type"), used: 12 }, self_181 = struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: content_type.repr, used: content_type.used, index: 0 }; "core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(self_181)));
     __pattern_temp_4 = "httpbin_status.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: rx_178 }, rx_175);
     drop("httpbin_status.wado/__cm_binding__Response_set_status_code"(local.tee response(__pattern_temp_4.0), status & 65535));
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
@@ -1564,7 +1564,7 @@ fn "httpbin_status.wado/handle"(request) {
         }
         "wasi/task-return:handle"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
-    "core:rt/cm_stream_write_u8"(tx_179, "core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(__sroa_v_repr_196 = body_str.repr; struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: __sroa_v_repr_196, used: body_str.used, index: 0 }));
+    "core:rt/cm_stream_write_u8"(tx_179, self_186 = struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: body_str.repr, used: body_str.used, index: 0 }; "core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(self_186));
     "wasi/stream-drop-writable"(tx_179);
     "httpbin_status.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_176, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } });
 }
@@ -6388,21 +6388,21 @@ fn "core:prelude/list.wado/List<u8>::grow"(self) {
 fn "core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(iter) {
     let __b: ref "core:prelude//List<u8>";
     let byte: u8;
-    let _licm_used_13: i32;
-    let _licm_repr_14: ref Array<u8>;
-    let __hfs_index_15: i32;
+    let _licm_used_12: i32;
+    let _licm_repr_13: ref Array<u8>;
+    let __hfs_index_14: i32;
     __b = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
-    _licm_used_13 = iter.used;
-    _licm_repr_14 = iter.repr;
-    __hfs_index_15 = iter.index;
+    _licm_used_12 = iter.used;
+    _licm_repr_13 = iter.repr;
+    __hfs_index_14 = iter.index;
     b737: block {
         l738: loop {
-            if __hfs_index_15 >= _licm_used_13 {
-                iter.index = __hfs_index_15;
+            if __hfs_index_14 >= _licm_used_12 {
+                iter.index = __hfs_index_14;
                 break b737;
             }
-            byte = builtin::array_get<u8>(_licm_repr_14, __hfs_index_15);
-            __hfs_index_15 = __hfs_index_15 + 1;
+            byte = builtin::array_get<u8>(_licm_repr_13, __hfs_index_14);
+            __hfs_index_14 = __hfs_index_14 + 1;
             "core:prelude/list.wado/List<u8>::push"(__b, byte);
             continue l738;
         };

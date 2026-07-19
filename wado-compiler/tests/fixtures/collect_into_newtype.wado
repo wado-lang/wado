@@ -23,7 +23,13 @@ export fn run() with Stdout {
     // A user-defined newtype over List<u32> also works, via a mapped iterator.
     let codes: Codes = s.chars().map(|c: char| c as u32).collect();
     println(`${codes[0]}`);
+
+    // collect advances the `&mut self` receiver to exhaustion: a follow-up
+    // next() on the same iterator returns None.
+    let mut it = ([10, 20, 30] as List<i32>).into_iter();
+    let taken: List<i32> = it.collect();
+    println(`${taken.len()} ${it.next() matches { None }}`);
 }
 
 __DATA__
-{"stdout": "2\n4142\n4142\n65\n"}
+{"stdout": "2\n4142\n4142\n65\n3 true\n"}

@@ -661,34 +661,35 @@ fn "parser_synth_id_collision_test.wado/unescape_st_text"(s) {
     let i: i32;
     let c: char;
     let next: char;
-    let index_23: i32;
-    let __local_5_27: ref "core:prelude/string.wado//String";
-    let __local_6_28: ref "core:prelude/format.wado//Formatter";
-    let _licm_used_31: i32;
-    let _licm_repr_32: ref Array<char>;
-    let __sroa_v_repr: ref Array<u8>;
+    let self_9: ref "core:prelude/string.wado//StrCharIter";
+    let index_22: i32;
+    let __local_5_26: ref "core:prelude/string.wado//String";
+    let __local_6_27: ref "core:prelude/format.wado//Formatter";
+    let _licm_used_30: i32;
+    let _licm_repr_31: ref Array<char>;
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(s.used), used: 0 };
-    chars = "core:prelude/list.wado/List<char>^FromIterator::from_iter<core:prelude/string.wado/StrCharIter>"(__sroa_v_repr = s.repr; struct.new "core:prelude/string.wado//StrCharIter" { repr: __sroa_v_repr, used: s.used, byte_index: 0 });
+    self_9 = struct.new "core:prelude/string.wado//StrCharIter" { repr: s.repr, used: s.used, byte_index: 0 };
+    chars = "core:prelude/list.wado/List<char>^FromIterator::from_iter<core:prelude/string.wado/StrCharIter>"(self_9);
     n = chars.used;
     i = 0;
-    _licm_used_31 = chars.used;
-    _licm_repr_32 = chars.repr;
+    _licm_used_30 = chars.used;
+    _licm_repr_31 = chars.repr;
     b42: block {
         l43: loop {
             break_if b42 i >= n;
-            c = builtin::array_get<char>(_licm_repr_32, i);
+            c = builtin::array_get<char>(_licm_repr_31, i);
             if (if c == 92 -> i32 {
                 (i + 1) < n;
             } else {
                 0;
             }) {
-                index_23 = i + 1;
-                if @unlikely(index_23 >= _licm_used_31) {
+                index_22 = i + 1;
+                if @unlikely(index_22 >= _licm_used_30) {
                     cold_path;
-                    "core:rt/panic"(__local_5_27 = "core:prelude/string.wado/String::with_capacity"(173); "core:prelude/string.wado/String::push_str"(__local_5_27, global:core:prelude/string.wado::__const_obj_6); "core:prelude/string.wado/String::push_str"(__local_5_27, global:parser_synth_id_collision_test.wado::__const_obj_21); "core:prelude/string.wado/String::push"(__local_5_27, 32); "core:prelude/string.wado/String::push"(__local_5_27, 97); "core:prelude/string.wado/String::push"(__local_5_27, 116); "core:prelude/string.wado/String::push"(__local_5_27, 32); "core:prelude/string.wado/String::push_str"(__local_5_27, global:parser_synth_id_collision_test.wado::__const_obj_20); "core:prelude/string.wado/String::push"(__local_5_27, 58); __local_6_28 = "core:prelude/format.wado/Formatter::new"(__local_5_27); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 350 }, __local_6_28); "core:prelude/string.wado/String::push"(__local_5_27, 58); "core:prelude/string.wado/String::push"(__local_5_27, 32); "core:prelude/string.wado/String::push_str"(__local_5_27, global:parser_synth_id_collision_test.wado::__const_obj_19); "core:prelude/string.wado/String::push_str"(__local_5_27, global:parser_synth_id_collision_test.wado::__const_obj_18); "core:prelude/string.wado/String::push"(__local_5_27, 105); "core:prelude/string.wado/String::push"(__local_5_27, 110); "core:prelude/string.wado/String::push"(__local_5_27, 100); "core:prelude/string.wado/String::push"(__local_5_27, 101); "core:prelude/string.wado/String::push"(__local_5_27, 120); "core:prelude/string.wado/String::push"(__local_5_27, 58); "core:prelude/string.wado/String::push"(__local_5_27, 32); __local_6_28 = "core:prelude/format.wado/Formatter::new"(__local_5_27); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: index_23 }, __local_6_28); "core:prelude/string.wado/String::push"(__local_5_27, 10); "core:prelude/string.wado/String::push_str"(__local_5_27, global:core:prelude/string.wado::__const_obj_8); __local_6_28 = "core:prelude/format.wado/Formatter::new"(__local_5_27); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: _licm_used_31 }, __local_6_28); "core:prelude/string.wado/String::push"(__local_5_27, 10); __local_5_27);
+                    "core:rt/panic"(__local_5_26 = "core:prelude/string.wado/String::with_capacity"(173); "core:prelude/string.wado/String::push_str"(__local_5_26, global:core:prelude/string.wado::__const_obj_6); "core:prelude/string.wado/String::push_str"(__local_5_26, global:parser_synth_id_collision_test.wado::__const_obj_21); "core:prelude/string.wado/String::push"(__local_5_26, 32); "core:prelude/string.wado/String::push"(__local_5_26, 97); "core:prelude/string.wado/String::push"(__local_5_26, 116); "core:prelude/string.wado/String::push"(__local_5_26, 32); "core:prelude/string.wado/String::push_str"(__local_5_26, global:parser_synth_id_collision_test.wado::__const_obj_20); "core:prelude/string.wado/String::push"(__local_5_26, 58); __local_6_27 = "core:prelude/format.wado/Formatter::new"(__local_5_26); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 350 }, __local_6_27); "core:prelude/string.wado/String::push"(__local_5_26, 58); "core:prelude/string.wado/String::push"(__local_5_26, 32); "core:prelude/string.wado/String::push_str"(__local_5_26, global:parser_synth_id_collision_test.wado::__const_obj_19); "core:prelude/string.wado/String::push_str"(__local_5_26, global:parser_synth_id_collision_test.wado::__const_obj_18); "core:prelude/string.wado/String::push"(__local_5_26, 105); "core:prelude/string.wado/String::push"(__local_5_26, 110); "core:prelude/string.wado/String::push"(__local_5_26, 100); "core:prelude/string.wado/String::push"(__local_5_26, 101); "core:prelude/string.wado/String::push"(__local_5_26, 120); "core:prelude/string.wado/String::push"(__local_5_26, 58); "core:prelude/string.wado/String::push"(__local_5_26, 32); __local_6_27 = "core:prelude/format.wado/Formatter::new"(__local_5_26); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: index_22 }, __local_6_27); "core:prelude/string.wado/String::push"(__local_5_26, 10); "core:prelude/string.wado/String::push_str"(__local_5_26, global:core:prelude/string.wado::__const_obj_8); __local_6_27 = "core:prelude/format.wado/Formatter::new"(__local_5_26); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: _licm_used_30 }, __local_6_27); "core:prelude/string.wado/String::push"(__local_5_26, 10); __local_5_26);
                     unreachable;
                 }
-                next = builtin::array_get<char>(_licm_repr_32, index_23);
+                next = builtin::array_get<char>(_licm_repr_31, index_22);
                 if (if (if next == 92 -> i32 {
                     1;
                 } else {
@@ -1815,11 +1816,11 @@ fn "core:prelude/list.wado/List<char>^FromIterator::from_iter<core:prelude/strin
     __b = struct.new "core:prelude//List<char>" { repr: builtin::array_new<char>(0), used: 0 };
     b201: block {
         l202: loop {
-            let __sroa___match_5_discriminant: i32;
-            let __sroa___match_5_payload_0: char;
-            multivalue_bind [__sroa___match_5_discriminant, __sroa___match_5_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(iter);
-            if __sroa___match_5_discriminant == 0 {
-                "core:prelude/list.wado/List<char>::push"(__b, __sroa___match_5_payload_0);
+            let __sroa___match_4_discriminant: i32;
+            let __sroa___match_4_payload_0: char;
+            multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(iter);
+            if __sroa___match_4_discriminant == 0 {
+                "core:prelude/list.wado/List<char>::push"(__b, __sroa___match_4_payload_0);
             } else {
                 break b201;
             }

@@ -1137,10 +1137,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect()
         });
         for i in 0..inferred.len() {
+            // Reject a default that did not fully resolve — an error type, or one
+            // still carrying any type param (e.g. `List<T>` where a sibling method
+            // param `T` was not substituted). Such a default must not pin the slot;
+            // leaving it unbound routes to the normal defer/"cannot infer" path.
             if self.is_unbound_type_param(inferred[i])
                 && let Some(default_ty) = defaults[i]
                 && default_ty != TypeTable::ERROR
-                && !self.is_unbound_type_param(default_ty)
+                && !self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .contains_type_param(default_ty)
             {
                 inferred[i] = default_ty;
             }

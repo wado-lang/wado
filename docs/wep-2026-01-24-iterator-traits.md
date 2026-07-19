@@ -134,12 +134,12 @@ pub trait IntoIterator {
 /// Create a collection from any iterable of `Elem`.
 internal trait FromIterator {
     type Elem;
-    fn from_iter<I: Iterator<Item = Self::Elem>>(iter: I) -> Self;
+    fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self;
 }
 
 impl FromIterator for List<T> {
     type Elem = T;
-    fn from_iter<I: Iterator<Item = T>>(iter: I) -> List<T> { ... }
+    fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> List<T> { ... }
 }
 ```
 
