@@ -96,7 +96,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(match util::unescape_byte(raw) {
                 Ok(byte) => {
                     if let Some(err_msg) = util::check_int_range_positive(
-                        byte as u128,
+                        u128::from(byte),
                         target_type,
                         &self.tysys.type_table.borrow(),
                         &byte.to_string(),

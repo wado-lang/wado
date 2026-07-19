@@ -9348,7 +9348,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 };
                 return TirExpr::new(
                     TirExprKind::IntLiteral {
-                        value: byte as u64,
+                        value: u64::from(byte),
                         repr: s.clone(),
                     },
                     byte_type,

@@ -174,7 +174,8 @@ pub(super) fn unescape_bytes(raw: &str) -> Result<Vec<u8>, String> {
                 out.push(byte);
             } else if chars.peek() == Some(&'u') {
                 return Err(
-                    "unicode escape `\\u` is not allowed in a byte literal; use `\\xNN`".to_string(),
+                    "unicode escape `\\u` is not allowed in a byte literal; use `\\xNN`"
+                        .to_string(),
                 );
             } else {
                 let decoded = unescape_one(&mut chars)? as u32;

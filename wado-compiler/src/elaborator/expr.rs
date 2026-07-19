@@ -2450,7 +2450,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Literal::Char(raw) => {
                 ExhPattern::IntLit(util::unescape_char(raw).unwrap_or('\0') as i128)
             }
-            Literal::Byte(raw) => ExhPattern::IntLit(i128::from(util::unescape_byte(raw).unwrap_or(0))),
+            Literal::Byte(raw) => {
+                ExhPattern::IntLit(i128::from(util::unescape_byte(raw).unwrap_or(0)))
+            }
             Literal::Null => {
                 // `null` coerces to a `None` variant pattern when the scrutinee
                 // has a `None` case; otherwise it is an opaque `Null` literal.
