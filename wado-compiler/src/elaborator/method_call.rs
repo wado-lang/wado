@@ -857,6 +857,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 (name.clone(), name, vec![], None)
             }
+            ResolvedType::Newtype { name, .. } if name.contains('<') => {
+                let type_args = {
+                    let tt = self.tysys.type_table.borrow();
+                    let ultimate = tt.get_ultimate_base_type(method_impl_type_id);
+                    tt.generic_type_args(ultimate).unwrap_or_default()
+                };
+                let head = crate::name::split_base_name(&name).to_string();
+                let type_arg_names: Vec<String> = type_args
+                    .iter()
+                    .map(|t| {
+                        self.tysys
+                            .type_table
+                            .borrow()
+                            .mangle_type_arg_for_generic(*t)
+                    })
+                    .collect();
+                (name, head, type_arg_names, Some(type_args))
+            }
             _ => {
                 let name = self
                     .tysys

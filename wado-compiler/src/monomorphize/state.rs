@@ -396,6 +396,22 @@ impl Monomorphizer {
         trait_name: Option<&str>,
     ) -> Option<String> {
         let trait_name = trait_name?;
+        self.newtype_own_name(type_id, type_table, |own| {
+            self.functions
+                .trait_env
+                .impl_module_for(own, trait_name, None)
+                .is_some()
+        })
+    }
+
+    /// Peel refs/newtypes to the first newtype level satisfying `has_own_impl`
+    /// (evaluated on that level's mangled name), returning that name.
+    fn newtype_own_name(
+        &self,
+        type_id: TypeId,
+        type_table: &TypeTable,
+        has_own_impl: impl Fn(&str) -> bool,
+    ) -> Option<String> {
         let mut tid = type_id;
         loop {
             match type_table.get(tid) {
@@ -403,16 +419,9 @@ impl Monomorphizer {
                 ResolvedType::Newtype { base_type, .. } => {
                     let base = *base_type;
                     let own = type_table.mangle_type_name(tid);
-                    if self
-                        .functions
-                        .trait_env
-                        .impl_module_for(&own, trait_name, None)
-                        .is_some()
-                    {
+                    if has_own_impl(&own) {
                         return Some(own);
                     }
-                    // This newtype has no own impl, but an inner newtype in a
-                    // `type B = A` chain still might, so keep peeling.
                     tid = base;
                 }
                 _ => return None,
@@ -426,12 +435,21 @@ impl Monomorphizer {
         type_table: &TypeTable,
         info: &LocalMethodName,
     ) -> bool {
-        let Some(trait_name) = info.trait_name.as_deref() else {
-            return false;
+        let own = match info.trait_name.as_deref() {
+            Some(trait_name) => self.newtype_own_name(receiver_type_id, type_table, |own| {
+                self.functions
+                    .trait_env
+                    .impl_module_for(own, trait_name, None)
+                    .is_some()
+            }),
+            None => self.newtype_own_name(receiver_type_id, type_table, |own| {
+                let head = crate::name::split_base_name(own);
+                self.functions
+                    .trait_env
+                    .has_inherent_method(head, &info.method_name)
+            }),
         };
-        self.newtype_own_struct_name_with_impl(receiver_type_id, type_table, Some(trait_name))
-            .as_deref()
-            == Some(info.struct_name.as_str())
+        own.as_deref() == Some(info.struct_name.as_str())
     }
 
     /// Build the ordered list of `(mangled_method_name, trait_name)` formats to

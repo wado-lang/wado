@@ -1,0 +1,48 @@
+// Regression test for wado-lang/wado#1615: a newtype's inherent method invoked
+// inside a generic function body.
+type Bytes = List<u8>;
+
+fn hex_digit(nibble: u32) -> char {
+    if nibble < 10 {
+        return char::from_u32_unchecked(('0' as u32) + nibble);
+    }
+    return char::from_u32_unchecked(('a' as u32) + nibble - 10);
+}
+
+impl Bytes {
+    fn to_hex(&self) -> String {
+        let mut s = String::with_capacity(self.len() * 2);
+        let mut i = 0;
+        while i < self.len() {
+            let b = self[i] as u32;
+            s.push(hex_digit((b >> 4) & 0xf));
+            s.push(hex_digit(b & 0xf));
+            i += 1;
+        }
+        return s;
+    }
+}
+
+fn make() -> Result<Bytes, String> {
+    return Result::Ok([0x0f, 0xa0] as Bytes);
+}
+
+fn enc<T>(_v: &T) -> String {
+    return match make() {
+        Ok(bytes) => bytes.to_hex(),
+        Err(_) => panic("unreachable"),
+    };
+}
+
+fn enc_direct(b: Bytes) -> String {
+    return b.to_hex();
+}
+
+export fn run() {
+    let n = 5;
+    assert enc::<i32>(&n) == "0fa0";
+    assert enc_direct([0x0f, 0xa0] as Bytes) == "0fa0";
+}
+
+__DATA__
+{"stdout": ""}

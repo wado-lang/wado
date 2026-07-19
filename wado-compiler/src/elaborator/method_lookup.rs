@@ -527,12 +527,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
                 base_type,
-            } => (
-                name.clone(),
-                Some(module_source.clone()),
-                None,
-                Some(*base_type),
-            ),
+            } => {
+                let (head, own_type_args) = if name.contains('<') {
+                    let args = {
+                        let tt = self.tysys.type_table.borrow();
+                        let ultimate = tt.get_ultimate_base_type(base_type_id);
+                        tt.generic_type_args(ultimate).filter(|a| !a.is_empty())
+                    };
+                    (crate::name::split_base_name(name).to_string(), args)
+                } else {
+                    (name.clone(), None)
+                };
+                (
+                    head,
+                    Some(module_source.clone()),
+                    own_type_args,
+                    Some(*base_type),
+                )
+            }
             // Flags: first try looking up methods on the flags type itself,
             // then fall back to u32 for method inheritance
             ResolvedType::Flags {

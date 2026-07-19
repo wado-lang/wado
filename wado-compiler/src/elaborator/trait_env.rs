@@ -955,6 +955,17 @@ impl TraitEnv {
             .unwrap_or_default()
     }
 
+    /// Whether `type_name` has an inherent impl declaring `method_name`.
+    pub(crate) fn has_inherent_method(&self, type_name: &str, method_name: &str) -> bool {
+        self.all_impl_index.get(type_name).is_some_and(|keys| {
+            keys.iter().any(|key| {
+                self.impl_headers.get(key).is_some_and(|h| {
+                    h.trait_name.is_none() && h.methods.iter().any(|m| m.name == method_name)
+                })
+            })
+        })
+    }
+
     pub(crate) fn impl_module_for(
         &self,
         type_name: &str,

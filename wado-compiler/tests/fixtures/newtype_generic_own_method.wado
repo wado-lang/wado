@@ -1,0 +1,33 @@
+// Regression test for wado-lang/wado#1626: an inherent method on a generic
+// newtype (`impl MyArray<T> { fn ... }`), including element access under
+// monomorphization.
+type MyArray<T> = List<T>;
+
+impl MyArray<T> {
+    fn second(&self) -> T {
+        return self[1];
+    }
+    fn count(&self) -> i32 {
+        return self.len();
+    }
+}
+
+fn via_generic<U>(_u: &U) -> i32 {
+    let a: MyArray<i32> = [10, 20, 30];
+    return a.second();
+}
+
+export fn run() {
+    let a: MyArray<i32> = [10, 20, 30];
+    assert a.second() == 20;
+    assert a.count() == 3;
+
+    let s: MyArray<String> = ["hi", "yo"];
+    assert s.second() == "yo";
+
+    let n = 5;
+    assert via_generic::<i32>(&n) == 20;
+}
+
+__DATA__
+{"stdout": ""}

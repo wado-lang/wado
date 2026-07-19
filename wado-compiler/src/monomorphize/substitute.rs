@@ -281,6 +281,34 @@ impl Monomorphizer {
                     stores,
                 )
             }
+            // Only a param-embedding base is re-mangled; a concrete-base newtype
+            // keeps its identity so its trait impls resolve. See wado-lang/wado#1626.
+            ResolvedType::Newtype {
+                name,
+                module_source,
+                base_type,
+            } if type_table.contains_type_param(base_type) => {
+                let new_base = self.substitute_type(base_type, substitution, type_table);
+                if new_base == base_type {
+                    return type_id;
+                }
+                let head = crate::name::split_base_name(&name).to_string();
+                let new_name = match type_table.generic_type_args(new_base) {
+                    Some(args) if !args.is_empty() => {
+                        let arg_names: Vec<String> = args
+                            .iter()
+                            .map(|&a| type_table.mangle_type_arg_for_generic(a))
+                            .collect();
+                        mangle_generic_name(&head, &arg_names)
+                    }
+                    _ => head,
+                };
+                type_table.intern(ResolvedType::Newtype {
+                    name: new_name,
+                    module_source,
+                    base_type: new_base,
+                })
+            }
             ResolvedType::GenericInstance {
                 name,
                 module_source,

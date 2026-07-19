@@ -7,14 +7,9 @@ use { Serialize, Deserialize, DeserializeError, DeserializeErrorKind } from "cor
 use { Value } from "core:value";
 use { TreeMap } from "core:collections";
 
-// Non-generic helper: works around wado-lang/wado#1615.
-fn bytes_to_hex(b: ByteList) -> String {
-    return b.to_hex();
-}
-
 fn enc<T: Serialize>(v: &T) -> String {
     return match to_bytes::<T>(v) {
-        Ok(bytes) => bytes_to_hex(bytes),
+        Ok(bytes) => bytes.to_hex(),
         Err(_) => {
             panic("serialize failed");
         },
@@ -582,7 +577,7 @@ test "tuple from an indefinite array consumes the break" {
 
 fn enc_canon<T: Serialize>(v: &T) -> String {
     return match to_bytes_canonical::<T>(v) {
-        Ok(bytes) => bytes_to_hex(bytes),
+        Ok(bytes) => bytes.to_hex(),
         Err(_) => {
             panic("canonical serialize failed");
         },

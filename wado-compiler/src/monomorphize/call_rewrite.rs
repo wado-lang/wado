@@ -522,6 +522,18 @@ impl Monomorphizer {
             // Try trait method name format first (e.g., Triple^IndexValue::index_value)
             let mut possible_keys = Vec::new();
             if let Some(info) = method_func.method_info.as_ref()
+                && info.trait_name.is_none()
+                && info.base_struct_name != base_struct
+            {
+                possible_keys.push(InstantiationKey {
+                    name: MethodName::format_local(&info.base_struct_name, None, &method_name),
+                    module_source: method_func.module_source.clone(),
+                    impl_type_args: impl_type_args.clone(),
+                    method_type_args: vec![],
+                    method_info: None,
+                });
+            }
+            if let Some(info) = method_func.method_info.as_ref()
                 && let Some(ref trait_name) = info.trait_name
             {
                 // For ref-type impls, try the ref struct name first (e.g., "&^IntoIterator::into_iter")
