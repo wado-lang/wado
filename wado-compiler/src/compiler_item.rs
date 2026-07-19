@@ -123,6 +123,11 @@ pub enum CompilerItem {
     /// `Reflect` — compile-time struct-introspection anchor; the
     /// per-struct `impl Reflect for S` synthesis points at it.
     Reflect,
+    /// `Ref` — sealed marker trait for reference (in-place) types,
+    /// whose `&T` / `&mut T` is a shared GC handle with addressable
+    /// interior. The `where T: Ref` bound gates operations that hand
+    /// out a real element reference (e.g. `Index` / `IndexMut`).
+    Ref,
     /// `Eq` — anchor for synthesised `==` / `!=` lowering and the
     /// auto-derive checks that decide whether a compound type
     /// (struct, variant, generic instance) implements `Eq`.
@@ -411,6 +416,7 @@ impl CompilerItem {
         Self::Ordering,
         Self::Default,
         Self::Reflect,
+        Self::Ref,
         Self::Eq,
         Self::Ord,
         Self::From,
@@ -532,6 +538,7 @@ impl CompilerItem {
             Self::Ordering => "ordering",
             Self::Default => "default",
             Self::Reflect => "reflect",
+            Self::Ref => "ref",
             Self::Eq => "eq",
             Self::Ord => "ord",
             Self::From => "from",
@@ -670,6 +677,7 @@ impl CompilerItem {
             | Self::Ordering
             | Self::Default
             | Self::Reflect
+            | Self::Ref
             | Self::Eq
             | Self::Ord
             | Self::From
@@ -801,6 +809,7 @@ impl CompilerItem {
             Self::Formatter => CompilerItemKind::Struct,
             Self::Default
             | Self::Reflect
+            | Self::Ref
             | Self::Eq
             | Self::Ord
             | Self::From

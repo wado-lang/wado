@@ -80,6 +80,15 @@ internal trait Reflect {
     fn type_name() -> String;
 }
 
+/// Marker trait for reference (in-place) types: those whose `&T` / `&mut T` is
+/// a shared GC handle with addressable interior (`struct`, `List<T>`, `String`,
+/// `i128` / `u128`), as opposed to replace-on-assign value types. The `where T:
+/// Ref` bound gates operations that hand out a real element reference — e.g.
+/// `Index` / `IndexMut`. The compiler synthesizes the impl for every eligible
+/// type; it is sealed and cannot be implemented in user code.
+#[compiler_item("ref")]
+internal trait Ref {}
+
 /// Trait for immutable indexing operations.
 /// Types implementing this trait can be indexed with the `[]` operator for reading.
 internal trait Index<IndexType> {

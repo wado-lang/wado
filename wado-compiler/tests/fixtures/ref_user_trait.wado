@@ -1,0 +1,24 @@
+// A user who declares their own `trait Ref` owns that name: the seal (for the
+// compiler's sealed `Ref`) must not fire on an impl of the user's trait.
+
+trait Ref {
+    fn describe(&self) -> String;
+}
+
+struct Foo {
+    a: i32,
+}
+
+impl Ref for Foo {
+    fn describe(&self) -> String {
+        return "foo";
+    }
+}
+
+test "user-defined Ref trait works" {
+    let f = Foo { a: 1 };
+    assert f.describe() == "foo";
+}
+
+__DATA__
+{"test": {}}

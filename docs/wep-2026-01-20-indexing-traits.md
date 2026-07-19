@@ -153,8 +153,8 @@ impl IndexAssign<i32> for List<T> {
 }
 
 // For reference element types only (when trait bounds are available):
-// impl Index<i32> for List<T> where T: Reference { ... }
-// impl IndexMut<i32> for List<T> where T: Reference { ... }
+// impl Index<i32> for List<T> where T: Ref { ... }
+// impl IndexMut<i32> for List<T> where T: Ref { ... }
 ```
 
 ### Optimization: Pattern Recognition
@@ -175,6 +175,36 @@ builtin::array_set(repr, i, builtin::array_get(repr, i) + 1);
 ```
 
 This keeps the semantic layer clean while allowing low-level optimization.
+
+### The `Ref` marker trait
+
+The `where T: Ref` bound above names the set of _reference (in-place) types_:
+those whose `&T` / `&mut T` is a shared GC handle with addressable interior
+(`struct`, `List<T>`, `String`, `i128` / `u128`), as opposed to the
+replace-on-assign value types (`primitive`, `enum`, `flags`, `variant`, `fn`).
+This is exactly the in-place-vs-replace dividing line of
+[Reference Representation](./wep-2026-06-13-reference-representation.md); only an
+in-place element can back a real `&T` returned from `Index` / a real `&mut T`
+returned from `IndexMut`.
+
+`Ref` is declared in the prelude (`core:prelude/traits`) as a sealed,
+compiler-synthesized marker trait, anchored by `#[compiler_item("ref")]`:
+
+```wado
+#[compiler_item("ref")]
+internal trait Ref {}
+```
+
+Sealed means the compiler provides the impl for every eligible type and a user
+`impl Ref for T` is rejected (a user who declares their _own_ `trait Ref` owns
+that name and is unaffected) — the same sealing `Reflect` uses. Keeping it a
+compiler item lets the Rust side reference the trait by registry lookup rather
+than a hard-coded name.
+
+- [x] Declared as the sealed `Ref` compiler-item trait in the prelude.
+- [ ] Synthesize `impl Ref for T` for every eligible reference type (eligibility
+      = the in-place predicate), so `where T: Ref` resolves.
+- [ ] Gate `impl Index` / `impl IndexMut` for `List<T>` on `where T: Ref`.
 
 ## Consequences
 

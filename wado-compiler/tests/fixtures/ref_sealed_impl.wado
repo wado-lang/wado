@@ -1,0 +1,20 @@
+// `Ref` is sealed: a user `impl Ref for T` is a compile error (the compiler
+// synthesizes the impl for every eligible reference type).
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Ref for Point {
+}
+
+test "unreachable" {
+    assert true;
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "cannot implement `Ref`: it is a sealed"
+}

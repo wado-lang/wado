@@ -873,42 +873,50 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let _ = logger.error_in(&module_source, violation);
         }
 
-        // Seal `Reflect`: compiler-synthesized, it may not be implemented in
-        // user code (that would let a program forge a type's reflection). A
-        // user who declares their *own* `trait Reflect` owns that name, so the
+        // Seal the compiler-synthesized traits: they may not be implemented in
+        // user code (a user `impl Reflect` could forge a type's reflection; a
+        // user `impl Ref` could forge reference-type eligibility). A user who
+        // declares their *own* trait of the same name owns that name, so the
         // seal must not fire on an impl of their trait — skip when any user
-        // module declares a trait of the same name (same local-vs-foreign
+        // module declares a trait of the same name (the same local-vs-foreign
         // distinction the orphan checker draws via `local_trait_names`).
-        if let Some(reflect_name) = type_table
-            .borrow()
-            .compiler_items()
-            .trait_name_opt(crate::compiler_item::CompilerItem::Reflect)
-            .map(str::to_string)
-        {
-            let user_owns_reflect = modules.iter().any(|(ms, m)| {
+        for sealed_item in [
+            crate::compiler_item::CompilerItem::Reflect,
+            crate::compiler_item::CompilerItem::Ref,
+        ] {
+            let Some(sealed_name) = type_table
+                .borrow()
+                .compiler_items()
+                .trait_name_opt(sealed_item)
+                .map(str::to_string)
+            else {
+                continue;
+            };
+            let user_owns_name = modules.iter().any(|(ms, m)| {
                 super::trait_env::is_user_local(ms)
                     && m.items
                         .iter()
-                        .any(|it| matches!(it, Item::Trait(t) if t.name == reflect_name))
+                        .any(|it| matches!(it, Item::Trait(t) if t.name == sealed_name))
             });
-            if !user_owns_reflect {
-                for (module_source, module) in modules {
-                    if !super::trait_env::is_user_local(module_source) {
-                        continue;
-                    }
-                    for item in &module.items {
-                        if let Item::Impl(impl_block) = item
-                            && let Some(trait_type) = &impl_block.trait_type
-                            && super::trait_env::get_type_name_static(trait_type) == reflect_name
-                        {
-                            let _ = logger.error_in(
-                                module_source,
-                                TypeError::SealedTraitImpl {
-                                    trait_name: reflect_name.clone(),
-                                    span: impl_block.span,
-                                },
-                            );
-                        }
+            if user_owns_name {
+                continue;
+            }
+            for (module_source, module) in modules {
+                if !super::trait_env::is_user_local(module_source) {
+                    continue;
+                }
+                for item in &module.items {
+                    if let Item::Impl(impl_block) = item
+                        && let Some(trait_type) = &impl_block.trait_type
+                        && super::trait_env::get_type_name_static(trait_type) == sealed_name
+                    {
+                        let _ = logger.error_in(
+                            module_source,
+                            TypeError::SealedTraitImpl {
+                                trait_name: sealed_name.clone(),
+                                span: impl_block.span,
+                            },
+                        );
                     }
                 }
             }
