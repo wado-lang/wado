@@ -250,18 +250,18 @@ impl UserId {
 | TypeScript | Alias (use branded types for distinction) |
 | **Wado**   | **Newtype (this proposal)**               |
 
-## TODO
+## Capabilities
 
-- [ ] Generic newtypes (`type MyArray<T> = List<T>`)
-- [ ] Return type substitution for generic containers (`Option<Base>` → `Option<Newtype>` when calling inherited method on newtype)
-- [x] Trait bounds with newtypes (`fn compare<T: Ord>(a: T, b: T)` with newtype) — implemented
-- [x] Methods on primitive newtypes (`impl UserId { ... }` where `type UserId = i32`) — implemented
-- [x] `List<Newtype>.sort()` via Ord inheritance — implemented
-- [x] Associated-function inheritance (`ByteList::with_capacity`) with newtype return — implemented
-- [x] A newtype over the raw GC `Array<T>` inherits its `Index` traits (`ByteArray`) — implemented
-- [x] `for-of` inherits `IntoIterator` on a newtype, by value (`Item = T`) and by
-      reference (`Item = &T`) (wado-lang/wado#1616) — implemented
-- [ ] A newtype's own inherent method called inside a generic function body mis-resolves its owner to the erased base (wado-lang/wado#1615)
+Newtypes support the full feature set today:
+
+- Distinct-type checking, method/operator/trait inheritance, and zero-cost shared representation
+- Newtype-specific inherent methods via `impl`, including inside generic function bodies
+- Method-signature substitution, extended to generic container return types (`Option<Base>` → `Option<Newtype>`, `List<Base>` → `List<Newtype>`)
+- Trait bounds (`fn compare<T: Ord>(a: T, b: T)` accepts a newtype), and `List<Newtype>.sort()` via inherited `Ord`
+- Associated-function inheritance (`ByteList::with_capacity`) with newtype return
+- Generic newtypes (`type MyArray<T> = List<T>`)
+- Newtypes over the raw GC `Array<T>` inherit `Index` traits and associated functions (`ByteArray`)
+- `for-of` inherits `IntoIterator`, both by value (`Item = T`) and by reference (`Item = &T`)
 
 ## See Also
 
