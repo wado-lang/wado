@@ -1091,11 +1091,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// Fill declared defaults for still-unbound method type params — e.g.
-    /// `collect<C: FromIterator<Elem = Self::Item> = List<Self::Item>>` — so a
-    /// call whose context pins no target falls back to the default instead of
-    /// raising "cannot infer". The default is resolved with `Self` bound to the
-    /// receiver, so `Self::Item` projections resolve against the actual iterator.
+    /// Bind a still-unbound method type param to its declared default, resolving
+    /// the default with `Self` set to the concrete receiver.
     fn fill_defaulted_method_type_args(
         &mut self,
         method_type_params: &[ast::GenericParam],
@@ -1108,9 +1105,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         let receiver_type = self.tysys.get_base_type(receiver_type);
-        // A generic receiver (`it: I` in a generic body) leaves `Self::Item`
-        // unresolvable — skip and let the defer/expected-type path bind the
-        // param. Only a concrete receiver can seed a `Self::…` default.
         if self.is_unbound_type_param(receiver_type) {
             return;
         }
@@ -1121,9 +1115,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !has_fillable {
             return;
         }
-        // A `Self::Assoc` in the default (e.g. `List<Self::Item>`) resolves off
-        // the concrete receiver's trait impl; make sure that impl's associated
-        // types are registered first (they are otherwise lazily populated).
         if let Some(trait_name) = trait_name {
             self.register_assoc_types_for_concrete_type_and_trait(receiver_type, trait_name);
         }
@@ -1137,10 +1128,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect()
         });
         for i in 0..inferred.len() {
-            // Reject a default that did not fully resolve — an error type, or one
-            // still carrying any type param (e.g. `List<T>` where a sibling method
-            // param `T` was not substituted). Such a default must not pin the slot;
-            // leaving it unbound routes to the normal defer/"cannot infer" path.
             if self.is_unbound_type_param(inferred[i])
                 && let Some(default_ty) = defaults[i]
                 && default_ty != TypeTable::ERROR

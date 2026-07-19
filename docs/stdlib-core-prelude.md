@@ -271,10 +271,8 @@ Returns None when iteration is complete.
 
 #### `fn collect<C: FromIterator<Elem = Self::Item> = List<Self::Item>>(&mut self) -> C`
 
-Collects the remaining elements into any `FromIterator` target, chosen
-by the expected type (annotation or turbofish) — a `List<Self::Item>` or
-any newtype over it — defaulting to `List<Self::Item>` when unconstrained.
-Advances `self` to exhaustion, like calling `next()` until `None`.
+Collects the remaining elements into any `FromIterator` target,
+defaulting to `List<Self::Item>`.
 
 #### `fn count(&mut self) -> i32`
 
@@ -360,9 +358,7 @@ Note: Uses &self due to parser limitation (self by value not yet supported in tr
 
 ### `pub trait FromIterator`
 
-Trait for creating a collection from any iterable of `Elem`.
-A newtype over a `FromIterator` base inherits this impl, so `collect()`
-can target the newtype directly.
+Trait for creating a collection from any iterator of `Elem`.
 
 #### `fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self`
 
@@ -616,10 +612,8 @@ Returns None when iteration is complete.
 
 #### `fn collect<C: FromIterator<Elem = Self::Item> = List<Self::Item>>(&mut self) -> C`
 
-Collects the remaining elements into any `FromIterator` target, chosen
-by the expected type (annotation or turbofish) — a `List<Self::Item>` or
-any newtype over it — defaulting to `List<Self::Item>` when unconstrained.
-Advances `self` to exhaustion, like calling `next()` until `None`.
+Collects the remaining elements into any `FromIterator` target,
+defaulting to `List<Self::Item>`.
 
 #### `fn count(&mut self) -> i32`
 
@@ -705,9 +699,7 @@ Note: Uses &self due to parser limitation (self by value not yet supported in tr
 
 ### `pub trait FromIterator`
 
-Trait for creating a collection from any iterable of `Elem`.
-A newtype over a `FromIterator` base inherits this impl, so `collect()`
-can target the newtype directly.
+Trait for creating a collection from any iterator of `Elem`.
 
 #### `fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self`
 

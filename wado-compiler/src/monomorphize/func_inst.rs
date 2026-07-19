@@ -1161,29 +1161,25 @@ impl Monomorphizer {
             .map(|(_, &tid)| tid)
     }
 
-    /// A newtype receiver of a `T^Trait::method` type-param static dispatch
-    /// inherits its base type's trait impl: `ByteList^FromIterator::from_iter`
-    /// resolves through `List<u8>`. Peel the newtype to its base so downstream
-    /// impl-type-arg recovery and home-module resolution see the base instance —
-    /// unless the newtype declares its own impl of the bound trait, which shadows
-    /// the base.
+    /// Resolve the dispatch receiver for a `T^Trait::method` type-param static
+    /// call: a `newtype` inherits its base's trait impl, so peel it to the base
+    /// unless the newtype defines its own impl of the bound trait.
     fn type_param_dispatch_tid(
         &self,
         tid: TypeId,
         info: &LocalMethodName,
         type_table: &TypeTable,
     ) -> TypeId {
+        if !matches!(type_table.get(tid), ResolvedType::Newtype { .. }) {
+            return tid;
+        }
         let base = type_table.resolve_newtype_base(tid);
         if base == tid {
             return tid;
         }
-        // Without a trait we cannot check whether the newtype defines its own
-        // member for this dispatch, so keep the newtype rather than risk peeling
-        // past an own impl (matches the pre-peel `base_type_name` behavior).
         let Some(trait_name) = &info.trait_name else {
             return tid;
         };
-        // A newtype with its own impl of the bound trait shadows the base.
         let newtype_name = type_table.mangle_type_name(tid);
         if self
             .functions

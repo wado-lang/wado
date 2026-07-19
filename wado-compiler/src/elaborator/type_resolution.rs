@@ -142,9 +142,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 return type_id;
             }
-            // `Self` bound to a concrete type (e.g. default-type-arg resolution
-            // binds `Self` = the concrete receiver): resolve the associated type
-            // straight off it, mirroring the `T::Assoc` concrete path below.
             if let Some(self_type) = self.annotate_ctx.trait_ctx.self_type
                 && !self
                     .tysys

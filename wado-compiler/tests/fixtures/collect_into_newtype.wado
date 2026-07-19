@@ -1,5 +1,5 @@
 // wado-lang/wado#1623: collect() targets any FromIterator type, including a
-// newtype over List (e.g. the prelude ByteList), chosen by the expected type.
+// newtype over List, chosen by the expected type.
 use { println, Stdout } from "core:cli";
 
 type Codes = List<u32>;
@@ -7,25 +7,18 @@ type Codes = List<u32>;
 export fn run() with Stdout {
     let s = "AB";
 
-    // Annotation drives the collect target: plain List<u8>.
     let list: List<u8> = s.bytes().collect();
     println(`${list.len()}`);
 
-    // The issue's goal: collect straight into ByteList (newtype over List<u8>),
-    // no `collect::<List<u8>>() as ByteList` boundary cast.
     let bytes: ByteList = s.bytes().collect();
     println(`${bytes.to_hex()}`);
 
-    // Turbofish selects the target explicitly.
     let hex = s.bytes().collect::<ByteList>().to_hex();
     println(`${hex}`);
 
-    // A user-defined newtype over List<u32> also works, via a mapped iterator.
     let codes: Codes = s.chars().map(|c: char| c as u32).collect();
     println(`${codes[0]}`);
 
-    // collect advances the `&mut self` receiver to exhaustion: a follow-up
-    // next() on the same iterator returns None.
     let mut it = ([10, 20, 30] as List<i32>).into_iter();
     let taken: List<i32> = it.collect();
     println(`${taken.len()} ${it.next() matches { None }}`);
