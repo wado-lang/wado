@@ -21,7 +21,7 @@ import { join } from "node:path";
 process.env.NODE_USE_ENV_PROXY ??= "1";
 
 const BUCKET = process.env.WADO_CACHE_BUCKET ?? "wado-lang-cache";
-const OBJECT = process.env.WADO_CACHE_OBJECT ?? "cargo-registry/linux-x86_64/registry.tar.gz";
+const OBJECT = process.env.WADO_CACHE_OBJECT ?? "cargo/registry/linux-x86_64.tar.gz";
 const SCOPE = "https://www.googleapis.com/auth/devstorage.read_only";
 const TIMEOUT_MS = 60_000;
 

@@ -37,8 +37,8 @@ jobs:
       # Pack only public registry data — never credentials.toml / config.toml.
       - name: Pack registry cache
         run: |
-          tar -C "$HOME/.cargo" -czf registry.tar.gz registry/index registry/cache
-          ls -lh registry.tar.gz
+          tar -C "$HOME/.cargo" -czf linux-x86_64.tar.gz registry/index registry/cache
+          ls -lh linux-x86_64.tar.gz
 
       - id: auth
         uses: google-github-actions/auth@v2
@@ -48,6 +48,6 @@ jobs:
 
       - uses: google-github-actions/upload-cloud-storage@v2
         with:
-          path: registry.tar.gz
-          destination: ${{ vars.CARGO_CACHE_BUCKET }}/cargo-registry/linux-x86_64
+          path: linux-x86_64.tar.gz
+          destination: ${{ vars.CARGO_CACHE_BUCKET }}/cargo/registry
           parent: false
