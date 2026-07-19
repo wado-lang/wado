@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784447592649,
+  "lastUpdate": 1784459854890,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -42121,6 +42121,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/08bd1db526a718bcefeb7e619f1262c717a5241d"
         },
         "date": 1784447592268,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8257,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16526,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271337,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c10f0b9645e6054f19f0e064429ff3295956e51e",
+          "message": "Merge pull request #1638 from wado-lang/claude/cargo-cache-investigation-j0dqra\n\nfix(cargo-cache): make the web container reuse CI's sccache compile cache",
+          "timestamp": "2026-07-19T19:57:59+09:00",
+          "tree_id": "cf75afb656c5541d68b6332383b0719bc712ab36",
+          "url": "https://github.com/wado-lang/wado/commit/c10f0b9645e6054f19f0e064429ff3295956e51e"
+        },
+        "date": 1784459854420,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
