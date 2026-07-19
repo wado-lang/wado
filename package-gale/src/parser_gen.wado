@@ -595,7 +595,7 @@ fn collect_parser_members(grammar: &Grammar, ctx: &mut GenContext) -> MemberDecl
     }
     let lang = ctx.action_language();
     for let act of &grammar.named_actions {
-        if !is_parser_members(act) {
+        if !is_parser_members(act, &grammar.kind) {
             continue;
         }
         match translate_members(&lang, &act.body.text, &grammar.name) {

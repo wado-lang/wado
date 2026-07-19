@@ -57,11 +57,19 @@ All 17 `CompositeLexers` / `CompositeParsers` descriptors short-circuit on `pars
 
 ## Stage C — action / predicate execution
 
-**Status:** the **parser** half has landed (java2wado Phase 3), and the `language = Wado` **lexer** action surface — `set_type` / `set_channel` / `skip` / `more`, the mode ops, and multi-alt winner dispatch — executes at the tournament commit (Phase 4 in [`action.md`](./action.md)). Remaining: `@lexer::members`, lexer `print`, nested-group / mid-element action placement, the LATN (ATN-class) lexer path, and the **SuperClass trait** for the real-world grammars below — each remaining item's prerequisite is in [`action.md`](./action.md) (Phase 4). A follow-up harness step will make the ANTLR descriptor `[output]` corpus codegen-and-compare (it is parse-only today), unblocking the `[output]` acceptance.
+Each item's prerequisite is in [`action.md`](./action.md) (Phase 4):
 
-- **java2wado numeric promotion.** i32 token members (`$X.int` / `.type` / `.line` / `.pos` / `.index`) mixed with a wider value-channel field (`returns [long v]` / `[float]` / `[double]`) mismatch Wado's strict widths in any context (`$v = $X.int`, `$v + $X.int`), since Wado has no implicit widening. Loud compile error, not silent; no corpus grammar hits it. A proper fix threads Java's promotion rules through the emitter (cast where promotion is required), not an assignment-only cast. Rationale in [`action.md`](./action.md) (Open questions).
+- Lexer `print` — an output sink threaded through `tokenize` onto `TokenStream`.
+- Nested-group / mid-element lexer action placement.
+- The LATN (ATN-class) lexer path.
+- The rest of the lexer `$`-attribute surface — `$type`, `getCharPositionInLine`, member methods reading match position/text.
+- The `language = Java` lexer path (java2wado over lexer bodies).
+- The SuperClass trait for the real-world grammars below.
+- Make the ANTLR descriptor `[output]` corpus codegen-and-compare (parse-only today), unblocking the `[output]` acceptance.
 
-Gale still **silently discards** action / predicate contents for the cases below the parser subset does not yet cover. The g4 parser accepts them, so grammars containing them (`ANTLRv4Lexer`, `RustLexer`, `RustParser`, `TypeScriptLexer`, `TypeScriptParser`) load cleanly — but the generated lexer/parser behaves as if every predicate were `true` and every action a no-op. That is wrong for:
+- java2wado numeric promotion: i32 token members (`$X.int` / `.type` / `.line` / `.pos` / `.index`) mixed with a wider value-channel field (`returns [long v]` / `[float]` / `[double]`) mismatch Wado's strict widths in any context (`$v = $X.int`, `$v + $X.int`), since Wado has no implicit widening. Loud compile error, not silent; no corpus grammar hits it. A proper fix threads Java's promotion rules through the emitter (cast where promotion is required), not an assignment-only cast. Rationale in [`action.md`](./action.md) (Open questions).
+
+Gale still silently discards action / predicate contents for the cases below the parser subset does not yet cover. The g4 parser accepts them, so grammars containing them (`ANTLRv4Lexer`, `RustLexer`, `RustParser`, `TypeScriptLexer`, `TypeScriptParser`) load cleanly — but the generated lexer/parser behaves as if every predicate were `true` and every action a no-op. That is wrong for:
 
 - Rust's `>>` / `>>=` token splitting in generics (`{this.NextGT()}?`) and float-literal disambiguation (`{this.FloatLiteralPossible()}?`); without them Gale mis-parses nested generics. (Raw-string `#`-count matching is _not_ a Stage C case — `RAW_STRING_CONTENT` is a recursive fragment, a LATN concern.)
 - TypeScript's regex-vs-division disambiguation and other context-sensitive lexer and parser rules.

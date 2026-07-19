@@ -1,0 +1,16 @@
+use lm from "./grammars/wado_lex_members.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/action_lex_members" },
+    };
+
+test "a @lexer::members field persists across tokens" {
+    let r = lm::parse(&"aaaa");
+    assert r.ok(), "clean parse of 'aaaa'";
+    assert r.output == "ABAB", `output: '${r.output}'`;
+}
+
+test "the counter resets per tokenize run" {
+    let r = lm::parse(&"aa");
+    assert r.ok(), "clean parse of 'aa'";
+    assert r.output == "AB", `output: '${r.output}'`;
+}
