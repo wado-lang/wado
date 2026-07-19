@@ -1,0 +1,26 @@
+// `IndexRef` returns `&Output`, so its `type Output: Ref` bound requires the
+// element to be a reference type. A scalar `Output` has no reference identity —
+// use `IndexValue` (returns by value) for that. This locks in impl-site
+// enforcement of the trait's associated-type bound.
+
+struct Cell {
+    value: i32,
+}
+
+impl IndexRef<i32> for Cell {
+    type Output = i32;
+
+    fn index_ref(&self, _i: i32) -> &Self::Output {
+        return &self.value;
+    }
+}
+
+test "unreachable" {
+    assert true;
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "does not implement trait 'Ref'"
+}

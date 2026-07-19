@@ -200,13 +200,13 @@ reworking this.
       returning a boxed `&i32`) moved to `IndexValue`, matching real `List` /
       `TreeMap`.
 - [x] `type Output: Ref` bound declared on `IndexRef` / `IndexMutRef`.
-- [ ] Enforce the `type Output: Ref` bound at impl sites. Associated-type bounds
-      are not checked against an impl's binding today (a general gap, not
-      specific to `Ref` — `IntoIterator::Iter: Iterator` is unchecked too), so
-      the bound currently documents intent without rejecting a non-`Ref`
-      `Output`. Enforcing it is the next step (add an impl-site associated-type
-      bound check; fixture: `impl IndexRef<i32> for Cell { type Output = i32 }`
-      → error).
+- [x] Enforce the `type Output: Ref` bound at impl sites. Added a general
+      impl-site associated-type bound check (`enforce_impl_assoc_type_bounds`):
+      an impl's `type X = Concrete` is checked against every bound the trait
+      declares on `X`, so `impl IndexRef<i32> for Cell { type Output = i32 }`
+      now errors (`i32` does not implement `Ref`). General, not `Ref`-specific —
+      it also covers `IntoIterator::Iter: Iterator` etc. Fixture:
+      `index_ref_scalar_output_rejected`.
 - [ ] `impl<T: Ref> IndexRef / IndexMutRef for List<T>`, and route `&a[i]` /
       `a[i].m()` through them (or keep the `List` intrinsic and use `Ref` only as
       the diagnostic gate — decide during implementation).

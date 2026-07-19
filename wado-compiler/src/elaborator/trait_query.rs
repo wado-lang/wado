@@ -186,6 +186,42 @@ pub(crate) fn find_trait_decl_methods_with_module_with(
     None
 }
 
+/// Find a trait declaration by name and return its associated-type declarations
+/// (`type Output: Ref;` etc.), for enforcing an impl's bindings against the
+/// trait's associated-type bounds. Resolves the trait local-first, mirroring
+/// [`find_trait_decl_methods_with_module_with`].
+pub(crate) fn find_trait_decl_assoc_types_with(
+    trait_name: &str,
+    current_module_source: &ModuleSource,
+    current_module_items: &[ast::Item],
+    imports: &super::sem::ModuleImports,
+    symbols: &crate::symbol::SymbolTable,
+    trait_env: &super::trait_env::TraitEnv,
+    loaded_modules: &IndexMap<ModuleSource, ast::Module>,
+) -> Option<Vec<ast::AssociatedTypeDecl>> {
+    let canonical_key = canonical_decl_key_with(
+        trait_name,
+        current_module_source,
+        imports,
+        symbols,
+        trait_env,
+    );
+    if let Some((module_src, item_id)) = trait_env.decl_index.get(&canonical_key)
+        && let Some(module) = loaded_modules.get(module_src)
+        && let Some(Item::Trait(trait_decl)) = module.item_by_id(*item_id)
+    {
+        return Some(trait_decl.associated_types.clone());
+    }
+    for item in current_module_items {
+        if let Item::Trait(trait_decl) = item
+            && trait_decl.name == trait_name
+        {
+            return Some(trait_decl.associated_types.clone());
+        }
+    }
+    None
+}
+
 impl TypeSystem {
     /// Build the mapping from an impl block's declared type-parameter names to
     /// the concrete type arguments at a use site, by position. Pure over the
@@ -374,6 +410,77 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &self.tysys.trait_env,
             self.loaded_modules,
         )
+    }
+
+    /// Find a trait declaration's associated-type declarations (with their
+    /// bounds), for enforcing an impl's bindings against `type X: Bound`.
+    pub(super) fn find_trait_decl_assoc_type_decls(
+        &self,
+        trait_name: &str,
+    ) -> Option<Vec<ast::AssociatedTypeDecl>> {
+        find_trait_decl_assoc_types_with(
+            trait_name,
+            &self.current_module_source,
+            self.current_module_items,
+            &self.sem.imports,
+            self.symbols,
+            &self.tysys.trait_env,
+            self.loaded_modules,
+        )
+    }
+
+    /// Enforce a trait's associated-type bounds (`type X: Bound`) against an
+    /// impl's bindings (`type X = Concrete`). Runs during impl annotation so a
+    /// non-conforming binding is a clean bound error — e.g.
+    /// `impl IndexRef<i32> for C { type Output = i32 }` where `IndexRef`
+    /// requires `Output: Ref` reports that `i32` does not implement `Ref`.
+    /// A still-parametric binding is skipped (re-checked once concrete).
+    pub(super) fn enforce_impl_assoc_type_bounds(&mut self, impl_block: &ast::ImplBlock) {
+        let Some(trait_type) = &impl_block.trait_type else {
+            return;
+        };
+        let trait_name = self.get_type_name(trait_type);
+        let Some(decls) = self.find_trait_decl_assoc_type_decls(&trait_name) else {
+            return;
+        };
+        for binding in &impl_block.associated_types {
+            let Some(decl) = decls.iter().find(|d| d.name == binding.name) else {
+                continue;
+            };
+            if decl.bounds.is_empty() {
+                continue;
+            }
+            let type_id = self.resolve_type(&binding.ty);
+            if self.tysys.type_table.borrow().contains_type_param(type_id) {
+                continue;
+            }
+            for bound in &decl.bounds {
+                if bound.fn_signature.is_some() {
+                    continue;
+                }
+                if !self.tysys.type_implements_trait(
+                    &self.annotate_ctx,
+                    &self.type_lookup(),
+                    type_id,
+                    &bound.name,
+                ) {
+                    let type_name = self.tysys.type_id_to_string(type_id);
+                    let reason = self.tysys.trait_unimpl_reason_chain(
+                        &self.annotate_ctx,
+                        &self.type_lookup(),
+                        type_id,
+                        &bound.name,
+                    );
+                    let _ = self.emit(TypeError::TraitBoundNotSatisfied {
+                        type_name,
+                        trait_name: bound.name.clone(),
+                        param_name: binding.name.clone(),
+                        reason,
+                        span: binding.span,
+                    });
+                }
+            }
+        }
     }
 
     /// Find a trait declaration's type parameters (e.g., `<T, U>` in `trait Foo<T, U>`).
