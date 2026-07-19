@@ -91,7 +91,7 @@ type "functype//core:prelude/string.wado/String::is_valid_utf8" = fn(ref "core:p
 
 type "functype//core:prelude/slice.wado/ArraySlice<u8>::to_array" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref Array<u8>;  // TypeId(30)
 
-type "functype//core:prelude/slice.wado/ArrayIter<u8>::collect" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> ref "core:prelude//List<u8>";  // TypeId(31)
+type "functype//core:prelude/slice.wado/ArrayIter<u8>::collect<core:prelude/list.wado/List<u8>>" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> ref "core:prelude//List<u8>";  // TypeId(31)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(32)
 
@@ -135,7 +135,7 @@ fn "ice_array_iter_into_iterator.wado/run"() with Stdout {
     self_19 = struct.new "core:prelude/slice.wado//ArrayRefIter<u8>" { repr: __b.repr, index: 0, end: 5 };
     repr_21 = self_19.repr;
     bytes_17 = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: repr_21, index: 0, end: 5 };
-    collected = "core:prelude/slice.wado/ArrayIter<u8>::collect"(bytes_17);
+    collected = "core:prelude/slice.wado/ArrayIter<u8>::collect<core:prelude/list.wado/List<u8>>"(bytes_17);
     __match_3 = __inline_String__from_utf8_slice_15: block -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>" {
         bytes_26 = struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: collected.repr, start: 0, end: collected.used };
         if @unlikely("core:prelude/string.wado/String::is_valid_utf8"(struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: bytes_26.repr, start: 0, end: bytes_26.end }) == 0) {
@@ -433,7 +433,7 @@ fn "core:prelude/slice.wado/ArraySlice<u8>::to_array"(self) {
     return out;
 }
 
-fn "core:prelude/slice.wado/ArrayIter<u8>::collect"(self) {
+fn "core:prelude/slice.wado/ArrayIter<u8>::collect<core:prelude/list.wado/List<u8>>"(self) {
     let remaining: i32;
     let repr_2: ref Array<u8>;
     let a: i32;

@@ -8508,25 +8508,6 @@ pub fn "StrUtf8ByteIter^Iterator::next"(self: &mut StrUtf8ByteIter) -> Option<u8
     return Option<u8>::Some(byte);
 }
 
-pub fn "StrUtf8ByteIter^Iterator::collect"(self: &mut StrUtf8ByteIter) -> List<u8> {
-    let mut result: List<u8> = __seq_lit: {
-        let mut __b: List<u8> = "core::prelude/list.wado::List<u8>^SequenceLiteralBuilder::new_literal"(0);
-        break __seq_lit: __b."List<u8>^SequenceLiteralBuilder::build"();
-    };
-    loop {
-        let __match_4: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-        match __match_4 {
-            Some(item) => {
-                result."List<u8>::push"(item);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return result;
-}
-
 pub fn "StrUtf8ByteIter^Iterator::count"(self: &mut StrUtf8ByteIter) -> i32 {
     let mut n: i32 = 0;
     loop {
@@ -8729,25 +8710,6 @@ pub fn "StrCharIter^Iterator::next"(self: &mut StrCharIter) -> Option<char> {
     self.byte_index = (self.byte_index + 3);
     let code: u32 = (((((b0 as u32 & 7) << 18) | ((b1 & 63) << 12)) | ((b2 & 63) << 6)) | (b3 & 63));
     return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(code));
-}
-
-pub fn "StrCharIter^Iterator::collect"(self: &mut StrCharIter) -> List<char> {
-    let mut result: List<char> = __seq_lit: {
-        let mut __b: List<char> = "core::prelude/list.wado::List<char>^SequenceLiteralBuilder::new_literal"(0);
-        break __seq_lit: __b."List<char>^SequenceLiteralBuilder::build"();
-    };
-    loop {
-        let __match_4: Option<char> = self."StrCharIter^Iterator::next"();
-        match __match_4 {
-            Some(item) => {
-                result."List<char>::push"(item);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return result;
 }
 
 pub fn "StrCharIter^Iterator::count"(self: &mut StrCharIter) -> i32 {
@@ -10010,25 +9972,6 @@ pub fn "StrSplitIter^Iterator::next"(self: &mut StrSplitIter) -> Option<String> 
     return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
 }
 
-pub fn "StrSplitIter^Iterator::collect"(self: &mut StrSplitIter) -> List<String> {
-    let mut result: List<String> = __seq_lit: {
-        let mut __b: List<String> = "core::prelude/list.wado::List<core:prelude/string.wado/String>^SequenceLiteralBuilder::new_literal"(0);
-        break __seq_lit: __b."List<core:prelude/string.wado/String>^SequenceLiteralBuilder::build"();
-    };
-    loop {
-        let __match_4: Option<String> = self."StrSplitIter^Iterator::next"();
-        match __match_4 {
-            Some(item) => {
-                result."List<core:prelude/string.wado/String>::push"(item);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return result;
-}
-
 pub fn "StrSplitIter^Iterator::count"(self: &mut StrSplitIter) -> i32 {
     let mut n: i32 = 0;
     loop {
@@ -10251,25 +10194,6 @@ pub fn "StrSplitNIter^Iterator::next"(self: &mut StrSplitNIter) -> Option<String
     return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
 }
 
-pub fn "StrSplitNIter^Iterator::collect"(self: &mut StrSplitNIter) -> List<String> {
-    let mut result: List<String> = __seq_lit: {
-        let mut __b: List<String> = "core::prelude/list.wado::List<core:prelude/string.wado/String>^SequenceLiteralBuilder::new_literal"(0);
-        break __seq_lit: __b."List<core:prelude/string.wado/String>^SequenceLiteralBuilder::build"();
-    };
-    loop {
-        let __match_4: Option<String> = self."StrSplitNIter^Iterator::next"();
-        match __match_4 {
-            Some(item) => {
-                result."List<core:prelude/string.wado/String>::push"(item);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return result;
-}
-
 pub fn "StrSplitNIter^Iterator::count"(self: &mut StrSplitNIter) -> i32 {
     let mut n: i32 = 0;
     loop {
@@ -10469,25 +10393,6 @@ pub fn "StrSplitWhitespaceIter^Iterator::next"(self: &mut StrSplitWhitespaceIter
     let mut part: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
     "core::builtin::core/builtin/array_copy<u8>"(&mut part, 0, self.repr, start, len);
     return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
-}
-
-pub fn "StrSplitWhitespaceIter^Iterator::collect"(self: &mut StrSplitWhitespaceIter) -> List<String> {
-    let mut result: List<String> = __seq_lit: {
-        let mut __b: List<String> = "core::prelude/list.wado::List<core:prelude/string.wado/String>^SequenceLiteralBuilder::new_literal"(0);
-        break __seq_lit: __b."List<core:prelude/string.wado/String>^SequenceLiteralBuilder::build"();
-    };
-    loop {
-        let __match_4: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
-        match __match_4 {
-            Some(item) => {
-                result."List<core:prelude/string.wado/String>::push"(item);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return result;
 }
 
 pub fn "StrSplitWhitespaceIter^Iterator::count"(self: &mut StrSplitWhitespaceIter) -> i32 {
@@ -10708,25 +10613,6 @@ pub fn "StrLinesIter^Iterator::next"(self: &mut StrLinesIter) -> Option<String> 
     return %16;
 }
 
-pub fn "StrLinesIter^Iterator::collect"(self: &mut StrLinesIter) -> List<String> {
-    let mut result: List<String> = __seq_lit: {
-        let mut __b: List<String> = "core::prelude/list.wado::List<core:prelude/string.wado/String>^SequenceLiteralBuilder::new_literal"(0);
-        break __seq_lit: __b."List<core:prelude/string.wado/String>^SequenceLiteralBuilder::build"();
-    };
-    loop {
-        let __match_4: Option<String> = self."StrLinesIter^Iterator::next"();
-        match __match_4 {
-            Some(item) => {
-                result."List<core:prelude/string.wado/String>::push"(item);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return result;
-}
-
 pub fn "StrLinesIter^Iterator::count"(self: &mut StrLinesIter) -> i32 {
     let mut n: i32 = 0;
     loop {
@@ -10930,25 +10816,6 @@ pub fn "StrCharIndicesIter^Iterator::next"(self: &mut StrCharIndicesIter) -> Opt
     self.byte_index = (self.byte_index + 3);
     let code: u32 = (((((b0 as u32 & 7) << 18) | ((b1 & 63) << 12)) | ((b2 & 63) << 6)) | (b3 & 63));
     return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(code)]);
-}
-
-pub fn "StrCharIndicesIter^Iterator::collect"(self: &mut StrCharIndicesIter) -> List<[i32, char]> {
-    let mut result: List<[i32, char]> = __seq_lit: {
-        let mut __b: List<[i32, char]> = "core::prelude/list.wado::List<[i32,char]>^SequenceLiteralBuilder::new_literal"(0);
-        break __seq_lit: __b."List<[i32,char]>^SequenceLiteralBuilder::build"();
-    };
-    loop {
-        let __match_4: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
-        match __match_4 {
-            Some(item) => {
-                result."List<[i32,char]>::push"(item);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return result;
 }
 
 pub fn "StrCharIndicesIter^Iterator::count"(self: &mut StrCharIndicesIter) -> i32 {
@@ -14090,42 +13957,6 @@ pub fn "&&Array<u8>^Inspect::inspect"(self: &&&Array<u8>, f: &mut Formatter) {
     *inner."Array<u8>^Inspect::inspect"(f);
 }
 
-pub fn "List<[i32,char]>::push"(self: &mut List<[i32, char]>, value: [i32, char]) with stores[value] {
-    let used: i32 = self.used;
-    if (used >= self.repr."Array<[i32,char]>::len"()) {
-        core::builtin::cold_path();
-        self."List<[i32,char]>::grow"();
-    }
-    self.repr."Array<[i32,char]>^IndexAssign<i32>::index_assign"(used, value);
-    self.used = (used + 1);
-}
-
-fn "List<[i32,char]>^SequenceLiteralBuilder::build"(self: &List<[i32, char]>) -> List<[i32, char]> {
-    return *self;
-}
-
-fn "List<[i32,char]>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> List<[i32, char]> {
-    return "core::prelude/list.wado::List<[i32,char]>::with_capacity"(capacity);
-}
-
-pub fn "List<core:prelude/string.wado/String>::push"(self: &mut List<String>, value: String) with stores[value] {
-    let used: i32 = self.used;
-    if (used >= self.repr."Array<core:prelude/string.wado/String>::len"()) {
-        core::builtin::cold_path();
-        self."List<core:prelude/string.wado/String>::grow"();
-    }
-    self.repr."Array<core:prelude/string.wado/String>^IndexAssign<i32>::index_assign"(used, value);
-    self.used = (used + 1);
-}
-
-fn "List<core:prelude/string.wado/String>^SequenceLiteralBuilder::build"(self: &List<String>) -> List<String> {
-    return *self;
-}
-
-fn "List<core:prelude/string.wado/String>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> List<String> {
-    return "core::prelude/list.wado::List<core:prelude/string.wado/String>::with_capacity"(capacity);
-}
-
 pub fn "ArraySlice<u8>::len"(self: &ArraySlice<u8>) -> i32 {
     return (self.end - self.start);
 }
@@ -14166,10 +13997,6 @@ pub fn "String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.w
     return s;
 }
 
-pub fn "List<char>::with_capacity"(capacity: i32) -> List<char> {
-    return List<char> { repr: core::builtin::array_new::<char>(capacity), used: 0 };
-}
-
 pub fn "List<char>::push"(self: &mut List<char>, value: char) with stores[value] {
     let used: i32 = self.used;
     if (used >= self.repr."Array<char>::len"()) {
@@ -14180,12 +14007,8 @@ pub fn "List<char>::push"(self: &mut List<char>, value: char) with stores[value]
     self.used = (used + 1);
 }
 
-fn "List<char>^SequenceLiteralBuilder::build"(self: &List<char>) -> List<char> {
-    return *self;
-}
-
-fn "List<char>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> List<char> {
-    return "core::prelude/list.wado::List<char>::with_capacity"(capacity);
+pub fn "List<char>::with_capacity"(capacity: i32) -> List<char> {
+    return List<char> { repr: core::builtin::array_new::<char>(capacity), used: 0 };
 }
 
 fn "core/builtin/array_fill<u8>"(arr: &mut Array<u8>, offset: i32, value: u8, len: i32);
@@ -14338,7 +14161,7 @@ fn "List<u8>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> List<u8> {
 }
 
 pub fn "String::from_utf8<core:prelude/list.wado/List<u8>>"(bytes: List<u8>) -> Result<String, String> {
-    let collected: List<u8> = bytes."List<u8>^IntoIterator::into_iter"()."ArrayIter<u8>::collect"();
+    let collected: List<u8> = bytes."List<u8>^IntoIterator::into_iter"()."ArrayIter<u8>::collect<core:prelude/list.wado/List<u8>>"();
     return "core::prelude/string.wado::String::from_utf8_slice"(collected."List<u8>::as_slice"());
 }
 
@@ -14388,6 +14211,16 @@ fn "List<u8>^IntoIterator::into_iter"(self: &List<u8>) -> ArrayIter<u8> {
 }
 
 pub fn "ArrayIter<u8>::collect"(self: &mut ArrayIter<u8>) -> List<u8> {
+    let remaining: i32 = core::rt::i32_max((self.end - self.index), 0);
+    let mut repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(remaining);
+    if (remaining > 0) {
+        "core::builtin::core/builtin/array_copy<u8>"(&mut repr, 0, self.repr, self.index, remaining);
+    }
+    self.index = self.end;
+    return "core::prelude/list.wado::List<u8>::internal_from_raw"(repr, remaining);
+}
+
+pub fn "ArrayIter<u8>::collect<core:prelude/list.wado/List<u8>>"(self: &mut ArrayIter<u8>) -> List<u8> {
     let remaining: i32 = core::rt::i32_max((self.end - self.index), 0);
     let mut repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(remaining);
     if (remaining > 0) {
@@ -14482,46 +14315,6 @@ fn "IterMap<core:prelude/string.wado/StrCharIter,char>^Iterator::next"(self: &mu
 
 fn "IterMap<core:prelude/string.wado/StrCharIter,char>^IntoIterator::into_iter"(self: &IterMap<core:prelude/string.wado/StrCharIter,char>) -> IterMap<core:prelude/string.wado/StrCharIter,char> {
     return *self;
-}
-
-pub fn "List<core:prelude/string.wado/String>::with_capacity"(capacity: i32) -> List<String> {
-    return List<core:prelude/string.wado/String> { repr: core::builtin::array_new::<String>(capacity), used: 0 };
-}
-
-fn "Array<core:prelude/string.wado/String>^IndexAssign<i32>::index_assign"(self: &mut Array<String>, index: i32, value: String) with stores[value] {
-    core::builtin::array_set::<String>(self, index, value);
-}
-
-pub fn "List<core:prelude/string.wado/String>::grow"(self: &mut List<String>) {
-    let capacity: i32 = self.repr."Array<core:prelude/string.wado/String>::len"();
-    let new_capacity: i32 = core::rt::i32_max((capacity * 2), 4);
-    let mut new_repr: Array<String> = core::builtin::array_new::<String>(new_capacity);
-    core::builtin::array_copy::<String>(&mut new_repr, 0, &self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
-pub fn "Array<core:prelude/string.wado/String>::len"(self: &Array<String>) -> i32 {
-    return core::builtin::array_len(self);
-}
-
-pub fn "List<[i32,char]>::with_capacity"(capacity: i32) -> List<[i32, char]> {
-    return List<[i32,char]> { repr: core::builtin::array_new::<[i32, char]>(capacity), used: 0 };
-}
-
-fn "Array<[i32,char]>^IndexAssign<i32>::index_assign"(self: &mut Array<[i32, char]>, index: i32, value: [i32, char]) with stores[value] {
-    core::builtin::array_set::<[i32, char]>(self, index, value);
-}
-
-pub fn "List<[i32,char]>::grow"(self: &mut List<[i32, char]>) {
-    let capacity: i32 = self.repr."Array<[i32,char]>::len"();
-    let new_capacity: i32 = core::rt::i32_max((capacity * 2), 4);
-    let mut new_repr: Array<[i32, char]> = core::builtin::array_new::<[i32, char]>(new_capacity);
-    core::builtin::array_copy::<[i32, char]>(&mut new_repr, 0, &self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
-pub fn "Array<[i32,char]>::len"(self: &Array<[i32, char]>) -> i32 {
-    return core::builtin::array_len(self);
 }
 
 fn "core/prelude/array.wado/write_seq_inspect_alt<u8>"(repr: &Array<u8>, len: i32, f: &mut Formatter, marker: bool, limit: i32) {
@@ -14706,10 +14499,6 @@ fn "$value_copy$[i32,char]"(v: [i32, char]) -> [i32, char] {
     return [i32,char] { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$core:prelude/list.wado/List<[i32,char]>"(v: List<[i32, char]>) -> List<[i32, char]> {
-    return List<[i32,char]> { repr: core::builtin::array_clone::<[i32, char]>(&v.repr), used: v.used };
-}
-
 fn "$value_copy$core:prelude/string.wado/StrLinesIter"(v: StrLinesIter) -> StrLinesIter {
     return StrLinesIter { repr: v.repr, used: v.used, pos: v.pos, finished: v.finished };
 }
@@ -14724,10 +14513,6 @@ fn "$value_copy$core:prelude/string.wado/StrSplitNIter"(v: StrSplitNIter) -> Str
 
 fn "$value_copy$core:prelude/string.wado/StrSplitIter"(v: StrSplitIter) -> StrSplitIter {
     return StrSplitIter { repr: v.repr, used: v.used, pos: v.pos, sep_repr: core::builtin::array_clone::<u8>(&v.sep_repr), sep_len: v.sep_len, finished: v.finished };
-}
-
-fn "$value_copy$core:prelude/list.wado/List<core:prelude/string.wado/String>"(v: List<String>) -> List<String> {
-    return List<core:prelude/string.wado/String> { repr: core::builtin::array_clone::<String>(&v.repr), used: v.used };
 }
 
 fn "$value_copy$Array<u8>"(v: Array<u8>) -> Array<u8> {

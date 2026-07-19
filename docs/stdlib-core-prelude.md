@@ -269,9 +269,11 @@ Types implementing this trait can be iterated over using `for-of` loops.
 Advances the iterator and returns the next value.
 Returns None when iteration is complete.
 
-#### `fn collect(&mut self) -> List<Self::Item>`
+#### `fn collect<C: FromIterator<Elem = Self::Item> = List<Self::Item>>(&mut self) -> C`
 
-Collects remaining elements into an List.
+Collects the remaining elements into any `FromIterator` target, chosen
+by the expected type (annotation or turbofish) — a `List<Self::Item>` or
+any newtype over it — defaulting to `List<Self::Item>` when unconstrained.
 
 #### `fn count(&mut self) -> i32`
 
@@ -355,13 +357,13 @@ Types implementing this trait can be used in `for-of` loops directly.
 Creates an iterator from a value.
 Note: Uses &self due to parser limitation (self by value not yet supported in traits).
 
-### `pub trait FromIterator<T>`
+### `pub trait FromIterator`
 
-Trait for creating a collection from an iterator.
-This is a simplified version - the full Rust-style trait requires `impl Iterator`
-syntax which is not yet supported.
+Trait for creating a collection from any iterable of `Elem`.
+A newtype over a `FromIterator` base inherits this impl, so `collect()`
+can target the newtype directly.
 
-#### `fn from_iter(iter: Self::Iter) -> Self`
+#### `fn from_iter<I: Iterator<Item = Self::Elem>>(iter: I) -> Self`
 
 ### `pub trait PushDisplay`
 
@@ -611,9 +613,11 @@ Types implementing this trait can be iterated over using `for-of` loops.
 Advances the iterator and returns the next value.
 Returns None when iteration is complete.
 
-#### `fn collect(&mut self) -> List<Self::Item>`
+#### `fn collect<C: FromIterator<Elem = Self::Item> = List<Self::Item>>(&mut self) -> C`
 
-Collects remaining elements into an List.
+Collects the remaining elements into any `FromIterator` target, chosen
+by the expected type (annotation or turbofish) — a `List<Self::Item>` or
+any newtype over it — defaulting to `List<Self::Item>` when unconstrained.
 
 #### `fn count(&mut self) -> i32`
 
@@ -697,13 +701,13 @@ Types implementing this trait can be used in `for-of` loops directly.
 Creates an iterator from a value.
 Note: Uses &self due to parser limitation (self by value not yet supported in traits).
 
-### `pub trait FromIterator<T>`
+### `pub trait FromIterator`
 
-Trait for creating a collection from an iterator.
-This is a simplified version - the full Rust-style trait requires `impl Iterator`
-syntax which is not yet supported.
+Trait for creating a collection from any iterable of `Elem`.
+A newtype over a `FromIterator` base inherits this impl, so `collect()`
+can target the newtype directly.
 
-#### `fn from_iter(iter: Self::Iter) -> Self`
+#### `fn from_iter<I: Iterator<Item = Self::Elem>>(iter: I) -> Self`
 
 ### `pub trait AsByteSlice`
 
@@ -4027,9 +4031,9 @@ Joins elements into a string with the given separator.
 
 ##### `fn into_iter(&self) -> Self::Iter`
 
-#### `impl FromIterator<T> for List<T>`
+#### `impl FromIterator for List<T>`
 
-##### `fn from_iter(iter: ArrayIter<T>) -> List<T>`
+##### `fn from_iter<I: Iterator<Item = T>>(iter: I) -> List<T>`
 
 #### `impl SequenceLiteralBuilder for List<T>`
 

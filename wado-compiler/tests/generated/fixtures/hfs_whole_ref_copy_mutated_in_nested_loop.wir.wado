@@ -135,9 +135,9 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(50)
 
-type "functype//core:prelude/slice.wado/ArrayRefIter<core:prelude/string.wado/String>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayRefIter<core:prelude/string.wado/String>") -> ref null "core:prelude/string.wado//String";  // TypeId(51)
+type "functype//core:prelude/list.wado/List<core:prelude/string.wado/String>::push" = fn(ref "core:prelude//List<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(51)
 
-type "functype//core:prelude/list.wado/List<core:prelude/string.wado/String>::push" = fn(ref "core:prelude//List<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(52)
+type "functype//core:prelude/slice.wado/ArrayRefIter<core:prelude/string.wado/String>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayRefIter<core:prelude/string.wado/String>") -> ref null "core:prelude/string.wado//String";  // TypeId(52)
 
 type "functype//core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(53)
 
@@ -847,16 +847,6 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     }
 }
 
-fn "core:prelude/slice.wado/ArrayRefIter<core:prelude/string.wado/String>^Iterator::next"(self) {
-    let ref_val: ref "core:prelude/string.wado//String";
-    if self.index >= self.end {
-        return ref.null none;
-    }
-    ref_val = builtin::array_get<ref "core:prelude/string.wado//String">(self.repr, self.index);
-    self.index = self.index + 1;
-    return ref_val;
-}
-
 fn "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(self, value) {
     let used: i32;
     used = self.used;
@@ -866,6 +856,16 @@ fn "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(self, va
     }
     builtin::array_set<ref "core:prelude/string.wado//String">(self.repr, used, value);
     self.used = used + 1;
+}
+
+fn "core:prelude/slice.wado/ArrayRefIter<core:prelude/string.wado/String>^Iterator::next"(self) {
+    let ref_val: ref "core:prelude/string.wado//String";
+    if self.index >= self.end {
+        return ref.null none;
+    }
+    ref_val = builtin::array_get<ref "core:prelude/string.wado//String">(self.repr, self.index);
+    self.index = self.index + 1;
+    return ref_val;
 }
 
 fn "core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self) {
