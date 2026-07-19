@@ -3133,18 +3133,26 @@ fn slot_variant_layout(module: &WirPackage, slot_ty: &WirType) -> Option<(u32, V
 }
 
 /// Build the all-default result vector for `cand`'s inner variant — used when a
-/// return leaves the slot unused (a null ref, e.g. an `Err` return). The
-/// discriminant takes a unit case's value when one exists (semantically
-/// "empty"), else 0; the value is never read on that path, since the outer
-/// discriminant selects a different case.
+/// return leaves the slot unused (a null ref, e.g. an `Err` return).
+///
+/// These locals are dead on this path: a read of the inner slot is dominated by
+/// the outer discriminant check that selects this case (the inner match is
+/// lowered inside the outer `Ok` arm), so the outer case not being taken means
+/// the inner match is never reached. To avoid relying on that invariant for
+/// soundness, the discriminant is chosen to match *no* payload-bearing case —
+/// the unit case's value when one exists, else an out-of-range sentinel (the
+/// case count). The only slot reads `classify_slot_consumer` admits lower to
+/// `inner_disc == case_disc`, so were one to execute against this default it
+/// would correctly miss every case (as `ref.test` on the old boxed null did)
+/// rather than spuriously match case 0.
 fn default_variant_vector(cand: &SlotFlattenCand) -> Vec<WirInstr> {
     let vi = &cand.layout.variant_info;
     let disc = vi
         .case_type_indices
         .iter()
         .position(Option::is_none)
-        .and_then(|p| i32::try_from(p).ok())
-        .unwrap_or(0);
+        .unwrap_or(vi.case_type_indices.len());
+    let disc = i32::try_from(disc).unwrap_or(-1);
     let mut out = Vec::with_capacity(cand.layout.field_types.len());
     out.push(WirInstr::I32Const(disc));
     for ty in &cand.layout.field_types[1..] {
@@ -3359,6 +3367,16 @@ fn find_unwrap_alias(body: &[WirInstr], slot_local: &str, def_use: &LocalDefUse)
 /// Classify the consumer of `slot_local` in `body`, or `None` if not cleanly
 /// rewritable. `case_types` is the inner variant's payload-bearing case set
 /// (the only type the nested rewrite's `VariantReplacement` maps carry).
+///
+/// This is a *structural* consumer check: it verifies every use of the slot is a
+/// payload-case `ref.test` / `ref.cast` (directly or through the `?`-unwrap
+/// alias), not that those reads are dominated by the outer discriminant guard
+/// that guarantees the slot was materialized. Correctness does not hinge on that
+/// dominance: on a path where the slot is absent it decodes via
+/// [`default_variant_vector`] to a discriminant matching no payload case, so an
+/// accepted read misses every case exactly as `ref.test` on the old boxed null
+/// did. A use naming a *unit* case is rejected here (its struct type is not in
+/// `case_types`), so the flattened form only ever answers payload-case tests.
 fn classify_slot_consumer(
     body: &[WirInstr],
     slot_local: &str,
@@ -3396,16 +3414,32 @@ fn slot_case_types(cand: &SlotFlattenCand) -> IndexSet<u32> {
         .collect()
 }
 
+/// True when `instr` (any position) contains a `Call` to a func id in `ids`.
+fn body_calls_any(instr: &WirInstr, ids: &IndexSet<u32>) -> bool {
+    if let WirInstr::Call { func_id, .. } = instr
+        && ids.contains(&func_id.index())
+    {
+        return true;
+    }
+    let mut found = false;
+    instr.for_each_child(&mut |c| found = found || body_calls_any(c, ids));
+    found
+}
+
 /// Phase 2: keep candidates whose every call site consumes the slot cleanly.
 fn validate_slot_sites(module: &WirPackage, cands: Vec<SlotFlattenCand>) -> Vec<SlotFlattenCand> {
-    let def_use_by_func: Vec<LocalDefUse> = module
+    // `def_use` is only consulted for functions that hold a candidate call site,
+    // so build it lazily for exactly those — the common leaf/stdlib function
+    // that references no candidate skips both the map build and the scan below.
+    let cand_ids: IndexSet<u32> = cands.iter().map(|c| c.func_id_index).collect();
+    let def_use_by_func: Vec<Option<LocalDefUse>> = module
         .functions
         .iter()
         .map(|func| {
             func.body
                 .as_deref()
+                .filter(|body| body.iter().any(|i| body_calls_any(i, &cand_ids)))
                 .map(LocalDefUse::of_body)
-                .unwrap_or_default()
         })
         .collect();
     cands
@@ -3415,8 +3449,10 @@ fn validate_slot_sites(module: &WirPackage, cands: Vec<SlotFlattenCand>) -> Vec<
             let mut saw_call = false;
             let mut all_ok = true;
             for (i, func) in module.functions.iter().enumerate() {
-                let Some(body) = &func.body else { continue };
-                let def_use = &def_use_by_func[i];
+                let Some(def_use) = &def_use_by_func[i] else {
+                    continue;
+                };
+                let body = func.body.as_ref().unwrap();
                 // Every reference to the candidate must be a multi-value bind we
                 // can rewrite. A `Return(Call(f))` tail call (or any other raw
                 // call) would keep the old arity after we widen the signature,
