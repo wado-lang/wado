@@ -1,7 +1,5 @@
-// Rust-style byte literal `b'x'` is an integer literal whose value is one byte
-// and whose default type is `u8`. It reuses the integer-literal pipeline: it
-// coerces into any integer type whose range holds the value, takes part in
-// arithmetic, and works as a (range) pattern.
+// Byte literal `b'x'`: a `u8`-valued integer literal that coerces, does
+// arithmetic, and matches (including range patterns) like any integer literal.
 
 fn takes_u8(b: u8) -> u8 {
     return b;
@@ -22,7 +20,7 @@ export fn run() {
     assert a == 65;
     assert takes_u8(b'B') == 66;
 
-    // Every standard single-byte escape.
+    // Standard escapes.
     assert b'\n' == 10;
     assert b'\t' == 9;
     assert b'\r' == 13;
@@ -31,21 +29,20 @@ export fn run() {
     assert b'\"' == 34;
     assert b'\0' == 0;
 
-    // `\xNN`, including a high byte only expressible via the escape.
+    // \xNN, including a high byte.
     assert b'\x00' == 0;
     assert b'\x7f' == 127;
     assert b'\xff' == 255;
 
-    // Coercion into other integer types (value always fits 0..=255).
+    // Coercion.
     let n: i32 = b'A';
     assert n == 65;
     let w: u32 = b'\xff';
     assert w == 255;
 
-    // Arithmetic behaves like any integer literal.
     assert b'A' + 1 == b'B';
 
-    // Pattern matching, individual and range, plus `matches`.
+    // Patterns.
     assert classify(b'5') == 1;
     assert classify(b'q') == 2;
     assert classify(b'\t') == 3;

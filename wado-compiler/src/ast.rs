@@ -2610,8 +2610,7 @@ pub enum Literal {
     /// Byte-string literal `b"..."`: raw source text between quotes (escape
     /// sequences not interpreted). Lowers to a constant `List<u8>`.
     Bytes(String),
-    /// Byte literal `b'x'`: raw source text between quotes (escape sequences not
-    /// interpreted). Lowers to a `u8` integer literal.
+    /// Byte literal `b'x'`: raw source between quotes. Lowers to a `u8`.
     Byte(String),
     /// Char literal: raw source text between quotes (escape sequences not interpreted).
     Char(String),

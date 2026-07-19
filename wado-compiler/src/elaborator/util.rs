@@ -173,8 +173,7 @@ pub(super) fn unescape_bytes(raw: &str) -> Result<Vec<u8>, String> {
                     .map_err(|_| format!("invalid `\\x` escape: \\x{hi}{lo}"))?;
                 out.push(byte);
             } else if chars.peek() == Some(&'u') {
-                // A Unicode escape denotes a scalar, not a byte. Reject it in
-                // both `b"..."` and `b'x'`; `\xNN` writes a raw byte.
+                // A Unicode escape is a scalar, not a byte.
                 return Err(
                     "unicode escape `\\u` is not allowed in a byte literal; use `\\xNN`".to_string(),
                 );
@@ -198,9 +197,8 @@ pub(super) fn unescape_bytes(raw: &str) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
-/// Interpret the raw content of a byte literal `b'x'` (between quotes, without
-/// the quotes) into the single byte it denotes. Shares the byte-string decoder
-/// ([`unescape_bytes`]) and requires exactly one byte.
+/// Decode a byte literal `b'x'` (raw content, without quotes) to its single
+/// byte via [`unescape_bytes`], requiring exactly one byte.
 pub(super) fn unescape_byte(raw: &str) -> Result<u8, String> {
     match unescape_bytes(raw)?.as_slice() {
         [b] => Ok(*b),

@@ -9340,9 +9340,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 TirExprKind::CharLiteral(ch)
             }
             ast::Literal::Byte(s) => {
-                // A byte literal is an integer literal whose value is the byte.
-                // Lower to `IntLiteral` (default type `u8`, or the coerced
-                // integer type) so it rejoins the ordinary integer pipeline.
+                // Lower to `IntLiteral` (default `u8`, or the coerced type).
                 let byte = super::util::unescape_byte(s).unwrap_or(0);
                 let byte_type = if recorded_type == crate::tir::TypeTable::UNKNOWN {
                     crate::tir::TypeTable::U8

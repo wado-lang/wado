@@ -1585,23 +1585,18 @@ optimize. (`#include_bytes("path")` produces the same `ByteList` from a file.)
 The default type is `ByteList`, but newtype literal coercion lets it flow into a
 `List<u8>` context (or any type whose base is `List<u8>`) with no cast.
 
-**Byte literals** are the single-byte analog of a byte string: a `b` prefix on a
-single-quoted character produces one `u8`.
+**Byte literals** are the single-byte analog: `b'x'` is one `u8`.
 
 ```wado
-let a = b'A';              // Type: u8, value 65
-let hi = b'\xff';          // Type: u8, value 255
-let n: i32 = b'A';         // 65 — numeric-literal coercion
+let a = b'A';              // u8, 65
+let hi = b'\xff';          // u8, 255
+let n: i32 = b'A';         // 65 — coerces like an integer literal
 ```
 
-A byte literal is an integer literal whose value is the byte, with a default
-type of `u8`; it takes the ordinary numeric-literal coercion into any integer
-type whose range holds the value (always `0..=255`). Its content follows the
-same byte rule as a byte
-string: exactly one byte, written as an ASCII source character, a `\xNN` escape
-(the only way to write `0x80..=0xFF`), or a standard single-byte escape. Unicode
-escapes and non-ASCII source characters are rejected; use a char literal `'…'`
-for a Unicode scalar.
+A byte literal is an integer literal defaulting to `u8`, so it coerces like any
+integer literal (its value is always `0..=255`). Its content follows the same
+one-byte rule as a byte string (`\xNN` for `0x80..=0xFF`; no `\u`); use a char
+literal `'…'` for a Unicode scalar.
 
 #### Escape Sequences
 

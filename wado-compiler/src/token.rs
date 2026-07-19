@@ -72,8 +72,7 @@ pub enum TokenKind {
     /// Byte-string literal `b"..."`: raw source text between the quotes (escape
     /// sequences not interpreted). Lowers to a constant `List<u8>`.
     ByteStringLit(String),
-    /// Byte literal `b'x'`: raw source text between the quotes (escape sequences
-    /// not interpreted). Lowers to a `u8` integer literal.
+    /// Byte literal `b'x'`: raw source between the quotes. Lowers to a `u8`.
     ByteCharLit(String),
     TemplateStringLit(Vec<TemplateTokenPart>), // Structured template string parts
     /// Char literal: raw source text between the quotes (escape sequences not interpreted).

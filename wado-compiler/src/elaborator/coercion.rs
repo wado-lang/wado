@@ -89,9 +89,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        // Byte literal coercion to integer: `let n: i32 = b'A'`. A byte literal
-        // is an integer literal whose value is always 0..=255, so it takes the
-        // same range check as a non-negative number literal.
+        // Byte literal → integer (`let n: i32 = b'A'`): value 0..=255, so the
+        // non-negative range check applies.
         if let Expr::Literal(lit) = expr
             && let Literal::Byte(raw) = &lit.value
             && self.tysys.type_table.borrow().is_integer(target_type)
@@ -409,10 +408,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow()
                 .get_ultimate_base_type(target_type);
             if base_id == list_u8 {
-                // Validate the escapes here too: this coercion path is taken
-                // before `resolve_literal`, so without it an invalid byte
-                // string (e.g. a `\u` escape) coerced to `List<u8>` would go
-                // unreported and reify silently to empty bytes.
+                // This path runs before `resolve_literal`, so validate here too
+                // — else an invalid byte string coerced to `List<u8>` is unreported.
                 if let Expr::Literal(lit) = expr
                     && let Literal::Bytes(raw) = &lit.value
                     && let Err(message) = util::unescape_bytes(raw)

@@ -209,8 +209,7 @@ impl<'a> Lexer<'a> {
         };
 
         let kind = match ch {
-            // Byte-string literal `b"..."` and byte literal `b'x'` (before the
-            // identifier rule so the leading `b` is not lexed as an identifier).
+            // `b"..."` / `b'x'` — before the identifier rule so `b` is not an ident.
             'b' if self.peek_second() == Some('"') => self.lex_byte_string(),
             'b' if self.peek_second() == Some('\'') => self.lex_byte_char(),
 
@@ -956,9 +955,7 @@ impl<'a> Lexer<'a> {
     fn skip_escape(&mut self) {
         match self.peek_char() {
             Some('x') => {
-                // \xNN — skip up to 2 hex digits. Valid in byte literals /
-                // byte strings; the elaborator rejects it in char / string
-                // literals when it decodes escapes.
+                // \xNN — the elaborator rejects it in char / string literals.
                 self.advance();
                 for _ in 0..2 {
                     match self.peek_char() {
@@ -1237,18 +1234,14 @@ impl<'a> Lexer<'a> {
         TokenKind::CharLit(self.scan_char_raw())
     }
 
-    /// Lex a byte literal `b'x'`. The leading `b` is still pending (dispatched
-    /// here because the next char is `'`, so it cannot be an identifier). Same
-    /// raw scan as a char; lowers to a `u8` integer literal.
+    /// Lex a byte literal `b'x'`; lowers to a `u8` integer literal.
     fn lex_byte_char(&mut self) -> TokenKind {
         self.advance(); // consume `b`
         TokenKind::ByteCharLit(self.scan_char_raw())
     }
 
-    /// Scan a single-quoted literal, with the opening `'` as the current char.
-    /// Returns the raw source between the quotes (escapes not interpreted).
-    /// Shared by char (`'x'`) and byte (`b'x'`) literals; byte-range and
-    /// escape validation are deferred to the elaborator.
+    /// Scan a single-quoted literal (opening `'` current), returning the raw
+    /// text between the quotes. Shared by char `'x'` and byte `b'x'` literals.
     fn scan_char_raw(&mut self) -> String {
         let start = self.pos;
         let start_line = self.line;
