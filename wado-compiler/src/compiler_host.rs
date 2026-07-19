@@ -193,6 +193,15 @@ pub enum Code {
     ParamMissing,
 }
 
+impl Code {
+    pub fn is_unused_lint(&self) -> bool {
+        matches!(
+            self,
+            Code::DeadFunction | Code::DeadGlobal | Code::TestOnlyFunction | Code::TestOnlyGlobal
+        )
+    }
+}
+
 impl std::fmt::Display for Code {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let name = match self {
@@ -734,5 +743,20 @@ mod tests {
         assert!(display.contains("test.wado:10:5"));
         assert!(display.contains("error"));
         assert!(display.contains("expected ';'"));
+    }
+
+    #[test]
+    fn unused_lint_codes_are_classified() {
+        for code in [
+            Code::DeadFunction,
+            Code::DeadGlobal,
+            Code::TestOnlyFunction,
+            Code::TestOnlyGlobal,
+        ] {
+            assert!(code.is_unused_lint(), "{code} should be an unused lint");
+        }
+        for code in [Code::TypeMismatch, Code::UnexpectedToken, Code::Log] {
+            assert!(!code.is_unused_lint(), "{code} is not an unused lint");
+        }
     }
 }
