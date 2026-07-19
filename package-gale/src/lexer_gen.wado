@@ -308,10 +308,6 @@ pub fn gen_lexer(
     let grammar_ci = resolve_ci(&grammar.options, &empty_opts);
     let keywords = collect_keyword_rules(&grammar.lexer_rules, &grammar.options);
     let ea = grammar.action_language matches { Wado };
-    // `@lexer::members` fields / methods land on the `Lexer` struct; a
-    // member-referencing action reaches them through the `lexer` handle the
-    // apply fn receives. Threading is gated on a non-empty members block, so a
-    // member-free grammar stays byte-identical.
     let members = collect_lexer_members(grammar, ctx);
     let has_members = members_present(&members);
     gen_lexer_struct(w, &members);
@@ -340,16 +336,10 @@ pub fn gen_lexer(
     gen_token_kind_name_fn(w, &grammar.lexer_rules, lit_tokens);
 }
 
-/// Whether `members` contributes any field or method to the `Lexer` — the gate
-/// for threading the `lexer` handle into the apply fns.
 fn members_present(members: &MemberDecls) -> bool {
     return !members.fields.is_empty() || !members.methods.is_empty();
 }
 
-/// Translate the grammar's `@lexer::members` (and, in a `lexer grammar`, bare
-/// `@members`) blocks to `Lexer` fields + methods. Mirrors the parser side
-/// (`collect_parser_members`): only when actions are emittable, and an
-/// untranslatable block is a loud diagnostic rather than a silent drop.
 fn collect_lexer_members(grammar: &Grammar, ctx: &mut GenContext) -> MemberDecls {
     let mut fields: List<MemberField> = [];
     let mut methods: List<String> = [];
@@ -382,8 +372,6 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls) {
     let mut s = StructSpec::new("Lexer");
     s.add_field(&"chars", &"List<char>");
     s.add_field(&"pos", &"i32");
-    // `@lexer::members` fields: defaulted so `Lexer::new`'s literal can omit
-    // them (mirrors the `Parser` member fields).
     for let mf of &members.fields {
         s.add_field_default(&mf.name, &mf.ty, &mf.init);
     }
@@ -417,7 +405,6 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls) {
     w.line(&"return LexerSlice::new(&self.chars, start, end);");
     w.end();
 
-    // `@lexer::members` methods: spliced verbatim (already Wado, `self` = Lexer).
     for let m of &members.methods {
         w.blank();
         w.line(m);
@@ -747,11 +734,6 @@ fn gen_mode_constants(w: &mut CodeWriter, mode_names: &List<String>) {
 /// only that alt's actions. Bodies are identity-translated (`$text` over
 /// `chars`/`start`/`pos`, `lx.*` verbatim). Called post-tournament for the
 /// winner only, so a losing candidate's actions never run.
-///
-/// With `@lexer::members`, the apply fn instead receives `lexer: &mut Lexer`
-/// (so an action can read / write member fields as `lexer.<name>`) and binds a
-/// local `chars = &lexer.chars`, keeping the rest of the body — the
-/// `winning_alt` call and `$text` slices — unchanged.
 fn gen_lexer_apply_fns(w: &mut CodeWriter, grammar: &Grammar, has_members: bool) {
     for let rule of &grammar.lexer_rules {
         let mut ids: List<i32> = [];
@@ -773,9 +755,6 @@ fn gen_lexer_apply_fns(w: &mut CodeWriter, grammar: &Grammar, has_members: bool)
         f.add_param(&"pos", &"i32");
         f.add_param(&"lx", &"&mut LexerActions");
         f.emit_begin(w);
-        // `chars` is derived from the threaded `Lexer`; only bind it when the
-        // body reads it (the multi-alt `winning_alt` call or a `$text` slice),
-        // so a single-alt member action with no `$text` leaves no unused local.
         if has_members && apply_body_reads_chars(rule) {
             w.line(&"let chars = &lexer.chars;");
         }
@@ -805,9 +784,6 @@ fn gen_lexer_apply_fns(w: &mut CodeWriter, grammar: &Grammar, has_members: bool)
     }
 }
 
-/// Whether the apply fn body reads the `chars` slice: a multi-alt rule calls
-/// `winning_alt_<rule>(chars, ...)`, and any alt action using `$text` expands to
-/// a `LexerSlice::new(chars, ...)`. Used to gate the member-mode `chars` local.
 fn apply_body_reads_chars(rule: &LexerRule) -> bool {
     if rule.body.len() > 1 {
         return true;
@@ -900,8 +876,6 @@ fn gen_lexer_action_replay(
 ) {
     w.begin(&"if best_act >= 0");
     w.line(&"let mut lx = LexerActions::new();");
-    // With members the apply fn takes `&mut lexer` (member state lives on it) and
-    // derives `chars` from it; otherwise it takes the char slice directly.
     let recv = if has_members { "&mut lexer" } else { "&lexer.chars" };
     for let mut i = 0; i < act_rule_names.len(); i += 1 {
         let call = `${apply_fn_name(&act_rule_names[i])}(${recv}, start, best_end, &mut lx);`;

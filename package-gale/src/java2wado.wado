@@ -68,8 +68,6 @@ pub fn translate_predicate(
     };
 }
 
-/// Translate a `@members` block to Wado struct fields + methods. `Java` parses
-/// the class body; Wado members are a later item.
 pub fn translate_members(lang: &ActionLanguage, body: &String, grammar_name: &String) -> Result<MemberDecls, String> {
     return match lang {
         Java => translate_java_members(body, grammar_name),
@@ -78,10 +76,6 @@ pub fn translate_members(lang: &ActionLanguage, body: &String, grammar_name: &St
     };
 }
 
-/// Whether a named action is a parser-scoped `@members` block: explicit
-/// `@parser::members`, or bare `@members` in a grammar that has a parser side
-/// (combined / parser grammar). In a `lexer grammar` a bare `@members` is the
-/// lexer's, so it is excluded here and claimed by `is_lexer_members`.
 pub fn is_parser_members(act: &NamedAction, kind: &GrammarKind) -> bool {
     if act.name != "members" {
         return false;
@@ -92,9 +86,6 @@ pub fn is_parser_members(act: &NamedAction, kind: &GrammarKind) -> bool {
     };
 }
 
-/// Whether a named action is a lexer-scoped `@members` block: explicit
-/// `@lexer::members`, or bare `@members` in a `lexer grammar` (no parser exists
-/// there). The source of the generated `Lexer`'s member fields + methods.
 pub fn is_lexer_members(act: &NamedAction, kind: &GrammarKind) -> bool {
     if act.name != "members" {
         return false;

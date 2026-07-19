@@ -1,9 +1,3 @@
-//! Stage C `@lexer::members`: a persistent counter field lives on the generated
-//! `Lexer` and survives across tokens. Rule `A`'s action bumps `lexer.count` and
-//! retypes every 2nd match to `B` via `lx.set_type`, so `aaaa` tokenizes as
-//! A B A B. Proves the member field is threaded into the apply fn (not dropped)
-//! and persists across the tournament commits, unlike per-token `LexerActions`.
-
 use lm from "./grammars/wado_lex_members.g4"
     with {
         generator: { module: "../src/generator.wado", output_dir: "./generated/action_lex_members" },
