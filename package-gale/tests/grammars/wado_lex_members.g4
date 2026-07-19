@@ -13,6 +13,6 @@ t : A { p.emit("A") }
   | B { p.emit("B") }
   ;
 
-A : 'a' { lexer.count += 1; if lexer.count % 2 == 0 { lx.set_type(TK_B) } } ;
+A : 'a' { lx.count += 1; if lx.count % 2 == 0 { lx.set_type(TK_B) } } ;
 B : 'b' ;
 WS : ' ' -> skip ;

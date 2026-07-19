@@ -1368,6 +1368,13 @@ pub global TK_ERROR: i32 = 6;
 struct Lexer {
     chars: List<char>,
     pos: i32,
+    act_type: i32 = -1,
+    act_channel: i32 = -1,
+    act_skip: bool = false,
+    act_more: bool = false,
+    act_push_mode: i32 = -1,
+    act_pop_mode: bool = false,
+    act_set_mode: i32 = -1,
 }
 
 impl Lexer {
@@ -1382,24 +1389,15 @@ impl Lexer {
     fn slice(&self, start: i32, end: i32) -> LexerSlice {
         return LexerSlice::new(&self.chars, start, end);
     }
-}
 
-pub global MODE_DEFAULT_MODE: i32 = 0;
-pub global MODE_INNER: i32 = 1;
-
-struct LexerActions {
-    act_type: i32,
-    act_channel: i32,
-    act_skip: bool,
-    act_more: bool,
-    act_push_mode: i32,
-    act_pop_mode: bool,
-    act_set_mode: i32,
-}
-
-impl LexerActions {
-    fn new() -> LexerActions {
-        return LexerActions { act_type: -1, act_channel: -1, act_skip: false, act_more: false, act_push_mode: -1, act_pop_mode: false, act_set_mode: -1 };
+    fn reset_actions(&mut self) {
+        self.act_type = -1;
+        self.act_channel = -1;
+        self.act_skip = false;
+        self.act_more = false;
+        self.act_push_mode = -1;
+        self.act_pop_mode = false;
+        self.act_set_mode = -1;
     }
 
     fn set_type(&mut self, t: i32) {
@@ -1431,11 +1429,14 @@ impl LexerActions {
     }
 }
 
-fn apply_LT_actions(chars: &List<char>, start: i32, pos: i32, lx: &mut LexerActions) {
+pub global MODE_DEFAULT_MODE: i32 = 0;
+pub global MODE_INNER: i32 = 1;
+
+fn apply_LT_actions(lx: &mut Lexer, start: i32, pos: i32) {
     lx.push_mode(MODE_INNER);
 }
 
-fn apply_GT_actions(chars: &List<char>, start: i32, pos: i32, lx: &mut LexerActions) {
+fn apply_GT_actions(lx: &mut Lexer, start: i32, pos: i32) {
     lx.pop_mode();
 }
 
@@ -1537,19 +1538,19 @@ pub fn tokenize(input: &String) -> TokenStream {
             lexer.pos = start + 1;
         } else {
             if best_act >= 0 {
-                let mut lx = LexerActions::new();
+                lexer.reset_actions();
                 if best_act == 0 {
-                    apply_LT_actions(&lexer.chars, start, best_end, &mut lx);
+                    apply_LT_actions(&mut lexer, start, best_end);
                 } else if best_act == 1 {
-                    apply_GT_actions(&lexer.chars, start, best_end, &mut lx);
+                    apply_GT_actions(&mut lexer, start, best_end);
                 }
-                if lx.act_type >= 0 { best_kind = lx.act_type; }
-                if lx.act_channel >= 0 { best_channel = lx.act_channel; }
-                if lx.act_more { best_more = true; }
-                if lx.act_skip { best_act_skip = true; }
-                if lx.act_push_mode >= 0 { best_push_mode = lx.act_push_mode; }
-                if lx.act_pop_mode { best_pop_mode = true; }
-                if lx.act_set_mode >= 0 { best_set_mode = lx.act_set_mode; }
+                if lexer.act_type >= 0 { best_kind = lexer.act_type; }
+                if lexer.act_channel >= 0 { best_channel = lexer.act_channel; }
+                if lexer.act_more { best_more = true; }
+                if lexer.act_skip { best_act_skip = true; }
+                if lexer.act_push_mode >= 0 { best_push_mode = lexer.act_push_mode; }
+                if lexer.act_pop_mode { best_pop_mode = true; }
+                if lexer.act_set_mode >= 0 { best_set_mode = lexer.act_set_mode; }
             }
             let tok_start = if more_start >= 0 { more_start } else { start };
             let is_skip = best_kind matches { TK_WS } || best_act_skip;

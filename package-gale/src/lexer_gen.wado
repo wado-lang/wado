@@ -310,18 +310,18 @@ pub fn gen_lexer(
     let ea = grammar.action_language matches { Wado };
     let members = collect_lexer_members(grammar, ctx);
     let has_members = members_present(&members);
-    gen_lexer_struct(w, &members);
     let act_rule_names = executed_action_rule_names(grammar);
+    let has_actions = !act_rule_names.is_empty();
     let uses_modes = has_modes(&grammar.mode_names);
-    if !act_rule_names.is_empty() {
+    gen_lexer_struct(w, &members, has_actions, uses_modes);
+    if has_actions {
         if uses_modes {
             gen_mode_constants(w, &grammar.mode_names);
         }
-        gen_lexer_actions_struct(w, uses_modes);
         gen_lexer_apply_fns(w, grammar, has_members);
     }
-    gen_lexer_match_fns(w, &grammar.lexer_rules, &keywords, lit_tokens, &grammar.options, atn_class, ea);
-    gen_literal_match_fns(w, lit_tokens, grammar_ci);
+    gen_lexer_match_fns(w, &grammar.lexer_rules, &keywords, lit_tokens, &grammar.options, atn_class, ea, has_members);
+    gen_literal_match_fns(w, lit_tokens, grammar_ci, has_members);
     gen_keyword_classifier_fn(w, &keywords);
     gen_tokenize_fn(
         w,
@@ -368,12 +368,23 @@ fn collect_lexer_members(grammar: &Grammar, ctx: &mut GenContext) -> MemberDecls
     return MemberDecls { fields, methods };
 }
 
-fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls) {
+fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, has_actions: bool, uses_modes: bool) {
     let mut s = StructSpec::new("Lexer");
     s.add_field(&"chars", &"List<char>");
     s.add_field(&"pos", &"i32");
     for let mf of &members.fields {
         s.add_field_default(&mf.name, &mf.ty, &mf.init);
+    }
+    if has_actions {
+        s.add_field_default(&"act_type", &"i32", &"-1");
+        s.add_field_default(&"act_channel", &"i32", &"-1");
+        s.add_field_default(&"act_skip", &"bool", &"false");
+        s.add_field_default(&"act_more", &"bool", &"false");
+        if uses_modes {
+            s.add_field_default(&"act_push_mode", &"i32", &"-1");
+            s.add_field_default(&"act_pop_mode", &"bool", &"false");
+            s.add_field_default(&"act_set_mode", &"i32", &"-1");
+        }
     }
     s.emit(w);
     w.blank();
@@ -405,6 +416,10 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls) {
     w.line(&"return LexerSlice::new(&self.chars, start, end);");
     w.end();
 
+    if has_actions {
+        gen_lexer_action_methods(w, uses_modes);
+    }
+
     for let m of &members.methods {
         w.blank();
         w.line(m);
@@ -412,6 +427,61 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls) {
 
     w.end();  // impl
     w.blank();
+}
+
+/// The action-effect surface on `Lexer`: a `{ ... }` action latches its effects
+/// here (last-wins) and the tournament commit folds them into the outcome.
+/// `reset_actions` clears the per-token latches before each winner replay.
+fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool) {
+    w.blank();
+    let mut fr = FnSpec::new("reset_actions");
+    fr.set_receiver(&"&mut self");
+    fr.emit_begin(w);
+    w.line(&"self.act_type = -1;");
+    w.line(&"self.act_channel = -1;");
+    w.line(&"self.act_skip = false;");
+    w.line(&"self.act_more = false;");
+    if uses_modes {
+        w.line(&"self.act_push_mode = -1;");
+        w.line(&"self.act_pop_mode = false;");
+        w.line(&"self.act_set_mode = -1;");
+    }
+    w.end();
+    w.blank();
+
+    lexer_setter(w, &"set_type", &"t", &"act_type");
+    w.blank();
+    lexer_setter(w, &"set_channel", &"c", &"act_channel");
+    w.blank();
+    lexer_flag(w, &"skip", &"act_skip");
+    w.blank();
+    lexer_flag(w, &"more", &"act_more");
+
+    if uses_modes {
+        w.blank();
+        lexer_setter(w, &"push_mode", &"m", &"act_push_mode");
+        w.blank();
+        lexer_flag(w, &"pop_mode", &"act_pop_mode");
+        w.blank();
+        lexer_setter(w, &"set_mode", &"m", &"act_set_mode");
+    }
+}
+
+fn lexer_setter(w: &mut CodeWriter, name: &String, arg: &String, field: &String) {
+    let mut f = FnSpec::new(name);
+    f.set_receiver(&"&mut self");
+    f.add_param(arg, &"i32");
+    f.emit_begin(w);
+    w.line(&`self.${*field} = ${*arg};`);
+    w.end();
+}
+
+fn lexer_flag(w: &mut CodeWriter, name: &String, field: &String) {
+    let mut f = FnSpec::new(name);
+    f.set_receiver(&"&mut self");
+    f.emit_begin(w);
+    w.line(&`self.${*field} = true;`);
+    w.end();
 }
 
 fn gen_lexer_match_fns(
@@ -422,6 +492,7 @@ fn gen_lexer_match_fns(
     grammar_opts: &List<GrammarOption>,
     atn_class: &TreeMap<String, i32>,
     ea: bool,
+    hm: bool,
 ) {
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(grammar_opts, &empty_opts);
@@ -433,7 +504,7 @@ fn gen_lexer_match_fns(
         } else if !rule.is_fragment {
             if !is_keyword_rule_name(&rule.name, keywords)
                 && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
-                gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts, atn_class, ea);
+                gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts, atn_class, ea, hm);
             }
         } else if fragment_is_recursive(rule, lexer_rules) {
             // A recursive fragment needs its own `try_*` matcher (non-
@@ -441,7 +512,7 @@ fn gen_lexer_match_fns(
             // resolves case-insensitivity from `resolve_ci(grammar_opts,
             // &rule.options)`, so a rule-level `options { caseInsensitive=... }`
             // on the fragment overrides the grammar-level flag.
-            gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts, atn_class, ea);
+            gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts, atn_class, ea, hm);
         }
     }
 }
@@ -520,15 +591,23 @@ fn gen_lexer_match_fn(
     grammar_opts: &List<GrammarOption>,
     atn_class: &TreeMap<String, i32>,
     ea: bool,
+    hm: bool,
 ) {
     let fn_name = lexer_try_fn_name(&rule.name);
     let ci = resolve_ci(grammar_opts, &rule.options);
     gen_visibility_comment(w, &rule.visibility);
     let mut f = FnSpec::new(&fn_name);
-    f.add_param(&"chars", &"&List<char>");
+    if hm {
+        f.add_param(&"lx", &"&Lexer");
+    } else {
+        f.add_param(&"chars", &"&List<char>");
+    }
     f.add_param(&"start", &"i32");
     f.set_return_type(&"i32");
     f.emit_begin(w);
+    if hm {
+        w.line(&"let chars = &lx.chars;");
+    }
     // ATN-class rule (recursive non-greedy body): the static single-pass
     // emitter cannot decide it, so delegate to the runtime lexer simulator.
     if let Some(idx) = atn_class.get(rule.name) {
@@ -541,10 +620,10 @@ fn gen_lexer_match_fn(
     if rule.body.len() == 1 {
         // gen_lexer_alt_seq places the alt's predicates; a false one returns -1
         // so the tokenizer tries the next rule.
-        gen_lexer_alt_seq(w, &rule.body[0], all_rules, &"return -1", ci, ea);
+        gen_lexer_alt_seq(w, &rule.body[0], all_rules, &"return -1", ci, ea, hm);
         w.line(&"return pos;");
     } else {
-        gen_lexer_alts(w, &rule.body, all_rules, &"return -1", ci, ea);
+        gen_lexer_alts(w, &rule.body, all_rules, &"return -1", ci, ea, hm);
         w.line(&"return pos;");
     }
     w.end();
@@ -618,7 +697,7 @@ fn lexer_rule_executed_action_ids(grammar: &Grammar, rule: &LexerRule, out: &mut
 /// order. A rule's position in this list is its `act_index` — the tournament
 /// records it in `best_act`, and the commit dispatches `apply_<name>_actions`.
 /// Empty keeps every actionless / predicate-only grammar byte-identical (no
-/// `LexerActions` struct, no `apply_*` fn, no `best_act` wiring).
+/// action-effect surface on `Lexer`, no `apply_*` fn, no `best_act` wiring).
 pub fn executed_action_rule_names(grammar: &Grammar) -> List<String> {
     let mut names: List<String> = [];
     for let rule of &grammar.lexer_rules {
@@ -629,91 +708,6 @@ pub fn executed_action_rule_names(grammar: &Grammar) -> List<String> {
         }
     }
     return names;
-}
-
-/// The runtime action-context passed to every `apply_<rule>_actions` as `lx`.
-/// A lexer action's effects are collected here (last-wins), then folded into
-/// the tournament outcome at commit. `act_type` / `act_channel` are `< 0` when
-/// the action left the emitted kind / channel unchanged; `act_skip` / `act_more`
-/// are latched flags. Emitted only when a grammar runs a lexer action.
-fn gen_lexer_actions_struct(w: &mut CodeWriter, uses_modes: bool) {
-    let mut s = StructSpec::new("LexerActions");
-    s.add_field(&"act_type", &"i32");
-    s.add_field(&"act_channel", &"i32");
-    s.add_field(&"act_skip", &"bool");
-    s.add_field(&"act_more", &"bool");
-    if uses_modes {
-        s.add_field(&"act_push_mode", &"i32");
-        s.add_field(&"act_pop_mode", &"bool");
-        s.add_field(&"act_set_mode", &"i32");
-    }
-    s.emit(w);
-    w.blank();
-
-    let mode_init = if uses_modes { ", act_push_mode: -1, act_pop_mode: false, act_set_mode: -1" } else { "" };
-    ImplSpec::new("LexerActions").emit_begin(w);
-    let mut f = FnSpec::new("new");
-    f.set_return_type(&"LexerActions");
-    f.emit_begin(w);
-    w.line(&`return LexerActions \{ act_type: -1, act_channel: -1, act_skip: false, act_more: false${mode_init} \};`);
-    w.end();
-    w.blank();
-
-    let mut ft = FnSpec::new("set_type");
-    ft.set_receiver(&"&mut self");
-    ft.add_param(&"t", &"i32");
-    ft.emit_begin(w);
-    w.line(&"self.act_type = t;");
-    w.end();
-    w.blank();
-
-    let mut fc = FnSpec::new("set_channel");
-    fc.set_receiver(&"&mut self");
-    fc.add_param(&"c", &"i32");
-    fc.emit_begin(w);
-    w.line(&"self.act_channel = c;");
-    w.end();
-    w.blank();
-
-    let mut fs = FnSpec::new("skip");
-    fs.set_receiver(&"&mut self");
-    fs.emit_begin(w);
-    w.line(&"self.act_skip = true;");
-    w.end();
-    w.blank();
-
-    let mut fm = FnSpec::new("more");
-    fm.set_receiver(&"&mut self");
-    fm.emit_begin(w);
-    w.line(&"self.act_more = true;");
-    w.end();
-
-    if uses_modes {
-        w.blank();
-        let mut fp = FnSpec::new("push_mode");
-        fp.set_receiver(&"&mut self");
-        fp.add_param(&"m", &"i32");
-        fp.emit_begin(w);
-        w.line(&"self.act_push_mode = m;");
-        w.end();
-        w.blank();
-
-        let mut fpo = FnSpec::new("pop_mode");
-        fpo.set_receiver(&"&mut self");
-        fpo.emit_begin(w);
-        w.line(&"self.act_pop_mode = true;");
-        w.end();
-        w.blank();
-
-        let mut fsm = FnSpec::new("set_mode");
-        fsm.set_receiver(&"&mut self");
-        fsm.add_param(&"m", &"i32");
-        fsm.emit_begin(w);
-        w.line(&"self.act_set_mode = m;");
-        w.end();
-    }
-    w.end();  // impl
-    w.blank();
 }
 
 /// Emit a `MODE_<NAME>` constant per lexer mode so a `language = Wado` action
@@ -743,25 +737,21 @@ fn gen_lexer_apply_fns(w: &mut CodeWriter, grammar: &Grammar, has_members: bool)
         }
         let ci = resolve_ci(&grammar.options, &rule.options);
         if rule.body.len() > 1 {
-            gen_lexer_winning_alt_fn(w, rule, &grammar.lexer_rules, ci);
+            gen_lexer_winning_alt_fn(w, rule, &grammar.lexer_rules, ci, has_members);
         }
         let mut f = FnSpec::new(&apply_fn_name(&rule.name));
-        if has_members {
-            f.add_param(&"lexer", &"&mut Lexer");
-        } else {
-            f.add_param(&"chars", &"&List<char>");
-        }
+        f.add_param(&"lx", &"&mut Lexer");
         f.add_param(&"start", &"i32");
         f.add_param(&"pos", &"i32");
-        f.add_param(&"lx", &"&mut LexerActions");
         f.emit_begin(w);
-        if has_members && apply_body_reads_chars(rule) {
-            w.line(&"let chars = &lexer.chars;");
+        if apply_body_reads_chars(rule) {
+            w.line(&"let chars = &lx.chars;");
         }
         if rule.body.len() == 1 {
             gen_lexer_alt_action_stmts(w, &rule.body[0]);
         } else {
-            w.line(&`let _walt = winning_alt_${rule.name}(chars, start);`);
+            let wa_arg = if has_members { "lx" } else { "chars" };
+            w.line(&`let _walt = winning_alt_${rule.name}(${wa_arg}, start);`);
             let mut first = true;
             for let mut ai = 0; ai < rule.body.len(); ai += 1 {
                 if !lexer_alt_has_action(&rule.body[ai]) {
@@ -827,18 +817,31 @@ fn gen_lexer_alt_action_stmts(w: &mut CodeWriter, alt: &LexerAlternative) {
 /// (first-match, mirroring `gen_lexer_alts`), or -1. Each alt sits in its own
 /// labeled block; a failed match `break`s to the next, a full match returns its
 /// index. No side effects — actions are run by the caller for the returned alt.
-fn gen_lexer_winning_alt_fn(w: &mut CodeWriter, rule: &LexerRule, all_rules: &List<LexerRule>, ci: bool) {
+fn gen_lexer_winning_alt_fn(
+    w: &mut CodeWriter,
+    rule: &LexerRule,
+    all_rules: &List<LexerRule>,
+    ci: bool,
+    has_members: bool,
+) {
     let mut f = FnSpec::new(&`winning_alt_${rule.name}`);
-    f.add_param(&"chars", &"&List<char>");
+    if has_members {
+        f.add_param(&"lx", &"&Lexer");
+    } else {
+        f.add_param(&"chars", &"&List<char>");
+    }
     f.add_param(&"start", &"i32");
     f.set_return_type(&"i32");
     f.emit_begin(w);
+    if has_members {
+        w.line(&"let chars = &lx.chars;");
+    }
     w.line(&"let mut pos = start;");
     for let mut ai = 0; ai < rule.body.len(); ai += 1 {
         let label = `walt_${ai}`;
         w.begin(&`${label}:`);
         w.line(&"pos = start;");
-        gen_lexer_alt_seq(w, &rule.body[ai], all_rules, &`break ${label}`, ci, true);
+        gen_lexer_alt_seq(w, &rule.body[ai], all_rules, &`break ${label}`, ci, true, has_members);
         w.line(&`return ${ai};`);
         w.end();
     }
@@ -864,21 +867,14 @@ fn apply_fn_name(rule_name: &String) -> String {
 }
 
 /// Emit the post-tournament replay dispatch: for the winning rule (`best_act`),
-/// run its `apply_<rule>_actions` into a fresh `LexerActions`, then fold the
-/// collected effects into the tournament outcome. Only reached with
+/// reset the `Lexer`'s effect latches, run its `apply_<rule>_actions`, then fold
+/// the latched effects into the tournament outcome. Only reached with
 /// `best_act >= 0`, i.e. the winner runs actions.
-fn gen_lexer_action_replay(
-    w: &mut CodeWriter,
-    act_rule_names: &List<String>,
-    use_modes: bool,
-    has_set_mode_rules: bool,
-    has_members: bool,
-) {
+fn gen_lexer_action_replay(w: &mut CodeWriter, act_rule_names: &List<String>, use_modes: bool, has_set_mode_rules: bool) {
     w.begin(&"if best_act >= 0");
-    w.line(&"let mut lx = LexerActions::new();");
-    let recv = if has_members { "&mut lexer" } else { "&lexer.chars" };
+    w.line(&"lexer.reset_actions();");
     for let mut i = 0; i < act_rule_names.len(); i += 1 {
-        let call = `${apply_fn_name(&act_rule_names[i])}(${recv}, start, best_end, &mut lx);`;
+        let call = `${apply_fn_name(&act_rule_names[i])}(&mut lexer, start, best_end);`;
         if i == 0 {
             w.begin(&`if best_act == ${i}`);
         } else {
@@ -887,21 +883,19 @@ fn gen_lexer_action_replay(
         w.line(&call);
     }
     w.end();
-    // Fold the collected effects into the tournament outcome. `best_channel`
-    // and `best_more` exist because `has_actions` forced their machinery on;
+    // Fold the latched effects into the tournament outcome. `best_channel` and
+    // `best_more` exist because `has_actions` forced their machinery on;
     // `best_act_skip` feeds the `is_skip` decision below. An untouched
     // `act_type` / `act_channel` (<0) leaves the tournament value in place.
-    w.line(&"if lx.act_type >= 0 { best_kind = lx.act_type; }");
-    w.line(&"if lx.act_channel >= 0 { best_channel = lx.act_channel; }");
-    w.line(&"if lx.act_more { best_more = true; }");
-    w.line(&"if lx.act_skip { best_act_skip = true; }");
-    // Mode ops fold into the mode-transition vars, which exist only under
-    // `use_modes` (push/pop) and `has_set_mode_rules` (set_mode).
+    w.line(&"if lexer.act_type >= 0 { best_kind = lexer.act_type; }");
+    w.line(&"if lexer.act_channel >= 0 { best_channel = lexer.act_channel; }");
+    w.line(&"if lexer.act_more { best_more = true; }");
+    w.line(&"if lexer.act_skip { best_act_skip = true; }");
     if use_modes {
-        w.line(&"if lx.act_push_mode >= 0 { best_push_mode = lx.act_push_mode; }");
-        w.line(&"if lx.act_pop_mode { best_pop_mode = true; }");
+        w.line(&"if lexer.act_push_mode >= 0 { best_push_mode = lexer.act_push_mode; }");
+        w.line(&"if lexer.act_pop_mode { best_pop_mode = true; }");
         if has_set_mode_rules {
-            w.line(&"if lx.act_set_mode >= 0 { best_set_mode = lx.act_set_mode; }");
+            w.line(&"if lexer.act_set_mode >= 0 { best_set_mode = lexer.act_set_mode; }");
         }
     }
     w.end();
@@ -944,6 +938,7 @@ fn gen_lexer_alts(
     fail_action: &String,
     ci: bool,
     ea: bool,
+    hm: bool,
 ) {
     let id = w.next_id();
     w.line(&`let alts_saved_${id} = pos;`);
@@ -955,7 +950,7 @@ fn gen_lexer_alts(
         let label = `alts_${id}_${i}`;
         w.begin(&`${label}:`);
         w.line(&`pos = alts_saved_${id};`);
-        gen_lexer_alt_seq(w, &alts[i], all_rules, &`break ${label}`, ci, ea);
+        gen_lexer_alt_seq(w, &alts[i], all_rules, &`break ${label}`, ci, ea, hm);
         w.line(&`alts_ok_${id} = true;`);
         w.end();
     }
@@ -983,6 +978,7 @@ fn gen_lexer_alt_seq(
     fail_action: &String,
     ci: bool,
     ea: bool,
+    hm: bool,
 ) {
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         // Every `before_index == i` predicate (alt-initial and mid-alt); the
@@ -1010,7 +1006,7 @@ fn gen_lexer_alt_seq(
                     }
                 }
                 let rest_alt = LexerAlternative { elements: rest_elems, actions: rest_actions };
-                gen_lexer_non_greedy_repeat(w, rep, &rest_alt, all_rules, fail_action, ci, ea);
+                gen_lexer_non_greedy_repeat(w, rep, &rest_alt, all_rules, fail_action, ci, ea, hm);
                 return;
             }
             // Greedy Plus / Star whose inner is a single-char-consuming
@@ -1052,12 +1048,12 @@ fn gen_lexer_alt_seq(
                             `lexer predicate after a lookahead-aware greedy repeat is not yet supported (rule alt element ${i})`,
                         );
                     }
-                    gen_lexer_repeat_lookahead_aware(w, rep, &suffix_elems, all_rules, fail_action, ci, ea);
+                    gen_lexer_repeat_lookahead_aware(w, rep, &suffix_elems, all_rules, fail_action, ci, ea, hm);
                     break;
                 }
             }
         }
-        gen_lexer_elem(w, elem, all_rules, fail_action, ci, ea);
+        gen_lexer_elem(w, elem, all_rules, fail_action, ci, ea, hm);
     }
     gen_lexer_rule_predicates(w, &alt.actions, alt.elements.len(), ea, fail_action);
 }
@@ -1142,6 +1138,7 @@ fn gen_lexer_repeat_lookahead_aware(
     fail_action: &String,
     ci: bool,
     ea: bool,
+    hm: bool,
 ) {
     let id = w.next_id();
     let accept_var = `accept_${id}`;
@@ -1153,13 +1150,13 @@ fn gen_lexer_repeat_lookahead_aware(
     // legally start at the current position even before any inner
     // consumption.
     if let Star = rep.kind {
-        gen_lexer_suffix_peek(w, suffix, all_rules, &accept_var, ci, ea);
+        gen_lexer_suffix_peek(w, suffix, all_rules, &accept_var, ci, ea, hm);
     }
 
     // Plus: the first iteration is mandatory and may not be skipped.
     if let Plus = rep.kind {
-        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea);
-        gen_lexer_suffix_peek(w, suffix, all_rules, &accept_var, ci, ea);
+        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea, hm);
+        gen_lexer_suffix_peek(w, suffix, all_rules, &accept_var, ci, ea, hm);
     }
 
     // Forward scan: each iteration of the inner advances pos and
@@ -1169,8 +1166,8 @@ fn gen_lexer_repeat_lookahead_aware(
     w.begin(&"loop");
     w.line(&`let la_saved_${id} = pos;`);
     w.begin(&`${loop_label}:`);
-    gen_lexer_elem(w, &rep.element, all_rules, &`break ${loop_label}`, ci, ea);
-    gen_lexer_suffix_peek(w, suffix, all_rules, &accept_var, ci, ea);
+    gen_lexer_elem(w, &rep.element, all_rules, &`break ${loop_label}`, ci, ea, hm);
+    gen_lexer_suffix_peek(w, suffix, all_rules, &accept_var, ci, ea, hm);
     w.line(&"continue;");
     w.end();
     w.line(&`pos = la_saved_${id};`);
@@ -1193,7 +1190,7 @@ fn gen_lexer_repeat_lookahead_aware(
     let assert_msg = `lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)`;
     let assert_fail = `panic("${assert_msg}")`;
     for let elem of suffix {
-        gen_lexer_elem(w, elem, all_rules, &assert_fail, ci, ea);
+        gen_lexer_elem(w, elem, all_rules, &assert_fail, ci, ea, hm);
     }
 }
 
@@ -1208,6 +1205,7 @@ fn gen_lexer_suffix_peek(
     accept_var: &String,
     ci: bool,
     ea: bool,
+    hm: bool,
 ) {
     let id = w.next_id();
     let save_var = `peek_save_${id}`;
@@ -1217,7 +1215,7 @@ fn gen_lexer_suffix_peek(
     w.line(&`let mut ${matched_var} = false;`);
     w.begin(&`${label}:`);
     for let elem of suffix {
-        gen_lexer_elem(w, elem, all_rules, &`break ${label}`, ci, ea);
+        gen_lexer_elem(w, elem, all_rules, &`break ${label}`, ci, ea, hm);
     }
     w.line(&`${matched_var} = true;`);
     w.end();
@@ -1234,7 +1232,9 @@ fn gen_lexer_elem(
     fail_action: &String,
     ci: bool,
     ea: bool,
+    hm: bool,
 ) {
+    let call_ctx = if hm { "lx" } else { "chars" };
     match *elem {
         Literal(text) => {
             let chars: List<char> = text.chars().collect();
@@ -1276,29 +1276,29 @@ fn gen_lexer_elem(
                     // emitted separately with grammar-level CI.
                     if fragment_is_recursive(f, all_rules) {
                         let fn_name = lexer_try_fn_name(&name);
-                        w.line(&`pos = ${fn_name}(chars, pos);`);
+                        w.line(&`pos = ${fn_name}(${call_ctx}, pos);`);
                         w.line(&`if pos < 0 \{ ${fail_action}; \}`);
                     } else if f.body.len() == 1 {
-                        gen_lexer_alt_seq(w, &f.body[0], all_rules, fail_action, ci, ea);
+                        gen_lexer_alt_seq(w, &f.body[0], all_rules, fail_action, ci, ea, hm);
                     } else {
-                        gen_lexer_alts(w, &f.body, all_rules, fail_action, ci, ea);
+                        gen_lexer_alts(w, &f.body, all_rules, fail_action, ci, ea, hm);
                     }
                 } else {
                     let fn_name = lexer_try_fn_name(&name);
-                    w.line(&`pos = ${fn_name}(chars, pos);`);
+                    w.line(&`pos = ${fn_name}(${call_ctx}, pos);`);
                     w.line(&`if pos < 0 \{ ${fail_action}; \}`);
                 }
             }
         },
         Group(alts) => {
             if alts.len() == 1 {
-                gen_lexer_alt_seq(w, &alts[0], all_rules, fail_action, ci, ea);
+                gen_lexer_alt_seq(w, &alts[0], all_rules, fail_action, ci, ea, hm);
             } else {
-                gen_lexer_alts(w, &alts, all_rules, fail_action, ci, ea);
+                gen_lexer_alts(w, &alts, all_rules, fail_action, ci, ea, hm);
             }
         },
-        Repeat(rep) => gen_lexer_repeat(w, &rep, all_rules, fail_action, ci, ea),
-        Not(not_elem) => gen_lexer_not(w, &not_elem, all_rules, fail_action, ci, ea),
+        Repeat(rep) => gen_lexer_repeat(w, &rep, all_rules, fail_action, ci, ea, hm),
+        Not(not_elem) => gen_lexer_not(w, &not_elem, all_rules, fail_action, ci, ea, hm),
     }
 }
 
@@ -1347,6 +1347,7 @@ fn gen_lexer_repeat(
     fail_action: &String,
     ci: bool,
     ea: bool,
+    hm: bool,
 ) {
     let id = w.next_id();
     let label = `rep_${id}`;
@@ -1354,7 +1355,7 @@ fn gen_lexer_repeat(
         w.begin(&"loop");
         w.line(&`let rep_saved_${id} = pos;`);
         w.begin(&`${label}:`);
-        gen_lexer_elem(w, &rep.element, all_rules, &`break ${label}`, ci, ea);
+        gen_lexer_elem(w, &rep.element, all_rules, &`break ${label}`, ci, ea, hm);
         w.line(&"continue;");
         w.end();
         w.line(&`pos = rep_saved_${id};`);
@@ -1362,11 +1363,11 @@ fn gen_lexer_repeat(
         w.end();
     }
     if let Plus = rep.kind {
-        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea);
+        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea, hm);
         w.begin(&"loop");
         w.line(&`let rep_saved_${id} = pos;`);
         w.begin(&`${label}:`);
-        gen_lexer_elem(w, &rep.element, all_rules, &`break ${label}`, ci, ea);
+        gen_lexer_elem(w, &rep.element, all_rules, &`break ${label}`, ci, ea, hm);
         w.line(&"continue;");
         w.end();
         w.line(&`pos = rep_saved_${id};`);
@@ -1377,7 +1378,7 @@ fn gen_lexer_repeat(
         w.line(&`let opt_saved_${id} = pos;`);
         w.line(&`let mut opt_ok_${id} = false;`);
         w.begin(&`${label}:`);
-        gen_lexer_elem(w, &rep.element, all_rules, &`break ${label}`, ci, ea);
+        gen_lexer_elem(w, &rep.element, all_rules, &`break ${label}`, ci, ea, hm);
         w.line(&`opt_ok_${id} = true;`);
         w.end();
         w.line(&`if !opt_ok_${id} \{ pos = opt_saved_${id}; \}`);
@@ -1392,12 +1393,13 @@ fn gen_lexer_non_greedy_repeat(
     fail_action: &String,
     ci: bool,
     ea: bool,
+    hm: bool,
 ) {
     let id = w.next_id();
     let label = `ng_${id}`;
     // For Plus, match at least one element first
     if let Plus = rep.kind {
-        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea);
+        gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea, hm);
     }
     // Loop: try matching the rest first (non-greedy), otherwise consume one more
     w.begin(&"loop");
@@ -1405,7 +1407,7 @@ fn gen_lexer_non_greedy_repeat(
     w.line(&`let ng_saved_${id} = pos;`);
     w.line(&`let mut ng_exit_${id} = false;`);
     w.begin(&`${label}:`);
-    gen_lexer_alt_seq(w, rest, all_rules, &`break ${label}`, ci, ea);
+    gen_lexer_alt_seq(w, rest, all_rules, &`break ${label}`, ci, ea, hm);
     w.line(&`ng_exit_${id} = true;`);
     w.end();
     w.begin(&`if ng_exit_${id}`);
@@ -1413,7 +1415,7 @@ fn gen_lexer_non_greedy_repeat(
     w.end();
     // Exit failed, restore pos and consume one element
     w.line(&`pos = ng_saved_${id};`);
-    gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea);
+    gen_lexer_elem(w, &rep.element, all_rules, fail_action, ci, ea, hm);
     w.end();
 }
 
@@ -1424,6 +1426,7 @@ fn gen_lexer_not(
     fail_action: &String,
     ci: bool,
     ea: bool,
+    hm: bool,
 ) {
     if let CharClass(cc) = not_elem.element {
         let expanded = if ci { expand_char_class_ci(&cc) } else { cc };
@@ -1440,7 +1443,7 @@ fn gen_lexer_not(
     w.line(&`let not_saved_${id} = pos;`);
     w.line(&`let mut not_matched_${id} = false;`);
     w.begin(&`${label}:`);
-    gen_lexer_elem(w, &not_elem.element, all_rules, &`break ${label}`, ci, ea);
+    gen_lexer_elem(w, &not_elem.element, all_rules, &`break ${label}`, ci, ea, hm);
     w.line(&`not_matched_${id} = true;`);
     w.end();
     w.line(&`pos = not_saved_${id};`);
@@ -1881,15 +1884,22 @@ fn gen_keyword_check(w: &mut CodeWriter, kw: &KeywordInfo) {
     w.write(&` \{ return TK_${kw.rule_name}; \}\n`);
 }
 
-fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &List<LitToken>, ci: bool) {
+fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &List<LitToken>, ci: bool, hm: bool) {
     for let lit of lit_tokens {
         let chars: List<char> = lit.text.chars().collect();
         let fn_name = lit_try_fn_name(&lit.const_name);
         let mut f = FnSpec::new(&fn_name);
-        f.add_param(&"chars", &"&List<char>");
+        if hm {
+            f.add_param(&"lx", &"&Lexer");
+        } else {
+            f.add_param(&"chars", &"&List<char>");
+        }
         f.add_param(&"start", &"i32");
         f.set_return_type(&"i32");
         f.emit_begin(w);
+        if hm {
+            w.line(&"let chars = &lx.chars;");
+        }
         w.line(&"let pos = start;");
         for let mut i = 0; i < chars.len(); i += 1 {
             let mismatch = gen_char_mismatch(&`chars[pos + ${i}]`, chars[i], ci);
@@ -2381,10 +2391,11 @@ fn gen_dispatch_groups(
     groups: &List<DispatchGroup>,
     needs_extras: bool,
     has_actions: bool,
+    has_members: bool,
 ) {
     // If only a wildcard group exists, emit calls directly without dispatch
     if groups.len() == 1 && groups[0].guard == "true" {
-        gen_group_calls(w, calls, &groups[0].calls, needs_extras, has_actions);
+        gen_group_calls(w, calls, &groups[0].calls, needs_extras, has_actions, has_members);
         return;
     }
     let mut first_group = true;
@@ -2392,7 +2403,7 @@ fn gen_dispatch_groups(
         let is_wc = g.guard == "true";
         if is_wc {
             if first_group {
-                gen_group_calls(w, calls, &g.calls, needs_extras, has_actions);
+                gen_group_calls(w, calls, &g.calls, needs_extras, has_actions, has_members);
                 continue;
             }
             w.else_begin(&"else");
@@ -2402,7 +2413,7 @@ fn gen_dispatch_groups(
             w.else_begin(&`else if ${g.guard}`);
         }
         first_group = false;
-        gen_group_calls(w, calls, &g.calls, needs_extras, has_actions);
+        gen_group_calls(w, calls, &g.calls, needs_extras, has_actions, has_members);
     }
     if !first_group {
         w.end();
@@ -2415,12 +2426,14 @@ fn gen_group_calls(
     indices: &List<i32>,
     needs_extras: bool,
     has_actions: bool,
+    has_members: bool,
 ) {
+    let ctx = if has_members { "&lexer" } else { "&lexer.chars" };
     // Uniform `try_*` call per candidate (keep the longest match). Single-char
     // literals are not hand-inlined — the wado compiler folds the tiny bodies.
     for let call_idx of indices {
         let call = &calls[*call_idx];
-        w.line(&`end = ${call.fn_name}(&lexer.chars, start);`);
+        w.line(&`end = ${call.fn_name}(${ctx}, start);`);
         // Under `has_actions` EVERY winner block reassigns `best_act` — the
         // rule's replay index, or -1 for a literal / non-action rule — so a
         // longer non-action match that supersedes an earlier action match does
@@ -2522,6 +2535,7 @@ fn gen_tokenize_fn(
     }
 
     if use_modes {
+        let mode_ctx = if has_members { "&lexer" } else { "&lexer.chars" };
         // Generate mode dispatch
         for let mut mi = 0; mi < mode_names.len(); mi += 1 {
             if mi == 0 {
@@ -2533,7 +2547,7 @@ fn gen_tokenize_fn(
             if mi == 0 {
                 for let lit of lit_tokens {
                     let fn_name = lit_try_fn_name(&lit.const_name);
-                    w.line(&`end = ${fn_name}(&lexer.chars, start);`);
+                    w.line(&`end = ${fn_name}(${mode_ctx}, start);`);
                     let lit_reset = literal_command_extras(
                         lit,
                         lexer_rules,
@@ -2560,7 +2574,7 @@ fn gen_tokenize_fn(
                     && !is_keyword_rule_name(&rule.name, keywords)
                     && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
                     let fn_name = lexer_try_fn_name(&rule.name);
-                    w.line(&`end = ${fn_name}(&lexer.chars, start);`);
+                    w.line(&`end = ${fn_name}(${mode_ctx}, start);`);
                     let extra = best_state_extras(
                         rule.push_mode,
                         rule.pop_mode,
@@ -2644,7 +2658,7 @@ fn gen_tokenize_fn(
             }
         }
         let groups = build_dispatch_groups(&all_calls);
-        gen_dispatch_groups(w, &all_calls, &groups, needs_extras, has_actions);
+        gen_dispatch_groups(w, &all_calls, &groups, needs_extras, has_actions, has_members);
     }
 
     // Keyword reclassification: check if the matched text is actually a keyword.
@@ -2684,7 +2698,7 @@ fn gen_tokenize_fn(
     // reclassification so an explicit `set_type` wins, and before the
     // skip/more/channel commit so its effects (`best_kind`) feed them.
     if has_actions {
-        gen_lexer_action_replay(w, act_rule_names, use_modes, has_set_mode_rules, has_members);
+        gen_lexer_action_replay(w, act_rule_names, use_modes, has_set_mode_rules);
     }
 
     // `more` rules accumulate text into the next emitted token. `tok_start`
