@@ -24,6 +24,7 @@ pub(super) enum OnBoundTrait {
     Deserialize,
     Default,
     Reflect,
+    Ref,
     Inspect,
     InspectAlt,
     DisplayAlt,
@@ -518,6 +519,8 @@ impl TypeSystem {
                 of(CompilerItem::Default, OnBoundTrait::Default)
             } else if trait_name == items.trait_name(CompilerItem::Reflect) {
                 of(CompilerItem::Reflect, OnBoundTrait::Reflect)
+            } else if trait_name == items.trait_name(CompilerItem::Ref) {
+                of(CompilerItem::Ref, OnBoundTrait::Ref)
             } else if trait_name == items.trait_name(CompilerItem::Inspect) {
                 of(CompilerItem::Inspect, OnBoundTrait::Inspect)
             } else if trait_name == items.trait_name(CompilerItem::InspectAlt) {
@@ -706,6 +709,45 @@ impl TypeSystem {
         self.auto_derive_default_struct_type(scope, &name).is_some()
     }
 
+    /// Reference identity — the `Ref` marker's eligibility. True when a value of
+    /// this type is a Wasm GC reference, mirroring `type_id_to_wir_type`'s
+    /// ref-vs-scalar split (WEP 2026-07-19). GC references (`struct`, `variant`,
+    /// generic instances incl. `List` / `String` / tuples, the raw `Array<T>`,
+    /// `fn`, `&T` / `&mut T`) and the wide-int structs (`i128` / `u128`) are
+    /// `Ref`; scalars (other primitives, `enum`, `flags`), `resource` handles
+    /// (an `i32`, not a GC ref), `unit`, and `never` are not. A `Newtype`
+    /// follows its base type.
+    fn is_ref_identity(&self, resolved: &ResolvedType) -> bool {
+        match resolved {
+            ResolvedType::Primitive(p) => {
+                matches!(p, PrimitiveType::I128 | PrimitiveType::U128)
+            }
+            ResolvedType::Struct { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::BuiltinArray(_)
+            | ResolvedType::Function { .. }
+            | ResolvedType::Ref(_)
+            | ResolvedType::MutRef(_) => true,
+            ResolvedType::Newtype { base_type, .. } => {
+                let base = self.type_table.borrow().get(*base_type).clone();
+                self.is_ref_identity(&base)
+            }
+            ResolvedType::Enum { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::Reactive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Unknown
+            | ResolvedType::Error
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocTypeProjection { .. } => false,
+        }
+    }
+
     fn type_implements_trait_inner(
         &self,
         ctx: &Scope,
@@ -734,6 +776,14 @@ impl TypeSystem {
                 return bounds.iter().any(|b| b.name == trait_name);
             }
             return false;
+        }
+
+        // `Ref` (reference identity) is decided by the type's representation, not
+        // by an impl lookup or field recursion. It must run before the primitive
+        // path — `i128` / `u128` are `Ref` (GC structs) while every other scalar
+        // is not — and before the impl-based paths.
+        if on_bound == Some(OnBoundTrait::Ref) {
+            return self.is_ref_identity(resolved);
         }
 
         let is_eq = on_bound == Some(OnBoundTrait::Eq);

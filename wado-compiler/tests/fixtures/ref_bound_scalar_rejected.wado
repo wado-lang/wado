@@ -1,0 +1,16 @@
+// A scalar `i32` is not a Wasm GC reference, so it does not satisfy `T: Ref`.
+
+fn accepts_ref<T: Ref>(x: &T) -> i32 {
+    return 1;
+}
+
+test "unreachable" {
+    let n: i32 = 5;
+    assert accepts_ref(&n) == 1;  // i32 is not Ref
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "does not implement trait 'Ref'"
+}

@@ -1,0 +1,35 @@
+// `Ref` (reference identity) holds for every type that is a Wasm GC reference:
+// struct, variant, String, List, the wide-int structs, and `&T` itself.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+variant Color {
+    Red,
+    Blue(i32),
+}
+
+fn accepts_ref<T: Ref>(x: &T) -> i32 {
+    return 1;
+}
+
+test "Ref holds for reference-identity types" {
+    let p = Point { x: 1, y: 2 };
+    let c = Color::Blue(3);
+    let s: String = "hi";
+    let big: i128 = 42;
+    let xs: List<i32> = [1, 2, 3];
+    let r = &p;
+
+    assert accepts_ref(&p) == 1;    // struct
+    assert accepts_ref(&c) == 1;    // variant
+    assert accepts_ref(&s) == 1;    // String
+    assert accepts_ref(&big) == 1;  // i128 (GC struct, not a scalar)
+    assert accepts_ref(&xs) == 1;   // List<T>
+    assert accepts_ref(&r) == 1;    // &T is itself Ref (T = &Point)
+}
+
+__DATA__
+{"test": {}}
