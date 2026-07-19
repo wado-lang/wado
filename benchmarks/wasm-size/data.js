@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784416377654,
+  "lastUpdate": 1784422528775,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -41813,6 +41813,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/46160cf4aaec5e128800ad65e4d99f9566e134c9"
         },
         "date": 1784416377265,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8257,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16526,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271337,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d2b86569580d0def6e5e753f5996f622737f5b11",
+          "message": "Merge pull request #1629 from wado-lang/claude/newtype-bug-fixes-jo0uuc\n\nfix(monomorphize): newtype inherent methods in generic contexts",
+          "timestamp": "2026-07-19T09:45:36+09:00",
+          "tree_id": "ccc6fa033ee454daaf1e9d476fb7834448c74ba8",
+          "url": "https://github.com/wado-lang/wado/commit/d2b86569580d0def6e5e753f5996f622737f5b11"
+        },
+        "date": 1784422528327,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
