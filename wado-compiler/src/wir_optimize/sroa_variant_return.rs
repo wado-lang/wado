@@ -3745,17 +3745,19 @@ fn expand_slot_binds(
         });
 
         // Fresh locals for `W`'s result-vector fields, mapped by field name so
-        // `build_variant_replacement` can resolve each case struct's fields.
+        // `build_variant_replacement` can resolve each case struct's fields. The
+        // field name (`discriminant`, `payload_0`, `caseN_payload_M`) is kept in
+        // the local name so the flattened slot stays self-documenting.
         let mut field_map: crate::hashmap::IndexMap<String, String> =
             crate::hashmap::IndexMap::default();
         let mut sub_locals: Vec<Option<String>> = Vec::with_capacity(cand.layout.field_names.len());
         let mut decls: Vec<WirInstr> = Vec::with_capacity(cand.layout.field_names.len());
-        for (fi, field_name) in cand.layout.field_names.iter().enumerate() {
-            let name = format!("{slot_local}__n{fi}");
+        for (field_name, field_ty) in cand.layout.field_names.iter().zip(&cand.layout.field_types) {
+            let name = format!("{slot_local}__n_{field_name}");
             field_map.insert(field_name.clone(), name.clone());
             decls.push(WirInstr::DeclareLocal {
                 name: name.clone(),
-                ty: cand.layout.field_types[fi].clone(),
+                ty: field_ty.clone(),
             });
             sub_locals.push(Some(name));
         }
