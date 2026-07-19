@@ -93,24 +93,27 @@ internal trait Reflect {
 #[compiler_item("ref")]
 internal trait Ref {}
 
-/// Trait for immutable indexing operations.
-/// Types implementing this trait can be indexed with the `[]` operator for reading.
-internal trait Index<IndexType> {
-    type Output;
+/// Trait for immutable reference indexing.
+/// `container[i]` in reference position (`&container[i]`, a `&self`-method
+/// receiver, pattern match) reads through this. `Output: Ref` because you can
+/// only hand out `&Output` when the element is itself a GC reference — a scalar
+/// element is read by value through `IndexValue` instead.
+internal trait IndexRef<IndexType> {
+    type Output: Ref;
 
     /// Returns a reference to the element at the given index.
-    fn index(&self, index: IndexType) -> &Self::Output;
+    fn index_ref(&self, index: IndexType) -> &Self::Output;
 }
 
-/// Trait for mutable indexing operations.
+/// Trait for mutable reference indexing.
 /// Types implementing this trait can be indexed with the `[]` operator to get
-/// a mutable reference: `container[i].mutating_method()`.
-/// Note: Requires Index to be implemented (supertrait relationship).
-internal trait IndexMut<IndexType> {
-    type Output;
+/// a mutable reference: `container[i].mutating_method()`. `Output: Ref` for the
+/// same reason as `IndexRef`.
+internal trait IndexMutRef<IndexType> {
+    type Output: Ref;
 
     /// Returns a mutable reference to the element at the given index.
-    fn index_mut(&mut self, index: IndexType) -> &mut Self::Output;
+    fn index_mut_ref(&mut self, index: IndexType) -> &mut Self::Output;
 }
 
 /// Trait for index assignment operations.

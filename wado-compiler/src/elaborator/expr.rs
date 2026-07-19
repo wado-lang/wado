@@ -1468,9 +1468,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let _ = self.resolve_expr(&index.index, ctx, Some(key_type));
                 }
 
-                // Generate: *expr.index(index_expr)
-                let mangled_method_name =
-                    MethodName::format_local(&lookup_name, Some(&trait_info.trait_name), "index");
+                // Generate: *expr.index_ref(index_expr)
+                let mangled_method_name = MethodName::format_local(
+                    &lookup_name,
+                    Some(&trait_info.trait_name),
+                    "index_ref",
+                );
 
                 // The method returns &Output, so the type is Ref(output_type)
                 let ref_output_type = self
@@ -1486,7 +1489,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_info: Some(LocalMethodName::new(
                         lookup_name,
                         Some(trait_info.trait_name.clone()),
-                        "index".to_string(),
+                        "index_ref".to_string(),
                     )),
                 };
 
@@ -1510,14 +1513,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return trait_info.output_type;
             }
 
-            // Fallback: try IndexValue trait (returns value by copy)
-            let index_value_info = self.index_lookup_or_newtype_base(
-                &struct_name,
-                base_type_id,
-                &lookup_name,
-                lookup_type_id,
-                |s, n, t| s.find_index_value_trait_impl(n, t, index_type),
-            );
+            // Fallback: try IndexValue trait (returns value by copy). Match the
+            // resolved subscript type first (to pick between overloaded impls);
+            // if that fails, retry by container name alone so a not-yet-coerced
+            // literal subscript (a reference-keyed `g[[0]]`) still resolves and
+            // is coerced to the impl's declared key type below.
+            let index_value_info = self
+                .index_lookup_or_newtype_base(
+                    &struct_name,
+                    base_type_id,
+                    &lookup_name,
+                    lookup_type_id,
+                    |s, n, t| s.find_index_value_trait_impl(n, t, Some(index_type)),
+                )
+                .or_else(|| {
+                    self.index_lookup_or_newtype_base(
+                        &struct_name,
+                        base_type_id,
+                        &lookup_name,
+                        lookup_type_id,
+                        |s, n, t| s.find_index_value_trait_impl(n, t, None),
+                    )
+                });
             if let Some(trait_info) = index_value_info {
                 if let Some(key_type) = trait_info.index_type
                     && key_type != index_type

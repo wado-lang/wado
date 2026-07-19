@@ -193,10 +193,20 @@ reworking this.
       prelude, sealed alongside `Reflect`.
 - [ ] `Ref` eligibility synthesis (reference-identity predicate), so `T: Ref`
       resolves; correct `resource ∉ Ref`, `&T ∈ Ref`, `variant`/`fn` ∈ `Ref`.
-- [ ] Rename the prelude `Index` / `IndexMut` traits to `IndexRef` /
+- [x] Rename the prelude `Index` / `IndexMut` traits to `IndexRef` /
       `IndexMutRef` (methods `index_ref` / `index_mut_ref`) and update the
-      elaborator's index-desugaring lookups.
-- [ ] `type Output: Ref` bound on `IndexRef` / `IndexMutRef`.
+      elaborator's index-desugaring lookups. Migrated the user-container
+      fixtures: struct-`Output` impls renamed; scalar-`Output` impls (which were
+      returning a boxed `&i32`) moved to `IndexValue`, matching real `List` /
+      `TreeMap`.
+- [x] `type Output: Ref` bound declared on `IndexRef` / `IndexMutRef`.
+- [ ] Enforce the `type Output: Ref` bound at impl sites. Associated-type bounds
+      are not checked against an impl's binding today (a general gap, not
+      specific to `Ref` — `IntoIterator::Iter: Iterator` is unchecked too), so
+      the bound currently documents intent without rejecting a non-`Ref`
+      `Output`. Enforcing it is the next step (add an impl-site associated-type
+      bound check; fixture: `impl IndexRef<i32> for Cell { type Output = i32 }`
+      → error).
 - [ ] `impl<T: Ref> IndexRef / IndexMutRef for List<T>`, and route `&a[i]` /
       `a[i].m()` through them (or keep the `List` intrinsic and use `Ref` only as
       the diagnostic gate — decide during implementation).

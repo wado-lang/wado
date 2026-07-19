@@ -2672,19 +2672,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         base_type_id: TypeId,
         _index_type: TypeId,
     ) -> Option<IndexTraitInfo> {
-        // Look for impl Index<...> for StructName
-        self.find_indexing_trait_impl(struct_name, base_type_id, "Index", "index", "Output", None)
-            .map(
-                |(output_type, self_kind, trait_name, impl_module_source, index_type)| {
-                    IndexTraitInfo {
-                        output_type,
-                        self_kind,
-                        trait_name,
-                        impl_module_source,
-                        index_type,
-                    }
-                },
-            )
+        // Look for impl IndexRef<...> for StructName
+        self.find_indexing_trait_impl(
+            struct_name,
+            base_type_id,
+            "IndexRef",
+            "index_ref",
+            "Output",
+            None,
+        )
+        .map(
+            |(output_type, self_kind, trait_name, impl_module_source, index_type)| IndexTraitInfo {
+                output_type,
+                self_kind,
+                trait_name,
+                impl_module_source,
+                index_type,
+            },
+        )
     }
 
     /// Find `KeyValueLiteralBuilder` trait implementation for a type.
@@ -2922,12 +2927,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         base_type_id: TypeId,
         _index_type: TypeId,
     ) -> Option<IndexMutTraitInfo> {
-        // Look for impl IndexMut<...> for StructName
+        // Look for impl IndexMutRef<...> for StructName
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
-            "IndexMut",
-            "index_mut",
+            "IndexMutRef",
+            "index_mut_ref",
             "Output",
             None,
         )
@@ -2944,12 +2949,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Find `IndexValue` trait implementation for a type
+    /// Find `IndexValue` trait implementation for a type.
+    ///
+    /// `expected_index_type` disambiguates overloaded impls (e.g. `List`'s
+    /// `IndexValue<i32>` vs `IndexValue<RangeExclusive<i32>>`); pass `None` to
+    /// match by container name alone, for a not-yet-coerced literal subscript
+    /// (a list-literal key `g[[0]]`) whose type only settles after the impl's
+    /// declared key type is known.
     pub(super) fn find_index_value_trait_impl(
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-        index_type: TypeId,
+        expected_index_type: Option<TypeId>,
     ) -> Option<IndexValueTraitInfo> {
         // Look for impl IndexValue<...> for StructName, matching the index type
         self.find_indexing_trait_impl(
@@ -2958,7 +2969,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             "IndexValue",
             "index_value",
             "Output",
-            Some(index_type),
+            expected_index_type,
         )
         .map(
             |(output_type, self_kind, trait_name, impl_module_source, index_type)| {
@@ -3483,8 +3494,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Generate: container.index_mut(index).method(args)
         // Step 1: Create container.index_mut(index) call
-        let mangled_index_mut_name =
-            MethodName::format_local(&struct_name, Some(&index_mut_info.trait_name), "index_mut");
+        let mangled_index_mut_name = MethodName::format_local(
+            &struct_name,
+            Some(&index_mut_info.trait_name),
+            "index_mut_ref",
+        );
 
         // IndexMut returns &mut Output
         let mut_ref_output_type = self
@@ -3510,7 +3524,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_info: Some(LocalMethodName::new(
                         struct_name.clone(),
                         Some(index_mut_info.trait_name.clone()),
-                        "index_mut".to_string(),
+                        "index_mut_ref".to_string(),
                     )),
                 },
                 self_kind: index_mut_info.self_kind,
