@@ -1,0 +1,53 @@
+# Publishes the shared cargo registry cache to GCS so non-GitHub environments
+# (e.g. the Claude Code web container) can restore it. See
+# .claude/hooks/cargo-cache-restore.mjs for the consumer side.
+#
+# Required repo configuration:
+#   secrets.GCP_WIF_PROVIDER    workload identity provider resource name
+#   secrets.GCP_CACHE_WRITER_SA writer service-account email (roles/storage.objectAdmin on the bucket)
+#   vars.CARGO_CACHE_BUCKET     GCS bucket name (e.g. wado-lang-cache)
+name: Cargo registry cache
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Cargo.lock
+      - .github/workflows/cargo-cache.yml
+  workflow_dispatch:
+
+concurrency:
+  group: cargo-cache
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      # Populates ~/.cargo/registry/{index,cache} without compiling.
+      - run: cargo fetch --locked
+
+      # Pack only public registry data — never credentials.toml / config.toml.
+      - name: Pack registry cache
+        run: |
+          tar -C "$HOME/.cargo" -czf registry.tar.gz registry/index registry/cache
+          ls -lh registry.tar.gz
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_CACHE_WRITER_SA }}
+
+      - uses: google-github-actions/upload-cloud-storage@v2
+        with:
+          path: registry.tar.gz
+          destination: ${{ vars.CARGO_CACHE_BUCKET }}/cargo-registry/linux-x86_64
+          parent: false
