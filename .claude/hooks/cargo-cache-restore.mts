@@ -19,11 +19,12 @@
 
 import { createSign } from "node:crypto";
 import { createWriteStream, readFileSync, mkdirSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { tmpdir, homedir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 process.env.NODE_USE_ENV_PROXY ??= "1";
 
@@ -74,7 +75,7 @@ async function accessToken({ client_email, private_key, token_uri }: ServiceAcco
   return (await res.json()).access_token;
 }
 
-async function restore(token: string, object: string, destDir: string, tarName: string): Promise<void> {
+async function restore(token: string, object: string, destDir: string, tarName: string): Promise<boolean> {
   const url =
     `https://storage.googleapis.com/storage/v1/b/${BUCKET}` +
     `/o/${encodeURIComponent(object)}?alt=media`;
@@ -84,7 +85,7 @@ async function restore(token: string, object: string, destDir: string, tarName: 
   });
   if (res.status === 404) {
     log(`no cache object yet (gs://${BUCKET}/${object}); skipping`);
-    return;
+    return false;
   }
   if (!res.ok) throw new Error(`download failed: HTTP ${res.status} ${await res.text()}`);
 
@@ -93,6 +94,23 @@ async function restore(token: string, object: string, destDir: string, tarName: 
   await pipeline(Readable.fromWeb(res.body!), createWriteStream(tarPath));
   execFileSync("tar", ["-xzf", tarPath, "-C", destDir]);
   log(`restored gs://${BUCKET}/${object} into ${destDir}`);
+  return true;
+}
+
+// Reconstruct target/ from the just-restored sccache cache, in the background,
+// so the session is warm without anyone needing to run on-task-started first.
+// Detached and non-blocking; warm-cache-bg.sh waits for the parallel mise-setup
+// hook to install mise + sccache before it builds.
+function launchBackgroundWarm(): void {
+  if (process.env.CLAUDE_CODE_REMOTE !== "true") return;
+  try {
+    const script = join(dirname(fileURLToPath(import.meta.url)), "warm-cache-bg.sh");
+    const child = spawn("bash", [script], { detached: true, stdio: "ignore" });
+    child.unref();
+    log("launched warm-cache in the background");
+  } catch (e) {
+    log(`warm-cache launch skipped: ${(e as Error).message}`);
+  }
 }
 
 async function main(): Promise<void> {
@@ -105,13 +123,14 @@ async function main(): Promise<void> {
   const token = await accessToken(key);
   // Independent and best-effort: a missing sccache object must not stop the
   // registry restore, and vice versa.
-  const results = await Promise.allSettled([
+  const [registry, sccache] = await Promise.allSettled([
     restore(token, REGISTRY_OBJECT, CARGO_HOME, "cargo-registry-cache.tar.gz"),
     restore(token, SCCACHE_OBJECT, SCCACHE_DIR, "cargo-sccache-cache.tar.gz"),
   ]);
-  for (const r of results) {
+  for (const r of [registry, sccache]) {
     if (r.status === "rejected") log(`skipped: ${(r.reason as Error).message}`);
   }
+  if (sccache.status === "fulfilled" && sccache.value) launchBackgroundWarm();
 }
 
 main().catch((e: Error) => log(`skipped: ${e.message}`));
