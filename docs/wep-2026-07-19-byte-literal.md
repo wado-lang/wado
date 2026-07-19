@@ -19,8 +19,8 @@ literal should not inherit, so both forms reject it.
 
 `b'x'` is an integer literal whose value is one byte and whose default type is
 `u8`. It is the same category as `42`, differing only in spelling and default
-type; everything downstream (coercion, range checks, arithmetic, patterns,
-codegen) is ordinary integer-literal behavior.
+type; everything else (coercion, range checks, arithmetic, patterns) is ordinary
+integer-literal behavior.
 
 ```wado
 let b = b'A';          // u8, 65
@@ -52,52 +52,11 @@ is unchanged apart from the `\u` rejection.
 `b'` is unambiguous: Wado has no lifetimes, so `'` always opens a char/byte
 literal.
 
-## Implementation
-
-`b'x'` is threaded through the front end as a new `Literal` variant and **lowered
-to `TirExprKind::IntLiteral` in reify**, rejoining the integer pipeline — so NIR,
-WIR, and codegen are untouched (`u8` `IntLiteral` already lowers to `i32.const`).
-
-- Lexer/token: add `TokenKind::ByteCharLit(String)` (raw text); dispatch
-  `'b' if peek_second() == Some('\'') => lex_byte_char()` beside the `b"` arm
-  (`lexer.rs:214`), `lex_byte_char()` modeled on `lex_char()` (`:1221`).
-- AST/parser: add `Literal::Byte(String)` (`ast.rs:2614`); parse it in expression
-  and pattern position (`parser.rs:3951`, `:2954`).
-- Escape decoding (`elaborator/util.rs`): reject `\u` in `unescape_bytes` (`:159`)
-  — this is the `b"..."` alignment — then add `unescape_byte` returning the single
-  byte via `unescape_bytes` (error unless exactly one).
-- Typing/reify: `resolve_literal` → `TypeTable::U8` (`expr.rs:345`); a
-  `Literal::Byte` arm in `try_coerce_numeric_literal_inner` (`coercion.rs:48`);
-  `reify_literal` → `IntLiteral { value: byte as u64, repr }` (`reify.rs:9332`).
-- Patterns: `exh_literal` → `IntLit` (`expr.rs:2441`); pattern reify → `U128`
-  (`reify.rs:9497`/`:9805`/`:10231`). Range patterns then work for free.
-- Unparser + `format.fixtures/` entry preserve the `b'…'` spelling.
-- TextMate: add a `string.quoted.single.byte.wado` rule beside the `b"` rule
-  (`wado-cli/src/syntax.rs:298`); `mise run update-wado-vscode-grammar`.
-  `syntax.rs` needs no change (`u8`/`char` already listed).
-- Docs: `spec.md` (String/Character Literals) + `cheatsheet.md` note `b'x'` and
-  the no-`\u` rule for both forms.
-
-## Testing
-
-Red/green TDD. Fixture `tests/fixtures/byte_literal.wado` mirroring
-`byte_string_literal.wado`:
-
-- [ ] default `u8`; each standard escape; `\xNN` incl. a high byte (`b'\xff'`);
-- [ ] coercion (`let n: i32 = b'A'`), range failure (`let x: i8 = b'\xff'`),
-      arithmetic (`b'A' + 1 == b'B'`), match + `matches` with range patterns;
-- [ ] compile-error: `b''`, `b'ab'`, `b'あ'`, `b'\u{41}'`.
-
-Byte-string alignment: add a compile-error fixture `b"\u{41}"` and confirm the
-existing `byte_string_literal.wado` (no `\u`) still passes. Lexer unit tests near
-`test_byte_string_literal` (`lexer.rs:1359`): `b'` recognized, `\x00` kept raw,
-identifier ending in `b` (`crab`) not mis-lexed. `touch tests/e2e.rs` after
-adding fixtures.
-
 ## Consequences
 
-- Byte parsers read intent-first (`b'{'`, `b'a'..=b'z'`) with near-zero back-end
-  cost (reuses `IntLiteral`), closing the `b'x':u8 :: b"...":ByteList` symmetry.
+- Byte parsers read intent-first (`b'{'`, `b'a'..=b'z'`), closing the
+  `b'x':u8 :: b"...":ByteList` symmetry. `b'x'` reuses the existing integer
+  literal, so it costs nothing beyond the front end.
 - Rejecting `\u` in `b"..."` is a minor breaking change; the only affected code is
   a byte string using a `≤ 0x7F` Unicode escape, rewritable as `\xNN`. Worth it
   for one consistent byte-escape rule across both forms.
@@ -105,7 +64,5 @@ adding fixtures.
 ### Alternatives considered
 
 - Strict `u8` (Rust): a special case against uniform literal flexibility, no gain.
-- Lower to `CharLiteral`: reaches the same codegen but carries `char` semantics
-  needing re-typing to `u8`; `IntLiteral` already means "an integer value".
-- Desugar `b'x'` to a number in the lexer: loses the source spelling for `format`
-  / LSP hover and blocks a "byte literal" diagnostic.
+- Desugar `b'x'` to a number literal: loses the source spelling for `format` /
+  LSP hover and blocks a "byte literal" diagnostic.
