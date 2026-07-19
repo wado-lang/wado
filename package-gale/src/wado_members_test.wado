@@ -38,6 +38,23 @@ test "translate_wado_members rejects a field with no initializer" {
     assert translate_wado_members(&"count: i32") matches { Err(_) };
 }
 
+test "translate_wado_members keeps fields after a comparison-operator initializer" {
+    let m = translate_wado_members(&"ok: bool = 1 < 2; count: i32 = 0").unwrap();
+    assert m.fields.len() == 2, `fields: ${m.fields.len()}`;
+    assert m.fields[0].name == "ok";
+    assert m.fields[0].init == "1 < 2", `init: '${m.fields[0].init}'`;
+    assert m.fields[1].name == "count";
+    assert m.fields[1].init == "0";
+}
+
+test "translate_wado_members captures a method with a struct-literal default arg" {
+    let m = translate_wado_members(&"fn reset(p: Pos = Pos { x: 0 }) { return p.x; }").unwrap();
+    assert m.fields.is_empty(), `fields: ${m.fields.len()}`;
+    assert m.methods.len() == 1, `methods: ${m.methods.len()}`;
+    assert m.methods[0].contains("Pos { x: 0 }"), `method: '${m.methods[0]}'`;
+    assert m.methods[0].contains("return p.x;"), `method: '${m.methods[0]}'`;
+}
+
 test "is_lexer_members claims explicit lexer scope in any grammar" {
     let act = member_act(Option::<String>::Some("lexer"));
     assert is_lexer_members(&act, &GrammarKind::Combined);

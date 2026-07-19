@@ -343,7 +343,11 @@ fn members_present(members: &MemberDecls) -> bool {
 fn collect_lexer_members(grammar: &Grammar, ctx: &mut GenContext) -> MemberDecls {
     let mut fields: List<MemberField> = [];
     let mut methods: List<String> = [];
-    if !ctx.emit_actions() {
+    // Lexer members are Wado-only: the lexer action / predicate path that reads
+    // them is emitted only for `language = Wado` (`lexer_grammar_executes_actions`),
+    // so translating a Java block here would emit dead fields no code references.
+    // The IR retains the block; the java2wado lexer path can pick it up later.
+    if !ctx.emit_actions() || !ctx.action_language() matches { Wado } {
         return MemberDecls { fields, methods };
     }
     let lang = ctx.action_language();
@@ -744,7 +748,7 @@ fn gen_lexer_apply_fns(w: &mut CodeWriter, grammar: &Grammar, has_members: bool)
         f.add_param(&"start", &"i32");
         f.add_param(&"pos", &"i32");
         f.emit_begin(w);
-        if apply_body_reads_chars(rule) {
+        if apply_body_reads_chars(rule, has_members) {
             w.line(&"let chars = &lx.chars;");
         }
         if rule.body.len() == 1 {
@@ -774,8 +778,12 @@ fn gen_lexer_apply_fns(w: &mut CodeWriter, grammar: &Grammar, has_members: bool)
     }
 }
 
-fn apply_body_reads_chars(rule: &LexerRule) -> bool {
-    if rule.body.len() > 1 {
+/// Whether the apply fn body reads the `chars` slice. A multi-alt rule calls
+/// `winning_alt_<rule>(chars, ...)` — but only in a non-member grammar; a member
+/// grammar passes `lx` there instead, so multi-alt alone no longer implies a
+/// `chars` read. `$text` in any alt action always reads `chars`.
+fn apply_body_reads_chars(rule: &LexerRule, has_members: bool) -> bool {
+    if rule.body.len() > 1 && !has_members {
         return true;
     }
     for let alt of &rule.body {

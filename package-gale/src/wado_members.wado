@@ -67,20 +67,39 @@ fn is_method_start(chars: &List<char>, i: i32, n: i32) -> bool {
     return false;
 }
 
+/// Capture a `fn` item from `start`: skip past the parameter list `(...)` first
+/// (a struct-literal default arg like `p: P = P { }` puts a `{` there that is not
+/// the body), then balance the body `{...}`. Returns the index just past `}`.
 fn capture_fn(chars: &List<char>, start: i32, n: i32) -> Result<i32, String> {
     let mut i = start;
+    while i < n && chars[i] != '(' {
+        i = skip_span(chars, i, n);
+    }
+    if i >= n {
+        return Result::Err("gale: Wado @members: method parameter list '(' not found");
+    }
+    i = skip_balanced(chars, i, n, '(', ')')?;
     while i < n && chars[i] != '{' {
         i = skip_span(chars, i, n);
     }
     if i >= n {
         return Result::Err("gale: Wado @members: method body '{' not found");
     }
+    return skip_balanced(chars, i, n, '{', '}');
+}
+
+/// Balance a delimiter pair starting at `open` (`chars[i] == open`), skipping
+/// string / char / comment spans, and return the index just past the matching
+/// `close`.
+fn skip_balanced(chars: &List<char>, open_idx: i32, n: i32, open: char, close: char) -> Result<i32, String> {
+    let mut i = open_idx;
     let mut depth = 0;
     while i < n {
-        if chars[i] == '{' {
+        let c = chars[i];
+        if c == open {
             depth += 1;
             i += 1;
-        } else if chars[i] == '}' {
+        } else if c == close {
             depth -= 1;
             i += 1;
             if depth == 0 {
@@ -90,7 +109,7 @@ fn capture_fn(chars: &List<char>, start: i32, n: i32) -> Result<i32, String> {
             i = skip_span(chars, i, n);
         }
     }
-    return Result::Err("gale: Wado @members: unterminated method body");
+    return Result::Err("gale: Wado @members: unterminated method definition");
 }
 
 fn parse_field(chars: &List<char>, start: i32, n: i32, fields: &mut List<MemberField>) -> Result<i32, String> {
@@ -129,6 +148,11 @@ fn parse_field(chars: &List<char>, start: i32, n: i32, fields: &mut List<MemberF
     return Result::Ok(if init_end < n { init_end + 1 } else { n });
 }
 
+/// Index of the first top-level `target` from `start`, tracking `()[]{}` nesting
+/// and skipping string / char / comment spans; `n` if none. `<` / `>` are NOT
+/// tracked — they are comparison / shift operators in an initializer and a
+/// generic in a type (`List<i32>`), and neither ever encloses the `=` / `;` this
+/// scans for, so treating them as brackets only mis-balances `a < b`.
 fn scan_to(chars: &List<char>, start: i32, n: i32, target: char) -> i32 {
     let mut i = start;
     let mut depth = 0;
@@ -137,10 +161,10 @@ fn scan_to(chars: &List<char>, start: i32, n: i32, target: char) -> i32 {
         if c == target && depth == 0 {
             return i;
         }
-        if c == '<' || c == '(' || c == '[' || c == '{' {
+        if c == '(' || c == '[' || c == '{' {
             depth += 1;
             i += 1;
-        } else if c == '>' || c == ')' || c == ']' || c == '}' {
+        } else if c == ')' || c == ']' || c == '}' {
             if depth > 0 {
                 depth -= 1;
             }

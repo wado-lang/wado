@@ -131,6 +131,17 @@ WS : ' ' -> skip ;
     assert !src.contains("best_act"), "predicates need no best_act";
 }
 
+test "a language=Java lexer grammar emits no @lexer::members fields (Wado-only)" {
+    // The lexer action / predicate path that would read members is Wado-only, so
+    // a Java lexer's members must not become dead fields on the generated Lexer.
+    let src = gen_source(&"lexer grammar L;
+@members { int nest = 0; }
+A : 'a' ;
+WS : ' ' -> skip ;
+");
+    assert !src.contains("nest: i32"), "Java lexer members must not be emitted";
+}
+
 test "a nested-group lexer action warns loudly (not yet executed)" {
     // The action sits inside a `( ... )` group, not at the rule's top level.
     assert unsupported_count(&"lexer grammar L;
