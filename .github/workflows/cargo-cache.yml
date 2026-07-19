@@ -5,7 +5,7 @@
 # Required repo variables (none are secret — all are plain identifiers):
 #   vars.GCP_WIF_PROVIDER    workload identity provider resource name
 #   vars.GCP_CACHE_WRITER_SA writer service-account email (roles/storage.objectAdmin on the bucket)
-#   vars.CARGO_CACHE_BUCKET  GCS bucket name (e.g. wado-lang-cache)
+#   vars.GCP_CACHE_BUCKET  GCS bucket name (e.g. wado-lang-cache)
 name: Cargo registry cache
 
 on:
@@ -49,5 +49,5 @@ jobs:
       - uses: google-github-actions/upload-cloud-storage@v2
         with:
           path: linux-x86_64.tar.gz
-          destination: ${{ vars.CARGO_CACHE_BUCKET }}/cargo/registry
+          destination: ${{ vars.GCP_CACHE_BUCKET }}/cargo/registry
           parent: false
