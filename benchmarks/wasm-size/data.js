@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784422528775,
+  "lastUpdate": 1784426265832,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -41857,6 +41857,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d2b86569580d0def6e5e753f5996f622737f5b11"
         },
         "date": 1784422528327,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8257,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16526,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271337,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8d0d347b9d808161d60b86e1eb0aa8848cfbe8fb",
+          "message": "Merge pull request #1630 from wado-lang/claude/compound-assignment-double-eval-x4aoz0\n\nfix(elaborator): once-eval compound assignment (#1179) and non-primitive index-key coercion (#1628)",
+          "timestamp": "2026-07-19T10:47:34+09:00",
+          "tree_id": "140a9fada451a01372345ccf8b133f53779eafc0",
+          "url": "https://github.com/wado-lang/wado/commit/8d0d347b9d808161d60b86e1eb0aa8848cfbe8fb"
+        },
+        "date": 1784426265371,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
