@@ -1253,6 +1253,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         |s, n, t| s.find_index_assign_trait_impl(n, t, index_type),
                     );
                     if let Some(trait_info) = assign_info {
+                        if let Some(key_type) = trait_info.index_type
+                            && key_type != index_type
+                        {
+                            let _ = self.resolve_expr(&index_expr.index, ctx, Some(key_type));
+                        }
+
                         // Generate: expr.index_assign(index, value)
                         let value_span = value.span();
                         let value_type = match value {
@@ -1456,6 +1462,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::CompoundAssignOp::Shl => BinaryOp::Shl,
             ast::CompoundAssignOp::Shr => BinaryOp::Shr,
         };
+        // Reserve reify's `__caN` locals, resolving each impure sub-piece once
+        // (a subscript against its index key type) so the annotate and reify
+        // frames stay identical; later walks re-encounter each piece via
+        // `compound_hoist_types` instead of re-resolving.
+        ctx.enter_scope();
+        let saved_hoist_types = std::mem::take(&mut ctx.compound_hoist_types);
+        let mut hoists: Vec<super::reify::CompoundHoist<'_>> = Vec::new();
+        super::reify::collect_compound_hoists(&compound.target, &mut hoists);
+        for (idx, hoist) in hoists.iter().enumerate() {
+            let expected = hoist
+                .index_ctx
+                .and_then(|ix| self.compound_index_key_type(ix, ctx));
+            let piece_type = self.resolve_expr(hoist.piece, ctx, expected);
+            let _local_index = ctx.add_local(format!("__ca{idx}"), piece_type, false, None);
+            ctx.compound_hoist_types
+                .insert(hoist.piece.id(), piece_type);
+        }
+
         let read_type = self.resolve_expr(&compound.target, ctx, None);
         let rhs_type = self.resolve_expr(&compound.value, ctx, Some(read_type));
         let read = placeholder(read_type, compound.target.span());
@@ -1467,14 +1491,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // compound's AstId so reify replays that MethodCall instead of a raw
         // `Binary` (a primitive `/` on struct operands is invalid Wasm).
         let combined = self.build_binary_op_tir(read, op, rhs, compound.span, Some(compound.id));
-        self.assign_to_target(
+        let result = self.assign_to_target(
             &compound.target,
             AssignValue::Resolved {
                 type_id: combined,
                 span: compound.span,
             },
             ctx,
-        )
+        );
+        ctx.compound_hoist_types = saved_hoist_types;
+        ctx.exit_scope();
+        result
     }
 
     /// Build a `TirExpr` for `a OP1 b OP2 c [OP3 d …]` as the equivalent

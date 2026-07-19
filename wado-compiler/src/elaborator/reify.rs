@@ -62,7 +62,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::ast::{self, AstId, Item, Module};
+use crate::ast::{self, AstId, CompoundAssignOp, Expr, Item, Module, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
@@ -70,9 +70,10 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::global_name;
 use crate::symbol::SymbolTable;
 use crate::tir::{
-    self as tir, TirBlock, TirEnum, TirEnumCase, TirExpr, TirFlags, TirFlagsMember, TirFunction,
-    TirGlobal, TirModule, TirNewtype, TirPattern, TirStmt, TirStruct, TirTest, TirVariantDecl,
-    TypeId,
+    self as tir, CallArg, ResolvedType, TirBinaryOp, TirBlock, TirEnum, TirEnumCase, TirExpr,
+    TirExprKind, TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirModule, TirNewtype,
+    TirPattern, TirStmt, TirStmtKind, TirStruct, TirTest, TirUnaryOp, TirVariantDecl, TypeId,
+    TypeTable,
 };
 
 use super::sem::ModuleSemantics;
@@ -111,6 +112,79 @@ macro_rules! reify_annotation_accessors {
             }
         )+
     };
+}
+
+/// Whether a compound-assign target sub-piece may be left inline (duplicated
+/// between the read and write) rather than hoisted. It must be side-effect-free
+/// AND allocate no reify local: a pure inline piece is walked twice by annotate
+/// (read type, then write dispatch) but once by reify, so any local it allocated
+/// would desync the frame. Only idents, literals, field access, and deref / ref
+/// of a pure operand qualify — notably NOT a list/tuple literal, which
+/// materialises a `__b` builder local under sequence coercion.
+pub(super) fn ast_expr_is_pure(expr: &ast::Expr) -> bool {
+    match expr {
+        Expr::Ident(_) | Expr::Literal(_) => true,
+        Expr::FieldAccess(f) => ast_expr_is_pure(&f.expr),
+        Expr::Unary(u) => {
+            matches!(u.op, UnaryOp::Deref | UnaryOp::Ref | UnaryOp::MutRef)
+                && ast_expr_is_pure(&u.expr)
+        }
+        _ => false,
+    }
+}
+
+/// Whether `expr` is place-shaped — an l-value skeleton (recurse into it to
+/// hoist impure subscripts) rather than an owned value like `get_obj()` (bound
+/// whole).
+fn ast_expr_is_place(expr: &ast::Expr) -> bool {
+    match expr {
+        Expr::Ident(_) | Expr::FieldAccess(_) | Expr::Index(_) => true,
+        Expr::Unary(u) => u.op == UnaryOp::Deref,
+        _ => false,
+    }
+}
+
+/// The side-effecting value operands of a compound-assign target — index
+/// subscripts, deref'd references, and owned-value bases (`get_obj().field`) —
+/// each bound once so the inline place skeleton is pure to duplicate. Shared by
+/// reify (binds `let __caN`, overrides) and annotate (reserves the matching
+/// frame slots).
+pub(super) fn collect_compound_hoists<'e>(expr: &'e ast::Expr, out: &mut Vec<CompoundHoist<'e>>) {
+    match expr {
+        Expr::FieldAccess(f) => collect_hoists_of_base(&f.expr, out),
+        Expr::Index(ix) => {
+            collect_hoists_of_base(&ix.expr, out);
+            if !ast_expr_is_pure(&ix.index) {
+                out.push(CompoundHoist {
+                    piece: &ix.index,
+                    index_ctx: Some(ix),
+                });
+            }
+        }
+        Expr::Unary(u) if u.op == UnaryOp::Deref => {
+            collect_hoists_of_base(&u.expr, out);
+        }
+        _ => {}
+    }
+}
+
+/// One side-effecting sub-piece of a compound-assign target to bind once.
+pub(super) struct CompoundHoist<'e> {
+    pub(super) piece: &'e ast::Expr,
+    /// The enclosing index when `piece` is its subscript; drives key-type
+    /// coercion on the annotate side.
+    pub(super) index_ctx: Option<&'e ast::IndexExpr>,
+}
+
+fn collect_hoists_of_base<'e>(base: &'e ast::Expr, out: &mut Vec<CompoundHoist<'e>>) {
+    if ast_expr_is_place(base) {
+        collect_compound_hoists(base, out);
+    } else if !ast_expr_is_pure(base) {
+        out.push(CompoundHoist {
+            piece: base,
+            index_ctx: None,
+        });
+    }
 }
 
 /// One reify-side power-assert capture slot. Independent from
@@ -213,6 +287,13 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// caller AST under the wrong perspective. Empty outside a default
     /// walk. See [`Self::reify_pad_args_with_defaults`].
     pub(crate) default_arg_overrides: IndexMap<String, TirExpr>,
+    /// Active `AstId` → already-reified-`Local` substitutions for the
+    /// side-effecting sub-pieces of a compound-assign target, bound once to
+    /// `let __caN` before the read/write. Reify returns the bound `Local` for
+    /// those exact nodes so `arr[bump()] += 1` evaluates `bump()` once while
+    /// the place skeleton (index calls, field / deref chain) stays inline and
+    /// still writes back. Empty outside `reify_compound_assign`.
+    pub(crate) compound_overrides: IndexMap<crate::ast::AstId, TirExpr>,
     /// Call site for location literals (`#file` / `#line` / `#function`) in a
     /// default-argument expression, which report the call site rather than the
     /// callee module reify swaps to for name resolution. Set only by the
@@ -299,6 +380,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             tuple_overlay_visits: IndexMap::default(),
             live_items,
             default_arg_overrides: IndexMap::default(),
+            compound_overrides: IndexMap::default(),
             call_site_location: None,
             pending_local_structs: Vec::new(),
             pending_local_newtypes: Vec::new(),
@@ -2269,6 +2351,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             {
                 return self.reify_with_assert_capture(slot_idx, expr, ctx, expected_type);
             }
+        }
+
+        // Compound-assign once-eval hook (see `compound_overrides`).
+        if !self.compound_overrides.is_empty()
+            && let Some(tir) = self.compound_overrides.get(&expr.id())
+        {
+            return tir.clone();
         }
 
         // The expression's recorded type is the source of truth for
@@ -4780,51 +4869,74 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Reify a compound assignment `x += y` / `x -= y` / etc. The
-    /// elaborator desugars to `x = x op y` and routes through
-    /// `assign_to_target`, which handles complex lvalues
-    /// (`a[i] += x` etc.). Reify handles the common case: target is
-    /// any expression that produces a writeable place; the desugared
-    /// shape is `Assign { target, value: Binary { left: target, op,
-    /// right: value } }`. The shared `reify_binary` path picks the
-    /// native vs operator-trait dispatch for the inner op via Gap 11.
-    fn reify_compound_assign(
+    /// Bind each collected impure sub-piece to a `let __caN = …;` in `prelude`
+    /// once and register its `AstId` → `Local` override, so every recurrence
+    /// in the reified read / write becomes that `Local` read.
+    fn bind_compound_hoists(
         &mut self,
-        compound: &ast::CompoundAssignExpr,
+        hoists: &[CompoundHoist<'_>],
+        prelude: &mut Vec<TirStmt>,
         ctx: &mut FunctionContext,
-        recorded_type: TypeId,
+    ) {
+        for (counter, hoist) in hoists.iter().enumerate() {
+            let value = self.reify_expr(hoist.piece, ctx, None);
+            let span = value.span;
+            let type_id = value.type_id;
+            let name = format!("__ca{counter}");
+            let index = ctx.add_local(name.clone(), type_id, false, None);
+            prelude.push(TirStmt::new(
+                TirStmtKind::Let {
+                    name: name.clone(),
+                    local_index: index,
+                    is_mut: false,
+                    is_reactive: false,
+                    type_id,
+                    value,
+                    skip_value_copy: false,
+                },
+                span,
+            ));
+            let local = TirExpr::new(TirExprKind::Local { index, name }, type_id, span);
+            self.compound_overrides.insert(hoist.piece.id(), local);
+        }
+    }
+
+    /// Wrap the compound-assign write in a `Block` that runs `prelude`
+    /// (the once-bound sub-piece `let`s) first. With no bindings the flat
+    /// write is returned unchanged, so pure targets (`x += 1`, `g += 1`)
+    /// keep their previous WIR shape.
+    fn wrap_prelude(
+        &self,
+        prelude: Vec<TirStmt>,
+        write: TirExpr,
+        span: crate::token::Span,
     ) -> TirExpr {
-        use crate::ast::CompoundAssignOp;
-        use crate::tir::{TirExprKind, TypeTable};
+        if prelude.is_empty() {
+            return write;
+        }
+        let mut stmts = prelude;
+        stmts.push(TirStmt::new(TirStmtKind::Expr(write), span));
+        TirExpr::new(
+            TirExprKind::Block(TirBlock::new(stmts, span)),
+            TypeTable::UNIT,
+            span,
+        )
+    }
 
-        let op = match compound.op {
-            CompoundAssignOp::Add => crate::tir::TirBinaryOp::Add,
-            CompoundAssignOp::Sub => crate::tir::TirBinaryOp::Sub,
-            CompoundAssignOp::Mul => crate::tir::TirBinaryOp::Mul,
-            CompoundAssignOp::Div => crate::tir::TirBinaryOp::Div,
-            CompoundAssignOp::Mod => crate::tir::TirBinaryOp::Mod,
-            CompoundAssignOp::BitAnd => crate::tir::TirBinaryOp::BitAnd,
-            CompoundAssignOp::BitOr => crate::tir::TirBinaryOp::BitOr,
-            CompoundAssignOp::BitXor => crate::tir::TirBinaryOp::BitXor,
-            CompoundAssignOp::Shl => crate::tir::TirBinaryOp::Shl,
-            CompoundAssignOp::Shr => crate::tir::TirBinaryOp::Shr,
-        };
-
-        // The target appears twice in the desugared shape (as the
-        // read for the binary op, and as the assignment target). The
-        // elaborator side reifies it once and emits the same node
-        // twice (it's pure for the lvalue shapes the elaborator
-        // accepts); reify mirrors by walking the AST twice.
-        let read = self.reify_expr(&compound.target, ctx, None);
-        let rhs = self.reify_expr(&compound.value, ctx, Some(read.type_id));
+    /// Build the combined value `read OP rhs`, dispatching through the
+    /// operator trait method when annotate recorded one on the compound's
+    /// `AstId` (`u128 /= u128` → `Div::div`); a raw primitive `Binary` on
+    /// struct operands would lower to invalid Wasm. Mirrors the
+    /// `reify_binary` dispatch path (keyed on `binary.id`).
+    fn build_compound_combined(
+        &mut self,
+        read: TirExpr,
+        rhs: TirExpr,
+        op: TirBinaryOp,
+        compound: &ast::CompoundAssignExpr,
+    ) -> TirExpr {
         let combined_type = read.type_id;
-        // Operator-overloaded operands (`u128 /= u128`, …): the combined
-        // value dispatches through the trait method (`Div::div`), recorded by
-        // `resolve_compound_assign` under the compound's AstId. Replay that
-        // MethodCall — a raw `Binary` with a primitive `/` on struct operands
-        // would lower to invalid Wasm. Mirrors the `reify_binary` dispatch
-        // path (keyed on `binary.id`).
-        let combined = if let Some(dispatch) = self.ann_operator_dispatch(compound.id) {
+        if let Some(dispatch) = self.ann_operator_dispatch(compound.id) {
             let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
                 read,
                 dispatch.self_kind,
@@ -4832,7 +4944,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 compound.span,
                 &self.tysys.type_table,
             );
-            let call_args: Vec<crate::tir::CallArg> = std::iter::once(rhs)
+            let call_args: Vec<CallArg> = std::iter::once(rhs)
                 .zip(dispatch.arg_ref_wraps.iter().copied())
                 .map(|(arg, wrap)| {
                     let arg_expr = if wrap {
@@ -4840,10 +4952,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             .tysys
                             .type_table
                             .borrow_mut()
-                            .intern(crate::tir::ResolvedType::Ref(arg.type_id));
+                            .intern(ResolvedType::Ref(arg.type_id));
                         TirExpr::new(
                             TirExprKind::Unary {
-                                op: crate::tir::TirUnaryOp::Ref,
+                                op: TirUnaryOp::Ref,
                                 expr: Box::new(arg),
                             },
                             arg_ref_type,
@@ -4852,7 +4964,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     } else {
                         arg
                     };
-                    crate::tir::CallArg::new(arg_expr, false)
+                    CallArg::new(arg_expr, false)
                 })
                 .collect();
             super::Elaborator::<H>::build_tir_method_call(
@@ -4873,73 +4985,203 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 combined_type,
                 compound.span,
             )
-        };
+        }
+    }
 
-        // IndexAssign rewrite for `arr[i] OP= v`: dispatch the
-        // assignment side through `index_assign_dispatch` so reify
-        // emits `arr.index_assign(i, combined)` (the same MethodCall
-        // production's `assign_to_target` builds), not a plain
-        // `Assign` whose target is an `Index` expression.
+    /// Build the `Index` / `IndexValue` trait read `*recv.index(idx)` (or
+    /// `recv.index_value(idx)`) from an already-reified receiver and subscript
+    /// plus the recorded dispatch. Shared by [`Self::reify_index`] and the
+    /// compound-assign read so the two lowerings cannot drift. `deref_type` is
+    /// the type of the `*…` result used when `dispatch.needs_deref`.
+    fn build_index_read_from_dispatch(
+        &self,
+        receiver: TirExpr,
+        idx: TirExpr,
+        dispatch: super::sem::types::OperatorDispatch,
+        deref_type: TypeId,
+        span: crate::token::Span,
+    ) -> TirExpr {
+        let adjusted = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+            receiver,
+            dispatch.self_kind,
+            false,
+            span,
+            &self.tysys.type_table,
+        );
+        let method_call = super::Elaborator::<H>::build_tir_method_call(
+            adjusted,
+            dispatch.function_ref,
+            vec![],
+            vec![CallArg::new(idx, false)],
+            dispatch.return_type,
+            span,
+        );
+        // `Index` returns `&Output` (wrap in `*`); `IndexValue` returns
+        // `Output` by copy.
+        if dispatch.needs_deref {
+            TirExpr::new(
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Deref,
+                    expr: Box::new(method_call),
+                },
+                deref_type,
+                span,
+            )
+        } else {
+            method_call
+        }
+    }
+
+    /// The compound-assign read side of `recv[idx]`, reusing the same
+    /// once-evaluated receiver / subscript the write side gets.
+    fn build_index_trait_read(
+        &self,
+        recv: &TirExpr,
+        idx: &TirExpr,
+        index_expr: &ast::IndexExpr,
+        span: crate::token::Span,
+    ) -> TirExpr {
+        let Some(dispatch) = self.ann_operator_dispatch(index_expr.id) else {
+            // Write-only `IndexAssign` type — annotate diagnosed the missing
+            // read; match its recovery shape.
+            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
+        };
+        // Deref result type: the index expr's recorded type, peeling
+        // `&Output` on the degenerate missing-annotation path.
+        let deref_type = if dispatch.needs_deref {
+            self.ann_expression_types(index_expr.id).unwrap_or_else(|| {
+                match self.tysys.type_table.borrow().get(dispatch.return_type) {
+                    ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+                    _ => dispatch.return_type,
+                }
+            })
+        } else {
+            dispatch.return_type
+        };
+        self.build_index_read_from_dispatch(recv.clone(), idx.clone(), dispatch, deref_type, span)
+    }
+
+    /// Reify a compound assignment `x += y` as `x = x op y`, evaluating each
+    /// target sub-expression once: impure value operands are bound to `let
+    /// __caN` and replayed through an `AstId` override while the place skeleton
+    /// stays inline and writes back. Pure targets bind nothing.
+    ///
+    /// Residual: an intermediate `Index` read in a nested index's *receiver*
+    /// (`m.index(i)` in `m[i][j] += 1`) is still duplicated — harmless for pure
+    /// builtin reads, but a side-effecting custom `Index::index` runs twice.
+    /// Binding the reference can't fix it under value semantics (the `let`
+    /// would copy the referent) and there is no `IndexMut` to borrow.
+    fn reify_compound_assign(
+        &mut self,
+        compound: &ast::CompoundAssignExpr,
+        ctx: &mut FunctionContext,
+        recorded_type: TypeId,
+    ) -> TirExpr {
+        let _ = recorded_type;
+
+        let op = match compound.op {
+            CompoundAssignOp::Add => TirBinaryOp::Add,
+            CompoundAssignOp::Sub => TirBinaryOp::Sub,
+            CompoundAssignOp::Mul => TirBinaryOp::Mul,
+            CompoundAssignOp::Div => TirBinaryOp::Div,
+            CompoundAssignOp::Mod => TirBinaryOp::Mod,
+            CompoundAssignOp::BitAnd => TirBinaryOp::BitAnd,
+            CompoundAssignOp::BitOr => TirBinaryOp::BitOr,
+            CompoundAssignOp::BitXor => TirBinaryOp::BitXor,
+            CompoundAssignOp::Shl => TirBinaryOp::Shl,
+            CompoundAssignOp::Shr => TirBinaryOp::Shr,
+        };
+        let span = compound.span;
+
+        // Save/restore the override map so a nested compound assign keeps its
+        // own bindings; the scope keeps `__caN` names out of the enclosing map.
+        let mut hoists: Vec<CompoundHoist<'_>> = Vec::new();
+        collect_compound_hoists(&compound.target, &mut hoists);
+        let saved_overrides = std::mem::take(&mut self.compound_overrides);
+        ctx.enter_scope();
+        let mut prelude: Vec<TirStmt> = Vec::new();
+        self.bind_compound_hoists(&hoists, &mut prelude, ctx);
+
+        let result = self.reify_compound_assign_body(compound, ctx, op, prelude, span);
+        ctx.exit_scope();
+        self.compound_overrides = saved_overrides;
+        result
+    }
+
+    /// Build the read + write of a compound assign with the impure-operand
+    /// overrides active. Split out so `reify_compound_assign` restores the
+    /// override map on every return path.
+    fn reify_compound_assign_body(
+        &mut self,
+        compound: &ast::CompoundAssignExpr,
+        ctx: &mut FunctionContext,
+        op: TirBinaryOp,
+        prelude: Vec<TirStmt>,
+        span: crate::token::Span,
+    ) -> TirExpr {
+        // `recv[idx] OP= v` on an `IndexAssign` type: the read
+        // (`*recv.index(idx)`) and the write (`recv.index_assign(idx, …)`) are
+        // different methods built from the same reified receiver / subscript.
         if let ast::Expr::Index(index_expr) = &compound.target
-            && let Some(dispatch) = self.ann_index_assign_dispatch(index_expr.id)
+            && let Some(assign_dispatch) = self.ann_index_assign_dispatch(index_expr.id)
         {
-            let receiver = self.reify_expr(&index_expr.expr, ctx, None);
-            let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
-                receiver,
-                dispatch.self_kind,
+            let recv = self.reify_expr(&index_expr.expr, ctx, None);
+            let idx = self.reify_expr(&index_expr.index, ctx, None);
+
+            let read = self.build_index_trait_read(&recv, &idx, index_expr, span);
+            let rhs = self.reify_expr(&compound.value, ctx, Some(read.type_id));
+            let combined = self.build_compound_combined(read, rhs, op, compound);
+
+            let write_recv = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+                recv,
+                assign_dispatch.self_kind,
                 false,
-                compound.span,
+                span,
                 &self.tysys.type_table,
             );
-            let idx_expr = self.reify_expr(&index_expr.index, ctx, None);
-            let _ = recorded_type;
-            return super::Elaborator::<H>::build_tir_method_call(
-                receiver,
-                dispatch.function_ref,
+            let write = super::Elaborator::<H>::build_tir_method_call(
+                write_recv,
+                assign_dispatch.function_ref,
                 vec![],
-                vec![
-                    crate::tir::CallArg::new(idx_expr, false),
-                    crate::tir::CallArg::new(combined, false),
-                ],
-                dispatch.return_type,
-                compound.span,
+                vec![CallArg::new(idx, false), CallArg::new(combined, false)],
+                assign_dispatch.return_type,
+                span,
             );
+            return self.wrap_prelude(prelude, write, span);
         }
 
-        // Re-walk the target for the assignment side. For the simple
-        // local / global / field-access cases this reproduces the same
-        // TIR shape; IndexMut targets (`a[i] OP= x` where the trait
-        // resolves to `IndexMut` not `IndexAssign`) remain a follow-up.
-        let target_for_assign = self.reify_expr(&compound.target, ctx, None);
-        let _ = recorded_type;
-        // Global-var compound-assign: `g OP= v` lowers to
-        // `GlobalVarSet { value: g OP v }` so codegen actually
-        // mutates the global. Mirrors production's
-        // `assign_to_target` (operators.rs:1192+) which the
-        // compound-assign desugar also feeds through.
-        if let TirExprKind::GlobalVarGet {
+        // General l-values (local, global, field-access, tuple index, deref):
+        // the reified place's impure operands are already overridden to bound
+        // locals, so read (a clone) and write share a pure skeleton.
+        let place = self.reify_expr(&compound.target, ctx, None);
+        let rhs = self.reify_expr(&compound.value, ctx, Some(place.type_id));
+        let combined = self.build_compound_combined(place.clone(), rhs, op, compound);
+
+        let write = if let TirExprKind::GlobalVarGet {
             module_source,
             name,
-        } = &target_for_assign.kind
+        } = &place.kind
         {
-            return TirExpr::new(
+            TirExpr::new(
                 TirExprKind::GlobalVarSet {
                     module_source: module_source.clone(),
                     name: name.clone(),
                     value: Box::new(combined),
                 },
                 TypeTable::UNIT,
-                compound.span,
-            );
-        }
-        TirExpr::new(
-            TirExprKind::Assign {
-                target: Box::new(target_for_assign),
-                value: Box::new(combined),
-            },
-            TypeTable::UNIT,
-            compound.span,
-        )
+                span,
+            )
+        } else {
+            TirExpr::new(
+                TirExprKind::Assign {
+                    target: Box::new(place),
+                    value: Box::new(combined),
+                },
+                TypeTable::UNIT,
+                span,
+            )
+        };
+        self.wrap_prelude(prelude, write, span)
     }
 
     /// Reify the `?` postfix operator. The elaborator desugars
@@ -4958,8 +5200,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         _recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::tir::{ResolvedType, TirExprKind, TypeTable};
-
         let inner = self.reify_expr(&qm.expr, ctx, None);
         let inner_type = inner.type_id;
 
@@ -5470,7 +5710,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::tir::{CallArg, ResolvedType, TirExprKind, TirUnaryOp, TypeTable};
+        use crate::tir::{ResolvedType, TirExprKind, TypeTable};
 
         let receiver = self.reify_expr(&index.expr, ctx, None);
 
@@ -5504,44 +5744,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
-        // Operator-dispatch path: Gap 11's `operator_dispatch[index.id]`
-        // carries the resolved Index / IndexValue trait method. The
-        // `return_type` on the record signals whether the outer
-        // `Deref` wrap applies (Index returns `&Output`; IndexValue
-        // returns `Output`).
+        // Operator-dispatch path: `operator_dispatch[index.id]` carries the
+        // resolved Index / IndexValue method and `needs_deref`. Shared with the
+        // compound-assign read via `build_index_read_from_dispatch`.
         if let Some(dispatch) = self.ann_operator_dispatch(index.id) {
-            let adjusted_receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
-                receiver,
-                dispatch.self_kind,
-                false,
-                index.span,
-                &self.tysys.type_table,
-            );
             let idx_expr = self.reify_expr(&index.index, ctx, None);
-            let method_call = super::Elaborator::<H>::build_tir_method_call(
-                adjusted_receiver,
-                dispatch.function_ref,
-                vec![],
-                vec![CallArg::new(idx_expr, false)],
-                dispatch.return_type,
+            return self.build_index_read_from_dispatch(
+                receiver,
+                idx_expr,
+                dispatch,
+                recorded_type,
                 index.span,
             );
-            // `Index` trait returns `&Output`, so the outer wrap is a
-            // `Deref` (`expr[i]` → `*expr.index(i)`). Annotate records
-            // this explicitly: a return-type-shape check would misfire
-            // for an `IndexValue` whose `Output` is itself a reference
-            // (`List<&i32>::index_value` → `&i32`) and double-deref.
-            if dispatch.needs_deref {
-                return TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::Deref,
-                        expr: Box::new(method_call),
-                    },
-                    recorded_type,
-                    index.span,
-                );
-            }
-            return method_call;
         }
 
         // No dispatch recorded → the elaborator emitted a recovery
