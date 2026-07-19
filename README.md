@@ -1,12 +1,12 @@
 # The Wado Programming Language
 
-Wado is a statically-typed, high-level WebAssembly language and toolchain that targets only the WebAssembly Component Model and WASI 0.3+. The compiler is 100% agentic-coded. The language takes Rust as its base — made garbage-collected, with no lifetimes and no borrow checker — and borrows its surface syntax from TypeScript.
+Wado is a Rust-flavored, statically-typed, GC-ed language and toolchain that targets only the WebAssembly Component Model and WASI 0.3+. The compiler is 100% agentic-coded.
 
 See [docs/design-philosophy.md](docs/design-philosophy.md) for the reasoning behind these choices, and [wado-lang.org](https://wado-lang.org) for the docs and blog.
 
 ## Installing
 
-### Pre-built binary (recommended)
+### Pre-built binary
 
 Pre-built binaries are published on
 [GitHub Releases](https://github.com/wado-lang/wado/releases/latest) for:
@@ -52,8 +52,7 @@ If you have a Rust toolchain installed:
 cargo install --git https://github.com/wado-lang/wado wado-cli
 ```
 
-This builds the current `main` branch from source. Re-run the same command
-to update.
+This builds the current `main` branch from source.
 
 ## Hello World
 
@@ -90,7 +89,7 @@ These are also published, alongside the blog, at [wado-lang.org](https://wado-la
 
 ## Development
 
-### Development Process
+### Agentic Coding
 
 Developing entirely through agentic coding requires active management:
 
@@ -130,23 +129,12 @@ mise run on-task-started   # install all project tools
 
 See [mise.toml](mise.toml) for the list of managed tools.
 
-### Build and Test
-
-```sh
-cargo build
-cargo test
-```
-
 ### The Wado CLI
 
 - `wado compile FILE` - Compile Wado source to Wasm/WAT
 - `wado run FILE` - Run Wado source directly using Wasmtime
-- `wado dump FILE` - Dump internal compiler state for debugging
+- `wado doc FILE` - See the documentation for a Wado source file
 - `wado format FILE` - Format Wado source code
-
-### Examples That Already Work
-
-There are E2E test fixtures in [wado-compiler/tests/fixtures/\*.wado](wado-compiler/tests/fixtures).
 
 ### VS Code Extension
 
@@ -172,13 +160,11 @@ Releases are cut manually on a roughly weekly cadence via [tagpr](https://github
 
 How it works:
 
-1. Every push to `main` (re)opens a **Release PR** that bumps `[workspace.package].version` in both `Cargo.toml` and `wado.toml` (kept in lockstep so the CLI and the published Wado packages ship one version), regenerates `Cargo.lock`, and updates `CHANGELOG.md` from PRs merged since the previous tag.
-2. Merging the Release PR pushes tag `v<next>`, which triggers `.github/workflows/release.yml` to:
-   - build pre-built binaries for five targets in parallel — Linux (`x86_64`, `aarch64`), macOS (Apple Silicon), Windows (`x86_64`, `aarch64`) — publish them to a [GitHub Release](https://github.com/wado-lang/wado/releases) with `SHA256SUMS.txt`, and attest each archive's build provenance;
-   - run `wado publish` to push the workspace's Wado packages to [GHCR](https://github.com/orgs/wado-lang/packages) as OCI artifacts.
+1. Every push to `main` opens a **Release PR** that bumps `[workspace.package].version` in both `Cargo.toml` and `wado.toml` (kept in lockstep so the CLI and the published Wado packages ship one version), regenerates `Cargo.lock`, and updates `CHANGELOG.md` from PRs merged since the previous tag.
+2. Merging the Release PR pushes tag `v<next>`, which triggers `.github/workflows/release.yml`.
 3. Default bump is **patch**. Add a `tagpr:minor` or `tagpr:major` label on the Release PR to override.
 
-tagpr is the single version manager: the workspace version is bumped only by the Release PR, never by hand. Do not edit `[workspace.package].version` in `Cargo.toml` or `wado.toml` directly — the release job fails if the two files disagree with the tag.
+`tagpr` is the single version manager: the workspace version is bumped only by the Release PR, never by hand. Do not edit `[workspace.package].version` in `Cargo.toml` or `wado.toml` directly.
 
 ## Benchmarks
 

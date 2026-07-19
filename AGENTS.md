@@ -2,8 +2,6 @@
 
 This document describes how to develop the Wado compiler toolchain.
 
-Wado is a statically-typed programming language targeting Wasm/WASI.
-
 Note: `CLAUDE.md` is a symlink to `AGENTS.md`.
 
 ## Development
@@ -36,8 +34,8 @@ mise run test        # test Rust crates
 mise run test-wado   # test Wado modules
 mise run format      # format Rust files and Markdown files
 
-mise run benchmark-all     # count-prime, mandelbrot, sieve, fts, zlib, and so on
-mise run report-wasm-size  # hello_world, pi_approx, zlib, and so on
+mise run benchmark-all     # runs all benchmarks and reports the results
+mise run report-wasm-size  # measures the size of the generated Wasm files and reports the results
 ```
 
 ## General Rules
@@ -49,7 +47,7 @@ mise run report-wasm-size  # hello_world, pi_approx, zlib, and so on
 - Perform red/green TDD.
 - A compiler bug is always P0 — no exceptions. The instant you suspect one, stop all other work, and as the top priority write a minimal reproducible e2e fixture, file the issue, and fix it. A workaround that lets the current task proceed is never a reason to skip or defer any of these.
 - A pre-existing issue — whether you find it or a reviewer points it out — must be fixed, with TDD when practical.
-- Use plain `cargo build` / `cargo run` / `cargo test` (the `dev` profile) for iteration. `Cargo.toml` raises `opt-level` on `wado-compiler`, `wado-dev-tools`, and `cranelift-codegen` so dev-build runtime is close to release for the parts that matter, while compile time stays much lower. `--release` is for distributing binaries, not for the inner dev loop.
+- Use plain `cargo build` / `cargo run` / `cargo test` (the `dev` profile) for iteration. `Cargo.toml` raises `opt-level` on `wado-compiler`, `wado-dev-tools`, and deps so dev-build runtime is close to release for the parts that matter. `--release` is only for distributing binaries, not for the inner dev loop.
 - Use the `rust` skill when writing Rust.
 - Use the `wado` skill when writing Wado code or designing Wado language features.
 
@@ -59,21 +57,34 @@ For the detailed specification, read `docs/spec.md`.
 
 ### Quick tour of the Wado language
 
-Unlike Rust:
-
-- No lifetimes. No borrow checker. No ownership. Just GC.
-- Value semantics: every value is deeply copied when assigned or passed to a function, except for references.
-- Wado splits Rust's `enum` into `variant` for sum types with payloads and `enum` for plain discriminants (no payload). Bitmask types use `flags`.
-- No macros.
-- No `unsafe`. No raw pointers.
-- Semicolons are just separators. Functions that return values must use `return`.
+Wado is a statically-typed programming language targeting Wasm/WASI, strongly affected by Rust and TypeScript.
 
 Like Rust:
 
-- Full generics and traits, but no dynamic dispatch (yet).
+- Full types, generics and traits.
+  - String, List (Rust's Vec), TreeMap (Rust's IndexMap), and primitives types.
+  - traits: Display, Inspect (Rust's Debug), Eq (no PartialEq), Ord.
+  - No dynamic dispatch (yet)
 - Full pattern matching:
   - `match` statements and expressions.
   - `if let` and `while let`.
+
+Unlike Rust:
+
+- No lifetimes. No borrow checker. Just GC.
+  - Partial ownership is only implemented for Wasm CM resources.
+- Value semantics: every value is deeply copied when assigned or passed to a function, except for references.
+  - And thus no Copy or Clone traits.
+- Wado splits Rust's `enum` into `variant` for sum types with payloads and `enum` for plain discriminants (no payload). Bitmask types use `flags`.
+- No macros.
+- No user-defined attributes.
+- No `unsafe` and no raw pointers.
+- Semicolons are just separators. Functions that return values must use `return`.
+
+Like TypeScript & JavaScript:
+
+- ES modules like module system: `use { to_string} from "core:json"`.
+- Template string literals with backtick + `${expr}` interpolation, but with Rust-like formatting specifiers: `${expr:specifier}`.
 
 Wado-specific features:
 
@@ -82,8 +93,6 @@ Wado-specific features:
 - `scrutinee matches { PATTERN }` operator, similar to Rust's `matches!` macro.
 - `task return` for Wasm async functions.
 - `assert` statements with power-assert-like diagnostics. Assertions cannot be disabled, so they are always reliable.
-- ES-Modules-like import statements.
-- Template string literals with Rust-like `{expr:specifier}` formatting.
 - Literal spread `..base`: JS-leaning (anonymous composition, key-value merge, last-wins); a named struct allows only a single leading `..base`.
 
 ## The Compiler
@@ -289,15 +298,14 @@ When bumping wasmtime, re-align them:
 
 Wado targets the following Wasm features:
 
-- Wasm 3.0 (2025-09-17), including GC
+- Wasm 3.0 (released on 2025-09-17), including GC and JSPI
 - Wasm Component Model (CM)
   - Design: `vendor/component-model/design/mvp/`
   - Canonical ABI: `vendor/component-model/design/mvp/CanonicalABI.md`
   - Concurrency (async, streams, futures): `vendor/component-model/design/mvp/Concurrency.md`
-- WASI 0.3.0 (P3)
-  - P3 is supported by wasmtime.
+- WASI 0.3 (or p3, released on 2026-06-11)
+  - Fully supported by wasmtime.
   - See wasmtime's P3 support: `find vendor/wasmtime/crates/wasi/src/p3/wit -name '*.wit'`
-- Wasm Stack Switching
 
 ### Vendor Submodules
 
