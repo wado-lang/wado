@@ -135,9 +135,9 @@ type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core
 
 type "functype//core:prelude/list.wado/List<core:prelude/string.wado/String>::push" = fn(ref "core:prelude//List<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(52)
 
-type "functype//core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(53)
+type "functype//core:prelude/list.wado/List<i32>::push" = fn(ref "core:prelude//List<i32>", i32);  // TypeId(53)
 
-type "functype//core:prelude/list.wado/List<i32>::push" = fn(ref "core:prelude//List<i32>", i32);  // TypeId(54)
+type "functype//core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(54)
 
 type "functype//core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(55)
 
@@ -972,17 +972,6 @@ fn "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(self, va
     self.used = used + 1;
 }
 
-fn "core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref "Array<core:prelude/string.wado/String>";
-    let a: i32;
-    capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<ref "core:prelude/string.wado//String">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
-    builtin::array_copy<ref "core:prelude/string.wado//String">(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
 fn "core:prelude/list.wado/List<i32>::push"(self, value) {
     let used: i32;
     used = self.used;
@@ -992,6 +981,17 @@ fn "core:prelude/list.wado/List<i32>::push"(self, value) {
     }
     builtin::array_set<i32>(self.repr, used, value);
     self.used = used + 1;
+}
+
+fn "core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self) {
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref "Array<core:prelude/string.wado/String>";
+    let a: i32;
+    capacity = builtin::array_len(self.repr);
+    new_repr = builtin::array_new<ref "core:prelude/string.wado//String">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    builtin::array_copy<ref "core:prelude/string.wado//String">(new_repr, 0, self.repr, 0, self.used);
+    self.repr = new_repr;
 }
 
 fn "core:prelude/list.wado/List<i32>::grow"(self) {

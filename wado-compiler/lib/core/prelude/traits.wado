@@ -345,13 +345,10 @@ internal trait Iterator {
     /// Returns None when iteration is complete.
     fn next(&mut self) -> Option<Self::Item>;
 
-    /// Collects remaining elements into an List.
-    fn collect(&mut self) -> List<Self::Item> {
-        let mut result: List<Self::Item> = [];
-        while let Some(item) = self.next() {
-            result.push(item);
-        }
-        return result;
+    /// Collects the remaining elements into any `FromIterator` target,
+    /// defaulting to `List<Self::Item>`.
+    fn collect<C: FromIterator<Elem = Self::Item> = List<Self::Item>>(&mut self) -> C {
+        return C::from_iter(self);
     }
 
     /// Counts the number of remaining elements in the iterator.
@@ -752,12 +749,10 @@ impl ConvertError {
 }
 
 
-/// Trait for creating a collection from an iterator.
-/// This is a simplified version - the full Rust-style trait requires `impl Iterator`
-/// syntax which is not yet supported.
-internal trait FromIterator<T> {
-    type Iter;
-    fn from_iter(iter: Self::Iter) -> Self;
+/// Trait for creating a collection from any iterator of `Elem`.
+internal trait FromIterator {
+    type Elem;
+    fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self;
 }
 
 /// Builder trait for constructing a value from a key-value literal `{ key: value, ... }`.

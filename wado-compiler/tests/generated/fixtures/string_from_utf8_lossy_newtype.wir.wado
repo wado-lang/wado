@@ -135,7 +135,7 @@ type "functype//core:prelude/slice.wado/ArraySlice<u8>::len" = fn(ref "core:prel
 
 type "functype//core:prelude/slice.wado/ArraySlice<u8>::to_array" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref Array<u8>;  // TypeId(51)
 
-type "functype//core:prelude/slice.wado/ArrayIter<u8>::collect" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> ref "core:prelude//List<u8>";  // TypeId(52)
+type "functype//core:prelude/slice.wado/ArrayIter<u8>::collect<core:prelude/list.wado/List<u8>>" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> ref "core:prelude//List<u8>";  // TypeId(52)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(53)
 
@@ -940,7 +940,7 @@ fn "core:prelude/string.wado/String::from_utf8_lossy<string_from_utf8_lossy_newt
     let bytes_15: ref Array<u8>;
     let __sroa_bytes_repr: ref Array<u8>;
     let __sroa_bytes_end: i32;
-    collected = "core:prelude/slice.wado/ArrayIter<u8>::collect"(struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: bytes.repr, index: 0, end: bytes.used });
+    collected = "core:prelude/slice.wado/ArrayIter<u8>::collect<core:prelude/list.wado/List<u8>>"(struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: bytes.repr, index: 0, end: bytes.used });
     slice = struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: collected.repr, start: 0, end: collected.used };
     __fused___inline_String__from_utf8_slice_2: block {
         __sroa_bytes_repr = slice.repr;
@@ -987,7 +987,7 @@ fn "core:prelude/slice.wado/ArraySlice<u8>::to_array"(self) {
     return out;
 }
 
-fn "core:prelude/slice.wado/ArrayIter<u8>::collect"(self) {
+fn "core:prelude/slice.wado/ArrayIter<u8>::collect<core:prelude/list.wado/List<u8>>"(self) {
     let remaining: i32;
     let repr_2: ref Array<u8>;
     let a: i32;
