@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784464829858,
+  "lastUpdate": 1784467652715,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -42253,6 +42253,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8f3a20810fa3a144aaddfa36f79ab4a9eeceb8c7"
         },
         "date": 1784464829390,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8257,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16526,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271337,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7386643fd4399d9effd98e90ebdf93b244bee4b6",
+          "message": "Merge pull request #1640 from wado-lang/claude/container-cargo-cache-check-xm619q\n\nchore(cargo-cache): warm target/ automatically in the background at session start",
+          "timestamp": "2026-07-19T22:17:31+09:00",
+          "tree_id": "aefb94913881dccbccd5790a8aee4cddcb18a059",
+          "url": "https://github.com/wado-lang/wado/commit/7386643fd4399d9effd98e90ebdf93b244bee4b6"
+        },
+        "date": 1784467652332,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
