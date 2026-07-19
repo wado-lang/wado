@@ -955,7 +955,6 @@ impl<'a> Lexer<'a> {
     fn skip_escape(&mut self) {
         match self.peek_char() {
             Some('x') => {
-                // \xNN — the elaborator rejects it in char / string literals.
                 self.advance();
                 for _ in 0..2 {
                     match self.peek_char() {
@@ -1401,7 +1400,6 @@ mod tests {
 
     #[test]
     fn test_byte_literal() {
-        // `b'x'` is a byte literal; raw content is kept (escapes uninterpreted).
         let a = tokens("b'A'");
         assert!(
             matches!(&a[0].kind, TokenKind::ByteCharLit(raw) if raw == "A"),
@@ -1416,14 +1414,10 @@ mod tests {
             esc[0].kind
         );
 
-        // An identifier ending in `b` (e.g. `crab`) greedily consumes the `b`,
-        // so a following `'A'` is a plain char literal, not a byte literal.
         let suffixed = tokens("crab'A'");
         assert!(matches!(&suffixed[0].kind, TokenKind::Ident(s) if s == "crab"));
         assert!(matches!(&suffixed[1].kind, TokenKind::CharLit(raw) if raw == "A"));
 
-        // A bare `b` followed by a char literal only becomes a byte literal when
-        // the `b` starts a token: `foo b'A'` → Ident, ByteCharLit.
         let spaced = tokens("foo b'A'");
         assert!(matches!(&spaced[0].kind, TokenKind::Ident(s) if s == "foo"));
         assert!(matches!(&spaced[1].kind, TokenKind::ByteCharLit(raw) if raw == "A"));

@@ -89,8 +89,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        // Byte literal → integer (`let n: i32 = b'A'`): value 0..=255, so the
-        // non-negative range check applies.
         if let Expr::Literal(lit) = expr
             && let Literal::Byte(raw) = &lit.value
             && self.tysys.type_table.borrow().is_integer(target_type)
@@ -408,8 +406,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow()
                 .get_ultimate_base_type(target_type);
             if base_id == list_u8 {
-                // This path runs before `resolve_literal`, so validate here too
-                // — else an invalid byte string coerced to `List<u8>` is unreported.
                 if let Expr::Literal(lit) = expr
                     && let Literal::Bytes(raw) = &lit.value
                     && let Err(message) = util::unescape_bytes(raw)

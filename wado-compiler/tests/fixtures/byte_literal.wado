@@ -14,8 +14,6 @@ fn classify(b: u8) -> i32 {
     };
 }
 
-// A byte-literal pattern's width follows the scrutinee: matched against a wide
-// int (i128/u128 GC struct), it compares via the correctly-typed struct.
 fn matches_signed_wide(x: i128) -> bool {
     return match x {
         b'A' => true,
@@ -35,12 +33,10 @@ fn id<T>(x: T) -> T {
 }
 
 export fn run() {
-    // Default type u8.
     let a = b'A';
     assert a == 65;
     assert takes_u8(b'B') == 66;
 
-    // Standard escapes.
     assert b'\n' == 10;
     assert b'\t' == 9;
     assert b'\r' == 13;
@@ -49,12 +45,10 @@ export fn run() {
     assert b'\"' == 34;
     assert b'\0' == 0;
 
-    // \xNN, including a high byte.
     assert b'\x00' == 0;
     assert b'\x7f' == 127;
     assert b'\xff' == 255;
 
-    // Coercion.
     let n: i32 = b'A';
     assert n == 65;
     let w: u32 = b'\xff';
@@ -62,19 +56,16 @@ export fn run() {
 
     assert b'A' + 1 == b'B';
 
-    // Patterns.
     assert classify(b'5') == 1;
     assert classify(b'q') == 2;
     assert classify(b'\t') == 3;
     assert classify(b'!') == 0;
     assert b'7' matches { b'0'..=b'9' };
 
-    // Wide-int scrutinees: the pattern follows the scrutinee's GC-struct type.
     assert matches_signed_wide(65 as i128);
     assert !matches_signed_wide(66 as i128);
     assert matches_unsigned_wide(65 as u128);
 
-    // Generic inference keeps the u8 default: `id(b'A')` is a u8.
     assert takes_u8(id(b'A')) == 65;
 }
 

@@ -9340,7 +9340,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 TirExprKind::CharLiteral(ch)
             }
             ast::Literal::Byte(s) => {
-                // Lower to `IntLiteral` (default `u8`, or the coerced type).
                 let byte = super::util::unescape_byte(s).unwrap_or(0);
                 let byte_type = if recorded_type == crate::tir::TypeTable::UNKNOWN {
                     crate::tir::TypeTable::U8
@@ -9791,11 +9790,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // string literals decode their escapes. `null` on a
                 // variant scrutinee with a `None` case lowers to that
                 // case.
-                // Integer-literal patterns (number and byte) follow the
-                // scrutinee's signedness: a wide-int scrutinee is a GC struct,
-                // so the pattern variant must match its exact type (`u128::eq`
-                // vs `i128::eq`); a narrow scrutinee folds to a scalar `i32/i64`
-                // eq. Never let the literal fix the width.
                 let scrutinee_is_unsigned = {
                     let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
                     matches!(
@@ -10262,9 +10256,6 @@ fn ast_literal_to_pattern(lit: &ast::Literal) -> crate::tir::TirLiteralPattern {
         ast::Literal::Char(s) => {
             TirLiteralPattern::Char(super::util::unescape_char(s).unwrap_or('\0'))
         }
-        // Byte patterns are integer patterns whose width follows the scrutinee,
-        // so they are reified in the scrutinee-aware block and never reach this
-        // scrutinee-agnostic decoder.
         ast::Literal::Byte(_) => {
             panic!("ast_literal_to_pattern: byte literal must be reified scrutinee-aware")
         }

@@ -173,7 +173,6 @@ pub(super) fn unescape_bytes(raw: &str) -> Result<Vec<u8>, String> {
                     .map_err(|_| format!("invalid `\\x` escape: \\x{hi}{lo}"))?;
                 out.push(byte);
             } else if chars.peek() == Some(&'u') {
-                // A Unicode escape is a scalar, not a byte.
                 return Err(
                     "unicode escape `\\u` is not allowed in a byte literal; use `\\xNN`".to_string(),
                 );
