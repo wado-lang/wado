@@ -3,14 +3,9 @@ use { MemberField, MemberDecls } from "./java2wado/jmembers.wado";
 pub fn translate_wado_members(body: &String) -> Result<MemberDecls, String> {
     let chars: List<char> = body.chars().collect();
     let n = chars.len();
-    let mut i = 0;
     let mut fields: List<MemberField> = [];
     let mut methods: List<String> = [];
-    while i < n {
-        i = skip_ws_semi(&chars, i, n);
-        if i >= n {
-            break;
-        }
+    for let mut i = skip_ws_semi(&chars, 0, n); i < n; i = skip_ws_semi(&chars, i, n) {
         if is_method_start(&chars, i, n) {
             let close = capture_fn(&chars, i, n)?;
             methods.push(collect_range(&chars, i, close));
