@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784441889277,
+  "lastUpdate": 1784442728887,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -42033,6 +42033,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d481fee21ff858caa49e6d4e9955eeb85bbd8345"
         },
         "date": 1784441888848,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8257,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16526,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271337,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5a195cee9f469de89d2c57be557f382262be0d4d",
+          "message": "Merge pull request #1635 from wado-lang/claude/container-cargo-cache-check-xm619q\n\nchore: cache compiled dependencies via sccache for the web container",
+          "timestamp": "2026-07-19T15:18:45+09:00",
+          "tree_id": "816c444c5c012789d3c3bbf7499de71d81473aa6",
+          "url": "https://github.com/wado-lang/wado/commit/5a195cee9f469de89d2c57be557f382262be0d4d"
+        },
+        "date": 1784442728110,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
