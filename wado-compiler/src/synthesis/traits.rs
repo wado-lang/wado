@@ -478,8 +478,45 @@ fn generate_struct_reflect_impls(
         return;
     }
 
+    let targets = collect_reflect_targets(module, ctx, reflect_trait_name);
+    // Nothing to synthesize in this module: skip the registry lookups (and the
+    // `require_method` invariant assertion) rather than run them for every
+    // module that merely declares a struct.
+    if targets.is_empty() {
+        return;
+    }
+
     let module_source = module.module_source.clone();
-    let infos: Vec<(String, Vec<FieldInfo>, Span)> = module
+    let env = ReflectSynthEnv::resolve(&mut module.type_table.borrow_mut());
+
+    let mut generated = Vec::new();
+    for target in &targets {
+        let methods = generate_struct_reflect_methods(
+            &module.type_table,
+            &env,
+            &module_source,
+            reflect_trait_name,
+            target,
+        );
+        generated.extend(methods.into_iter().map(|f| Rc::new(RefCell::new(f))));
+        ctx.record_impl(&target.0, reflect_trait_name);
+    }
+
+    module.functions.extend(generated);
+}
+
+/// A struct selected for `Reflect` synthesis: its name, per-field
+/// `(name, type, index)` info, and declaration span.
+type ReflectTarget = (String, Vec<FieldInfo>, Span);
+
+/// Select the structs in `module` that need a synthesized `Reflect` impl:
+/// non-generic, non-monomorphized, and actually requested by a bound.
+fn collect_reflect_targets(
+    module: &TirModule,
+    ctx: &SynthesisCtx<'_, '_, '_>,
+    reflect_trait_name: &str,
+) -> Vec<ReflectTarget> {
+    module
         .structs
         .iter()
         .filter(|s| s.type_params.is_empty() && s.monomorph_info.is_none())
@@ -494,72 +531,72 @@ fn generate_struct_reflect_impls(
                 s.span,
             )
         })
-        .collect();
+        .collect()
+}
 
-    // Nothing to synthesize in this module: skip the registry lookups (and the
-    // `require_method` invariant assertion) entirely rather than run them for
-    // every module that merely declares a struct.
-    if infos.is_empty() {
-        return;
-    }
+/// Synthesize one struct's three `Reflect` methods — `type_name()`,
+/// `field_names()`, `fields(&self)` — and register its `Fields` associated
+/// tuple type so trait-qualified `fields` calls and the `Reflect<Fields = [..F]>`
+/// pack binding both project the concrete tuple.
+fn generate_struct_reflect_methods(
+    type_table: &RefCell<TypeTable>,
+    env: &ReflectSynthEnv,
+    module_source: &ModuleSource,
+    reflect_trait_name: &str,
+    target: &ReflectTarget,
+) -> [TirFunction; 3] {
+    let (name, fields, span) = target;
+    let span = *span;
+    let field_names: Vec<String> = fields.iter().map(|(n, _, _)| n.clone()).collect();
 
-    let env = ReflectSynthEnv::resolve(&mut module.type_table.borrow_mut());
+    let type_name_fn = generate_struct_type_name_fn(
+        name,
+        env.string_type,
+        reflect_trait_name,
+        &env.type_name_method,
+        span,
+    );
 
-    let mut generated = Vec::new();
-    for (name, fields, span) in &infos {
-        let field_names: Vec<String> = fields.iter().map(|(n, _, _)| n.clone()).collect();
-        let type_name_fn = generate_struct_type_name_fn(
-            name,
-            env.string_type,
-            reflect_trait_name,
-            &env.type_name_method,
-            *span,
+    let (names_tuple_type, ref_struct_type, fields_tuple_type) = {
+        let mut tt = type_table.borrow_mut();
+        let names_tuple_type =
+            tt.make_tuple(std::iter::repeat_n(env.string_type, field_names.len()).collect());
+        let struct_type = tt.make_struct(name.clone(), module_source.clone());
+        let ref_struct_type = tt.make_ref(struct_type);
+        let fields_tuple_type = tt.make_tuple(fields.iter().map(|(_, ty, _)| *ty).collect());
+        // Register `S::Fields = [F_0, F_1, …]` for the `fields` return type and
+        // the pack binding to project.
+        tt.register_assoc_type_resolution(
+            struct_type,
+            REFLECT_FIELDS_ASSOC.to_string(),
+            fields_tuple_type,
         );
-        let (field_names_fn, fields_fn) = {
-            let mut tt = module.type_table.borrow_mut();
-            let names_tuple_type =
-                tt.make_tuple(std::iter::repeat_n(env.string_type, field_names.len()).collect());
-            let struct_type = tt.make_struct(name.clone(), module_source.clone());
-            let ref_struct_type = tt.make_ref(struct_type);
-            let fields_tuple_type = tt.make_tuple(fields.iter().map(|(_, ty, _)| *ty).collect());
-            // Register `S::Fields = [F_0, F_1, …]` so trait-qualified `fields`
-            // calls and the `Reflect<Fields = [..F]>` pack binding project it.
-            tt.register_assoc_type_resolution(
-                struct_type,
-                REFLECT_FIELDS_ASSOC.to_string(),
-                fields_tuple_type,
-            );
-            drop(tt);
-            let field_names_fn = generate_struct_field_names_fn(
-                name,
-                &field_names,
-                env.string_type,
-                names_tuple_type,
-                env.list_string_type,
-                reflect_trait_name,
-                &env.string_type_name,
-                &env.from_tuple,
-                &env.field_names_method,
-                *span,
-            );
-            let fields_fn = generate_struct_fields_fn(
-                name,
-                fields,
-                ref_struct_type,
-                fields_tuple_type,
-                reflect_trait_name,
-                &env.fields_method,
-                *span,
-            );
-            (field_names_fn, fields_fn)
-        };
-        generated.push(Rc::new(RefCell::new(type_name_fn)));
-        generated.push(Rc::new(RefCell::new(field_names_fn)));
-        generated.push(Rc::new(RefCell::new(fields_fn)));
-        ctx.record_impl(name, reflect_trait_name);
-    }
+        (names_tuple_type, ref_struct_type, fields_tuple_type)
+    };
 
-    module.functions.extend(generated);
+    let field_names_fn = generate_struct_field_names_fn(
+        name,
+        &field_names,
+        env.string_type,
+        names_tuple_type,
+        env.list_string_type,
+        reflect_trait_name,
+        &env.string_type_name,
+        &env.from_tuple,
+        &env.field_names_method,
+        span,
+    );
+    let fields_fn = generate_struct_fields_fn(
+        name,
+        fields,
+        ref_struct_type,
+        fields_tuple_type,
+        reflect_trait_name,
+        &env.fields_method,
+        span,
+    );
+
+    [type_name_fn, field_names_fn, fields_fn]
 }
 
 /// The `Reflect` trait's associated-type name (`type Fields`). Sealed and
