@@ -769,10 +769,9 @@ fn parse_test_export(name: &str) -> Option<TestExportName> {
         (TestKind::ExpectTrap, rest)
     } else if let Some(rest) = name.strip_prefix("test-todo-") {
         (TestKind::Todo, rest)
-    } else if let Some(rest) = name.strip_prefix("test-") {
-        (TestKind::Normal, rest)
     } else {
-        return None;
+        let rest = name.strip_prefix("test-")?;
+        (TestKind::Normal, rest)
     };
 
     let (timeout_ms, rest) = parse_timeout_segment(rest);

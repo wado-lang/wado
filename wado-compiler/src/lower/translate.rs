@@ -795,14 +795,13 @@ impl FunctionTranslator<'_, '_> {
                         crate::tir::TypeTable::I32,
                     ),
                 ]
-            } else if let Some(elems) = tuple_elems {
+            } else {
+                let elems = tuple_elems?;
                 elems
                     .into_iter()
                     .enumerate()
                     .map(|(i, ty)| (i.to_string(), i as u32, ty))
                     .collect()
-            } else {
-                return None;
             }
         };
         if fields.is_empty() {

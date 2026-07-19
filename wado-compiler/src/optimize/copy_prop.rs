@@ -187,14 +187,13 @@ fn analyze_copy_binding(
                         inner_type_id,
                     }
                 }
-            } else if let Some(root_local) = field_chain_root(body, ie) {
+            } else {
+                let root_local = field_chain_root(body, ie)?;
                 CopySource::RefProjection {
                     root_local,
                     op,
                     projection: ie,
                 }
-            } else {
-                return None;
             }
         }
         _ => return None,

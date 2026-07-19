@@ -2960,7 +2960,7 @@ impl FunctionRef {
             info.to_mangled_name()
         } else {
             let path = self.module_source.to_path();
-            format!("{}/{}", path.join("/"), &self.name)
+            format!("{}/{}", path.join("/"), self.name)
         }
     }
 
@@ -2977,7 +2977,7 @@ impl FunctionRef {
             return None;
         }
         if self.module_source.is_core_builtin() || self.module_source.is_wasm_asset() {
-            Some(format!("builtin::{}", &self.name))
+            Some(format!("builtin::{}", self.name))
         } else {
             None
         }
