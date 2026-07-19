@@ -67,9 +67,6 @@ fn is_method_start(chars: &List<char>, i: i32, n: i32) -> bool {
     return false;
 }
 
-/// Capture a `fn` item from `start`: skip past the parameter list `(...)` first
-/// (a struct-literal default arg like `p: P = P { }` puts a `{` there that is not
-/// the body), then balance the body `{...}`. Returns the index just past `}`.
 fn capture_fn(chars: &List<char>, start: i32, n: i32) -> Result<i32, String> {
     let mut i = start;
     while i < n && chars[i] != '(' {
@@ -88,9 +85,6 @@ fn capture_fn(chars: &List<char>, start: i32, n: i32) -> Result<i32, String> {
     return skip_balanced(chars, i, n, '{', '}');
 }
 
-/// Balance a delimiter pair starting at `open` (`chars[i] == open`), skipping
-/// string / char / comment spans, and return the index just past the matching
-/// `close`.
 fn skip_balanced(chars: &List<char>, open_idx: i32, n: i32, open: char, close: char) -> Result<i32, String> {
     let mut i = open_idx;
     let mut depth = 0;
@@ -148,11 +142,6 @@ fn parse_field(chars: &List<char>, start: i32, n: i32, fields: &mut List<MemberF
     return Result::Ok(if init_end < n { init_end + 1 } else { n });
 }
 
-/// Index of the first top-level `target` from `start`, tracking `()[]{}` nesting
-/// and skipping string / char / comment spans; `n` if none. `<` / `>` are NOT
-/// tracked — they are comparison / shift operators in an initializer and a
-/// generic in a type (`List<i32>`), and neither ever encloses the `=` / `;` this
-/// scans for, so treating them as brackets only mis-balances `a < b`.
 fn scan_to(chars: &List<char>, start: i32, n: i32, target: char) -> i32 {
     let mut i = start;
     let mut depth = 0;
