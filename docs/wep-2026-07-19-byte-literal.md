@@ -52,17 +52,9 @@ is unchanged apart from the `\u` rejection.
 `b'` is unambiguous: Wado has no lifetimes, so `'` always opens a char/byte
 literal.
 
-### Lowering
-
-A byte literal reuses the integer-literal lowering, never a byte-specific
-representation. In expression position it lowers to an `IntLiteral`. In pattern
-position its width and signedness follow the **scrutinee**, exactly like a
-number literal: a narrow scrutinee folds to a scalar `i32`/`i64` compare, and a
-wide-int (`i128`/`u128`) scrutinee — a GC struct with no native Wasm compare —
-selects the matching `i128`/`u128` struct-typed `Eq::eq`. Fixing the width from
-the literal instead (e.g. always `u128`) would build the wrong struct for a
-signed wide scrutinee, so the byte pattern is reified where the scrutinee type
-is known and never via a scrutinee-agnostic decoder.
+In every position — expression, coercion, and pattern (including against a
+wide-int scrutinee) — a byte literal behaves exactly as a number literal of the
+same value would; it carries no representation of its own.
 
 ## Consequences
 
