@@ -152,9 +152,9 @@ impl IndexAssign<i32> for List<T> {
     }
 }
 
-// For reference element types only (when trait bounds are available):
-// impl Index<i32> for List<T> where T: Ref { ... }
-// impl IndexMut<i32> for List<T> where T: Ref { ... }
+// List element references (&xs[i], &mut xs[i], xs[i].m()) are NOT trait-based:
+// they lower to the reference-representation intrinsic, so List does not
+// implement IndexRef / IndexMutRef. See WEP 2026-07-19.
 ```
 
 ### Optimization: Pattern Recognition

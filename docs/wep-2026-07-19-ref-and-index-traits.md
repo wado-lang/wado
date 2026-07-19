@@ -126,53 +126,60 @@ makes "you may return `&Output` only when `Output` is a reference" a property of
 the trait itself: `impl IndexRef<i32> for List<i32>` fails to type-check because
 `i32: Ref` does not hold, with no per-container special-casing.
 
-`List<T>`:
+The index traits are the extension point for _user_ containers. `List<T>` /
+arrays are not implemented on top of them: they provide `IndexValue` /
+`IndexAssign` for the `[]` value read/write of every element type, and their
+element _references_ (`&xs[i]`, `&mut xs[i]`, `xs[i].m()`, `&mut`-iteration) are
+compiler intrinsics governed by
+[Reference Representation](./wep-2026-06-13-reference-representation.md), not by
+`IndexRef` / `IndexMutRef`. `List` deliberately does _not_ implement the
+reference index traits — that keeps a single lowering for array element refs
+rather than a trait impl shadowing the intrinsic.
 
 ```wado
-impl IndexValue<i32>  for List<T> { type Output = T; /* array.get */ }           // all T
-impl IndexAssign<i32> for List<T> { type Input  = T; /* array.set */ }           // all T
-impl<T: Ref> IndexRef<i32>    for List<T> { type Output = T; /* element ref */ } // T: Ref
-impl<T: Ref> IndexMutRef<i32> for List<T> { type Output = T; /* element ref */ } // T: Ref
+impl IndexValue<i32>  for List<T> { type Output = T; /* array.get */ }  // all T
+impl IndexAssign<i32> for List<T> { type Input  = T; /* array.set */ }  // all T
+// &xs[i] / &mut xs[i] / xs[i].m() : reference-representation intrinsic, not a trait.
 ```
 
 ### Resolution
 
-The compiler desugars `container[i]` by which traits resolve:
+For a container that indexes _through the traits_ (a user container), the
+compiler desugars `container[i]` by which traits resolve:
 
 - `let x = a[i]` (value read) → `IndexValue::index_value` (a copy — value
-  semantics). `List` always has this, so scalar-element reads are unaffected.
+  semantics).
 - `a[i] = v` → `IndexAssign::index_assign`.
-- `&a[i]` → `IndexRef::index_ref`. If `Output` is not `Ref` (e.g. `&nums[i]` on
-  `List<i32>`) this is a type error: a value-typed element has no reference
-  identity to borrow. Diagnostic names the fix (bind by value: `let x = nums[i]`).
-- `a[i].m()` with `m(&self)` → `IndexRef::index_ref` receiver when `Output: Ref`,
-  else `IndexValue::index_value` on a temporary copy.
-- `&mut a[i]` / `a[i].m()` with `m(&mut self)` → `IndexMutRef::index_mut_ref`,
-  subject to the write-back gate below.
+- `&a[i]` → `IndexRef::index_ref` (`Output: Ref`, enforced at the impl site — a
+  scalar-`Output` container simply cannot implement `IndexRef`; it offers
+  `IndexValue`, and its `[i]` is read by value).
+- `a[i].m()` with `m(&self)` → `IndexRef::index_ref` receiver when the container
+  implements it, else `IndexValue::index_value` on a temporary copy.
+- `&mut a[i]` / `a[i].m()` with `m(&mut self)` → `IndexMutRef::index_mut_ref`.
 
-### The `IndexMutRef` write-back gate
+For `List` / arrays, the same surface syntax lowers to the reference-representation
+intrinsic instead: a value read/write is `array.get` / `array.set`; `&xs[i]` on a
+`Ref` element is the shared handle, on a scalar element a permitted read-only
+snapshot box (reference-representation §"`&` to a … place"); `&mut xs[i]` follows
+the reference-representation forbid / carve-out (a replace-on-assign element in an
+escaping position is an error, the non-escaping case a temp + write-back).
 
-Because `Ref` includes the replace-on-assign GC types (`variant`, `fn`),
-`IndexMutRef` is _offered_ for them, but a `&mut variant` / `&mut fn` into an
-array slot cannot support `*r = v` replacement — there is no stable box cell for
-the element. This is precisely
-[Reference Representation](./wep-2026-06-13-reference-representation.md)'s domain.
+### `IndexRef` `Output` vs the `&place` operation
 
-Decision: gate this at the **place**, not with a second marker trait. The
-reference-representation forbid / carve-out is evaluated on the `container[i]`
-place, so `&mut a[i]` and `a[i].m()` (`&mut self`) are rejected — or lowered via
-the non-escaping temp + write-back carve-out — identically for replace-on-assign
-elements, whether the element ref comes from the built-in `List` intrinsic or an
-`IndexMutRef` impl. `Ref` is the _necessary_ gate (it excludes scalars, `enum`,
-`flags`, `resource`); reference-representation is the _additional_ gate for
-`&mut` write-back soundness. This makes `&mut xs[i]` obey the same rule and emit
-the same diagnostic as `&mut x` on a local — one concept, no new surface.
+Two different things both spell `&container[i]`:
 
-The alternative — a second sealed marker (in-place-mutability, the boxing-set
-complement) that statically withholds `IndexMutRef` from replace-on-assign
-elements — is rejected for now: the place-level check already makes the design
-sound with less surface, and a future need can still add the marker without
-reworking this.
+- The `IndexRef` / `IndexMutRef` _trait_ result: `&Self::Output`, gated by
+  `type Output: Ref`. A user container cannot hand out a reference to a
+  value-typed element — that is the fake-`&scalar` footgun, forbidden by
+  construction.
+- The language `&<place>` operation on a `List` / array element: governed by
+  reference-representation, which _permits_ `&scalar-element` as a read-only
+  snapshot box (it is a `Box<T>` copy, sound because there is no write to lose).
+
+So `&nums[i]` on `List<i32>` is **not** an error — it is a reference-representation
+snapshot, unchanged by this WEP. `Ref` gates the trait `Output`, not the `&place`
+operation. (Whether to additionally tighten the `&scalar` snapshot is a
+reference-representation question, out of scope here.)
 
 ## Consequences
 
@@ -191,8 +198,9 @@ reworking this.
 
 - [x] `Ref` declared as the sealed `#[compiler_item("ref")]` marker in the
       prelude, sealed alongside `Reflect`.
-- [ ] `Ref` eligibility synthesis (reference-identity predicate), so `T: Ref`
-      resolves; correct `resource ∉ Ref`, `&T ∈ Ref`, `variant`/`fn` ∈ `Ref`.
+- [x] `Ref` eligibility (reference-identity predicate `is_ref_identity`), so
+      `T: Ref` resolves: `resource ∉ Ref`, `&T ∈ Ref`, `variant` / `fn` ∈ `Ref`.
+      Fixtures: `ref_bound_satisfied`, `ref_bound_{scalar,resource,enum,flags}_rejected`.
 - [x] Rename the prelude `Index` / `IndexMut` traits to `IndexRef` /
       `IndexMutRef` (methods `index_ref` / `index_mut_ref`) and update the
       elaborator's index-desugaring lookups. Migrated the user-container
@@ -207,10 +215,21 @@ reworking this.
       now errors (`i32` does not implement `Ref`). General, not `Ref`-specific —
       it also covers `IntoIterator::Iter: Iterator` etc. Fixture:
       `index_ref_scalar_output_rejected`.
-- [ ] `impl<T: Ref> IndexRef / IndexMutRef for List<T>`, and route `&a[i]` /
-      `a[i].m()` through them (or keep the `List` intrinsic and use `Ref` only as
-      the diagnostic gate — decide during implementation).
-- [ ] Place-level reference-representation check on `IndexMutRef` receivers.
+- [x] `List` element references: decided to keep the reference-representation
+      intrinsic and _not_ implement `IndexRef` / `IndexMutRef` for `List<T>`.
+      `&xs[i]` / `&mut xs[i]` / `xs[i].m()` already work through it (struct
+      element in-place, scalar element as a snapshot box) — a `List` trait impl
+      would only shadow the intrinsic. `Ref` gates the trait `Output` for user
+      containers; it does not change the `&place` operation on arrays.
+
+The feature is complete: `Ref` is defined and resolves correctly, the four
+index traits are named and the reference-returning pair is gated on `Output:
+Ref` and enforced at impl sites. Possible follow-ups, out of this WEP's scope:
+
+- [ ] Tighten the `&scalar` snapshot box (`&nums[i]`) — a
+      reference-representation decision, not an index-trait one.
+- [ ] `impl<T: Ref> IndexRef / IndexMutRef for List<T>` only if a generic
+      `fn f<C: IndexRef<i32>>(c: C)` ever needs `List` to satisfy the bound.
 
 ## References
 
