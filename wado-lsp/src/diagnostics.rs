@@ -83,11 +83,7 @@ pub fn from_compiler_diagnostic(
         CompilerSeverity::Debug => return None,
     };
 
-    let is_unused_lint = matches!(
-        diag.code,
-        Code::DeadFunction | Code::DeadGlobal | Code::TestOnlyFunction | Code::TestOnlyGlobal
-    );
-    let tags = if is_unused_lint {
+    let tags = if diag.code.is_unused_lint() {
         vec![DiagnosticTag::Unnecessary]
     } else {
         Vec::new()
