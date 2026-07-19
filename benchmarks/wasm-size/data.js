@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784442728887,
+  "lastUpdate": 1784447592649,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -42077,6 +42077,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5a195cee9f469de89d2c57be557f382262be0d4d"
         },
         "date": 1784442728110,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8257,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16526,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271337,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "08bd1db526a718bcefeb7e619f1262c717a5241d",
+          "message": "Merge pull request #1636 from wado-lang/claude/lexer-action-members-design-xfuptp\n\nfeat(gale): @lexer::members over a unified Lexer context",
+          "timestamp": "2026-07-19T16:43:09+09:00",
+          "tree_id": "968091dac27660e4cab7ec3d9c6d1624e33116ac",
+          "url": "https://github.com/wado-lang/wado/commit/08bd1db526a718bcefeb7e619f1262c717a5241d"
+        },
+        "date": 1784447592268,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
