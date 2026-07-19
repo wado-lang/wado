@@ -158,19 +158,21 @@ array slot cannot support `*r = v` replacement — there is no stable box cell f
 the element. This is precisely
 [Reference Representation](./wep-2026-06-13-reference-representation.md)'s domain.
 
-Normative requirement: the reference-representation forbid / carve-out is
-evaluated on the `container[i]` **place**, so `&mut a[i]` and `a[i].m()`
-(`&mut self`) are rejected — or lowered via the non-escaping temp + write-back
-carve-out — identically for replace-on-assign elements, whether the element ref
-comes from the built-in `List` intrinsic or an `IndexMutRef` impl. `Ref` is the
-_necessary_ gate (it excludes scalars, `enum`, `flags`, `resource`);
-reference-representation is the _additional_ gate for `&mut` write-back
-soundness.
+Decision: gate this at the **place**, not with a second marker trait. The
+reference-representation forbid / carve-out is evaluated on the `container[i]`
+place, so `&mut a[i]` and `a[i].m()` (`&mut self`) are rejected — or lowered via
+the non-escaping temp + write-back carve-out — identically for replace-on-assign
+elements, whether the element ref comes from the built-in `List` intrinsic or an
+`IndexMutRef` impl. `Ref` is the _necessary_ gate (it excludes scalars, `enum`,
+`flags`, `resource`); reference-representation is the _additional_ gate for
+`&mut` write-back soundness. This makes `&mut xs[i]` obey the same rule and emit
+the same diagnostic as `&mut x` on a local — one concept, no new surface.
 
-Statically refusing to even _offer_ `IndexMutRef` for replace-on-assign elements
-would need a second sealed marker (in-place-mutability, the boxing-set
-complement). That is deferred: the place-level reference-representation check
-already makes the design sound, so a second marker is not yet warranted.
+The alternative — a second sealed marker (in-place-mutability, the boxing-set
+complement) that statically withholds `IndexMutRef` from replace-on-assign
+elements — is rejected for now: the place-level check already makes the design
+sound with less surface, and a future need can still add the marker without
+reworking this.
 
 ## Consequences
 
