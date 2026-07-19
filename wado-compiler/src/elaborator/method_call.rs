@@ -3033,23 +3033,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // `type_name` / `field_names` take no arguments. Resolve any supplied
-        // args so errors inside them still surface, then reject the arity —
-        // without this the extra operands reach a 0-param synthesized call and
-        // trip a WIR-pipeline validation ICE.
-        if !static_call.args.is_empty() {
-            for arg in &static_call.args {
-                self.resolve_expr(arg, ctx, None);
-            }
-            let _ = self.emit(TypeError::ArgumentCountMismatch {
-                expected: 0,
-                found: static_call.args.len(),
-                span: static_call.span,
-            });
-            return TypeTable::ERROR;
-        }
-
-        let (reflect_trait_name, type_name_method, module_source) = {
+        let (reflect_trait_name, type_name_method, fields_method, module_source) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
@@ -3059,9 +3043,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 items
                     .method_name(crate::compiler_item::CompilerItem::ReflectTypeName)
                     .to_string(),
+                items
+                    .method_name(crate::compiler_item::CompilerItem::ReflectFields)
+                    .to_string(),
                 self.find_struct_module_source(&self_name),
             )
         };
+
+        // `fields(&self)` takes the receiver as its one argument; `type_name` /
+        // `field_names` take none. Resolve any supplied args so errors inside
+        // them still surface, then enforce the arity — an unexpected operand
+        // reaching a synthesized call trips a WIR-pipeline validation ICE.
+        let is_fields = method == fields_method;
+        let expected_args = usize::from(is_fields);
+        let ref_self_ty = self.tysys.type_table.borrow_mut().make_ref(self_ty);
+        for (i, arg) in static_call.args.iter().enumerate() {
+            let hint = if is_fields && i == 0 {
+                Some(ref_self_ty)
+            } else {
+                None
+            };
+            self.resolve_expr(arg, ctx, hint);
+        }
+        if static_call.args.len() != expected_args {
+            let _ = self.emit(TypeError::ArgumentCountMismatch {
+                expected: expected_args,
+                found: static_call.args.len(),
+                span: static_call.span,
+            });
+            return TypeTable::ERROR;
+        }
 
         // Demand-synthesize `impl Reflect for T`.
         self.tysys
@@ -3069,9 +3080,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow_mut()
             .record_bound_driven_synth_request(&self_name, &module_source, &reflect_trait_name);
 
-        // `is_reflect_trait_call` admits only `type_name` / `field_names`, so a
-        // non-`type_name` method is `field_names` and returns `List<String>`.
-        let return_type = {
+        // `is_reflect_trait_call` admits only `type_name` / `field_names` /
+        // `fields`: `type_name` returns `String`, `fields` returns the `Fields`
+        // tuple `[F_0, F_1, …]`, and `field_names` returns `List<String>`.
+        let return_type = if is_fields {
+            let field_types: Vec<TypeId> = self
+                .type_lookup()
+                .struct_fields(&self_name)
+                .map(|info| info.fields.iter().map(|(_, ty, _)| *ty).collect())
+                .unwrap_or_default();
+            self.tysys.type_table.borrow_mut().make_tuple(field_types)
+        } else {
             let mut tt = self.tysys.type_table.borrow_mut();
             let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
             if method == type_name_method {
@@ -3095,7 +3114,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             static_call.id,
             super::sem::types::StaticMethodDispatch {
                 function_ref: func_ref,
-                param_is_mut: Vec::new(),
+                param_is_mut: if is_fields { vec![false] } else { Vec::new() },
                 type_args: Vec::new(),
                 param_defaults: Vec::new(),
             },
@@ -3122,6 +3141,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let items = tt.compiler_items();
         method == items.method_name(crate::compiler_item::CompilerItem::ReflectFieldNames)
             || method == items.method_name(crate::compiler_item::CompilerItem::ReflectTypeName)
+            || method == items.method_name(crate::compiler_item::CompilerItem::ReflectFields)
     }
 
     /// Get the operator trait and method name for a binary operator.

@@ -260,10 +260,15 @@ after the first three.
 - [x] `Reflect` per-struct synthesis of `type_name()` / `field_names()` — the
       value-free string metadata. `field_names()` collects a homogeneous string
       tuple through the general `List::from_tuple` constructor.
-- [ ] `Reflect` per-struct synthesis of `fields(&self)` and the `Fields`
-      associated tuple (the remaining §10 members).
+- [x] `Reflect` per-struct synthesis of `fields(&self)` and the `Fields`
+      associated tuple (the remaining §10 members). `fields(&self)` returns the
+      values as a heterogeneous tuple `[self.f_0, …]`; the tuple type is
+      registered as the struct's `Fields` associated-type resolution.
 - [ ] `where`-clause pack binding `T: Reflect<Fields = [..F]>` (the unbuilt
-      item from WEP 2026-03-14 §11).
+      item from WEP 2026-03-14 §11). Wado has no `where` keyword, so this is
+      spelled as an inline bound `impl<T: Reflect<Fields = [..F]>, ..F: Trait>`;
+      the monomorphizer must derive `F` by projecting `T`'s `Fields` tuple
+      (`resolve_assoc_type`) rather than from the receiver.
 - [ ] `Reflect` metadata extension — `field_meta()` (`wire_name`,
       `has_default`, `doc`, `validate`) and `type_doc()`.
 - [ ] `#[validate(…)]` attribute — parse the closed vocabulary into

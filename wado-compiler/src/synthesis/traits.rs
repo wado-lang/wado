@@ -459,13 +459,16 @@ pub fn synthesize_reflect(project: &mut Package) {
     }
 }
 
-/// Synthesize `S^Reflect::type_name()` and `S^Reflect::field_names()` for every
-/// requested struct.
+/// Synthesize `S^Reflect::type_name()`, `S^Reflect::field_names()`, and
+/// `S^Reflect::fields(&self)` (plus the `type Fields` associated tuple) for
+/// every requested struct.
 ///
-/// `fields(&self)` (the `Fields` associated tuple) is a separate follow-up
-/// slice; this covers the value-free string metadata. `field_names()` builds a
-/// homogeneous string tuple and hands it to the general `List::from_tuple`
-/// prelude constructor, avoiding a hand-built `List` literal in synthesized TIR.
+/// `field_names()` builds a homogeneous string tuple and hands it to the
+/// general `List::from_tuple` prelude constructor, avoiding a hand-built `List`
+/// literal in synthesized TIR. `fields(&self)` returns the field values as a
+/// heterogeneous tuple `[self.f_0, self.f_1, …]` whose type is registered as the
+/// struct's `Fields` associated type, so `Reflect::<S>::fields(&s)` and the
+/// `Reflect<Fields = [..F]>` pack binding both project the concrete tuple.
 fn generate_struct_reflect_impls(
     module: &mut TirModule,
     ctx: &mut SynthesisCtx<'_, '_, '_>,
@@ -475,7 +478,8 @@ fn generate_struct_reflect_impls(
         return;
     }
 
-    let infos: Vec<(String, Vec<String>, Span)> = module
+    let module_source = module.module_source.clone();
+    let infos: Vec<(String, Vec<FieldInfo>, Span)> = module
         .structs
         .iter()
         .filter(|s| s.type_params.is_empty() && s.monomorph_info.is_none())
@@ -483,7 +487,10 @@ fn generate_struct_reflect_impls(
         .map(|s| {
             (
                 s.name.clone(),
-                s.fields.iter().map(|f| f.name.clone()).collect(),
+                s.fields
+                    .iter()
+                    .map(|f| (f.name.clone(), f.type_id, f.index))
+                    .collect(),
                 s.span,
             )
         })
@@ -503,6 +510,7 @@ fn generate_struct_reflect_impls(
         from_tuple,
         type_name_method,
         field_names_method,
+        fields_method,
     ) = {
         let mut tt = module.type_table.borrow_mut();
         let string_type = tt.make_compiler_struct(CompilerItem::String);
@@ -519,6 +527,7 @@ fn generate_struct_reflect_impls(
         let field_names_method = items
             .method_name(CompilerItem::ReflectFieldNames)
             .to_string();
+        let fields_method = items.method_name(CompilerItem::ReflectFields).to_string();
         (
             string_type,
             list_string_type,
@@ -526,11 +535,13 @@ fn generate_struct_reflect_impls(
             from_tuple,
             type_name_method,
             field_names_method,
+            fields_method,
         )
     };
 
     let mut generated = Vec::new();
-    for (name, field_names, span) in &infos {
+    for (name, fields, span) in &infos {
+        let field_names: Vec<String> = fields.iter().map(|(n, _, _)| n.clone()).collect();
         let type_name_fn = generate_struct_type_name_fn(
             name,
             string_type,
@@ -538,31 +549,56 @@ fn generate_struct_reflect_impls(
             &type_name_method,
             *span,
         );
-        let field_names_fn = {
+        let (field_names_fn, fields_fn) = {
             let mut tt = module.type_table.borrow_mut();
-            let tuple_type =
+            let names_tuple_type =
                 tt.make_tuple(std::iter::repeat_n(string_type, field_names.len()).collect());
+            let struct_type = tt.make_struct(name.clone(), module_source.clone());
+            let ref_struct_type = tt.make_ref(struct_type);
+            let fields_tuple_type = tt.make_tuple(fields.iter().map(|(_, ty, _)| *ty).collect());
+            // Register `S::Fields = [F_0, F_1, …]` so trait-qualified `fields`
+            // calls and the `Reflect<Fields = [..F]>` pack binding project it.
+            tt.register_assoc_type_resolution(
+                struct_type,
+                REFLECT_FIELDS_ASSOC.to_string(),
+                fields_tuple_type,
+            );
             drop(tt);
-            generate_struct_field_names_fn(
+            let field_names_fn = generate_struct_field_names_fn(
                 name,
-                field_names,
+                &field_names,
                 string_type,
-                tuple_type,
+                names_tuple_type,
                 list_string_type,
                 reflect_trait_name,
                 &string_type_name,
                 &from_tuple,
                 &field_names_method,
                 *span,
-            )
+            );
+            let fields_fn = generate_struct_fields_fn(
+                name,
+                fields,
+                ref_struct_type,
+                fields_tuple_type,
+                reflect_trait_name,
+                &fields_method,
+                *span,
+            );
+            (field_names_fn, fields_fn)
         };
         generated.push(Rc::new(RefCell::new(type_name_fn)));
         generated.push(Rc::new(RefCell::new(field_names_fn)));
+        generated.push(Rc::new(RefCell::new(fields_fn)));
         ctx.record_impl(name, reflect_trait_name);
     }
 
     module.functions.extend(generated);
 }
+
+/// The `Reflect` trait's associated-type name (`type Fields`). Sealed and
+/// compiler-defined, so its spelling is fixed rather than registry-driven.
+const REFLECT_FIELDS_ASSOC: &str = "Fields";
 
 /// The `List::from_tuple` constructor, resolved from
 /// [`CompilerItem::ListFromTuple`] so synthesis never hard-codes its owner /
@@ -640,6 +676,66 @@ fn generate_struct_field_names_fn(
         list_string_type,
         body,
         vec![],
+    )
+}
+
+/// Build `StructName^Reflect::fields(&self) -> [F_0, F_1, …]` as
+/// `return [self.f_0, self.f_1, …];` — the field values packed into a tuple
+/// whose type is the struct's `Fields` associated type.
+fn generate_struct_fields_fn(
+    struct_name: &str,
+    fields: &[FieldInfo],
+    ref_struct_type: TypeId,
+    fields_tuple_type: TypeId,
+    reflect_trait_name: &str,
+    fields_method: &str,
+    span: Span,
+) -> TirFunction {
+    let method_info = trait_method_info(struct_name, reflect_trait_name, fields_method);
+    let qualified_name = method_info.to_mangled_name();
+
+    let elements = fields
+        .iter()
+        .map(|(name, field_type, field_index)| {
+            field_access_local(
+                0,
+                "self",
+                ref_struct_type,
+                *field_index,
+                name,
+                *field_type,
+                span,
+            )
+        })
+        .collect();
+    let tuple = TirExpr::new(
+        TirExprKind::TupleLiteral { elements },
+        fields_tuple_type,
+        span,
+    );
+
+    let body = TirBlock::new(
+        vec![TirStmt::new(
+            TirStmtKind::Return { value: Some(tuple) },
+            span,
+        )],
+        span,
+    );
+
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        vec![TirParam {
+            name: "self".to_string(),
+            type_id: ref_struct_type,
+            local_index: 0,
+            is_mut: false,
+            is_mut_ref: false,
+            span,
+        }],
+        fields_tuple_type,
+        body,
+        vec![param_local("self", ref_struct_type, false)],
     )
 }
 
