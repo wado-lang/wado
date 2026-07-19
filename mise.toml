@@ -31,6 +31,37 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 mise install
+mise run warm-cache
+"""
+
+[tasks.warm-cache]
+description = "Reconstruct target/ from the restored sccache cache, then warm the incremental dev loop"
+run = """
+#!/usr/bin/env bash
+# Turns the restored sccache cache (see .claude/hooks/cargo-cache-restore.mts)
+# into a warm target/: an ~8 min cold dependency build becomes an ~80s
+# sccache-backed rebuild. sccache is used ONLY here — it disables incremental,
+# which cripples the edit/rebuild inner loop (measured ~12x slower on
+# wado-compiler edits), so we hand off to incremental immediately after.
+# No-ops cleanly when sccache or the cache is absent (e.g. local dev).
+set -e -o pipefail
+export SCCACHE_DIR="${SCCACHE_DIR:-$HOME/.cargo/sccache}"
+if ! command -v sccache >/dev/null 2>&1; then
+  echo "sccache not installed; skipping warm-cache (normal cold build applies)"
+  exit 0
+fi
+if [ ! -d "$SCCACHE_DIR" ] || [ -z "$(ls -A "$SCCACHE_DIR" 2>/dev/null)" ]; then
+  echo "no restored sccache cache at $SCCACHE_DIR; skipping warm-cache"
+  exit 0
+fi
+# 1) Reconstruct dependency artifacts fast from the content-addressed cache.
+RUSTC_WRAPPER=sccache CARGO_INCREMENTAL=0 cargo build --workspace --locked
+sccache --show-stats || true
+# 2) Hand off to incremental so the first real edit is a fast relink rather
+#    than a full non-incremental recompile (sccache and incremental are
+#    mutually exclusive). Only the workspace crates rebuild here; the cached
+#    dependencies are reused.
+CARGO_INCREMENTAL=1 cargo build --workspace --locked
 """
 
 [tasks.on-task-done]

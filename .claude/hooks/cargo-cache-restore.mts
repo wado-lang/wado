@@ -1,15 +1,21 @@
 #!/usr/bin/env node
-// SessionStart hook: restore the shared cargo registry cache from GCS.
+// SessionStart hook: restore the shared cargo caches from GCS.
+//
+// Two objects are restored (both produced by .github/workflows/cargo-cache.yml):
+//   registry  -> $CARGO_HOME (registry/index + registry/cache; saves the download)
+//   sccache   -> $SCCACHE_DIR (content-addressed compile cache; the `warm-cache`
+//                mise task turns it into a warm target/ in ~80s instead of ~8min)
+// Neither object contains credentials.
 //
 // Best-effort: any failure (no key, no object yet, network) is logged and the
-// session continues. The object is produced by .github/workflows/cargo-cache.yml
-// and contains only registry/index + registry/cache (never credentials).
+// session continues.
 //
 // Auth uses a read-only service-account key provided via the environment:
 //   WADO_CACHE_SA_KEY_B64   base64 of the JSON key (for stores that reject raw JSON), or
 //   WADO_CACHE_SA_KEY       inline service-account JSON, or
 //   WADO_CACHE_SA_KEY_FILE  path to the JSON key file
-// Optional overrides: WADO_CACHE_BUCKET, WADO_CACHE_OBJECT.
+// Optional overrides: WADO_CACHE_BUCKET, WADO_CACHE_OBJECT (registry),
+//   WADO_CACHE_SCCACHE_OBJECT, SCCACHE_DIR.
 
 import { createSign } from "node:crypto";
 import { createWriteStream, readFileSync, mkdirSync } from "node:fs";
@@ -22,7 +28,10 @@ import { join } from "node:path";
 process.env.NODE_USE_ENV_PROXY ??= "1";
 
 const BUCKET = process.env.WADO_CACHE_BUCKET ?? "wado-lang-cache";
-const OBJECT = process.env.WADO_CACHE_OBJECT ?? "cargo/registry/linux-x86_64.tar.gz";
+const REGISTRY_OBJECT = process.env.WADO_CACHE_OBJECT ?? "cargo/registry/linux-x86_64.tar.gz";
+const SCCACHE_OBJECT = process.env.WADO_CACHE_SCCACHE_OBJECT ?? "cargo/sccache/linux-x86_64.tar.gz";
+const CARGO_HOME = process.env.CARGO_HOME ?? join(homedir(), ".cargo");
+const SCCACHE_DIR = process.env.SCCACHE_DIR ?? join(CARGO_HOME, "sccache");
 const SCOPE = "https://www.googleapis.com/auth/devstorage.read_only";
 const TIMEOUT_MS = 60_000;
 
@@ -65,6 +74,27 @@ async function accessToken({ client_email, private_key, token_uri }: ServiceAcco
   return (await res.json()).access_token;
 }
 
+async function restore(token: string, object: string, destDir: string, tarName: string): Promise<void> {
+  const url =
+    `https://storage.googleapis.com/storage/v1/b/${BUCKET}` +
+    `/o/${encodeURIComponent(object)}?alt=media`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (res.status === 404) {
+    log(`no cache object yet (gs://${BUCKET}/${object}); skipping`);
+    return;
+  }
+  if (!res.ok) throw new Error(`download failed: HTTP ${res.status} ${await res.text()}`);
+
+  mkdirSync(destDir, { recursive: true });
+  const tarPath = join(tmpdir(), tarName);
+  await pipeline(Readable.fromWeb(res.body!), createWriteStream(tarPath));
+  execFileSync("tar", ["-xzf", tarPath, "-C", destDir]);
+  log(`restored gs://${BUCKET}/${object} into ${destDir}`);
+}
+
 async function main(): Promise<void> {
   const key = loadKey();
   if (!key) {
@@ -73,25 +103,15 @@ async function main(): Promise<void> {
   }
 
   const token = await accessToken(key);
-  const url =
-    `https://storage.googleapis.com/storage/v1/b/${BUCKET}` +
-    `/o/${encodeURIComponent(OBJECT)}?alt=media`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
-  if (res.status === 404) {
-    log(`no cache object yet (gs://${BUCKET}/${OBJECT}); skipping`);
-    return;
+  // Independent and best-effort: a missing sccache object must not stop the
+  // registry restore, and vice versa.
+  const results = await Promise.allSettled([
+    restore(token, REGISTRY_OBJECT, CARGO_HOME, "cargo-registry-cache.tar.gz"),
+    restore(token, SCCACHE_OBJECT, SCCACHE_DIR, "cargo-sccache-cache.tar.gz"),
+  ]);
+  for (const r of results) {
+    if (r.status === "rejected") log(`skipped: ${(r.reason as Error).message}`);
   }
-  if (!res.ok) throw new Error(`download failed: HTTP ${res.status} ${await res.text()}`);
-
-  const cargoHome = process.env.CARGO_HOME ?? join(homedir(), ".cargo");
-  mkdirSync(cargoHome, { recursive: true });
-  const tarPath = join(tmpdir(), "cargo-registry-cache.tar.gz");
-  await pipeline(Readable.fromWeb(res.body!), createWriteStream(tarPath));
-  execFileSync("tar", ["-xzf", tarPath, "-C", cargoHome]);
-  log(`restored gs://${BUCKET}/${OBJECT} into ${cargoHome}`);
 }
 
 main().catch((e: Error) => log(`skipped: ${e.message}`));
