@@ -1,12 +1,28 @@
-# Publishes the shared cargo registry cache to GCS so non-GitHub environments
-# (e.g. the Claude Code web container) can restore it. See
-# .claude/hooks/cargo-cache-restore.mjs for the consumer side.
+# Publishes shared cargo caches to GCS so non-GitHub environments (e.g. the
+# Claude Code web container) can restore them. Two objects are produced:
+#
+#   cargo/registry/linux-x86_64.tar.gz  registry index + downloaded .crate files
+#   cargo/sccache/linux-x86_64.tar.gz   sccache content-addressed compile cache
+#
+# The registry cache saves the download; the sccache cache saves the compile of
+# the ~440 dependencies (an ~8 min cold build becomes an ~80s sccache-backed
+# rebuild in the container). See .claude/hooks/cargo-cache-restore.mts (consumer)
+# and the `warm-cache` task in mise.toml (which uses it, then hands off to
+# incremental for the dev loop).
+#
+# PATH PARITY IS LOAD-BEARING. sccache's Rust cache key is sensitive to the
+# absolute build paths (build-script OUT_DIR and dependency paths bake into it),
+# so the runner MUST compile under the exact same absolute paths the container
+# uses, or every entry misses. Keep these env values in lockstep with the
+# container: repo at /home/user/wado, CARGO_HOME at /root/.cargo, target at
+# /home/user/wado/target. sccache itself is the distro build on both sides
+# (Ubuntu 24.04 `apt` sccache) so the on-disk cache format matches.
 #
 # Required repo variables (none are secret — all are plain identifiers):
 #   vars.GCP_WIF_PROVIDER    workload identity provider resource name
 #   vars.GCP_CACHE_WRITER_SA writer service-account email (roles/storage.objectAdmin on the bucket)
-#   vars.GCP_CACHE_BUCKET  GCS bucket name (e.g. wado-lang-cache)
-name: Cargo registry cache
+#   vars.GCP_CACHE_BUCKET    GCS bucket name (e.g. wado-lang-cache)
+name: Cargo caches (registry + sccache)
 
 on:
   push:
@@ -24,21 +40,48 @@ permissions:
   contents: read
   id-token: write
 
+env:
+  # Mirror the container's absolute paths (see the parity note above).
+  CONTAINER_REPO: /home/user/wado
+  CARGO_HOME: /root/.cargo
+  SCCACHE_DIR: /root/.cargo/sccache
+  CARGO_TARGET_DIR: /home/user/wado/target
+  RUSTC_WRAPPER: sccache
+  CARGO_INCREMENTAL: "0"
+  RUSTFLAGS: -D warnings # must match the container's mise [env]
+
 jobs:
   upload:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: false
 
-      # Populates ~/.cargo/registry/{index,cache} without compiling.
-      - run: cargo fetch --locked
+      - name: Install sccache (distro build — same version as the container)
+        run: sudo apt-get update && sudo apt-get install -y sccache
 
-      # Pack only public registry data — never credentials.toml / config.toml.
-      - name: Pack registry cache
+      - name: Mirror the container's absolute build paths
         run: |
-          tar -C "$HOME/.cargo" -czf linux-x86_64.tar.gz registry/index registry/cache
-          ls -lh linux-x86_64.tar.gz
+          sudo mkdir -p "$CONTAINER_REPO" "$CARGO_HOME"
+          sudo cp -a "$GITHUB_WORKSPACE/." "$CONTAINER_REPO/"
+          sudo chown -R "$(id -u):$(id -g)" "$CONTAINER_REPO" "$CARGO_HOME"
+
+      - name: Fetch registry, then compile through sccache
+        working-directory: /home/user/wado
+        run: |
+          cargo fetch --locked
+          cargo build --workspace --locked
+          sccache --show-stats
+
+      - name: Pack caches (public data only — never credentials.toml / config.toml)
+        run: |
+          sccache --stop-server || true
+          mkdir -p out/registry out/sccache
+          tar -C "$CARGO_HOME" -czf out/registry/linux-x86_64.tar.gz registry/index registry/cache
+          tar -C "$SCCACHE_DIR" -czf out/sccache/linux-x86_64.tar.gz .
+          ls -lh out/registry/linux-x86_64.tar.gz out/sccache/linux-x86_64.tar.gz
 
       - id: auth
         uses: google-github-actions/auth@v2
@@ -46,8 +89,16 @@ jobs:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_CACHE_WRITER_SA }}
 
-      - uses: google-github-actions/upload-cloud-storage@v2
+      - name: Upload registry cache
+        uses: google-github-actions/upload-cloud-storage@v2
         with:
-          path: linux-x86_64.tar.gz
+          path: out/registry/linux-x86_64.tar.gz
           destination: ${{ vars.GCP_CACHE_BUCKET }}/cargo/registry
+          parent: false
+
+      - name: Upload sccache cache
+        uses: google-github-actions/upload-cloud-storage@v2
+        with:
+          path: out/sccache/linux-x86_64.tar.gz
+          destination: ${{ vars.GCP_CACHE_BUCKET }}/cargo/sccache
           parent: false

@@ -18,6 +18,19 @@ fi
 
 log "Remote session detected, setting up mise..."
 
+# Install sccache so `mise run warm-cache` can turn the restored sccache cache
+# into a warm target/ (see .claude/hooks/cargo-cache-restore.mts). Best-effort:
+# if it fails, warm-cache no-ops and a normal cold build applies.
+if ! command -v sccache >/dev/null 2>&1; then
+    log "Installing sccache..."
+    if DEBIAN_FRONTEND=noninteractive apt-get install -y sccache >/dev/null 2>&1 \
+        || DEBIAN_FRONTEND=noninteractive sudo apt-get install -y sccache >/dev/null 2>&1; then
+        log "sccache installed: $(sccache --version 2>/dev/null)"
+    else
+        log "Warning: sccache install failed; warm-cache will be skipped"
+    fi
+fi
+
 # Setup local bin directory
 LOCAL_BIN="$HOME/.local/bin"
 mkdir -p "$LOCAL_BIN"
