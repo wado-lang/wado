@@ -10,6 +10,23 @@
 //! the variant case, whose layout (shared-vs-per-case payload offsets) is
 //! WIR-specific.
 //!
+//! ## Two entry points, one layout engine
+//!
+//! [`compute_variant_layout`] is the single source of truth for how a variant
+//! packs into a result vector. It drives both:
+//!
+//! - [`sroa_variant_returns`] — widens a function whose sole result is a boxed
+//!   `ref Variant` into that layout.
+//! - [`flatten_variant_slots`] — once a multi-value function has a `ref W`
+//!   *result slot* whose `W` is itself a small variant (the `Ok(ref Option<T>)`
+//!   an outer widening leaves boxed), splits that slot into `W`'s own layout,
+//!   run to a fix-point so nested-in-nested slots peel one level per round.
+//!   This generalizes the layout analysis recursively to any eligible
+//!   `SubtypeHierarchy` variant — `Result`, a multi-case variant, an
+//!   `Option<(scalar, scalar)>` — not just `Option<scalar>`. Return
+//!   decomposition ([`pad_variant_fields`]) and call-site replacement
+//!   ([`build_variant_replacement`]) are shared with the widening path.
+//!
 //! ## Tail-call propagation
 //!
 //! Eligibility is computed in a fix-point loop so that `return another_call(...)`
@@ -26,7 +43,8 @@
 use crate::compiler_trace;
 use crate::hashmap::IndexSet;
 use crate::wir::{
-    WirFuncType, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId, WirVariantType,
+    WirFuncType, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId, WirVariantRepr,
+    WirVariantType,
 };
 
 use super::util::{collect_pinned_func_ids, is_root_observable};
@@ -769,25 +787,37 @@ fn find_sroa_candidates(module: &WirPackage, pinned: &IndexSet<u32>) -> Vec<(u32
         .collect()
 }
 
-/// Compute the SROA layout info for a variant-returning function.
+/// The multi-value layout of a variant: `[i32 disc, payload_0, ...]`.
 ///
-/// Returns `(SroaCandidate, valid_case_type_indices)` when the variant is
-/// representable as a small multi-value tuple. The caller separately verifies
-/// that every `Return` in the body is a leaf shape compatible with this
-/// layout (`all_returns_are_variant_struct_new`), so this stage can be
-/// re-used across the fix-point's rounds without touching the body.
+/// The single source of truth for how a variant's cases pack into a Wasm
+/// result vector, shared by function-return widening
+/// ([`analyze_variant_layout`]) and nested result-slot flattening
+/// ([`flatten_variant_slots`]).
+struct VariantLayout {
+    /// Field types of the result vector (`[i32, payload_types...]`).
+    field_types: Vec<WirType>,
+    /// Field names (`["discriminant", "payload_0" | "caseN_payload_M", ...]`).
+    field_names: Vec<String>,
+    /// Per-case slot layout.
+    variant_info: VariantSroaInfo,
+    /// Every case struct type index plus the base variant type — the valid
+    /// `StructNew` targets at a `Return` leaf.
+    valid_case_type_indices: IndexSet<u32>,
+}
+
+/// Compute the multi-value layout of a variant, or `None` when it does not fit
+/// the small-tuple model.
 ///
 /// A variant is eligible (layout-wise) if:
 /// - All payload types across all cases are eligible value types
 /// - The result vector fits [`MAX_SHARED_RESULT_FIELDS`] (shared layout) or
 ///   [`MAX_PER_CASE_RESULT_FIELDS`] (per-case layout)
 /// - Case type indices can be resolved via `variant_case_info`
-fn analyze_variant_layout(
+fn compute_variant_layout(
     module: &WirPackage,
-    func_array_idx: usize,
     variant_type_idx: u32,
     variant_type: &WirVariantType,
-) -> Option<(SroaCandidate, IndexSet<u32>)> {
+) -> Option<VariantLayout> {
     // Collect per-case info: case type index and payload count
     let mut case_type_indices: Vec<Option<u32>> = Vec::with_capacity(variant_type.cases.len());
     let mut max_payload_count: usize = 0;
@@ -907,21 +937,43 @@ fn analyze_variant_layout(
     // Also include StructNew of the base variant type (for unit cases like None)
     all_case_type_indices.insert(variant_type_idx);
 
+    Some(VariantLayout {
+        field_types,
+        field_names,
+        variant_info: VariantSroaInfo {
+            case_type_indices,
+            max_payload_count: total_payload_slots,
+            case_slot_offsets,
+        },
+        valid_case_type_indices: all_case_type_indices,
+    })
+}
+
+/// Compute the SROA layout info for a variant-returning function.
+///
+/// Wraps [`compute_variant_layout`] into a [`SroaCandidate`]. The caller
+/// separately verifies that every `Return` in the body is a leaf shape
+/// compatible with this layout (`all_returns_are_variant_struct_new`), so this
+/// stage can be re-used across the fix-point's rounds without touching the body.
+fn analyze_variant_layout(
+    module: &WirPackage,
+    func_array_idx: usize,
+    variant_type_idx: u32,
+    variant_type: &WirVariantType,
+) -> Option<(SroaCandidate, IndexSet<u32>)> {
+    let layout = compute_variant_layout(module, variant_type_idx, variant_type)?;
+    let valid = layout.valid_case_type_indices.clone();
     Some((
         SroaCandidate {
             func_array_idx,
             struct_type_idx: variant_type_idx,
-            valid_case_type_indices: all_case_type_indices.clone(),
-            field_types,
-            field_count,
-            field_names,
-            variant_info: VariantSroaInfo {
-                case_type_indices,
-                max_payload_count: total_payload_slots,
-                case_slot_offsets,
-            },
+            valid_case_type_indices: valid.clone(),
+            field_count: layout.field_types.len(),
+            field_types: layout.field_types,
+            field_names: layout.field_names,
+            variant_info: layout.variant_info,
         },
-        all_case_type_indices,
+        valid,
     ))
 }
 
@@ -2503,6 +2555,105 @@ fn default_value_for_type(ty: &WirType) -> WirInstr {
     }
 }
 
+/// Build the call-site [`VariantReplacement`] for a variant whose result vector
+/// fields are bound to the locals in `field_map` (keyed by the layout's field
+/// names — `"discriminant"`, `"payload_N"` or `"caseN_payload_M"`).
+///
+/// Maps each case struct's `(case_type_idx, field_name)` to the local carrying
+/// that field, and records which payload locals hold non-nullable refs (they
+/// need `ref.as_non_null` when read). Shared by the function-return rewriter
+/// ([`rewrite_call_sites`]) and the nested-slot flattener
+/// ([`flatten_variant_slots`]), so both derive the exact same replacement.
+fn build_variant_replacement(
+    field_map: &crate::hashmap::IndexMap<String, String>,
+    vi: &VariantSroaInfo,
+    variant_type_idx: u32,
+    types: &[WirTypeDef],
+) -> VariantReplacement {
+    let disc_local = field_map["discriminant"].clone();
+    let mut case_disc_values: crate::hashmap::IndexMap<u32, i32> =
+        crate::hashmap::IndexMap::default();
+    let mut field_to_local: crate::hashmap::IndexMap<(u32, String), String> =
+        crate::hashmap::IndexMap::default();
+
+    for (disc_val, case_type_opt) in vi.case_type_indices.iter().enumerate() {
+        if let Some(case_type_idx) = case_type_opt {
+            case_disc_values.insert(*case_type_idx, i32::try_from(disc_val).unwrap());
+
+            // Look up the case struct type to map field names → sroa locals
+            if let Some(WirTypeDef::Struct(st)) = types.get(*case_type_idx as usize) {
+                for (field_pos, field) in st.fields.iter().enumerate() {
+                    if field_pos == 0 {
+                        // Discriminant field
+                        field_to_local
+                            .insert((*case_type_idx, field.name.clone()), disc_local.clone());
+                    } else {
+                        let payload_idx = field_pos - 1;
+                        // For per-case layout, slot names are
+                        // "case{disc_val}_payload_{idx}"; for shared layout,
+                        // "payload_{idx}".
+                        let payload_name = if vi.case_slot_offsets.is_some() {
+                            format!("case{disc_val}_payload_{payload_idx}")
+                        } else {
+                            format!("payload_{payload_idx}")
+                        };
+                        if let Some(sroa_local) = field_map.get(&payload_name) {
+                            field_to_local
+                                .insert((*case_type_idx, field.name.clone()), sroa_local.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Track which SROA locals hold ref types that need ref.as_non_null when read.
+    // The check must be against the ORIGINAL variant-case payload type from
+    // `WirVariantCase::payload`, not the case struct's field type: the latter
+    // is always declared nullable for the Option<&T> boxing optimisation,
+    // which loses the information that a `Some(non_null_ref)` payload is
+    // semantically non-null at the Wado source level.
+    let mut ref_locals = crate::hashmap::IndexSet::default();
+    if let Some(WirTypeDef::Variant(wv)) = types.get(variant_type_idx as usize) {
+        for (disc_val_2, case_type_opt_2) in vi.case_type_indices.iter().enumerate() {
+            if case_type_opt_2.is_none() {
+                continue;
+            }
+            // Locate the corresponding variant case by discriminant value.
+            let Some(wir_case) = wv.cases.iter().find(|c| c.index as usize == disc_val_2) else {
+                continue;
+            };
+            for (payload_idx, payload_ty) in wir_case.payload.iter().enumerate() {
+                let is_non_nullable_ref = matches!(
+                    payload_ty,
+                    WirType::Ref {
+                        nullable: false,
+                        ..
+                    }
+                );
+                if !is_non_nullable_ref {
+                    continue;
+                }
+                let payload_name = if vi.case_slot_offsets.is_some() {
+                    format!("case{disc_val_2}_payload_{payload_idx}")
+                } else {
+                    format!("payload_{payload_idx}")
+                };
+                if let Some(sroa_local) = field_map.get(&payload_name) {
+                    ref_locals.insert(sroa_local.clone());
+                }
+            }
+        }
+    }
+
+    VariantReplacement {
+        disc_local,
+        case_disc_values,
+        field_to_local,
+        ref_locals,
+    }
+}
+
 /// Rewrite call sites of SROA'd functions.
 ///
 /// For each `LocalSet { name: T, value: Call { func_id } }` where `func_id` is SROA'd:
@@ -2565,100 +2716,15 @@ fn rewrite_call_sites(
             locals.push(Some(fresh));
         }
 
-        let vi = &candidate.variant_info;
-        {
-            // Variant candidate: build VariantReplacement
-            let disc_local = field_map["discriminant"].clone();
-            let mut case_disc_values: crate::hashmap::IndexMap<u32, i32> =
-                crate::hashmap::IndexMap::default();
-            let mut field_to_local: crate::hashmap::IndexMap<(u32, String), String> =
-                crate::hashmap::IndexMap::default();
-
-            for (disc_val, case_type_opt) in vi.case_type_indices.iter().enumerate() {
-                if let Some(case_type_idx) = case_type_opt {
-                    case_disc_values.insert(*case_type_idx, i32::try_from(disc_val).unwrap());
-
-                    // Look up the case struct type to map field names → sroa locals
-                    if let Some(WirTypeDef::Struct(st)) = types.get(*case_type_idx as usize) {
-                        for (field_pos, field) in st.fields.iter().enumerate() {
-                            if field_pos == 0 {
-                                // Discriminant field
-                                field_to_local.insert(
-                                    (*case_type_idx, field.name.clone()),
-                                    disc_local.clone(),
-                                );
-                            } else {
-                                let payload_idx = field_pos - 1;
-                                // For per-case layout, slot names are
-                                // "case{disc_val}_payload_{idx}"; for shared layout,
-                                // "payload_{idx}".
-                                let payload_name = if vi.case_slot_offsets.is_some() {
-                                    format!("case{disc_val}_payload_{payload_idx}")
-                                } else {
-                                    format!("payload_{payload_idx}")
-                                };
-                                if let Some(sroa_local) = field_map.get(&payload_name) {
-                                    field_to_local.insert(
-                                        (*case_type_idx, field.name.clone()),
-                                        sroa_local.clone(),
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Track which SROA locals hold ref types that need ref.as_non_null when read.
-            // The check must be against the ORIGINAL variant-case payload type from
-            // `WirVariantCase::payload`, not the case struct's field type: the latter
-            // is always declared nullable for the Option<&T> boxing optimisation,
-            // which loses the information that a `Some(non_null_ref)` payload is
-            // semantically non-null at the Wado source level.
-            let mut ref_locals = crate::hashmap::IndexSet::default();
-            if let Some(WirTypeDef::Variant(wv)) = types.get(candidate.struct_type_idx as usize) {
-                for (disc_val_2, case_type_opt_2) in vi.case_type_indices.iter().enumerate() {
-                    if case_type_opt_2.is_none() {
-                        continue;
-                    }
-                    // Locate the corresponding variant case by discriminant value.
-                    let Some(wir_case) = wv.cases.iter().find(|c| c.index as usize == disc_val_2)
-                    else {
-                        continue;
-                    };
-                    for (payload_idx, payload_ty) in wir_case.payload.iter().enumerate() {
-                        let is_non_nullable_ref = matches!(
-                            payload_ty,
-                            WirType::Ref {
-                                nullable: false,
-                                ..
-                            }
-                        );
-                        if !is_non_nullable_ref {
-                            continue;
-                        }
-                        let payload_name = if vi.case_slot_offsets.is_some() {
-                            format!("case{disc_val_2}_payload_{payload_idx}")
-                        } else {
-                            format!("payload_{payload_idx}")
-                        };
-                        if let Some(sroa_local) = field_map.get(&payload_name) {
-                            ref_locals.insert(sroa_local.clone());
-                        }
-                    }
-                }
-            }
-
-            variant_replacements.insert(
-                temp_name,
-                VariantReplacement {
-                    disc_local,
-                    case_disc_values,
-                    field_to_local,
-                    ref_locals,
-                },
-            );
-        }
+        variant_replacements.insert(
+            temp_name,
+            build_variant_replacement(
+                &field_map,
+                &candidate.variant_info,
+                candidate.struct_type_idx,
+                types,
+            ),
+        );
 
         // Extract the Call instruction (and any prefix statements from block wrappers)
         let (mut prefix_instrs, call_instr) = take_call_from_local_set(&mut instrs[set_idx]);
@@ -3012,16 +3078,20 @@ fn take_call_from_local_set(instr: &mut WirInstr) -> (Vec<WirInstr>, Box<WirInst
 // Nested variant-slot flattening.
 //
 // Single-level SROA turns `next_element<i64>` into a function returning the
-// multi-value vector `[outer_disc, ref Option<i64>, ref Err]`. The `Option<i64>`
-// payload is still heap-boxed at every return (`struct.new Option<i64>::Some`)
-// and immediately matched at every call site. This phase splits such a
-// `ref Option<scalar>` result slot into `[inner_disc, scalar]`, removing the
-// per-element inner allocation (the dominant cost when deserializing arrays of
-// scalars).
+// multi-value vector `[outer_disc, ref Option<i64>, ref Err]`. A `ref W` result
+// slot whose `W` is itself a small variant is still heap-boxed at every return
+// (`struct.new W::Case`) and immediately matched at every call site. This phase
+// splits such a slot into `W`'s own multi-value layout `[inner_disc,
+// payloads...]` (via [`compute_variant_layout`], the same layout engine
+// single-level SROA uses), removing the per-element inner allocation — the
+// dominant cost when deserializing arrays of scalars.
 //
-// Scope: the inner variant must be "Option-like scalar" — exactly two cases,
-// one carrying a single non-ref scalar payload, the other unit. `Option<&T>`
-// is null-opt (already unboxed) and is out of scope.
+// This generalizes the layout analysis recursively: the inner `W` may be any
+// eligible `SubtypeHierarchy` variant (`Result`, a multi-case variant, an
+// `Option<(scalar, scalar)>`), not just `Option<scalar>`. Only `Option<&T>`
+// null-niche variants (already unboxed, no discriminant field) are out of
+// scope. Running the pass to a fix-point flattens nested-in-nested slots one
+// level per round.
 //
 // Bail-everywhere: a slot is expanded only when every return of the function
 // decomposes structurally and every call site's slot local is consumed solely
@@ -3030,91 +3100,57 @@ fn take_call_from_local_set(instr: &mut WirInstr) -> (Vec<WirInstr>, Box<WirInst
 // slot out and whose else-arm diverges). Any other shape leaves the slot at its
 // single-level (boxed) form, which is already correct.
 
-/// Layout of an Option-like scalar variant.
-struct OptionLikeInfo {
-    /// WIR type index of the payload-bearing ("Some") case struct.
-    some_case_type_idx: u32,
-    /// Discriminant of the payload-bearing case.
-    some_disc: i32,
-    /// Discriminant of the unit ("None") case.
-    none_disc: i32,
-    /// The scalar payload type.
-    payload_ty: WirType,
-    /// Field name of the payload inside the Some case struct.
-    some_payload_field: String,
-}
-
-/// A confirmed nested-slot flatten target.
-struct NestedSlotCand {
+/// A confirmed slot-flatten target: result slot `slot` of function `func_idx`,
+/// a `ref W`, expands into `W`'s multi-value layout.
+struct SlotFlattenCand {
     func_idx: usize,
     func_id_index: u32,
-    /// Result-vector index of the `ref Option<scalar>` slot to expand.
+    /// Result-vector index of the `ref W` slot to expand.
     slot: usize,
-    info: OptionLikeInfo,
+    /// WIR type index of the inner variant `W`.
+    variant_type_idx: u32,
+    /// `W`'s multi-value layout (`[i32 disc, payloads...]`).
+    layout: VariantLayout,
 }
 
-fn is_scalar_value_type(ty: &WirType) -> bool {
-    matches!(
-        ty,
-        WirType::I8
-            | WirType::I16
-            | WirType::I32
-            | WirType::I64
-            | WirType::U8
-            | WirType::U16
-            | WirType::U32
-            | WirType::U64
-            | WirType::F32
-            | WirType::F64
-            | WirType::Bool
-            | WirType::Char
-            | WirType::Enum { .. }
-            | WirType::Flags { .. }
-    )
-}
-
-/// Recognise an Option-like scalar variant: two cases, one single-scalar
-/// payload, one unit.
-fn option_like_scalar(module: &WirPackage, v_idx: u32) -> Option<OptionLikeInfo> {
+/// If result-slot type `slot_ty` is a `ref` to an eligible `SubtypeHierarchy`
+/// variant, return `(variant_type_idx, layout)`. Null-niche (`NullableRef`)
+/// variants — `Option<&T>` and friends, already unboxed with no discriminant
+/// field — are out of scope.
+fn slot_variant_layout(module: &WirPackage, slot_ty: &WirType) -> Option<(u32, VariantLayout)> {
+    let WirType::Ref { type_id, .. } = slot_ty else {
+        return None;
+    };
+    let v_idx = type_id.index();
     let WirTypeDef::Variant(v) = module.types.get(v_idx as usize)? else {
         return None;
     };
-    if v.cases.len() != 2 {
+    if !matches!(v.repr, WirVariantRepr::SubtypeHierarchy) {
         return None;
     }
-    // Identify the payload case (exactly one scalar payload) and the unit case.
-    let (some_case, none_case) = match (&v.cases[0], &v.cases[1]) {
-        (a, b) if a.payload.len() == 1 && b.payload.is_empty() => (a, b),
-        (a, b) if b.payload.len() == 1 && a.payload.is_empty() => (b, a),
-        _ => return None,
-    };
-    let payload_ty = some_case.payload[0].clone();
-    if !is_scalar_value_type(&payload_ty) {
-        return None;
+    let layout = compute_variant_layout(module, v_idx, v)?;
+    Some((v_idx, layout))
+}
+
+/// Build the all-default result vector for `cand`'s inner variant — used when a
+/// return leaves the slot unused (a null ref, e.g. an `Err` return). The
+/// discriminant takes a unit case's value when one exists (semantically
+/// "empty"), else 0; the value is never read on that path, since the outer
+/// discriminant selects a different case.
+fn default_variant_vector(cand: &SlotFlattenCand) -> Vec<WirInstr> {
+    let vi = &cand.layout.variant_info;
+    let disc = vi
+        .case_type_indices
+        .iter()
+        .position(Option::is_none)
+        .and_then(|p| i32::try_from(p).ok())
+        .unwrap_or(0);
+    let mut out = Vec::with_capacity(cand.layout.field_types.len());
+    out.push(WirInstr::I32Const(disc));
+    for ty in &cand.layout.field_types[1..] {
+        out.push(default_value_for_type(ty));
     }
-    let some_disc = i32::try_from(some_case.index).ok()?;
-    let none_disc = i32::try_from(none_case.index).ok()?;
-    // Resolve the Some case's struct type index via variant_case_info.
-    let mut some_case_type_idx = None;
-    for (&case_type_idx, &(parent, case_index)) in &module.variant_case_info {
-        if parent == v_idx && case_index == some_case.index {
-            some_case_type_idx = Some(case_type_idx);
-            break;
-        }
-    }
-    let some_case_type_idx = some_case_type_idx?;
-    // The payload field name (field after the discriminant) in the Some struct.
-    let WirTypeDef::Struct(st) = module.types.get(some_case_type_idx as usize)? else {
-        return None;
-    };
-    let some_payload_field = st.fields.get(1)?.name.clone();
-    Some(OptionLikeInfo {
-        some_case_type_idx,
-        some_disc,
-        none_disc,
-        payload_ty,
-        some_payload_field,
-    })
+    out
 }
 
 /// True when `type_id` belongs to variant `v_idx`'s family (the base variant
@@ -3150,7 +3186,7 @@ fn slot_field_decomposable(expr: &WirInstr, v_idx: u32, module: &WirPackage) -> 
 /// Verify every value-returning `Return` reachable in `instr` yields a
 /// multi-value `Seq` of `arity` whose `slot` field is decomposable. Walks every
 /// child position via `for_each_child` so the validator's coverage matches the
-/// rewriter (`rewrite_nested_returns`, which uses `for_each_boxed_child_mut`):
+/// rewriter (`rewrite_slot_returns`, which uses `for_each_boxed_child_mut`):
 /// a `?` desugar can leave a `Return` inside an `If` condition or a `LocalSet`
 /// value, and the rewriter visits those, so the validator must too or it would
 /// confirm a function whose un-validated return is later left at the old arity.
@@ -3183,9 +3219,10 @@ fn all_returns_decompose(
     ok
 }
 
-/// Phase 1: collect functions with an expandable `ref Option<scalar>` result
-/// slot whose returns all decompose.
-fn nested_slot_candidates(module: &WirPackage, pinned: &IndexSet<u32>) -> Vec<NestedSlotCand> {
+/// Phase 1: collect functions with an expandable `ref W` result slot whose
+/// returns all decompose. One slot per function per round; the pass's
+/// fix-point loop revisits functions to reach deeper slots.
+fn slot_flatten_candidates(module: &WirPackage, pinned: &IndexSet<u32>) -> Vec<SlotFlattenCand> {
     let mut out = Vec::new();
     for (i, func) in module.functions.iter().enumerate() {
         let func_id_index = module.defined_func_base + u32::try_from(i).unwrap();
@@ -3195,32 +3232,37 @@ fn nested_slot_candidates(module: &WirPackage, pinned: &IndexSet<u32>) -> Vec<Ne
         let Some(WirTypeDef::Func(ft)) = module.types.get(func.type_id.index() as usize) else {
             continue;
         };
-        if ft.results.len() < 2 || ft.results.len() + 1 > MAX_PER_CASE_RESULT_FIELDS {
+        // Only already-multi-value functions have a `ref W` *slot* to flatten;
+        // sole-result `ref W` returns are the province of single-level SROA.
+        if ft.results.len() < 2 {
             continue;
         }
-        for slot in 0..ft.results.len() {
-            let WirType::Ref { type_id, .. } = &ft.results[slot] else {
+        let arity = ft.results.len();
+        for slot in 0..arity {
+            let Some((v_idx, layout)) = slot_variant_layout(module, &ft.results[slot]) else {
                 continue;
             };
-            let v_idx = type_id.index();
-            let Some(info) = option_like_scalar(module, v_idx) else {
+            // Splicing the slot into `W`'s layout changes the result arity by
+            // `layout.len() - 1`; keep it within the per-case cap.
+            let new_arity = arity - 1 + layout.field_types.len();
+            if new_arity > MAX_PER_CASE_RESULT_FIELDS {
                 continue;
-            };
+            }
             let body = func.body.as_ref().unwrap();
-            let arity = ft.results.len();
             if !body
                 .iter()
                 .all(|instr| all_returns_decompose(instr, arity, slot, v_idx, module))
             {
                 continue;
             }
-            out.push(NestedSlotCand {
+            out.push(SlotFlattenCand {
                 func_idx: i,
                 func_id_index,
                 slot,
-                info,
+                variant_type_idx: v_idx,
+                layout,
             });
-            break; // one slot per function
+            break; // one slot per function per round
         }
     }
     out
@@ -3341,8 +3383,21 @@ fn classify_slot_consumer(
     }
 }
 
+/// The payload-bearing case struct type indices of a candidate's inner variant
+/// — the only ids the call-site rewriter's `VariantReplacement` maps carry,
+/// hence the only ones a `RefTest` / `RefCast` on the slot local may name.
+fn slot_case_types(cand: &SlotFlattenCand) -> IndexSet<u32> {
+    cand.layout
+        .variant_info
+        .case_type_indices
+        .iter()
+        .flatten()
+        .copied()
+        .collect()
+}
+
 /// Phase 2: keep candidates whose every call site consumes the slot cleanly.
-fn validate_nested_sites(module: &WirPackage, cands: Vec<NestedSlotCand>) -> Vec<NestedSlotCand> {
+fn validate_slot_sites(module: &WirPackage, cands: Vec<SlotFlattenCand>) -> Vec<SlotFlattenCand> {
     let def_use_by_func: Vec<LocalDefUse> = module
         .functions
         .iter()
@@ -3356,7 +3411,7 @@ fn validate_nested_sites(module: &WirPackage, cands: Vec<NestedSlotCand>) -> Vec
     cands
         .into_iter()
         .filter(|cand| {
-            let case_types: IndexSet<u32> = std::iter::once(cand.info.some_case_type_idx).collect();
+            let case_types = slot_case_types(cand);
             let mut saw_call = false;
             let mut all_ok = true;
             for (i, func) in module.functions.iter().enumerate() {
@@ -3410,11 +3465,11 @@ fn count_calls_to(instr: &WirInstr, func_id_index: u32) -> usize {
 ///
 /// Deliberately recurses only into statement-list bodies (Block/Loop/Seq, If
 /// arms) — NOT into If conditions / `LocalSet` values — so it stays symmetric
-/// with `expand_nested_binds` (which rewrites the same positions). A call in a
+/// with `expand_slot_binds` (which rewrites the same positions). A call in a
 /// non-statement position is counted by `count_calls_to` (which visits every
 /// position via `for_each_child`) but not here, so `total_calls != mvbind_calls`
 /// bails the candidate. Do not switch this to `for_each_child` without also
-/// teaching `expand_nested_binds` to rewrite those positions.
+/// teaching `expand_slot_binds` to rewrite those positions.
 fn for_each_multivalue_call(
     body: &[WirInstr],
     func_id_index: u32,
@@ -3449,28 +3504,35 @@ fn for_each_multivalue_call(
     }
 }
 
-pub(super) fn flatten_nested_variant_slots(module: &mut WirPackage) {
+pub(super) fn flatten_variant_slots(module: &mut WirPackage) {
     let pinned = collect_pinned_func_ids(module);
-    let cands = nested_slot_candidates(module, &pinned);
-    if cands.is_empty() {
-        return;
+    // Fix-point: each round flattens at most one `ref W` slot per function.
+    // A round that flattens `[.., ref Result<ref Option<i64>, E>, ..]` exposes
+    // the inner `ref Option<i64>` for the next round, so nested-in-nested slots
+    // peel one level at a time. Bounded by the arity cap: every flatten adds at
+    // least one field, and no result vector exceeds `MAX_PER_CASE_RESULT_FIELDS`.
+    loop {
+        let cands = slot_flatten_candidates(module, &pinned);
+        if cands.is_empty() {
+            break;
+        }
+        let confirmed = validate_slot_sites(module, cands);
+        compiler_trace!(
+            "sroa_variant_return",
+            "slot-flatten confirmed = {}",
+            confirmed.len()
+        );
+        if confirmed.is_empty() {
+            break;
+        }
+        apply_slot_flatten(module, &confirmed);
     }
-    let confirmed = validate_nested_sites(module, cands);
-    compiler_trace!(
-        "sroa_variant_return",
-        "nested confirmed = {}",
-        confirmed.len()
-    );
-    if confirmed.is_empty() {
-        return;
-    }
-    apply_nested_flatten(module, &confirmed);
 }
 
-/// Phase 3: rewrite signatures, returns, and call sites of confirmed nested
+/// Phase 3: rewrite signatures, returns, and call sites of confirmed slot
 /// candidates.
-fn apply_nested_flatten(module: &mut WirPackage, confirmed: &[NestedSlotCand]) {
-    let by_func: crate::hashmap::IndexMap<u32, &NestedSlotCand> =
+fn apply_slot_flatten(module: &mut WirPackage, confirmed: &[SlotFlattenCand]) {
+    let by_func: crate::hashmap::IndexMap<u32, &SlotFlattenCand> =
         confirmed.iter().map(|c| (c.func_id_index, c)).collect();
 
     // Step A: signatures + returns of the confirmed functions.
@@ -3484,7 +3546,7 @@ fn apply_nested_flatten(module: &mut WirPackage, confirmed: &[NestedSlotCand]) {
         let mut results = ft.results.clone();
         results.splice(
             cand.slot..=cand.slot,
-            [WirType::I32, cand.info.payload_ty.clone()],
+            cand.layout.field_types.iter().cloned(),
         );
         let new_ft = WirFuncType {
             name: ft.name.clone(),
@@ -3497,7 +3559,7 @@ fn apply_nested_flatten(module: &mut WirPackage, confirmed: &[NestedSlotCand]) {
         func.type_id = WirTypeId::new(new_type_idx, func.type_id.fq().into());
         if let Some(body) = &mut func.body {
             for instr in body.iter_mut() {
-                rewrite_nested_returns(instr, cand, old_arity);
+                rewrite_slot_returns(instr, cand, old_arity);
             }
         }
     }
@@ -3506,19 +3568,40 @@ fn apply_nested_flatten(module: &mut WirPackage, confirmed: &[NestedSlotCand]) {
     for i in 0..module.functions.len() {
         if module.functions[i].body.is_some() {
             let mut body = module.functions[i].body.take().unwrap();
-            rewrite_nested_call_sites(&mut body, &by_func);
+            rewrite_slot_call_sites(&mut body, &by_func, &module.types);
             module.functions[i].body = Some(body);
         }
     }
 }
 
+/// Decompose a slot value — a `StructNew` of the inner variant `W` (optionally
+/// under `RefAsNonNull`), or a null ref — into `W`'s flat result vector `[disc,
+/// payloads...]`, reusing the same [`pad_variant_fields`] machinery that
+/// single-level SROA uses at return sites.
+fn decompose_slot_to_vector(slot_expr: WirInstr, cand: &SlotFlattenCand) -> Vec<WirInstr> {
+    let mut expr = slot_expr;
+    while let WirInstr::RefAsNonNull(inner) = expr {
+        expr = *inner;
+    }
+    match expr {
+        WirInstr::StructNew { type_id, fields } if !fields.is_empty() => pad_variant_fields(
+            fields,
+            &cand.layout.variant_info,
+            &cand.layout.field_types,
+            type_id.index(),
+        ),
+        // Null / unused slot: all-default `W` vector (never read on this path).
+        _ => default_variant_vector(cand),
+    }
+}
+
 /// Split the slot field of every multi-value `Return` `Seq` of the function
-/// into `[inner_disc, payload]`. Walks every child position — a `?` desugar can
+/// into `W`'s flat layout. Walks every child position — a `?` desugar can
 /// leave a `Return` inside an `If` condition or a `LocalSet` value, not just in
 /// a block body — and only touches `Return`s whose `Seq` has the pre-widening
-/// arity and whose slot field is the `Option` value (a `StructNew`/null), so an
-/// unrelated same-arity return is left alone.
-fn rewrite_nested_returns(instr: &mut WirInstr, cand: &NestedSlotCand, old_arity: usize) {
+/// arity and whose slot field is the inner-variant value (a `StructNew`/null),
+/// so an unrelated same-arity return is left alone.
+fn rewrite_slot_returns(instr: &mut WirInstr, cand: &SlotFlattenCand, old_arity: usize) {
     if let WirInstr::Return { value: Some(v) } = instr
         && let WirInstr::Seq(fields) = v.as_mut()
         && fields.len() == old_arity
@@ -3529,45 +3612,20 @@ fn rewrite_nested_returns(instr: &mut WirInstr, cand: &NestedSlotCand, old_arity
         )
     {
         let slot_expr = std::mem::replace(&mut fields[cand.slot], WirInstr::Nop);
-        let (disc, payload) = decompose_slot_value(slot_expr, &cand.info);
-        fields.splice(cand.slot..=cand.slot, [disc, payload]);
+        let expanded = decompose_slot_to_vector(slot_expr, cand);
+        fields.splice(cand.slot..=cand.slot, expanded);
     }
-    instr.for_each_boxed_child_mut(&mut |c| rewrite_nested_returns(c, cand, old_arity));
+    instr.for_each_boxed_child_mut(&mut |c| rewrite_slot_returns(c, cand, old_arity));
 }
 
-/// Decompose a slot value (`StructNew` of the inner variant, or null) into
-/// `(inner_disc, payload)` expressions.
-fn decompose_slot_value(mut expr: WirInstr, info: &OptionLikeInfo) -> (WirInstr, WirInstr) {
-    // Look through `RefAsNonNull` narrowing wrappers (mirror the recursive
-    // `peel_ref_as_non_null` the validator uses, so accept/rewrite agree).
-    while let WirInstr::RefAsNonNull(inner) = expr {
-        expr = *inner;
-    }
-    match expr {
-        WirInstr::StructNew { mut fields, .. } if !fields.is_empty() => {
-            // Field 0 is the discriminant constant; field 1 (if present) the payload.
-            let payload = if fields.len() >= 2 {
-                fields.remove(1)
-            } else {
-                default_value_for_type(&info.payload_ty)
-            };
-            let disc = fields.remove(0);
-            (disc, payload)
-        }
-        _ => (
-            WirInstr::I32Const(info.none_disc),
-            default_value_for_type(&info.payload_ty),
-        ),
-    }
-}
-
-/// Rewrite all nested-candidate call sites in one body. Classification runs in
-/// a read-only plan pass over the *whole* body (same scope `validate_nested_sites`
+/// Rewrite all slot-candidate call sites in one body. Classification runs in a
+/// read-only plan pass over the *whole* body (same scope `validate_slot_sites`
 /// uses), so the consumer verdict never depends on where the bind sits or on
 /// mutations a prior bind made; the mutation pass then consumes those plans.
-fn rewrite_nested_call_sites(
+fn rewrite_slot_call_sites(
     body: &mut Vec<WirInstr>,
-    by_func: &crate::hashmap::IndexMap<u32, &NestedSlotCand>,
+    by_func: &crate::hashmap::IndexMap<u32, &SlotFlattenCand>,
+    types: &[WirTypeDef],
 ) {
     // Plan: classify every candidate call site's slot consumer against the full
     // body. Keyed by slot local (single-level SROA gives each call site a unique
@@ -3578,7 +3636,7 @@ fn rewrite_nested_call_sites(
         let root: &[WirInstr] = body;
         let def_use = LocalDefUse::of_body(root);
         for instr in root {
-            plan_nested_call_sites(instr, root, by_func, &def_use, &mut plans);
+            plan_slot_call_sites(instr, root, by_func, &def_use, &mut plans);
         }
     }
     if plans.is_empty() {
@@ -3593,7 +3651,7 @@ fn rewrite_nested_call_sites(
     // Expand the binds and register the inner-variant replacements.
     let mut replacements: crate::hashmap::IndexMap<String, VariantReplacement> =
         crate::hashmap::IndexMap::default();
-    expand_nested_binds(body, by_func, &plans, &mut replacements);
+    expand_slot_binds(body, by_func, &plans, types, &mut replacements);
     // Replace variant accesses on the slot local / unwrap alias.
     let mut aliases: crate::hashmap::IndexMap<String, (String, u32)> =
         crate::hashmap::IndexMap::default();
@@ -3605,10 +3663,10 @@ fn rewrite_nested_call_sites(
 
 /// Read-only plan pass: record `slot_local -> SlotConsumer` for every candidate
 /// `MultiValueLocalBind`, classifying against `root` (the full function body).
-fn plan_nested_call_sites(
+fn plan_slot_call_sites(
     instr: &WirInstr,
     root: &[WirInstr],
-    by_func: &crate::hashmap::IndexMap<u32, &NestedSlotCand>,
+    by_func: &crate::hashmap::IndexMap<u32, &SlotFlattenCand>,
     def_use: &LocalDefUse,
     plans: &mut crate::hashmap::IndexMap<String, SlotConsumer>,
 ) {
@@ -3620,22 +3678,24 @@ fn plan_nested_call_sites(
         && let Some(cand) = by_func.get(&func_id.index())
         && let Some(Some(slot_local)) = locals.get(cand.slot)
     {
-        let case_types: IndexSet<u32> = std::iter::once(cand.info.some_case_type_idx).collect();
+        let case_types = slot_case_types(cand);
         if let Some(consumer) = classify_slot_consumer(root, slot_local, &case_types, def_use) {
             plans.insert(slot_local.clone(), consumer);
         }
     }
-    instr.for_each_child(&mut |c| plan_nested_call_sites(c, root, by_func, def_use, plans));
+    instr.for_each_child(&mut |c| plan_slot_call_sites(c, root, by_func, def_use, plans));
 }
 
-/// Mutation pass: at each candidate bind, split the slot local into
-/// `[disc, payload]`, declare the two inner locals, and register the inner
-/// `VariantReplacement` keyed by the `?`-unwrap alias (the unwrap was already
+/// Mutation pass: at each candidate bind, split the slot local into `W`'s
+/// result-vector locals, declare them, and register the inner
+/// `VariantReplacement` (built by [`build_variant_replacement`], the shared
+/// call-site machinery) keyed by the `?`-unwrap alias (the unwrap was already
 /// turned into a guard) or, for a direct consumer, by the slot local itself.
-fn expand_nested_binds(
+fn expand_slot_binds(
     body: &mut Vec<WirInstr>,
-    by_func: &crate::hashmap::IndexMap<u32, &NestedSlotCand>,
+    by_func: &crate::hashmap::IndexMap<u32, &SlotFlattenCand>,
     plans: &crate::hashmap::IndexMap<String, SlotConsumer>,
+    types: &[WirTypeDef],
     replacements: &mut crate::hashmap::IndexMap<String, VariantReplacement>,
 ) {
     let mut i = 0;
@@ -3643,16 +3703,16 @@ fn expand_nested_binds(
         // Post-order: recurse into nested bodies before rewriting this level.
         match &mut body[i] {
             WirInstr::Block { body: b, .. } | WirInstr::Loop { body: b, .. } | WirInstr::Seq(b) => {
-                expand_nested_binds(b, by_func, plans, replacements);
+                expand_slot_binds(b, by_func, plans, types, replacements);
             }
             WirInstr::If {
                 then_body,
                 else_body,
                 ..
             } => {
-                expand_nested_binds(then_body, by_func, plans, replacements);
+                expand_slot_binds(then_body, by_func, plans, types, replacements);
                 if let Some(eb) = else_body {
-                    expand_nested_binds(eb, by_func, plans, replacements);
+                    expand_slot_binds(eb, by_func, plans, types, replacements);
                 }
             }
             _ => {}
@@ -3678,55 +3738,40 @@ fn expand_nested_binds(
             i += 1;
             continue;
         };
-        // `validate_nested_sites` confirmed this site, so the plan pass (same
+        // `validate_slot_sites` confirmed this site, so the plan pass (same
         // classification, same scope) must have recorded a consumer.
         let consumer = plans.get(&slot_local).unwrap_or_else(|| {
-            unreachable!("nested-flatten: confirmed call site `{slot_local}` has no plan")
+            unreachable!("slot-flatten: confirmed call site `{slot_local}` has no plan")
         });
 
-        let disc_local = format!("{slot_local}__ndisc");
-        let val_local = format!("{slot_local}__nval");
-
-        // Expand the bind's locals: replace the single slot local with the two
-        // inner locals.
-        if let WirInstr::MultiValueLocalBind { locals, .. } = &mut body[i] {
-            locals.splice(
-                cand.slot..=cand.slot,
-                [Some(disc_local.clone()), Some(val_local.clone())],
-            );
+        // Fresh locals for `W`'s result-vector fields, mapped by field name so
+        // `build_variant_replacement` can resolve each case struct's fields.
+        let mut field_map: crate::hashmap::IndexMap<String, String> =
+            crate::hashmap::IndexMap::default();
+        let mut sub_locals: Vec<Option<String>> = Vec::with_capacity(cand.layout.field_names.len());
+        let mut decls: Vec<WirInstr> = Vec::with_capacity(cand.layout.field_names.len());
+        for (fi, field_name) in cand.layout.field_names.iter().enumerate() {
+            let name = format!("{slot_local}__n{fi}");
+            field_map.insert(field_name.clone(), name.clone());
+            decls.push(WirInstr::DeclareLocal {
+                name: name.clone(),
+                ty: cand.layout.field_types[fi].clone(),
+            });
+            sub_locals.push(Some(name));
         }
 
-        // Build the inner VariantReplacement.
-        let mut case_disc_values: crate::hashmap::IndexMap<u32, i32> =
-            crate::hashmap::IndexMap::default();
-        case_disc_values.insert(cand.info.some_case_type_idx, cand.info.some_disc);
-        let mut field_to_local: crate::hashmap::IndexMap<(u32, String), String> =
-            crate::hashmap::IndexMap::default();
-        field_to_local.insert(
-            (
-                cand.info.some_case_type_idx,
-                cand.info.some_payload_field.clone(),
-            ),
-            val_local.clone(),
-        );
-        let ivr = VariantReplacement {
-            disc_local: disc_local.clone(),
-            case_disc_values,
-            field_to_local,
-            ref_locals: crate::hashmap::IndexSet::default(),
-        };
+        // Expand the bind's locals: replace the single slot local with `W`'s
+        // result-vector locals.
+        if let WirInstr::MultiValueLocalBind { locals, .. } = &mut body[i] {
+            locals.splice(cand.slot..=cand.slot, sub_locals);
+        }
 
-        // Insert DeclareLocals for the inner locals before the bind.
-        let decls = vec![
-            WirInstr::DeclareLocal {
-                name: disc_local,
-                ty: WirType::I32,
-            },
-            WirInstr::DeclareLocal {
-                name: val_local,
-                ty: cand.info.payload_ty.clone(),
-            },
-        ];
+        let ivr = build_variant_replacement(
+            &field_map,
+            &cand.layout.variant_info,
+            cand.variant_type_idx,
+            types,
+        );
 
         let key = match consumer {
             SlotConsumer::Direct => slot_local,
@@ -3734,8 +3779,9 @@ fn expand_nested_binds(
         };
         replacements.insert(key, ivr);
 
+        let decls_len = decls.len();
         body.splice(i..i, decls);
-        i += 3; // 2 decls + the bind
+        i += decls_len + 1; // decls + the bind
     }
 }
 
