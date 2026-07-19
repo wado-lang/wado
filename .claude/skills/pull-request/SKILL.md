@@ -1,9 +1,9 @@
 ---
 name: pull-request
-description: Project rules for opening a PR: a Conventional Commits title, and a description scoped to origin/main...HEAD (three-dot) with no trial-and-error history and no test section. Read before creating or editing any pull request.
+description: The rules for opening a PR you must read before creating or editing any pull request.
 ---
 
-## Title
+## PR Title
 
 Use the Conventional Commits style for pull request titles:
 
@@ -14,19 +14,27 @@ Use the Conventional Commits style for pull request titles:
 - `docs`: documentation-only changes
 - `perf`: code change that improves performance
 - `refactor`: code change that neither fixes a bug nor adds a feature
-- `chore`: anything else (e.g. build process, dependencies)
+- `chore`: anything else (e.g. CI, build process, dependencies)
 
 It may include a scope, e.g. `feat(optimizer)`.
 
-## Description
+## PR Description
 
-Describe the outcome of the whole branch (origin/main...HEAD -- use three dots).
+Describe the outcome of the whole branch (`origin/main...HEAD` -- use three dots).
 
-Do not include trial-and-error history; the commits does.
+Do not include trial-and-error history in the branch; the commit history is the SSoT.
+
+Add closing keywords for any issues that are resolved by this PR.
 
 No need to include a test section. CI runs the full test suite.
 
-## After opening
+## Before opening
+
+Revise the branch with `git diff origin/main...HEAD` and clean up comments and docs according to the project rules.
+
+Check mergeability with `git merge-tree $(git merge-base HEAD origin/main) HEAD origin/main`. If conflicting, resolve it with the `git-upstream-sync` skill.
+
+## After opening & Periodic status checks
 
 Check mergeability (`mergeable_state`). If conflicting, resolve it with the
 `git-upstream-sync` skill.
