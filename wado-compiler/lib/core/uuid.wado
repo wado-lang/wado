@@ -91,7 +91,7 @@ impl Uuid {
         // 32. Deriving the hyphen positions from the field structure keeps the
         // canonical layout explicit instead of hardcoding offsets.
         let groups: List<i32> = if len == 36 { [8, 4, 4, 4, 12] } else { [32] };
-        let bytes = s.bytes().collect::<List<u8>>() as ByteList;
+        let bytes: ByteList = s.bytes().collect();
         let mut out: ByteList = [];
         let mut pos = 0;
         for let mut g = 0; g < groups.len(); g += 1 {

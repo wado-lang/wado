@@ -1091,6 +1091,62 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
+    /// Fill declared defaults for still-unbound method type params — e.g.
+    /// `collect<C: FromIterator<Elem = Self::Item> = List<Self::Item>>` — so a
+    /// call whose context pins no target falls back to the default instead of
+    /// raising "cannot infer". The default is resolved with `Self` bound to the
+    /// receiver, so `Self::Item` projections resolve against the actual iterator.
+    fn fill_defaulted_method_type_args(
+        &mut self,
+        method_type_params: &[ast::GenericParam],
+        receiver_type: TypeId,
+        trait_name: Option<&str>,
+        impl_offset: u32,
+        inferred: &mut [TypeId],
+    ) {
+        if method_type_params.len() != inferred.len() {
+            return;
+        }
+        let receiver_type = self.tysys.get_base_type(receiver_type);
+        // A generic receiver (`it: I` in a generic body) leaves `Self::Item`
+        // unresolvable — skip and let the defer/expected-type path bind the
+        // param. Only a concrete receiver can seed a `Self::…` default.
+        if self.is_unbound_type_param(receiver_type) {
+            return;
+        }
+        let has_fillable = method_type_params
+            .iter()
+            .zip(inferred.iter())
+            .any(|(p, &tid)| p.default.is_some() && self.is_unbound_type_param(tid));
+        if !has_fillable {
+            return;
+        }
+        // A `Self::Assoc` in the default (e.g. `List<Self::Item>`) resolves off
+        // the concrete receiver's trait impl; make sure that impl's associated
+        // types are registered first (they are otherwise lazily populated).
+        if let Some(trait_name) = trait_name {
+            self.register_assoc_types_for_concrete_type_and_trait(receiver_type, trait_name);
+        }
+        let defaults: Vec<Option<TypeId>> = self.with_self_type(receiver_type, |s| {
+            let mut scope = s.enter_inherited_type_param_scope();
+            scope.annotate_ctx.trait_ctx.type_params.clear();
+            scope.register_generic_params(method_type_params, impl_offset);
+            method_type_params
+                .iter()
+                .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))
+                .collect()
+        });
+        for i in 0..inferred.len() {
+            if self.is_unbound_type_param(inferred[i])
+                && let Some(default_ty) = defaults[i]
+                && default_ty != TypeTable::ERROR
+                && !self.is_unbound_type_param(default_ty)
+            {
+                inferred[i] = default_ty;
+            }
+        }
+    }
+
     /// Infer method-level type arguments for an instance method call using
     /// the method's already-resolved parameter and return types.
     ///
@@ -1225,6 +1281,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // param's associated-type-equality bound (e.g.
         // `fn m<T, I: Iterator<Item = T>>`), mirroring the free-function path.
         self.resolve_assoc_bound_args(&method_type_params, &mut inferred);
+        self.fill_defaulted_method_type_args(
+            &method_type_params,
+            receiver_type,
+            trait_name,
+            impl_offset,
+            &mut inferred,
+        );
         let all_concrete = inferred.iter().all(|&tid| !self.is_unbound_type_param(tid));
         if !all_concrete {
             // Classify each method type parameter that did not resolve to a

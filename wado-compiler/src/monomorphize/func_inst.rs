@@ -1161,6 +1161,35 @@ impl Monomorphizer {
             .map(|(_, &tid)| tid)
     }
 
+    /// A newtype receiver of a `T^Trait::method` type-param static dispatch
+    /// inherits its base type's trait impl: `ByteList^FromIterator::from_iter`
+    /// resolves through `List<u8>`. Peel the newtype to its base so downstream
+    /// impl-type-arg recovery and home-module resolution see the base instance —
+    /// unless the newtype declares its own impl of the bound trait, which shadows
+    /// the base.
+    fn type_param_dispatch_tid(
+        &self,
+        tid: TypeId,
+        info: &LocalMethodName,
+        type_table: &TypeTable,
+    ) -> TypeId {
+        let base = type_table.resolve_newtype_base(tid);
+        if base == tid {
+            return tid;
+        }
+        if let Some(trait_name) = &info.trait_name {
+            let newtype_name = type_table.mangle_type_name(tid);
+            if self
+                .functions
+                .trait_env
+                .has_any_methodful_impl(&newtype_name, trait_name)
+            {
+                return tid;
+            }
+        }
+        base
+    }
+
     /// Instantiate a generic function with concrete type arguments
     ///
     /// Note: `instantiate_function` is separate from `instantiate_method`
@@ -1565,8 +1594,10 @@ impl Monomorphizer {
                         // resolve the concrete receiver by the param's name.
                         match self.receiver_substitution_tid(&info, substitution) {
                             Some(concrete_tid) => {
-                                let type_name = type_table.mangle_type_name(concrete_tid);
-                                let base = type_table.base_type_name(concrete_tid);
+                                let dispatch_tid =
+                                    self.type_param_dispatch_tid(concrete_tid, &info, type_table);
+                                let type_name = type_table.mangle_type_name(dispatch_tid);
+                                let base = type_table.base_type_name(dispatch_tid);
                                 info.with_substituted_struct_name(&type_name, &base)
                             }
                             None => info.clone(),
@@ -1632,7 +1663,9 @@ impl Monomorphizer {
                     //    queued or it is left unresolved at WIR build.
                     //  - A non-type-param call encodes all of its type args in
                     //    its name, so an unchanged name means nothing to rewrite.
-                    let receiver_tid = self.receiver_substitution_tid(&info, substitution);
+                    let receiver_tid = self
+                        .receiver_substitution_tid(&info, substitution)
+                        .map(|tid| self.type_param_dispatch_tid(tid, &info, type_table));
                     let receiver_is_concrete = receiver_tid.is_some_and(|tid| {
                         !matches!(
                             type_table.get(tid),

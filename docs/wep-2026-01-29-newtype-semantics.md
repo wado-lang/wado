@@ -259,6 +259,7 @@ Newtypes support the full feature set today:
 - Method-signature substitution, extended to generic container return types (`Option<Base>` → `Option<Newtype>`, `List<Base>` → `List<Newtype>`)
 - Trait bounds (`fn compare<T: Ord>(a: T, b: T)` accepts a newtype), and `List<Newtype>.sort()` via inherited `Ord`
 - Associated-function inheritance (`ByteList::with_capacity`) with newtype return
+- `FromIterator` inheritance, so `collect()` targets a newtype directly (`let bytes: ByteList = s.bytes().collect()`, wado-lang/wado#1623)
 - Generic newtypes (`type MyArray<T> = List<T>`)
 - Newtypes over the raw GC `Array<T>` inherit `Index` traits and associated functions (`ByteArray`)
 - `for-of` inherits `IntoIterator`, both by value (`Item = T`) and by reference (`Item = &T`)
