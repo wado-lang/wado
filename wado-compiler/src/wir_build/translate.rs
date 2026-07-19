@@ -2464,10 +2464,9 @@ impl FunctionTranslator<'_, '_> {
                             value: Box::new(val),
                         }
                     }
-                    ExprKind::FieldAccess {
-                        expr: receiver,
-                        ..
-                    } if arena.exprs[target].type_id == TypeTable::UNIT => {
+                    ExprKind::FieldAccess { expr: receiver, .. }
+                        if arena.exprs[target].type_id == TypeTable::UNIT =>
+                    {
                         // Unit-typed field assignment: the field has no Wasm
                         // representation. Emit the receiver for side effects (then
                         // drop the ref), and emit val for side effects (it produces
