@@ -25,9 +25,11 @@ const OBJECT = process.env.WADO_CACHE_OBJECT ?? "cargo-registry/linux-x86_64/reg
 const SCOPE = "https://www.googleapis.com/auth/devstorage.read_only";
 const TIMEOUT_MS = 60_000;
 
-const log = (m) => console.error(`[cargo-cache] ${m}`);
+type ServiceAccountKey = { client_email: string; private_key: string; token_uri: string };
 
-function loadKey() {
+const log = (m: string): void => console.error(`[cargo-cache] ${m}`);
+
+function loadKey(): ServiceAccountKey | null {
   const file = process.env.WADO_CACHE_SA_KEY_FILE;
   const inline = process.env.WADO_CACHE_SA_KEY;
   if (file) return JSON.parse(readFileSync(file, "utf8"));
@@ -35,9 +37,9 @@ function loadKey() {
   return null;
 }
 
-const b64url = (v) => Buffer.from(v).toString("base64url");
+const b64url = (v: string | Buffer): string => Buffer.from(v).toString("base64url");
 
-async function accessToken({ client_email, private_key, token_uri }) {
+async function accessToken({ client_email, private_key, token_uri }: ServiceAccountKey): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
   const claim = b64url(
@@ -60,7 +62,7 @@ async function accessToken({ client_email, private_key, token_uri }) {
   return (await res.json()).access_token;
 }
 
-async function main() {
+async function main(): Promise<void> {
   const key = loadKey();
   if (!key) {
     log("no service-account key in env; skipping cache restore");
@@ -84,9 +86,9 @@ async function main() {
   const cargoHome = process.env.CARGO_HOME ?? join(homedir(), ".cargo");
   mkdirSync(cargoHome, { recursive: true });
   const tarPath = join(tmpdir(), "cargo-registry-cache.tar.gz");
-  await pipeline(Readable.fromWeb(res.body), createWriteStream(tarPath));
+  await pipeline(Readable.fromWeb(res.body!), createWriteStream(tarPath));
   execFileSync("tar", ["-xzf", tarPath, "-C", cargoHome]);
   log(`restored gs://${BUCKET}/${OBJECT} into ${cargoHome}`);
 }
 
-main().catch((e) => log(`skipped: ${e.message}`));
+main().catch((e: Error) => log(`skipped: ${e.message}`));
