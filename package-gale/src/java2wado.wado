@@ -15,11 +15,13 @@ use {
     Alternative,
     Element,
     NamedAction,
+    GrammarKind,
 } from "./ir.wado";
 use { map_java_type } from "./java2wado/jemit.wado";
 use { translate_wado_action, PARSER_HANDLE } from "./action_translate.wado";
 use { translate_java_expr, translate_java_stmts, JEnv } from "./java2wado/jemit.wado";
 use { translate_java_members, java_member_method_names, MemberDecls } from "./java2wado/jmembers.wado";
+use { translate_wado_members } from "./wado_members.wado";
 
 /// Translate an action body to Wado: `Wado` routes to the identity translator,
 /// `Java` to java2wado, any other language is a loud error. `grammar_name` and
@@ -71,20 +73,35 @@ pub fn translate_predicate(
 pub fn translate_members(lang: &ActionLanguage, body: &String, grammar_name: &String) -> Result<MemberDecls, String> {
     return match lang {
         Java => translate_java_members(body, grammar_name),
-        Wado => Result::Err("java2wado: Wado @members translation is not yet implemented"),
+        Wado => translate_wado_members(body),
         Other(name) => Result::Err(`unsupported action language '${*name}' for @members`),
     };
 }
 
-/// Whether a named action is a parser-scoped `@members` block (`@parser::members`
-/// or bare `@members`) — the source of the generated `Parser`'s fields + methods.
-pub fn is_parser_members(act: &NamedAction) -> bool {
+/// Whether a named action is a parser-scoped `@members` block: explicit
+/// `@parser::members`, or bare `@members` in a grammar that has a parser side
+/// (combined / parser grammar). In a `lexer grammar` a bare `@members` is the
+/// lexer's, so it is excluded here and claimed by `is_lexer_members`.
+pub fn is_parser_members(act: &NamedAction, kind: &GrammarKind) -> bool {
     if act.name != "members" {
         return false;
     }
     return match &act.scope {
         Some(s) => *s == "parser",
-        None => true,
+        None => !kind matches { Lexer },
+    };
+}
+
+/// Whether a named action is a lexer-scoped `@members` block: explicit
+/// `@lexer::members`, or bare `@members` in a `lexer grammar` (no parser exists
+/// there). The source of the generated `Lexer`'s member fields + methods.
+pub fn is_lexer_members(act: &NamedAction, kind: &GrammarKind) -> bool {
+    if act.name != "members" {
+        return false;
+    }
+    return match &act.scope {
+        Some(s) => *s == "lexer",
+        None => kind matches { Lexer },
     };
 }
 
@@ -94,7 +111,7 @@ pub fn is_parser_members(act: &NamedAction) -> bool {
 pub fn collect_member_method_names(grammar: &Grammar) -> List<String> {
     let mut names: List<String> = [];
     for let act of &grammar.named_actions {
-        if !is_parser_members(act) {
+        if !is_parser_members(act, &grammar.kind) {
             continue;
         }
         for let n of &java_member_method_names(&act.body.text) {

@@ -1,0 +1,219 @@
+//! Translate a `language = Wado` `@members` block to recognizer struct fields +
+//! methods. The block body is already Wado, so no expression translation is
+//! needed: a field `name: Type = init` becomes a defaulted struct field (read /
+//! written through the recognizer handle the caller binds), and a `fn` item is
+//! spliced verbatim into the recognizer's `impl`. A field without a default is a
+//! loud error — the generated `new()` literal omits members, so they must default.
+
+use { MemberField, MemberDecls } from "./java2wado/jmembers.wado";
+
+/// Parse a Wado `@members` body into fields + verbatim method sources. Items are
+/// separated by `;` (a trailing `;` is optional); a `fn` / `pub fn` item is a
+/// method, anything else is a `[pub] name: Type = init` field.
+pub fn translate_wado_members(body: &String) -> Result<MemberDecls, String> {
+    let chars: List<char> = body.chars().collect();
+    let n = chars.len();
+    let mut i = 0;
+    let mut fields: List<MemberField> = [];
+    let mut methods: List<String> = [];
+    while i < n {
+        i = skip_ws_semi(&chars, i, n);
+        if i >= n {
+            break;
+        }
+        if is_method_start(&chars, i, n) {
+            let close = capture_fn(&chars, i, n)?;
+            methods.push(collect_range(&chars, i, close));
+            i = close;
+        } else {
+            i = parse_field(&chars, i, n, &mut fields)?;
+        }
+    }
+    return Result::Ok(MemberDecls { fields, methods });
+}
+
+fn skip_ws_semi(chars: &List<char>, start: i32, n: i32) -> i32 {
+    let mut i = start;
+    while i < n && (chars[i].is_ascii_whitespace() || chars[i] == ';') {
+        i += 1;
+    }
+    return i;
+}
+
+fn skip_ws(chars: &List<char>, start: i32, n: i32) -> i32 {
+    let mut i = start;
+    while i < n && chars[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    return i;
+}
+
+fn is_ident_char(c: char) -> bool {
+    return 'a' <= c <= 'z' || 'A' <= c <= 'Z' || '0' <= c <= '9' || c == '_';
+}
+
+/// Whether `chars[i..]` starts with the keyword `word` on a word boundary.
+fn word_at(chars: &List<char>, i: i32, n: i32, word: &String) -> bool {
+    let wc: List<char> = word.chars().collect();
+    if i + wc.len() > n {
+        return false;
+    }
+    for let mut k = 0; k < wc.len(); k += 1 {
+        if chars[i + k] != wc[k] {
+            return false;
+        }
+    }
+    let after = i + wc.len();
+    return after >= n || !is_ident_char(chars[after]);
+}
+
+/// Whether an item at `i` is a method: `fn` or `pub fn`.
+fn is_method_start(chars: &List<char>, i: i32, n: i32) -> bool {
+    if word_at(chars, i, n, &"fn") {
+        return true;
+    }
+    if word_at(chars, i, n, &"pub") {
+        let j = skip_ws(chars, i + 3, n);
+        return word_at(chars, j, n, &"fn");
+    }
+    return false;
+}
+
+/// Capture a `fn` item from `start`: skip to the first `{`, balance braces to the
+/// matching `}`, return the index just past it. Skips string / char / comment
+/// spans so a brace inside them does not throw off the count.
+fn capture_fn(chars: &List<char>, start: i32, n: i32) -> Result<i32, String> {
+    let mut i = start;
+    while i < n && chars[i] != '{' {
+        i = skip_span(chars, i, n);
+    }
+    if i >= n {
+        return Result::Err("gale: Wado @members: method body '{' not found");
+    }
+    let mut depth = 0;
+    while i < n {
+        if chars[i] == '{' {
+            depth += 1;
+            i += 1;
+        } else if chars[i] == '}' {
+            depth -= 1;
+            i += 1;
+            if depth == 0 {
+                return Result::Ok(i);
+            }
+        } else {
+            i = skip_span(chars, i, n);
+        }
+    }
+    return Result::Err("gale: Wado @members: unterminated method body");
+}
+
+/// Parse a `[pub] name: Type = init` field ending at a top-level `;` or the block
+/// end; return the index past the terminator. Pushes one `MemberField`.
+fn parse_field(chars: &List<char>, start: i32, n: i32, fields: &mut List<MemberField>) -> Result<i32, String> {
+    let mut i = skip_ws(chars, start, n);
+    if word_at(chars, i, n, &"pub") {
+        i = skip_ws(chars, i + 3, n);
+    }
+    let name_start = i;
+    while i < n && is_ident_char(chars[i]) {
+        i += 1;
+    }
+    if i == name_start {
+        return Result::Err("gale: Wado @members: expected a field name");
+    }
+    let name = collect_range(chars, name_start, i);
+    i = skip_ws(chars, i, n);
+    if i >= n || chars[i] != ':' {
+        return Result::Err(`gale: Wado @members: expected ':' after field '${name}'`);
+    }
+    i += 1;
+    let ty_end = scan_to(chars, i, n, '=');
+    if ty_end >= n {
+        return Result::Err(`gale: Wado @members: field '${name}' needs an initializer ('= ...')`);
+    }
+    let ty = collect_range(chars, i, ty_end).trim();
+    if ty.is_empty() {
+        return Result::Err(`gale: Wado @members: field '${name}' has no type`);
+    }
+    let init_start = ty_end + 1;
+    let init_end = scan_to(chars, init_start, n, ';');
+    let init = collect_range(chars, init_start, init_end).trim();
+    if init.is_empty() {
+        return Result::Err(`gale: Wado @members: field '${name}' has an empty initializer`);
+    }
+    fields.push(MemberField { name, ty, init });
+    return Result::Ok(if init_end < n { init_end + 1 } else { n });
+}
+
+/// Index of the first top-level `target` char from `start`, honoring `<>()[]{}`
+/// nesting and skipping string / char / comment spans; `n` if none.
+fn scan_to(chars: &List<char>, start: i32, n: i32, target: char) -> i32 {
+    let mut i = start;
+    let mut depth = 0;
+    while i < n {
+        let c = chars[i];
+        if c == target && depth == 0 {
+            return i;
+        }
+        if c == '<' || c == '(' || c == '[' || c == '{' {
+            depth += 1;
+            i += 1;
+        } else if c == '>' || c == ')' || c == ']' || c == '}' {
+            if depth > 0 {
+                depth -= 1;
+            }
+            i += 1;
+        } else {
+            i = skip_span(chars, i, n);
+        }
+    }
+    return n;
+}
+
+/// Advance past one string / char literal or comment starting at `i`; otherwise
+/// advance one char. Keeps a brace / delimiter inside a literal from miscounting.
+fn skip_span(chars: &List<char>, i: i32, n: i32) -> i32 {
+    let c = chars[i];
+    if c == '"' || c == '\'' || c == '`' {
+        return skip_quoted(chars, i, n, c);
+    }
+    if c == '/' && i + 1 < n && chars[i + 1] == '/' {
+        let mut j = i + 2;
+        while j < n && chars[j] != '\n' {
+            j += 1;
+        }
+        return j;
+    }
+    if c == '/' && i + 1 < n && chars[i + 1] == '*' {
+        let mut j = i + 2;
+        while j + 1 < n && !(chars[j] == '*' && chars[j + 1] == '/') {
+            j += 1;
+        }
+        return if j + 1 < n { j + 2 } else { n };
+    }
+    return i + 1;
+}
+
+fn skip_quoted(chars: &List<char>, open: i32, n: i32, quote: char) -> i32 {
+    let mut i = open + 1;
+    while i < n {
+        if chars[i] == '\\' {
+            i += 2;
+            continue;
+        }
+        if chars[i] == quote {
+            return i + 1;
+        }
+        i += 1;
+    }
+    return n;
+}
+
+fn collect_range(chars: &List<char>, start: i32, end: i32) -> String {
+    let mut s = String::with_capacity(if end > start { end - start } else { 0 });
+    for let mut i = start; i < end; i += 1 {
+        s.push(chars[i]);
+    }
+    return s;
+}

@@ -1,0 +1,56 @@
+//! Unit tests for the Wado `@members` translator and the lexer/parser member
+//! scope partition.
+
+use { translate_wado_members } from "./wado_members.wado";
+use { is_lexer_members, is_parser_members } from "./java2wado.wado";
+use { NamedAction, ActionSource, GrammarKind } from "./ir.wado";
+
+fn member_act(scope: Option<String>) -> NamedAction {
+    return NamedAction { scope, name: "members", body: ActionSource {} };
+}
+
+test "translate_wado_members parses a defaulted field" {
+    let m = translate_wado_members(&"count: i32 = 0").unwrap();
+    assert m.fields.len() == 1, `fields: ${m.fields.len()}`;
+    assert m.fields[0].name == "count";
+    assert m.fields[0].ty == "i32";
+    assert m.fields[0].init == "0";
+    assert m.methods.is_empty();
+}
+
+test "translate_wado_members parses several fields and a method" {
+    let src = "depth: i32 = 0; tag: String = \"\";\nfn deeper(&mut self) { self.depth += 1; }";
+    let m = translate_wado_members(&src).unwrap();
+    assert m.fields.len() == 2, `fields: ${m.fields.len()}`;
+    assert m.fields[0].name == "depth";
+    assert m.fields[1].name == "tag";
+    assert m.fields[1].ty == "String";
+    assert m.methods.len() == 1, `methods: ${m.methods.len()}`;
+    assert m.methods[0].contains("fn deeper(&mut self)");
+    assert m.methods[0].contains("self.depth += 1;");
+}
+
+test "translate_wado_members handles a generic field type" {
+    let m = translate_wado_members(&"seen: List<i32> = []").unwrap();
+    assert m.fields.len() == 1;
+    assert m.fields[0].ty == "List<i32>", `ty: ${m.fields[0].ty}`;
+    assert m.fields[0].init == "[]";
+}
+
+test "translate_wado_members rejects a field with no initializer" {
+    assert translate_wado_members(&"count: i32") matches { Err(_) };
+}
+
+test "is_lexer_members claims explicit lexer scope in any grammar" {
+    let act = member_act(Option::<String>::Some("lexer"));
+    assert is_lexer_members(&act, &GrammarKind::Combined);
+    assert !is_parser_members(&act, &GrammarKind::Combined);
+}
+
+test "bare @members is the parser's in a combined grammar, the lexer's in a lexer grammar" {
+    let act = member_act(null);
+    assert is_parser_members(&act, &GrammarKind::Combined);
+    assert !is_lexer_members(&act, &GrammarKind::Combined);
+    assert is_lexer_members(&act, &GrammarKind::Lexer);
+    assert !is_parser_members(&act, &GrammarKind::Lexer);
+}

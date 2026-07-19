@@ -198,7 +198,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     gen_runtime(&mut w, ef, ctx.needs_atn(), needs_latn, emit_highlight);
     gen_token_kind(&mut w, &grammar.lexer_rules);
     gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
-    gen_lexer(&mut w, grammar, &lit_tokens, &atn_class_map);
+    gen_lexer(&mut w, grammar, &lit_tokens, &atn_class_map, &mut ctx);
     gen_node_kinds(&mut w, &lowered.parser_rules);
     gen_alt_enums(&mut w, grammar);
     gen_parser(&mut w, grammar, &lowered, &mut ctx);
