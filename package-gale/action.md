@@ -250,6 +250,47 @@ Recovery invariants with actions present:
 - Predicates evaluate mid-match, position-sensitively (`Column() < 2`), in both the single-pass DFA emitter and the LATN Pike VM (thread-local evaluation; a false predicate kills the thread).
 - Lexer commands stay typed IR (`-> skip` etc.); `lx.set_type` / `set_channel` from actions compose with them, action last-wins.
 
+## Lexer members (`@lexer::members`)
+
+The parser side is done: `collect_parser_members` translates each `@parser::members` / bare `@members` block into `Parser` struct fields + an `impl Parser` method block, and actions reference them as `this.field` / `this.method()` (`this` → `self`, since actions run inside `Parser` methods). Lexer members are the analog against `Lexer` — but a lexer action runs in a _post-tournament replay fn_, not on a `Lexer` method, and a lexer _predicate_ runs _mid-match_ in a free match fn, so neither has a `Lexer` handle today. This section designs that threading. Everything below is gated on the grammar declaring a non-empty lexer-members block (`lexer_grammar_has_members`); a member-free lexer stays byte-identical.
+
+### Where they live
+
+Fields → the `Lexer` struct (defaulted, so `Lexer::new`'s literal omits them — same as `Parser::new`); methods → an `impl Lexer` block. `collect_lexer_members` mirrors `collect_parser_members`: it selects the lexer blocks (`is_lexer_members`), runs the same `translate_members` (java2wado for `language = Java`, identity for `language = Wado`), and pushes the resulting `MemberField`s / method sources onto `Lexer`. An untranslatable block is a loud `UnsupportedAction` diagnostic, never a silent drop.
+
+Scope resolution partitions the blocks cleanly: `is_lexer_members` is `scope == Some("lexer")`, plus **bare `@members` in a `lexer grammar`** (no parser exists there, so an unscoped block is the lexer's). Correspondingly `is_parser_members` must stop claiming bare `@members` when the grammar is a `lexer grammar` — today it returns `true` for any `None` scope, which would attach a lexer grammar's members to a `Parser` that is never generated. Fix the two predicates together so every block lands in exactly one recognizer.
+
+### Threading the `Lexer` — two access shapes
+
+Member state is _persistent across tokens_ (a nesting counter lives on the `Lexer` for the whole `tokenize` loop, unlike the per-commit `LexerActions`), and it is touched from two directions:
+
+- **Actions write fields** (post-tournament, in `apply_<rule>_actions`). The apply fn takes `lexer: &mut Lexer` in place of its `chars: &List<char>` param — `$text` sources `&lexer.chars`, and the `winning_alt_<rule>` re-scan is called `winning_alt_<rule>(&lexer.chars, start)`. The replay dispatch calls `apply_<rule>_actions(&mut lexer, start, best_end, &mut lx)`. `lx: &mut LexerActions` stays the effect channel unchanged; `Lexer` and `LexerActions` are distinct objects, so there is no aliasing between `&mut lexer` and `&mut lx`. Dropping the separate `chars` param (rather than passing `&lexer.chars` alongside `&mut lexer`) avoids a simultaneous `&mut lexer` + `&lexer.chars` at the call site.
+- **Predicates read fields** (mid-match, in the match fn). A member-referencing predicate needs the `Lexer` where the match fn runs. Match fns are free fns `match_<rule>(chars, start) -> i32`; in member mode they gain a trailing `lexer: &Lexer` (read-only — a predicate is effect-free, which the type system enforces), so `{ this.here(T) }?` resolves `this.field` → `lexer.field` and `this.method()` → a call to an effect-free `impl Lexer` method. The `tokenize` loop already has `lexer` in scope at every `match_<rule>(&lexer.chars, start)` call site, so it forwards `&lexer` there. Because fields persist, a counter a _winning_ action bumped is visible to a _later_ token's predicate — matching ANTLR, where members persist across `nextToken`.
+
+Byte-identical gating: the extra `&mut Lexer` / `&Lexer` params, and the `impl Lexer` member block, are emitted only under `lexer_grammar_has_members`. A member-free action grammar keeps today's `chars/start/pos/lx` apply-fn shape and its predicate-only match fns.
+
+### Member methods and the runtime API
+
+A member method is `impl Lexer` / `&mut self`, so `this.` → `self.` (identical to the parser member translation — `translate_java_members` already binds `this_bind` to the recognizer handle). Its callable surface:
+
+- **member fields / sibling member methods** — direct `self.*`.
+- **position / text reads** — a member method has no `start` / `pos` in scope, so `Lexer` carries the current match window: `tok_start` / `tok_end` fields, set immediately before the replay (`lexer.tok_start = start; lexer.tok_end = best_end;`). `impl Lexer` methods then read them — `self.text()` slices `self.chars[tok_start..tok_end]`; `self.column()` / `self.token_start_column()` compute the 0-based column from the char stream (the same back-scan-to-newline the runtime already does for `ParseError` line/col). A member-method body's `getText()` / `getCharPositionInLine()` / `_tokenStartCharPositionInLine` map onto these — the same fixed renames the standalone predicate/action path uses, now reachable through `self`.
+
+Carve-out: an **effect command** (`setType` / `skip` / `pushMode` …) issued _from inside a member method_ has no `lx` handle (the method receiver is `Lexer`, not `LexerActions`), so it is a loud diagnostic in this landing. Top-level actions still issue effects through `lx` exactly as today — the restriction is only the (rare) method-issues-effect case, which the unification below removes.
+
+### The unification endpoint
+
+The principled endpoint folds the whole lexer action-context — the match window, `$text`, and the effect latches (`act_type` / `act_channel` / `skip` / `more` / mode ops) — onto `Lexer`, retiring the separate `LexerActions`. Then a top-level action and a member method share one context (`this.` → `self.` uniformly, `self.set_type(...)` legal anywhere), mirroring the parser side where a single `Parser` carries `@members` + the runtime API + `p.emit`. This subsumes the carve-out. It is deferred because it re-shapes every already-landed lexer-action grammar's output — permissible (behavior is pinned by the descriptor / driver suite, and the byte-identical rule only protects grammars _not_ using the feature), but a self-contained step. The member landing here is additive: it leaves the `lx` fold in place and only adds `Lexer` fields/methods and the read/write threading.
+
+### Relationship to `superClass`
+
+`@lexer::members` and `superClass` are siblings, not alternatives. Members inline declarations _into_ `Lexer`; `superClass = Foo` generates an _external_ `pub trait Foo` the user implements in Wado and passes at `tokenize_with<B: Foo>(input, base)`, with base-class state living in the impl. A grammar with both composes — member fields/methods on `Lexer`, base calls through the trait handle. The real-world lexers (TypeScriptLexer, RustLexer, ANTLRv4Lexer) keep their state in a hand-written base _outside_ the `.g4` and reach it via `superClass`, so `@lexer::members` is not their path. Its consumers are the in-grammar counter / position grammars — the `SemPredEvalLexer` position-sensitive shape and `PositionAdjustingLexer`'s inlined helpers.
+
+### Staging
+
+- **members-a** (this design): fields on `Lexer`; an `impl Lexer` method block over member state + position/text reads (`tok_start`/`tok_end` window, `self.text()` / `self.column()` / `self.token_start_column()`); actions receive `&mut Lexer`, predicates receive `&Lexer`; effects still fold through `lx`; a method issuing an effect command is a loud diagnostic. Fixtures: a `language = Wado` lexer with `@lexer::members { int depth = 0; }`, a field-writing action (`{ this.depth += 1 }`) and a field-reading predicate (`{ this.depth == 0 }?`), plus a member method that reads `self.column()`.
+- **members-b**: the runtime-API-on-`Lexer` unification — member methods issue effects, `LexerActions` retired.
+
 ## Staging
 
 - [x] Phase 1a — IR retention, byte-identical (1a-i: rule signatures, named-action / option bodies; 1a-ii: per-alternative `actions` sidecar).
@@ -305,7 +346,7 @@ Recovery invariants with actions present:
     - A keyword-classified single-literal rule (`KW : 'if' { ... }`) never runs its action — keyword reclassification happens after the tournament and does not set `best_act`. Use a char-class/multi-element body to keep the rule in the tournament.
   - [ ] Remaining lexer action surface, each with its own prerequisite:
     - **Nested-group / mid-element placement.** Top-level rule/alt actions run (with `$text` over the full match slice); an action nested inside an element, or one whose `$text` must reflect the mid-element cursor, still warns. Needs the action emitted inline during the match at its `before_index` with a guard so a partially-matched-then-failed alt does not run it (`ActionPlacement`).
-    - **`@lexer::members`.** Needs the apply fn to receive the `Lexer` instance (fields/methods live on it), not just `chars`/`start`/`pos`.
+    - **`@lexer::members`.** Designed in [Lexer members](#lexer-members-lexermembers): fields on `Lexer`, an `impl Lexer` method block, actions threaded `&mut Lexer`, predicates threaded `&Lexer`, member methods reading a `tok_start`/`tok_end` window; effect-issuing methods parked to the runtime-API-on-`Lexer` unification. Reuses the parser member machinery (`collect_*_members` / `translate_members`).
     - **Print via a lexer output sink.** Needs an output buffer threaded through `tokenize` onto `TokenStream` (the parser's `p.emit` writes `ParseResult.output`; the lexer has none yet).
     - **The LATN (ATN-class) lexer path** and the rest of the lexer `$`-attribute surface (`$type` / `getCharPositionInLine`).
 
