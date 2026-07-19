@@ -1,0 +1,47 @@
+// A custom `Index` / `IndexAssign` keyed by a reference type (`List<i32>`):
+// a list-literal subscript `g[[0]]` must be coerced to the key type, not
+// lowered as a bare tuple (issue #1628).
+
+struct Grid {
+    data: List<i32>,
+}
+
+impl Index<List<i32>> for Grid {
+    type Output = i32;
+
+    fn index(&self, key: List<i32>) -> &Self::Output {
+        return &self.data[key[0]];
+    }
+}
+
+impl IndexAssign<List<i32>> for Grid {
+    type Input = i32;
+
+    fn index_assign(&mut self, key: List<i32>, v: Self::Input) {
+        self.data[key[0]] = v;
+    }
+}
+
+test "list-keyed index read coerces the subscript to the key type" {
+    let g = Grid { data: [10, 20, 30] };
+    assert g[[0]] == 10;
+    assert g[[1]] == 20;
+    assert g[[2]] == 30;
+}
+
+test "list-keyed index write coerces the subscript to the key type" {
+    let mut g = Grid { data: [10, 20, 30] };
+    g[[1]] = 99;
+    assert g[[1]] == 99;
+    assert g[[0]] == 10;
+}
+
+test "list-keyed compound assign coerces the subscript to the key type" {
+    let mut g = Grid { data: [10, 20, 30] };
+    g[[1]] += 5;
+    assert g[[1]] == 25;
+    assert g[[0]] == 10;
+}
+
+__DATA__
+{"test": {}}

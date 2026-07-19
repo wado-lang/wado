@@ -2675,11 +2675,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Look for impl Index<...> for StructName
         self.find_indexing_trait_impl(struct_name, base_type_id, "Index", "index", "Output", None)
             .map(
-                |(output_type, self_kind, trait_name, impl_module_source)| IndexTraitInfo {
-                    output_type,
-                    self_kind,
-                    trait_name,
-                    impl_module_source,
+                |(output_type, self_kind, trait_name, impl_module_source, index_type)| {
+                    IndexTraitInfo {
+                        output_type,
+                        self_kind,
+                        trait_name,
+                        impl_module_source,
+                        index_type,
+                    }
                 },
             )
     }
@@ -2695,7 +2698,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         base_type_id: TypeId,
     ) -> Option<KeyValueLiteralTraitInfo> {
         // Primary: explicit impl KeyValueLiteralBuilder for T (self-as-builder pattern)
-        if let Some((value_type, self_kind, trait_name, _)) = self.find_indexing_trait_impl(
+        if let Some((value_type, self_kind, trait_name, _, _)) = self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
             "KeyValueLiteralBuilder",
@@ -2732,7 +2735,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             "Builder",
         )?;
         let builder_name = self.tysys.struct_name_for_type(builder_type)?;
-        if let Some((value_type, self_kind, trait_name, _)) = self.find_indexing_trait_impl(
+        if let Some((value_type, self_kind, trait_name, _, _)) = self.find_indexing_trait_impl(
             &builder_name,
             builder_type,
             "KeyValueLiteralBuilder",
@@ -2816,7 +2819,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         base_type_id: TypeId,
     ) -> Option<SequenceLiteralTraitInfo> {
         // Primary: self-as-builder (impl SequenceLiteralBuilder for T)
-        if let Some((element_type, self_kind, trait_name, impl_source)) = self
+        if let Some((element_type, self_kind, trait_name, impl_source, _)) = self
             .find_indexing_trait_impl(
                 struct_name,
                 base_type_id,
@@ -2852,7 +2855,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             "Builder",
         )?;
         let builder_name = self.tysys.struct_name_for_type(builder_type)?;
-        if let Some((element_type, self_kind, trait_name, impl_source)) = self
+        if let Some((element_type, self_kind, trait_name, impl_source, _)) = self
             .find_indexing_trait_impl(
                 &builder_name,
                 builder_type,
@@ -2900,11 +2903,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None,
         )
         .map(
-            |(input_type, self_kind, trait_name, impl_module_source)| IndexAssignTraitInfo {
-                input_type,
-                self_kind,
-                trait_name,
-                impl_module_source,
+            |(input_type, self_kind, trait_name, impl_module_source, index_type)| {
+                IndexAssignTraitInfo {
+                    input_type,
+                    self_kind,
+                    trait_name,
+                    impl_module_source,
+                    index_type,
+                }
             },
         )
     }
@@ -2926,11 +2932,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None,
         )
         .map(
-            |(output_type, self_kind, trait_name, impl_module_source)| IndexMutTraitInfo {
-                output_type,
-                self_kind,
-                trait_name,
-                impl_module_source,
+            |(output_type, self_kind, trait_name, impl_module_source, index_type)| {
+                IndexMutTraitInfo {
+                    output_type,
+                    self_kind,
+                    trait_name,
+                    impl_module_source,
+                    index_type,
+                }
             },
         )
     }
@@ -2952,11 +2961,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(index_type),
         )
         .map(
-            |(output_type, self_kind, trait_name, impl_module_source)| IndexValueTraitInfo {
-                output_type,
-                self_kind,
-                trait_name,
-                impl_module_source,
+            |(output_type, self_kind, trait_name, impl_module_source, index_type)| {
+                IndexValueTraitInfo {
+                    output_type,
+                    self_kind,
+                    trait_name,
+                    impl_module_source,
+                    index_type,
+                }
             },
         )
     }
@@ -3103,7 +3115,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         assoc_type_name: &str,
         expected_index_type: Option<TypeId>,
-    ) -> Option<(TypeId, ast::SelfKind, String, ModuleSource)> {
+    ) -> Option<(TypeId, ast::SelfKind, String, ModuleSource, Option<TypeId>)> {
         // Get concrete type arguments from the base type (for generic instances like Triple<i32>).
         // The raw GC array `Array<T>` carries its element type as the single
         // type arg, mirroring a generic instance, so `impl IndexValue for Array<T>`
@@ -3120,11 +3132,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &concrete_type_args,
             |trait_base| trait_base.starts_with(trait_base_name),
             |s, impl_ref, mapping, declared| {
-                // If an expected index type is provided, check the trait's type
-                // argument matches. e.g. for `impl IndexValue<RangeExclusive<i32>>
-                // for List<T>` the trait type arg `RangeExclusive<i32>` must match
-                // the actual index expression type.
-                if let Some(expected_idx_type) = expected_index_type {
+                // The trait's index-type argument (`List<i32>` in `impl
+                // Index<List<i32>>`), returned for subscript coercion and used
+                // to disambiguate overlapping impls when `expected_index_type`
+                // is set.
+                let index_type = {
                     let impl_block = s.get_impl_block(impl_ref);
                     let trait_index_arg = impl_block.trait_type.as_ref().and_then(|t| {
                         if let ast::Type::Generic(g) = t {
@@ -3133,12 +3145,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             None
                         }
                     });
-                    if let Some(ref arg) = trait_index_arg {
-                        let resolved_trait_idx = s.resolve_type_with_param_mapping(arg, mapping);
-                        if resolved_trait_idx != expected_idx_type {
-                            return None;
-                        }
-                    }
+                    trait_index_arg.map(|arg| s.resolve_type_with_param_mapping(&arg, mapping))
+                };
+                if let Some(expected_idx_type) = expected_index_type
+                    && let Some(resolved_trait_idx) = index_type
+                    && resolved_trait_idx != expected_idx_type
+                {
+                    return None;
                 }
 
                 // Verify non-type-parameter positions match the concrete type args
@@ -3191,7 +3204,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 drop(scope);
 
-                Some((assoc_type, self_kind, trait_name, impl_source))
+                Some((assoc_type, self_kind, trait_name, impl_source, index_type))
             },
         )
     }
@@ -3378,6 +3391,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let index_mut_info =
             self.find_index_mut_trait_impl(&struct_name, base_type_id, index_type)?;
+
+        if let Some(key_type) = index_mut_info.index_type
+            && key_type != index_type
+        {
+            let _ = self.resolve_expr(&index_expr.index, ctx, Some(key_type));
+        }
 
         // Now we need to check if the method being called requires &mut self
         // First, look up method info on the OUTPUT type (what IndexMut returns)

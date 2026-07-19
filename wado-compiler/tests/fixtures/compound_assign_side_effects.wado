@@ -1,0 +1,154 @@
+// Compound assignment `target OP= rhs` must evaluate each target
+// sub-expression exactly once (issue #1179). Side-effect counters pin the
+// rule for impure l-values, like `comparison_chain_side_effects.wado`.
+
+global mut CALL_COUNT: i32 = 0;
+
+fn bump() -> i32 {
+    CALL_COUNT += 1;
+    return 0;
+}
+
+struct Cell {
+    value: i32,
+}
+
+impl<i32> Index<i32> for Cell {
+    type Output = i32;
+
+    fn index(&self, _idx: i32) -> &Self::Output {
+        return &self.value;
+    }
+}
+
+impl<i32> IndexAssign<i32> for Cell {
+    type Input = i32;
+
+    fn index_assign(&mut self, _idx: i32, v: Self::Input) {
+        self.value = v;
+    }
+}
+
+struct Obj {
+    field: i32,
+}
+
+global mut OBJ_CALLS: i32 = 0;
+
+fn get_obj() -> Obj {
+    OBJ_CALLS += 1;
+    return Obj { field: 0 };
+}
+
+struct Holder {
+    value: i32,
+}
+
+// A custom `Index` whose `index()` has a side effect, so a nested index
+// read used as a subscript is observably evaluated once.
+global mut IDX_CALLS: i32 = 0;
+
+struct SideIndex {
+    data: List<i32>,
+}
+
+impl<i32> Index<i32> for SideIndex {
+    type Output = i32;
+
+    fn index(&self, i: i32) -> &Self::Output {
+        IDX_CALLS += 1;
+        return &self.data[i];
+    }
+}
+
+test "arr[bump()] += 1 evaluates the subscript once" {
+    CALL_COUNT = 0;
+    let mut arr: List<i32> = [10, 20, 30];
+    arr[bump()] += 1;
+    assert CALL_COUNT == 1;
+    assert arr[0] == 11;
+    assert arr[1] == 20;
+}
+
+test "custom IndexAssign obj[bump()] += 1 evaluates the subscript once" {
+    CALL_COUNT = 0;
+    let mut cell = Cell { value: 5 };
+    cell[bump()] += 2;
+    assert CALL_COUNT == 1;
+    assert cell.value == 7;
+}
+
+test "get_obj().field += 1 calls get_obj once" {
+    OBJ_CALLS = 0;
+    get_obj().field += 1;
+    assert OBJ_CALLS == 1;
+}
+
+test "nested matrix[bump()][j] += 1 evaluates the row index once and writes back" {
+    CALL_COUNT = 0;
+    let mut m: List<List<i32>> = [[1, 2], [3, 4]];
+    m[bump()][1] += 10;
+    assert CALL_COUNT == 1;
+    assert m[0][1] == 12;
+    assert m[0][0] == 1;
+    assert m[1][0] == 3;
+}
+
+test "nested arr[bump()].field += 1 evaluates the index once and writes back" {
+    CALL_COUNT = 0;
+    let mut a: List<Holder> = [Holder { value: 1 }, Holder { value: 2 }];
+    a[bump()].value += 5;
+    assert CALL_COUNT == 1;
+    assert a[0].value == 6;
+    assert a[1].value == 2;
+}
+
+test "side-effecting custom Index as subscript is evaluated once" {
+    IDX_CALLS = 0;
+    let mut a: List<i32> = [0, 0, 0];
+    let si = SideIndex { data: [1] };
+    a[si[0]] += 5;
+    assert IDX_CALLS == 1;
+    assert a[1] == 5;
+    assert a[0] == 0;
+}
+
+// Frame parity: the `__caN` slot must exist on both the annotate and reify
+// walks, else a later closure's capture index shifts.
+test "closure after an impure compound assign captures the right local" {
+    CALL_COUNT = 0;
+    let mut arr: List<i32> = [10, 20, 30];
+    arr[bump()] += 1;
+    let y = 42;
+    let g = || {
+        return y;
+    };
+    assert g() == 42;
+    assert arr[0] == 11;
+    assert CALL_COUNT == 1;
+}
+
+// A hoisted sub-piece that introduces its own locals (the `match` arm binds
+// `i`, its block binds `_z`) must be walked once on both sides.
+test "match subscript with inner locals keeps frame parity for a later closure" {
+    CALL_COUNT = 0;
+    let mut arr: List<i32> = [10, 20, 30];
+    let sel = 5;
+    arr[match sel { i => { let _z = bump(); i - 5 } }] += 1;
+    let y = 42;
+    let g = || {
+        return y;
+    };
+    assert g() == 42;
+    assert arr[0] == 11;
+    assert CALL_COUNT == 1;
+}
+
+test "plain local x += 1 still works" {
+    let mut x = 10;
+    x += 5;
+    assert x == 15;
+}
+
+__DATA__
+{"test": {}}
