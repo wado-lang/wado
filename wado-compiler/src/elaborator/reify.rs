@@ -9791,31 +9791,43 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // string literals decode their escapes. `null` on a
                 // variant scrutinee with a `None` case lowers to that
                 // case.
+                // Integer-literal patterns (number and byte) follow the
+                // scrutinee's signedness: a wide-int scrutinee is a GC struct,
+                // so the pattern variant must match its exact type (`u128::eq`
+                // vs `i128::eq`); a narrow scrutinee folds to a scalar `i32/i64`
+                // eq. Never let the literal fix the width.
+                let scrutinee_is_unsigned = {
+                    let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
+                    matches!(
+                        resolved,
+                        ResolvedType::Primitive(
+                            PrimitiveType::U8
+                                | PrimitiveType::U16
+                                | PrimitiveType::U32
+                                | PrimitiveType::U64
+                                | PrimitiveType::U128
+                        )
+                    ) || matches!(resolved, ResolvedType::Struct { ref name, .. } if name == "u128")
+                };
+                let int_pattern = |value: u128| {
+                    if scrutinee_is_unsigned {
+                        TirLiteralPattern::U128(value)
+                    } else {
+                        TirLiteralPattern::I128(value as i128)
+                    }
+                };
                 let tir_lit = match lit {
                     ast::Literal::Number(repr) => {
-                        let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
-                        let is_unsigned = matches!(
-                            resolved,
-                            ResolvedType::Primitive(
-                                PrimitiveType::U8
-                                    | PrimitiveType::U16
-                                    | PrimitiveType::U32
-                                    | PrimitiveType::U64
-                                    | PrimitiveType::U128
-                            )
-                        ) || matches!(
-                            resolved,
-                            ResolvedType::Struct { ref name, .. } if name == "u128"
-                        );
-                        if is_unsigned {
-                            TirLiteralPattern::U128(
-                                super::util::parse_u128_literal(repr).unwrap_or(0),
-                            )
+                        if scrutinee_is_unsigned {
+                            int_pattern(super::util::parse_u128_literal(repr).unwrap_or(0))
                         } else {
                             TirLiteralPattern::I128(
                                 super::util::parse_i128_literal(repr).unwrap_or(0),
                             )
                         }
+                    }
+                    ast::Literal::Byte(raw) => {
+                        int_pattern(u128::from(super::util::unescape_byte(raw).unwrap_or(0)))
                     }
                     ast::Literal::Bool(b) => TirLiteralPattern::Bool(*b),
                     ast::Literal::Char(raw) => {
@@ -10250,8 +10262,11 @@ fn ast_literal_to_pattern(lit: &ast::Literal) -> crate::tir::TirLiteralPattern {
         ast::Literal::Char(s) => {
             TirLiteralPattern::Char(super::util::unescape_char(s).unwrap_or('\0'))
         }
-        ast::Literal::Byte(s) => {
-            TirLiteralPattern::U128(u128::from(super::util::unescape_byte(s).unwrap_or(0)))
+        // Byte patterns are integer patterns whose width follows the scrutinee,
+        // so they are reified in the scrutinee-aware block and never reach this
+        // scrutinee-agnostic decoder.
+        ast::Literal::Byte(_) => {
+            panic!("ast_literal_to_pattern: byte literal must be reified scrutinee-aware")
         }
         ast::Literal::Bool(b) => TirLiteralPattern::Bool(*b),
         ast::Literal::Null => TirLiteralPattern::Null,
