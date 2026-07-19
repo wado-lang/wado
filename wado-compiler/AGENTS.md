@@ -191,34 +191,3 @@ Tests for standard library logic live alongside implementations in `lib/`. These
 ## Wasm Compatibility
 
 This crate must compile for `wasm32-unknown-unknown`. Do not use OS-dependent `std` modules in production code. CI enforces this with a wasm32 build check.
-
-## LSP-Friendly Compiler Architecture
-
-Pipeline:
-
-```
-parse → bind → load → analyze → annotate → build_tir → monomorphize → lower → optimize → codegen
-```
-
-- `annotate` is AST-preserving type resolution; the bundle is returned as `Semantics` (see `src/semantics.rs`). Used by both LSP and batch compilation. The desugar-replacement surface rewrites (`x += y`, `while`, C-style `for`, `for x of expr`, `assert`, `matches`, comparison chain) are TIR-direct: the elaborator builds TIR from the parsed AST without producing synthetic AST nodes for them, so the parsed AST stays parser-shaped end to end. For the for-of iterator path the `.into_iter()` / `.next()` dispatches go through `Elaborator::resolve_method_call_with` (the TIR-level entry point to method dispatch) with `method_id: None`, so the synthetic helper calls leave no use→def edge against the `for` keyword. `Self::method` / `T::method` static-call rewriting resolves the prefix to its concrete type name (`CalleeIdentKind` in `elaborator/call.rs`) before any parameter-type lookup or argument resolution, so the rewrite stays internal to `resolve_call` and never builds a synthetic `CallExpr`.
-- `build_tir` (reify) emits TIR; used only by batch compilation. The body walk (`annotate`) records facts and builds no TIR — reify is the sole TIR producer. `build_tir_from_state` takes a `build_tir` flag: the LSP engine runs the fact-walk only (`build_tir = false`, no reify, empty `tir_modules`); the batch path, the general `semantics()` entry, and kiln options extraction pass `true`.
-- `AstId` is the canonical identity for every semantic entity that originates in source. It is `(AstIdSpace, local)`: the space is minted per parse, making full ids globally unique, so per-node fact maps (`TypeAnnotations`, use→def `references`, symbol table, liveness) key by bare `AstId` — cross-module collisions are impossible by construction (see issue #1342). The local half is dense over `Block` / `Stmt` / `Expr` / `Pattern` / `Type` / `Item` / `Decl`, so every source position resolves to an id via `Module::ast_id_at`. The owning `ModuleSource` is _derived_ from an id only where output needs a URI/span (navigation, diagnostics), via the `AstIdSpace → ModuleSource` registry on `Semantics::module_of_id` (a symbol reads it straight off `Symbol::module_source`). Builtins are parsed like any module and get their own space + dense local range.
-- AST is the source of truth: `annotate` attaches facts, never mutates or moves AST nodes. Decl-backed `ResolvedType` variants and `Symbol` carry `defined_at: AstId`; `Symbol` additionally stores its declaring `module` as authoritative home data (set once at `SymbolTable::define`, never used as a map key).
-- Use→def edges are recorded by the real elaborator as it performs name resolution (`resolve_ident`, `resolve_call`, …). `Semantics::referenced_symbol` is the single source of truth; there is no separate lexical re-scan. `semantics_of` always runs the body fact-walk (`annotate_bodies` over user modules; stdlib facts seeded from the snapshot) so the edges exist for both LSP and batch compilation, regardless of whether reify runs.
-- Structural facts that derive purely from the AST (per-`AstId` spans, declaration name spans, assignment write targets, position-to-`AstId` lookup) live on a per-module `AstIndex` (`src/ast_index.rs`), built once during `semantics_of`. Powers `Semantics::ast_id_at` / `span_of_id` / `name_span_of` / `is_write_target` without AST re-walks.
-- LSP queries entry through `Semantics::cursor_at(module, line, col) -> Cursor`, which exposes `def_key` / `def_symbol` / `def_name_span` / `def_span` / `references_to_def` / `is_write_target` / `span` / `key` / `module`. Each LSP feature is a thin pass over those query methods.
-- The `codegen.rs` principle still holds: codegen consumes `Package` without knowledge of earlier phases.
-
-Entry points:
-
-- `wado_compiler::semantics(source, host, filename) -> Semantics` — LSP path; skips `monomorphize` / `lower` / `optimize` / `codegen`.
-- `wado_compiler::compile_with_options(...)` — batch path; calls `semantics_of` + `build_tir` + `Package::new`, so registries build once.
-
-`Engine::{definition, hover, diagnostics}` all go through `semantics` — cross-file navigation falls out for free because `Semantics` already contains every transitively-loaded module.
-
-### Next
-
-1. **Build out LSP features on the query API:** completion, rename, references, call-hierarchy. The infrastructure is in place; these are additive.
-2. **(Deferred)** Salsa / demand-driven incrementalization, only if per-file reanalysis becomes a bottleneck. The architecture is designed to be wrappable in salsa queries with minimal restructuring; not planned.
-
-Out of scope for this track: language changes, `Package` format changes, codegen output changes.
