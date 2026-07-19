@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784459854890,
+  "lastUpdate": 1784463264315,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -42165,6 +42165,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c10f0b9645e6054f19f0e064429ff3295956e51e"
         },
         "date": 1784459854420,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8257,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16526,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271337,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5125b7be77bd07502e290fd7fec2581eea31661e",
+          "message": "Merge pull request #1639 from wado-lang/claude/variant-return-sroa-unify-i53hit\n\nrefactor(optimizer): unify variant-return SROA on one recursive layout engine",
+          "timestamp": "2026-07-19T20:55:48+09:00",
+          "tree_id": "a22cfca4f7f6429d9c0c8facb6753411927c9c3e",
+          "url": "https://github.com/wado-lang/wado/commit/5125b7be77bd07502e290fd7fec2581eea31661e"
+        },
+        "date": 1784463263620,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
