@@ -2,10 +2,10 @@
 # (e.g. the Claude Code web container) can restore it. See
 # .claude/hooks/cargo-cache-restore.mjs for the consumer side.
 #
-# Required repo configuration:
-#   secrets.GCP_WIF_PROVIDER    workload identity provider resource name
-#   secrets.GCP_CACHE_WRITER_SA writer service-account email (roles/storage.objectAdmin on the bucket)
-#   vars.CARGO_CACHE_BUCKET     GCS bucket name (e.g. wado-lang-cache)
+# Required repo variables (none are secret — all are plain identifiers):
+#   vars.GCP_WIF_PROVIDER    workload identity provider resource name
+#   vars.GCP_CACHE_WRITER_SA writer service-account email (roles/storage.objectAdmin on the bucket)
+#   vars.CARGO_CACHE_BUCKET  GCS bucket name (e.g. wado-lang-cache)
 name: Cargo registry cache
 
 on:
@@ -43,8 +43,8 @@ jobs:
       - id: auth
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account: ${{ secrets.GCP_CACHE_WRITER_SA }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_CACHE_WRITER_SA }}
 
       - uses: google-github-actions/upload-cloud-storage@v2
         with:
