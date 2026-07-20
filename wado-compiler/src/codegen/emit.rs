@@ -788,9 +788,6 @@ impl<'a> WirEmitter<'a> {
             self.next_local = idx + 1;
         }
 
-        // Emit the finalized declared locals (`func.locals`, the SSoT every
-        // producer populates), then the scratch locals the emitter's own
-        // lowerings synthesise.
         let mut local_types: Vec<(String, ValType)> = Vec::new();
         for (name, ty) in func.locals.iter() {
             self.push_declared_local(name, ty, &mut local_types);

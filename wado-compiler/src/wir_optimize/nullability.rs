@@ -1,12 +1,7 @@
-//! Nullability oracle shared by WIR optimization passes.
-//!
-//! Answers whether a WIR value is a statically non-null reference, combining
-//! structural producer recognition ([`WirInstr::is_nonnull_result`] — a
-//! `struct.new` / `array.new*` / `ref.as_non_null` / `ref.func` / non-null-typed
-//! read) with each local's declared type ([`WirLocals`]). The latter matters
-//! because a `local.get`'s own `result_ty` can read nullable for a non-null
-//! local after inlining substitutes a nullable-typed argument, while the
-//! `DeclareLocal` type stays authoritative.
+//! Nullability oracle shared by WIR optimization passes: whether a WIR value is
+//! a statically non-null reference, from structural producers
+//! ([`WirInstr::is_nonnull_result`]) plus each local's declared type
+//! ([`WirLocals`], authoritative where inlining left a read site stale-nullable).
 
 use crate::wir::{WirInstr, WirLocals};
 

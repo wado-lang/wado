@@ -178,12 +178,9 @@ pub(super) fn is_root_observable(instr: &WirInstr) -> bool {
 /// to enable CSE / dead-load elimination of trapping operations whose
 /// result IS used.
 ///
-/// A `LocalGet` receiver's nullability is decided through the [`Nullability`]
-/// oracle (the local's declared type), not the read site's `result_ty` —
-/// inlining can leave the latter stale-nullable for a non-null local. Rewriting
-/// `result_ty` instead would cost a codegen `ref.as_non_null` per read, so the
-/// declared type is consulted only here. An empty oracle disables the receiver
-/// refinement (every heap read is conservatively trap-capable).
+/// A receiver's nullability comes from the [`Nullability`] oracle, not the read
+/// site's `result_ty` (inlining can leave that stale-nullable). Rewriting
+/// `result_ty` instead would cost a codegen `ref.as_non_null` per read.
 pub(super) fn may_trap_in(instr: &WirInstr, null: &Nullability) -> bool {
     // Operand-dependent: `ref.as_non_null(inner)` only traps when `inner`
     // could itself produce null.

@@ -210,8 +210,6 @@ impl WasmModuleInfo {
             for instr in &mut body {
                 remap_func_ids_in_instr(instr, &func_index_remap);
             }
-            // A bundled module's body is final on arrival (it bypasses
-            // `wir_optimize`), so finalize its declared-local table here.
             let locals = WirLocals::scan(&body);
             wir.functions.push(WirFunction {
                 name: WirName {
@@ -1260,20 +1258,14 @@ pub struct WirFunction {
     /// because it is the mangle (not an intern-order `TypeId`), identical
     /// types interned more than once still resolve to the one helper.
     pub value_copy_mangle: Option<String>,
-    /// Declared locals, the single source of truth the emitter allocates from.
-    /// Every producer finalizes it from the body's `DeclareLocal`s once the body
-    /// is final: `optimize_wir` at every `-O` for the main package, and
-    /// `WasmModuleInfo::to_wir_package` for a bundled module. Empty until then;
-    /// the emitter never rescans, so no producer may leave it stale.
+    /// Declared locals the emitter allocates from, finalized once per producer
+    /// (`optimize_wir` for the main package, `to_wir_package` for a bundled one).
     pub locals: WirLocals,
 }
 
 impl WirFunction {
-    /// The declared locals of the current body — the single access point the
-    /// WIR optimizer uses. Live by construction: it scans the body as it stands,
-    /// so a pass always sees the locals of the body it is rewriting, never a
-    /// stale snapshot. `optimize_wir` freezes the final result into `locals` for
-    /// the emitter; every mid-pipeline consumer calls this.
+    /// Declared locals of the current body, scanned live — the optimizer's single
+    /// access point, always reflecting the body a pass is rewriting.
     pub fn declared_locals(&self) -> WirLocals {
         WirLocals::scan(self.body.as_deref().unwrap_or(&[]))
     }
@@ -1281,12 +1273,9 @@ impl WirFunction {
 
 /// A function's declared locals, keyed by name in declaration order.
 ///
-/// `DeclareLocal` instructions inline in the body are the source of truth for a
-/// local's declared type; this is the one canonical view of them, derived by a
-/// single [`WirLocals::scan`]. Because a local's declared type carries its
-/// nullability, this is also the optimizer's authority on whether a `local.get`
-/// yields a non-null reference — the read site's own `result_ty` can read
-/// nullable for a non-null local after inlining.
+/// A local's declared type is the optimizer's authority on whether a `local.get`
+/// yields a non-null reference: the read site's own `result_ty` can read nullable
+/// for a non-null local after inlining.
 #[derive(Debug, Default, Clone)]
 pub struct WirLocals {
     types: IndexMap<String, WirType>,
