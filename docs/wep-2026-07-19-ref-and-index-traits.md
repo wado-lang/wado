@@ -159,27 +159,35 @@ compiler desugars `container[i]` by which traits resolve:
 
 For `List` / arrays, the same surface syntax lowers to the reference-representation
 intrinsic instead: a value read/write is `array.get` / `array.set`; `&xs[i]` on a
-`Ref` element is the shared handle, on a scalar element a permitted read-only
-snapshot box (reference-representation §"`&` to a … place"); `&mut xs[i]` follows
-the reference-representation forbid / carve-out (a replace-on-assign element in an
-escaping position is an error, the non-escaping case a temp + write-back).
+`Ref` element is the shared handle; `&mut xs[i]` follows the reference-representation
+forbid / carve-out.
 
-### `IndexRef` `Output` vs the `&place` operation
+### `&container[i]` requires a `Ref` element
 
-Two different things both spell `&container[i]`:
+Taking a reference _into_ a container element — `&xs[i]` / `&mut xs[i]` — is a
+real element reference only when the element is a GC reference (`T: Ref`). A
+value-typed element (scalar, `enum`, `flags`) has no reference identity: `&nums[i]`
+would alias a snapshot _copy_, not the element. So it is a compile error, on both
+the trait path (a user container's `IndexRef` cannot even be declared with a
+scalar `Output` — `type Output: Ref`) and the array-element `&place` path
+(rejected in `resolve_unary`). The diagnostic points at the value read: bind the
+element to a local first.
 
-- The `IndexRef` / `IndexMutRef` _trait_ result: `&Self::Output`, gated by
-  `type Output: Ref`. A user container cannot hand out a reference to a
-  value-typed element — that is the fake-`&scalar` footgun, forbidden by
-  construction.
-- The language `&<place>` operation on a `List` / array element: governed by
-  reference-representation, which _permits_ `&scalar-element` as a read-only
-  snapshot box (it is a `Box<T>` copy, sound because there is no write to lose).
+```wado
+let nums: List<i32> = [1, 2, 3];
+// let r = &nums[0];        // error: `i32` element has no reference identity
+let x = nums[0];            // read by value
+let r = &x;                 // &x on a local is a real (boxed) reference — fine
+```
 
-So `&nums[i]` on `List<i32>` is **not** an error — it is a reference-representation
-snapshot, unchanged by this WEP. `Ref` gates the trait `Output`, not the `&place`
-operation. (Whether to additionally tighten the `&scalar` snapshot is a
-reference-representation question, out of scope here.)
+The distinction is principled: a scalar _local_ `&x` is a real reference (the
+local's slot is boxed, and a `&mut` writes back), whereas a scalar array element
+has no per-element box, so `&nums[i]` could only ever be a copy. `Ref` is exactly
+"has reference identity", so it is the right gate for both.
+
+A still-generic element (`&arr[i]` over a type parameter `T`) is not gated here —
+it is checked once `T` is concrete; the `&mut`-over-scalar iteration case is
+rejected by the [Iterator Reference Model](./wep-2026-07-05-iterator-reference-model.md).
 
 ## Consequences
 
@@ -191,6 +199,10 @@ reference-representation question, out of scope here.)
   construction rather than by convention.
 - No proxy objects, no fake `&i32` into scalar arrays; `IndexValue` /
   `IndexAssign` remain the honest value-semantics path for every element type.
+- `&container[i]` on a value-typed element is a compile error on both paths (the
+  trait `Output` bound and the array-element `&place`), so a reference into a
+  container always aliases the element, never a copy — while a scalar _local_
+  `&x` stays a real (boxed) reference.
 - The `variant` / `fn` case is handled once, at the place level, by
   reference-representation — the index traits do not re-derive it.
 
@@ -215,21 +227,23 @@ reference-representation question, out of scope here.)
       now errors (`i32` does not implement `Ref`). General, not `Ref`-specific —
       it also covers `IntoIterator::Iter: Iterator` etc. Fixture:
       `index_ref_scalar_output_rejected`.
-- [x] `List` element references: decided to keep the reference-representation
-      intrinsic and _not_ implement `IndexRef` / `IndexMutRef` for `List<T>`.
-      `&xs[i]` / `&mut xs[i]` / `xs[i].m()` already work through it (struct
-      element in-place, scalar element as a snapshot box) — a `List` trait impl
-      would only shadow the intrinsic. `Ref` gates the trait `Output` for user
-      containers; it does not change the `&place` operation on arrays.
+- [x] `List` element references: keep the reference-representation intrinsic and
+      do _not_ implement `IndexRef` / `IndexMutRef` for `List<T>` (a trait impl
+      would only shadow it). `&xs[i]` / `&mut xs[i]` / `xs[i].m()` work through it
+      for `Ref` elements.
+- [x] Gate `&container[i]` / `&mut container[i]` on a `Ref` element in
+      `resolve_unary`: a scalar / `enum` / `flags` element is rejected (it has no
+      reference identity), with a diagnostic that points at the value read. A
+      generic `T` element is deferred to concrete instantiation; a scalar _local_
+      `&x` stays allowed. Fixture: `ref_scalar_element_rejected`. Migrated the few
+      fixtures that took `&scalar[i]` (`ref_1`, `ref_3`, `generic_advanced`,
+      `serde_json_roundtrip_complex`) to bind-to-local.
 
 The feature is complete: `Ref` is defined and resolves correctly, the four
-index traits are named and the reference-returning pair is gated on `Output:
-Ref` and enforced at impl sites. Possible follow-ups, out of this WEP's scope:
-
-- [ ] Tighten the `&scalar` snapshot box (`&nums[i]`) — a
-      reference-representation decision, not an index-trait one.
-- [ ] `impl<T: Ref> IndexRef / IndexMutRef for List<T>` only if a generic
-      `fn f<C: IndexRef<i32>>(c: C)` ever needs `List` to satisfy the bound.
+index traits are named, the reference-returning pair is gated on `Output: Ref`
+and enforced at impl sites, and `&container[i]` requires a `Ref` element on both
+the trait and the array-element `&place` paths — a reference into a container
+never aliases a copy.
 
 ## References
 

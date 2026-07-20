@@ -309,7 +309,8 @@ test "all enum variants roundtrip" {
     ];
     let names: List<String> = ["North", "South", "East", "West"];
     for let mut i = 0; i < 4; i += 1 {
-        let json_r = to_string::<Direction>(&variants[i]);
+        let v = variants[i];
+        let json_r = to_string::<Direction>(&v);
         if let Ok(json) = json_r {
             assert json == `"${names[i]}"`;
         } else {

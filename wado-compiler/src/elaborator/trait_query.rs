@@ -824,7 +824,7 @@ impl TypeSystem {
     /// `Ref`; scalars (other primitives, `enum`, `flags`), `resource` handles
     /// (an `i32`, not a GC ref), `unit`, and `never` are not. A `Newtype`
     /// follows its base type.
-    fn is_ref_identity(&self, resolved: &ResolvedType) -> bool {
+    pub(super) fn is_ref_identity(&self, resolved: &ResolvedType) -> bool {
         match resolved {
             ResolvedType::Primitive(p) => {
                 matches!(p, PrimitiveType::I128 | PrimitiveType::U128)

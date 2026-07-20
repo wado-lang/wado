@@ -131,7 +131,10 @@ fn ref_array_basic() with Stdout {
 fn ref_array_ref_element() with Stdout {
     let mut arr: List<i32> = [10, 20, 30];
 
-    let r = &arr[1];
+    // A scalar element has no reference identity; bind it to a local and
+    // reference that. The local is a copy, so it stays a snapshot.
+    let e = arr[1];
+    let r = &e;
     println(`ref element: ${*r}`);
 
     arr[1] = 999;

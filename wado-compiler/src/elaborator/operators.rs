@@ -954,6 +954,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let expr_type = self.resolve_expr(&unary.expr, ctx, inner_expected);
 
+        // A reference *into* a container element (`&xs[i]` / `&mut xs[i]`) is a
+        // real element reference only when the element is itself a GC reference
+        // (`T: Ref`). A value-typed element has no reference identity: `&nums[i]`
+        // would alias a snapshot copy, not the element, so it is rejected here.
+        // (A scalar *local* `&x` is fine — its slot is boxed, a real reference.)
+        if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef)
+            && matches!(&unary.expr, ast::Expr::Index(_))
+            && expr_type != TypeTable::UNKNOWN
+            && expr_type != TypeTable::ERROR
+            // Skip still-generic elements — a `T` element is checked once the
+            // type is concrete (a generic iterator body like `&mut arr[i]` over
+            // `T` is sound per monomorph; the `&mut`-over-scalar case is rejected
+            // by the iterator-reference model, not here).
+            && !self
+                .tysys
+                .type_table
+                .borrow()
+                .contains_type_param(expr_type)
+        {
+            let elem = self.tysys.type_table.borrow().get(expr_type).clone();
+            if !self.tysys.is_ref_identity(&elem) {
+                let elem_name = self.tysys.type_id_to_string(expr_type);
+                let _ = self.emit(TypeError::CannotAssign {
+                    message: format!(
+                        "cannot take a reference to a value-typed element `{elem_name}`: \
+                         it has no reference identity (the reference would alias a copy, not \
+                         the element). Read it by value instead, e.g. `let x = ...[i];`"
+                    ),
+                    span: unary.span,
+                });
+            }
+        }
+
         if unary.op == UnaryOp::MutRef
             && let ast::Expr::Ident(id) = &unary.expr
             && let Some(local) = ctx.lookup(&id.name)
