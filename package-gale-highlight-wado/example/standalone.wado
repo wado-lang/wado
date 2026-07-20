@@ -1,12 +1,12 @@
-//! Standalone HTML demo — and a reference for the CSS classes the highlighter
-//! emits.
+//! Standalone HTML demo — and a reference for how to style the highlighter's
+//! output.
 //!
 //! The library ships only the highlight *fragment* (`<span class="...">`);
-//! bringing your own CSS and page shell is the intended usage. This example is
-//! a copy-paste starting point: it highlights a sample and wraps it in a full,
-//! styled page that exercises every capture class the Wado query produces
-//! (tree-sitter vocabulary — `constant.builtin` becomes `class="constant
-//! builtin"`).
+//! bringing your own page shell is the intended usage. This example is a
+//! copy-paste starting point: it highlights a sample, colors the tokens with
+//! `gale-highlight`'s `default_theme` via `stylesheet`, and wraps the result in
+//! a page whose own chrome (background, container, font) is the `PAGE_CSS`
+//! below.
 //!
 //!     wado run package-gale-highlight-wado/example/standalone.wado > demo.html
 //!
@@ -14,10 +14,11 @@
 
 use { print, Stdout } from "core:cli";
 use { highlight } from "../src/lib.wado";
+use { stylesheet, default_theme } from "lib:gale";
 
-// A starter theme. Selectors are the tree-sitter capture names Gale emits, so
-// any tree-sitter theme drops in — swap these colors for your own.
-global DEMO_CSS: String = "
+// The page's own chrome — not part of the highlighter. Token colors come from
+// the theme (see `run`); this only sets the surrounding page and code block.
+global PAGE_CSS: String = "
 body { background: #0d1117; margin: 0; padding: 2rem; }
 .wado {
     display: block;
@@ -28,12 +29,6 @@ body { background: #0d1117; margin: 0; padding: 2rem; }
     border-radius: 8px;
     overflow-x: auto;
 }
-.comment { color: #8b949e; font-style: italic; }
-.string { color: #a5d6ff; }
-.number { color: #79c0ff; }
-.keyword { color: #ff7b72; }
-.variable { color: #c9d1d9; }
-.constant.builtin { color: #79c0ff; }
 ";
 
 // Sample source, exercising comments, keywords, strings, numbers, template
@@ -55,10 +50,12 @@ export fn run() with Stdout {
 ";
 
 export fn run() with Stdout {
+    let theme = default_theme();
+    let css = `${PAGE_CSS}${stylesheet(&theme)}`;
     print(`<!doctype html>
 <html>
-<head><meta charset="utf-8"><title>Wado highlight demo</title><style>${DEMO_CSS}</style></head>
-<body><pre class="wado">${highlight(&SAMPLE)}</pre></body>
+<head><meta charset="utf-8"><title>Wado highlight demo</title><style>${css}</style></head>
+<body><pre class="wado">${highlight(SAMPLE)}</pre></body>
 </html>
 `);
 }

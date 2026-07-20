@@ -1,18 +1,33 @@
 //! Syntax highlighter for the Wado language.
 //!
 //! The parser is generated at build time by Gale from the bundled grammar
-//! (`grammar/Wado.g4` + `grammar/Wado.highlights.scm`). `highlight()` renders
+//! (`grammar/Wado.g4` + `grammar/Wado.highlights.scm`). `highlight` renders
 //! Wado source to an HTML fragment of `<span class="...">` nodes using the
-//! tree-sitter capture vocabulary; pair it with `gale-highlight`'s themes
-//! (`document`, `Theme`) for a standalone page.
+//! tree-sitter capture vocabulary; pair it with `gale-highlight`'s `Theme` /
+//! `stylesheet` for a styled page.
 //!
 //!     use { highlight } from "wado-lang:gale-highlight-wado";
-//!     let html = highlight(&src);
+//!     let html = highlight(src);
 
-pub use { parse, highlight, highlight_result, ParseResult, Diagnostic } from "../grammar/Wado.g4"
+use { highlight as highlight_impl } from "../grammar/Wado.g4"
     with {
         generator: {
             module: "lib:gale",
             inputs: ["../grammar/Wado.highlights.scm"],
         },
     };
+
+pub use { parse, highlight_result, ParseResult, Diagnostic } from "../grammar/Wado.g4"
+    with {
+        generator: {
+            module: "lib:gale",
+            inputs: ["../grammar/Wado.highlights.scm"],
+        },
+    };
+
+/// Render Wado `source` to an HTML fragment of `<span class="...">` nodes,
+/// using the tree-sitter capture vocabulary. The component's public entry
+/// point; style the result with `gale-highlight`'s `Theme` / `stylesheet`.
+export fn highlight(source: String) -> String {
+    return highlight_impl(&source);
+}
