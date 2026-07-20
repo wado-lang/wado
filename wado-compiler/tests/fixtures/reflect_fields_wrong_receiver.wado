@@ -1,0 +1,25 @@
+// `Reflect::<T>::fields(&self)` requires a receiver of type `T`; passing a
+// different struct is a clean compile error, not a WIR-pipeline ICE.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Other {
+    a: i32,
+    b: i32,
+    c: i32,
+}
+
+test "unreachable" {
+    let o = Other { a: 1, b: 2, c: 3 };
+    let _f = Reflect::<Point>::fields(&o);
+    assert true;
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "type mismatch: expected 'Point', found 'Other'"
+}

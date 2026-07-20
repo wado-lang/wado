@@ -173,17 +173,23 @@ fn deref_local(
     deref_expr(local_expr(index, name, ref_type, span), inner_type, span)
 }
 
+/// The leading `self` parameter (`local_index 0`) of a synthesized method,
+/// typed as the receiver reference `ref_type`.
+fn self_param(ref_type: TypeId, span: Span) -> TirParam {
+    TirParam {
+        name: "self".to_string(),
+        type_id: ref_type,
+        local_index: 0,
+        is_mut: false,
+        is_mut_ref: false,
+        span,
+    }
+}
+
 /// Standard `(self, other)` parameter list for `Eq`/`Ord`-style methods.
 fn binary_method_params(ref_type: TypeId, span: Span) -> Vec<TirParam> {
     vec![
-        TirParam {
-            name: "self".to_string(),
-            type_id: ref_type,
-            local_index: 0,
-            is_mut: false,
-            is_mut_ref: false,
-            span,
-        },
+        self_param(ref_type, span),
         TirParam {
             name: "other".to_string(),
             type_id: ref_type,
@@ -206,14 +212,7 @@ fn binary_method_locals(ref_type: TypeId) -> Vec<TirLocal> {
 /// Standard `(&self, &mut Formatter)` parameter list for `Inspect`/`Display`-style methods.
 fn inspect_params(ref_type: TypeId, fmt_type: TypeId, span: Span) -> Vec<TirParam> {
     vec![
-        TirParam {
-            name: "self".to_string(),
-            type_id: ref_type,
-            local_index: 0,
-            is_mut: false,
-            is_mut_ref: false,
-            span,
-        },
+        self_param(ref_type, span),
         TirParam {
             name: "f".to_string(),
             type_id: fmt_type,
@@ -767,14 +766,7 @@ fn generate_struct_fields_fn(
     make_synthetic_method(
         qualified_name,
         method_info,
-        vec![TirParam {
-            name: "self".to_string(),
-            type_id: ref_struct_type,
-            local_index: 0,
-            is_mut: false,
-            is_mut_ref: false,
-            span,
-        }],
+        vec![self_param(ref_struct_type, span)],
         fields_tuple_type,
         body,
         vec![param_local("self", ref_struct_type, false)],
@@ -3526,14 +3518,7 @@ fn generate_display_fallback(
     let qualified_name = display_info.to_mangled_name();
 
     let params = vec![
-        TirParam {
-            name: "self".to_string(),
-            type_id: ref_type,
-            local_index: 0,
-            is_mut: false,
-            is_mut_ref: false,
-            span,
-        },
+        self_param(ref_type, span),
         TirParam {
             name: "f".to_string(),
             type_id: fmt_type,

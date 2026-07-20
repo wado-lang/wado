@@ -3025,13 +3025,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let method = static_call.method.clone();
         let self_name = self.tysys.type_table.borrow().type_name(self_ty);
 
-        if self.type_lookup().struct_fields(&self_name).is_none() {
+        // Subject struct's field types (also gates non-struct receivers).
+        // Resolved once here and reused for the `fields` return tuple, so the
+        // recorded call type is sourced from the same field list every time.
+        let Some(field_types) = self.type_lookup().struct_fields(&self_name).map(|info| {
+            info.fields
+                .iter()
+                .map(|(_, ty, _)| *ty)
+                .collect::<Vec<TypeId>>()
+        }) else {
             let _ = self.emit(TypeError::UnknownFunction {
                 name: format!("Reflect::<{self_name}>::{method}"),
                 span: static_call.span,
             });
             return TypeTable::ERROR;
-        }
+        };
 
         let (reflect_trait_name, type_name_method, fields_method, module_source) = {
             let tt = self.tysys.type_table.borrow();
@@ -3050,28 +3058,51 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         };
 
-        // `fields(&self)` takes the receiver as its one argument; `type_name` /
-        // `field_names` take none. Resolve any supplied args so errors inside
-        // them still surface, then enforce the arity — an unexpected operand
-        // reaching a synthesized call trips a WIR-pipeline validation ICE.
+        // Resolve args first so errors inside them still surface, then reject a
+        // wrong arity — or, for `fields`, a receiver that is not the subject
+        // struct. Either would reach a synthesized call and trip a WIR-pipeline
+        // validation ICE, so both are caught here.
         let is_fields = method == fields_method;
-        let expected_args = usize::from(is_fields);
-        let ref_self_ty = self.tysys.type_table.borrow_mut().make_ref(self_ty);
-        for (i, arg) in static_call.args.iter().enumerate() {
-            let hint = if is_fields && i == 0 {
-                Some(ref_self_ty)
-            } else {
-                None
-            };
-            self.resolve_expr(arg, ctx, hint);
-        }
-        if static_call.args.len() != expected_args {
-            let _ = self.emit(TypeError::ArgumentCountMismatch {
-                expected: expected_args,
-                found: static_call.args.len(),
-                span: static_call.span,
-            });
-            return TypeTable::ERROR;
+        if is_fields {
+            // `fields(&self)` takes the receiver as its one argument, by value
+            // or by reference (both coerce to the `&self` param).
+            let ref_self_ty = self.tysys.type_table.borrow_mut().make_ref(self_ty);
+            let arg_types: Vec<TypeId> = static_call
+                .args
+                .iter()
+                .map(|arg| self.resolve_expr(arg, ctx, Some(ref_self_ty)))
+                .collect();
+            if arg_types.len() != 1 {
+                let _ = self.emit(TypeError::ArgumentCountMismatch {
+                    expected: 1,
+                    found: arg_types.len(),
+                    span: static_call.span,
+                });
+                return TypeTable::ERROR;
+            }
+            let arg_ty = arg_types[0];
+            let peeled = self.tysys.type_table.borrow().peel_refs(arg_ty);
+            if arg_ty != TypeTable::ERROR && peeled != self_ty {
+                let found = self.tysys.type_table.borrow().type_name(peeled);
+                let _ = self.emit(TypeError::TypeMismatch {
+                    expected: self_name,
+                    found,
+                    span: static_call.span,
+                });
+                return TypeTable::ERROR;
+            }
+        } else {
+            for arg in &static_call.args {
+                self.resolve_expr(arg, ctx, None);
+            }
+            if !static_call.args.is_empty() {
+                let _ = self.emit(TypeError::ArgumentCountMismatch {
+                    expected: 0,
+                    found: static_call.args.len(),
+                    span: static_call.span,
+                });
+                return TypeTable::ERROR;
+            }
         }
 
         // Demand-synthesize `impl Reflect for T`.
@@ -3084,11 +3115,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `fields`: `type_name` returns `String`, `fields` returns the `Fields`
         // tuple `[F_0, F_1, …]`, and `field_names` returns `List<String>`.
         let return_type = if is_fields {
-            let field_types: Vec<TypeId> = self
-                .type_lookup()
-                .struct_fields(&self_name)
-                .map(|info| info.fields.iter().map(|(_, ty, _)| *ty).collect())
-                .unwrap_or_default();
             self.tysys.type_table.borrow_mut().make_tuple(field_types)
         } else {
             let mut tt = self.tysys.type_table.borrow_mut();
