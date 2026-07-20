@@ -826,7 +826,7 @@ impl TypeSystem {
     }
 
     /// The `Ref` marker's eligibility: whether a value of this type is a Wasm GC
-    /// reference (WEP 2026-07-19). A `Newtype` follows its base type.
+    /// reference (WEP 2026-01-20). A `Newtype` follows its base type.
     pub(super) fn is_ref_identity(&self, resolved: &ResolvedType) -> bool {
         match resolved {
             ResolvedType::Primitive(p) => {

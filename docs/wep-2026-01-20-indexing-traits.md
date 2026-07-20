@@ -1,229 +1,150 @@
 # WEP: Indexing Traits Design
 
-This WEP defines the trait system for indexing operations (`[]` operator) in Wado.
+Defines the `[]` operator for `List<T>`, `TreeMap`, and user-defined containers,
+and the `Ref` marker that governs which elements can be handed out by reference.
 
 ## Context
 
-Wado needs traits to support indexing operations on collections like `List<T>` and user-defined types. The design must account for:
+Indexing has four distinct behaviors:
 
-1. **Four distinct operations**:
-   - Read (reference): `let x = container[i]` where container returns `&T`
-   - Read (value): `let x = container[i]` where container returns `T` by value
-   - Mutable access: `container[i].method()` where method takes `&mut self`
-   - Assignment: `container[i] = value`
+- Read by value: `let x = c[i]` binds a copy of the element.
+- Write by value: `c[i] = v` replaces the element.
+- Read by reference: `&c[i]` / a `&self`-method receiver aliases the element.
+- Mutable access: `c[i].method()` where the method takes `&mut self`.
 
-2. **Wasm GC constraints**: In Wasm GC, `array.get` returns a value for primitives but a reference for reference types. You cannot get a mutable reference to a primitive array element.
+A Wasm GC constraint shapes the design: a scalar array element has no
+addressable cell, so it can only be read or written **by value** — it can never
+be handed out as `&scalar`. A GC-reference element (a heap object) can be handed
+out as a live reference that aliases the stored element. The traits make this
+distinction explicit rather than hiding it behind proxy objects (as C++'s
+`vector<bool>` does).
 
-3. **Flexibility**: Different collection types may support different subsets of operations.
-
-## Decision
-
-Split indexing into four independent traits:
+## The four index traits
 
 ```wado
-/// Read-only indexing returning a reference: container[index] -> &Output
-pub trait Index<IndexType> {
-    type Output;
-    fn index(&self, index: IndexType) -> &Self::Output;
-}
-
-/// Read-only indexing returning a value: container[index] -> Output
-/// Use this for containers of primitives where references cannot be returned.
-pub trait IndexValue<IndexType> {
+/// Read by value: `c[i]` -> Output (a copy).
+internal trait IndexValue<IndexType> {
     type Output;
     fn index_value(&self, index: IndexType) -> Self::Output;
 }
 
-/// Mutable access: container[index].mutating_method()
-pub trait IndexMut<IndexType> {
-    type Output;
-    fn index_mut(&mut self, index: IndexType) -> &mut Self::Output;
-}
-
-/// Assignment: container[index] = value
-pub trait IndexAssign<IndexType> {
+/// Write by value: `c[i] = v`.
+internal trait IndexAssign<IndexType> {
     type Input;
     fn index_assign(&mut self, index: IndexType, value: Self::Input);
 }
-```
 
-### Design Rationale
-
-#### Why Four Traits?
-
-The key insight is that `Index` (returning `&Output`) and `IndexValue` (returning `Output`) serve different use cases:
-
-- `Index` returns a reference - works for containers storing reference types
-- `IndexValue` returns a copy - necessary for containers storing primitives
-
-This separation is semantically honest about Wasm GC's constraints rather than hiding them behind leaky abstractions like proxy objects.
-
-#### Why Not Proxy Objects?
-
-C++'s `vector<bool>` uses proxy objects that pretend to be references. This is widely considered a design mistake because:
-
-- Proxies don't behave like real references (`auto x = vec[i]` captures proxy, not value)
-- Template code breaks unexpectedly
-- Mental model mismatch causes bugs
-
-By using `IndexValue`, we're explicit: "you get a copy, not a reference."
-
-#### IndexMut Without Index?
-
-`IndexMut` does NOT require `Index` as a supertrait because:
-
-- A container might support mutable access but not immutable reference return
-- For value types, `IndexValue` provides the read capability instead
-
-### Compiler Resolution
-
-The compiler desugars `[]` syntax based on which traits are implemented:
-
-#### For Read (`let x = container[i]`)
-
-1. Check `Index<Idx>` → generate `*container.index(i)`
-2. Else check `IndexValue<Idx>` → generate `container.index_value(i)`
-3. Else error
-
-#### For Method Call (`container[i].method()`)
-
-1. If method takes `&mut self`:
-   - Check `IndexMut<Idx>` → generate `container.index_mut(i).method()`
-   - Else error: "cannot mutate indexed value"
-2. If method takes `&self`:
-   - Check `Index<Idx>` or `IndexMut<Idx>` → use reference
-   - Else check `IndexValue<Idx>` → generate `container.index_value(i).method()` (method called on temporary)
-3. Else error
-
-#### For Assignment (`container[i] = value`)
-
-1. Check `IndexAssign<Idx>` → generate `container.index_assign(i, value)`
-2. Else error
-
-### Use Cases
-
-#### Index Only (Reference Types)
-
-| Type             | Description                                       |
-| ---------------- | ------------------------------------------------- |
-| `List<Struct>`   | Returns `&Struct` - actual reference to GC object |
-| Custom container | User-defined container with reference storage     |
-| Tree nodes       | `tree[path]` returns reference to node            |
-
-#### IndexValue Only (Value Types)
-
-| Type               | Description                                   |
-| ------------------ | --------------------------------------------- |
-| `List<i32>`        | Returns `i32` by value - cannot return `&i32` |
-| Computed sequences | Fibonacci where `fib[n]` computes on demand   |
-| `RangeExclusive`   | `range[i]` computes i-th value, no storage    |
-| Packed bit arrays  | `bits[i]` returns extracted bool              |
-
-#### IndexValue + IndexAssign (Primitive Arrays)
-
-| Type           | Description                               |
-| -------------- | ----------------------------------------- |
-| `List<i32>`    | Read returns copy, write replaces element |
-| `List<f64>`    | Same - Wasm GC constraint                 |
-| Remote storage | Can GET/PUT values but no live references |
-
-#### Index + IndexMut + IndexAssign (Full Access)
-
-| Type           | Description                                        |
-| -------------- | -------------------------------------------------- |
-| `List<Struct>` | Full read/mutate/write for reference element types |
-| Custom maps    | Full access to stored reference values             |
-
-### Implementation for List
-
-```wado
-// For ALL element types: value-based read and assignment
-impl IndexValue<i32> for List<T> {
-    type Output = T;
-    fn index_value(&self, index: i32) -> Self::Output {
-        return builtin::array_get::<T>(self.repr, index);
-    }
+/// Read by reference: `&c[i]` -> &Output.
+internal trait IndexRef<IndexType> {
+    type Output: Ref;
+    fn index_ref(&self, index: IndexType) -> &Self::Output;
 }
 
-impl IndexAssign<i32> for List<T> {
-    type Input = T;
-    fn index_assign(&mut self, index: i32, value: Self::Input) {
-        builtin::array_set::<T>(self.repr, index, value);
-    }
+/// Mutable reference: `c[i].mutating_method()` -> &mut Output.
+internal trait IndexMutRef<IndexType> {
+    type Output: Ref;
+    fn index_mut_ref(&mut self, index: IndexType) -> &mut Self::Output;
 }
-
-// List element references (&xs[i], &mut xs[i], xs[i].m()) are NOT trait-based:
-// they lower to the reference-representation intrinsic, so List does not
-// implement IndexRef / IndexMutRef. See WEP 2026-07-19.
 ```
 
-### Optimization: Pattern Recognition
+The four are named for what indexing yields — a `Value`, a `Ref`, a `MutRef`, or
+a write (`Assign`). They are independent: a container implements only the
+behaviors it supports.
 
-After inlining `IndexValue::index_value` and `IndexAssign::index_assign` to `builtin::array_get`/`builtin::array_set`, the optimizer can recognize patterns:
+- `IndexValue` / `IndexAssign` carry no bound — reads copy out, writes copy in,
+  so any element type works.
+- `IndexRef` / `IndexMutRef` return a reference into the container, so their
+  `Output` must be a reference type (`Ref`, below). A container of value-typed
+  elements simply cannot implement them; its `[i]` is read by value.
 
-```wado
-// Source
-arr[i] = arr[i] + 1;
+`[]` at a use site behaves by which traits the container provides: a value read
+binds a copy (`IndexValue`); `&c[i]` and a `&self`-method receiver take a
+reference (`IndexRef`) when available, otherwise operate on a value copy; a
+`&mut self`-method receiver takes a mutable reference (`IndexMutRef`); assignment
+writes (`IndexAssign`). A `c[i].mutating_method()` on a container that offers
+only value access is a compile error — you cannot mutate a copy in place.
 
-// After desugaring
-arr.index_assign(i, arr.index_value(i) + 1);
+## The `Ref` marker
 
-// After inlining
-builtin::array_set(repr, i, builtin::array_get(repr, i) + 1);
+`Ref` marks the **reference-identity** types: those whose value is a Wasm GC
+reference — a heap object (or a handle to one) that `&T` can alias, so `==` on
+`&T` compares identity. It is the property that lets a container hand out a live
+reference to an element.
 
-// Optimizer can potentially fuse to read-modify-write
-```
+| Category   | Types                                                                                          | `Ref` |
+| ---------- | ---------------------------------------------------------------------------------------------- | ----- |
+| GC objects | `struct`, `variant`, `List<T>`, `String`, tuples, `TreeMap` / `TreeSet`, `fn`; `i128` / `u128` | yes   |
+| References | `&T`, `&mut T`                                                                                 | yes   |
+| Scalars    | `i8`…`u64`, `f32`, `f64`, `bool`, `char`; `enum`; `flags`                                      | no    |
+| Handles    | `resource`                                                                                     | no    |
+| Non-values | `()`, `never`                                                                                  | no    |
 
-This keeps the semantic layer clean while allowing low-level optimization.
+A `Newtype` follows its base type.
 
-### The `Ref` marker trait
+Two entries are load-bearing:
 
-The reference-returning traits `Index` / `IndexMut` are renamed `IndexRef` /
-`IndexMutRef` (see the superseding WEP below) and gated by `Ref` — the sealed
-marker for _reference identity_ (a value that is a Wasm GC reference). It is not
-the in-place-vs-replace axis of
-[Reference Representation](./wep-2026-06-13-reference-representation.md): a
-`variant` is `Ref` (a live GC handle you can read) yet replace-on-assign. `Ref`
-excludes `resource` (an `i32` handle, not a GC reference) and includes `&T`.
+- `resource` is **not** `Ref`. A resource is an opaque handle, not a GC
+  reference: it cannot be aliased, and a resource element is read by value. A
+  reference "into" a resource element is meaningless.
+- `&T` **is** `Ref`. A reference value is itself a GC handle, so a `List<&T>`
+  element is a real reference for any `T`.
 
-The full definition, membership, the `type Output: Ref` anchoring, and the
-`IndexMut` write-back interaction are specified in
-[The `Ref` Marker Trait and Index-Trait Gating](./wep-2026-07-19-ref-and-index-traits.md).
+`Ref` is reference identity, which is distinct from in-place mutability. A
+`variant` is `Ref` — `&variant` is a live handle you can read and pattern-match —
+even though assigning a variant replaces the whole value rather than mutating it
+in place (see [Reference Representation](./wep-2026-06-13-reference-representation.md)).
+`Ref` is also unrelated to whether a value _holds_ references: a `struct` with
+`&T` fields is `Ref` because the struct is a heap object, and a scalar `i32` is
+not `Ref` even though `&i32` (which is `Ref`) can point at one.
+
+`Ref` is a sealed marker: the compiler provides it for every eligible type and a
+user `impl Ref` is rejected (a user who declares their own `trait Ref` owns that
+name and is unaffected).
+
+## `Ref` gates the trait `Output`, not the `&` operator
+
+`type Output: Ref` on `IndexRef` / `IndexMutRef` is enforced: a container whose
+`Output` is a value type cannot declare these traits — that would be a leaky
+abstraction promising a live reference to an element that has none. Such a
+container exposes `IndexValue` (a copy) instead. So `impl IndexRef<i32> for C
+{ type Output = i32 }` is a compile error.
+
+This gate is on the traits — the container's contract. It is **not** a gate on
+the language `&` operator. `&c[i]` on a value-typed element (`&nums[i]` on a
+`List<i32>`) stays legal: under Wado's value semantics a reference to a value
+type is a reference to a _copy_, not a fake reference — aliasing and identity are
+the province of reference types, which `Ref` names. This keeps the pervasive
+read-only idiom `list.contains(&other[i])` (passing a scalar element to a `&T`
+parameter) working. The one unsound case, `&mut <scalar element>` with an
+expected write-back, is governed by
+[Reference Representation](./wep-2026-06-13-reference-representation.md), not by
+`Ref`.
+
+## `List<T>`
+
+`List<T>` implements `IndexValue` and `IndexAssign` for every element type, so
+`c[i]` reads a copy and `c[i] = v` writes for all `T`. It does **not** implement
+`IndexRef` / `IndexMutRef`; element references (`&xs[i]`, `&mut xs[i]`,
+`xs[i].method()`, `&mut`-iteration) come from the language's reference model and
+work for `Ref` elements — for a `List<Struct>`, `&xs[i]` aliases the element and
+mutation through it is observed at the element; for a `List<i32>`, `&xs[i]` is a
+value-copy reference.
 
 ## Consequences
 
-### Advantages
-
-1. **Semantically honest**: `IndexValue` clearly means "you get a copy"
-2. **Wasm GC compatible**: No fake references for primitives
-3. **General**: Works for any `Container<Primitive>`, not just List
-4. **No proxy objects**: Avoids C++ `vector<bool>` mistakes
-5. **Flexible**: Collections implement only what they support
-6. **Optimizable**: Inlining enables pattern recognition
-
-### Trade-offs
-
-1. **Four traits**: More traits to understand than Rust's two
-2. **No `arr[i].mutate()` for primitives**: But this is honest - you CAN'T mutate a copy
-3. **Learning curve**: Users must understand Index vs IndexValue distinction
-
-### Error Messages
-
-The compiler should provide clear errors:
-
-```
-error: cannot mutate indexed value
-  --> file.wado:10:5
-   |
-10 |     arr[i].increment();
-   |     ^^^^^^^^^^^^^^^^^^
-   |
-   = note: `List<i32>` implements `IndexValue`, not `IndexMut`
-   = note: primitive array elements cannot be mutated in place
-   = help: use `arr[i] = arr[i] + 1` instead
-```
+- Honest about Wasm GC: no proxy objects, and a container never hands out a fake
+  `&scalar`. `IndexValue` / `IndexAssign` are the value-semantics path for every
+  element type; `IndexRef` / `IndexMutRef` add live references only where the
+  element is a GC reference.
+- `Ref` resolves a long-standing ambiguity with a crisp behavioral rule:
+  `resource ∉ Ref`, `&T ∈ Ref`, `variant` / `fn` ∈ `Ref`.
+- The cost is four traits instead of Rust's two, and the `Index` vs `IndexValue`
+  distinction to learn.
 
 ## Related
 
-- [Associated Types](./wep-2026-01-20-associated-types.md) - Required for `type Output` in traits
-- [Operator Overloading](./wep-2026-01-18-operator-overloading.md) - General operator trait design
+- [Reference Representation and Mutation Write-Back](./wep-2026-06-13-reference-representation.md)
+- [Iterator Reference Model](./wep-2026-07-05-iterator-reference-model.md)
+- [Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md)
+- [Associated Types](./wep-2026-01-20-associated-types.md)
+- [Operator Overloading](./wep-2026-01-18-operator-overloading.md)
