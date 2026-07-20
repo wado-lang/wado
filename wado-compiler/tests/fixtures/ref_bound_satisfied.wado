@@ -1,5 +1,7 @@
-// `Ref` (reference identity) holds for every type that is a Wasm GC reference:
-// struct, variant, String, List, the wide-int structs, and `&T` itself.
+// `Ref` (reference identity) holds for every Wasm GC reference: struct, variant,
+// String, List, the wide-int structs, tuples, and `&T` itself. `RefMut` (in-place
+// mutability) holds for the same set minus the replace-on-assign ones — a
+// `variant` is `Ref` but not `RefMut` (see ref_mut_bound_rejected).
 
 struct Point {
     x: i32,
@@ -15,20 +17,29 @@ fn accepts_ref<T: Ref>(x: &T) -> i32 {
     return 1;
 }
 
-test "Ref holds for reference-identity types" {
-    let p = Point { x: 1, y: 2 };
-    let c = Color::Blue(3);
-    let s: String = "hi";
-    let big: i128 = 42;
-    let xs: List<i32> = [1, 2, 3];
-    let r = &p;
+fn accepts_ref_mut<T: RefMut>(x: &mut T) -> i32 {
+    return 1;
+}
 
-    assert accepts_ref(&p) == 1;    // struct
-    assert accepts_ref(&c) == 1;    // variant
-    assert accepts_ref(&s) == 1;    // String
-    assert accepts_ref(&big) == 1;  // i128 (GC struct, not a scalar)
-    assert accepts_ref(&xs) == 1;   // List<T>
-    assert accepts_ref(&r) == 1;    // &T is itself Ref (T = &Point)
+test "Ref and RefMut hold for reference-identity types" {
+    let mut p = Point { x: 1, y: 2 };
+    let mut s: String = "hi";
+    let mut big: i128 = 42;
+    let mut xs: List<i32> = [1, 2, 3];
+    let mut pair = [1, 2];
+    let mut r = &p;
+
+    // Both Ref and RefMut: mutated in place.
+    assert accepts_ref(&p) == 1 && accepts_ref_mut(&mut p) == 1;       // struct
+    assert accepts_ref(&s) == 1 && accepts_ref_mut(&mut s) == 1;       // String
+    assert accepts_ref(&big) == 1 && accepts_ref_mut(&mut big) == 1;   // i128
+    assert accepts_ref(&xs) == 1 && accepts_ref_mut(&mut xs) == 1;     // List<T>
+    assert accepts_ref(&pair) == 1 && accepts_ref_mut(&mut pair) == 1; // tuple
+    assert accepts_ref(&r) == 1 && accepts_ref_mut(&mut r) == 1;       // &T
+
+    // Ref only: a variant is a live handle but replace-on-assign.
+    let c = Color::Blue(3);
+    assert accepts_ref(&c) == 1;
 }
 
 __DATA__

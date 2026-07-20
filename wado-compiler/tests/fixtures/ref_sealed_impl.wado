@@ -1,5 +1,5 @@
-// `Ref` is sealed: a user `impl Ref for T` is a compile error (the compiler
-// synthesizes the impl for every eligible reference type).
+// `Ref` and `RefMut` are sealed: a user `impl` of either is a compile error (the
+// compiler synthesizes them for every eligible type).
 
 struct Point {
     x: i32,
@@ -9,6 +9,9 @@ struct Point {
 impl Ref for Point {
 }
 
+impl RefMut for Point {
+}
+
 test "unreachable" {
     assert true;
 }
@@ -16,5 +19,5 @@ test "unreachable" {
 __DATA__
 {
     "test": {},
-    "compile_error": "cannot implement `Ref`: it is a sealed"
+    "compile_error": "it is a sealed"
 }

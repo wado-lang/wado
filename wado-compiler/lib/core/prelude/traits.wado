@@ -86,6 +86,13 @@ internal trait Reflect {
 #[compiler_item("ref")]
 internal trait Ref {}
 
+/// Marker for in-place-mutable reference types: `Ref` minus the replace-on-assign
+/// ones (`variant`, `fn`). A `&mut` to one of these writes through to the stored
+/// value. Sealed and compiler-synthesized; user impls are rejected.
+/// See WEP 2026-01-20.
+#[compiler_item("ref_mut")]
+internal trait RefMut {}
+
 /// Immutable reference indexing: `&container[i]` reads through this.
 /// `Output: Ref` — only a reference element can be handed out by reference; a
 /// value element is read through `IndexValue`.
@@ -97,9 +104,10 @@ internal trait IndexRef<IndexType> {
 }
 
 /// Mutable reference indexing: `container[i].mutating_method()`.
-/// `Output: Ref` for the same reason as `IndexRef`.
+/// `Output: RefMut` — the element must be mutated in place, so a replace-on-assign
+/// element (`variant`, `fn`) cannot be handed out mutably by reference.
 internal trait IndexMutRef<IndexType> {
-    type Output: Ref;
+    type Output: RefMut;
 
     /// Returns a mutable reference to the element at the given index.
     fn index_mut_ref(&mut self, index: IndexType) -> &mut Self::Output;

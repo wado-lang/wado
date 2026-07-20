@@ -2665,6 +2665,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
+    /// Whether `type_id` is a compiler-intrinsic sequence container (`List`)
+    /// whose concrete `[]` lowers to direct array access. Its `IndexRef` /
+    /// `IndexMutRef` impls are the generic-facing contract only; concrete
+    /// subscripting bypasses them so reads stay value-shaped for Container SROA
+    /// and copy elision, and the mutable side keeps its optimized path.
+    pub(super) fn uses_intrinsic_index_dispatch(&self, type_id: TypeId) -> bool {
+        self.tysys.type_table.borrow().as_list(type_id).is_some()
+    }
+
     /// Find Index trait implementation for a type
     pub(super) fn find_index_trait_impl(
         &mut self,
@@ -3368,15 +3377,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // First, resolve the indexed container to get its type
         let container_type = self.resolve_expr(&index_expr.expr, ctx, None);
 
-        // Check if this is an List type (Arrays use optimized direct access, not traits)
-        let is_array = self
-            .tysys
-            .type_table
-            .borrow()
-            .as_list(container_type)
-            .is_some();
-        if is_array {
-            return None; // Use normal resolution for arrays
+        // `List` uses its optimized direct-access path, not its index traits.
+        if self.uses_intrinsic_index_dispatch(container_type) {
+            return None;
         }
 
         // Get base type (unwrap reference if needed)

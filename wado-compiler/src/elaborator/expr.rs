@@ -1452,15 +1452,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.typecheck(index_type, expected, index.index.span());
             }
 
-            // First, try Index trait (returns reference)
-            // Try the direct name first, then fall back to base type name for newtypes
-            let index_trait_info = self.index_lookup_or_newtype_base(
-                &struct_name,
-                base_type_id,
-                &lookup_name,
-                lookup_type_id,
-                |s, n, t| s.find_index_trait_impl(n, t, index_type),
-            );
+            // `List` keeps its optimized direct-array path for concrete reads,
+            // so skip its `IndexRef` contract here (see
+            // `uses_intrinsic_index_dispatch`).
+            let index_trait_info = (!self.uses_intrinsic_index_dispatch(base_type_id))
+                .then(|| {
+                    self.index_lookup_or_newtype_base(
+                        &struct_name,
+                        base_type_id,
+                        &lookup_name,
+                        lookup_type_id,
+                        |s, n, t| s.find_index_trait_impl(n, t, index_type),
+                    )
+                })
+                .flatten();
             if let Some(trait_info) = index_trait_info {
                 if let Some(key_type) = trait_info.index_type
                     && key_type != index_type

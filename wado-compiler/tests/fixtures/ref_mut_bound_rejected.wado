@@ -1,0 +1,40 @@
+// `RefMut` fails for the replace-on-assign reference types and for non-references.
+// A `variant` and a `fn` are `Ref` (live `&` handles) but boxed, so a `&mut`
+// cannot write through them; a scalar `i32` is not a reference at all.
+// See WEP 2026-01-20.
+
+variant Color {
+    Red,
+    Blue(i32),
+}
+
+fn accepts_ref_mut<T: RefMut>(x: &mut T) -> i32 {
+    return 1;
+}
+
+fn use_variant() -> i32 {
+    let mut c = Color::Blue(3);
+    return accepts_ref_mut(&mut c);
+}
+
+fn use_fn() -> i32 {
+    let mut g: fn(i32) -> i32 = |n: i32| {
+        return n + 1;
+    };
+    return accepts_ref_mut(&mut g);
+}
+
+fn use_scalar() -> i32 {
+    let mut n: i32 = 7;
+    return accepts_ref_mut(&mut n);
+}
+
+test "unreachable" {
+    assert true;
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "does not implement trait 'RefMut'"
+}

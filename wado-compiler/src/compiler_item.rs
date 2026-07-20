@@ -126,6 +126,10 @@ pub enum CompilerItem {
     /// `Ref` — sealed marker for reference-identity types (GC references);
     /// its `Output: Ref` bound gates the reference-returning index traits.
     Ref,
+    /// `RefMut` — sealed marker for in-place-mutable reference types (`Ref`
+    /// minus the replace-on-assign ones: `variant` / `fn`); its `Output: RefMut`
+    /// bound gates `IndexMutRef`.
+    RefMut,
     /// `Eq` — anchor for synthesised `==` / `!=` lowering and the
     /// auto-derive checks that decide whether a compound type
     /// (struct, variant, generic instance) implements `Eq`.
@@ -415,6 +419,7 @@ impl CompilerItem {
         Self::Default,
         Self::Reflect,
         Self::Ref,
+        Self::RefMut,
         Self::Eq,
         Self::Ord,
         Self::From,
@@ -537,6 +542,7 @@ impl CompilerItem {
             Self::Default => "default",
             Self::Reflect => "reflect",
             Self::Ref => "ref",
+            Self::RefMut => "ref_mut",
             Self::Eq => "eq",
             Self::Ord => "ord",
             Self::From => "from",
@@ -676,6 +682,7 @@ impl CompilerItem {
             | Self::Default
             | Self::Reflect
             | Self::Ref
+            | Self::RefMut
             | Self::Eq
             | Self::Ord
             | Self::From
@@ -808,6 +815,7 @@ impl CompilerItem {
             Self::Default
             | Self::Reflect
             | Self::Ref
+            | Self::RefMut
             | Self::Eq
             | Self::Ord
             | Self::From

@@ -25,6 +25,7 @@ pub(super) enum OnBoundTrait {
     Default,
     Reflect,
     Ref,
+    RefMut,
     Inspect,
     InspectAlt,
     DisplayAlt,
@@ -637,6 +638,8 @@ impl TypeSystem {
                 of(CompilerItem::Reflect, OnBoundTrait::Reflect)
             } else if trait_name == items.trait_name(CompilerItem::Ref) {
                 of(CompilerItem::Ref, OnBoundTrait::Ref)
+            } else if trait_name == items.trait_name(CompilerItem::RefMut) {
+                of(CompilerItem::RefMut, OnBoundTrait::RefMut)
             } else if trait_name == items.trait_name(CompilerItem::Inspect) {
                 of(CompilerItem::Inspect, OnBoundTrait::Inspect)
             } else if trait_name == items.trait_name(CompilerItem::InspectAlt) {
@@ -858,6 +861,32 @@ impl TypeSystem {
         }
     }
 
+    /// The `RefMut` marker's eligibility: a `Ref` type whose value is mutated in
+    /// place rather than replaced on assign (WEP 2026-01-20). `variant` and `fn`
+    /// are `Ref` but boxed (replace-on-assign), so a `&mut` cannot write through
+    /// them; every other `Ref` type qualifies. A `Newtype` follows its base.
+    pub(super) fn is_ref_mut_identity(&self, scope: &TypeLookup, resolved: &ResolvedType) -> bool {
+        match resolved {
+            ResolvedType::Variant { .. } | ResolvedType::Function { .. } => false,
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } => {
+                if scope.variant_case_in(name, module_source).is_some() {
+                    false
+                } else {
+                    self.is_ref_identity(resolved)
+                }
+            }
+            ResolvedType::Newtype { base_type, .. } => {
+                let base = self.type_table.borrow().get(*base_type).clone();
+                self.is_ref_mut_identity(scope, &base)
+            }
+            _ => self.is_ref_identity(resolved),
+        }
+    }
+
     fn type_implements_trait_inner(
         &self,
         ctx: &Scope,
@@ -890,6 +919,10 @@ impl TypeSystem {
 
         if on_bound == Some(OnBoundTrait::Ref) {
             return self.is_ref_identity(resolved);
+        }
+
+        if on_bound == Some(OnBoundTrait::RefMut) {
+            return self.is_ref_mut_identity(scope, resolved);
         }
 
         let is_eq = on_bound == Some(OnBoundTrait::Eq);

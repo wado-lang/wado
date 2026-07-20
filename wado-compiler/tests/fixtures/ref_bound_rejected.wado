@@ -1,0 +1,51 @@
+// `Ref` fails for every non-reference type: a scalar (`i32`), a `resource`
+// handle (an `i32` index into the CM handle table), an `enum` (scalar
+// discriminant), and `flags` (a `u32` bitmask). None is a Wasm GC reference.
+// See WEP 2026-01-20.
+
+pub resource Counter {
+    fn bump(&self);
+}
+
+enum Dir {
+    North,
+    South,
+}
+
+flags Perms {
+    Read,
+    Write,
+}
+
+fn accepts_ref<T: Ref>(x: &T) -> i32 {
+    return 1;
+}
+
+fn use_scalar() -> i32 {
+    let n: i32 = 5;
+    return accepts_ref(&n);
+}
+
+fn use_resource(c: &Counter) -> i32 {
+    return accepts_ref(c);
+}
+
+fn use_enum() -> i32 {
+    let d = Dir::North;
+    return accepts_ref(&d);
+}
+
+fn use_flags() -> i32 {
+    let p = Perms::Read;
+    return accepts_ref(&p);
+}
+
+test "unreachable" {
+    assert true;
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "does not implement trait 'Ref'"
+}

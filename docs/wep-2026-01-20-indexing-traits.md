@@ -1,7 +1,8 @@
 # WEP: Indexing Traits Design
 
 Defines the `[]` operator for `List<T>`, `TreeMap`, and user-defined containers,
-and the `Ref` marker that governs which elements can be handed out by reference.
+and the `Ref` / `RefMut` markers that govern which elements can be handed out by
+shared reference and by mutable reference.
 
 ## Context
 
@@ -42,7 +43,7 @@ internal trait IndexRef<IndexType> {
 
 /// Mutable reference: `c[i].mutating_method()` -> &mut Output.
 internal trait IndexMutRef<IndexType> {
-    type Output: Ref;
+    type Output: RefMut;
     fn index_mut_ref(&mut self, index: IndexType) -> &mut Self::Output;
 }
 ```
@@ -53,9 +54,13 @@ behaviors it supports.
 
 - `IndexValue` / `IndexAssign` carry no bound — reads copy out, writes copy in,
   so any element type works.
-- `IndexRef` / `IndexMutRef` return a reference into the container, so their
-  `Output` must be a reference type (`Ref`, below). A container of value-typed
-  elements simply cannot implement them; its `[i]` is read by value.
+- `IndexRef` returns a shared reference into the container, so its `Output` must
+  be a reference type (`Ref`, below).
+- `IndexMutRef` returns a mutable reference into the container, so its `Output`
+  must additionally be mutated in place, not replaced on assign (`RefMut`, below).
+
+A container of value-typed elements simply cannot implement the reference
+traits; its `[i]` is read by value.
 
 `[]` at a use site behaves by which traits the container provides: a value read
 binds a copy (`IndexValue`); `&c[i]` and a `&self`-method receiver take a
@@ -64,50 +69,62 @@ reference (`IndexRef`) when available, otherwise operate on a value copy; a
 writes (`IndexAssign`). A `c[i].mutating_method()` on a container that offers
 only value access is a compile error — you cannot mutate a copy in place.
 
-## The `Ref` marker
+## The `Ref` and `RefMut` markers
 
-`Ref` marks the **reference-identity** types: those whose value is a Wasm GC
-reference — a heap object (or a handle to one) that `&T` can alias, so `==` on
-`&T` compares identity. It is the property that lets a container hand out a live
-reference to an element.
+Two distinct properties gate the two reference traits:
 
-| Category   | Types                                                                                          | `Ref` |
-| ---------- | ---------------------------------------------------------------------------------------------- | ----- |
-| GC objects | `struct`, `variant`, `List<T>`, `String`, tuples, `TreeMap` / `TreeSet`, `fn`; `i128` / `u128` | yes   |
-| References | `&T`, `&mut T`                                                                                 | yes   |
-| Scalars    | `i8`…`u64`, `f32`, `f64`, `bool`, `char`; `enum`; `flags`                                      | no    |
-| Handles    | `resource`                                                                                     | no    |
-| Non-values | `()`, `never`                                                                                  | no    |
+- `Ref` marks the **reference-identity** types: those whose value is a Wasm GC
+  reference — a heap object (or a handle to one) that `&T` can alias, so `==` on
+  `&T` compares identity. It is the property that lets a container hand out a
+  live shared reference to an element.
+- `RefMut` marks the **in-place-mutable** reference types: the `Ref` types whose
+  value is mutated in place rather than replaced wholesale on assignment. It is
+  the property that lets a container hand out a live _mutable_ reference — a
+  `&mut` whose writes land on the stored element. `RefMut` is a strict subset of
+  `Ref`.
+
+| Category             | Types                                                                       | `Ref` | `RefMut` |
+| -------------------- | --------------------------------------------------------------------------- | ----- | -------- |
+| In-place GC objects  | `struct`, `List<T>`, `String`, tuples, `TreeMap` / `TreeSet`; `i128`/`u128` | yes   | yes      |
+| Replace-on-assign GC | `variant`, `fn`                                                             | yes   | no       |
+| References           | `&T`, `&mut T`                                                              | yes   | yes      |
+| Scalars              | `i8`…`u64`, `f32`, `f64`, `bool`, `char`; `enum`; `flags`                   | no    | no       |
+| Handles              | `resource`                                                                  | no    | no       |
+| Non-values           | `()`, `never`                                                               | no    | no       |
 
 A `Newtype` follows its base type.
 
-Two entries are load-bearing:
+Three entries are load-bearing:
 
 - `resource` is **not** `Ref`. A resource is an opaque handle, not a GC
   reference: it cannot be aliased, and a resource element is read by value. A
   reference "into" a resource element is meaningless.
-- `&T` **is** `Ref`. A reference value is itself a GC handle, so a `List<&T>`
-  element is a real reference for any `T`.
+- `&T` **is** `Ref` (and `RefMut`). A reference value is itself a GC handle, so a
+  `List<&T>` element is a real reference for any `T`.
+- `variant` and `fn` are `Ref` but **not** `RefMut`. `&variant` is a live handle
+  you can read and pattern-match, but assigning a variant replaces the whole
+  value rather than mutating it in place, so a `&mut variant` cannot write
+  through (see
+  [Reference Representation](./wep-2026-06-13-reference-representation.md)). A
+  container therefore hands variants out by shared reference (`IndexRef`) but not
+  by mutable reference (`IndexMutRef`).
 
-`Ref` is reference identity, which is distinct from in-place mutability. A
-`variant` is `Ref` — `&variant` is a live handle you can read and pattern-match —
-even though assigning a variant replaces the whole value rather than mutating it
-in place (see [Reference Representation](./wep-2026-06-13-reference-representation.md)).
-`Ref` is also unrelated to whether a value _holds_ references: a `struct` with
-`&T` fields is `Ref` because the struct is a heap object, and a scalar `i32` is
-not `Ref` even though `&i32` (which is `Ref`) can point at one.
+Neither marker is about whether a value _holds_ references: a `struct` with `&T`
+fields is `Ref` because the struct is a heap object, and a scalar `i32` is not
+`Ref` even though `&i32` (which is `Ref`) can point at one.
 
-`Ref` is a sealed marker: the compiler provides it for every eligible type and a
-user `impl Ref` is rejected (a user who declares their own `trait Ref` owns that
-name and is unaffected).
+Both are sealed markers: the compiler provides each for every eligible type and a
+user `impl Ref` / `impl RefMut` is rejected (a user who declares their own
+same-named `trait` owns that name and is unaffected).
 
-## `Ref` gates the trait `Output`, not the `&` operator
+## The markers gate the trait `Output`, not the `&` operator
 
-`type Output: Ref` on `IndexRef` / `IndexMutRef` is enforced: a container whose
-`Output` is a value type cannot declare these traits — that would be a leaky
-abstraction promising a live reference to an element that has none. Such a
-container exposes `IndexValue` (a copy) instead. So `impl IndexRef<i32> for C
-{ type Output = i32 }` is a compile error.
+`type Output: Ref` on `IndexRef` and `type Output: RefMut` on `IndexMutRef` are
+enforced: a container whose `Output` is a value type cannot declare `IndexRef`,
+and one whose `Output` is replace-on-assign cannot declare `IndexMutRef` — either
+would be a leaky abstraction promising a reference to an element that cannot back
+it. Such a container exposes `IndexValue` (a copy) instead. So `impl IndexRef<i32>
+for C { type Output = i32 }` is a compile error.
 
 This gate is on the traits — the container's contract. It is **not** a gate on
 the language `&` operator. `&c[i]` on a value-typed element (`&nums[i]` on a
@@ -118,17 +135,23 @@ read-only idiom `list.contains(&other[i])` (passing a scalar element to a `&T`
 parameter) working. The one unsound case, `&mut <scalar element>` with an
 expected write-back, is governed by
 [Reference Representation](./wep-2026-06-13-reference-representation.md), not by
-`Ref`.
+these markers.
 
 ## `List<T>`
 
-`List<T>` implements `IndexValue` and `IndexAssign` for every element type, so
-`c[i]` reads a copy and `c[i] = v` writes for all `T`. It does **not** implement
-`IndexRef` / `IndexMutRef`; element references (`&xs[i]`, `&mut xs[i]`,
-`xs[i].method()`, `&mut`-iteration) come from the language's reference model and
-work for `Ref` elements — for a `List<Struct>`, `&xs[i]` aliases the element and
-mutation through it is observed at the element; for a `List<i32>`, `&xs[i]` is a
-value-copy reference.
+`List<T>` implements all four index traits, each with the element bound that
+makes it sound:
+
+- `IndexValue` / `IndexAssign` for every element type — `c[i]` reads a copy and
+  `c[i] = v` writes for all `T`.
+- `IndexRef` for `T: Ref` — `&xs[i]` aliases the stored element.
+- `IndexMutRef` for `T: RefMut` — `&mut xs[i]` and `xs[i].mutating_method()`
+  write through to the stored element.
+
+So a `List<Struct>` gets all four; a `List<Variant>` gets everything but
+`IndexMutRef` (a variant is `Ref`, not `RefMut`); a `List<i32>` gets only the
+value traits, and `&nums[i]` on it is a value-copy reference from the language's
+reference model rather than a `Ref` alias.
 
 ## Consequences
 
@@ -136,10 +159,11 @@ value-copy reference.
   `&scalar`. `IndexValue` / `IndexAssign` are the value-semantics path for every
   element type; `IndexRef` / `IndexMutRef` add live references only where the
   element is a GC reference.
-- `Ref` resolves a long-standing ambiguity with a crisp behavioral rule:
-  `resource ∉ Ref`, `&T ∈ Ref`, `variant` / `fn` ∈ `Ref`.
-- The cost is four traits instead of Rust's two, and the `Index` vs `IndexValue`
-  distinction to learn.
+- `Ref` and `RefMut` resolve a long-standing ambiguity with crisp behavioral
+  rules: `resource ∉ Ref`; `&T ∈ RefMut`; `variant` / `fn` ∈ `Ref` but
+  `∉ RefMut` (shared references but no mutable ones).
+- The cost is four traits instead of Rust's two, two markers to learn, and the
+  `IndexRef` vs `IndexValue` distinction.
 
 ## Related
 
