@@ -67,37 +67,46 @@ pub fn find_this_calls(body: &String) -> List<String> {
     let mut out: List<String> = [];
     let mut i = 0;
     while i < n {
-        let c = chars[i];
-        if c == '"' || c == '\'' {
-            i = scan_string(&chars, i);
-            continue;
-        }
-        if c == '/' && i + 1 < n && chars[i + 1] == '/' {
-            i = scan_line_comment(&chars, i);
-            continue;
-        }
-        if c == '/' && i + 1 < n && chars[i + 1] == '*' {
-            i = scan_block_comment(&chars, i);
-            continue;
-        }
-        if word_boundary_this(&chars, i, n) {
-            let after = skip_ws(&chars, i + 4, n);
-            if after < n && chars[after] == '.' {
-                let name_start = skip_ws(&chars, after + 1, n);
-                let name_end = scan_ident(&chars, name_start, n);
-                if name_end > name_start {
-                    let call = skip_ws(&chars, name_end, n);
-                    if call < n && chars[call] == '(' {
-                        out.push(collect_range(&chars, name_start, name_end));
-                        i = name_end;
-                        continue;
-                    }
-                }
-            }
-        }
-        i += 1;
+        i = match chars[i] {
+            '"' | '\'' => scan_string(&chars, i),
+            '/' && i + 1 < n && chars[i + 1] == '/' => scan_line_comment(&chars, i),
+            '/' && i + 1 < n && chars[i + 1] == '*' => scan_block_comment(&chars, i),
+            _ => match this_call_at(&chars, i, n) {
+                // Continue scanning at the method name, so `this.a(this.b())`
+                // finds both calls (arguments are re-scanned).
+                Some([name, name_end, _]) => {
+                    out.push(name);
+                    name_end;
+                },
+                None => i + 1,
+            },
+        };
     }
     return out;
+}
+
+/// If a `this.<method>(` call starts at `i` (whitespace allowed between
+/// tokens), returns `[method, name_end, close]`: the method name, the index
+/// just past the name, and the index just past the matching `)`. Else `null`.
+fn this_call_at(chars: &List<char>, i: i32, n: i32) -> Option<[String, i32, i32]> {
+    if !word_boundary_this(chars, i, n) {
+        return null;
+    }
+    let after = skip_ws(chars, i + 4, n);
+    if after >= n || chars[after] != '.' {
+        return null;
+    }
+    let name_start = skip_ws(chars, after + 1, n);
+    let name_end = scan_ident(chars, name_start, n);
+    if name_end == name_start {
+        return null;
+    }
+    let paren = skip_ws(chars, name_end, n);
+    if paren >= n || chars[paren] != '(' {
+        return null;
+    }
+    let name = collect_range(chars, name_start, name_end);
+    return Option::Some([name, name_end, match_paren(chars, paren, n)]);
 }
 
 /// Whether `this` sits at `i` as a whole word (not part of a longer ident).
@@ -145,13 +154,10 @@ fn collect_range(chars: &List<char>, start: i32, end: i32) -> String {
 /// role (predicate vs action); a later occurrence with a different role is a
 /// conflict the caller reports.
 pub fn add_super_op(ops: &mut List<SuperOp>, name: &String, kind: &ActionKind) {
-    let is_pred = kind matches { Predicate };
-    for let o of ops {
-        if o.name == *name {
-            return;
-        }
+    if ops.iter().any(|o: &SuperOp| o.name == *name) {
+        return;
     }
-    ops.push(SuperOp { name: *name, is_predicate: is_pred });
+    ops.push(SuperOp { name: *name, is_predicate: kind matches { Predicate } });
 }
 
 /// Collect the superClass operations across a grammar's lexer rules: every
@@ -171,23 +177,13 @@ pub fn collect_lexer_super_ops(grammar: &Grammar) -> List<SuperOp> {
 /// path (not yet wired), so a base with any action op is not emitted as an
 /// effect interface — it stays carved out until action ops land.
 pub fn all_super_ops_predicates(ops: &List<SuperOp>) -> bool {
-    for let o of ops {
-        if !o.is_predicate {
-            return false;
-        }
-    }
-    return true;
+    return ops.iter().all(|o: &SuperOp| o.is_predicate);
 }
 
 /// Whether a lexer rule's body carries any superClass op — the gate for
 /// marking its generated `try_<rule>` (and replay helpers) `with Foo`.
 pub fn lexer_rule_has_super_op(rule: &LexerRule) -> bool {
-    for let alt of &rule.body {
-        if lexer_alt_has_super_op(alt) {
-            return true;
-        }
-    }
-    return false;
+    return rule.body.iter().any(|alt: &LexerAlternative| lexer_alt_has_super_op(alt));
 }
 
 /// Whether a rule's (already-rewritten) body calls the base effect — its match
@@ -196,39 +192,17 @@ pub fn lexer_rule_has_super_op(rule: &LexerRule) -> bool {
 /// `this.` sites by the time codegen marks effects.
 pub fn lexer_rule_calls_super(rule: &LexerRule, base_name: &String) -> bool {
     let needle = `${*base_name}::`;
-    for let alt of &rule.body {
-        if lexer_alt_calls_super(alt, &needle) {
-            return true;
-        }
-    }
-    return false;
+    return rule.body.iter().any(|alt: &LexerAlternative| lexer_alt_calls_super(alt, &needle));
 }
 
 fn lexer_alt_calls_super(alt: &LexerAlternative, needle: &String) -> bool {
-    for let a of &alt.actions {
-        if a.source.text.contains(*needle) {
-            return true;
-        }
-    }
-    for let e of &alt.elements {
-        if lexer_elem_calls_super(e, needle) {
-            return true;
-        }
-    }
-    return false;
+    return alt.actions.iter().any(|a: &AltAction| a.source.text.contains(*needle))
+        || alt.elements.iter().any(|e: &LexerElement| lexer_elem_calls_super(e, needle));
 }
 
 fn lexer_elem_calls_super(elem: &LexerElement, needle: &String) -> bool {
     return match elem {
-        Group(alts) => {
-            let mut any = false;
-            for let alt of alts {
-                if lexer_alt_calls_super(alt, needle) {
-                    any = true;
-                }
-            }
-            any;
-        },
+        Group(alts) => alts.iter().any(|alt: &LexerAlternative| lexer_alt_calls_super(alt, needle)),
         Repeat(rep) => lexer_elem_calls_super(&rep.element, needle),
         Not(n) => lexer_elem_calls_super(&n.element, needle),
         _ => false,
@@ -261,30 +235,13 @@ fn collect_lexer_elem_ops(elem: &LexerElement, ops: &mut List<SuperOp>) {
 }
 
 fn lexer_alt_has_super_op(alt: &LexerAlternative) -> bool {
-    for let a of &alt.actions {
-        if !find_this_calls(&a.source.text).is_empty() {
-            return true;
-        }
-    }
-    for let e of &alt.elements {
-        if lexer_elem_has_super_op(e) {
-            return true;
-        }
-    }
-    return false;
+    return alt.actions.iter().any(|a: &AltAction| !find_this_calls(&a.source.text).is_empty())
+        || alt.elements.iter().any(|e: &LexerElement| lexer_elem_has_super_op(e));
 }
 
 fn lexer_elem_has_super_op(elem: &LexerElement) -> bool {
     return match elem {
-        Group(alts) => {
-            let mut any = false;
-            for let alt of alts {
-                if lexer_alt_has_super_op(alt) {
-                    any = true;
-                }
-            }
-            any;
-        },
+        Group(alts) => alts.iter().any(|alt: &LexerAlternative| lexer_alt_has_super_op(alt)),
         Repeat(rep) => lexer_elem_has_super_op(&rep.element),
         Not(n) => lexer_elem_has_super_op(&n.element),
         _ => false,
@@ -372,44 +329,22 @@ pub fn rewrite_this_calls(body: &String, base_name: &String) -> String {
     let mut out = String::with_capacity(n + 8);
     let mut i = 0;
     while i < n {
-        let c = chars[i];
-        if c == '"' || c == '\'' {
-            let end = scan_string(&chars, i);
-            append_range(&mut out, &chars, i, end);
-            i = end;
-            continue;
-        }
-        if c == '/' && i + 1 < n && chars[i + 1] == '/' {
-            let end = scan_line_comment(&chars, i);
-            append_range(&mut out, &chars, i, end);
-            i = end;
-            continue;
-        }
-        if c == '/' && i + 1 < n && chars[i + 1] == '*' {
-            let end = scan_block_comment(&chars, i);
-            append_range(&mut out, &chars, i, end);
-            i = end;
-            continue;
-        }
-        if word_boundary_this(&chars, i, n) {
-            let after = skip_ws(&chars, i + 4, n);
-            if after < n && chars[after] == '.' {
-                let name_start = skip_ws(&chars, after + 1, n);
-                let name_end = scan_ident(&chars, name_start, n);
-                if name_end > name_start {
-                    let paren = skip_ws(&chars, name_end, n);
-                    if paren < n && chars[paren] == '(' {
-                        let close = match_paren(&chars, paren, n);
-                        let method = collect_range(&chars, name_start, name_end);
-                        out.push_str(&super_call_expr(base_name, &method));
-                        i = close;
-                        continue;
-                    }
-                }
-            }
-        }
-        out.push(c);
-        i += 1;
+        i = match chars[i] {
+            '"' | '\'' => copy_span(&mut out, &chars, i, scan_string(&chars, i)),
+            '/' && i + 1 < n && chars[i + 1] == '/' => copy_span(&mut out, &chars, i, scan_line_comment(&chars, i)),
+            '/' && i + 1 < n && chars[i + 1] == '*' => copy_span(&mut out, &chars, i, scan_block_comment(&chars, i)),
+            _ => match this_call_at(&chars, i, n) {
+                // Rewrite the whole call and skip past its `)` (arguments dropped).
+                Some([method, _, close]) => {
+                    out.push_str(&super_call_expr(base_name, &method));
+                    close;
+                },
+                None => {
+                    out.push(chars[i]);
+                    i + 1;
+                },
+            },
+        };
     }
     return out;
 }
@@ -419,28 +354,29 @@ pub fn rewrite_this_calls(body: &String, base_name: &String) -> String {
 /// would already have rejected).
 fn match_paren(chars: &List<char>, open: i32, n: i32) -> i32 {
     let mut depth = 0;
-    let mut i = open;
-    while i < n {
-        let c = chars[i];
-        if c == '"' || c == '\'' {
-            i = scan_string(chars, i);
-            continue;
+    for let mut i = open; i < n; i += 1 {
+        match chars[i] {
+            // Skip a string span; `- 1` because the loop step re-adds one.
+            '"' | '\'' => i = scan_string(chars, i) - 1,
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return i + 1;
+                }
+            },
+            _ => {
+            },
         }
-        if c == '(' {
-            depth += 1;
-        } else if c == ')' {
-            depth -= 1;
-            if depth == 0 {
-                return i + 1;
-            }
-        }
-        i += 1;
     }
     return n;
 }
 
-fn append_range(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+/// Copy `chars[start..end]` into `out` and return `end` — the scanner's next
+/// index, so a match arm reads `i = copy_span(...)`.
+fn copy_span(out: &mut String, chars: &List<char>, start: i32, end: i32) -> i32 {
     for let mut i = start; i < end; i += 1 {
         out.push(chars[i]);
     }
+    return end;
 }
