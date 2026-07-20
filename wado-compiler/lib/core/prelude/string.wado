@@ -354,7 +354,6 @@ impl Iterator for StrSplitNIter {
         if self.finished {
             return null;
         }
-        // Last allowed part: return the whole remainder unsplit.
         if self.remaining <= 1 {
             self.finished = true;
             return Option::Some(substring(self.repr, self.pos, self.used - self.pos));
@@ -436,7 +435,6 @@ impl Iterator for StrLinesIter {
             }
             self.pos += 1;
         }
-        // Remaining text (no trailing newline)
         self.finished = true;
         if self.pos > start {
             return Option::Some(substring(self.repr, start, self.pos - start));
@@ -535,7 +533,6 @@ impl String {
         if min_capacity <= capacity {
             return;
         }
-        // Double, or jump straight to min_capacity, but never below 8.
         self.realloc_to(i32_max(i32_max(capacity * 2, min_capacity), 8));
     }
 
@@ -1120,7 +1117,6 @@ impl String {
                 pos += 1;
             }
         }
-        // Copy the untouched tail in one bulk append.
         if pos < self.used {
             result.push_str_range_unchecked(self, pos, self.used);
         }
@@ -1279,7 +1275,6 @@ impl Add for String {
     }
 }
 
-// Eq implementation for String - lexicographic equality
 impl Eq for String {
     pub fn eq(&self, other: &Self) -> bool {
         let len = self.len();
@@ -1299,7 +1294,6 @@ impl LenientFromStr for String {
     }
 }
 
-// Ord implementation for String - lexicographic ordering
 impl Ord for String {
     pub fn cmp(&self, other: &Self) -> Ordering {
         let len_a = self.len();
@@ -1319,7 +1313,6 @@ impl Ord for String {
             }
         }
 
-        // All compared bytes are equal, compare lengths
         if len_a < len_b {
             return Ordering::Less;
         }

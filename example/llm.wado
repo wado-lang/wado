@@ -111,8 +111,6 @@ export fn run() with Stdout, Stderr, Environment, Client {
             content: "Explain WebAssembly briefly",
         },
     ];
-    // `send_post` accepts any `AsByteSlice`, so hand it the serializer's view
-    // directly — no owned buffer needed at the call site.
     let resp = send_post(api_key, to_bytes(&ChatRequest {
         model: MODEL_NAME,
         messages,

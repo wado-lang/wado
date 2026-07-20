@@ -31,8 +31,6 @@ struct RouteResponse {
 type Handler = fn(Request, PathParams) -> RouteResponse;
 
 fn body_for(route: String, params: List<String>) -> List<u8> {
-    // `to_bytes` returns a read-only view; materialize an owned List<u8> for the
-    // response body with a single bulk copy.
     return json::to_bytes(&ApiResponse { route, params }).unwrap().to_list();
 }
 
