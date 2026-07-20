@@ -37,7 +37,14 @@ use {
     is_lexer_members,
 } from "./java2wado.wado";
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
-use { superclass_base_name, collect_lexer_super_ops, rewrite_superclass_calls, gen_super_interface, SuperOp } from "./superclass.wado";
+use {
+    superclass_base_name,
+    collect_lexer_super_ops,
+    all_super_ops_predicates,
+    rewrite_superclass_calls,
+    gen_super_interface,
+    SuperOp,
+} from "./superclass.wado";
 use { gen_highlight } from "./highlight_gen.wado";
 use { HighlightRule } from "./highlight_query.wado";
 use { GenContext, sets_overlap } from "./gen_context.wado";
@@ -145,18 +152,21 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     ctx.set_action_language(&grammar.action_language);
     ctx.set_action_grammar(&grammar.name, collect_member_method_names(grammar));
     // `options { superClass = Foo }`: a `this.<method>()` call in a lexer
-    // action / predicate becomes an ambient `Foo::<method>(lx)` effect
-    // operation. Only wired when actions actually emit (a Java superClass
-    // grammar whose actions are still discarded stays byte-identical).
-    if ctx.emit_actions() {
-        if let Some(sc) = superclass_base_name(grammar) {
-            let ops = collect_lexer_super_ops(grammar);
-            if !ops.is_empty() {
-                ctx.set_superclass(&sc, ops);
-                // Rewrite `this.<method>()` -> `Foo::<method>()` in place, after
-                // op collection (which scans the original `this.` sites).
-                rewrite_superclass_calls(grammar, &sc);
-            }
+    // action / predicate becomes an ambient `Foo::<method>(view)` effect
+    // operation. Independent of `emit_actions` (which gates the java2wado
+    // parser path): a Java superClass grammar's lexer bodies lower to the
+    // effect even though its parser actions stay carved out.
+    if let Some(sc) = superclass_base_name(grammar) {
+        let ops = collect_lexer_super_ops(grammar);
+        // Predicate ops are fully wired; action ops (`{this.m();}`) need the
+        // winner-replay path (not yet). A base with any action op stays carved
+        // out (its bodies discarded, byte-identical to before) until that lands,
+        // rather than emitting a half-wired interface.
+        if !ops.is_empty() && all_super_ops_predicates(&ops) {
+            ctx.set_superclass(&sc, ops);
+            // Rewrite `this.<method>()` -> `Foo::<method>(view)` in place, after
+            // op collection (which scans the original `this.` sites).
+            rewrite_superclass_calls(grammar, &sc);
         }
     }
     ctx.precompute_scannability();
@@ -218,12 +228,21 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // when lowering built a caller-FOLLOW gate (`emit_follow`).
     let ef = ctx.emit_follow();
     let emit_highlight = options.highlight_query matches { Some(_) };
-    gen_runtime(&mut w, ef, ctx.needs_atn(), needs_latn, emit_highlight);
+    gen_runtime(&mut w, ef, ctx.needs_atn(), needs_latn, emit_highlight, ctx.has_superclass());
     gen_token_kind(&mut w, &grammar.lexer_rules);
     gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
     let lexer_members = collect_lexer_members(grammar, &mut ctx);
     let has_members = members_present(&lexer_members);
-    gen_lexer(&mut w, grammar, &lit_tokens, &atn_class_map, &lexer_members, has_members, ctx.superclass_name(), ctx.superclass_ops());
+    gen_lexer(
+        &mut w,
+        grammar,
+        &lit_tokens,
+        &atn_class_map,
+        &lexer_members,
+        has_members,
+        ctx.superclass_name(),
+        ctx.superclass_ops(),
+    );
     gen_node_kinds(&mut w, &lowered.parser_rules);
     gen_alt_enums(&mut w, grammar);
     gen_parser(&mut w, grammar, &lowered, &mut ctx);
@@ -477,11 +496,23 @@ fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {
 /// generated module (in dependency order — `lex` first, then `diag`, then
 /// `tree`, which references both), where such imports are both redundant and
 /// unresolvable.
-fn gen_runtime(w: &mut CodeWriter, emit_follow: bool, needs_atn: bool, needs_latn: bool, highlight: bool) {
+fn gen_runtime(
+    w: &mut CodeWriter,
+    emit_follow: bool,
+    needs_atn: bool,
+    needs_latn: bool,
+    highlight: bool,
+    has_superclass: bool,
+) {
     gen_runtime_fragment(w, &#include_str("./runtime/lex.wado"));
     gen_runtime_fragment(w, &#include_str("./runtime/diag.wado"));
     gen_runtime_fragment(w, &#include_str("./runtime/tree.wado"));
     gen_runtime_fragment(w, &#include_str("./runtime/tools.wado"));
+    // The `LexerView` handle passed to base effect operations. Static code, so
+    // it lives as a runtime fragment; inlined only under `superClass`.
+    if has_superclass {
+        gen_runtime_fragment(w, &#include_str("./runtime/superclass.wado"));
+    }
     // Scan functions reference `follow_yields` / `EMPTY_FOLLOW` when the
     // grammar has a caller-FOLLOW gate.
     if emit_follow {

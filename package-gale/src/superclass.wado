@@ -167,6 +167,18 @@ pub fn collect_lexer_super_ops(grammar: &Grammar) -> List<SuperOp> {
     return ops;
 }
 
+/// Whether every collected op is a predicate. Action ops need the winner-replay
+/// path (not yet wired), so a base with any action op is not emitted as an
+/// effect interface — it stays carved out until action ops land.
+pub fn all_super_ops_predicates(ops: &List<SuperOp>) -> bool {
+    for let o of ops {
+        if !o.is_predicate {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// Whether a lexer rule's body carries any superClass op — the gate for
 /// marking its generated `try_<rule>` (and replay helpers) `with Foo`.
 pub fn lexer_rule_has_super_op(rule: &LexerRule) -> bool {
@@ -279,18 +291,18 @@ fn lexer_elem_has_super_op(elem: &LexerElement) -> bool {
     };
 }
 
-/// Emit `interface Foo { <op per site> }`. A predicate op returns `bool`; an
-/// action op returns unit. Op names are snake_cased to match the call-site
-/// rewrite (`this.isOk()` -> `Foo::is_ok()`). The base state lives on the
-/// handler's `self`; a later layer threads the recognizer runtime (a lexer
-/// match-window view / `&Parser`) to ops that read lookahead or matched text.
+/// Emit `interface Foo { <op per site> }`. Each op receives a `LexerView` — a
+/// match-window handle exposing the recognizer runtime (`la`, `text`, cursor) —
+/// so a base method can read lookahead / matched text alongside its own `self`
+/// state. A predicate op returns `bool`; an action op returns unit. Op names
+/// are snake_cased to match the call-site rewrite (`this.isOk()` -> `Foo::is_ok()`).
 pub fn gen_super_interface(w: &mut CodeWriter, name: &String, ops: &List<SuperOp>) {
     w.line(&`pub interface ${*name} {`);
     for let op of ops {
         if op.is_predicate {
-            w.line(&`    fn ${to_snake_case(&op.name)}() -> bool;`);
+            w.line(&`    fn ${to_snake_case(&op.name)}(view: LexerView) -> bool;`);
         } else {
-            w.line(&`    fn ${to_snake_case(&op.name)}();`);
+            w.line(&`    fn ${to_snake_case(&op.name)}(view: LexerView);`);
         }
     }
     w.line(&"}");
@@ -298,10 +310,12 @@ pub fn gen_super_interface(w: &mut CodeWriter, name: &String, ops: &List<SuperOp
 }
 
 /// The Wado expression a `this.<method>(...)` call site lowers to: the ambient
-/// effect operation `Foo::<method>()`. Arguments are dropped for now (every
-/// corpus / real-world call is zero-argument beyond the implicit `this`).
+/// effect operation `Foo::<method>(LexerView { chars, start, pos })`. The view
+/// literal reads the lexer match-fn locals (`chars` / `start` / `pos`), in
+/// scope at every lexer predicate / action site. Call arguments are dropped
+/// (every corpus / real-world call is zero-argument beyond the implicit `this`).
 pub fn super_call_expr(base_name: &String, method: &String) -> String {
-    return `${*base_name}::${to_snake_case(method)}()`;
+    return `${*base_name}::${to_snake_case(method)}(LexerView { chars, start, pos })`;
 }
 
 /// Rewrite every lexer action / predicate body in place, turning each

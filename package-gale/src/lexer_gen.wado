@@ -308,7 +308,11 @@ pub fn gen_lexer(
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(&grammar.options, &empty_opts);
     let keywords = collect_keyword_rules(&grammar.lexer_rules, &grammar.options);
-    let ea = grammar.action_language matches { Wado };
+    // Emit lexer action / predicate bodies through the identity translator when
+    // the grammar is Wado, or when it has a `superClass` — a superClass grammar's
+    // `this.m()` sites were rewritten to `Foo::m(LexerView { .. })` (Wado) before
+    // codegen, so the identity path emits them regardless of the source language.
+    let ea = grammar.action_language matches { Wado } || !sc_name.is_empty();
     let act_rule_names = executed_action_rule_names(grammar);
     let has_actions = !act_rule_names.is_empty();
     let uses_modes = has_modes(&grammar.mode_names);
@@ -325,7 +329,17 @@ pub fn gen_lexer(
         }
         gen_lexer_apply_fns(w, grammar, has_members);
     }
-    gen_lexer_match_fns(w, &grammar.lexer_rules, &keywords, lit_tokens, &grammar.options, atn_class, ea, has_members, sc_name);
+    gen_lexer_match_fns(
+        w,
+        &grammar.lexer_rules,
+        &keywords,
+        lit_tokens,
+        &grammar.options,
+        atn_class,
+        ea,
+        has_members,
+        sc_name,
+    );
     gen_literal_match_fns(w, lit_tokens, grammar_ci, has_members);
     gen_keyword_classifier_fn(w, &keywords);
     gen_tokenize_fn(
@@ -577,10 +591,16 @@ fn gen_lexer_match_fn(
     }
     f.add_param(&"start", &"i32");
     f.set_return_type(&"i32");
-    // A rule whose body evaluates a `Foo::op()` predicate calls the base
-    // effect, so its match fn declares `with Foo`.
+    // A rule whose body evaluates a `Foo::op(LexerView { chars, .. })` calls the
+    // base effect, so its match fn declares `with Foo`; the view literal stores
+    // the char-stream ref, so the fn also declares `stores[...]` for it.
     if !sc_name.is_empty() && lexer_rule_calls_super(rule, sc_name) {
         f.add_effect(sc_name);
+        if hm {
+            f.add_stores(&"lx");
+        } else {
+            f.add_stores(&"chars");
+        }
     }
     f.emit_begin(w);
     if hm {

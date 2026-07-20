@@ -2,6 +2,7 @@ use {
     find_this_calls,
     superclass_base_name,
     add_super_op,
+    all_super_ops_predicates,
     gen_super_interface,
     super_call_expr,
     rewrite_this_calls,
@@ -83,6 +84,19 @@ test "add_super_op dedups and fixes the first role" {
     assert ops[1].name == "n" && !ops[1].is_predicate;
 }
 
+test "all_super_ops_predicates gates action-op bases out" {
+    let preds: List<SuperOp> = [
+        SuperOp { name: "a", is_predicate: true },
+        SuperOp { name: "b", is_predicate: true },
+    ];
+    assert all_super_ops_predicates(&preds);
+    let mixed: List<SuperOp> = [
+        SuperOp { name: "a", is_predicate: true },
+        SuperOp { name: "c", is_predicate: false },
+    ];
+    assert !all_super_ops_predicates(&mixed);
+}
+
 test "gen_super_interface emits predicate and action ops" {
     let ops: List<SuperOp> = [
         SuperOp { name: "isRegexPossible", is_predicate: true },
@@ -92,21 +106,21 @@ test "gen_super_interface emits predicate and action ops" {
     gen_super_interface(&mut w, &"LexerBase", &ops);
     let out = w.to_string();
     assert out.contains("pub interface LexerBase {");
-    assert out.contains("fn is_regex_possible() -> bool;");
-    assert out.contains("fn process_open_brace();");
+    assert out.contains("fn is_regex_possible(view: LexerView) -> bool;");
+    assert out.contains("fn process_open_brace(view: LexerView);");
 }
 
-test "super_call_expr snake-cases the ambient op" {
-    assert super_call_expr(&"LexerBase", &"isRegexPossible") == "LexerBase::is_regex_possible()";
+test "super_call_expr passes a LexerView built from the match-fn locals" {
+    assert super_call_expr(&"LexerBase", &"isRegexPossible") == "LexerBase::is_regex_possible(LexerView { chars, start, pos })";
 }
 
-test "rewrite_this_calls maps this.m() to the ambient op" {
-    assert rewrite_this_calls(&"this.isOk()", &"B") == "B::is_ok()";
-    assert rewrite_this_calls(&"this.a() && x > 0", &"B") == "B::a() && x > 0";
+test "rewrite_this_calls maps this.m() to the ambient op with a view" {
+    assert rewrite_this_calls(&"this.isOk()", &"B") == "B::is_ok(LexerView { chars, start, pos })";
+    assert rewrite_this_calls(&"this.a() && x > 0", &"B") == "B::a(LexerView { chars, start, pos }) && x > 0";
 }
 
-test "rewrite_this_calls drops arguments" {
-    assert rewrite_this_calls(&"this.check(1, 2)", &"B") == "B::check()";
+test "rewrite_this_calls drops the original arguments" {
+    assert rewrite_this_calls(&"this.check(1, 2)", &"B") == "B::check(LexerView { chars, start, pos })";
 }
 
 test "rewrite_this_calls leaves strings and non-this text untouched" {

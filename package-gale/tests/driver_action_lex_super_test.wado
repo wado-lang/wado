@@ -10,7 +10,7 @@ use sup from "./grammars/wado_lex_super.g4"
     with {
         generator: { module: "../src/generator.wado", output_dir: "./generated/action_lex_super" },
     };
-use { SlBase } from "./grammars/wado_lex_super.g4";
+use { SlBase, LexerView } from "./grammars/wado_lex_super.g4";
 
 // Base state lives on the handler — a plain user struct, separate from the Lexer.
 struct SlBaseImpl {
@@ -18,7 +18,7 @@ struct SlBaseImpl {
 }
 
 impl SlBase for SlBaseImpl {
-    fn enabled(&self) -> bool {
+    fn enabled(&self, view: LexerView) -> bool {
         resume self.on;
     }
 }

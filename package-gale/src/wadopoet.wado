@@ -442,6 +442,10 @@ pub struct FnSpec {
     /// Effect names for the `with …` clause, rendered after the return
     /// type (e.g. `["Stdout", "Stderr"]` → ` with Stdout, Stderr`).
     effects: List<String>,
+    /// Reference-parameter names for a `stores[…]` clause, rendered inside the
+    /// same `with` clause after the effects (e.g. `["chars"]` →
+    /// ` with Foo, stores[chars]`).
+    stores: List<String>,
     receiver: Option<String>,
 }
 
@@ -455,6 +459,7 @@ impl FnSpec {
             is_export: false,
             generics: [],
             effects: [],
+            stores: [],
             receiver: null,
         };
     }
@@ -473,6 +478,11 @@ impl FnSpec {
 
     pub fn add_effect(&mut self, effect_name: &String) -> &mut FnSpec with stores[self] {
         self.effects.push(*effect_name);
+        return self;
+    }
+
+    pub fn add_stores(&mut self, param_name: &String) -> &mut FnSpec with stores[self] {
+        self.stores.push(*param_name);
         return self;
     }
 
@@ -537,8 +547,15 @@ impl FnSpec {
         if let Some(ret) = &self.return_type {
             sig.push_str(&` -> ${*ret}`);
         }
-        if self.effects.len() > 0 {
-            sig.push_str(&` with ${join_comma(&self.effects)}`);
+        let mut clauses: List<String> = [];
+        for let e of &self.effects {
+            clauses.push(*e);
+        }
+        if self.stores.len() > 0 {
+            clauses.push(`stores[${join_comma(&self.stores)}]`);
+        }
+        if clauses.len() > 0 {
+            sig.push_str(&` with ${join_comma(&clauses)}`);
         }
         return sig;
     }

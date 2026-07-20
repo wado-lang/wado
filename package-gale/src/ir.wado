@@ -752,6 +752,14 @@ pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
         // resolution to the tool, but keeping the last value is a sensible
         // default for Gale's merge.
         for let opt of &g.options {
+            // A split lexer + parser each declare their own `superClass`
+            // (lexer base vs parser base). Gale wires the lexer's base as an
+            // effect interface; the parser's is not yet supported, and a
+            // last-wins merge would clobber the lexer base with it. Keep only
+            // the lexer / combined split's `superClass`.
+            if opt.name == "superClass" && g.kind matches { Parser } {
+                continue;
+            }
             let mut found = false;
             for let mut i = 0; i < options.len(); i += 1 {
                 if options[i].name == opt.name {

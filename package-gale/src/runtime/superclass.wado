@@ -1,0 +1,65 @@
+//! Runtime support for the SuperClass effect interface (see `action.md`,
+//! "SuperClass — an effect interface"). Inlined into a generated lexer only
+//! when the grammar declares `options { superClass = Foo }`.
+//!
+//! `LexerView` is the match-window handle passed by value to every base
+//! operation. Its methods mirror the ANTLR recognizer runtime a base method
+//! reaches through `this` — lookahead (`la`, ANTLR `_input.LA`), matched text
+//! (`text`, ANTLR `getText`), and the cursor — so a hand-written `impl Foo`
+//! handler reads the lexer state alongside its own `self`. Passed by value, so
+//! the handler needs no `stores` clause; the char-stream ref it carries is why
+//! a generated `try_<rule>` that builds one declares `stores[...]`.
+
+/// A read-only window over the char stream at a lexer match site: the whole
+/// input plus the token `start` and the current match cursor `pos`.
+pub struct LexerView {
+    chars: &List<char>,
+    start: i32,
+    pos: i32,
+}
+
+impl LexerView {
+    /// ANTLR `_input.LA(k)`: `la(1)` is the char at the cursor, `la(-1)` the
+    /// one before it; out of range (including EOF) is -1. The cursor is the
+    /// current match position, so a mid-rule predicate sees the live lookahead.
+    pub fn la(&self, k: i32) -> i32 {
+        let i = if k > 0 { self.pos + k - 1 } else { self.pos + k };
+        if i < 0 || i >= self.chars.len() {
+            return -1;
+        }
+        return self.chars[i] as i32;
+    }
+
+    /// ANTLR `getText()`: the input matched by the current rule so far
+    /// (`chars[start..pos]`).
+    pub fn text(&self) -> String {
+        let mut s = String::with_capacity(if self.pos > self.start { self.pos - self.start } else { 0 });
+        for let mut i = self.start; i < self.pos; i += 1 {
+            s.push(self.chars[i]);
+        }
+        return s;
+    }
+
+    /// The token start index (absolute, into the whole input).
+    pub fn start(&self) -> i32 {
+        return self.start;
+    }
+
+    /// The current match cursor (absolute, into the whole input).
+    pub fn pos(&self) -> i32 {
+        return self.pos;
+    }
+
+    /// The char at an absolute input index, or -1 out of range.
+    pub fn char_at(&self, i: i32) -> i32 {
+        if i < 0 || i >= self.chars.len() {
+            return -1;
+        }
+        return self.chars[i] as i32;
+    }
+
+    /// The total input length in chars.
+    pub fn input_len(&self) -> i32 {
+        return self.chars.len();
+    }
+}
