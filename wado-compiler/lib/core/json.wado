@@ -2323,17 +2323,20 @@ pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError> {
 
 /// Serializes a value directly to UTF-8 JSON bytes.
 ///
-/// Equivalent to `to_string` followed by a byte-buffer conversion, but
-/// skips the intermediate re-encoding: the serializer's UTF-8 buffer is
-/// handed back directly as a `ByteList` with no copy. Prefer this over
+/// Equivalent to `to_string` followed by a byte-buffer conversion, but skips
+/// the intermediate re-encoding: the serializer's UTF-8 buffer is copied out in
+/// a single bulk `array_copy`. Prefer this over
 /// `to_string(value).bytes().collect()` whenever the output is consumed
 /// as bytes (e.g. an HTTP response body).
 pub fn to_bytes<T: Serialize>(value: &T) -> Result<ByteList, SerializeError> {
     let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = JsonSerializer { buf: &mut buf };
     value.serialize(&mut ser)?;
-    let len = buf.len();
-    return Result::Ok(List::internal_from_raw(String::internal_into_raw_bytes(buf), len) as ByteList);
+    // Value semantics: an owned `ByteList` cannot alias `buf`'s buffer, so the
+    // bytes must be copied out exactly once. `as_bytes()` is a borrowed view
+    // (no copy); `to_array()` does the single bulk `array_copy`.
+    let bytes = buf.as_bytes();
+    return Result::Ok(List::internal_from_raw(bytes.to_array(), bytes.len()) as ByteList);
 }
 
 /// Serializes a value to a pretty JSON string. Convenience over
@@ -2386,8 +2389,11 @@ pub fn to_bytes_canonical<T: Serialize>(value: &T) -> Result<ByteList, Serialize
     let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = CanonicalJsonSerializer { buf: &mut buf };
     value.serialize(&mut ser)?;
-    let len = buf.len();
-    return Result::Ok(List::internal_from_raw(String::internal_into_raw_bytes(buf), len) as ByteList);
+    // Value semantics: an owned `ByteList` cannot alias `buf`'s buffer, so the
+    // bytes must be copied out exactly once. `as_bytes()` is a borrowed view
+    // (no copy); `to_array()` does the single bulk `array_copy`.
+    let bytes = buf.as_bytes();
+    return Result::Ok(List::internal_from_raw(bytes.to_array(), bytes.len()) as ByteList);
 }
 
 /// Serializes a value to pretty-printed UTF-8 JSON bytes.
@@ -2400,6 +2406,9 @@ pub fn to_bytes_pretty<T: Serialize>(value: &T) -> Result<ByteList, SerializeErr
         depth: 0,
     };
     value.serialize(&mut ser)?;
-    let len = buf.len();
-    return Result::Ok(List::internal_from_raw(String::internal_into_raw_bytes(buf), len) as ByteList);
+    // Value semantics: an owned `ByteList` cannot alias `buf`'s buffer, so the
+    // bytes must be copied out exactly once. `as_bytes()` is a borrowed view
+    // (no copy); `to_array()` does the single bulk `array_copy`.
+    let bytes = buf.as_bytes();
+    return Result::Ok(List::internal_from_raw(bytes.to_array(), bytes.len()) as ByteList);
 }

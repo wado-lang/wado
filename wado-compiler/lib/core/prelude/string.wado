@@ -513,14 +513,6 @@ impl String {
         return &mut self.repr as &mut Array<u8>;
     }
 
-    /// Internal: Consume `s`, moving out its backing byte array without copying
-    /// (stdlib use only). Unlike `internal_raw_bytes`, which returns a shared
-    /// reference that a caller must deep-copy to own, this transfers ownership of
-    /// the buffer directly. Caller must respect `len()` boundary.
-    internal fn internal_into_raw_bytes(s: String) -> Array<u8> {
-        return s.repr as Array<u8>;
-    }
-
     /// Internal: Create String from raw UTF-8 bytes (stdlib use only)
     /// The bytes must be valid UTF-8. No validation is performed.
     internal fn internal_from_utf8_raw(bytes: Array<u8>, len: i32) -> String {

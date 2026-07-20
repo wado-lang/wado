@@ -570,8 +570,11 @@ pub fn to_bytes<T: Serialize>(value: &T) -> Result<ByteList, SerializeError> {
     let mut buf: String = "";
     let mut ser = NsdSerializer { buf: &mut buf };
     value.serialize::<NsdSerializer>(&mut ser)?;
-    let len = buf.len();
-    return Result::Ok(List::<u8>::internal_from_raw(String::internal_into_raw_bytes(buf), len) as ByteList);
+    // Value semantics: an owned `ByteList` cannot alias `buf`'s buffer, so the
+    // bytes must be copied out exactly once. `as_bytes()` is a borrowed view
+    // (no copy); `to_array()` does the single bulk `array_copy`.
+    let bytes = buf.as_bytes();
+    return Result::Ok(List::<u8>::internal_from_raw(bytes.to_array(), bytes.len()) as ByteList);
 }
 
 /// Serializes a value to a JSON NSD string. Convenience over `to_bytes` for
