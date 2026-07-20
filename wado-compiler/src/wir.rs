@@ -210,6 +210,9 @@ impl WasmModuleInfo {
             for instr in &mut body {
                 remap_func_ids_in_instr(instr, &func_index_remap);
             }
+            // A bundled module's body is final on arrival (it bypasses
+            // `wir_optimize`), so finalize its declared-local table here.
+            let locals = WirLocals::scan(&body);
             wir.functions.push(WirFunction {
                 name: WirName {
                     fq: func_fq.to_string(),
@@ -222,6 +225,7 @@ impl WasmModuleInfo {
                     span: None,
                     attributes: Vec::new(),
                 },
+                locals,
                 value_copy_mangle: None,
                 generic_origin: None,
                 effects: Vec::new(),
@@ -1256,6 +1260,58 @@ pub struct WirFunction {
     /// because it is the mangle (not an intern-order `TypeId`), identical
     /// types interned more than once still resolve to the one helper.
     pub value_copy_mangle: Option<String>,
+    /// Declared locals, finalized once at the end of the WIR phase from the
+    /// body's `DeclareLocal`s. The emitter allocates from it and the optimizer's
+    /// nullability oracle queries it. Empty until finalized (or for functions
+    /// synthesised outside `wir_optimize`; the emitter rescans those).
+    pub locals: WirLocals,
+}
+
+/// A function's declared locals, keyed by name in declaration order.
+///
+/// `DeclareLocal` instructions inline in the body are the source of truth for a
+/// local's declared type; this is the one canonical view of them, derived by a
+/// single [`WirLocals::scan`]. Because a local's declared type carries its
+/// nullability, this is also the optimizer's authority on whether a `local.get`
+/// yields a non-null reference — the read site's own `result_ty` can read
+/// nullable for a non-null local after inlining.
+#[derive(Debug, Default, Clone)]
+pub struct WirLocals {
+    types: IndexMap<String, WirType>,
+}
+
+impl WirLocals {
+    /// Build the table from every `DeclareLocal` reachable in `body`, keeping the
+    /// first declaration of each name in declaration (pre-order) order.
+    pub fn scan(body: &[WirInstr]) -> Self {
+        let mut types = IndexMap::default();
+        for instr in body {
+            Self::scan_instr(instr, &mut types);
+        }
+        Self { types }
+    }
+
+    fn scan_instr(instr: &WirInstr, types: &mut IndexMap<String, WirType>) {
+        if let WirInstr::DeclareLocal { name, ty } = instr {
+            types.entry(name.clone()).or_insert_with(|| ty.clone());
+        }
+        instr.for_each_child(&mut |child| Self::scan_instr(child, types));
+    }
+
+    /// Whether `name` is declared with a non-null reference type.
+    pub fn is_nonnull_ref(&self, name: &str) -> bool {
+        self.types.get(name).is_some_and(WirType::is_nonnull_ref)
+    }
+
+    /// Whether any local is declared.
+    pub fn is_empty(&self) -> bool {
+        self.types.is_empty()
+    }
+
+    /// Declared locals, `(name, type)`, in declaration order.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &WirType)> {
+        self.types.iter().map(|(name, ty)| (name.as_str(), ty))
+    }
 }
 
 /// WIR instructions are tree-structured where operands are child nodes,

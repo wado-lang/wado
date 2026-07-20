@@ -37,6 +37,8 @@ mod dedupe_const_globals;
 mod elide_local;
 mod elide_struct;
 mod init_guard;
+mod nullability;
+mod nullability_opt;
 mod nullable_ref;
 mod peephole;
 mod prune_dead_data;
@@ -215,6 +217,12 @@ pub fn optimize_wir(
     });
     profiler.span_end("wir/phase5_peephole");
 
+    // Phase 5b: nullability-driven rewrites (elide proven-redundant
+    // `ref.as_non_null`, fold `ref.is_null` on a non-null reference).
+    wir_pass("wir/optimize_nullability", module, profiler, |m| {
+        nullability_opt::optimize_nullability(m);
+    });
+
     // Phase 6: strip write-only WIR-synthesised locals (`__match_scrut_N`,
     // multi-value temps, `__pair_temp_N`) that no TIR pass can reach, so codegen
     // doesn't emit dead locals.
@@ -267,4 +275,13 @@ pub fn optimize_wir(
     dce_unreachable_types(module);
     dce::compact_dead_items(module);
     profiler.span_end("wir/phase8_dce_compact");
+
+    // Phase 9: finalize each function's declared-local table (the SSoT the
+    // emitter allocates from and the optimizer already queried) now that no
+    // pass adds or removes a `DeclareLocal`.
+    for func in &mut module.functions {
+        if let Some(body) = &func.body {
+            func.locals = crate::wir::WirLocals::scan(body);
+        }
+    }
 }

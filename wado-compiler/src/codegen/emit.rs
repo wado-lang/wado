@@ -7,7 +7,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::wir::{
     WirAbstractHeapType, WirArrayType, WirExportDesc, WirFuncType, WirFunction, WirImportDesc,
-    WirInstr, WirPackage, WirStructType, WirType, WirTypeDef, WirVariantType,
+    WirInstr, WirLocals, WirPackage, WirStructType, WirType, WirTypeDef, WirVariantType,
 };
 
 use wasm_encoder::{
@@ -788,10 +788,26 @@ impl<'a> WirEmitter<'a> {
             self.next_local = idx + 1;
         }
 
-        // Scan body for DeclareLocal instructions to pre-allocate
+        // Emit the WIR-phase-finalized declared locals (the `WirLocals` SSoT),
+        // then the scratch locals the emitter's own lowerings synthesise. A
+        // function synthesised outside `wir_optimize` (a bundled module's body,
+        // late CM glue) carries no finalized table, so derive it once from the
+        // same shared scan rather than special-casing every synthesis site.
         let mut local_types: Vec<(String, ValType)> = Vec::new();
+        let scanned;
+        let declared = if !func.locals.is_empty() || func.body.is_none() {
+            &func.locals
+        } else {
+            scanned = WirLocals::scan(func.body.as_deref().unwrap_or(&[]));
+            &scanned
+        };
+        for (name, ty) in declared.iter() {
+            self.push_declared_local(name, ty, &mut local_types);
+        }
         if let Some(ref body) = func.body {
-            self.collect_declared_locals(body, &mut local_types);
+            for instr in body {
+                self.collect_scratch_locals(instr, &mut local_types);
+            }
         }
 
         // Build locals array
@@ -823,310 +839,104 @@ impl<'a> WirEmitter<'a> {
         f
     }
 
-    /// Collect `DeclareLocal` instructions from a body to pre-allocate.
-    /// Recursively walks the entire instruction tree to find all `DeclareLocal` nodes.
-    fn collect_declared_locals(&mut self, body: &[WirInstr], locals: &mut Vec<(String, ValType)>) {
-        for instr in body {
-            self.collect_declared_locals_instr(instr, locals);
-        }
-    }
-
-    /// Recursively collect `DeclareLocal` from a single instruction and all its children.
-    /// Ref-type locals are made nullable (Wasm requires defaultable locals for patterns
-    /// that initialize on branches). Tracked in `ref_locals` for `ref.as_non_null` on get.
-    fn collect_declared_locals_instr(
+    /// Allocate one declared local. A non-null ref local is made nullable (Wasm
+    /// requires defaultable locals) and tracked in `ref_locals` so its
+    /// `local.get` gets a `ref.as_non_null`.
+    fn push_declared_local(
         &mut self,
-        instr: &WirInstr,
+        name: &str,
+        ty: &WirType,
         locals: &mut Vec<(String, ValType)>,
     ) {
+        if !self.scratch_local_names.insert(name.to_string()) {
+            return;
+        }
+        let mut val_type = self.wir_type_to_val_type(ty);
+        if let ValType::Ref(rt) = &mut val_type
+            && !rt.nullable
+        {
+            rt.nullable = true;
+            self.ref_locals.insert(name.to_string());
+        }
+        locals.push((name.to_string(), val_type));
+    }
+
+    /// Declare the scratch locals the emitter's inlined lowerings need but that
+    /// are not `DeclareLocal`s in the WIR: the `-f no-array-copy` `array.copy`
+    /// loop, every `ArrayClone` clone loop, and the `-f no-wide-arithmetic`
+    /// 128-bit software pool. Slot names are keyed per type / type-pair and
+    /// deduped through `scratch_local_names`, so sites sharing a shape share slots.
+    fn collect_scratch_locals(&mut self, instr: &WirInstr, locals: &mut Vec<(String, ValType)>) {
         match instr {
-            WirInstr::DeclareLocal { name, ty } => {
-                if !self.scratch_local_names.insert(name.clone()) {
-                    return;
-                }
-                let mut val_type = self.wir_type_to_val_type(ty);
-                // Non-null ref locals must be made nullable for Wasm defaultability.
-                // We track them and add ref.as_non_null on local.get.
-                if let ValType::Ref(rt) = &mut val_type
-                    && !rt.nullable
-                {
-                    rt.nullable = true;
-                    self.ref_locals.insert(name.clone());
-                }
-                locals.push((name.clone(), val_type));
-            }
-            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
-                self.collect_declared_locals(body, locals);
-            }
-            WirInstr::If {
-                condition,
-                then_body,
-                else_body,
-                ..
-            } => {
-                self.collect_declared_locals_instr(condition, locals);
-                self.collect_declared_locals(then_body, locals);
-                if let Some(else_body) = else_body {
-                    self.collect_declared_locals(else_body, locals);
-                }
-            }
-            WirInstr::Seq(body) => {
-                self.collect_declared_locals(body, locals);
-            }
-            // Recursively walk all other instruction types that contain children
-            WirInstr::LocalSet { value, .. } | WirInstr::LocalTee { value, .. } => {
-                self.collect_declared_locals_instr(value, locals);
-            }
-            WirInstr::Call { args, .. } => {
-                for arg in args {
-                    self.collect_declared_locals_instr(arg, locals);
-                }
-            }
-            WirInstr::CallIndirect { args, index, .. } => {
-                for arg in args {
-                    self.collect_declared_locals_instr(arg, locals);
-                }
-                self.collect_declared_locals_instr(index, locals);
-            }
-            WirInstr::CallRef { args, func_ref, .. } => {
-                for arg in args {
-                    self.collect_declared_locals_instr(arg, locals);
-                }
-                self.collect_declared_locals_instr(func_ref, locals);
-            }
-            WirInstr::StructNew { fields, .. }
-            | WirInstr::ArrayNewFixed {
-                elements: fields, ..
-            } => {
-                for f in fields {
-                    self.collect_declared_locals_instr(f, locals);
-                }
-            }
-            WirInstr::StructGet { expr, .. }
-            | WirInstr::RefCast { expr, .. }
-            | WirInstr::RefTest { expr, .. } => {
-                self.collect_declared_locals_instr(expr, locals);
-            }
-            WirInstr::StructSet { expr, value, .. } => {
-                self.collect_declared_locals_instr(expr, locals);
-                self.collect_declared_locals_instr(value, locals);
-            }
-            WirInstr::ArrayNew { init, len, .. }
-            | WirInstr::ArrayNewData {
-                offset: init, len, ..
-            } => {
-                self.collect_declared_locals_instr(init, locals);
-                self.collect_declared_locals_instr(len, locals);
-            }
-            WirInstr::ArrayNewDefault { len, .. } => {
-                self.collect_declared_locals_instr(len, locals);
-            }
-            WirInstr::ArrayGet { array, index, .. }
-            | WirInstr::ArrayGetS { array, index, .. }
-            | WirInstr::ArrayGetU { array, index, .. } => {
-                self.collect_declared_locals_instr(array, locals);
-                self.collect_declared_locals_instr(index, locals);
-            }
-            WirInstr::ArraySet {
-                array,
-                index,
-                value,
-                ..
-            } => {
-                self.collect_declared_locals_instr(array, locals);
-                self.collect_declared_locals_instr(index, locals);
-                self.collect_declared_locals_instr(value, locals);
-            }
-            WirInstr::ArrayFill {
-                array,
-                offset,
-                value,
-                len,
-                ..
-            } => {
-                self.collect_declared_locals_instr(array, locals);
-                self.collect_declared_locals_instr(offset, locals);
-                self.collect_declared_locals_instr(value, locals);
-                self.collect_declared_locals_instr(len, locals);
-            }
             WirInstr::ArrayCopy {
                 dest_type_id,
                 src_type_id,
-                dest,
-                dest_offset,
-                src,
-                src_offset,
-                len,
-            } => {
-                self.collect_declared_locals_instr(dest, locals);
-                self.collect_declared_locals_instr(dest_offset, locals);
-                self.collect_declared_locals_instr(src, locals);
-                self.collect_declared_locals_instr(src_offset, locals);
-                self.collect_declared_locals_instr(len, locals);
-                // The native `array.copy` lowering (the default) needs no
-                // scratch locals, so skip the loop's slot declarations. They
-                // are only emitted for the `-f no-array-copy` loop path.
-                if self.codegen_flags.array_copy {
-                    return;
-                }
-                // Pre-declare scratch locals for the inlined copy loop.
-                // We lower `array.copy` to a Wasm loop because wasmtime's
-                // `array.copy` implementation has a known performance bug
-                // for short copies. Naming is keyed on the (dst, src)
-                // type-id pair so multiple ArrayCopy sites within the same
-                // function that share both types reuse the same slots.
-                let dst_wasm_idx = self.resolve_type_index(dest_type_id.index());
-                let src_wasm_idx = self.resolve_type_index(src_type_id.index());
-                // Match `ArrayClone`'s convention: declare scratch ref locals
-                // as non-null. Init-tracking validates them because we always
-                // `local.set` before `local.get` within the emitted loop.
+                ..
+            } if !self.codegen_flags.array_copy => {
                 let dst_ref = RefType {
                     nullable: false,
-                    heap_type: HeapType::Concrete(dst_wasm_idx),
+                    heap_type: HeapType::Concrete(self.resolve_type_index(dest_type_id.index())),
                 };
                 let src_ref = RefType {
                     nullable: false,
-                    heap_type: HeapType::Concrete(src_wasm_idx),
+                    heap_type: HeapType::Concrete(self.resolve_type_index(src_type_id.index())),
                 };
-                let dst_name = format!(
-                    "__array_copy_dst_{}_{}",
-                    dest_type_id.index(),
-                    src_type_id.index()
-                );
-                let src_name = format!(
-                    "__array_copy_src_{}_{}",
-                    dest_type_id.index(),
-                    src_type_id.index()
-                );
-                let dst_off_name = format!(
-                    "__array_copy_dst_off_{}_{}",
-                    dest_type_id.index(),
-                    src_type_id.index()
-                );
-                let src_off_name = format!(
-                    "__array_copy_src_off_{}_{}",
-                    dest_type_id.index(),
-                    src_type_id.index()
-                );
-                let len_name = format!(
-                    "__array_copy_len_{}_{}",
-                    dest_type_id.index(),
-                    src_type_id.index()
-                );
-                let i_name = format!(
-                    "__array_copy_i_{}_{}",
-                    dest_type_id.index(),
-                    src_type_id.index()
-                );
-                // Dedup: multiple ArrayCopy sites with the same type pair
-                // share these slot names. Without the guard, every site
-                // would grow the locals table by 6 unused entries.
-                if self.scratch_local_names.insert(dst_name.clone()) {
-                    locals.push((dst_name, ValType::Ref(dst_ref)));
-                    locals.push((src_name, ValType::Ref(src_ref)));
-                    locals.push((dst_off_name, ValType::I32));
-                    locals.push((src_off_name, ValType::I32));
-                    locals.push((len_name, ValType::I32));
-                    locals.push((i_name, ValType::I32));
+                let key = format!("{}_{}", dest_type_id.index(), src_type_id.index());
+                if self
+                    .scratch_local_names
+                    .insert(format!("__array_copy_dst_{key}"))
+                {
+                    locals.push((format!("__array_copy_dst_{key}"), ValType::Ref(dst_ref)));
+                    locals.push((format!("__array_copy_src_{key}"), ValType::Ref(src_ref)));
+                    locals.push((format!("__array_copy_dst_off_{key}"), ValType::I32));
+                    locals.push((format!("__array_copy_src_off_{key}"), ValType::I32));
+                    locals.push((format!("__array_copy_len_{key}"), ValType::I32));
+                    locals.push((format!("__array_copy_i_{key}"), ValType::I32));
                 }
             }
             WirInstr::ArrayClone {
                 type_id,
-                src,
                 element_copy_mangle,
-            } => {
-                self.collect_declared_locals_instr(src, locals);
-                // Pre-declare the four temps the JIT-compiled clone loop uses.
-                let arr_wasm_idx = self.resolve_type_index(type_id.index());
-                let arr_ref = RefType {
-                    nullable: false,
-                    heap_type: HeapType::Concrete(arr_wasm_idx),
-                };
-                let src_name = format!("__copy_arr_src_{}", type_id.index());
-                let dst_name = format!("__copy_arr_dst_{}", type_id.index());
-                let len_name = format!("__copy_arr_len_{}", type_id.index());
-                let loop_idx_name = format!("__copy_arr_i_{}", type_id.index());
-                // Dedup: multiple ArrayClone sites with the same type_id
-                // share these slot names. See `ArrayCopy` above for rationale.
-                let new_clone_site = self.scratch_local_names.insert(src_name.clone());
-                if new_clone_site {
-                    locals.push((src_name, ValType::Ref(arr_ref)));
-                    locals.push((dst_name, ValType::Ref(arr_ref)));
-                    locals.push((len_name, ValType::I32));
-                    locals.push((loop_idx_name, ValType::I32));
-                }
-                // When `element_copy_type` is set, the loop also
-                // branches on per-element nullability (slots beyond
-                // `List<T>::used` are default-null) so it needs an
-                // extra temp of element-nullable-ref type.
-                //
-                // Dedup the element temp independently of `new_clone_site`:
-                // a *shallow* `ArrayClone` of the same `type_id` (emitted by
-                // `value_copy_demote`) claims `src_name` but carries no
-                // element temp, so gating on `new_clone_site` would let it
-                // suppress a sibling deep clone's declaration of `elem_name`.
-                if element_copy_mangle.is_some()
-                    && let Some(elem_val) = self.array_element_val_type(type_id.index())
-                {
-                    let elem_name = format!("__copy_arr_elem_{}", type_id.index());
-                    if self.scratch_local_names.insert(elem_name.clone()) {
-                        locals.push((elem_name, elem_val));
-                    }
-                }
-            }
-            WirInstr::GlobalSet { value, .. } => {
-                self.collect_declared_locals_instr(value, locals);
-            }
-            WirInstr::Return { value: Some(v) } => {
-                self.collect_declared_locals_instr(v, locals);
-            }
-            WirInstr::Drop(v) => {
-                self.collect_declared_locals_instr(v, locals);
-            }
-            WirInstr::BrTable { index, .. } => {
-                self.collect_declared_locals_instr(index, locals);
-            }
-            WirInstr::BrIf { condition, .. }
-            | WirInstr::BranchHint {
-                expr: condition, ..
-            } => {
-                self.collect_declared_locals_instr(condition, locals);
-            }
-            WirInstr::Select {
-                condition,
-                if_true,
-                if_false,
                 ..
             } => {
-                self.collect_declared_locals_instr(condition, locals);
-                self.collect_declared_locals_instr(if_true, locals);
-                self.collect_declared_locals_instr(if_false, locals);
-            }
-            // 128-bit ops need scratch i64 locals only under the
-            // `-f no-wide-arithmetic` software lowering (see `emit_instr`).
-            WirInstr::I64MulWideU(a, b) | WirInstr::I64MulWideS(a, b) => {
-                self.collect_declared_locals_instr(a, locals);
-                self.collect_declared_locals_instr(b, locals);
-                if !self.codegen_flags.wide_arithmetic {
-                    self.declare_wide_arith_scratch(locals);
+                let arr_ref = RefType {
+                    nullable: false,
+                    heap_type: HeapType::Concrete(self.resolve_type_index(type_id.index())),
+                };
+                let idx = type_id.index();
+                if self
+                    .scratch_local_names
+                    .insert(format!("__copy_arr_src_{idx}"))
+                {
+                    locals.push((format!("__copy_arr_src_{idx}"), ValType::Ref(arr_ref)));
+                    locals.push((format!("__copy_arr_dst_{idx}"), ValType::Ref(arr_ref)));
+                    locals.push((format!("__copy_arr_len_{idx}"), ValType::I32));
+                    locals.push((format!("__copy_arr_i_{idx}"), ValType::I32));
+                }
+                // The deep-clone loop's per-element nullability branch needs an
+                // element-typed temp; deduped independently, since a shallow
+                // `ArrayClone` of the same `type_id` claims `__copy_arr_src` but
+                // carries no element temp.
+                if element_copy_mangle.is_some()
+                    && let Some(elem_val) = self.array_element_val_type(idx)
+                    && self
+                        .scratch_local_names
+                        .insert(format!("__copy_arr_elem_{idx}"))
+                {
+                    locals.push((format!("__copy_arr_elem_{idx}"), elem_val));
                 }
             }
-            WirInstr::I64Add128(a, b, c, d) | WirInstr::I64Sub128(a, b, c, d) => {
-                self.collect_declared_locals_instr(a, locals);
-                self.collect_declared_locals_instr(b, locals);
-                self.collect_declared_locals_instr(c, locals);
-                self.collect_declared_locals_instr(d, locals);
-                if !self.codegen_flags.wide_arithmetic {
-                    self.declare_wide_arith_scratch(locals);
-                }
+            WirInstr::I64MulWideU(..)
+            | WirInstr::I64MulWideS(..)
+            | WirInstr::I64Add128(..)
+            | WirInstr::I64Sub128(..)
+                if !self.codegen_flags.wide_arithmetic =>
+            {
+                self.declare_wide_arith_scratch(locals);
             }
-            // For all other instructions, walk children generically
-            other => {
-                other.for_each_child(&mut |child| {
-                    self.collect_declared_locals_instr(child, locals);
-                });
-            }
+            _ => {}
         }
+        instr.for_each_child(&mut |child| self.collect_scratch_locals(child, locals));
     }
 
     /// Emit a single WIR instruction to the Wasm function.
