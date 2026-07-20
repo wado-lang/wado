@@ -12,7 +12,7 @@ use crate::wir::{WirInstr, WirLocals, WirPackage};
 use crate::wir_visitor::WirMutVisitor;
 
 use super::nullability::Nullability;
-use super::util::{is_side_effect_free, may_trap};
+use super::util::{is_side_effect_free, may_trap_in};
 
 pub(super) fn optimize_nullability(module: &mut WirPackage) {
     for func in &mut module.functions {
@@ -43,7 +43,7 @@ impl WirMutVisitor for NullabilityRewrite<'_> {
             WirInstr::RefIsNull(inner)
                 if self.null.is_nonnull(inner)
                     && is_side_effect_free(inner)
-                    && !may_trap(inner) =>
+                    && !may_trap_in(inner, self.null) =>
             {
                 *instr = WirInstr::I32Const(0);
             }

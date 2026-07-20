@@ -1,7 +1,7 @@
 //! Shared utility functions for WIR optimization passes.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::wir::{WirExportDesc, WirInstr, WirLocals, WirPackage, WirType, WirTypeId};
+use crate::wir::{WirExportDesc, WirInstr, WirPackage, WirType, WirTypeId};
 
 use super::nullability::Nullability;
 
@@ -177,17 +177,13 @@ pub(super) fn is_root_observable(instr: &WirInstr) -> bool {
 /// [`is_root_observable`] which the WIR optimizer deliberately keeps lax
 /// to enable CSE / dead-load elimination of trapping operations whose
 /// result IS used.
-pub(super) fn may_trap(instr: &WirInstr) -> bool {
-    let empty = WirLocals::default();
-    may_trap_in(instr, &Nullability::new(&empty))
-}
-
-/// [`may_trap`] that decides a `LocalGet` receiver's nullability through the
-/// [`Nullability`] oracle (the local's declared type), not the read site's
-/// `result_ty` — inlining can leave the latter stale-nullable for a non-null
-/// local. Rewriting `result_ty` instead would cost a codegen `ref.as_non_null`
-/// per read, so the declared type is consulted only here. An empty oracle
-/// recovers [`may_trap`].
+///
+/// A `LocalGet` receiver's nullability is decided through the [`Nullability`]
+/// oracle (the local's declared type), not the read site's `result_ty` —
+/// inlining can leave the latter stale-nullable for a non-null local. Rewriting
+/// `result_ty` instead would cost a codegen `ref.as_non_null` per read, so the
+/// declared type is consulted only here. An empty oracle disables the receiver
+/// refinement (every heap read is conservatively trap-capable).
 pub(super) fn may_trap_in(instr: &WirInstr, null: &Nullability) -> bool {
     // Operand-dependent: `ref.as_non_null(inner)` only traps when `inner`
     // could itself produce null.

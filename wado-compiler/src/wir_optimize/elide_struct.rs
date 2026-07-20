@@ -32,8 +32,9 @@
 //!   (`lower::plan::boxing`), so NIR's `elide_box_local` never sees them.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::wir::{WirInstr, WirPackage, WirTypeDef};
-use crate::wir_optimize::util::may_trap;
+use crate::wir::{WirInstr, WirLocals, WirPackage, WirTypeDef};
+use crate::wir_optimize::nullability::Nullability;
+use crate::wir_optimize::util::may_trap_in;
 use crate::wir_visitor::WirMutVisitor;
 
 #[derive(Default)]
@@ -480,6 +481,8 @@ fn elide_struct_locals_one_pass(body: &mut [WirInstr]) -> bool {
         return false;
     }
     let candidate_names: IndexSet<String> = candidates.keys().cloned().collect();
+    let locals = WirLocals::scan(body);
+    let null = Nullability::new(&locals);
 
     // Filter to valid leaf candidates:
     //   - exactly one LocalSet/LocalTee of this name
@@ -511,7 +514,7 @@ fn elide_struct_locals_one_pass(body: &mut [WirInstr]) -> bool {
             // initializer there could skip a trap the def always fired.
             // `elide_adjacent_box_locals` still handles the trap-capable case
             // under its unconditional-adjacency discipline.
-            if may_trap(&inner) {
+            if may_trap_in(&inner, &null) {
                 return None;
             }
             Some((name, inner))
@@ -572,6 +575,8 @@ fn elide_multi_field_struct_locals_one_pass(
         return false;
     }
     let candidate_names: IndexSet<String> = candidates.keys().cloned().collect();
+    let locals = WirLocals::scan(body);
+    let null = Nullability::new(&locals);
 
     // Filter: candidate is valid when each accessed field is read exactly
     // once and every field initializer is pure. Unaccessed fields are
@@ -622,7 +627,7 @@ fn elide_multi_field_struct_locals_one_pass(
                 // A trap-capable initializer can neither be dropped (an
                 // unread field's trap would vanish) nor moved to a use that
                 // may execute conditionally.
-                if may_trap(inner) {
+                if may_trap_in(inner, &null) {
                     return None;
                 }
             }
