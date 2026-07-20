@@ -180,8 +180,10 @@ pub fn optimize_wir(
     wir_pass("wir/run_peephole", module, profiler, |m| {
         let types = &m.types;
         for func in &mut m.functions {
+            let locals = func.declared_locals();
             if let Some(body) = &mut func.body {
-                run_peephole(body, types);
+                let null = nullability::Nullability::new(&locals);
+                run_peephole(body, &null, types);
             }
         }
     });
@@ -288,8 +290,6 @@ pub fn optimize_wir(
 /// itself in `WasmModuleInfo::to_wir_package`); the emitter never rescans.
 fn finalize_locals(module: &mut WirPackage) {
     for func in &mut module.functions {
-        if let Some(body) = &func.body {
-            func.locals = crate::wir::WirLocals::scan(body);
-        }
+        func.locals = func.declared_locals();
     }
 }

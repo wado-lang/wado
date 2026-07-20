@@ -30,7 +30,7 @@
 //! cleanup pass for write-only locals only.
 
 use crate::hashmap::IndexMap;
-use crate::wir::{WirInstr, WirLocals, WirPackage};
+use crate::wir::{WirInstr, WirPackage};
 use crate::wir_visitor::WirMutVisitor;
 
 use super::nullability::Nullability;
@@ -38,10 +38,10 @@ use super::util::{count_local_gets, is_side_effect_free, may_trap_in};
 
 pub(super) fn elide_write_only_locals(module: &mut WirPackage) {
     for func in &mut module.functions {
+        // Declared locals are stable across the sweep (elision only nops stores;
+        // `DeclareLocal`s go later in `cleanup`), so read the SSoT once.
+        let locals = func.declared_locals();
         if let Some(body) = &mut func.body {
-            // Declared locals are stable across the sweep (elision only nops
-            // stores; `DeclareLocal`s go later in `cleanup`), so scan once.
-            let locals = WirLocals::scan(body);
             let null = Nullability::new(&locals);
             while elide_write_only_locals_in_body(body, &null) {}
         }
@@ -141,7 +141,7 @@ impl WirMutVisitor for ElideWriteOnly<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::wir::WirType;
+    use crate::wir::{WirLocals, WirType};
 
     fn lget(name: &str) -> WirInstr {
         WirInstr::LocalGet {

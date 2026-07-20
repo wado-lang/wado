@@ -1268,6 +1268,17 @@ pub struct WirFunction {
     pub locals: WirLocals,
 }
 
+impl WirFunction {
+    /// The declared locals of the current body — the single access point the
+    /// WIR optimizer uses. Live by construction: it scans the body as it stands,
+    /// so a pass always sees the locals of the body it is rewriting, never a
+    /// stale snapshot. `optimize_wir` freezes the final result into `locals` for
+    /// the emitter; every mid-pipeline consumer calls this.
+    pub fn declared_locals(&self) -> WirLocals {
+        WirLocals::scan(self.body.as_deref().unwrap_or(&[]))
+    }
+}
+
 /// A function's declared locals, keyed by name in declaration order.
 ///
 /// `DeclareLocal` instructions inline in the body are the source of truth for a

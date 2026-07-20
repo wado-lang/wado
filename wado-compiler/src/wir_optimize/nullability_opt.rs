@@ -8,7 +8,7 @@
 //! Both read a `LocalGet`'s nullability from the local's declared type, so they
 //! fire even where inlining left the read site's `result_ty` stale-nullable.
 
-use crate::wir::{WirInstr, WirLocals, WirPackage};
+use crate::wir::{WirInstr, WirPackage};
 use crate::wir_visitor::WirMutVisitor;
 
 use super::nullability::Nullability;
@@ -16,8 +16,8 @@ use super::util::{is_side_effect_free, may_trap_in};
 
 pub(super) fn optimize_nullability(module: &mut WirPackage) {
     for func in &mut module.functions {
+        let locals = func.declared_locals();
         if let Some(body) = &mut func.body {
-            let locals = WirLocals::scan(body);
             let null = Nullability::new(&locals);
             let mut rewriter = NullabilityRewrite { null: &null };
             for instr in body.iter_mut() {
@@ -55,6 +55,7 @@ impl WirMutVisitor for NullabilityRewrite<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::wir::WirLocals;
 
     fn rewrite(mut instr: WirInstr) -> WirInstr {
         let locals = WirLocals::default();
