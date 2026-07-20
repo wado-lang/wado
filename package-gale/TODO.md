@@ -64,7 +64,7 @@ Stage C is a hard prerequisite for treating Gale as a drop-in ANTLR4 replacement
 
 ## gale-highlight — theme vocabulary
 
-`gale-highlight` provides a grammar-agnostic `Theme` (capture-class → CSS color), `stylesheet`, and `default_theme`. The *color → class* half is covered; the *rule → class* half is not: the set of capture classes is grammar-defined (the `.scm` highlight query), so a theme author keys colors by hand-typed class names with nothing to validate against, and a class the grammar emits but the theme omits is silently unstyled.
+`gale-highlight` provides a grammar-agnostic `Theme` (capture-class → CSS color), `stylesheet`, and `default_theme`. The _color → class_ half is covered; the _rule → class_ half is not: the set of capture classes is grammar-defined (the `.scm` highlight query), so a theme author keys colors by hand-typed class names with nothing to validate against, and a class the grammar emits but the theme omits is silently unstyled.
 
 - **Expose a grammar's capture vocabulary from the generator.** Gale already parses the `.scm` at generation time; emit the capture names it uses as a generated artefact (e.g. a `pub const CAPTURES: List<String>`, or a class → default-color map) alongside the parser. A grammar package could then build or validate a `Theme` against the real class set, turning a mistyped or dropped class into a signal instead of silent unstyled output.
 
