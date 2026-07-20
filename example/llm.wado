@@ -111,13 +111,15 @@ export fn run() with Stdout, Stderr, Environment, Client {
             content: "Explain WebAssembly briefly",
         },
     ];
-    let request_body = to_bytes(&ChatRequest {
+    // `to_bytes` returns a read-only view; materialize an owned List<u8> for
+    // the outgoing body with a single bulk copy.
+    let request_body: List<u8> = to_bytes(&ChatRequest {
         model: MODEL_NAME,
         messages,
-    }).unwrap();
+    }).unwrap().into_iter().collect();
 
     // `send_post` streams the body out over the CM boundary as `list<u8>`.
-    let resp = send_post(api_key, request_body as List<u8>);
+    let resp = send_post(api_key, request_body);
     let status = resp.get_status_code();
     let body = read_body(resp);
 

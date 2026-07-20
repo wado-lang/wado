@@ -2314,29 +2314,36 @@ global SERIALIZE_BUFFER_CAPACITY: i32 = 128;
 /// Serializes a value to a JSON string. Convenience over `to_bytes` for text
 /// contexts; serde I/O is bytes-primary, so prefer `to_bytes` when the output
 /// is consumed as bytes (e.g. an HTTP response body).
-pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError> {
+///
+/// `trailing_char`, when `Some`, is appended after the value — pass
+/// `Option::Some('\n')` to emit JSON Lines (one record per line).
+pub fn to_string<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<String, SerializeError> {
     let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = JsonSerializer { buf: &mut buf };
     value.serialize(&mut ser)?;
+    if let Some(c) = trailing_char {
+        buf.push(c);
+    }
     return Result::Ok(buf);
 }
 
 /// Serializes a value directly to UTF-8 JSON bytes.
 ///
-/// Equivalent to `to_string` followed by a byte-buffer conversion, but skips
-/// the intermediate re-encoding: the serializer's UTF-8 buffer is copied out in
-/// a single bulk `array_copy`. Prefer this over
-/// `to_string(value).bytes().collect()` whenever the output is consumed
-/// as bytes (e.g. an HTTP response body).
-pub fn to_bytes<T: Serialize>(value: &T) -> Result<ByteList, SerializeError> {
+/// Returns a read-only `ByteSlice` viewing the serializer's own UTF-8 buffer —
+/// no copy, no re-encode. Prefer this over `to_string(value).bytes().collect()`
+/// whenever the output is consumed as bytes (e.g. an HTTP response body).
+///
+/// `trailing_char`, when `Some`, is appended after the value — pass
+/// `Option::Some('\n')` to emit JSON Lines. The byte view already includes it,
+/// so a caller framing a stream needs no mutable buffer of its own.
+pub fn to_bytes<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError> {
     let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = JsonSerializer { buf: &mut buf };
     value.serialize(&mut ser)?;
-    // Value semantics: an owned `ByteList` cannot alias `buf`'s buffer, so the
-    // bytes must be copied out exactly once. `as_bytes()` is a borrowed view
-    // (no copy); `to_array()` does the single bulk `array_copy`.
-    let bytes = buf.as_bytes();
-    return Result::Ok(List::internal_from_raw(bytes.to_array(), bytes.len()) as ByteList);
+    if let Some(c) = trailing_char {
+        buf.push(c);
+    }
+    return Result::Ok(buf.as_bytes());
 }
 
 /// Serializes a value to a pretty JSON string. Convenience over
