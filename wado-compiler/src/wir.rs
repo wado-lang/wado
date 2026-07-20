@@ -210,6 +210,9 @@ impl WasmModuleInfo {
             for instr in &mut body {
                 remap_func_ids_in_instr(instr, &func_index_remap);
             }
+            // A bundled module's body is final on arrival (it bypasses
+            // `wir_optimize`), so finalize its declared-local table here.
+            let locals = WirLocals::scan(&body);
             wir.functions.push(WirFunction {
                 name: WirName {
                     fq: func_fq.to_string(),
@@ -222,6 +225,7 @@ impl WasmModuleInfo {
                     span: None,
                     attributes: Vec::new(),
                 },
+                locals,
                 value_copy_mangle: None,
                 generic_origin: None,
                 effects: Vec::new(),
@@ -1256,6 +1260,12 @@ pub struct WirFunction {
     /// because it is the mangle (not an intern-order `TypeId`), identical
     /// types interned more than once still resolve to the one helper.
     pub value_copy_mangle: Option<String>,
+    /// Declared locals, the single source of truth the emitter allocates from.
+    /// Every producer finalizes it from the body's `DeclareLocal`s once the body
+    /// is final: `optimize_wir` at every `-O` for the main package, and
+    /// `WasmModuleInfo::to_wir_package` for a bundled module. Empty until then;
+    /// the emitter never rescans, so no producer may leave it stale.
+    pub locals: WirLocals,
 }
 
 /// A function's declared locals, keyed by name in declaration order.

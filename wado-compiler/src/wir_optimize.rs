@@ -118,6 +118,7 @@ pub fn optimize_wir(
             });
         }
         dce::compact_dead_items(module);
+        finalize_locals(module);
         return;
     }
 
@@ -275,4 +276,20 @@ pub fn optimize_wir(
     dce_unreachable_types(module);
     dce::compact_dead_items(module);
     profiler.span_end("wir/phase8_dce_compact");
+
+    // Phase 9: finalize the declared-local SSoT now that no pass adds or removes
+    // a `DeclareLocal`.
+    finalize_locals(module);
+}
+
+/// Snapshot each function's declared locals into `func.locals`, the single
+/// source of truth the emitter allocates from. Runs at every `-O` on both exit
+/// paths so the main package is always finalized (a bundled module finalizes
+/// itself in `WasmModuleInfo::to_wir_package`); the emitter never rescans.
+fn finalize_locals(module: &mut WirPackage) {
+    for func in &mut module.functions {
+        if let Some(body) = &func.body {
+            func.locals = crate::wir::WirLocals::scan(body);
+        }
+    }
 }

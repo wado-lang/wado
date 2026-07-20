@@ -7,7 +7,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::wir::{
     WirAbstractHeapType, WirArrayType, WirExportDesc, WirFuncType, WirFunction, WirImportDesc,
-    WirInstr, WirLocals, WirPackage, WirStructType, WirType, WirTypeDef, WirVariantType,
+    WirInstr, WirPackage, WirStructType, WirType, WirTypeDef, WirVariantType,
 };
 
 use wasm_encoder::{
@@ -788,14 +788,14 @@ impl<'a> WirEmitter<'a> {
             self.next_local = idx + 1;
         }
 
-        // Emit the declared locals — the shared `WirLocals` view of the body's
-        // `DeclareLocal`s (the single source of truth) — then the scratch locals
-        // the emitter's own lowerings synthesise.
+        // Emit the finalized declared locals (`func.locals`, the SSoT every
+        // producer populates), then the scratch locals the emitter's own
+        // lowerings synthesise.
         let mut local_types: Vec<(String, ValType)> = Vec::new();
+        for (name, ty) in func.locals.iter() {
+            self.push_declared_local(name, ty, &mut local_types);
+        }
         if let Some(ref body) = func.body {
-            for (name, ty) in WirLocals::scan(body).iter() {
-                self.push_declared_local(name, ty, &mut local_types);
-            }
             for instr in body {
                 self.collect_scratch_locals(instr, &mut local_types);
             }
