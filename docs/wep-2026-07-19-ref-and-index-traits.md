@@ -162,32 +162,31 @@ intrinsic instead: a value read/write is `array.get` / `array.set`; `&xs[i]` on 
 `Ref` element is the shared handle; `&mut xs[i]` follows the reference-representation
 forbid / carve-out.
 
-### `&container[i]` requires a `Ref` element
+### `Ref` gates the trait `Output`, not the `&place` operator
 
-Taking a reference _into_ a container element — `&xs[i]` / `&mut xs[i]` — is a
-real element reference only when the element is a GC reference (`T: Ref`). A
-value-typed element (scalar, `enum`, `flags`) has no reference identity: `&nums[i]`
-would alias a snapshot _copy_, not the element. So it is a compile error, on both
-the trait path (a user container's `IndexRef` cannot even be declared with a
-scalar `Output` — `type Output: Ref`) and the array-element `&place` path
-(rejected in `resolve_unary`). The diagnostic points at the value read: bind the
-element to a local first.
+`Ref` is a _type/trait_ predicate, not a gate on the `&` operator. Two different
+things spell `&container[i]`:
 
-```wado
-let nums: List<i32> = [1, 2, 3];
-// let r = &nums[0];        // error: `i32` element has no reference identity
-let x = nums[0];            // read by value
-let r = &x;                 // &x on a local is a real (boxed) reference — fine
-```
+- The `IndexRef` / `IndexMutRef` _trait_ result (`&Self::Output`), gated by
+  `type Output: Ref`. A user container cannot hand out a reference to a
+  value-typed element — that would be a leaky abstraction (the caller would
+  think it aliases the element). This is enforced at the impl site.
+- The language `&<place>` operator on a `List` / array element. This is governed
+  by [Reference Representation](./wep-2026-06-13-reference-representation.md), not
+  by `Ref`. Under Wado's value semantics `&scalar-element` is a reference to a
+  value _copy_ (a boxed snapshot) — sound for reads and pervasive
+  (`list.contains(&other[i])`, passing `&scalar` to a `&T` parameter) — so it is
+  **permitted**, unchanged by this WEP.
 
-The distinction is principled: a scalar _local_ `&x` is a real reference (the
-local's slot is boxed, and a `&mut` writes back), whereas a scalar array element
-has no per-element box, so `&nums[i]` could only ever be a copy. `Ref` is exactly
-"has reference identity", so it is the right gate for both.
+So `&nums[i]` on `List<i32>` is _not_ an error. Under value semantics a reference
+to a value type is a reference to a copy — not a "fake" reference; aliasing and
+identity are the province of reference types (GC objects), which `Ref` names.
+Applying `Ref` to the `&place` operator was tried and reverted — it broke the
+pervasive read-only `&scalar[i]` idiom across the ecosystem.
 
-A still-generic element (`&arr[i]` over a type parameter `T`) is not gated here —
-it is checked once `T` is concrete; the `&mut`-over-scalar iteration case is
-rejected by the [Iterator Reference Model](./wep-2026-07-05-iterator-reference-model.md).
+The one genuinely unsound case, `&mut <scalar element>` with an expected
+write-back, is Reference Representation's forbid / carve-out, not `Ref`'s
+concern.
 
 ## Consequences
 
@@ -197,12 +196,11 @@ rejected by the [Iterator Reference Model](./wep-2026-07-05-iterator-reference-m
 - `IndexRef` / `IndexMutRef` enforce element referenceability through `type Output:
   Ref`, killing the C++ `vector<bool>` fake-reference class of bug by
   construction rather than by convention.
-- No proxy objects, no fake `&i32` into scalar arrays; `IndexValue` /
-  `IndexAssign` remain the honest value-semantics path for every element type.
-- `&container[i]` on a value-typed element is a compile error on both paths (the
-  trait `Output` bound and the array-element `&place`), so a reference into a
-  container always aliases the element, never a copy — while a scalar _local_
-  `&x` stays a real (boxed) reference.
+- No proxy objects, no user container handing out a fake `&scalar`; `IndexValue`
+  / `IndexAssign` remain the honest value-semantics path for every element type.
+- `Ref` stays a type/trait predicate. The language `&scalar[i]` operator is
+  unchanged (a reference-representation snapshot, sound for reads), so the
+  pervasive `list.contains(&other[i])` idiom keeps working.
 - The `variant` / `fn` case is handled once, at the place level, by
   reference-representation — the index traits do not re-derive it.
 
@@ -231,19 +229,16 @@ rejected by the [Iterator Reference Model](./wep-2026-07-05-iterator-reference-m
       do _not_ implement `IndexRef` / `IndexMutRef` for `List<T>` (a trait impl
       would only shadow it). `&xs[i]` / `&mut xs[i]` / `xs[i].m()` work through it
       for `Ref` elements.
-- [x] Gate `&container[i]` / `&mut container[i]` on a `Ref` element in
-      `resolve_unary`: a scalar / `enum` / `flags` element is rejected (it has no
-      reference identity), with a diagnostic that points at the value read. A
-      generic `T` element is deferred to concrete instantiation; a scalar _local_
-      `&x` stays allowed. Fixture: `ref_scalar_element_rejected`. Migrated the few
-      fixtures that took `&scalar[i]` (`ref_1`, `ref_3`, `generic_advanced`,
-      `serde_json_roundtrip_complex`) to bind-to-local.
+- [x] Do _not_ gate the language `&scalar[i]` operator on `Ref`. A gate in
+      `resolve_unary` was tried and reverted: `&scalar[i]` is a
+      reference-representation snapshot, sound for reads and used pervasively
+      (`list.contains(&other[i])`), so rejecting it broke the ecosystem. `Ref`
+      gates the trait `Output`, not the `&` operator.
 
 The feature is complete: `Ref` is defined and resolves correctly, the four
-index traits are named, the reference-returning pair is gated on `Output: Ref`
-and enforced at impl sites, and `&container[i]` requires a `Ref` element on both
-the trait and the array-element `&place` paths — a reference into a container
-never aliases a copy.
+index traits are named, and the reference-returning pair is gated on
+`Output: Ref` and enforced at impl sites. The `&scalar[i]` language operator is
+left to reference-representation.
 
 ## References
 

@@ -935,20 +935,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve a unary expression
-    /// Whether `expr` is `container[i]` whose container resolved to a tuple.
-    fn index_base_is_tuple(&self, expr: &ast::Expr) -> bool {
-        let ast::Expr::Index(idx) = expr else {
-            return false;
-        };
-        let Some(base) = self.sem.types.expression_types.get(&idx.expr.id()).copied() else {
-            return false;
-        };
-        matches!(
-            self.tysys.type_table.borrow().get(base),
-            ResolvedType::GenericInstance { name, .. } if TypeTable::is_tuple_type(name)
-        )
-    }
-
     pub(super) fn resolve_unary(
         &mut self,
         unary: &ast::UnaryExpr,
@@ -967,31 +953,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None
         };
         let expr_type = self.resolve_expr(&unary.expr, ctx, inner_expected);
-
-        if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef)
-            && matches!(&unary.expr, ast::Expr::Index(_))
-            && !self.index_base_is_tuple(&unary.expr)
-            && expr_type != TypeTable::UNKNOWN
-            && expr_type != TypeTable::ERROR
-            && !self
-                .tysys
-                .type_table
-                .borrow()
-                .contains_type_param(expr_type)
-        {
-            let elem = self.tysys.type_table.borrow().get(expr_type).clone();
-            if !self.tysys.is_ref_identity(&elem) {
-                let elem_name = self.tysys.type_id_to_string(expr_type);
-                let _ = self.emit(TypeError::CannotReference {
-                    message: format!(
-                        "cannot take a reference to a value-typed element `{elem_name}`: \
-                         it has no reference identity (the reference would alias a copy, not \
-                         the element). Read it by value instead, e.g. `let x = ...[i];`"
-                    ),
-                    span: unary.span,
-                });
-            }
-        }
 
         if unary.op == UnaryOp::MutRef
             && let ast::Expr::Ident(id) = &unary.expr
