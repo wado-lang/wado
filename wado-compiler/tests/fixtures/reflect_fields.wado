@@ -1,0 +1,31 @@
+// Reflect per-struct synthesis (WEP 2026-06-13 §1): `Reflect::<T>::fields(&self)`
+// returns the struct's field values as a tuple whose type is `type Fields`.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Named {
+    id: i32,
+    label: String,
+    active: bool,
+}
+
+test "fields returns the field values as a tuple in order" {
+    let p = Point { x: 10, y: 20 };
+    let f = Reflect::<Point>::fields(&p);
+    assert f.0 == 10;
+    assert f.1 == 20;
+}
+
+test "fields preserves declared field order and types" {
+    let n = Named { id: 7, label: "hi", active: true };
+    let f = Reflect::<Named>::fields(&n);
+    assert f.0 == 7;
+    assert f.1 == "hi";
+    assert f.2 == true;
+}
+
+__DATA__
+{"test": {}}

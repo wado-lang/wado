@@ -409,7 +409,8 @@ where T: Reflect<Fields = [..F]>
       in `core:serde`; monomorphizer handles cross-module variadic impls with method-level
       type params (e.g., `fn serialize<S: Serializer>`) and associated type projections
 - [ ] Coherence: implement Rule 1 (non-VG wins) and Rule 2 (VG overlap forbidden)
-- [ ] `Reflect` trait: synthesize per-struct impl in the lowering pass
+- [x] `Reflect` trait: synthesize per-struct impl (`type_name`, `field_names`,
+      `fields`, and the `Fields` associated tuple) in the synthesis pass
 - [ ] `where` clause pack binding: parse `T: Trait<Assoc = [..F]>` and extract `F`
 - [ ] Error messages: show call site, element index, and body location
 - [x] Tuple `Eq`: monomorphizer expands `==`/`!=` on concrete tuples to element-wise
