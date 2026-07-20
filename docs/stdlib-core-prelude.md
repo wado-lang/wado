@@ -52,23 +52,22 @@ Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operator
 
 Compares self with other and returns an Ordering.
 
-### `pub trait Index<IndexType>`
+### `pub trait IndexRef<IndexType>`
 
-Trait for immutable indexing operations.
-Types implementing this trait can be indexed with the `[]` operator for reading.
+Immutable reference indexing: `&container[i]` reads through this.
+`Output: Ref` — only a reference element can be handed out by reference; a
+value element is read through `IndexValue`.
 
-#### `fn index(&self, index: IndexType) -> &Self::Output`
+#### `fn index_ref(&self, index: IndexType) -> &Self::Output`
 
 Returns a reference to the element at the given index.
 
-### `pub trait IndexMut<IndexType>`
+### `pub trait IndexMutRef<IndexType>`
 
-Trait for mutable indexing operations.
-Types implementing this trait can be indexed with the `[]` operator to get
-a mutable reference: `container[i].mutating_method()`.
-Note: Requires Index to be implemented (supertrait relationship).
+Mutable reference indexing: `container[i].mutating_method()`.
+`Output: Ref` for the same reason as `IndexRef`.
 
-#### `fn index_mut(&mut self, index: IndexType) -> &mut Self::Output`
+#### `fn index_mut_ref(&mut self, index: IndexType) -> &mut Self::Output`
 
 Returns a mutable reference to the element at the given index.
 
@@ -394,23 +393,22 @@ Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operator
 
 Compares self with other and returns an Ordering.
 
-### `pub trait Index<IndexType>`
+### `pub trait IndexRef<IndexType>`
 
-Trait for immutable indexing operations.
-Types implementing this trait can be indexed with the `[]` operator for reading.
+Immutable reference indexing: `&container[i]` reads through this.
+`Output: Ref` — only a reference element can be handed out by reference; a
+value element is read through `IndexValue`.
 
-#### `fn index(&self, index: IndexType) -> &Self::Output`
+#### `fn index_ref(&self, index: IndexType) -> &Self::Output`
 
 Returns a reference to the element at the given index.
 
-### `pub trait IndexMut<IndexType>`
+### `pub trait IndexMutRef<IndexType>`
 
-Trait for mutable indexing operations.
-Types implementing this trait can be indexed with the `[]` operator to get
-a mutable reference: `container[i].mutating_method()`.
-Note: Requires Index to be implemented (supertrait relationship).
+Mutable reference indexing: `container[i].mutating_method()`.
+`Output: Ref` for the same reason as `IndexRef`.
 
-#### `fn index_mut(&mut self, index: IndexType) -> &mut Self::Output`
+#### `fn index_mut_ref(&mut self, index: IndexType) -> &mut Self::Output`
 
 Returns a mutable reference to the element at the given index.
 
