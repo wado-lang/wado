@@ -248,6 +248,14 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A reference (`&`/`&mut`) was taken of something that cannot be
+    /// referenced — e.g. a value-typed container element, which has no
+    /// reference identity to alias.
+    CannotReference {
+        message: String,
+        span: Span,
+    },
+
     /// Trait bound not satisfied
     TraitBoundNotSatisfied {
         type_name: String,
@@ -707,6 +715,9 @@ impl TypeError {
             ),
             TypeError::CannotMutate { message, span } => {
                 (Code::ImmutableAssignment, message.clone(), *span)
+            }
+            TypeError::CannotReference { message, span } => {
+                (Code::TypeMismatch, message.clone(), *span)
             }
             TypeError::TraitBoundNotSatisfied {
                 type_name,

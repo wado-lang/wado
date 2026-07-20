@@ -1,0 +1,23 @@
+// A tuple element `t[0]` is a fixed GC-struct field, not a dynamic container
+// element, so `&t[0]` on a scalar element is permitted — the same rule as
+// `&s.f` on a scalar struct field. Only dynamic container elements (`&nums[i]`)
+// are gated on `Ref`. Regression guard for the element-reference gate.
+
+struct P {
+    x: i32,
+}
+
+test "reference to a scalar tuple element is allowed" {
+    let t = [10, "hi", true];
+    let r = &t[0];
+    assert *r == 10;
+}
+
+test "reference to a scalar struct field is allowed" {
+    let p = P { x: 5 };
+    let r = &p.x;
+    assert *r == 5;
+}
+
+__DATA__
+{"test": {}}

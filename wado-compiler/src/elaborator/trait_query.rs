@@ -151,6 +151,44 @@ pub(crate) fn canonical_decl_key_with(
 /// module that has the inputs in hand. Used by reify's
 /// `reify_impl_default_methods` to enumerate the trait's default methods
 /// for an impl block.
+/// Resolve a trait declaration by name to its `TraitDecl` and owning module.
+/// Resolves local-first — a local trait shadows a same-named one in another
+/// module (issue #1298), so this picks the right `Visitor` even when an
+/// unrelated `core:serde::Visitor` exists — then falls back to a scan of the
+/// current module's items. Shared by the by-methods and by-associated-types
+/// accessors so the resolution rule cannot drift between them.
+fn find_trait_decl_with<'a>(
+    trait_name: &str,
+    current_module_source: &ModuleSource,
+    current_module_items: &'a [ast::Item],
+    imports: &super::sem::ModuleImports,
+    symbols: &crate::symbol::SymbolTable,
+    trait_env: &super::trait_env::TraitEnv,
+    loaded_modules: &'a IndexMap<ModuleSource, ast::Module>,
+) -> Option<(&'a ast::TraitDecl, ModuleSource)> {
+    let canonical_key = canonical_decl_key_with(
+        trait_name,
+        current_module_source,
+        imports,
+        symbols,
+        trait_env,
+    );
+    if let Some((module_src, item_id)) = trait_env.decl_index.get(&canonical_key)
+        && let Some(module) = loaded_modules.get(module_src)
+        && let Some(Item::Trait(trait_decl)) = module.item_by_id(*item_id)
+    {
+        return Some((trait_decl, module_src.clone()));
+    }
+    for item in current_module_items {
+        if let Item::Trait(trait_decl) = item
+            && trait_decl.name == trait_name
+        {
+            return Some((trait_decl, current_module_source.clone()));
+        }
+    }
+    None
+}
+
 pub(crate) fn find_trait_decl_methods_with_module_with(
     trait_name: &str,
     current_module_source: &ModuleSource,
@@ -160,36 +198,21 @@ pub(crate) fn find_trait_decl_methods_with_module_with(
     trait_env: &super::trait_env::TraitEnv,
     loaded_modules: &IndexMap<ModuleSource, ast::Module>,
 ) -> Option<(Vec<ast::Function>, ModuleSource)> {
-    // `canonical_decl_key_with` resolves the trait local-first (a local trait
-    // shadows a same-named one in another module — issue #1298), so this picks
-    // the right `Visitor` even when an unrelated `core:serde::Visitor` exists.
-    let canonical_key = canonical_decl_key_with(
+    find_trait_decl_with(
         trait_name,
         current_module_source,
+        current_module_items,
         imports,
         symbols,
         trait_env,
-    );
-    if let Some((module_src, item_id)) = trait_env.decl_index.get(&canonical_key)
-        && let Some(module) = loaded_modules.get(module_src)
-        && let Some(Item::Trait(trait_decl)) = module.item_by_id(*item_id)
-    {
-        return Some((trait_decl.methods.clone(), module_src.clone()));
-    }
-    for item in current_module_items {
-        if let Item::Trait(trait_decl) = item
-            && trait_decl.name == trait_name
-        {
-            return Some((trait_decl.methods.clone(), current_module_source.clone()));
-        }
-    }
-    None
+        loaded_modules,
+    )
+    .map(|(decl, module)| (decl.methods.clone(), module))
 }
 
 /// Find a trait declaration by name and return its associated-type declarations
 /// (`type Output: Ref;` etc.), for enforcing an impl's bindings against the
-/// trait's associated-type bounds. Resolves the trait local-first, mirroring
-/// [`find_trait_decl_methods_with_module_with`].
+/// trait's associated-type bounds.
 pub(crate) fn find_trait_decl_assoc_types_with(
     trait_name: &str,
     current_module_source: &ModuleSource,
@@ -199,27 +222,16 @@ pub(crate) fn find_trait_decl_assoc_types_with(
     trait_env: &super::trait_env::TraitEnv,
     loaded_modules: &IndexMap<ModuleSource, ast::Module>,
 ) -> Option<Vec<ast::AssociatedTypeDecl>> {
-    let canonical_key = canonical_decl_key_with(
+    find_trait_decl_with(
         trait_name,
         current_module_source,
+        current_module_items,
         imports,
         symbols,
         trait_env,
-    );
-    if let Some((module_src, item_id)) = trait_env.decl_index.get(&canonical_key)
-        && let Some(module) = loaded_modules.get(module_src)
-        && let Some(Item::Trait(trait_decl)) = module.item_by_id(*item_id)
-    {
-        return Some(trait_decl.associated_types.clone());
-    }
-    for item in current_module_items {
-        if let Item::Trait(trait_decl) = item
-            && trait_decl.name == trait_name
-        {
-            return Some(trait_decl.associated_types.clone());
-        }
-    }
-    None
+        loaded_modules,
+    )
+    .map(|(decl, _)| decl.associated_types.clone())
 }
 
 impl TypeSystem {
@@ -435,6 +447,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `impl IndexRef<i32> for C { type Output = i32 }` where `IndexRef`
     /// requires `Output: Ref` reports that `i32` does not implement `Ref`.
     /// A still-parametric binding is skipped (re-checked once concrete).
+    ///
+    /// Only the bound's trait is checked; an associated-type-equality
+    /// constraint inside the bound (`Iterator<Item = Self::Item>`) is not
+    /// enforced — a mismatched projection would slip through. Sufficient for the
+    /// current marker bounds (`Ref` carries no such constraint); tightening this
+    /// is future work.
     pub(super) fn enforce_impl_assoc_type_bounds(&mut self, impl_block: &ast::ImplBlock) {
         let Some(trait_type) = &impl_block.trait_type else {
             return;
@@ -450,7 +468,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if decl.bounds.is_empty() {
                 continue;
             }
-            let type_id = self.resolve_type(&binding.ty);
+            // Reuse the binding type the caller (`module.rs`) just resolved into
+            // `assoc_type_bindings`, rather than resolving `binding.ty` again.
+            let type_id = self
+                .annotate_ctx
+                .trait_ctx
+                .assoc_type_bindings
+                .get(&binding.name)
+                .copied()
+                .unwrap_or_else(|| self.resolve_type(&binding.ty));
             if self.tysys.type_table.borrow().contains_type_param(type_id) {
                 continue;
             }
@@ -829,6 +855,11 @@ impl TypeSystem {
             ResolvedType::Primitive(p) => {
                 matches!(p, PrimitiveType::I128 | PrimitiveType::U128)
             }
+            // Every `GenericInstance` is a GC struct/variant (user generics,
+            // `Option` / `Result` / `List` / `TreeMap` / `Range` / tuples /
+            // `Box`), so it is always a reference. A generic newtype over a
+            // scalar (`type W<T> = T`) resolves to `Newtype`, not
+            // `GenericInstance`, and is handled by the `Newtype` arm below.
             ResolvedType::Struct { .. }
             | ResolvedType::Variant { .. }
             | ResolvedType::GenericInstance { .. }
