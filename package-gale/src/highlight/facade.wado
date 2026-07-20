@@ -117,17 +117,18 @@ fn highlight_file(
     standalone: bool,
     theme: Theme,
 ) -> Option<u64> with Stderr, MonotonicClock {
-    let open_result = root.open_at(
+    let file = match root.open_at(
         PathFlags::none(),
         *path,
         OpenFlags::none(),
         DescriptorFlags::Read,
-    ).wait();
-    if let Err(_) = open_result {
-        eprintln(`error: ${*path}: cannot open file`);
-        return null;
-    }
-    let file = open_result.unwrap();
+    ).wait() {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln(`error: ${*path}: cannot open file: ${e:?}`);
+            return null;
+        },
+    };
     let input = String::from_utf8_unchecked(read_all(&file));
 
     let start = MonotonicClock::now();
@@ -150,12 +151,10 @@ fn highlight_file(
 /// `mkdir -p` on every directory prefix of `path`. An already-existing
 /// directory is not an error.
 fn ensure_parent_dirs(root: &Descriptor, path: &String) -> bool with Stderr {
-    let components: List<String> = path.split("/").collect();
+    let mut components: List<String> = path.split("/").collect();
+    components.pop();  // drop the filename; only its parent dirs are created
     let mut prefix = String::new();
-    let mut i = 0;
-    while i < components.len() - 1 {
-        let comp = &components[i];
-        i += 1;
+    for let comp of &components {
         if comp.is_empty() || *comp == "." {
             continue;
         }
@@ -167,7 +166,7 @@ fn ensure_parent_dirs(root: &Descriptor, path: &String) -> bool with Stderr {
             if e matches { Exist } {
                 continue;
             }
-            eprintln(`error: ${prefix}: cannot create directory`);
+            eprintln(`error: ${prefix}: cannot create directory: ${e:?}`);
             return false;
         }
     }
@@ -177,24 +176,25 @@ fn ensure_parent_dirs(root: &Descriptor, path: &String) -> bool with Stderr {
 /// Write `source` to `path`, creating or truncating it. Returns `false` on
 /// failure (already reported).
 fn write_file(root: &Descriptor, path: &String, source: &String) -> bool with Stderr {
-    let open_result = root.open_at(
+    let file = match root.open_at(
         PathFlags::none(),
         *path,
         OpenFlags::Create | OpenFlags::Truncate,
         DescriptorFlags::Read | DescriptorFlags::Write,
-    ).wait();
-    if let Err(_) = open_result {
-        eprintln(`error: ${*path}: cannot open for writing`);
-        return false;
-    }
-    let file = open_result.unwrap();
+    ).wait() {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln(`error: ${*path}: cannot open for writing: ${e:?}`);
+            return false;
+        },
+    };
     let bytes: List<u8> = source.bytes().collect();
     let [rx, tx] = Stream::<u8>::new();
     let sub = file.write_via_stream(rx, 0 as Filesize);
     tx.write(bytes);
     tx.drop();
-    if let Some(Err(_)) = sub.read() {
-        eprintln(`error: ${*path}: write failed`);
+    if let Some(Err(e)) = sub.read() {
+        eprintln(`error: ${*path}: write failed: ${e:?}`);
         sub.drop();
         return false;
     }
