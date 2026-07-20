@@ -14,9 +14,13 @@ use wado_manifest::{Manifest, ManifestError, read_workspace_members};
 
 const MANIFEST_FILENAME: &str = "wado.toml";
 
-/// Glob options matching the CLI walker: `*` honours path components, `**` is
-/// required to cross directories.
-const WALK_MATCH_OPTIONS: MatchOptions = MatchOptions {
+/// Glob match options shared by the file walker (`wado-cli`'s discover, which
+/// re-exports this) and workspace-member matching, so `members` globs and the
+/// `[test].exclude` / `--filter` patterns are interpreted identically.
+/// `require_literal_separator: true` makes `*` honour path components
+/// (`src/*.wado` matches direct children only; `**` is required to cross
+/// directories) — standard shell / `.gitignore` convention.
+pub const WALK_MATCH_OPTIONS: MatchOptions = MatchOptions {
     case_sensitive: true,
     require_literal_separator: true,
     require_literal_leading_dot: false,

@@ -94,7 +94,13 @@ fn highlight_file(
             return null;
         },
     };
-    let input = String::from_utf8_unchecked(read_all(&file));
+    let input = match String::from_utf8(read_all(&file)) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln(`error: ${*path}: not valid UTF-8: ${e}`);
+            return null;
+        },
+    };
 
     let start = MonotonicClock::now();
     let html = highlight(&input);
@@ -174,9 +180,7 @@ fn read_all(file: &Descriptor) -> List<u8> {
         if chunk.len() == 0 {
             break;
         }
-        for let b of chunk {
-            result.push(b);
-        }
+        result.extend(&chunk);
     }
     read_stream.drop();
     return result;
