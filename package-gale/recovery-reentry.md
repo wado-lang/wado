@@ -99,24 +99,97 @@ The bare `let s = ...` snippet above highlights fully: a `keyword` class on
 `let`, defaults for `s = … ;`, and a real `templateString` → `interpolation`
 island around the backtick run.
 
-### Tier 2 — anchor re-entry (optional, higher reach / higher risk)
+### Tier 2 — fragment-entry re-entry (design)
 
-To structure a bare fragment as _statements_ (not just islands), re-enter at
-the grammar's **repeated-constituent anchors**: rules `A` that appear in a
-`*`/`+` loop in some rule (`item` in `item*`, `statement` in a block's
-`statement*`). At a stuck position, dispatch among anchors whose FIRST contains
-the current token. Shared-FIRST collisions (e.g. `statement` vs `item` both on
-`IDENTIFIER`) are resolved by the **existing ATN simulator** (`atn.wado`) —
-the same full-context prediction the normal parser uses — never by a new
-try-fail loop. This effectively auto-derives a `statement* | item*` fragment
-alternative from the grammar's own loop structure.
+Goal: structure a bare fragment as a **sequence of statement/item units**, not
+just delimiter islands. `let x = 1; foo(x); if y { g() }` at top level should
+yield three real `statement` subtrees, not skipped tokens with a couple of
+islands. Not required for correct highlighting (Tier 1 already recovers every
+context island); it pays off for consumers that want full fragment structure —
+an LSP outline of a snippet, selection/folding, a formatter over a partial file.
 
-Tier 2 is strictly opt-in beyond Tier 1 because "which anchor at top level"
-is a policy the grammar author normally encodes; auto-deriving it is exactly
-the class of decision the 2026-05 notes warn about. It is **not required for
-correct highlighting** (Tier 1 already recovers every context island). Ship it
-only if a consumer needs full fragment structure (e.g. an outline of a snippet),
-and gate it separately.
+#### Mechanism: reuse Tier 1's sweep, richer step
+
+Tier 2 reuses Tier 1's integration verbatim — the `expect(EOF)` hook, the
+`<error>` region under the root, the progress-guarded loop. Only the per-position
+step changes, layering three strategies (widest structure first):
+
+1. **Fragment-entry parse** — if the current token can begin a configured
+   fragment-entry rule, parse that whole rule (a statement / item), building its
+   full subtree.
+2. **Delimiter island (Tier 1)** — else if it is a delimiter trigger, descend
+   into that one rule.
+3. **Skip one** — else skip a token into the region.
+
+Nothing from Tier 1 is discarded: it is the inner fallback for a token no entry
+rule accepts. The three strategies share the one progress guard.
+
+#### Entry-rule set: explicit config (recommended)
+
+A new option `fragment_entry: List<String>` names the rule(s) a fragment is a
+sequence of — for a statement language, usually just `["statement"]`. It is set
+at the `use … with { generator: { options } }` site, the same surface that
+already sets `recover_islands`, so it needs **no `.g4` edit** (reading the
+grammar to name its statement rule is not editing it — this honors the
+no-grammar-edit constraint). `gale-highlight-wado` would set `["statement"]`.
+Unknown names warn and are skipped, as the highlight query does.
+
+**Single entry is the common, safest case and needs no dispatch at all:**
+`fragment_entry: ["statement"]` → the sweep loops `_parse_statement(p)` until
+EOF. Fully deterministic. For Wado this already covers bare statements _and_
+bare expressions (a bare `foo(x) + 1` parses as an `exprStatement` whose missing
+`;` is inserted by the rule's own recovery), and it subsumes Tier 1's template
+island because a backtick is in `FIRST(statement)`. So Wado's whole fragment
+story is one configured entry rule.
+
+Why explicit and not auto-derived: "which rule is a top-level unit" is a policy
+the grammar author encodes. Auto-guessing it is exactly the class of decision
+the 2026-05 LL(\*) notes flag — and a naive "repetition-body rule reachable from
+the start rule" set also sweeps up inner list-elements (`fieldDecl`, `param`,
+`enumCase`) that are not top-level units.
+
+#### Multiple entries → reuse the parser's own prediction (extension)
+
+When >1 entry is configured (a grammar with genuinely distinct top-level units),
+choosing among them at a token is the same decision the parser already makes for
+an alternation. Do not hand-roll it. Two viable realizations:
+
+- **Synthetic dispatch rule.** Inject `__fragment_unit : e1 | e2 | … ;`, emit it
+  through the normal pipeline, and call `_parse___fragment_unit(p)`; alternative
+  prediction (static k-lookahead → ATN escalation, exactly as any alternation)
+  picks the entry, no new algorithm and no backtracking. **Caveat:** injecting a
+  rule into the shared grammar perturbs FIRST/FOLLOW/ATN of the referenced rules
+  (`__fragment_unit` contributes EOF to `FOLLOW(statement)`), which could change
+  a FOLLOW-gated rule's _clean_-parse output. So the synthetic rule must be
+  lowered/predicted in **isolation** (its own analysis pass, not folded into the
+  real grammar's FOLLOW sets) — the load-bearing design constraint here.
+- **FIRST dispatch + narrow ATN.** Precompute `FIRST(e_i)`; a token unique to one
+  entry dispatches directly; only a genuine collision consults an isolated ATN
+  decision built for just those entries. More code, zero perturbation.
+
+Recommend shipping single-entry first (no dispatch, no perturbation risk) and
+treating multi-entry as a follow-up with the isolation constraint above.
+
+#### Why the 2026-05 trap does not apply
+
+Those failures changed the **clean-parse** code path — static per-rule variants
+baked into normal rules — so an over-broad guard silently mis-parsed valid
+input. Tier 2's fragment path runs **only at a stuck `expect(EOF)`** on
+already-broken input, never on a clean parse; the rejection corpus proves clean
+trees are byte-identical on/off. A mis-picked entry can only mis-structure an
+already-invalid fragment (cosmetic for highlighting), never a valid program.
+Opt-in **plus** recovery-only confines the blast radius — the crucial difference
+from baking variants into the normal path.
+
+#### Termination, tree, diagnostics
+
+- Each entry parse matches its FIRST token first → consumes ≥1; the progress
+  guard skips one on the defensive zero-consume case. O(n) overall.
+- Fragment units nest inside the one `<error>` region under the root (they are
+  recovered, not grammatical children of the start rule); their `statement`
+  subtrees are real nodes a walker sees.
+- One `UnexpectedToken` for the fragment; each unit adds its own recovery
+  diagnostics, capped by `max_errors`.
 
 ## Integration points (as built)
 
@@ -215,13 +288,27 @@ delimited `group`:
    exclusive-terminal + direct-first analysis) + gated `_recover_descend` /
    `_recover_try_descend`, wired into the `expect(EOF)` hook. Hit + rejection
    fixtures. Enabled in `gale-highlight-wado`.
-2. **Tier 2 (deferred):** anchor set + ATN-resolved dispatch for full fragment
-   structure (parse a bare `let …` as a statement, not just its islands).
-   Separate gate, its own rejection corpus. Reuses all of Tier 1's plumbing;
-   only the dispatch decision changes.
+2. **Tier 2a — single fragment entry (designed):** add `fragment_entry:
+   List<String>`; when it names one rule, the sweep step tries
+   `_parse_<entry>(p)` before the Tier 1 descend. No dispatch, no synthetic
+   rule, no analysis perturbation. Covers Wado (`["statement"]`). Reuses all of
+   Tier 1's plumbing — only the sweep step gains a first strategy.
+3. **Tier 2b — multiple entries (designed, follow-up):** synthetic
+   `__fragment_unit` alternation lowered/predicted **in isolation** (or FIRST
+   dispatch + a narrow isolated ATN), so clean-parse FIRST/FOLLOW is untouched.
+
+Tier 2's TDD mirrors Tier 1's: a hit fixture (`let x = 1; foo(x); if y { g() }`
+→ nested `statement` subtrees under the `<error>` region) and the mandatory
+rejection fixture (grammar generated on/off, incl. `fragment_entry` set → clean
+inputs byte-identical, since the fragment path never runs on a clean parse),
+plus an interaction case (a token no entry accepts still gets a Tier 1 island).
 
 ## Recommendation
 
 Tier 1 is sufficient for correct fragment _highlighting_ and is low-risk
-(deterministic, delimiter-trigger only, opt-in). Tier 2 is a separate, riskier
-capability for full fragment structure; pursue only on a concrete consumer need.
+(deterministic, delimiter-trigger only, opt-in). Tier 2a (single explicit entry)
+is the natural next step for full fragment structure — safe (no dispatch, no
+perturbation, recovery-only) and enough for a statement language like Wado.
+Tier 2b (multiple entries) is worthwhile only for a grammar with several
+distinct top-level units, and must lower the dispatch in isolation to keep the
+clean parse byte-identical.
