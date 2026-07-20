@@ -141,6 +141,10 @@ impls next to `RULE_NAMES`, so `{node.kind}` prints the rule name and
 
 ### Deferred
 
+- **Recovery re-entry (fragment structure).** A bare snippet whose tokens the
+  start rule can't derive (e.g. a top-level statement under an `item*` start
+  rule) is left unconsumed, so nested-only constructs build no subtree. Design
+  for grammar-agnostic, backtrack-free re-entry: `recovery-reentry.md`.
 - **No-viable `K_ERROR` _node_.** The no-viable fallback carries the
   `NoViableAlternative` code but does not open an explicit `K_ERROR` node:
   the diagnostic's `rule_stack` is built on unwind, which is incompatible
