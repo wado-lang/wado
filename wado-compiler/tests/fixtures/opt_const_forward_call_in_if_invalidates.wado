@@ -1,18 +1,22 @@
 // Regression: a call inside an `if` arm can mutate a local passed to it
 // (`grow` pushes through `&mut`), so the branch merge must invalidate
-// that local's field facts: `a.len()` is 3 or 4 depending on `c` and
-// must not fold to the pre-branch constant 3.
+// that local's field facts: `a.len()` is 5 or 6 depending on `c` and
+// must not fold to the pre-branch constant 5.
+//
+// Lengths are >= 5 so the not-expected constants don't collide with the
+// UTF-8 byte-length returns (1-4) of the string encoder that `println`'s
+// formatting pulls into the WIR.
 
 use { println, Stdout } from "core:cli";
 
 #[inline("never")]
 fn grow(xs: &mut List<i32>) {
-    xs.push(4);
+    xs.push(6);
 }
 
 #[inline("never")]
 fn f(c: bool) -> i32 {
-    let mut a: List<i32> = [1, 2, 3];
+    let mut a: List<i32> = [1, 2, 3, 4, 5];
     if c {
         grow(&mut a);
     }
@@ -25,9 +29,9 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "3 4\n",
+    "stdout": "5 6\n",
     "wir_not_expect:O2": [
-        "return 3;",
-        "return 4;"
+        "return 5;",
+        "return 6;"
     ]
 }

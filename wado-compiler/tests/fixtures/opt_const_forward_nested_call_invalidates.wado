@@ -1,14 +1,18 @@
 // Regression: a mutating call nested inside a statement's subexpression
 // (`pop(&mut a)` lowered into the scrutinee binding of `matches`) must
 // invalidate the list's field facts. Only top-level call statements were
-// invalidated before, so `a.len()` folded to the stale literal length 3
+// invalidated before, so `a.len()` folded to the stale literal length 5
 // once the stores-aware alias refinement stopped marking `a` aliased.
+//
+// The length is >= 5 so the not-expected constant doesn't collide with the
+// UTF-8 byte-length returns (1-4) of the string encoder that `println`'s
+// formatting pulls into the WIR.
 
 use { println, Stdout } from "core:cli";
 
 #[inline("never")]
 fn f() -> i32 with Stdout {
-    let mut a: List<i32> = [1, 2, 3];
+    let mut a: List<i32> = [1, 2, 3, 4, 5];
     if a.pop() matches { Some(_) } {
         println(`popped`);
     }
@@ -21,8 +25,8 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "popped\n2\n",
+    "stdout": "popped\n4\n",
     "wir_not_expect:O2": [
-        "return 3;"
+        "return 5;"
     ]
 }
