@@ -1,8 +1,12 @@
 /// Driver test for the Rust grammar parser.
 ///
-/// The Rust grammar uses semantic predicates for disambiguation, so some
-/// constructs (fn, match, use paths) are not supported without predicate
-/// evaluation. These tests cover items and expressions that parse correctly.
+/// A few constructs are not parsed yet — a top-level `fn` item (`expected Eof,
+/// got "fn"`) and a `use` path (`expected PATHSEP`). These are prediction /
+/// dispatch gaps in the item / `useTree` rules, not semantic-predicate gaps:
+/// `function_` and `useTree` use no predicate, and `match` / nested generics
+/// parse fine. The lexer's superClass predicates (`SOF`, float disambiguation)
+/// do run here via the installed base handler. These tests cover items and
+/// expressions that parse correctly, plus a couple of negative tripwires.
 use rust from "./grammars/RustLexer.g4"
     with {
         generator: {
@@ -128,11 +132,15 @@ test "parse empty crate" {
     }
 }
 
-test "fn keyword requires semantic predicates" {
-    // "fn main() {}" fails because the Rust grammar uses semantic predicates
-    // for the `fn` keyword that gale does not evaluate.
+test "top-level fn item is not predicted yet (prediction gap, not a predicate)" {
+    // `fn main() {}` fails with `expected Eof, got "fn"`: the `crate` rule's
+    // item prediction does not route `KW_FN` into the `function_` alternative,
+    // so it matches zero items and expects EOF. `function_` uses no semantic
+    // predicate — this is a static-prediction gap, unrelated to superClass. A
+    // negative tripwire: it will flip to `ok()` when item prediction is fixed.
     let r = rlex_prs(&"fn main() {}");
     assert !r.ok(), "expected a diagnostic";
+    assert r.diagnostics[0].message.contains("Eof"), `unexpected diagnostic: ${r.diagnostics[0].message}`;
 }
 
 // Multi-token tail-greedy caller-FOLLOW gate (parse-side + scan-side).
