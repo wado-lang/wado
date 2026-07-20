@@ -873,13 +873,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let _ = logger.error_in(&module_source, violation);
         }
 
-        // Seal the compiler-synthesized traits: they may not be implemented in
-        // user code (a user `impl Reflect` could forge a type's reflection; a
-        // user `impl Ref` could forge reference-type eligibility). A user who
-        // declares their *own* trait of the same name owns that name, so the
-        // seal must not fire on an impl of their trait — skip when any user
-        // module declares a trait of the same name (the same local-vs-foreign
-        // distinction the orphan checker draws via `local_trait_names`).
+        // Seal the compiler-synthesized traits: user code may not implement
+        // them. A user who declares their *own* trait of the same name owns it,
+        // so skip the seal when any user module declares that name.
         for sealed_item in [
             crate::compiler_item::CompilerItem::Reflect,
             crate::compiler_item::CompilerItem::Ref,

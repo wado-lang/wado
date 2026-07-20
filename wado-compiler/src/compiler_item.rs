@@ -123,10 +123,8 @@ pub enum CompilerItem {
     /// `Reflect` — compile-time struct-introspection anchor; the
     /// per-struct `impl Reflect for S` synthesis points at it.
     Reflect,
-    /// `Ref` — sealed marker trait for reference (in-place) types,
-    /// whose `&T` / `&mut T` is a shared GC handle with addressable
-    /// interior. The `where T: Ref` bound gates operations that hand
-    /// out a real element reference (e.g. `Index` / `IndexMut`).
+    /// `Ref` — sealed marker for reference-identity types (GC references);
+    /// its `Output: Ref` bound gates the reference-returning index traits.
     Ref,
     /// `Eq` — anchor for synthesised `==` / `!=` lowering and the
     /// auto-derive checks that decide whether a compound type

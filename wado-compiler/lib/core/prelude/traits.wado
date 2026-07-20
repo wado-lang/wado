@@ -80,24 +80,15 @@ internal trait Reflect {
     fn type_name() -> String;
 }
 
-/// Marker trait for reference-identity types: those whose value is a Wasm GC
-/// reference, so `&T` aliases the same object. Holds for `struct`, `variant`,
-/// `List<T>`, `String`, tuples, `i128` / `u128`, `fn`, `&T` / `&mut T`, and
-/// other GC-reference types; not for scalars (`primitive` except `i128`/`u128`,
-/// `enum`, `flags`), `resource` (an `i32` handle, not a GC reference), or `()`.
-/// Gates operations that hand out a real element reference — the `Output` of
-/// `Index` / `IndexMut`. Reference identity is distinct from the in-place-vs-
-/// replace axis (a `variant` is `Ref` yet replace-on-assign). Sealed: the
-/// compiler synthesizes the impl for every eligible type; user impls are
-/// rejected. See WEP 2026-07-19 (Ref and Index Traits).
+/// Marker for reference-identity types: those whose value is a Wasm GC
+/// reference. Sealed and compiler-synthesized; user impls are rejected.
+/// See WEP 2026-07-19.
 #[compiler_item("ref")]
 internal trait Ref {}
 
-/// Trait for immutable reference indexing.
-/// `container[i]` in reference position (`&container[i]`, a `&self`-method
-/// receiver, pattern match) reads through this. `Output: Ref` because you can
-/// only hand out `&Output` when the element is itself a GC reference — a scalar
-/// element is read by value through `IndexValue` instead.
+/// Immutable reference indexing: `&container[i]` reads through this.
+/// `Output: Ref` — only a reference element can be handed out by reference; a
+/// value element is read through `IndexValue`.
 internal trait IndexRef<IndexType> {
     type Output: Ref;
 
@@ -105,10 +96,8 @@ internal trait IndexRef<IndexType> {
     fn index_ref(&self, index: IndexType) -> &Self::Output;
 }
 
-/// Trait for mutable reference indexing.
-/// Types implementing this trait can be indexed with the `[]` operator to get
-/// a mutable reference: `container[i].mutating_method()`. `Output: Ref` for the
-/// same reason as `IndexRef`.
+/// Mutable reference indexing: `container[i].mutating_method()`.
+/// `Output: Ref` for the same reason as `IndexRef`.
 internal trait IndexMutRef<IndexType> {
     type Output: Ref;
 

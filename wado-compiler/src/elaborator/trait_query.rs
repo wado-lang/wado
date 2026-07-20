@@ -151,12 +151,8 @@ pub(crate) fn canonical_decl_key_with(
 /// module that has the inputs in hand. Used by reify's
 /// `reify_impl_default_methods` to enumerate the trait's default methods
 /// for an impl block.
-/// Resolve a trait declaration by name to its `TraitDecl` and owning module.
-/// Resolves local-first — a local trait shadows a same-named one in another
-/// module (issue #1298), so this picks the right `Visitor` even when an
-/// unrelated `core:serde::Visitor` exists — then falls back to a scan of the
-/// current module's items. Shared by the by-methods and by-associated-types
-/// accessors so the resolution rule cannot drift between them.
+/// Resolve a trait declaration by name to its `TraitDecl` and owning module,
+/// local-first (a local trait shadows a same-named one elsewhere, issue #1298).
 fn find_trait_decl_with<'a>(
     trait_name: &str,
     current_module_source: &ModuleSource,
@@ -210,9 +206,7 @@ pub(crate) fn find_trait_decl_methods_with_module_with(
     .map(|(decl, module)| (decl.methods.clone(), module))
 }
 
-/// Find a trait declaration by name and return its associated-type declarations
-/// (`type Output: Ref;` etc.), for enforcing an impl's bindings against the
-/// trait's associated-type bounds.
+/// A trait declaration's associated-type declarations, resolved by name.
 pub(crate) fn find_trait_decl_assoc_types_with(
     trait_name: &str,
     current_module_source: &ModuleSource,
@@ -424,8 +418,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Find a trait declaration's associated-type declarations (with their
-    /// bounds), for enforcing an impl's bindings against `type X: Bound`.
+    /// A trait declaration's associated-type declarations, with their bounds.
     pub(super) fn find_trait_decl_assoc_type_decls(
         &self,
         trait_name: &str,
@@ -442,17 +435,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Enforce a trait's associated-type bounds (`type X: Bound`) against an
-    /// impl's bindings (`type X = Concrete`). Runs during impl annotation so a
-    /// non-conforming binding is a clean bound error — e.g.
-    /// `impl IndexRef<i32> for C { type Output = i32 }` where `IndexRef`
-    /// requires `Output: Ref` reports that `i32` does not implement `Ref`.
-    /// A still-parametric binding is skipped (re-checked once concrete).
-    ///
-    /// Only the bound's trait is checked; an associated-type-equality
-    /// constraint inside the bound (`Iterator<Item = Self::Item>`) is not
-    /// enforced — a mismatched projection would slip through. Sufficient for the
-    /// current marker bounds (`Ref` carries no such constraint); tightening this
-    /// is future work.
+    /// impl's bindings (`type X = Concrete`), skipping still-parametric
+    /// bindings. Only the bound's trait is checked, not its associated-type
+    /// equality constraints (`Iterator<Item = Self::Item>`).
     pub(super) fn enforce_impl_assoc_type_bounds(&mut self, impl_block: &ast::ImplBlock) {
         let Some(trait_type) = &impl_block.trait_type else {
             return;
@@ -468,8 +453,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if decl.bounds.is_empty() {
                 continue;
             }
-            // Reuse the binding type the caller (`module.rs`) just resolved into
-            // `assoc_type_bindings`, rather than resolving `binding.ty` again.
             let type_id = self
                 .annotate_ctx
                 .trait_ctx
@@ -842,24 +825,13 @@ impl TypeSystem {
         self.auto_derive_default_struct_type(scope, &name).is_some()
     }
 
-    /// Reference identity — the `Ref` marker's eligibility. True when a value of
-    /// this type is a Wasm GC reference, mirroring `type_id_to_wir_type`'s
-    /// ref-vs-scalar split (WEP 2026-07-19). GC references (`struct`, `variant`,
-    /// generic instances incl. `List` / `String` / tuples, the raw `Array<T>`,
-    /// `fn`, `&T` / `&mut T`) and the wide-int structs (`i128` / `u128`) are
-    /// `Ref`; scalars (other primitives, `enum`, `flags`), `resource` handles
-    /// (an `i32`, not a GC ref), `unit`, and `never` are not. A `Newtype`
-    /// follows its base type.
+    /// The `Ref` marker's eligibility: whether a value of this type is a Wasm GC
+    /// reference (WEP 2026-07-19). A `Newtype` follows its base type.
     pub(super) fn is_ref_identity(&self, resolved: &ResolvedType) -> bool {
         match resolved {
             ResolvedType::Primitive(p) => {
                 matches!(p, PrimitiveType::I128 | PrimitiveType::U128)
             }
-            // Every `GenericInstance` is a GC struct/variant (user generics,
-            // `Option` / `Result` / `List` / `TreeMap` / `Range` / tuples /
-            // `Box`), so it is always a reference. A generic newtype over a
-            // scalar (`type W<T> = T`) resolves to `Newtype`, not
-            // `GenericInstance`, and is handled by the `Newtype` arm below.
             ResolvedType::Struct { .. }
             | ResolvedType::Variant { .. }
             | ResolvedType::GenericInstance { .. }
@@ -916,10 +888,6 @@ impl TypeSystem {
             return false;
         }
 
-        // `Ref` (reference identity) is decided by the type's representation, not
-        // by an impl lookup or field recursion. It must run before the primitive
-        // path — `i128` / `u128` are `Ref` (GC structs) while every other scalar
-        // is not — and before the impl-based paths.
         if on_bound == Some(OnBoundTrait::Ref) {
             return self.is_ref_identity(resolved);
         }

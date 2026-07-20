@@ -2949,13 +2949,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Find `IndexValue` trait implementation for a type.
-    ///
-    /// `expected_index_type` disambiguates overloaded impls (e.g. `List`'s
-    /// `IndexValue<i32>` vs `IndexValue<RangeExclusive<i32>>`); pass `None` to
-    /// match by container name alone, for a not-yet-coerced literal subscript
-    /// (a list-literal key `g[[0]]`) whose type only settles after the impl's
-    /// declared key type is known.
+    /// Find an `IndexValue` impl for a type. `expected_index_type` disambiguates
+    /// overloaded impls; `None` matches by container name alone.
     pub(super) fn find_index_value_trait_impl(
         &mut self,
         struct_name: &str,

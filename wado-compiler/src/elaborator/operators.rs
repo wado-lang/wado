@@ -935,11 +935,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve a unary expression
-    /// Whether `expr` is `container[i]` whose container resolved to a tuple
-    /// type. A tuple element is a fixed struct field, so `&t[0]` follows
-    /// field-access rules rather than the value-typed-container-element gate.
-    /// Reads the container's already-recorded type (its subexpression was
-    /// resolved before this runs).
+    /// Whether `expr` is `container[i]` whose container resolved to a tuple.
     fn index_base_is_tuple(&self, expr: &ast::Expr) -> bool {
         let ast::Expr::Index(idx) = expr else {
             return false;
@@ -972,24 +968,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let expr_type = self.resolve_expr(&unary.expr, ctx, inner_expected);
 
-        // A reference *into* a container element (`&xs[i]` / `&mut xs[i]`) is a
-        // real element reference only when the element is itself a GC reference
-        // (`T: Ref`). A value-typed element has no reference identity: `&nums[i]`
-        // would alias a snapshot copy, not the element, so it is rejected here.
-        // (A scalar *local* `&x` is fine — its slot is boxed, a real reference.)
-        //
-        // A tuple element `t[0]` is excluded: a tuple is a fixed GC struct and
-        // `t[0]` is a struct-field access, governed by the same rule as `&s.f`
-        // (permitted for `&`), not by dynamic container indexing.
         if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef)
             && matches!(&unary.expr, ast::Expr::Index(_))
             && !self.index_base_is_tuple(&unary.expr)
             && expr_type != TypeTable::UNKNOWN
             && expr_type != TypeTable::ERROR
-            // Skip still-generic elements — a `T` element is checked once the
-            // type is concrete (a generic iterator body like `&mut arr[i]` over
-            // `T` is sound per monomorph; the `&mut`-over-scalar case is rejected
-            // by the iterator-reference model, not here).
             && !self
                 .tysys
                 .type_table

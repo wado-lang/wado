@@ -1513,11 +1513,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return trait_info.output_type;
             }
 
-            // Fallback: try IndexValue trait (returns value by copy). Match the
-            // resolved subscript type first (to pick between overloaded impls);
-            // if that fails, retry by container name alone so a not-yet-coerced
-            // literal subscript (a reference-keyed `g[[0]]`) still resolves and
-            // is coerced to the impl's declared key type below.
+            // Fallback: try IndexValue trait (returns value by copy). Retry by
+            // container name alone when the exact index-type match fails, so a
+            // not-yet-coerced reference-keyed subscript (`g[[0]]`) still resolves.
             let index_value_info = self
                 .index_lookup_or_newtype_base(
                     &struct_name,

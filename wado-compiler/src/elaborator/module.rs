@@ -484,8 +484,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .assoc_type_bindings
                             .insert(binding.name.clone(), type_id);
                     }
-                    // Enforce the trait's `type X: Bound` against these bindings
-                    // (e.g. `IndexRef`'s `Output: Ref`).
                     scope.enforce_impl_assoc_type_bounds(impl_block);
                 }
 
