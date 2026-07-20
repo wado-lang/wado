@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784543443512,
+  "lastUpdate": 1784550083652,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -42473,6 +42473,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b2cadd3c2484970b8c0c469e747b475935db3d7c"
         },
         "date": 1784543443205,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8229,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16512,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271337,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "996595fbcb31773830161e1171310fa6ceffdcd5",
+          "message": "Merge pull request #1644 from wado-lang/claude/wado-string-template-expressions-96lj6i\n\nfeat(highlight): package the Wado highlighter as gale-highlight-wado",
+          "timestamp": "2026-07-20T21:11:25+09:00",
+          "tree_id": "48ded078c5522a44a12b67b1c70ceb4e17781973",
+          "url": "https://github.com/wado-lang/wado/commit/996595fbcb31773830161e1171310fa6ceffdcd5"
+        },
+        "date": 1784550083263,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
