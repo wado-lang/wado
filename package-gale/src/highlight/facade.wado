@@ -13,49 +13,20 @@ use { Deserialize } from "core:serde";
 use { MonotonicClock } from "wasi:clocks";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 
-/// A built-in color theme. Capture names map to HTML classes, so re-theming
-/// needs no regeneration — only different CSS.
-pub enum Theme {
-    Light,
-    Dark,
-}
-
-global LIGHT_CSS: String = #include_str("./themes/gale-light.css");
-global DARK_CSS: String = #include_str("./themes/gale-dark.css");
-
-/// The CSS for a built-in theme.
-pub fn theme_css(theme: Theme) -> String {
-    return match theme {
-        Light => LIGHT_CSS,
-        Dark => DARK_CSS,
-    };
-}
-
-/// Wrap an HTML highlight fragment in a standalone document with an embedded
-/// theme. `fragment` is the output of a grammar's `highlight(src)`.
-pub fn document(fragment: &String, title: &String, theme: Theme) -> String {
-    return `<!doctype html>
-<html>
-<head><meta charset="utf-8"><title>${*title}</title><style>
-${theme_css(theme)}</style></head>
-<body><pre class="wado">${*fragment}</pre></body>
-</html>
-`;
-}
-
 struct Options {
     output_dir: String,
-    standalone: bool = false,
-    theme: String = "light",
     #[serde(positional)]
     inputs: List<String> = [],
 }
 impl Deserialize for Options;
 
 /// A batch highlight CLI, generic over the grammar. Reads each input file,
-/// renders it via `highlight`, and writes `<output_dir>/<path>.html` (a bare
-/// fragment, or a full document with `--standalone`). Logs per-file timing and
-/// a closing `stats:` line.
+/// renders it via `highlight`, and writes the HTML fragment to
+/// `<output_dir>/<path>.html`. Logs per-file timing and a closing `stats:` line.
+///
+/// The output is a bare `<span class="...">` fragment — bring your own CSS and
+/// page shell to display it (see `example/standalone.wado` for a starting
+/// point). `highlight` is a grammar's fragment renderer.
 ///
 ///     run_cli(my_grammar::highlight, args());
 pub fn run_cli(highlight: fn(&String) -> String, args: List<String>) with Stderr, Preopens, MonotonicClock {
@@ -63,7 +34,7 @@ pub fn run_cli(highlight: fn(&String) -> String, args: List<String>) with Stderr
         Ok(o) => o,
         Err(e) => {
             eprintln(`error: ${e.message}`);
-            eprintln("usage: <cmd> --output-dir <dir> [--standalone] [--theme light|dark] <input> ...");
+            eprintln("usage: <cmd> --output-dir <dir> <input> ...");
             return;
         },
     };
@@ -71,10 +42,6 @@ pub fn run_cli(highlight: fn(&String) -> String, args: List<String>) with Stderr
         eprintln("error: no input files given");
         return;
     }
-    let theme = match opts.theme {
-        "dark" => Theme::Dark,
-        _ => Theme::Light,
-    };
 
     let dirs = Preopens::get_directories();
     if dirs.len() == 0 {
@@ -88,7 +55,7 @@ pub fn run_cli(highlight: fn(&String) -> String, args: List<String>) with Stderr
     let mut min: u64 = 0;
     let mut max: u64 = 0;
     for let path of &opts.inputs {
-        if let Some(ns) = highlight_file(&root, path, &opts.output_dir, highlight, opts.standalone, theme) {
+        if let Some(ns) = highlight_file(&root, path, &opts.output_dir, highlight) {
             if count == 0 || ns < min {
                 min = ns;
             }
@@ -114,8 +81,6 @@ fn highlight_file(
     path: &String,
     output_dir: &String,
     highlight: fn(&String) -> String,
-    standalone: bool,
-    theme: Theme,
 ) -> Option<u64> with Stderr, MonotonicClock {
     let file = match root.open_at(
         PathFlags::none(),
@@ -132,8 +97,7 @@ fn highlight_file(
     let input = String::from_utf8_unchecked(read_all(&file));
 
     let start = MonotonicClock::now();
-    let fragment = highlight(&input);
-    let html = if standalone { document(&fragment, path, theme) } else { fragment };
+    let html = highlight(&input);
     let elapsed = MonotonicClock::now() - start;
     let ms = elapsed as f64 / 1000000.0;
 

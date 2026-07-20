@@ -1,0 +1,64 @@
+//! Standalone HTML demo — and a reference for the CSS classes the highlighter
+//! emits.
+//!
+//! The library ships only the highlight *fragment* (`<span class="...">`);
+//! bringing your own CSS and page shell is the intended usage. This example is
+//! a copy-paste starting point: it highlights a sample and wraps it in a full,
+//! styled page that exercises every capture class the Wado query produces
+//! (tree-sitter vocabulary — `constant.builtin` becomes `class="constant
+//! builtin"`).
+//!
+//!     wado run package-gale-highlight-wado/example/standalone.wado > demo.html
+//!
+//! then open `demo.html` in a browser.
+
+use { print, Stdout } from "core:cli";
+use { highlight } from "../src/lib.wado";
+
+// A starter theme. Selectors are the tree-sitter capture names Gale emits, so
+// any tree-sitter theme drops in — swap these colors for your own.
+global DEMO_CSS: String = "
+body { background: #0d1117; margin: 0; padding: 2rem; }
+.wado {
+    display: block;
+    font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #c9d1d9;
+    background: #161b22;
+    padding: 1.25rem;
+    border-radius: 8px;
+    overflow-x: auto;
+}
+.comment { color: #8b949e; font-style: italic; }
+.string { color: #a5d6ff; }
+.number { color: #79c0ff; }
+.keyword { color: #ff7b72; }
+.variable { color: #c9d1d9; }
+.constant.builtin { color: #79c0ff; }
+";
+
+// Sample source, exercising comments, keywords, strings, numbers, template
+// interpolation, and booleans. A `\"`-escaped double quote keeps this a plain
+// string; the backtick template and `${...}` are literal here and highlight as
+// real Wado once parsed.
+global SAMPLE: String = "// A short tour of Wado tokens
+use { println } from \"core:cli\";
+
+struct Point { x: i32, y: i32 }
+
+export fn run() with Stdout {
+    let mut p = Point { x: 10, y: 0xFF };
+    let name = \"world\";
+    let ok = true;
+    println(`Hello, ${name}! sum = ${p.x + p.y}`);
+    if p.x > 0 { println(\"positive\"); }
+}
+";
+
+export fn run() with Stdout {
+    print(`<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Wado highlight demo</title><style>${DEMO_CSS}</style></head>
+<body><pre class="wado">${highlight(&SAMPLE)}</pre></body>
+</html>
+`);
+}
