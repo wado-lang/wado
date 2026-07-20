@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784524446008,
+  "lastUpdate": 1784543443512,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -42429,6 +42429,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b72d12e58ff3a3e29c0c4c224ae0b844d2f38e20"
         },
         "date": 1784524445488,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8229,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16512,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271337,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b2cadd3c2484970b8c0c469e747b475935db3d7c",
+          "message": "Merge pull request #1645 from wado-lang/claude/package-gale-action-tasks-0kkomf\n\nfeat(gale): model lexer superClass as a Wado effect interface",
+          "timestamp": "2026-07-20T19:20:54+09:00",
+          "tree_id": "59dc18b47bff244bc909b9aee512740573a41585",
+          "url": "https://github.com/wado-lang/wado/commit/b2cadd3c2484970b8c0c469e747b475935db3d7c"
+        },
+        "date": 1784543443205,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
