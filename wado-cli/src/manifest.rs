@@ -2,6 +2,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
+use wado_lsp::workspace::governing_workspace;
 use wado_manifest::{Manifest, ManifestError};
 
 use crate::args::CliExit;
@@ -73,34 +74,6 @@ pub(crate) fn resolve_manifest(
     }
 }
 
-/// The workspace governing `member_dir` — its root directory and `wado.toml`
-/// contents — if `member_dir` is a member of one.
-///
-/// A manifest that itself declares `[workspace]` is the workspace authority, not
-/// a governed member, so it returns `None`. Otherwise walk up to the nearest
-/// ancestor whose `[workspace].members` glob covers the member.
-fn governing_workspace(member_dir: &Path, member_content: &str) -> Option<(PathBuf, String)> {
-    if read_workspace_members(member_content).is_some() {
-        return None;
-    }
-    let mut dir = member_dir.to_path_buf();
-    while dir.pop() {
-        let candidate = dir.join(MANIFEST_FILENAME);
-        if !candidate.is_file() {
-            continue;
-        }
-        let Ok(content) = fs::read_to_string(&candidate) else {
-            continue;
-        };
-        if let Some(members) = read_workspace_members(&content)
-            && workspace_governs(&dir, &members, member_dir)
-        {
-            return Some((dir, content));
-        }
-    }
-    None
-}
-
 /// The workspace-root `wado.toml` contents governing `member_dir`, if any.
 fn find_workspace_root(member_dir: &Path, member_content: &str) -> Option<String> {
     governing_workspace(member_dir, member_content).map(|(_, content)| content)
@@ -163,37 +136,6 @@ pub(crate) fn workspace_member_dirs(root_dir: &Path, members: &[String]) -> Vec<
     dirs.sort();
     dirs.dedup();
     dirs
-}
-
-/// Read `[workspace].members` without full validation (the member may omit
-/// inherited required fields, which a full parse would reject).
-fn read_workspace_members(content: &str) -> Option<Vec<String>> {
-    let table: toml::Table = toml::from_str(content).ok()?;
-    let members = table
-        .get("workspace")?
-        .as_table()?
-        .get("members")?
-        .as_array()?;
-    Some(
-        members
-            .iter()
-            .filter_map(|v| v.as_str().map(str::to_owned))
-            .collect(),
-    )
-}
-
-/// Whether `member_dir` matches any `members` glob, evaluated as a pure path
-/// match (no filesystem walk, no canonicalize) against the member path relative
-/// to the workspace root. Reuses the walker's glob options so membership and
-/// test-discovery agree.
-fn workspace_governs(root_dir: &Path, members: &[String], member_dir: &Path) -> bool {
-    let Ok(rel) = member_dir.strip_prefix(root_dir) else {
-        return false;
-    };
-    members.iter().any(|pattern| {
-        glob::Pattern::new(pattern)
-            .is_ok_and(|p| p.matches_path_with(rel, crate::discover::WALK_MATCH_OPTIONS))
-    })
 }
 
 /// The kind of entry point to resolve, identified by the CM world it targets.

@@ -16,6 +16,7 @@ pub mod server;
 pub mod test_support;
 pub mod text;
 pub mod uri;
+pub mod workspace;
 
 use std::cell::RefCell;
 use std::rc::Rc;

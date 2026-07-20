@@ -1,0 +1,16 @@
+use { document, theme_css, Theme } from "./facade.wado";
+
+test "document wraps a fragment in a themed page" {
+    let frag: String = "<span class=\"keyword\">fn</span>";
+    let html = document(&frag, &"t.wado", Theme::Dark);
+    assert html.contains("<pre class=\"wado\">"), "pre wrapper present";
+    assert html.contains("<span class=\"keyword\">fn</span>"), "fragment embedded";
+    assert html.contains("<title>t.wado</title>"), "title embedded";
+    assert html.contains("<style>"), "css embedded";
+}
+
+test "theme_css differs per theme" {
+    assert theme_css(Theme::Light).len() > 0, "light css non-empty";
+    assert theme_css(Theme::Dark).len() > 0, "dark css non-empty";
+    assert theme_css(Theme::Light) != theme_css(Theme::Dark), "themes differ";
+}

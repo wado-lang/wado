@@ -341,7 +341,7 @@ fn nearest_manifest(start: &Path) -> Option<(wado_manifest::Manifest, PathBuf)> 
         let candidate = dir.join("wado.toml");
         if candidate.is_file() {
             let text = std::fs::read_to_string(&candidate).ok()?;
-            let manifest: wado_manifest::Manifest = text.parse().ok()?;
+            let manifest = crate::workspace::resolve_member_manifest(&dir, &text).ok()?;
             return Some((manifest, dir));
         }
         if !dir.pop() {
@@ -362,8 +362,9 @@ pub fn package_lib_entry(dep_path: &Path) -> Result<PathBuf, String> {
     let manifest_path = dep_path.join("wado.toml");
     let text = std::fs::read_to_string(&manifest_path)
         .map_err(|e| format!("cannot read {}: {e}", manifest_path.display()))?;
-    let manifest: wado_manifest::Manifest = text
-        .parse()
+    // Apply `[workspace.package]` inheritance: a dependency that is a workspace
+    // member force-inherits `version` and fails a standalone parse.
+    let manifest = crate::workspace::resolve_member_manifest(dep_path, &text)
         .map_err(|e| format!("invalid {}: {e}", manifest_path.display()))?;
     let lib = manifest.package.and_then(|p| p.lib).ok_or_else(|| {
         format!(

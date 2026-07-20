@@ -1,0 +1,247 @@
+//! gale-highlight: grammar-agnostic rendering helpers for Gale-generated
+//! highlighters.
+//!
+//! Everything here speaks only `String` / prelude types, so it is shared across
+//! every `.g4`. The grammar-specific `highlight()` function (which lives in the
+//! generated parser's inlined runtime, and traffics in per-grammar runtime
+//! types) is passed in as a `fn(&String) -> String` value — never as a type, so
+//! no grammar-specific runtime type ever crosses this package boundary.
+
+use { eprintln, Stderr } from "core:cli";
+use { parse as parse_args } from "core:args";
+use { Deserialize } from "core:serde";
+use { MonotonicClock } from "wasi:clocks";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+
+/// A built-in color theme. Capture names map to HTML classes, so re-theming
+/// needs no regeneration — only different CSS.
+pub enum Theme {
+    Light,
+    Dark,
+}
+
+// Themes are inlined as data (not `#include_str`) so the facade is
+// self-contained when compiled into a consumer package. Selectors are
+// tree-sitter capture names, which Gale emits as HTML classes
+// (`constant.builtin` -> class="constant builtin"), so they are grammar-agnostic.
+global LIGHT_CSS: String = ".wado { background: #ffffff; color: #24292e; }
+.comment { color: #6a737d; font-style: italic; }
+.string { color: #032f62; }
+.number { color: #005cc5; }
+.keyword { color: #d73a49; }
+.variable { color: #24292e; }
+.constant { color: #005cc5; }
+.constant.builtin { color: #005cc5; }
+.type { color: #6f42c1; }
+.function { color: #6f42c1; }
+.operator { color: #d73a49; }
+.punctuation { color: #24292e; }
+";
+global DARK_CSS: String = ".wado { background: #0d1117; color: #c9d1d9; }
+.comment { color: #8b949e; font-style: italic; }
+.string { color: #a5d6ff; }
+.number { color: #79c0ff; }
+.keyword { color: #ff7b72; }
+.variable { color: #c9d1d9; }
+.constant { color: #79c0ff; }
+.constant.builtin { color: #79c0ff; }
+.type { color: #d2a8ff; }
+.function { color: #d2a8ff; }
+.operator { color: #ff7b72; }
+.punctuation { color: #c9d1d9; }
+";
+
+/// The CSS for a built-in theme.
+pub fn theme_css(theme: Theme) -> String {
+    return match theme {
+        Light => LIGHT_CSS,
+        Dark => DARK_CSS,
+    };
+}
+
+/// Wrap an HTML highlight fragment in a standalone document with an embedded
+/// theme. `fragment` is the output of a grammar's `highlight(src)`.
+pub fn document(fragment: &String, title: &String, theme: Theme) -> String {
+    return `<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>${*title}</title><style>
+${theme_css(theme)}</style></head>
+<body><pre class="wado">${*fragment}</pre></body>
+</html>
+`;
+}
+
+struct Options {
+    output_dir: String,
+    standalone: bool = false,
+    theme: String = "light",
+    #[serde(positional)]
+    inputs: List<String> = [],
+}
+impl Deserialize for Options;
+
+/// A batch highlight CLI, generic over the grammar. Reads each input file,
+/// renders it via `highlight`, and writes `<output_dir>/<path>.html` (a bare
+/// fragment, or a full document with `--standalone`). Logs per-file timing and
+/// a closing `stats:` line.
+///
+///     run_cli(my_grammar::highlight, args());
+pub fn run_cli(highlight: fn(&String) -> String, args: List<String>) with Stderr, Preopens, MonotonicClock {
+    let opts = match parse_args::<Options>(args) {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln(`error: ${e.message}`);
+            eprintln("usage: <cmd> --output-dir <dir> [--standalone] [--theme light|dark] <input> ...");
+            return;
+        },
+    };
+    if opts.inputs.len() == 0 {
+        eprintln("error: no input files given");
+        return;
+    }
+    let theme = match opts.theme {
+        "dark" => Theme::Dark,
+        _ => Theme::Light,
+    };
+
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("error: no preopened directories available");
+        return;
+    }
+    let root = dirs[0].0;
+
+    let mut count = 0;
+    let mut sum: u64 = 0;
+    let mut min: u64 = 0;
+    let mut max: u64 = 0;
+    for let path of &opts.inputs {
+        if let Some(ns) = highlight_file(&root, path, &opts.output_dir, highlight, opts.standalone, theme) {
+            if count == 0 || ns < min {
+                min = ns;
+            }
+            if count == 0 || ns > max {
+                max = ns;
+            }
+            sum += ns;
+            count += 1;
+        }
+    }
+    if count > 0 {
+        let min_ms = min as f64 / 1000000.0;
+        let max_ms = max as f64 / 1000000.0;
+        let avg_ms = sum as f64 / count as f64 / 1000000.0;
+        eprintln(`stats: ${count} files | min ${min_ms:.3} ms | max ${max_ms:.3} ms | avg ${avg_ms:.3} ms`);
+    }
+}
+
+/// Highlight one file and write it under `output_dir`, preserving the input's
+/// path. Returns the render duration in nanoseconds, or `null` if skipped.
+fn highlight_file(
+    root: &Descriptor,
+    path: &String,
+    output_dir: &String,
+    highlight: fn(&String) -> String,
+    standalone: bool,
+    theme: Theme,
+) -> Option<u64> with Stderr, MonotonicClock {
+    let open_result = root.open_at(
+        PathFlags::none(),
+        *path,
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    ).wait();
+    if let Err(_) = open_result {
+        eprintln(`error: ${*path}: cannot open file`);
+        return null;
+    }
+    let file = open_result.unwrap();
+    let input = String::from_utf8_unchecked(read_all(&file));
+
+    let start = MonotonicClock::now();
+    let fragment = highlight(&input);
+    let html = if standalone { document(&fragment, path, theme) } else { fragment };
+    let elapsed = MonotonicClock::now() - start;
+    let ms = elapsed as f64 / 1000000.0;
+
+    let out_path = `${*output_dir}/${*path}.html`;
+    if !ensure_parent_dirs(root, &out_path) {
+        return null;
+    }
+    if !write_file(root, &out_path, &html) {
+        return null;
+    }
+    eprintln(`${*path} -> ${out_path} (${ms:.3} ms)`);
+    return Option::Some(elapsed as u64);
+}
+
+/// `mkdir -p` on every directory prefix of `path`. An already-existing
+/// directory is not an error.
+fn ensure_parent_dirs(root: &Descriptor, path: &String) -> bool with Stderr {
+    let components: List<String> = path.split("/").collect();
+    let mut prefix = String::new();
+    let mut i = 0;
+    while i < components.len() - 1 {
+        let comp = &components[i];
+        i += 1;
+        if comp.is_empty() || *comp == "." {
+            continue;
+        }
+        if !prefix.is_empty() {
+            prefix.push('/');
+        }
+        prefix.push_str(comp);
+        if let Err(e) = root.create_directory_at(prefix).wait() {
+            if e matches { Exist } {
+                continue;
+            }
+            eprintln(`error: ${prefix}: cannot create directory`);
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Write `source` to `path`, creating or truncating it. Returns `false` on
+/// failure (already reported).
+fn write_file(root: &Descriptor, path: &String, source: &String) -> bool with Stderr {
+    let open_result = root.open_at(
+        PathFlags::none(),
+        *path,
+        OpenFlags::Create | OpenFlags::Truncate,
+        DescriptorFlags::Read | DescriptorFlags::Write,
+    ).wait();
+    if let Err(_) = open_result {
+        eprintln(`error: ${*path}: cannot open for writing`);
+        return false;
+    }
+    let file = open_result.unwrap();
+    let bytes: List<u8> = source.bytes().collect();
+    let [rx, tx] = Stream::<u8>::new();
+    let sub = file.write_via_stream(rx, 0 as Filesize);
+    tx.write(bytes);
+    tx.drop();
+    if let Some(Err(_)) = sub.read() {
+        eprintln(`error: ${*path}: write failed`);
+        sub.drop();
+        return false;
+    }
+    sub.drop();
+    return true;
+}
+
+fn read_all(file: &Descriptor) -> List<u8> {
+    let [read_stream, _done] = file.read_via_stream(0 as Filesize);
+    let mut result: List<u8> = [];
+    loop {
+        let chunk = read_stream.read(65536);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let b of chunk {
+            result.push(b);
+        }
+    }
+    read_stream.drop();
+    return result;
+}

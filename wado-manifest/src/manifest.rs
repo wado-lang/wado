@@ -640,6 +640,27 @@ fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
 /// # Errors
 /// Propagates TOML, inheritance, and validation errors for the merged member,
 /// including problems in the root's `[workspace.package]` itself.
+/// Read `[workspace].members` from a `wado.toml` without full validation. A
+/// workspace member may omit inherited required fields (e.g. `version`) that a
+/// full parse would reject, so identifying the workspace must not depend on the
+/// member parsing standalone. Returns `None` when there is no `[workspace]`
+/// table.
+#[must_use]
+pub fn read_workspace_members(content: &str) -> Option<Vec<String>> {
+    let table: toml::Table = toml::from_str(content).ok()?;
+    let members = table
+        .get("workspace")?
+        .as_table()?
+        .get("members")?
+        .as_array()?;
+    Some(
+        members
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_owned))
+            .collect(),
+    )
+}
+
 pub fn resolve_member(member_toml: &str, root_toml: &str) -> Result<Manifest, ManifestError> {
     let mut member_raw: RawManifest =
         toml::from_str(member_toml).map_err(|e| ManifestError::Toml(e.to_string()))?;

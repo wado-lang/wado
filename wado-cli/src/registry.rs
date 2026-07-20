@@ -51,11 +51,16 @@ impl FilesystemProvider {
             path: toml_path.display().to_string(),
             message: e.to_string(),
         })?;
-        text.parse::<Manifest>()
-            .map_err(|e| ProviderError::InvalidManifest {
+        // Apply `[workspace.package]` inheritance when the path dep is a
+        // workspace member: it force-inherits `version` and would otherwise fail
+        // a standalone parse. Falls back to a standalone parse when it is not.
+        let member_dir = toml_path.parent().unwrap_or(self.root.as_path());
+        crate::manifest::resolve_manifest(member_dir, &text).map_err(|e| {
+            ProviderError::InvalidManifest {
                 source: toml_path.display().to_string(),
                 message: e.to_string(),
-            })
+            }
+        })
     }
 }
 
@@ -213,6 +218,55 @@ version = "0.1.0"
             .parse()
             .unwrap();
         let provider = FilesystemProvider::new(tmp.path().to_path_buf());
+        let locked = block_on(wado_manifest::resolve(&manifest, &provider)).unwrap();
+        assert!(locked.is_empty(), "path deps are not locked: {locked:?}");
+    }
+
+    #[test]
+    fn path_dep_that_is_a_workspace_member_inherits_version() {
+        // A path dependency pointing at a workspace member resolves: the member
+        // force-inherits `version` from `[workspace.package]`, so loading it must
+        // apply inheritance rather than fail a standalone parse on missing
+        // `version`.
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("wado.toml"),
+            r#"
+[workspace]
+members = ["app", "member"]
+
+[workspace.package]
+version = "0.3.0"
+"#,
+        )
+        .unwrap();
+        std::fs::create_dir(tmp.path().join("app")).unwrap();
+        std::fs::write(
+            tmp.path().join("app/wado.toml"),
+            r#"
+[package]
+name = "app"
+
+[dependencies]
+"lib:member" = { path = "../member" }
+"#,
+        )
+        .unwrap();
+        // The dependency member omits `version` (inherited from the workspace).
+        std::fs::create_dir(tmp.path().join("member")).unwrap();
+        std::fs::write(
+            tmp.path().join("member/wado.toml"),
+            "[package]\nname = \"member\"\n",
+        )
+        .unwrap();
+
+        let app_dir = tmp.path().join("app");
+        let manifest = crate::manifest::resolve_manifest(
+            &app_dir,
+            &std::fs::read_to_string(app_dir.join("wado.toml")).unwrap(),
+        )
+        .unwrap();
+        let provider = FilesystemProvider::new(app_dir);
         let locked = block_on(wado_manifest::resolve(&manifest, &provider)).unwrap();
         assert!(locked.is_empty(), "path deps are not locked: {locked:?}");
     }
