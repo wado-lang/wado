@@ -37,6 +37,7 @@ use {
     is_lexer_members,
 } from "./java2wado.wado";
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
+use { superclass_base_name, collect_lexer_super_ops, rewrite_superclass_calls, gen_super_interface, SuperOp } from "./superclass.wado";
 use { gen_highlight } from "./highlight_gen.wado";
 use { HighlightRule } from "./highlight_query.wado";
 use { GenContext, sets_overlap } from "./gen_context.wado";
@@ -143,6 +144,21 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     ctx.set_emit_actions(should_emit_actions(grammar));
     ctx.set_action_language(&grammar.action_language);
     ctx.set_action_grammar(&grammar.name, collect_member_method_names(grammar));
+    // `options { superClass = Foo }`: a `this.<method>()` call in a lexer
+    // action / predicate becomes an ambient `Foo::<method>(lx)` effect
+    // operation. Only wired when actions actually emit (a Java superClass
+    // grammar whose actions are still discarded stays byte-identical).
+    if ctx.emit_actions() {
+        if let Some(sc) = superclass_base_name(grammar) {
+            let ops = collect_lexer_super_ops(grammar);
+            if !ops.is_empty() {
+                ctx.set_superclass(&sc, ops);
+                // Rewrite `this.<method>()` -> `Foo::<method>()` in place, after
+                // op collection (which scans the original `this.` sites).
+                rewrite_superclass_calls(grammar, &sc);
+            }
+        }
+    }
     ctx.precompute_scannability();
     let lowered = lower(grammar, &lit_tokens, &mut ctx);
     // Build the ATN up front when the grammar needs the simulator, so parser
@@ -207,7 +223,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
     let lexer_members = collect_lexer_members(grammar, &mut ctx);
     let has_members = members_present(&lexer_members);
-    gen_lexer(&mut w, grammar, &lit_tokens, &atn_class_map, &lexer_members, has_members);
+    gen_lexer(&mut w, grammar, &lit_tokens, &atn_class_map, &lexer_members, has_members, ctx.superclass_name(), ctx.superclass_ops());
     gen_node_kinds(&mut w, &lowered.parser_rules);
     gen_alt_enums(&mut w, grammar);
     gen_parser(&mut w, grammar, &lowered, &mut ctx);

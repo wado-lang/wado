@@ -64,7 +64,7 @@ Each item's prerequisite is in [`action.md`](./action.md) (Phase 4):
 - The LATN (ATN-class) lexer path.
 - The rest of the lexer `$`-attribute surface — `$type`, `getCharPositionInLine`, member methods reading match position/text.
 - The `language = Java` lexer path (java2wado over lexer bodies).
-- The SuperClass trait for the real-world grammars below.
+- The SuperClass effect interface for the real-world grammars below. Started: a `language = Wado` lexer with base-state predicates works end to end (`options { superClass = Foo }` → `pub interface Foo`, `this.m()` → ambient `Foo::m()`, `try_<rule>` / `tokenize` carry `with Foo`, user installs `impl Foo for Base` via `with Foo => &mut base do`). See `action.md` (Phase 4, "SuperClass effect interface"). Remaining before the real grammars run: recognizer-runtime access from an op (a lexer match-window view for `la`/`$text`), action ops (`{this.m();}`), the parser side (`parse with Foo`, prediction-time predicates), and the `language = Java` path.
 - Make the ANTLR descriptor `[output]` corpus codegen-and-compare (parse-only today), unblocking the `[output]` acceptance.
 
 - java2wado numeric promotion: i32 token members (`$X.int` / `.type` / `.line` / `.pos` / `.index`) mixed with a wider value-channel field (`returns [long v]` / `[float]` / `[double]`) mismatch Wado's strict widths in any context (`$v = $X.int`, `$v + $X.int`), since Wado has no implicit widening. Loud compile error, not silent; no corpus grammar hits it. A proper fix threads Java's promotion rules through the emitter (cast where promotion is required), not an assignment-only cast. Rationale in [`action.md`](./action.md) (Open questions).

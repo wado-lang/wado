@@ -20,6 +20,7 @@ use {
 use { literal_const_name, gen_visibility_comment } from "./gen_util.wado";
 use { translate_lexer_predicate, translate_lexer_action } from "./action_translate.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec, Vis, char_lit, char_range_pat } from "./wadopoet.wado";
+use { SuperOp, gen_super_interface, lexer_rule_calls_super } from "./superclass.wado";
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
 use { TreeMap } from "core:collections";
 
@@ -301,6 +302,8 @@ pub fn gen_lexer(
     atn_class: &TreeMap<String, i32>,
     members: &MemberDecls,
     has_members: bool,
+    sc_name: &String,
+    sc_ops: &List<SuperOp>,
 ) {
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(&grammar.options, &empty_opts);
@@ -309,6 +312,12 @@ pub fn gen_lexer(
     let act_rule_names = executed_action_rule_names(grammar);
     let has_actions = !act_rule_names.is_empty();
     let uses_modes = has_modes(&grammar.mode_names);
+    // `options { superClass = Foo }`: emit the effect interface, then thread
+    // `with Foo` onto the op-reachable generated fns. Empty `sc_name` => no
+    // superClass => byte-identical output (no interface, no effect clause).
+    if !sc_name.is_empty() {
+        gen_super_interface(w, sc_name, sc_ops);
+    }
     gen_lexer_struct(w, members, has_actions, uses_modes);
     if has_actions {
         if uses_modes {
@@ -316,7 +325,7 @@ pub fn gen_lexer(
         }
         gen_lexer_apply_fns(w, grammar, has_members);
     }
-    gen_lexer_match_fns(w, &grammar.lexer_rules, &keywords, lit_tokens, &grammar.options, atn_class, ea, has_members);
+    gen_lexer_match_fns(w, &grammar.lexer_rules, &keywords, lit_tokens, &grammar.options, atn_class, ea, has_members, sc_name);
     gen_literal_match_fns(w, lit_tokens, grammar_ci, has_members);
     gen_keyword_classifier_fn(w, &keywords);
     gen_tokenize_fn(
@@ -328,6 +337,7 @@ pub fn gen_lexer(
         &grammar.options,
         &act_rule_names,
         has_members,
+        sc_name,
     );
     gen_token_kind_name_fn(w, &grammar.lexer_rules, lit_tokens);
 }
@@ -454,6 +464,7 @@ fn gen_lexer_match_fns(
     atn_class: &TreeMap<String, i32>,
     ea: bool,
     hm: bool,
+    sc_name: &String,
 ) {
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(grammar_opts, &empty_opts);
@@ -465,7 +476,7 @@ fn gen_lexer_match_fns(
         } else if !rule.is_fragment {
             if !is_keyword_rule_name(&rule.name, keywords)
                 && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
-                gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts, atn_class, ea, hm);
+                gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts, atn_class, ea, hm, sc_name);
             }
         } else if fragment_is_recursive(rule, lexer_rules) {
             // A recursive fragment needs its own `try_*` matcher (non-
@@ -473,7 +484,7 @@ fn gen_lexer_match_fns(
             // resolves case-insensitivity from `resolve_ci(grammar_opts,
             // &rule.options)`, so a rule-level `options { caseInsensitive=... }`
             // on the fragment overrides the grammar-level flag.
-            gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts, atn_class, ea, hm);
+            gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts, atn_class, ea, hm, sc_name);
         }
     }
 }
@@ -553,6 +564,7 @@ fn gen_lexer_match_fn(
     atn_class: &TreeMap<String, i32>,
     ea: bool,
     hm: bool,
+    sc_name: &String,
 ) {
     let fn_name = lexer_try_fn_name(&rule.name);
     let ci = resolve_ci(grammar_opts, &rule.options);
@@ -565,6 +577,11 @@ fn gen_lexer_match_fn(
     }
     f.add_param(&"start", &"i32");
     f.set_return_type(&"i32");
+    // A rule whose body evaluates a `Foo::op()` predicate calls the base
+    // effect, so its match fn declares `with Foo`.
+    if !sc_name.is_empty() && lexer_rule_calls_super(rule, sc_name) {
+        f.add_effect(sc_name);
+    }
     f.emit_begin(w);
     if hm {
         w.line(&"let chars = &lx.chars;");
@@ -2428,6 +2445,7 @@ fn gen_tokenize_fn(
     grammar_opts: &List<GrammarOption>,
     act_rule_names: &List<String>,
     has_members: bool,
+    sc_name: &String,
 ) {
     let has_actions = !act_rule_names.is_empty();
     let use_modes = has_modes(mode_names);
@@ -2445,6 +2463,11 @@ fn gen_tokenize_fn(
     let mut f = FnSpec::new("tokenize", Vis::Pub);
     f.add_param(&"input", &"&String");
     f.set_return_type(&"TokenStream");
+    // `tokenize` calls the op-carrying `try_<rule>` fns, so it propagates the
+    // base effect; a caller installs the handler with `with Foo => &mut base do`.
+    if !sc_name.is_empty() {
+        f.add_effect(sc_name);
+    }
     f.emit_begin(w);
     w.line(&"let mut lexer = Lexer::new(input);");
     // Struct-of-arrays token storage: the lexer pushes flat i32s, never a

@@ -1,0 +1,432 @@
+//! SuperClass — effect-interface synthesis for `options { superClass = Foo }`.
+//!
+//! ANTLR's `superClass` is object inheritance; Wado has none, so a base class
+//! becomes a Wado effect interface: `this.<method>()` action / predicate calls
+//! lower to ambient `Foo::<method>()` operations, the user provides an
+//! `impl Foo for Base` handler and installs it with `with Foo => &mut base do`.
+//! See `action.md`, "SuperClass — an effect interface".
+//!
+//! This module is the language-independent core: extract the base name, scan
+//! action / predicate bodies for `this.<method>` call sites, synthesize the
+//! effect interface, and rewrite each call site to `Foo::<method>()`. Threading
+//! the `with Foo` effect onto the op-reachable generated fns lives in codegen.
+
+use {
+    Grammar,
+    GrammarOption,
+    OptionValue,
+    ActionKind,
+    AltAction,
+    LexerRule,
+    LexerAlternative,
+    LexerElement,
+    LexerRepeatElement,
+    LexerNotElement,
+} from "./ir.wado";
+use { scan_string, scan_line_comment, scan_block_comment, is_id_start_char, is_id_continue_char } from "./g4/scan.wado";
+use { CodeWriter } from "./wadopoet.wado";
+use { to_snake_case } from "./ident.wado";
+
+/// One synthesized effect operation, from a distinct `this.<method>` call site.
+/// A call in a predicate body maps to `fn m() -> bool`; a call in an action
+/// body maps to `fn m()`. The base state lives on the handler's `self`; a
+/// later layer threads the recognizer runtime to ops that need it.
+pub struct SuperOp {
+    pub name: String,
+    pub is_predicate: bool,
+}
+
+/// The base name from `options { superClass = Foo }`, or `null` when the
+/// grammar declares no `superClass`. A dotted `a.b.Base` keeps its last
+/// component (the Wado effect name).
+pub fn superclass_base_name(grammar: &Grammar) -> Option<String> {
+    for let o of &grammar.options {
+        if o.name == "superClass" {
+            return Option::<String>::Some(option_value_name(&o.value));
+        }
+    }
+    return null;
+}
+
+fn option_value_name(v: &OptionValue) -> String {
+    return match v {
+        Ident(s) => *s,
+        Qualified(parts) => if parts.is_empty() { "" } else { parts[parts.len() - 1] },
+        Str(s) => *s,
+        _ => "",
+    };
+}
+
+/// Method names called as `this.<method>(` in a body, in source order,
+/// skipping string literals and comments so host text never yields a false
+/// hit. Only the `this.` receiver is a superClass call; a bare `m()` or
+/// `other.m()` is not.
+pub fn find_this_calls(body: &String) -> List<String> {
+    let chars: List<char> = body.chars().collect();
+    let n = chars.len();
+    let mut out: List<String> = [];
+    let mut i = 0;
+    while i < n {
+        let c = chars[i];
+        if c == '"' || c == '\'' {
+            i = scan_string(&chars, i);
+            continue;
+        }
+        if c == '/' && i + 1 < n && chars[i + 1] == '/' {
+            i = scan_line_comment(&chars, i);
+            continue;
+        }
+        if c == '/' && i + 1 < n && chars[i + 1] == '*' {
+            i = scan_block_comment(&chars, i);
+            continue;
+        }
+        if word_boundary_this(&chars, i, n) {
+            let after = skip_ws(&chars, i + 4, n);
+            if after < n && chars[after] == '.' {
+                let name_start = skip_ws(&chars, after + 1, n);
+                let name_end = scan_ident(&chars, name_start, n);
+                if name_end > name_start {
+                    let call = skip_ws(&chars, name_end, n);
+                    if call < n && chars[call] == '(' {
+                        out.push(collect_range(&chars, name_start, name_end));
+                        i = name_end;
+                        continue;
+                    }
+                }
+            }
+        }
+        i += 1;
+    }
+    return out;
+}
+
+/// Whether `this` sits at `i` as a whole word (not part of a longer ident).
+fn word_boundary_this(chars: &List<char>, i: i32, n: i32) -> bool {
+    if i + 4 > n {
+        return false;
+    }
+    if !(chars[i] == 't' && chars[i + 1] == 'h' && chars[i + 2] == 'i' && chars[i + 3] == 's') {
+        return false;
+    }
+    if i > 0 && is_id_continue_char(chars[i - 1]) {
+        return false;
+    }
+    return !(i + 4 < n && is_id_continue_char(chars[i + 4]));
+}
+
+fn scan_ident(chars: &List<char>, start: i32, n: i32) -> i32 {
+    if start >= n || !is_id_start_char(chars[start]) {
+        return start;
+    }
+    let mut i = start + 1;
+    while i < n && is_id_continue_char(chars[i]) {
+        i += 1;
+    }
+    return i;
+}
+
+fn skip_ws(chars: &List<char>, start: i32, n: i32) -> i32 {
+    let mut i = start;
+    while i < n && chars[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    return i;
+}
+
+fn collect_range(chars: &List<char>, start: i32, end: i32) -> String {
+    let mut s = String::with_capacity(if end > start { end - start } else { 0 });
+    for let mut i = start; i < end; i += 1 {
+        s.push(chars[i]);
+    }
+    return s;
+}
+
+/// Merge a scanned call site into the op set: first occurrence fixes the op's
+/// role (predicate vs action); a later occurrence with a different role is a
+/// conflict the caller reports.
+pub fn add_super_op(ops: &mut List<SuperOp>, name: &String, kind: &ActionKind) {
+    let is_pred = kind matches { Predicate };
+    for let o of ops {
+        if o.name == *name {
+            return;
+        }
+    }
+    ops.push(SuperOp { name: *name, is_predicate: is_pred });
+}
+
+/// Collect the superClass operations across a grammar's lexer rules: every
+/// distinct `this.<method>` call in an action / predicate body, in source
+/// order, deduped by name (first role wins).
+pub fn collect_lexer_super_ops(grammar: &Grammar) -> List<SuperOp> {
+    let mut ops: List<SuperOp> = [];
+    for let rule of &grammar.lexer_rules {
+        for let alt of &rule.body {
+            collect_lexer_alt_ops(alt, &mut ops);
+        }
+    }
+    return ops;
+}
+
+/// Whether a lexer rule's body carries any superClass op — the gate for
+/// marking its generated `try_<rule>` (and replay helpers) `with Foo`.
+pub fn lexer_rule_has_super_op(rule: &LexerRule) -> bool {
+    for let alt of &rule.body {
+        if lexer_alt_has_super_op(alt) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Whether a rule's (already-rewritten) body calls the base effect — its match
+/// fn evaluates a `Foo::op()` and so must declare `with Foo`. Checked against
+/// the rewritten form (`Foo::`) because op collection has already replaced the
+/// `this.` sites by the time codegen marks effects.
+pub fn lexer_rule_calls_super(rule: &LexerRule, base_name: &String) -> bool {
+    let needle = `${*base_name}::`;
+    for let alt of &rule.body {
+        if lexer_alt_calls_super(alt, &needle) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn lexer_alt_calls_super(alt: &LexerAlternative, needle: &String) -> bool {
+    for let a of &alt.actions {
+        if a.source.text.contains(*needle) {
+            return true;
+        }
+    }
+    for let e of &alt.elements {
+        if lexer_elem_calls_super(e, needle) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn lexer_elem_calls_super(elem: &LexerElement, needle: &String) -> bool {
+    return match elem {
+        Group(alts) => {
+            let mut any = false;
+            for let alt of alts {
+                if lexer_alt_calls_super(alt, needle) {
+                    any = true;
+                }
+            }
+            any;
+        },
+        Repeat(rep) => lexer_elem_calls_super(&rep.element, needle),
+        Not(n) => lexer_elem_calls_super(&n.element, needle),
+        _ => false,
+    };
+}
+
+fn collect_lexer_alt_ops(alt: &LexerAlternative, ops: &mut List<SuperOp>) {
+    for let a of &alt.actions {
+        for let name of &find_this_calls(&a.source.text) {
+            add_super_op(ops, name, &a.kind);
+        }
+    }
+    for let e of &alt.elements {
+        collect_lexer_elem_ops(e, ops);
+    }
+}
+
+fn collect_lexer_elem_ops(elem: &LexerElement, ops: &mut List<SuperOp>) {
+    match elem {
+        Group(alts) => {
+            for let alt of alts {
+                collect_lexer_alt_ops(alt, ops);
+            }
+        },
+        Repeat(rep) => collect_lexer_elem_ops(&rep.element, ops),
+        Not(n) => collect_lexer_elem_ops(&n.element, ops),
+        _ => {
+        },
+    }
+}
+
+fn lexer_alt_has_super_op(alt: &LexerAlternative) -> bool {
+    for let a of &alt.actions {
+        if !find_this_calls(&a.source.text).is_empty() {
+            return true;
+        }
+    }
+    for let e of &alt.elements {
+        if lexer_elem_has_super_op(e) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn lexer_elem_has_super_op(elem: &LexerElement) -> bool {
+    return match elem {
+        Group(alts) => {
+            let mut any = false;
+            for let alt of alts {
+                if lexer_alt_has_super_op(alt) {
+                    any = true;
+                }
+            }
+            any;
+        },
+        Repeat(rep) => lexer_elem_has_super_op(&rep.element),
+        Not(n) => lexer_elem_has_super_op(&n.element),
+        _ => false,
+    };
+}
+
+/// Emit `interface Foo { <op per site> }`. A predicate op returns `bool`; an
+/// action op returns unit. Op names are snake_cased to match the call-site
+/// rewrite (`this.isOk()` -> `Foo::is_ok()`). The base state lives on the
+/// handler's `self`; a later layer threads the recognizer runtime (a lexer
+/// match-window view / `&Parser`) to ops that read lookahead or matched text.
+pub fn gen_super_interface(w: &mut CodeWriter, name: &String, ops: &List<SuperOp>) {
+    w.line(&`pub interface ${*name} {`);
+    for let op of ops {
+        if op.is_predicate {
+            w.line(&`    fn ${to_snake_case(&op.name)}() -> bool;`);
+        } else {
+            w.line(&`    fn ${to_snake_case(&op.name)}();`);
+        }
+    }
+    w.line(&"}");
+    w.blank();
+}
+
+/// The Wado expression a `this.<method>(...)` call site lowers to: the ambient
+/// effect operation `Foo::<method>()`. Arguments are dropped for now (every
+/// corpus / real-world call is zero-argument beyond the implicit `this`).
+pub fn super_call_expr(base_name: &String, method: &String) -> String {
+    return `${*base_name}::${to_snake_case(method)}()`;
+}
+
+/// Rewrite every lexer action / predicate body in place, turning each
+/// `this.<method>(...)` call into the ambient effect operation
+/// `Foo::<method>()`. Run once, after op collection, so the identity
+/// translator then passes the already-Wado body through verbatim (it has no
+/// `$`-ref of its own to touch). Keeps the interface and the emit chain
+/// decoupled — no `base_name` threading through lexer codegen.
+pub fn rewrite_superclass_calls(grammar: &mut Grammar, base_name: &String) {
+    for let rule of &mut grammar.lexer_rules {
+        for let alt of &mut rule.body {
+            rewrite_lexer_alt(alt, base_name);
+        }
+    }
+}
+
+fn rewrite_lexer_alt(alt: &mut LexerAlternative, base_name: &String) {
+    for let a of &mut alt.actions {
+        a.source.text = rewrite_this_calls(&a.source.text, base_name);
+    }
+    for let mut i = 0; i < alt.elements.len(); i += 1 {
+        alt.elements[i] = rewrite_lexer_elem(&alt.elements[i], base_name);
+    }
+}
+
+fn rewrite_lexer_elem(elem: &LexerElement, base_name: &String) -> LexerElement {
+    return match elem {
+        Group(alts) => {
+            let mut new_alts: List<LexerAlternative> = [];
+            for let alt of alts {
+                let mut a = *alt;
+                rewrite_lexer_alt(&mut a, base_name);
+                new_alts.push(a);
+            }
+            LexerElement::Group(new_alts);
+        },
+        Repeat(rep) => LexerElement::Repeat(LexerRepeatElement {
+            kind: rep.kind,
+            element: rewrite_lexer_elem(&rep.element, base_name),
+            non_greedy: rep.non_greedy,
+        }),
+        Not(nn) => LexerElement::Not(LexerNotElement { element: rewrite_lexer_elem(&nn.element, base_name) }),
+        _ => *elem,
+    };
+}
+
+/// Replace each `this.<method>(...)` call in `body` with `Foo::<method>()`,
+/// copying everything else verbatim and skipping string / comment spans so a
+/// `this.` inside host text is never rewritten. Call arguments are dropped
+/// (zero-argument today).
+pub fn rewrite_this_calls(body: &String, base_name: &String) -> String {
+    let chars: List<char> = body.chars().collect();
+    let n = chars.len();
+    let mut out = String::with_capacity(n + 8);
+    let mut i = 0;
+    while i < n {
+        let c = chars[i];
+        if c == '"' || c == '\'' {
+            let end = scan_string(&chars, i);
+            append_range(&mut out, &chars, i, end);
+            i = end;
+            continue;
+        }
+        if c == '/' && i + 1 < n && chars[i + 1] == '/' {
+            let end = scan_line_comment(&chars, i);
+            append_range(&mut out, &chars, i, end);
+            i = end;
+            continue;
+        }
+        if c == '/' && i + 1 < n && chars[i + 1] == '*' {
+            let end = scan_block_comment(&chars, i);
+            append_range(&mut out, &chars, i, end);
+            i = end;
+            continue;
+        }
+        if word_boundary_this(&chars, i, n) {
+            let after = skip_ws(&chars, i + 4, n);
+            if after < n && chars[after] == '.' {
+                let name_start = skip_ws(&chars, after + 1, n);
+                let name_end = scan_ident(&chars, name_start, n);
+                if name_end > name_start {
+                    let paren = skip_ws(&chars, name_end, n);
+                    if paren < n && chars[paren] == '(' {
+                        let close = match_paren(&chars, paren, n);
+                        let method = collect_range(&chars, name_start, name_end);
+                        out.push_str(&super_call_expr(base_name, &method));
+                        i = close;
+                        continue;
+                    }
+                }
+            }
+        }
+        out.push(c);
+        i += 1;
+    }
+    return out;
+}
+
+/// Index just past the `)` matching the `(` at `open`, skipping nested parens
+/// and string spans. Returns `n` if unbalanced (a malformed body the g4 parser
+/// would already have rejected).
+fn match_paren(chars: &List<char>, open: i32, n: i32) -> i32 {
+    let mut depth = 0;
+    let mut i = open;
+    while i < n {
+        let c = chars[i];
+        if c == '"' || c == '\'' {
+            i = scan_string(chars, i);
+            continue;
+        }
+        if c == '(' {
+            depth += 1;
+        } else if c == ')' {
+            depth -= 1;
+            if depth == 0 {
+                return i + 1;
+            }
+        }
+        i += 1;
+    }
+    return n;
+}
+
+fn append_range(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+    for let mut i = start; i < end; i += 1 {
+        out.push(chars[i]);
+    }
+}

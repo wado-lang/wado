@@ -1,0 +1,114 @@
+use {
+    find_this_calls,
+    superclass_base_name,
+    add_super_op,
+    gen_super_interface,
+    super_call_expr,
+    rewrite_this_calls,
+    SuperOp,
+} from "./superclass.wado";
+use { Grammar, GrammarKind, GrammarOption, OptionValue, ActionKind } from "./ir.wado";
+use { CodeWriter } from "./wadopoet.wado";
+
+test "find_this_calls picks up this.method( sites" {
+    let calls = find_this_calls(&"this.isRegexPossible() && x > 0");
+    assert calls.len() == 1;
+    assert calls[0] == "isRegexPossible";
+}
+
+test "find_this_calls handles multiple and whitespace" {
+    let calls = find_this_calls(&"this.a(); this . b ( ) ; foo.c()");
+    assert calls.len() == 2;
+    assert calls[0] == "a";
+    assert calls[1] == "b";
+}
+
+test "find_this_calls ignores strings and comments" {
+    let calls = find_this_calls(&"\"this.x()\" /* this.y() */ this.z()");
+    assert calls.len() == 1;
+    assert calls[0] == "z";
+}
+
+test "find_this_calls ignores a bare field access without a call" {
+    let calls = find_this_calls(&"this.field + 1");
+    assert calls.is_empty();
+}
+
+test "find_this_calls does not match a longer identifier" {
+    let calls = find_this_calls(&"thistle.x() + other_this.y()");
+    assert calls.is_empty();
+}
+
+test "superclass_base_name reads the option" {
+    let g = Grammar {
+        name: "T",
+        kind: GrammarKind::Lexer,
+        parser_rules: [],
+        lexer_rules: [],
+        mode_names: [],
+        channels: [],
+        options: [
+            GrammarOption { name: "superClass", value: OptionValue::Ident("LexerBase") },
+        ],
+        named_actions: [],
+        pending_refs: [],
+        source_files: [],
+    };
+    assert superclass_base_name(&g) matches { Some(n) && n == "LexerBase" };
+}
+
+test "superclass_base_name is null without the option" {
+    let g = Grammar {
+        name: "T",
+        kind: GrammarKind::Lexer,
+        parser_rules: [],
+        lexer_rules: [],
+        mode_names: [],
+        channels: [],
+        options: [],
+        named_actions: [],
+        pending_refs: [],
+        source_files: [],
+    };
+    assert superclass_base_name(&g) matches { None };
+}
+
+test "add_super_op dedups and fixes the first role" {
+    let mut ops: List<SuperOp> = [];
+    add_super_op(&mut ops, &"m", &ActionKind::Predicate);
+    add_super_op(&mut ops, &"m", &ActionKind::Action);
+    add_super_op(&mut ops, &"n", &ActionKind::Action);
+    assert ops.len() == 2;
+    assert ops[0].name == "m" && ops[0].is_predicate;
+    assert ops[1].name == "n" && !ops[1].is_predicate;
+}
+
+test "gen_super_interface emits predicate and action ops" {
+    let ops: List<SuperOp> = [
+        SuperOp { name: "isRegexPossible", is_predicate: true },
+        SuperOp { name: "processOpenBrace", is_predicate: false },
+    ];
+    let mut w = CodeWriter::new();
+    gen_super_interface(&mut w, &"LexerBase", &ops);
+    let out = w.to_string();
+    assert out.contains("pub interface LexerBase {");
+    assert out.contains("fn is_regex_possible() -> bool;");
+    assert out.contains("fn process_open_brace();");
+}
+
+test "super_call_expr snake-cases the ambient op" {
+    assert super_call_expr(&"LexerBase", &"isRegexPossible") == "LexerBase::is_regex_possible()";
+}
+
+test "rewrite_this_calls maps this.m() to the ambient op" {
+    assert rewrite_this_calls(&"this.isOk()", &"B") == "B::is_ok()";
+    assert rewrite_this_calls(&"this.a() && x > 0", &"B") == "B::a() && x > 0";
+}
+
+test "rewrite_this_calls drops arguments" {
+    assert rewrite_this_calls(&"this.check(1, 2)", &"B") == "B::check()";
+}
+
+test "rewrite_this_calls leaves strings and non-this text untouched" {
+    assert rewrite_this_calls(&"\"this.x()\" other.y()", &"B") == "\"this.x()\" other.y()";
+}
