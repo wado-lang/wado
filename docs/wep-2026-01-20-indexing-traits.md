@@ -137,21 +137,37 @@ expected write-back, is governed by
 [Reference Representation](./wep-2026-06-13-reference-representation.md), not by
 these markers.
 
-## `List<T>`
+## Container coverage
 
-`List<T>` implements all four index traits, each with the element bound that
+The standard containers implement each index trait under the element bound that
 makes it sound:
 
-- `IndexValue` / `IndexAssign` for every element type — `c[i]` reads a copy and
-  `c[i] = v` writes for all `T`.
-- `IndexRef` for `T: Ref` — `&xs[i]` aliases the stored element.
-- `IndexMutRef` for `T: RefMut` — `&mut xs[i]` and `xs[i].mutating_method()`
-  write through to the stored element.
+- `List<T>` implements all four: `IndexValue` / `IndexAssign` for every element
+  type, `IndexRef` for `T: Ref`, and `IndexMutRef` for `T: RefMut`.
+- `TreeMap<K, V>` implements all four keyed by `K`: value read / write for every
+  `V`, `&m[k]` for `V: Ref`, and `m[k].mutating_method()` / `&mut m[k]` for
+  `V: RefMut`.
+- `ArraySlice<T>` is a shared view, so it offers `IndexValue` and `IndexRef`
+  (`T: Ref`) but not `IndexMutRef` — it holds only a shared reference to the
+  backing array and cannot hand out `&mut`.
+- The raw `Array<T>` implements only `IndexValue` / `IndexAssign`. It is the
+  generic backing store every container's `self.repr[i]` indexes, so carrying the
+  reference _traits_ would make those generic reads route through `IndexRef` and
+  box every scalar element. Its element references are the primitives
+  `array_get_ref` / `array_get_mut_ref` instead.
 
 So a `List<Struct>` gets all four; a `List<Variant>` gets everything but
 `IndexMutRef` (a variant is `Ref`, not `RefMut`); a `List<i32>` gets only the
 value traits, and `&nums[i]` on it is a value-copy reference from the language's
 reference model rather than a `Ref` alias.
+
+`List` is compiler-intrinsic — concrete subscripting lowers to direct array
+access, so its reference traits are the generic-facing contract rather than the
+concrete-access path. The mutable element reference itself is the primitive
+`array_get_mut_ref`, which carries the `RefMut` bound: an immutable `&T` read is
+sound for every element (a scalar yields a read-only snapshot), but a `&mut T`
+requires a real in-place slot, so only `RefMut` elements can be handed out
+mutably.
 
 ## Consequences
 

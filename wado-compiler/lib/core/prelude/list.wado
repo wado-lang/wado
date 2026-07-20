@@ -370,7 +370,7 @@ impl<T: Ref> IndexRef<i32> for List<T> {
 
     fn index_ref(&self, index: i32) -> &T {
         assert index < self.used, "index out of bounds";
-        return &self.repr[index];
+        return builtin::array_get_ref(&self.repr, index);
     }
 }
 
@@ -379,7 +379,7 @@ impl<T: RefMut> IndexMutRef<i32> for List<T> {
 
     fn index_mut_ref(&mut self, index: i32) -> &mut T {
         assert index < self.used, "index out of bounds";
-        return &mut self.repr[index];
+        return builtin::array_get_mut_ref(&mut self.repr, index);
     }
 }
 

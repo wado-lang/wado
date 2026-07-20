@@ -5,9 +5,12 @@
 //
 // `Array<T>` is a value type: assigning it, passing it by value, or
 // returning it deep-copies the backing GC array (see WEP-2026-06-02). Its
-// length is a runtime value (`array.len`), not part of the type. Element
-// access always copies (`arr[i]` returns `T`, never `&T`) because Wasm GC
-// has no interior references; in-place mutation goes through `set` / `[i] = v`.
+// length is a runtime value (`array.len`), not part of the type. `arr[i]`
+// copies (`T`, via the direct `array.get` path); in-place mutation goes through
+// `set` / `[i] = v`. Array is the generic backing store every `self.repr[i]`
+// indexes, so it does not carry the `IndexRef` / `IndexMutRef` *trait* impls
+// (those live on the higher-level containers); element references come from the
+// `builtin::array_get_ref` / `array_get_mut_ref` intrinsics instead.
 //
 // Every method is a thin wrapper over a `builtin::array_*` intrinsic, which
 // lowers directly to the matching `array.*` instruction.

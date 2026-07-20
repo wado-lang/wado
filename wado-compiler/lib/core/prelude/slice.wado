@@ -14,7 +14,7 @@
 // Element access is always a value copy (`s[i]` yields `T`, never `&T`),
 // because Wasm GC has no interior references.
 
-use { IndexValue, Iterator, IntoIterator, Add, Ord, Ordering } from "core:prelude/traits.wado";
+use { Ref, IndexValue, IndexRef, Iterator, IntoIterator, Add, Ord, Ordering } from "core:prelude/traits.wado";
 use { IterMap, IterFilter, IterEnumerate, IterTake, IterSkip, IterChain, IterZip } from "core:prelude/traits.wado";
 use { Option } from "core:prelude/types.wado";
 use { List } from "core:prelude/list.wado";
@@ -125,6 +125,20 @@ impl IndexValue<i32> for ArraySlice<T> {
             panic("index out of bounds");
         }
         return builtin::array_get(self.repr, self.start + index);
+    }
+}
+
+// A slice holds a shared `&Array<T>`, so it can alias elements (`IndexRef`) but
+// cannot hand out `&mut` into the backing (no `IndexMutRef`).
+impl<T: Ref> IndexRef<i32> for ArraySlice<T> {
+    type Output = T;
+
+    fn index_ref(&self, index: i32) -> &T {
+        if index < 0 || index >= self.end - self.start {
+            builtin::cold_path();
+            panic("index out of bounds");
+        }
+        return builtin::array_get_ref(self.repr, self.start + index);
     }
 }
 

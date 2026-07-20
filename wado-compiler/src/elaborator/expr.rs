@@ -1462,7 +1462,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         base_type_id,
                         &lookup_name,
                         lookup_type_id,
-                        |s, n, t| s.find_index_trait_impl(n, t, index_type),
+                        |s, n, t| s.find_index_trait_impl(n, t, Some(index_type)),
                     )
                 })
                 .flatten();
@@ -1628,7 +1628,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             base_type_id,
             &lookup_name,
             lookup_type_id,
-            |s, n, t| s.find_index_trait_impl(n, t, dummy),
+            |s, n, t| s.find_index_trait_impl(n, t, None),
         )
         .and_then(|i| i.index_type)
         .or_else(|| {

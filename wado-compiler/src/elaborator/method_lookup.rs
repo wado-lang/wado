@@ -2665,21 +2665,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// Whether `type_id` is a compiler-intrinsic sequence container (`List`)
-    /// whose concrete `[]` lowers to direct array access. Its `IndexRef` /
-    /// `IndexMutRef` impls are the generic-facing contract only; concrete
-    /// subscripting bypasses them so reads stay value-shaped for Container SROA
-    /// and copy elision, and the mutable side keeps its optimized path.
+    /// Whether `type_id` is `List`, whose concrete subscripts must stay
+    /// value-shaped for Container SROA: `List`'s `IndexRef` / `IndexMutRef`
+    /// bodies index its private `repr`, which the SROA pass cannot see through,
+    /// so concrete `List` access keeps the optimized direct path and its
+    /// reference traits dispatch only in generic contexts. `Array` needs no such
+    /// guard — it carries no reference-trait impls (element references come from
+    /// the `array_get_ref` / `array_get_mut_ref` intrinsics), so its raw
+    /// `self.repr[i]` reads never route through a trait.
     pub(super) fn uses_intrinsic_index_dispatch(&self, type_id: TypeId) -> bool {
         self.tysys.type_table.borrow().as_list(type_id).is_some()
     }
 
-    /// Find Index trait implementation for a type
+    /// Find an `IndexRef` impl for a type. `expected_index_type` disambiguates
+    /// overloaded impls (so a `Range` subscript does not match an `IndexRef<i32>`);
+    /// `None` matches by container name alone.
     pub(super) fn find_index_trait_impl(
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-        _index_type: TypeId,
+        expected_index_type: Option<TypeId>,
     ) -> Option<IndexTraitInfo> {
         // Look for impl IndexRef<...> for StructName
         self.find_indexing_trait_impl(
@@ -2688,7 +2693,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             "IndexRef",
             "index_ref",
             "Output",
-            None,
+            expected_index_type,
         )
         .map(
             |(output_type, self_kind, trait_name, impl_module_source, index_type)| IndexTraitInfo {
@@ -3169,13 +3174,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return None;
                 }
 
-                // Verify non-type-parameter positions match the concrete type args
+                // Verify non-type-parameter positions match the concrete type
+                // args, and that the impl's type-param bounds are satisfied —
+                // otherwise `Array<u8>` would match `impl<T: Ref> IndexRef<i32>`
+                // and read a scalar element through a boxed `&u8`.
                 let impl_block = s.get_impl_block(impl_ref);
                 if !s.tysys.verify_impl_type_compatibility(
                     &impl_block.ty,
                     &concrete_type_args,
                     declared,
                 ) {
+                    return None;
+                }
+                let impl_type_params = impl_block.type_params.clone();
+                let impl_ty = impl_block.ty.clone();
+                if !concrete_type_args.is_empty()
+                    && !s.tysys.check_impl_block_bounds(
+                        &s.annotate_ctx,
+                        &s.type_lookup(),
+                        &impl_type_params,
+                        &impl_ty,
+                        Some(&concrete_type_args),
+                    )
+                {
                     return None;
                 }
 

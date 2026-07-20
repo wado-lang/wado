@@ -1815,13 +1815,13 @@ impl<'a> TypeLookup<'a> {
     }
 }
 
-/// Info about an Index trait implementation
+/// Info about an `IndexRef` trait implementation
 pub(super) struct IndexTraitInfo {
     /// The Output associated type
     pub(super) output_type: TypeId,
-    /// Self kind for the index method (&self)
+    /// Self kind for the `index_ref` method (&self)
     pub(super) self_kind: ast::SelfKind,
-    /// The trait name (e.g., "Index<i32>")
+    /// The trait name (e.g., "`IndexRef`<i32>")
     pub(super) trait_name: String,
     /// Module where the impl block is defined
     pub(super) impl_module_source: ModuleSource,
@@ -1845,13 +1845,13 @@ pub(super) struct IndexAssignTraitInfo {
     pub(super) index_type: Option<TypeId>,
 }
 
-/// Info about an `IndexMut` trait implementation
+/// Info about an `IndexMutRef` trait implementation
 pub(super) struct IndexMutTraitInfo {
     /// The Output associated type
     pub(super) output_type: TypeId,
-    /// Self kind for the `index_mut` method (&mut self)
+    /// Self kind for the `index_mut_ref` method (&mut self)
     pub(super) self_kind: ast::SelfKind,
-    /// The trait name (e.g., "`IndexMut`")
+    /// The trait name (e.g., "`IndexMutRef`")
     pub(super) trait_name: String,
     /// Module where the impl block is defined
     pub(super) impl_module_source: ModuleSource,
