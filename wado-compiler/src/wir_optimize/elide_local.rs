@@ -167,7 +167,10 @@ mod tests {
     #[test]
     fn self_referencing_dead_store_elides() {
         let mut body = vec![increment("x")];
-        assert!(elide_write_only_locals_in_body(&mut body, &Nullability::new(&WirLocals::default())));
+        assert!(elide_write_only_locals_in_body(
+            &mut body,
+            &Nullability::new(&WirLocals::default())
+        ));
         assert!(matches!(body[0], WirInstr::Nop));
     }
 
@@ -175,7 +178,10 @@ mod tests {
     #[test]
     fn externally_read_store_is_kept() {
         let mut body = vec![increment("x"), lset("sink", lget("x"))];
-        assert!(elide_write_only_locals_in_body(&mut body, &Nullability::new(&WirLocals::default())));
+        assert!(elide_write_only_locals_in_body(
+            &mut body,
+            &Nullability::new(&WirLocals::default())
+        ));
         assert!(
             matches!(&body[0], WirInstr::LocalSet { name, .. } if name == "x"),
             "x is read by the sink copy and must survive: {:?}",
@@ -203,7 +209,10 @@ mod tests {
                 value: Some(Box::new(lget("z"))),
             },
         ];
-        assert!(elide_write_only_locals_in_body(&mut body, &Nullability::new(&WirLocals::default())));
+        assert!(elide_write_only_locals_in_body(
+            &mut body,
+            &Nullability::new(&WirLocals::default())
+        ));
         let WirInstr::LocalSet { value, .. } = &body[0] else {
             panic!("z is read by the return and must survive");
         };

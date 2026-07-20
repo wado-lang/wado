@@ -14,6 +14,7 @@
 //! | `array`               | Push collapse / data promotion / splitting  |
 //! | `const_forward`       | Struct field constant forwarding            |
 //! | `peephole`            | Constant folding, copy elision              |
+//! | `nullability_opt`     | Elide redundant `ref.as_non_null` / fold `ref.is_null` |
 //! | `elide_local`     | Write-only local elim for WIR-only locals  |
 //! | `cleanup`         | Nop/dead-code removal, normalization        |
 //! | `branch_hint`     | `br_if` selection + trap-based hint inference |

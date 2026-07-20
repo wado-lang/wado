@@ -108,7 +108,7 @@ NIR→WIR lowering avoids a few redundant shapes, firing once during the build a
 2. Struct-local elimination — substitute field reads for single-field struct and box locals.
 3. Data flow — forward constant struct fields for constant-index bounds-check elimination.
 4. Library rewrites — short-string append expansion; constant-array data promotion; large-literal splitting.
-5. Peephole — Wasm instruction-selection rewrites with no NIR analogue; multi-field struct elimination.
+5. Peephole — Wasm instruction-selection rewrites with no NIR analogue; multi-field struct elimination; nullability-driven rewrites (elide redundant `ref.as_non_null`, fold `ref.is_null` on a non-null reference).
 6. Write-only local elimination — for locals only the WIR builder synthesises.
 7. Global cleanup — constant-initializer promotion, identical-global dedup, and dead-data pruning.
 8. Branch hints — `br_if` selection and trap-based cold/likely inference (also at `-O0`).
