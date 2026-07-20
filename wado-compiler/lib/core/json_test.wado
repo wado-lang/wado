@@ -662,3 +662,24 @@ test "to_bytes_pretty matches to_string_pretty" {
         }
     }
 }
+
+test "to_bytes_pretty trailing_char appends" {
+    let u = PrettyUser { first_name: "Bo", age: 5 };
+    let b = to_bytes_pretty(&u, Option::Some('\n')).unwrap();
+    assert b[b.len() - 1] == 10;
+    if let Ok(s) = to_string_pretty(&u, Option::Some('\n')) {
+        assert_bytes_eq_string(&b, &s);
+    }
+}
+
+test "to_bytes_canonical default omits trailing char (signing-safe)" {
+    let u = PrettyUser { first_name: "Ann", age: 30 };
+    let b = to_bytes_canonical(&u).unwrap();
+    assert_bytes_eq_string(&b, &"{\"age\":30,\"firstName\":\"Ann\"}");
+}
+
+test "to_bytes_canonical trailing_char appends" {
+    let u = PrettyUser { first_name: "Ann", age: 30 };
+    let b = to_bytes_canonical(&u, Option::Some('\n')).unwrap();
+    assert_bytes_eq_string(&b, &"{\"age\":30,\"firstName\":\"Ann\"}\n");
+}

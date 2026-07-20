@@ -116,7 +116,7 @@ export fn run() with Stdout, Stderr, Environment, Client {
     let request_body: List<u8> = to_bytes(&ChatRequest {
         model: MODEL_NAME,
         messages,
-    }).unwrap().into_iter().collect();
+    }).unwrap().to_list();
 
     // `send_post` streams the body out over the CM boundary as `list<u8>`.
     let resp = send_post(api_key, request_body);

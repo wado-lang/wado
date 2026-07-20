@@ -566,23 +566,30 @@ impl Deserializer for NsdDeserializer {
 }
 
 /// Serializes a value to UTF-8 JSON NSD bytes — the primary entry point.
-pub fn to_bytes<T: Serialize>(value: &T) -> Result<ByteList, SerializeError> {
+///
+/// Returns a read-only `ByteSlice` viewing the serializer's own UTF-8 buffer —
+/// no copy. `trailing_char`, when `Some`, is appended after the value.
+pub fn to_bytes<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError> {
     let mut buf: String = "";
     let mut ser = NsdSerializer { buf: &mut buf };
     value.serialize::<NsdSerializer>(&mut ser)?;
-    // Value semantics: an owned `ByteList` cannot alias `buf`'s buffer, so the
-    // bytes must be copied out exactly once. `as_bytes()` is a borrowed view
-    // (no copy); `to_array()` does the single bulk `array_copy`.
-    let bytes = buf.as_bytes();
-    return Result::Ok(List::<u8>::internal_from_raw(bytes.to_array(), bytes.len()) as ByteList);
+    if let Some(c) = trailing_char {
+        buf.push(c);
+    }
+    return Result::Ok(buf.as_bytes());
 }
 
 /// Serializes a value to a JSON NSD string. Convenience over `to_bytes` for
 /// text contexts; serde I/O is bytes-primary.
-pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError> {
+///
+/// `trailing_char`, when `Some`, is appended after the value.
+pub fn to_string<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<String, SerializeError> {
     let mut buf: String = "";
     let mut ser = NsdSerializer { buf: &mut buf };
     value.serialize::<NsdSerializer>(&mut ser)?;
+    if let Some(c) = trailing_char {
+        buf.push(c);
+    }
     return Result::Ok(buf);
 }
 

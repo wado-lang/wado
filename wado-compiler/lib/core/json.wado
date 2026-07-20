@@ -2348,7 +2348,9 @@ pub fn to_bytes<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> 
 
 /// Serializes a value to a pretty JSON string. Convenience over
 /// `to_bytes_pretty`; serde I/O is bytes-primary.
-pub fn to_string_pretty<T: Serialize>(value: &T) -> Result<String, SerializeError> {
+///
+/// `trailing_char`, when `Some`, is appended after the value.
+pub fn to_string_pretty<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<String, SerializeError> {
     let indent = "  ";
     let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = PrettyJsonSerializer {
@@ -2357,6 +2359,9 @@ pub fn to_string_pretty<T: Serialize>(value: &T) -> Result<String, SerializeErro
         depth: 0,
     };
     value.serialize(&mut ser)?;
+    if let Some(c) = trailing_char {
+        buf.push(c);
+    }
     return Result::Ok(buf);
 }
 
@@ -2392,19 +2397,25 @@ pub fn from_bytes<T: Deserialize, S: AsByteSlice>(input: S) -> Result<T, Deseria
 /// encoded form (RFC 8785-style); equal values produce byte-identical output
 /// regardless of map insertion order. Use this for signing or content
 /// addressing; use `to_bytes` for the faster insertion-order form.
-pub fn to_bytes_canonical<T: Serialize>(value: &T) -> Result<ByteList, SerializeError> {
+///
+/// Returns a read-only `ByteSlice` viewing the serializer's own UTF-8 buffer —
+/// no copy. `trailing_char`, when `Some`, is appended after the value; leave it
+/// `null` (the default) to keep the byte-exact canonical form for signing.
+pub fn to_bytes_canonical<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError> {
     let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = CanonicalJsonSerializer { buf: &mut buf };
     value.serialize(&mut ser)?;
-    // Value semantics: an owned `ByteList` cannot alias `buf`'s buffer, so the
-    // bytes must be copied out exactly once. `as_bytes()` is a borrowed view
-    // (no copy); `to_array()` does the single bulk `array_copy`.
-    let bytes = buf.as_bytes();
-    return Result::Ok(List::internal_from_raw(bytes.to_array(), bytes.len()) as ByteList);
+    if let Some(c) = trailing_char {
+        buf.push(c);
+    }
+    return Result::Ok(buf.as_bytes());
 }
 
 /// Serializes a value to pretty-printed UTF-8 JSON bytes.
-pub fn to_bytes_pretty<T: Serialize>(value: &T) -> Result<ByteList, SerializeError> {
+///
+/// Returns a read-only `ByteSlice` viewing the serializer's own UTF-8 buffer —
+/// no copy. `trailing_char`, when `Some`, is appended after the value.
+pub fn to_bytes_pretty<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError> {
     let indent = "  ";
     let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = PrettyJsonSerializer {
@@ -2413,9 +2424,8 @@ pub fn to_bytes_pretty<T: Serialize>(value: &T) -> Result<ByteList, SerializeErr
         depth: 0,
     };
     value.serialize(&mut ser)?;
-    // Value semantics: an owned `ByteList` cannot alias `buf`'s buffer, so the
-    // bytes must be copied out exactly once. `as_bytes()` is a borrowed view
-    // (no copy); `to_array()` does the single bulk `array_copy`.
-    let bytes = buf.as_bytes();
-    return Result::Ok(List::internal_from_raw(bytes.to_array(), bytes.len()) as ByteList);
+    if let Some(c) = trailing_char {
+        buf.push(c);
+    }
+    return Result::Ok(buf.as_bytes());
 }

@@ -130,6 +130,22 @@ test "array slice and windows and chunks" {
     assert c0 matches { Some(c) && c.len() == 2 && c[0] == 1 };
 }
 
+test "slice to_list materializes an owned List" {
+    let mut a: Array<i32> = Array::new(5);
+    for let mut i = 0; i < 5; i += 1 {
+        a[i] = i + 1;
+    }
+    let list = a.slice(1, 4).to_list();
+    assert list.len() == 3;
+    assert list[0] == 2;
+    assert list[2] == 4;
+}
+
+test "empty slice to_list is empty" {
+    let a: Array<i32> = Array::new(3);
+    assert a.slice(1, 1).to_list().len() == 0;
+}
+
 test "inspect empty array" {
     let a: Array<i32> = Array::new(0);
     assert `${a:?}` == "[]";

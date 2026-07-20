@@ -103,6 +103,15 @@ impl ArraySlice<T> {
         return out;
     }
 
+    /// Copies the slice's elements into a new owned `List<T>` (single bulk copy).
+    /// The `List` counterpart to `to_array`, and the efficient way to turn a
+    /// borrowed view — e.g. the `ByteSlice` returned by `core:json`'s `to_bytes`
+    /// — into an owned buffer.
+    pub fn to_list(&self) -> List<T> {
+        let len = i32_max(self.end - self.start, 0);
+        return List::internal_from_raw(self.to_array(), len);
+    }
+
     /// Internal: the backing array this slice views. Paired with
     /// `internal_start`, lets bulk-copy paths (`List::extend_from_slice`)
     /// `array_copy` directly from the view without a temporary.
