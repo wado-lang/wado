@@ -65,7 +65,8 @@ Returns a reference to the element at the given index.
 ### `pub trait IndexMutRef<IndexType>`
 
 Mutable reference indexing: `container[i].mutating_method()`.
-`Output: Ref` for the same reason as `IndexRef`.
+`Output: RefMut` — the element must be mutated in place, so a replace-on-assign
+element (`variant`, `fn`) cannot be handed out mutably by reference.
 
 #### `fn index_mut_ref(&mut self, index: IndexType) -> &mut Self::Output`
 
@@ -73,10 +74,9 @@ Returns a mutable reference to the element at the given index.
 
 ### `pub trait IndexAssign<IndexType>`
 
-Trait for index assignment operations.
-Types implementing this trait can be assigned via the `[]` operator: `arr[i] = value`.
-This is separate from `IndexMut` because in Wasm GC, you cannot get a mutable reference
-to primitive array elements - reading and writing are fundamentally different operations.
+Value-assignment indexing: `container[i] = value`.
+Separate from `IndexMutRef`: a scalar element has no addressable cell, so
+writing it by value is a distinct operation from handing out a `&mut`.
 
 #### `fn index_assign(&mut self, index: IndexType, value: Self::Input)`
 
@@ -84,9 +84,9 @@ Assigns a value to the element at the given index.
 
 ### `pub trait IndexValue<IndexType>`
 
-Trait for value-returning indexing operations.
-Use this for containers of primitives where references cannot be returned.
-Unlike `Index` which returns `&Output`, this returns `Output` by value (copy).
+Value-copy indexing: `container[i]` yields a copy of the element.
+The value-semantics counterpart to `IndexRef` for elements that cannot be
+aliased by reference (scalars, resources).
 
 #### `fn index_value(&self, index: IndexType) -> Self::Output`
 
@@ -406,7 +406,8 @@ Returns a reference to the element at the given index.
 ### `pub trait IndexMutRef<IndexType>`
 
 Mutable reference indexing: `container[i].mutating_method()`.
-`Output: Ref` for the same reason as `IndexRef`.
+`Output: RefMut` — the element must be mutated in place, so a replace-on-assign
+element (`variant`, `fn`) cannot be handed out mutably by reference.
 
 #### `fn index_mut_ref(&mut self, index: IndexType) -> &mut Self::Output`
 
@@ -414,10 +415,9 @@ Returns a mutable reference to the element at the given index.
 
 ### `pub trait IndexAssign<IndexType>`
 
-Trait for index assignment operations.
-Types implementing this trait can be assigned via the `[]` operator: `arr[i] = value`.
-This is separate from `IndexMut` because in Wasm GC, you cannot get a mutable reference
-to primitive array elements - reading and writing are fundamentally different operations.
+Value-assignment indexing: `container[i] = value`.
+Separate from `IndexMutRef`: a scalar element has no addressable cell, so
+writing it by value is a distinct operation from handing out a `&mut`.
 
 #### `fn index_assign(&mut self, index: IndexType, value: Self::Input)`
 
@@ -425,9 +425,9 @@ Assigns a value to the element at the given index.
 
 ### `pub trait IndexValue<IndexType>`
 
-Trait for value-returning indexing operations.
-Use this for containers of primitives where references cannot be returned.
-Unlike `Index` which returns `&Output`, this returns `Output` by value (copy).
+Value-copy indexing: `container[i]` yields a copy of the element.
+The value-semantics counterpart to `IndexRef` for elements that cannot be
+aliased by reference (scalars, resources).
 
 #### `fn index_value(&self, index: IndexType) -> Self::Output`
 
@@ -3206,6 +3206,10 @@ Copies the slice's elements into a new `Array<T>`.
 
 ##### `fn index_value(&self, index: i32) -> Self::Output`
 
+#### `impl IndexRef<i32> for ArraySlice<T>`
+
+##### `fn index_ref(&self, index: i32) -> &T`
+
 #### `impl IntoIterator for ArraySlice<T>`
 
 ##### `fn into_iter(&self) -> Self::Iter`
@@ -4004,6 +4008,14 @@ Joins elements into a string with the given separator.
 #### `impl IndexAssign<i32> for List<T>`
 
 ##### `fn index_assign(&mut self, index: i32, value: Self::Input) with stores[value]`
+
+#### `impl IndexRef<i32> for List<T>`
+
+##### `fn index_ref(&self, index: i32) -> &T`
+
+#### `impl IndexMutRef<i32> for List<T>`
+
+##### `fn index_mut_ref(&mut self, index: i32) -> &mut T`
 
 #### `impl Eq for List<T>`
 
