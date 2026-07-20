@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784550083652,
+  "lastUpdate": 1784589530336,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -42537,6 +42537,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 271337,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6610b8679d7dc6971a57925d5c6219dc707e2d0d",
+          "message": "Merge pull request #1647 from wado-lang/claude/string-module-refactor-1xel81\n\nrefactor(stdlib)!: streamline String module; json to_bytes returns zero-copy ByteSlice",
+          "timestamp": "2026-07-21T08:08:56+09:00",
+          "tree_id": "1ba781864149ead6328445ec8bf8bdbb3c3ab997",
+          "url": "https://github.com/wado-lang/wado/commit/6610b8679d7dc6971a57925d5c6219dc707e2d0d"
+        },
+        "date": 1784589529631,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8143,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16466,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271128,
             "unit": "bytes"
           }
         ]
