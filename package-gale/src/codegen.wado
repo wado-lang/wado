@@ -158,15 +158,22 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // effect even though its parser actions stay carved out.
     if let Some(sc) = superclass_base_name(grammar) {
         let ops = collect_lexer_super_ops(grammar);
-        // Predicate ops are fully wired; action ops (`{this.m();}`) need the
-        // winner-replay path (not yet). A base with any action op stays carved
-        // out (its bodies discarded, byte-identical to before) until that lands,
-        // rather than emitting a half-wired interface.
         if !ops.is_empty() && all_super_ops_predicates(&ops) {
+            // Predicate ops are fully wired: emit the interface and rewrite
+            // `this.<method>()` -> `Foo::<method>(view)` in place, after op
+            // collection (which scans the original `this.` sites).
             ctx.set_superclass(&sc, ops);
-            // Rewrite `this.<method>()` -> `Foo::<method>(view)` in place, after
-            // op collection (which scans the original `this.` sites).
             rewrite_superclass_calls(grammar, &sc);
+        } else if !ops.is_empty() {
+            // Action ops (`{this.m();}`) need the winner-replay path, not yet
+            // wired. Rather than emit a half-wired interface, the base is left
+            // unwired — warn loudly so the drop is visible instead of the bodies
+            // surfacing later as a cryptic generated-code error.
+            ctx.warn(
+                &"superClass",
+                DiagnosticKind::UnsupportedAction,
+                `superClass '${sc}' has action operations ({this.m();}); superClass action ops are not yet executed, so the base is not wired`,
+            );
         }
     }
     ctx.precompute_scannability();
@@ -227,7 +234,11 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // needs a longest-match tournament; the FOLLOW runtime / mask globals only
     // when lowering built a caller-FOLLOW gate (`emit_follow`).
     let ef = ctx.emit_follow();
-    let emit_highlight = options.highlight_query matches { Some(_) };
+    // A superClass grammar cannot be highlighted: the `highlight` / `run`
+    // entries call `tokenize` / `parse`, which carry the base effect, but they
+    // have no way to install the user's handler (`run` is a CM export). Skip
+    // the highlighter (warned below) rather than emit code that cannot compile.
+    let emit_highlight = options.highlight_query matches { Some(_) } && !ctx.has_superclass();
     gen_runtime(&mut w, ef, ctx.needs_atn(), needs_latn, emit_highlight, ctx.has_superclass());
     gen_token_kind(&mut w, &grammar.lexer_rules);
     gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
@@ -249,7 +260,15 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     warn_unhandled_lexer_actions(grammar, &mut ctx);
     gen_string_tree_helper(&mut w, grammar, &lit_tokens);
     if let Some(query) = &options.highlight_query {
-        gen_highlight(&mut w, grammar, &lit_tokens, query, &mut ctx);
+        if ctx.has_superclass() {
+            ctx.warn(
+                &"highlight",
+                DiagnosticKind::UnsupportedAction,
+                `a highlight query with superClass '${*ctx.superclass_name()}' is not supported (the highlighter entry cannot install the base handler); skipping the highlighter`,
+            );
+        } else {
+            gen_highlight(&mut w, grammar, &lit_tokens, query, &mut ctx);
+        }
     }
     // The scan emission may intern kind-set helpers (`_kind_set_N`);
     // emit whatever was interned (a no-op when none).

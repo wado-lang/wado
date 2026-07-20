@@ -422,11 +422,6 @@ fn collect_element_action_ids(elem: &Element, out: &mut List<i32>) {
     }
 }
 
-/// Public `parse` entry under the emitter: tokenize, run the start
-/// rule (which drives the builder), and return a `ParseResult`. The parser is
-/// infallible; a failure leaves `p.recovering` set and the deepest error in
-/// `p.pending`, surfaced as one diagnostic. The partial tree (open nodes folded
-/// by each wrapper's `finish_node`) is still returned.
 /// The ` with Foo` clause a parse-entry fn carries when the lexer declares a
 /// `superClass` — the entry calls `tokenize` (which carries the base effect),
 /// so it must propagate it. Empty when there is no superClass.
@@ -437,6 +432,11 @@ fn superclass_clause(ctx: &GenContext) -> String {
     return "";
 }
 
+/// Public `parse` entry under the emitter: tokenize, run the start
+/// rule (which drives the builder), and return a `ParseResult`. The parser is
+/// infallible; a failure leaves `p.recovering` set and the deepest error in
+/// `p.pending`, surfaced as one diagnostic. The partial tree (open nodes folded
+/// by each wrapper's `finish_node`) is still returned.
 fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenContext) {
     if lowered.parser_rules.len() == 0 {
         return;

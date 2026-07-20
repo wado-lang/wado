@@ -175,12 +175,12 @@ pub struct GenContext {
     action_member_methods: List<String>,
     /// `options { superClass = Foo }`: the base effect-interface name, or `""`
     /// when the grammar declares none. A `this.<method>()` action / predicate
-    /// call lowers to the ambient `Foo::<method>(lx)` operation, and the
+    /// call lowers to the ambient `Foo::<method>(view)` operation, and the
     /// op-reachable generated fns (`try_<rule>`, `tokenize`) declare `with Foo`.
     /// See `action.md`, "SuperClass — an effect interface".
     superclass_name: String,
     /// The synthesized effect operations, one per distinct `this.<method>` call
-    /// site (predicate → `&Lexer -> bool`, action → `&mut Lexer`).
+    /// site (predicate → `fn m(view: LexerView) -> bool`, action → `fn m(view: LexerView)`).
     superclass_ops: List<SuperOp>,
     /// `action_id`s codegen has handled (emitted, or already raised a loud
     /// diagnostic for). A post-emit sweep warns for any stamped parser action

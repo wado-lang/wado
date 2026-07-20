@@ -594,7 +594,7 @@ fn gen_lexer_match_fn(
     // A rule whose body evaluates a `Foo::op(LexerView { chars, .. })` calls the
     // base effect, so its match fn declares `with Foo`; the view literal stores
     // the char-stream ref, so the fn also declares `stores[...]` for it.
-    if !sc_name.is_empty() && lexer_rule_calls_super(rule, sc_name) {
+    if !sc_name.is_empty() && lexer_rule_calls_super(rule, all_rules, sc_name) {
         f.add_effect(sc_name);
         if hm {
             f.add_stores(&"lx");

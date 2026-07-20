@@ -72,11 +72,11 @@ pub fn find_this_calls(body: &String) -> List<String> {
             '/' && i + 1 < n && chars[i + 1] == '/' => scan_line_comment(&chars, i),
             '/' && i + 1 < n && chars[i + 1] == '*' => scan_block_comment(&chars, i),
             _ => match this_call_at(&chars, i, n) {
-                // Continue scanning at the method name, so `this.a(this.b())`
-                // finds both calls (arguments are re-scanned).
-                Some([name, name_end, _]) => {
+                // Advance past the whole call — arguments are dropped at rewrite,
+                // so a nested `this.b()` in an argument is not a separate op.
+                Some([name, close]) => {
                     out.push(name);
-                    name_end;
+                    close;
                 },
                 None => i + 1,
             },
@@ -86,9 +86,10 @@ pub fn find_this_calls(body: &String) -> List<String> {
 }
 
 /// If a `this.<method>(` call starts at `i` (whitespace allowed between
-/// tokens), returns `[method, name_end, close]`: the method name, the index
-/// just past the name, and the index just past the matching `)`. Else `null`.
-fn this_call_at(chars: &List<char>, i: i32, n: i32) -> Option<[String, i32, i32]> {
+/// tokens), returns `[method, close]`: the method name and the index just past
+/// the matching `)`. Else `null`. Shared by op collection and the call-site
+/// rewrite, so both agree on what a call is and where it ends.
+fn this_call_at(chars: &List<char>, i: i32, n: i32) -> Option<[String, i32]> {
     if !word_boundary_this(chars, i, n) {
         return null;
     }
@@ -106,7 +107,7 @@ fn this_call_at(chars: &List<char>, i: i32, n: i32) -> Option<[String, i32, i32]
         return null;
     }
     let name = collect_range(chars, name_start, name_end);
-    return Option::Some([name, name_end, match_paren(chars, paren, n)]);
+    return Option::Some([name, match_paren(chars, paren, n)]);
 }
 
 /// Whether `this` sits at `i` as a whole word (not part of a longer ident).
@@ -180,33 +181,82 @@ pub fn all_super_ops_predicates(ops: &List<SuperOp>) -> bool {
     return ops.iter().all(|o: &SuperOp| o.is_predicate);
 }
 
-/// Whether a lexer rule's body carries any superClass op — the gate for
-/// marking its generated `try_<rule>` (and replay helpers) `with Foo`.
-pub fn lexer_rule_has_super_op(rule: &LexerRule) -> bool {
-    return rule.body.iter().any(|alt: &LexerAlternative| lexer_alt_has_super_op(alt));
-}
-
-/// Whether a rule's (already-rewritten) body calls the base effect — its match
-/// fn evaluates a `Foo::op()` and so must declare `with Foo`. Checked against
-/// the rewritten form (`Foo::`) because op collection has already replaced the
-/// `this.` sites by the time codegen marks effects.
-pub fn lexer_rule_calls_super(rule: &LexerRule, base_name: &String) -> bool {
+/// Whether a rule's generated match fn (transitively, through referenced
+/// fragments) evaluates a `Foo::op(...)`, so it must declare `with Foo`.
+/// Checked against the rewritten form (`Foo::`) because op collection has
+/// already replaced the `this.` sites by the time codegen marks effects. A
+/// `RuleRef` is followed through `all_rules` — a non-recursive fragment is
+/// inlined into its caller and a recursive one is called from it, so either way
+/// the caller's match fn carries the effect. `visited` breaks fragment cycles.
+pub fn lexer_rule_calls_super(rule: &LexerRule, all_rules: &List<LexerRule>, base_name: &String) -> bool {
     let needle = `${*base_name}::`;
-    return rule.body.iter().any(|alt: &LexerAlternative| lexer_alt_calls_super(alt, &needle));
+    let mut visited: List<String> = [];
+    return rule_calls_super(rule, all_rules, &needle, &mut visited);
 }
 
-fn lexer_alt_calls_super(alt: &LexerAlternative, needle: &String) -> bool {
-    return alt.actions.iter().any(|a: &AltAction| a.source.text.contains(*needle))
-        || alt.elements.iter().any(|e: &LexerElement| lexer_elem_calls_super(e, needle));
+fn rule_calls_super(rule: &LexerRule, all_rules: &List<LexerRule>, needle: &String, visited: &mut List<String>) -> bool {
+    if visited.iter().any(|v: &String| *v == rule.name) {
+        return false;
+    }
+    visited.push(rule.name);
+    for let alt of &rule.body {
+        if alt_calls_super(alt, all_rules, needle, visited) {
+            return true;
+        }
+    }
+    return false;
 }
 
-fn lexer_elem_calls_super(elem: &LexerElement, needle: &String) -> bool {
-    return match elem {
-        Group(alts) => alts.iter().any(|alt: &LexerAlternative| lexer_alt_calls_super(alt, needle)),
-        Repeat(rep) => lexer_elem_calls_super(&rep.element, needle),
-        Not(n) => lexer_elem_calls_super(&n.element, needle),
-        _ => false,
-    };
+fn alt_calls_super(
+    alt: &LexerAlternative,
+    all_rules: &List<LexerRule>,
+    needle: &String,
+    visited: &mut List<String>,
+) -> bool {
+    for let a of &alt.actions {
+        if a.source.text.contains(*needle) {
+            return true;
+        }
+    }
+    for let e of &alt.elements {
+        if elem_calls_super(e, all_rules, needle, visited) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn elem_calls_super(
+    elem: &LexerElement,
+    all_rules: &List<LexerRule>,
+    needle: &String,
+    visited: &mut List<String>,
+) -> bool {
+    match elem {
+        Group(alts) => {
+            for let alt of alts {
+                if alt_calls_super(alt, all_rules, needle, visited) {
+                    return true;
+                }
+            }
+        },
+        Repeat(rep) => {
+            return elem_calls_super(&rep.element, all_rules, needle, visited);
+        },
+        Not(n) => {
+            return elem_calls_super(&n.element, all_rules, needle, visited);
+        },
+        RuleRef(name) => {
+            for let r of all_rules {
+                if r.name == *name {
+                    return rule_calls_super(r, all_rules, needle, visited);
+                }
+            }
+        },
+        _ => {
+        },
+    }
+    return false;
 }
 
 fn collect_lexer_alt_ops(alt: &LexerAlternative, ops: &mut List<SuperOp>) {
@@ -232,20 +282,6 @@ fn collect_lexer_elem_ops(elem: &LexerElement, ops: &mut List<SuperOp>) {
         _ => {
         },
     }
-}
-
-fn lexer_alt_has_super_op(alt: &LexerAlternative) -> bool {
-    return alt.actions.iter().any(|a: &AltAction| !find_this_calls(&a.source.text).is_empty())
-        || alt.elements.iter().any(|e: &LexerElement| lexer_elem_has_super_op(e));
-}
-
-fn lexer_elem_has_super_op(elem: &LexerElement) -> bool {
-    return match elem {
-        Group(alts) => alts.iter().any(|alt: &LexerAlternative| lexer_alt_has_super_op(alt)),
-        Repeat(rep) => lexer_elem_has_super_op(&rep.element),
-        Not(n) => lexer_elem_has_super_op(&n.element),
-        _ => false,
-    };
 }
 
 /// Emit `interface Foo { <op per site> }`. Each op receives a `LexerView` — a
@@ -335,7 +371,7 @@ pub fn rewrite_this_calls(body: &String, base_name: &String) -> String {
             '/' && i + 1 < n && chars[i + 1] == '*' => copy_span(&mut out, &chars, i, scan_block_comment(&chars, i)),
             _ => match this_call_at(&chars, i, n) {
                 // Rewrite the whole call and skip past its `)` (arguments dropped).
-                Some([method, _, close]) => {
+                Some([method, close]) => {
                     out.push_str(&super_call_expr(base_name, &method));
                     close;
                 },
