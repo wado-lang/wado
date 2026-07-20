@@ -34,26 +34,33 @@ Writes a JSON-escaped string (with surrounding quotes) into buf.
 Only `"`, `\`, and controls (< 0x20) are escaped — all ASCII — so unescaped
 runs (including any multi-byte UTF-8) bulk-copy instead of re-encoding.
 
-### `pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError>`
+### `pub fn to_string<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<String, SerializeError>`
 
 Serializes a value to a JSON string. Convenience over `to_bytes` for text
 contexts; serde I/O is bytes-primary, so prefer `to_bytes` when the output
 is consumed as bytes (e.g. an HTTP response body).
 
-### `pub fn to_bytes<T: Serialize>(value: &T) -> Result<ByteList, SerializeError>`
+`trailing_char`, when `Some`, is appended after the value — pass
+`Option::Some('\n')` to emit JSON Lines (one record per line).
+
+### `pub fn to_bytes<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError>`
 
 Serializes a value directly to UTF-8 JSON bytes.
 
-Equivalent to `to_string` followed by a byte-buffer conversion, but
-skips the intermediate re-encoding: the serializer's UTF-8 buffer is
-handed back directly as a `ByteList` with no copy. Prefer this over
-`to_string(value).bytes().collect()` whenever the output is consumed
-as bytes (e.g. an HTTP response body).
+Returns a read-only `ByteSlice` viewing the serializer's own UTF-8 buffer —
+no copy, no re-encode. Prefer this over `to_string(value).bytes().collect()`
+whenever the output is consumed as bytes (e.g. an HTTP response body).
 
-### `pub fn to_string_pretty<T: Serialize>(value: &T) -> Result<String, SerializeError>`
+`trailing_char`, when `Some`, is appended after the value — pass
+`Option::Some('\n')` to emit JSON Lines. The byte view already includes it,
+so a caller framing a stream needs no mutable buffer of its own.
+
+### `pub fn to_string_pretty<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<String, SerializeError>`
 
 Serializes a value to a pretty JSON string. Convenience over
 `to_bytes_pretty`; serde I/O is bytes-primary.
+
+`trailing_char`, when `Some`, is appended after the value.
 
 ### `pub fn from_string<T: Deserialize>(input: String) -> Result<T, DeserializeError>`
 
@@ -69,7 +76,7 @@ Accepts any byte source via `AsByteSlice`: a `ByteList`, `ByteArray`,
 borrowed bytes directly (zero-copy); UTF-8 is validated where string content
 is materialized (RFC 8259 §8.1), reporting invalid bytes as `MalformedInput`.
 
-### `pub fn to_bytes_canonical<T: Serialize>(value: &T) -> Result<ByteList, SerializeError>`
+### `pub fn to_bytes_canonical<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError>`
 
 Serializes a value to canonical (deterministic) UTF-8 JSON bytes.
 
@@ -78,9 +85,16 @@ encoded form (RFC 8785-style); equal values produce byte-identical output
 regardless of map insertion order. Use this for signing or content
 addressing; use `to_bytes` for the faster insertion-order form.
 
-### `pub fn to_bytes_pretty<T: Serialize>(value: &T) -> Result<ByteList, SerializeError>`
+Returns a read-only `ByteSlice` viewing the serializer's own UTF-8 buffer —
+no copy. `trailing_char`, when `Some`, is appended after the value; leave it
+`null` (the default) to keep the byte-exact canonical form for signing.
+
+### `pub fn to_bytes_pretty<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError>`
 
 Serializes a value to pretty-printed UTF-8 JSON bytes.
+
+Returns a read-only `ByteSlice` viewing the serializer's own UTF-8 buffer —
+no copy. `trailing_char`, when `Some`, is appended after the value.
 
 ## Structs
 

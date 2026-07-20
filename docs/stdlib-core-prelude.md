@@ -3202,6 +3202,13 @@ Returns a by-value iterator over the slice.
 
 Copies the slice's elements into a new `Array<T>`.
 
+#### `pub fn to_list(&self) -> List<T>`
+
+Copies the slice's elements into a new owned `List<T>` (single bulk copy).
+The `List` counterpart to `to_array`, and the efficient way to turn a
+borrowed view — e.g. the `ByteSlice` returned by `core:json`'s `to_bytes`
+— into an owned buffer.
+
 #### `impl IndexValue<i32> for ArraySlice<T>`
 
 ##### `fn index_value(&self, index: i32) -> Self::Output`
@@ -3318,14 +3325,6 @@ Read the byte at `index` without bounds checks.
 For safe byte access, use `bytes()` iterator instead. This method is
 reserved for performance-critical code where bounds have been proven.
 
-#### `pub fn as_bytes(&self) -> ByteSlice with stores[self]`
-
-Zero-copy view of the string's UTF-8 bytes as an `ArraySlice<u8>`.
-No allocation: the slice references the string's backing buffer over
-`[0, len())`. Used by the byte-based deserializers to hand a wire key
-to `FieldSchema::lookup` without a `String` copy. The `AsByteSlice`
-trait impl (in `core:prelude/bytes.wado`) wraps this as a `ByteSlice`.
-
 #### `pub fn set_byte_unchecked(&mut self, index: i32, value: u8)`
 
 Write the byte at `index` without bounds or UTF-8 checks.
@@ -3335,6 +3334,14 @@ Write the byte at `index` without bounds or UTF-8 checks.
 - `0 <= index < self.len()`.
 - The resulting byte sequence must remain valid UTF-8. This is the
   caller's responsibility (cf. Rust's `as_bytes_mut`, which is `unsafe`).
+
+#### `pub fn as_bytes(&self) -> ByteSlice with stores[self]`
+
+Zero-copy view of the string's UTF-8 bytes as an `ArraySlice<u8>`.
+No allocation: the slice references the string's backing buffer over
+`[0, len())`. Used by the byte-based deserializers to hand a wire key
+to `FieldSchema::lookup` without a `String` copy. The `AsByteSlice`
+trait impl (in `core:prelude/bytes.wado`) wraps this as a `ByteSlice`.
 
 #### `pub fn grow(&mut self, min_capacity: i32)`
 
@@ -3354,13 +3361,8 @@ Grows the string if necessary (O(1) amortized).
 
 #### `pub fn push_bytes_unchecked<S: AsByteSlice>(&mut self, bytes: &S)`
 
-Append all bytes of `bytes` to this string (bulk-copy, single `array_copy`).
-
-# Safety (caller-side preconditions)
-
-- The resulting byte sequence (existing bytes + new bytes) must be valid UTF-8.
-  Append the bytes of any `AsByteSlice` source (`ByteList`, `ByteArray`,
-  `ByteSlice`, or a `String`) in one bulk `array_copy`.
+Append the bytes of any `AsByteSlice` source (`ByteList`, `ByteArray`,
+`ByteSlice`, or a `String`) in one bulk `array_copy`.
 
 # Safety (caller-side preconditions)
 
@@ -3384,6 +3386,10 @@ Returns an iterator over the UTF-8 bytes of the string.
 #### `pub fn chars(&self) -> StrCharIter with stores[self]`
 
 Returns an iterator over the Unicode scalar values (chars) of the string.
+
+#### `pub fn char_indices(&self) -> StrCharIndicesIter with stores[self]`
+
+Returns an iterator over characters with their byte indices.
 
 #### `pub fn to_chars(&self) -> List<char>`
 
@@ -3620,9 +3626,9 @@ a single bulk copy — no per-codepoint decode-and-re-encode.
 
 The validation core that `from_utf8` and the JSON deserializer route
 through: one forward pass over `decode_utf8_scalar`, then one `to_array`
-copy wrapped via `internal_from_utf8_raw`. Cheaper than `from_utf8`'s old
-codepoint-by-codepoint rebuild whenever the bytes already live in one
-buffer (e.g. a JSON string token sliced out of the borrowed input).
+copy. Cheaper than a codepoint-by-codepoint rebuild whenever the bytes
+already live in one buffer (e.g. a JSON string token sliced out of the
+borrowed input).
 
 #### `pub fn is_valid_utf8(bytes: ByteSlice) -> bool`
 
@@ -3664,10 +3670,6 @@ Returns an iterator over whitespace-separated substrings.
 
 Returns an iterator over the lines of this string.
 
-#### `pub fn char_indices(&self) -> StrCharIndicesIter with stores[self]`
-
-Returns an iterator over characters with their byte indices.
-
 #### `impl Add for String`
 
 ##### `pub fn add(&self, other: &Self) -> Self::Output`
@@ -3675,8 +3677,6 @@ Returns an iterator over characters with their byte indices.
 #### `impl Eq for String`
 
 ##### `pub fn eq(&self, other: &Self) -> bool`
-
-##### `fn eq_bytes(a: &Array<u8>, b: &Array<u8>, len: i32) -> bool`
 
 #### `impl LenientFromStr for String`
 
@@ -3698,8 +3698,7 @@ Identity: any string parses to itself. Never fails.
 
 ### `pub struct StrUtf8ByteIter`
 
-Iterator over UTF-8 bytes of a String.
-Yields each byte as u8.
+Iterator over the raw UTF-8 bytes of a String, yielding each as `u8`.
 
 _Fields are private._
 
@@ -3709,8 +3708,7 @@ _Fields are private._
 
 ### `pub struct StrCharIter`
 
-Iterator over Unicode scalar values (chars) of a String.
-Decodes UTF-8 and yields each character.
+Iterator over the Unicode scalar values (chars) of a String.
 
 _Fields are private._
 

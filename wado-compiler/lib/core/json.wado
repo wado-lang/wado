@@ -2401,7 +2401,10 @@ pub fn from_bytes<T: Deserialize, S: AsByteSlice>(input: S) -> Result<T, Deseria
 /// Returns a read-only `ByteSlice` viewing the serializer's own UTF-8 buffer —
 /// no copy. `trailing_char`, when `Some`, is appended after the value; leave it
 /// `null` (the default) to keep the byte-exact canonical form for signing.
-pub fn to_bytes_canonical<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError> {
+pub fn to_bytes_canonical<T: Serialize>(
+    value: &T,
+    trailing_char: Option<char> = null,
+) -> Result<ByteSlice, SerializeError> {
     let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = CanonicalJsonSerializer { buf: &mut buf };
     value.serialize(&mut ser)?;
