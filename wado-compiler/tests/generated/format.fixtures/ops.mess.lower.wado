@@ -67,6 +67,12 @@ struct StrCharIter {
     byte_index: i32,
 }
 
+struct StrCharIndicesIter {
+    repr: &Array<u8>,
+    used: i32,
+    byte_index: i32,
+}
+
 struct StrSplitIter {
     repr: &Array<u8>,
     used: i32,
@@ -99,12 +105,6 @@ struct StrLinesIter {
     finished: bool,
 }
 
-struct StrCharIndicesIter {
-    repr: &Array<u8>,
-    used: i32,
-    byte_index: i32,
-}
-
 struct WaitEvent {
     pub code: i32,
     pub handle: i32,
@@ -130,24 +130,9 @@ struct LenientParseError {
     reason: String,
 }
 
-struct "IterSkip<core:prelude/string.wado/StrCharIndicesIter>" {
-    pub inner: StrCharIndicesIter,
-    pub remaining: i32,
-}
-
-struct "IterTake<core:prelude/string.wado/StrCharIndicesIter>" {
-    pub inner: StrCharIndicesIter,
-    pub remaining: i32,
-}
-
-struct "IterEnumerate<core:prelude/string.wado/StrCharIndicesIter>" {
-    pub inner: StrCharIndicesIter,
-    pub count: i32,
-}
-
-struct "IterFilter<core:prelude/string.wado/StrCharIndicesIter>" {
-    pub inner: StrCharIndicesIter,
-    pub pred: fn mut([i32, char]) -> bool,
+struct "IterMap<core:prelude/string.wado/StrCharIter,char>" {
+    pub inner: StrCharIter,
+    pub f: fn mut(char) -> char,
 }
 
 struct "IterSkip<core:prelude/string.wado/StrLinesIter>" {
@@ -230,9 +215,24 @@ struct "IterFilter<core:prelude/string.wado/StrSplitIter>" {
     pub pred: fn mut(String) -> bool,
 }
 
-struct "IterMap<core:prelude/string.wado/StrCharIter,char>" {
-    pub inner: StrCharIter,
-    pub f: fn mut(char) -> char,
+struct "IterSkip<core:prelude/string.wado/StrCharIndicesIter>" {
+    pub inner: StrCharIndicesIter,
+    pub remaining: i32,
+}
+
+struct "IterTake<core:prelude/string.wado/StrCharIndicesIter>" {
+    pub inner: StrCharIndicesIter,
+    pub remaining: i32,
+}
+
+struct "IterEnumerate<core:prelude/string.wado/StrCharIndicesIter>" {
+    pub inner: StrCharIndicesIter,
+    pub count: i32,
+}
+
+struct "IterFilter<core:prelude/string.wado/StrCharIndicesIter>" {
+    pub inner: StrCharIndicesIter,
+    pub pred: fn mut([i32, char]) -> bool,
 }
 
 struct "IterSkip<core:prelude/string.wado/StrCharIter>" {
@@ -388,16 +388,16 @@ pub struct "Box<Fn<2,char>>" {
     value: fn mut(char, char) -> char,
 }
 
-pub struct "Box<Fn<1,char>>" {
-    value: fn(char) -> char,
+pub struct "Box<Fn<2,[i32,char]>>" {
+    value: fn mut([i32, char], [i32, char]) -> [i32, char],
 }
 
 pub struct "Box<Fn<2,String>>" {
     value: fn mut(String, String) -> String,
 }
 
-pub struct "Box<Fn<2,[i32,char]>>" {
-    value: fn mut([i32, char], [i32, char]) -> [i32, char],
+pub struct "Box<Fn<1,char>>" {
+    value: fn(char) -> char,
 }
 
 pub struct "Box<Fn<2,I::Item>>" {
@@ -735,11 +735,11 @@ pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
 pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -789,11 +789,11 @@ pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter
 
 pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -1516,11 +1516,11 @@ pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
 pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -1570,11 +1570,11 @@ pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter
 
 pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -1727,11 +1727,11 @@ pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
 pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -1781,11 +1781,11 @@ pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter
 
 pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -1973,11 +1973,11 @@ pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
 pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -2027,11 +2027,11 @@ pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter
 
 pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -2088,11 +2088,11 @@ pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
 pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -2142,11 +2142,11 @@ pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter
 
 pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -2259,11 +2259,11 @@ pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
 pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -2325,11 +2325,11 @@ pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter
 
 pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -3343,11 +3343,11 @@ pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
 pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -3444,11 +3444,11 @@ pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter
 
 pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -4531,11 +4531,11 @@ pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
 pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -4585,11 +4585,11 @@ pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter
 
 pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -5024,11 +5024,11 @@ pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
 pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -5104,11 +5104,11 @@ pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter
 
 pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -5201,11 +5201,11 @@ pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
 pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -5255,11 +5255,11 @@ pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter
 
 pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -7862,11 +7862,11 @@ pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
 pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -7916,11 +7916,11 @@ pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter
 
 pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -8038,11 +8038,11 @@ pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
 pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -8092,11 +8092,11 @@ pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter
 
 pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -8153,11 +8153,11 @@ pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
 pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -8207,11 +8207,11 @@ pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter
 
 pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -8221,6 +8221,102 @@ pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item
 
 fn byte_to_ascii_lowercase(b: u8) -> u8 {
     return (b | (((b >= 65) && (b <= 90)) as u8 * (65 ^ 97)));
+}
+
+fn is_ascii_whitespace_byte(b: u8) -> bool {
+    return Box<char> { value: b as char }.char::is_ascii_whitespace();
+}
+
+#[inline]
+fn utf8_seq_len(b0: u8) -> i32 {
+    if (b0 < 128) {
+        return 1;
+    }
+    if (b0 < 224) {
+        return 2;
+    }
+    if (b0 < 240) {
+        return 3;
+    }
+    return 4;
+}
+
+#[inline]
+fn decode_char_at(repr: &Array<u8>, pos: i32) -> [u32, i32] {
+    let b0: u32 = repr."Array<u8>^IndexValue<i32>::index_value"(pos) as u32;
+    if (b0 < 128) {
+        return [b0, 1];
+    }
+    if (b0 < 224) {
+        let b1: u32 = repr."Array<u8>^IndexValue<i32>::index_value"((pos + 1)) as u32;
+        return [(((b0 & 31) << 6) | (b1 & 63)), 2];
+    }
+    if (b0 < 240) {
+        let b1: u32 = repr."Array<u8>^IndexValue<i32>::index_value"((pos + 1)) as u32;
+        let b2: u32 = repr."Array<u8>^IndexValue<i32>::index_value"((pos + 2)) as u32;
+        return [((((b0 & 15) << 12) | ((b1 & 63) << 6)) | (b2 & 63)), 3];
+    }
+    let b1: u32 = repr."Array<u8>^IndexValue<i32>::index_value"((pos + 1)) as u32;
+    let b2: u32 = repr."Array<u8>^IndexValue<i32>::index_value"((pos + 2)) as u32;
+    let b3: u32 = repr."Array<u8>^IndexValue<i32>::index_value"((pos + 3)) as u32;
+    return [(((((b0 & 7) << 18) | ((b1 & 63) << 12)) | ((b2 & 63) << 6)) | (b3 & 63)), 4];
+}
+
+#[inline]
+fn encode_char(repr: &mut Array<u8>, pos: i32, code: u32) -> i32 {
+    if (code < 128) {
+        repr."Array<u8>^IndexAssign<i32>::index_assign"(pos, code as u8);
+        return 1;
+    }
+    if (code < 2048) {
+        repr."Array<u8>^IndexAssign<i32>::index_assign"(pos, (192 | (code >> 6)) as u8);
+        repr."Array<u8>^IndexAssign<i32>::index_assign"((pos + 1), (128 | (code & 63)) as u8);
+        return 2;
+    }
+    if (code < 65536) {
+        repr."Array<u8>^IndexAssign<i32>::index_assign"(pos, (224 | (code >> 12)) as u8);
+        repr."Array<u8>^IndexAssign<i32>::index_assign"((pos + 1), (128 | ((code >> 6) & 63)) as u8);
+        repr."Array<u8>^IndexAssign<i32>::index_assign"((pos + 2), (128 | (code & 63)) as u8);
+        return 3;
+    }
+    repr."Array<u8>^IndexAssign<i32>::index_assign"(pos, (240 | (code >> 18)) as u8);
+    repr."Array<u8>^IndexAssign<i32>::index_assign"((pos + 1), (128 | ((code >> 12) & 63)) as u8);
+    repr."Array<u8>^IndexAssign<i32>::index_assign"((pos + 2), (128 | ((code >> 6) & 63)) as u8);
+    repr."Array<u8>^IndexAssign<i32>::index_assign"((pos + 3), (128 | (code & 63)) as u8);
+    return 4;
+}
+
+fn char_start_backward(repr: &Array<u8>, pos: i32) -> i32 {
+    let mut p: i32 = pos;
+    loop {
+        if !(p > 0) {
+            break;
+        }
+        let b: u8 = repr."Array<u8>^IndexValue<i32>::index_value"(p);
+        if ((b >= 128) && (b < 192)) {
+            p = (p - 1);
+        } else {
+            break;
+        }
+    }
+    return p;
+}
+
+#[inline]
+fn bytes_match_at(haystack: &Array<u8>, pos: i32, needle: &Array<u8>, needle_len: i32) -> bool {
+    let mut j: i32 = 0;
+    loop {
+        if !(j < needle_len) {
+            break;
+        }
+        __for_0_body: {
+            if (haystack."Array<u8>^IndexValue<i32>::index_value"((pos + j)) != needle."Array<u8>^IndexValue<i32>::index_value"(j)) {
+                return false;
+            }
+        }
+        j = (j + 1);
+    }
+    return true;
 }
 
 fn decode_utf8_scalar(bytes: ArraySlice<u8>, start: i32, len: i32) -> Utf8Scalar {
@@ -8302,200 +8398,10 @@ fn decode_utf8_scalar(bytes: ArraySlice<u8>, start: i32, len: i32) -> Utf8Scalar
     return Utf8Scalar { code: 0, advance: 1, valid: false };
 }
 
-pub fn String::new() -> String {
-    return "core::prelude/string.wado::String::with_capacity"(0);
-}
-
-pub fn String::with_capacity(capacity: i32) -> String {
-    return String { repr: "core::builtin::core/builtin/array_new<u8>"(capacity) as Array<u8>, used: 0 };
-}
-
-pub fn String::len(self: &String) -> i32 {
-    return self.used;
-}
-
-pub fn String::is_empty(self: &String) -> bool {
-    return (self.used == 0);
-}
-
-pub fn String::get_byte_unchecked(self: &String, index: i32) -> u8 {
-    return self.repr."Array<u8>^IndexValue<i32>::index_value"(index);
-}
-
-pub fn String::as_bytes(self: &String) -> ArraySlice<u8> with stores[self] {
-    return "core::prelude/slice.wado::ArraySlice<u8>::internal_new"(self.String::internal_raw_bytes(), 0, self.used) as ArraySlice<u8>;
-}
-
-pub fn String::set_byte_unchecked(self: &mut String, index: i32, value: u8) {
-    self.repr."Array<u8>^IndexAssign<i32>::index_assign"(index, value);
-}
-
-fn String::internal_raw_bytes(self: &String) -> &Array<u8> {
-    return &self.repr as &Array<u8>;
-}
-
-fn String::internal_raw_bytes_mut(self: &mut String) -> &mut Array<u8> {
-    return &mut self.repr as &mut Array<u8>;
-}
-
-fn String::internal_into_raw_bytes(s: String) -> Array<u8> {
-    return s.repr as Array<u8>;
-}
-
-fn String::internal_from_utf8_raw(bytes: Array<u8>, len: i32) -> String {
-    return String { repr: "ops.mess_dirty.wado::$value_copy$Array<u8>"(bytes as Array<u8>), used: len };
-}
-
-pub fn String::grow(self: &mut String, min_capacity: i32) {
-    let capacity: i32 = self.repr."Array<u8>::len"();
-    if (min_capacity <= capacity) {
-        return;
-    }
-    let new_capacity: i32 = core::rt::i32_max(core::rt::i32_max((capacity * 2), min_capacity), 8);
-    let mut new_repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(new_capacity);
-    "core::builtin::core/builtin/array_copy<u8>"(&mut new_repr, 0, self.String::internal_raw_bytes(), 0, self.used);
-    self.repr = new_repr as Array<u8>;
-}
-
-fn String::internal_append_from_memory(self: &mut String, ptr: i32, len: i32) {
-    if (len == 0) {
-        return;
-    }
-    let new_used: i32 = (self.used + len);
-    if (new_used > self.repr."Array<u8>::len"()) {
-        core::builtin::cold_path();
-        self.String::grow(new_used);
-    }
-    let mut i: i32 = 0;
-    loop {
-        if !(i < len) {
-            break;
-        }
-        __for_0_body: {
-            self.repr."Array<u8>^IndexAssign<i32>::index_assign"((self.used + i), core::builtin::i32_load8_u((ptr + i)));
-        }
-        i = (i + 1);
-    }
-    self.used = new_used;
-}
-
-fn String::internal_reserve_uninit(self: &mut String, n: i32) -> i32 {
-    let new_used: i32 = (self.used + n);
-    if (new_used > self.repr."Array<u8>::len"()) {
-        core::builtin::cold_path();
-        self.String::grow(new_used);
-    }
-    let start: i32 = self.used;
-    self.used = new_used;
-    return start;
-}
-
-pub fn String::append_byte_filled(self: &mut String, byte: u8, n: i32) {
-    if (n <= 0) {
-        return;
-    }
-    let new_used: i32 = (self.used + n);
-    if (new_used > self.repr."Array<u8>::len"()) {
-        core::builtin::cold_path();
-        self.String::grow(new_used);
-    }
-    "core::builtin::core/builtin/array_fill<u8>"(self.String::internal_raw_bytes_mut(), self.used, byte, n);
-    self.used = new_used;
-}
-
-pub fn String::push_str(self: &mut String, other: &String) {
-    let other_len: i32 = other.String::len();
-    if (other_len == 0) {
-        return;
-    }
-    let new_used: i32 = (self.used + other_len);
-    if (new_used > self.repr."Array<u8>::len"()) {
-        core::builtin::cold_path();
-        self.String::grow(new_used);
-    }
-    "core::builtin::core/builtin/array_copy<u8>"(self.String::internal_raw_bytes_mut(), self.used, other.String::internal_raw_bytes(), 0, other_len);
-    self.used = new_used;
-}
-
-pub fn String::push_str_range_unchecked(self: &mut String, s: &String, start: i32, end: i32) {
-    let n: i32 = (end - start);
-    if (n <= 0) {
-        return;
-    }
-    let new_used: i32 = (self.used + n);
-    if (new_used > self.repr."Array<u8>::len"()) {
-        core::builtin::cold_path();
-        self.String::grow(new_used);
-    }
-    "core::builtin::core/builtin/array_copy<u8>"(self.String::internal_raw_bytes_mut(), self.used, s.String::internal_raw_bytes(), start, n);
-    self.used = new_used;
-}
-
-pub fn "String^Add::add"(self: &String, other: &String) -> String {
-    let mut result: String = "core::prelude/string.wado::String::with_capacity"((self.String::len() + other.String::len()));
-    result.String::push_str(self);
-    result.String::push_str(other);
-    return result;
-}
-
-pub fn "String^Eq::eq"(self: &String, other: &String) -> bool {
-    let len_a: i32 = self.String::len();
-    if (len_a != other.String::len()) {
-        return false;
-    }
-    return "core::prelude/string.wado::String^Eq::eq_bytes"(self.String::internal_raw_bytes(), other.String::internal_raw_bytes(), len_a);
-}
-
-fn "String^Eq::eq_bytes"(a: &Array<u8>, b: &Array<u8>, len: i32) -> bool {
-    let mut i: i32 = 0;
-    loop {
-        if !(i < len) {
-            break;
-        }
-        __for_0_body: {
-            if (a."Array<u8>^IndexValue<i32>::index_value"(i) != b."Array<u8>^IndexValue<i32>::index_value"(i)) {
-                return false;
-            }
-        }
-        i = (i + 1);
-    }
-    return true;
-}
-
-fn "String^LenientFromStr::from_str_lenient"(s: &String) -> Result<String, LenientParseError> {
-    return Result<String, LenientParseError>::Ok("ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(*s));
-}
-
-pub fn "String^Ord::cmp"(self: &String, other: &String) -> Ordering {
-    let len_a: i32 = self.String::len();
-    let len_b: i32 = other.String::len();
-    let min_len: i32 = core::rt::i32_min(len_a, len_b);
-    let a_repr: &Array<u8> = self.String::internal_raw_bytes();
-    let b_repr: &Array<u8> = other.String::internal_raw_bytes();
-    let mut i: i32 = 0;
-    loop {
-        if !(i < min_len) {
-            break;
-        }
-        __for_0_body: {
-            let a_byte: u8 = a_repr."Array<u8>^IndexValue<i32>::index_value"(i);
-            let b_byte: u8 = b_repr."Array<u8>^IndexValue<i32>::index_value"(i);
-            if (a_byte < b_byte) {
-                return Ordering::Less;
-            }
-            if (a_byte > b_byte) {
-                return Ordering::Greater;
-            }
-        }
-        i = (i + 1);
-    }
-    if (len_a < len_b) {
-        return Ordering::Less;
-    }
-    if (len_a > len_b) {
-        return Ordering::Greater;
-    }
-    return Ordering::Equal;
+fn substring(repr: &Array<u8>, start: i32, len: i32) -> String {
+    let mut part: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
+    "core::builtin::core/builtin/array_copy<u8>"(&mut part, 0, repr, start, len);
+    return String { repr: "ops.mess_dirty.wado::$value_copy$Array<u8>"(part as Array<u8>), used: len };
 }
 
 #[inline]
@@ -8506,25 +8412,6 @@ pub fn "StrUtf8ByteIter^Iterator::next"(self: &mut StrUtf8ByteIter) -> Option<u8
     let byte: u8 = self.repr."Array<u8>^IndexValue<i32>::index_value"(self.index);
     self.index = (self.index + 1);
     return Option<u8>::Some(byte);
-}
-
-pub fn "StrUtf8ByteIter^Iterator::collect"(self: &mut StrUtf8ByteIter) -> List<u8> {
-    let mut result: List<u8> = __seq_lit: {
-        let mut __b: List<u8> = "core::prelude/list.wado::List<u8>^SequenceLiteralBuilder::new_literal"(0);
-        break __seq_lit: __b."List<u8>^SequenceLiteralBuilder::build"();
-    };
-    loop {
-        let __match_4: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-        match __match_4 {
-            Some(item) => {
-                result."List<u8>::push"(item);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return result;
 }
 
 pub fn "StrUtf8ByteIter^Iterator::count"(self: &mut StrUtf8ByteIter) -> i32 {
@@ -8705,49 +8592,11 @@ pub fn "StrCharIter^Iterator::next"(self: &mut StrCharIter) -> Option<char> {
     if (self.byte_index >= self.used) {
         return %0;
     }
-    let b0: u8 = self.repr."Array<u8>^IndexValue<i32>::index_value"(self.byte_index);
-    self.byte_index = (self.byte_index + 1);
-    if (b0 < 128) {
-        return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(b0 as u32));
-    }
-    if (b0 < 224) {
-        let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"(self.byte_index) as u32;
-        self.byte_index = (self.byte_index + 1);
-        let code: u32 = (((b0 as u32 & 31) << 6) | (b1 & 63));
-        return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(code));
-    }
-    if (b0 < 240) {
-        let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"(self.byte_index) as u32;
-        let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((self.byte_index + 1)) as u32;
-        self.byte_index = (self.byte_index + 2);
-        let code: u32 = ((((b0 as u32 & 15) << 12) | ((b1 & 63) << 6)) | (b2 & 63));
-        return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(code));
-    }
-    let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"(self.byte_index) as u32;
-    let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((self.byte_index + 1)) as u32;
-    let b3: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((self.byte_index + 2)) as u32;
-    self.byte_index = (self.byte_index + 3);
-    let code: u32 = (((((b0 as u32 & 7) << 18) | ((b1 & 63) << 12)) | ((b2 & 63) << 6)) | (b3 & 63));
+    let __pattern_temp_0: [u32, i32] = "core::prelude/string.wado::decode_char_at"(self.repr, self.byte_index);
+    let code: u32 = __pattern_temp_0.0;
+    let len: i32 = __pattern_temp_0.1;
+    self.byte_index = (self.byte_index + len);
     return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(code));
-}
-
-pub fn "StrCharIter^Iterator::collect"(self: &mut StrCharIter) -> List<char> {
-    let mut result: List<char> = __seq_lit: {
-        let mut __b: List<char> = "core::prelude/list.wado::List<char>^SequenceLiteralBuilder::new_literal"(0);
-        break __seq_lit: __b."List<char>^SequenceLiteralBuilder::build"();
-    };
-    loop {
-        let __match_4: Option<char> = self."StrCharIter^Iterator::next"();
-        match __match_4 {
-            Some(item) => {
-                result."List<char>::push"(item);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return result;
 }
 
 pub fn "StrCharIter^Iterator::count"(self: &mut StrCharIter) -> i32 {
@@ -8924,321 +8773,55 @@ pub fn "StrCharIter^Iterator::skip"(self: &StrCharIter, n: i32) -> IterSkip<core
     return IterSkip<core:prelude/string.wado/StrCharIter> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(*self), remaining: n };
 }
 
-pub fn String::bytes(self: &String) -> StrUtf8ByteIter with stores[self] {
-    return StrUtf8ByteIter { repr: self.String::internal_raw_bytes(), used: self.used, index: 0 };
-}
-
-pub fn String::chars(self: &String) -> StrCharIter with stores[self] {
-    return StrCharIter { repr: self.String::internal_raw_bytes(), used: self.used, byte_index: 0 };
-}
-
-pub fn String::to_chars(self: &String) -> List<char> {
-    let bytes: ArraySlice<u8> = self.String::as_bytes();
-    let len: i32 = self.used;
-    let mut chars: List<char> = "core::prelude/list.wado::List<char>::with_capacity"(len);
-    let mut i: i32 = 0;
-    loop {
-        if !(i < len) {
-            break;
-        }
-        let b0: u8 = bytes."ArraySlice<u8>::get_unchecked"(i);
-        if (b0 < 128) {
-            chars."List<char>::push"("core::prelude/primitive.wado::char::from_u32_unchecked"(b0 as u32));
-            i = (i + 1);
-            continue;
-        }
-        let scalar: Utf8Scalar = "core::prelude/string.wado::decode_utf8_scalar"("ops.mess_dirty.wado::$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(bytes), i, len);
-        chars."List<char>::push"("core::prelude/primitive.wado::char::from_u32_unchecked"(scalar.code));
-        i = (i + scalar.advance);
-    }
-    return chars;
-}
-
-pub fn String::char_at_byte(self: &String, byte_index: i32) -> Option<char> {
-    if (byte_index >= self.used) {
+pub fn "StrCharIndicesIter^Iterator::next"(self: &mut StrCharIndicesIter) -> Option<[i32, char]> {
+    if (self.byte_index >= self.used) {
         return %0;
     }
-    let b0: u8 = self.repr."Array<u8>^IndexValue<i32>::index_value"(byte_index);
-    let needed: i32 = if (b0 < 128) {
-        1;
-    } else {
-        if (b0 < 224) {
-            2;
-        } else {
-            if (b0 < 240) {
-                3;
-            } else {
-                4;
-            };
+    let idx: i32 = self.byte_index;
+    let __pattern_temp_0: [u32, i32] = "core::prelude/string.wado::decode_char_at"(self.repr, self.byte_index);
+    let code: u32 = __pattern_temp_0.0;
+    let len: i32 = __pattern_temp_0.1;
+    self.byte_index = (self.byte_index + len);
+    return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(code)]);
+}
+
+pub fn "StrCharIndicesIter^Iterator::count"(self: &mut StrCharIndicesIter) -> i32 {
+    let mut n: i32 = 0;
+    loop {
+        let __match_2: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
+        match __match_2 {
+            Some(_) => {
+                n = (n + 1);
+            },
+            _ => {
+                break;
+            },
         };
-    };
-    if ((byte_index + needed) > self.used) {
-        return %8;
     }
-    return Option<char>::Some(self.String::char_at_byte_unchecked(byte_index));
+    return n;
 }
 
-pub fn String::char_at_byte_unchecked(self: &String, byte_index: i32) -> char {
-    let b0: u8 = self.repr."Array<u8>^IndexValue<i32>::index_value"(byte_index);
-    if (b0 < 128) {
-        return "core::prelude/primitive.wado::char::from_u32_unchecked"(b0 as u32);
-    }
-    if (b0 < 224) {
-        let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 1)) as u32;
-        let code: u32 = (((b0 as u32 & 31) << 6) | (b1 & 63));
-        return "core::prelude/primitive.wado::char::from_u32_unchecked"(code);
-    }
-    if (b0 < 240) {
-        let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 1)) as u32;
-        let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 2)) as u32;
-        let code: u32 = ((((b0 as u32 & 15) << 12) | ((b1 & 63) << 6)) | (b2 & 63));
-        return "core::prelude/primitive.wado::char::from_u32_unchecked"(code);
-    }
-    let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 1)) as u32;
-    let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 2)) as u32;
-    let b3: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 3)) as u32;
-    let code: u32 = (((((b0 as u32 & 7) << 18) | ((b1 & 63) << 12)) | ((b2 & 63) << 6)) | (b3 & 63));
-    return "core::prelude/primitive.wado::char::from_u32_unchecked"(code);
-}
-
-pub fn String::push(self: &mut String, c: char) {
-    let code: u32 = c as u32;
-    if ((self.used + 4) > self.repr."Array<u8>::len"()) {
-        core::builtin::cold_path();
-        self.String::grow((self.used + 4));
-    }
-    if (code < 128) {
-        self.repr."Array<u8>^IndexAssign<i32>::index_assign"(self.used, code as u8);
-        self.used = (self.used + 1);
-    } else {
-        if (code < 2048) {
-            self.repr."Array<u8>^IndexAssign<i32>::index_assign"(self.used, (192 | (code >> 6)) as u8);
-            self.repr."Array<u8>^IndexAssign<i32>::index_assign"((self.used + 1), (128 | (code & 63)) as u8);
-            self.used = (self.used + 2);
-        } else {
-            if (code < 65536) {
-                self.repr."Array<u8>^IndexAssign<i32>::index_assign"(self.used, (224 | (code >> 12)) as u8);
-                self.repr."Array<u8>^IndexAssign<i32>::index_assign"((self.used + 1), (128 | ((code >> 6) & 63)) as u8);
-                self.repr."Array<u8>^IndexAssign<i32>::index_assign"((self.used + 2), (128 | (code & 63)) as u8);
-                self.used = (self.used + 3);
-            } else {
-                self.repr."Array<u8>^IndexAssign<i32>::index_assign"(self.used, (240 | (code >> 18)) as u8);
-                self.repr."Array<u8>^IndexAssign<i32>::index_assign"((self.used + 1), (128 | ((code >> 12) & 63)) as u8);
-                self.repr."Array<u8>^IndexAssign<i32>::index_assign"((self.used + 2), (128 | ((code >> 6) & 63)) as u8);
-                self.repr."Array<u8>^IndexAssign<i32>::index_assign"((self.used + 3), (128 | (code & 63)) as u8);
-                self.used = (self.used + 4);
-            }
-        }
-    }
-}
-
-pub fn String::truncate(self: &mut String, byte_len: i32) {
-    if (byte_len >= self.used) {
-        return;
-    }
-    __assert_0: {
-        let __v0: i32 = byte_len;
-        let __cond: bool = (__v0 >= 0);
-        if !__cond {
-            core::builtin::cold_path();
-            core::rt::panic(__tmpl: {
-                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(144);
-                __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
-                __r.String::push_str(&String { repr: packed"String::truncate", used: 16 });
-                __r.String::push_str(&String { repr: packed" at ", used: 4 });
-                __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
-                __r.String::push_str(&String { repr: packed":", used: 1 });
-                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 639 }."i32^Display::fmt"(&mut __f);
-                __r.String::push_str(&String { repr: packed": ", used: 2 });
-                __r.String::push_str(&String { repr: packed"negative length", used: 15 });
-                __r.String::push_str(&String { repr: packed"\ncondition: byte_len >= 0\n", used: 26 });
-                __r.String::push_str(&String { repr: packed"byte_len: ", used: 10 });
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: __v0 }."i32^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&String { repr: packed"\n", used: 1 });
-                break __tmpl: __r;
-            });
-        }
-    }
-    __assert_1: {
-        let __v0: bool = self.String::is_char_boundary(byte_len);
-        let __cond: bool = __v0;
-        if !__cond {
-            core::builtin::cold_path();
-            core::rt::panic(__tmpl: {
-                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(185);
-                __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
-                __r.String::push_str(&String { repr: packed"String::truncate", used: 16 });
-                __r.String::push_str(&String { repr: packed" at ", used: 4 });
-                __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
-                __r.String::push_str(&String { repr: packed":", used: 1 });
-                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 640 }."i32^Display::fmt"(&mut __f);
-                __r.String::push_str(&String { repr: packed": ", used: 2 });
-                __r.String::push_str(&String { repr: packed"not on a UTF-8 character boundary", used: 33 });
-                __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_len)\n", used: 44 });
-                __r.String::push_str(&String { repr: packed"self.is_char_boundary(byte_len): ", used: 33 });
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<bool> { value: __v0 }."bool^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&String { repr: packed"\n", used: 1 });
-                break __tmpl: __r;
-            });
-        }
-    }
-    self.String::truncate_unchecked(byte_len);
-}
-
-pub fn String::truncate_unchecked(self: &mut String, byte_len: i32) {
-    self.used = byte_len;
-}
-
-pub fn String::truncate_chars(self: &mut String, char_count: i32) {
-    let mut byte_pos: i32 = 0;
-    let mut chars_seen: i32 = 0;
+pub fn "StrCharIndicesIter^Iterator::for_each"(self: &mut StrCharIndicesIter, f: fn mut([i32, char]) -> ()) {
     loop {
-        if !((byte_pos < self.used) && (chars_seen < char_count)) {
-            break;
-        }
-        let b: u8 = self.repr."Array<u8>^IndexValue<i32>::index_value"(byte_pos);
-        if (b < 128) {
-            byte_pos = (byte_pos + 1);
-        } else {
-            if (b < 224) {
-                byte_pos = (byte_pos + 2);
-            } else {
-                if (b < 240) {
-                    byte_pos = (byte_pos + 3);
-                } else {
-                    byte_pos = (byte_pos + 4);
-                }
-            }
-        }
-        chars_seen = (chars_seen + 1);
-    }
-    self.used = byte_pos;
-}
-
-pub fn String::is_char_boundary(self: &String, byte_index: i32) -> bool {
-    if ((byte_index == 0) || (byte_index == self.used)) {
-        return true;
-    }
-    if ((byte_index < 0) || (byte_index > self.used)) {
-        return false;
-    }
-    let b: u8 = self.repr."Array<u8>^IndexValue<i32>::index_value"(byte_index);
-    return ((b < 128) || (b >= 192));
-}
-
-pub fn String::pop(self: &mut String) -> Option<char> {
-    if (self.used == 0) {
-        return %1;
-    }
-    let mut pos: i32 = (self.used - 1);
-    loop {
-        if !(pos > 0) {
-            break;
-        }
-        let b: u8 = self.repr."Array<u8>^IndexValue<i32>::index_value"(pos);
-        if ((b >= 128) && (b < 192)) {
-            pos = (pos - 1);
-        } else {
-            break;
-        }
-    }
-    let b0: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"(pos) as u32;
-    let code: u32 = if (b0 < 128) {
-        b0;
-    } else {
-        if (b0 < 224) {
-            let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 1)) as u32;
-            (((b0 & 31) << 6) | (b1 & 63));
-        } else {
-            if (b0 < 240) {
-                let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 1)) as u32;
-                let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 2)) as u32;
-                ((((b0 & 15) << 12) | ((b1 & 63) << 6)) | (b2 & 63));
-            } else {
-                let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 1)) as u32;
-                let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 2)) as u32;
-                let b3: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 3)) as u32;
-                (((((b0 & 7) << 18) | ((b1 & 63) << 12)) | ((b2 & 63) << 6)) | (b3 & 63));
-            };
+        let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
+        match __match_3 {
+            Some(item) => {
+                f(item);
+            },
+            _ => {
+                break;
+            },
         };
-    };
-    self.used = pos;
-    return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(code));
-}
-
-pub fn String::clear(self: &mut String) {
-    self.used = 0;
-}
-
-pub fn String::capacity(self: &String) -> i32 {
-    return self.repr."Array<u8>::len"();
-}
-
-pub fn String::reserve(self: &mut String, additional: i32) {
-    let required: i32 = (self.used + additional);
-    if (required > self.repr."Array<u8>::len"()) {
-        self.String::grow(required);
     }
 }
 
-pub fn String::shrink_to_fit(self: &mut String) {
-    let capacity: i32 = self.repr."Array<u8>::len"();
-    if (capacity > self.used) {
-        let mut new_repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(self.used);
-        "core::builtin::core/builtin/array_copy<u8>"(&mut new_repr, 0, self.String::internal_raw_bytes(), 0, self.used);
-        self.repr = new_repr as Array<u8>;
-    }
-}
-
-pub fn String::trim_ascii_start(self: &String) -> String {
-    let mut start: i32 = 0;
+pub fn "StrCharIndicesIter^Iterator::find"(self: &mut StrCharIndicesIter, pred: fn mut([i32, char]) -> bool) -> Option<[i32, char]> {
     loop {
-        if !(start < self.used) {
-            break;
-        }
-        if "core::prelude/string.wado::is_ascii_whitespace_byte"(self.repr."Array<u8>^IndexValue<i32>::index_value"(start)) {
-            start = (start + 1);
-        } else {
-            break;
-        }
-    }
-    return self.String::substr_bytes(start, self.used);
-}
-
-pub fn String::trim_ascii_end(self: &String) -> String {
-    let mut end: i32 = self.used;
-    loop {
-        if !(end > 0) {
-            break;
-        }
-        if "core::prelude/string.wado::is_ascii_whitespace_byte"(self.repr."Array<u8>^IndexValue<i32>::index_value"((end - 1))) {
-            end = (end - 1);
-        } else {
-            break;
-        }
-    }
-    return self.String::substr_bytes(0, end);
-}
-
-pub fn String::trim_ascii(self: &String) -> String {
-    return self.String::trim_ascii_start().String::trim_ascii_end();
-}
-
-pub fn String::trim_start(self: &String) -> String {
-    let mut iter: StrCharIter = self.String::chars();
-    let mut start: i32 = 0;
-    loop {
-        let __match_4: Option<char> = iter."StrCharIter^Iterator::next"();
-        match __match_4 {
-            Some(c) => {
-                if Box<char> { value: c }.char::is_whitespace() {
-                    start = (start + Box<char> { value: c }.char::len_utf8());
-                } else {
-                    break;
+        let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
+        match __match_3 {
+            Some(item) => {
+                if pred("ops.mess_dirty.wado::$value_copy$[i32,char]"(item)) {
+                    return Option<[i32, char]>::Some("ops.mess_dirty.wado::$value_copy$[i32,char]"(item));
                 }
             },
             _ => {
@@ -9246,787 +8829,158 @@ pub fn String::trim_start(self: &String) -> String {
             },
         };
     }
-    return self.String::substr_bytes(start, self.used);
+    return %0;
 }
 
-pub fn String::trim_end(self: &String) -> String {
-    let mut end: i32 = self.used;
+pub fn "StrCharIndicesIter^Iterator::any"(self: &mut StrCharIndicesIter, pred: fn mut([i32, char]) -> bool) -> bool {
     loop {
-        if !(end > 0) {
-            break;
-        }
-        let mut pos: i32 = (end - 1);
-        loop {
-            if !(pos > 0) {
+        let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
+        match __match_3 {
+            Some(item) => {
+                if pred(item) {
+                    return true;
+                }
+            },
+            _ => {
                 break;
-            }
-            let b: u8 = self.repr."Array<u8>^IndexValue<i32>::index_value"(pos);
-            if ((b >= 128) && (b < 192)) {
-                pos = (pos - 1);
-            } else {
-                break;
-            }
-        }
-        let b0: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"(pos) as u32;
-        let code: u32 = if (b0 < 128) {
-            b0;
-        } else {
-            if (b0 < 224) {
-                let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 1)) as u32;
-                (((b0 & 31) << 6) | (b1 & 63));
-            } else {
-                if (b0 < 240) {
-                    let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 1)) as u32;
-                    let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 2)) as u32;
-                    ((((b0 & 15) << 12) | ((b1 & 63) << 6)) | (b2 & 63));
-                } else {
-                    let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 1)) as u32;
-                    let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 2)) as u32;
-                    let b3: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + 3)) as u32;
-                    (((((b0 & 7) << 18) | ((b1 & 63) << 12)) | ((b2 & 63) << 6)) | (b3 & 63));
-                };
-            };
+            },
         };
-        let ch: char = "core::prelude/primitive.wado::char::from_u32_unchecked"(code);
-        if Box<char> { value: ch }.char::is_whitespace() {
-            end = pos;
-        } else {
-            break;
-        }
-    }
-    return self.String::substr_bytes(0, end);
-}
-
-pub fn String::trim(self: &String) -> String {
-    return self.String::trim_start().String::trim_end();
-}
-
-pub fn String::to_ascii_lowercase(self: &String) -> String {
-    return "core::prelude/string.wado::String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>>"(self.String::chars()."StrCharIter^Iterator::map<char>"(&__Closure_0 {  }));
-}
-
-pub fn String::to_ascii_uppercase(self: &String) -> String {
-    return "core::prelude/string.wado::String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>>"(self.String::chars()."StrCharIter^Iterator::map<char>"(&__Closure_1 {  }));
-}
-
-pub fn String::eq_ignore_ascii_case(self: &String, other: String) -> bool {
-    let len: i32 = self.String::len();
-    if (len != other.String::len()) {
-        return false;
-    }
-    let a: &Array<u8> = self.String::internal_raw_bytes();
-    let b: &Array<u8> = other.String::internal_raw_bytes();
-    let mut i: i32 = 0;
-    loop {
-        if !(i < len) {
-            break;
-        }
-        __for_0_body: {
-            let ab: u8 = a."Array<u8>^IndexValue<i32>::index_value"(i);
-            let bb: u8 = b."Array<u8>^IndexValue<i32>::index_value"(i);
-            if ("core::prelude/string.wado::byte_to_ascii_lowercase"(ab) != "core::prelude/string.wado::byte_to_ascii_lowercase"(bb)) {
-                return false;
-            }
-        }
-        i = (i + 1);
-    }
-    return true;
-}
-
-pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
-    __assert_0: {
-        let __v0: i32 = start;
-        let __v1: bool = (0 <= __v0);
-        let __v2: i32 = start;
-        let __v3: i32 = end;
-        let __v4: bool = (__v2 <= __v3);
-        let __v5: bool = (__v1 && __v4);
-        let __v6: i32 = end;
-        let __v7: i32 = self.used;
-        let __v8: bool = (__v6 <= __v7);
-        let __cond: bool = (__v5 && __v8);
-        if !__cond {
-            core::builtin::cold_path();
-            core::rt::panic(__tmpl: {
-                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(410);
-                __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
-                __r.String::push_str(&String { repr: packed"String::substr_bytes", used: 20 });
-                __r.String::push_str(&String { repr: packed" at ", used: 4 });
-                __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
-                __r.String::push_str(&String { repr: packed":", used: 1 });
-                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 881 }."i32^Display::fmt"(&mut __f);
-                __r.String::push_str(&String { repr: packed": ", used: 2 });
-                __r.String::push_str(&String { repr: packed"byte range out of bounds", used: 24 });
-                __r.String::push_str(&String { repr: packed"\ncondition: 0 <= start && start <= end && end <= self.used\n", used: 59 });
-                __r.String::push_str(&String { repr: packed"start: ", used: 7 });
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: __v0 }."i32^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&String { repr: packed"\n", used: 1 });
-                __r.String::push_str(&String { repr: packed"0 <= start: ", used: 12 });
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<bool> { value: __v1 }."bool^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&String { repr: packed"\n", used: 1 });
-                __r.String::push_str(&String { repr: packed"start: ", used: 7 });
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: __v2 }."i32^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&String { repr: packed"\n", used: 1 });
-                __r.String::push_str(&String { repr: packed"end: ", used: 5 });
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: __v3 }."i32^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&String { repr: packed"\n", used: 1 });
-                __r.String::push_str(&String { repr: packed"start <= end: ", used: 14 });
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<bool> { value: __v4 }."bool^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&String { repr: packed"\n", used: 1 });
-                __r.String::push_str(&String { repr: packed"0 <= start && start <= end: ", used: 28 });
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<bool> { value: __v5 }."bool^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&String { repr: packed"\n", used: 1 });
-                __r.String::push_str(&String { repr: packed"end: ", used: 5 });
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: __v6 }."i32^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&String { repr: packed"\n", used: 1 });
-                __r.String::push_str(&String { repr: packed"self.used: ", used: 11 });
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: __v7 }."i32^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&String { repr: packed"\n", used: 1 });
-                __r.String::push_str(&String { repr: packed"end <= self.used: ", used: 18 });
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<bool> { value: __v8 }."bool^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&String { repr: packed"\n", used: 1 });
-                break __tmpl: __r;
-            });
-        }
-    }
-    __assert_1: {
-        let __v0: bool = self.String::is_char_boundary(start);
-        let __v1: bool = self.String::is_char_boundary(end);
-        let __cond: bool = (__v0 && __v1);
-        if !__cond {
-            core::builtin::cold_path();
-            core::rt::panic(__tmpl: {
-                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(254);
-                __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
-                __r.String::push_str(&String { repr: packed"String::substr_bytes", used: 20 });
-                __r.String::push_str(&String { repr: packed" at ", used: 4 });
-                __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
-                __r.String::push_str(&String { repr: packed":", used: 1 });
-                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 882 }."i32^Display::fmt"(&mut __f);
-                __r.String::push_str(&String { repr: packed": ", used: 2 });
-                __r.String::push_str(&String { repr: packed"byte range not on UTF-8 character boundaries", used: 44 });
-                __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(start) && self.is_char_boundary(end)\n", used: 71 });
-                __r.String::push_str(&String { repr: packed"self.is_char_boundary(start): ", used: 30 });
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<bool> { value: __v0 }."bool^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&String { repr: packed"\n", used: 1 });
-                __r.String::push_str(&String { repr: packed"self.is_char_boundary(end): ", used: 28 });
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<bool> { value: __v1 }."bool^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&String { repr: packed"\n", used: 1 });
-                break __tmpl: __r;
-            });
-        }
-    }
-    return self.String::substr_bytes_unchecked(start, end);
-}
-
-pub fn String::substr_bytes_unchecked(self: &String, start: i32, end: i32) -> String {
-    let len: i32 = (end - start);
-    if (len <= 0) {
-        return "core::prelude/string.wado::String::with_capacity"(0);
-    }
-    let mut repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
-    "core::builtin::core/builtin/array_copy<u8>"(&mut repr, 0, self.String::internal_raw_bytes(), start, len);
-    return String { repr: "ops.mess_dirty.wado::$value_copy$Array<u8>"(repr as Array<u8>), used: len };
-}
-
-pub fn String::contains(self: &String, pat: String) -> bool {
-    return match self.String::find(pat) {
-        Some(_) => true,
-        _ => false,
-    };
-}
-
-pub fn String::starts_with(self: &String, pat: String) -> bool {
-    let pat_len: i32 = pat.String::len();
-    if (pat_len > self.used) {
-        return false;
-    }
-    let pat_repr: &Array<u8> = pat.String::internal_raw_bytes();
-    let mut i: i32 = 0;
-    loop {
-        if !(i < pat_len) {
-            break;
-        }
-        __for_0_body: {
-            if (self.repr."Array<u8>^IndexValue<i32>::index_value"(i) != pat_repr."Array<u8>^IndexValue<i32>::index_value"(i)) {
-                return false;
-            }
-        }
-        i = (i + 1);
-    }
-    return true;
-}
-
-pub fn String::ends_with(self: &String, pat: String) -> bool {
-    let pat_len: i32 = pat.String::len();
-    if (pat_len > self.used) {
-        return false;
-    }
-    let offset: i32 = (self.used - pat_len);
-    let pat_repr: &Array<u8> = pat.String::internal_raw_bytes();
-    let mut i: i32 = 0;
-    loop {
-        if !(i < pat_len) {
-            break;
-        }
-        __for_0_body: {
-            if (self.repr."Array<u8>^IndexValue<i32>::index_value"((offset + i)) != pat_repr."Array<u8>^IndexValue<i32>::index_value"(i)) {
-                return false;
-            }
-        }
-        i = (i + 1);
-    }
-    return true;
-}
-
-pub fn String::strip_prefix(self: &String, prefix: String) -> Option<String> {
-    if !self.String::starts_with("ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(prefix)) {
-        return %0;
-    }
-    let start: i32 = prefix.String::len();
-    let len: i32 = (self.used - start);
-    let mut part: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
-    "core::builtin::core/builtin/array_copy<u8>"(&mut part, 0, self.String::internal_raw_bytes(), start, len);
-    return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
-}
-
-pub fn String::strip_suffix(self: &String, suffix: String) -> Option<String> {
-    if !self.String::ends_with("ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(suffix)) {
-        return %0;
-    }
-    let len: i32 = (self.used - suffix.String::len());
-    let mut part: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
-    "core::builtin::core/builtin/array_copy<u8>"(&mut part, 0, self.String::internal_raw_bytes(), 0, len);
-    return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
-}
-
-pub fn String::find(self: &String, pat: String) -> Option<i32> {
-    let pat_len: i32 = pat.String::len();
-    if (pat_len == 0) {
-        return Option<i32>::Some(0);
-    }
-    if (pat_len > self.used) {
-        return %2;
-    }
-    let pat_repr: &Array<u8> = pat.String::internal_raw_bytes();
-    let limit: i32 = (self.used - pat_len);
-    let mut i: i32 = 0;
-    loop {
-        if !(i <= limit) {
-            break;
-        }
-        __for_0_body: {
-            let mut matched: bool = true;
-            let mut j: i32 = 0;
-            loop {
-                if !(j < pat_len) {
-                    break;
-                }
-                __for_1_body: {
-                    if (self.repr."Array<u8>^IndexValue<i32>::index_value"((i + j)) != pat_repr."Array<u8>^IndexValue<i32>::index_value"(j)) {
-                        matched = false;
-                        break;
-                    }
-                }
-                j = (j + 1);
-            }
-            if matched {
-                return Option<i32>::Some(i);
-            }
-        }
-        i = (i + 1);
-    }
-    return %9;
-}
-
-pub fn String::rfind(self: &String, pat: String) -> Option<i32> {
-    let pat_len: i32 = pat.String::len();
-    if (pat_len == 0) {
-        return Option<i32>::Some(self.used);
-    }
-    if (pat_len > self.used) {
-        return %1;
-    }
-    let pat_repr: &Array<u8> = pat.String::internal_raw_bytes();
-    let mut i: i32 = (self.used - pat_len);
-    loop {
-        let mut matched: bool = true;
-        let mut j: i32 = 0;
-        loop {
-            if !(j < pat_len) {
-                break;
-            }
-            __for_0_body: {
-                if (self.repr."Array<u8>^IndexValue<i32>::index_value"((i + j)) != pat_repr."Array<u8>^IndexValue<i32>::index_value"(j)) {
-                    matched = false;
-                    break;
-                }
-            }
-            j = (j + 1);
-        }
-        if matched {
-            return Option<i32>::Some(i);
-        }
-        if (i == 0) {
-            break;
-        }
-        i = (i - 1);
-    }
-    return %8;
-}
-
-pub fn String::contains_char(self: &String, ch: char) -> bool {
-    __for_of_2: {
-        let mut __iter_2: StrCharIter = "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(self.String::chars()."core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"());
-        loop {
-            let __match_4: Option<char> = __iter_2."StrCharIter^Iterator::next"();
-            match __match_4 {
-                Some(c) => {
-                    if (c == ch) {
-                        return true;
-                    }
-                },
-                _ => {
-                    break;
-                },
-            };
-        }
     }
     return false;
 }
 
-pub fn String::find_char(self: &String, pred: fn mut(char) -> bool) -> Option<i32> {
-    let mut iter: StrCharIter = self.String::chars();
-    let mut byte_index: i32 = 0;
+pub fn "StrCharIndicesIter^Iterator::all"(self: &mut StrCharIndicesIter, pred: fn mut([i32, char]) -> bool) -> bool {
     loop {
-        let __match_5: Option<char> = iter."StrCharIter^Iterator::next"();
-        match __match_5 {
-            Some(c) => {
-                __for_0_body: {
-                    if pred(c) {
-                        return Option<i32>::Some(byte_index);
-                    }
+        let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
+        match __match_3 {
+            Some(item) => {
+                if !pred(item) {
+                    return false;
                 }
-                byte_index = (byte_index + Box<char> { value: c }.char::len_utf8());
             },
             _ => {
                 break;
             },
         };
     }
-    return %1;
+    return true;
 }
 
-pub fn String::insert(self: &mut String, byte_index: i32, ch: char) {
-    __assert_0: {
-        let __v0: bool = self.String::is_char_boundary(byte_index);
-        let __cond: bool = __v0;
-        if !__cond {
-            core::builtin::cold_path();
-            core::rt::panic(__tmpl: {
-                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(189);
-                __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
-                __r.String::push_str(&String { repr: packed"String::insert", used: 14 });
-                __r.String::push_str(&String { repr: packed" at ", used: 4 });
-                __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
-                __r.String::push_str(&String { repr: packed":", used: 1 });
-                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 1043 }."i32^Display::fmt"(&mut __f);
-                __r.String::push_str(&String { repr: packed": ", used: 2 });
-                __r.String::push_str(&String { repr: packed"insert index not on UTF-8 character boundary", used: 44 });
-                __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_index)\n", used: 46 });
-                __r.String::push_str(&String { repr: packed"self.is_char_boundary(byte_index): ", used: 35 });
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<bool> { value: __v0 }."bool^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&String { repr: packed"\n", used: 1 });
-                break __tmpl: __r;
-            });
-        }
-    }
-    self.String::insert_unchecked(byte_index, ch);
-}
-
-pub fn String::insert_unchecked(self: &mut String, byte_index: i32, ch: char) {
-    let code: u32 = ch as u32;
-    let char_len: i32 = Box<char> { value: ch }.char::len_utf8();
-    let new_used: i32 = (self.used + char_len);
-    if (new_used > self.repr."Array<u8>::len"()) {
-        self.String::grow(new_used);
-    }
-    "core::builtin::core/builtin/array_copy<u8>"(self.String::internal_raw_bytes_mut(), (byte_index + char_len), self.String::internal_raw_bytes(), byte_index, (self.used - byte_index));
-    if (code < 128) {
-        self.repr."Array<u8>^IndexAssign<i32>::index_assign"(byte_index, code as u8);
-    } else {
-        if (code < 2048) {
-            self.repr."Array<u8>^IndexAssign<i32>::index_assign"(byte_index, (192 | (code >> 6)) as u8);
-            self.repr."Array<u8>^IndexAssign<i32>::index_assign"((byte_index + 1), (128 | (code & 63)) as u8);
-        } else {
-            if (code < 65536) {
-                self.repr."Array<u8>^IndexAssign<i32>::index_assign"(byte_index, (224 | (code >> 12)) as u8);
-                self.repr."Array<u8>^IndexAssign<i32>::index_assign"((byte_index + 1), (128 | ((code >> 6) & 63)) as u8);
-                self.repr."Array<u8>^IndexAssign<i32>::index_assign"((byte_index + 2), (128 | (code & 63)) as u8);
-            } else {
-                self.repr."Array<u8>^IndexAssign<i32>::index_assign"(byte_index, (240 | (code >> 18)) as u8);
-                self.repr."Array<u8>^IndexAssign<i32>::index_assign"((byte_index + 1), (128 | ((code >> 12) & 63)) as u8);
-                self.repr."Array<u8>^IndexAssign<i32>::index_assign"((byte_index + 2), (128 | ((code >> 6) & 63)) as u8);
-                self.repr."Array<u8>^IndexAssign<i32>::index_assign"((byte_index + 3), (128 | (code & 63)) as u8);
-            }
-        }
-    }
-    self.used = new_used;
-}
-
-pub fn String::insert_str(self: &mut String, byte_index: i32, s: String) {
-    __assert_0: {
-        let __v0: bool = self.String::is_char_boundary(byte_index);
-        let __cond: bool = __v0;
-        if !__cond {
-            core::builtin::cold_path();
-            core::rt::panic(__tmpl: {
-                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(189);
-                __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
-                __r.String::push_str(&String { repr: packed"String::insert_str", used: 18 });
-                __r.String::push_str(&String { repr: packed" at ", used: 4 });
-                __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
-                __r.String::push_str(&String { repr: packed":", used: 1 });
-                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 1090 }."i32^Display::fmt"(&mut __f);
-                __r.String::push_str(&String { repr: packed": ", used: 2 });
-                __r.String::push_str(&String { repr: packed"insert_str index not on UTF-8 character boundary", used: 48 });
-                __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_index)\n", used: 46 });
-                __r.String::push_str(&String { repr: packed"self.is_char_boundary(byte_index): ", used: 35 });
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<bool> { value: __v0 }."bool^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&String { repr: packed"\n", used: 1 });
-                break __tmpl: __r;
-            });
-        }
-    }
-    self.String::insert_str_unchecked(byte_index, s);
-}
-
-pub fn String::insert_str_unchecked(self: &mut String, byte_index: i32, s: String) {
-    let s_len: i32 = s.String::len();
-    if (s_len == 0) {
-        return;
-    }
-    let new_used: i32 = (self.used + s_len);
-    if (new_used > self.repr."Array<u8>::len"()) {
-        self.String::grow(new_used);
-    }
-    "core::builtin::core/builtin/array_copy<u8>"(self.String::internal_raw_bytes_mut(), (byte_index + s_len), self.String::internal_raw_bytes(), byte_index, (self.used - byte_index));
-    "core::builtin::core/builtin/array_copy<u8>"(self.String::internal_raw_bytes_mut(), byte_index, s.String::internal_raw_bytes(), 0, s_len);
-    self.used = new_used;
-}
-
-pub fn String::remove(self: &mut String, byte_index: i32) -> char {
-    __assert_0: {
-        let __v0: i32 = byte_index;
-        let __v1: bool = (__v0 >= 0);
-        let __v2: i32 = byte_index;
-        let __v3: i32 = self.used;
-        let __v4: bool = (__v2 < __v3);
-        let __cond: bool = (__v1 && __v4);
-        if !__cond {
-            core::builtin::cold_path();
-            core::rt::panic(__tmpl: {
-                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(306);
-                __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
-                __r.String::push_str(&String { repr: packed"String::remove", used: 14 });
-                __r.String::push_str(&String { repr: packed" at ", used: 4 });
-                __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
-                __r.String::push_str(&String { repr: packed":", used: 1 });
-                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 1124 }."i32^Display::fmt"(&mut __f);
-                __r.String::push_str(&String { repr: packed": ", used: 2 });
-                __r.String::push_str(&String { repr: packed"index out of bounds", used: 19 });
-                __r.String::push_str(&String { repr: packed"\ncondition: byte_index >= 0 && byte_index < self.used\n", used: 54 });
-                __r.String::push_str(&String { repr: packed"byte_index: ", used: 12 });
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: __v0 }."i32^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&String { repr: packed"\n", used: 1 });
-                __r.String::push_str(&String { repr: packed"byte_index >= 0: ", used: 17 });
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<bool> { value: __v1 }."bool^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&String { repr: packed"\n", used: 1 });
-                __r.String::push_str(&String { repr: packed"byte_index: ", used: 12 });
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: __v2 }."i32^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&String { repr: packed"\n", used: 1 });
-                __r.String::push_str(&String { repr: packed"self.used: ", used: 11 });
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: __v3 }."i32^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&String { repr: packed"\n", used: 1 });
-                __r.String::push_str(&String { repr: packed"byte_index < self.used: ", used: 24 });
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<bool> { value: __v4 }."bool^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&String { repr: packed"\n", used: 1 });
-                break __tmpl: __r;
-            });
-        }
-    }
-    __assert_1: {
-        let __v0: bool = self.String::is_char_boundary(byte_index);
-        let __cond: bool = __v0;
-        if !__cond {
-            core::builtin::cold_path();
-            core::rt::panic(__tmpl: {
-                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(189);
-                __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
-                __r.String::push_str(&String { repr: packed"String::remove", used: 14 });
-                __r.String::push_str(&String { repr: packed" at ", used: 4 });
-                __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
-                __r.String::push_str(&String { repr: packed":", used: 1 });
-                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 1125 }."i32^Display::fmt"(&mut __f);
-                __r.String::push_str(&String { repr: packed": ", used: 2 });
-                __r.String::push_str(&String { repr: packed"remove index not on UTF-8 character boundary", used: 44 });
-                __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_index)\n", used: 46 });
-                __r.String::push_str(&String { repr: packed"self.is_char_boundary(byte_index): ", used: 35 });
-                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<bool> { value: __v0 }."bool^Inspect::inspect"(&mut __f);
-                __r.String::push_str(&String { repr: packed"\n", used: 1 });
-                break __tmpl: __r;
-            });
-        }
-    }
-    return self.String::remove_unchecked(byte_index);
-}
-
-pub fn String::remove_unchecked(self: &mut String, byte_index: i32) -> char {
-    let b0: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"(byte_index) as u32;
-    let char_len: i32 = if (b0 < 128) {
-        1;
-    } else {
-        if (b0 < 224) {
-            2;
-        } else {
-            if (b0 < 240) {
-                3;
-            } else {
-                4;
-            };
-        };
-    };
-    let code: u32 = if (b0 < 128) {
-        b0;
-    } else {
-        if (b0 < 224) {
-            let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 1)) as u32;
-            (((b0 & 31) << 6) | (b1 & 63));
-        } else {
-            if (b0 < 240) {
-                let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 1)) as u32;
-                let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 2)) as u32;
-                ((((b0 & 15) << 12) | ((b1 & 63) << 6)) | (b2 & 63));
-            } else {
-                let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 1)) as u32;
-                let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 2)) as u32;
-                let b3: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((byte_index + 3)) as u32;
-                (((((b0 & 7) << 18) | ((b1 & 63) << 12)) | ((b2 & 63) << 6)) | (b3 & 63));
-            };
-        };
-    };
-    "core::builtin::core/builtin/array_copy<u8>"(self.String::internal_raw_bytes_mut(), byte_index, self.String::internal_raw_bytes(), (byte_index + char_len), ((self.used - byte_index) - char_len));
-    self.used = (self.used - char_len);
-    return "core::prelude/primitive.wado::char::from_u32_unchecked"(code);
-}
-
-pub fn String::repeat(self: &String, n: i32) -> String {
-    if ((n <= 0) || (self.used == 0)) {
-        return "core::prelude/string.wado::String::with_capacity"(0);
-    }
-    let total: i32 = (self.used * n);
-    let mut repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(total);
-    let mut r: i32 = 0;
+pub fn "StrCharIndicesIter^Iterator::last"(self: &mut StrCharIndicesIter) -> Option<[i32, char]> {
+    let mut result: Option<[i32, char]> = %0;
     loop {
-        if !(r < n) {
-            break;
-        }
-        __for_0_body: {
-            "core::builtin::core/builtin/array_copy<u8>"(&mut repr, (r * self.used), self.String::internal_raw_bytes(), 0, self.used);
-        }
-        r = (r + 1);
-    }
-    return String { repr: "ops.mess_dirty.wado::$value_copy$Array<u8>"(repr as Array<u8>), used: total };
-}
-
-pub fn String::replace(self: &String, from: String, to: String) -> String {
-    return self.String::replacen(from, to, -1);
-}
-
-pub fn String::replacen(self: &String, from: String, to: String, count: i32) -> String {
-    let from_len: i32 = from.String::len();
-    if (from_len == 0) {
-        return *self;
-    }
-    let to_len: i32 = to.String::len();
-    let from_repr: &Array<u8> = from.String::internal_raw_bytes();
-    let to_repr: &Array<u8> = to.String::internal_raw_bytes();
-    let mut result: String = "core::prelude/string.wado::String::with_capacity"(self.used);
-    let mut pos: i32 = 0;
-    let mut replacements: i32 = 0;
-    let limit: i32 = (self.used - from_len);
-    loop {
-        if !(pos <= limit) {
-            break;
-        }
-        if ((count >= 0) && (replacements >= count)) {
-            break;
-        }
-        let mut matched: bool = true;
-        let mut j: i32 = 0;
-        loop {
-            if !(j < from_len) {
+        let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
+        match __match_3 {
+            Some(item) => {
+                result = Option<[i32, char]>::Some(item);
+            },
+            _ => {
                 break;
-            }
-            __for_0_body: {
-                if (self.repr."Array<u8>^IndexValue<i32>::index_value"((pos + j)) != from_repr."Array<u8>^IndexValue<i32>::index_value"(j)) {
-                    matched = false;
-                    break;
-                }
-            }
-            j = (j + 1);
-        }
-        if matched {
-            if (to_len > 0) {
-                let new_used: i32 = (result.used + to_len);
-                if (new_used > result.repr."Array<u8>::len"()) {
-                    result.String::grow(new_used);
-                }
-                "core::builtin::core/builtin/array_copy<u8>"(&mut result.repr, result.used, to_repr, 0, to_len);
-                result.used = new_used;
-            }
-            pos = (pos + from_len);
-            replacements = (replacements + 1);
-        } else {
-            if (result.used >= result.repr."Array<u8>::len"()) {
-                result.String::grow((result.used + 1));
-            }
-            result.repr."Array<u8>^IndexAssign<i32>::index_assign"(result.used, self.repr."Array<u8>^IndexValue<i32>::index_value"(pos));
-            result.used = (result.used + 1);
-            pos = (pos + 1);
-        }
-    }
-    loop {
-        if !(pos < self.used) {
-            break;
-        }
-        if (result.used >= result.repr."Array<u8>::len"()) {
-            result.String::grow((result.used + 1));
-        }
-        result.repr."Array<u8>^IndexAssign<i32>::index_assign"(result.used, self.repr."Array<u8>^IndexValue<i32>::index_value"(pos));
-        result.used = (result.used + 1);
-        pos = (pos + 1);
+            },
+        };
     }
     return result;
 }
 
-pub fn "String^Default::default"() -> String {
-    return String { repr: packed"", used: 0 };
-}
-
-pub fn String::from_utf8_slice(bytes: ArraySlice<u8>) -> Result<String, String> {
-    if !"core::prelude/string.wado::String::is_valid_utf8"("ops.mess_dirty.wado::$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(bytes)) {
-        core::builtin::cold_path();
-        return Result<String, String>::Err(String { repr: packed"invalid UTF-8", used: 13 });
-    }
-    return Result<String, String>::Ok("core::prelude/string.wado::String::internal_from_utf8_raw"(bytes."ArraySlice<u8>::to_array"(), bytes."ArraySlice<u8>::len"()));
-}
-
-pub fn String::is_valid_utf8(bytes: ArraySlice<u8>) -> bool {
-    let len: i32 = bytes."ArraySlice<u8>::len"();
-    let mut i: i32 = 0;
+pub fn "StrCharIndicesIter^Iterator::nth"(self: &mut StrCharIndicesIter, n: i32) -> Option<[i32, char]> {
+    let mut remaining: i32 = n;
     loop {
-        if !(i < len) {
-            break;
-        }
-        let scalar: Utf8Scalar = "core::prelude/string.wado::decode_utf8_scalar"("ops.mess_dirty.wado::$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(bytes), i, len);
-        if !scalar.valid {
-            core::builtin::cold_path();
-            return false;
-        }
-        i = (i + scalar.advance);
+        let __match_4: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
+        match __match_4 {
+            Some(item) => {
+                if (remaining <= 0) {
+                    return Option<[i32, char]>::Some(item);
+                }
+                remaining = (remaining - 1);
+            },
+            _ => {
+                break;
+            },
+        };
     }
-    return true;
+    return %2;
 }
 
-pub fn "String^From<char>::from"(value: char) -> String {
-    let mut s: String = "core::prelude/string.wado::String::with_capacity"(4);
-    s.String::push(value);
-    return s;
+pub fn "StrCharIndicesIter^Iterator::position"(self: &mut StrCharIndicesIter, pred: fn mut([i32, char]) -> bool) -> Option<i32> {
+    let mut idx: i32 = 0;
+    loop {
+        let __match_4: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
+        match __match_4 {
+            Some(item) => {
+                if pred(item) {
+                    return Option<i32>::Some(idx);
+                }
+                idx = (idx + 1);
+            },
+            _ => {
+                break;
+            },
+        };
+    }
+    return %2;
+}
+
+pub fn "StrCharIndicesIter^Iterator::reduce"(self: &mut StrCharIndicesIter, f: fn mut([i32, char], [i32, char]) -> [i32, char]) -> Option<[i32, char]> {
+    let __match_5: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
+    match __match_5 {
+        Some(first) => {
+            let mut acc: [i32, char] = first;
+            loop {
+                let __match_6: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
+                match __match_6 {
+                    Some(item) => {
+                        acc = "ops.mess_dirty.wado::$value_copy$[i32,char]"(f("ops.mess_dirty.wado::$value_copy$[i32,char]"(acc), item));
+                    },
+                    _ => {
+                        break;
+                    },
+                };
+            }
+            return Option<[i32, char]>::Some("ops.mess_dirty.wado::$value_copy$[i32,char]"(acc));
+        },
+        _ => (),
+    };
+    return %1;
+}
+
+pub fn "StrCharIndicesIter^Iterator::filter"(self: &StrCharIndicesIter, pred: fn mut([i32, char]) -> bool) -> IterFilter<core:prelude/string.wado/StrCharIndicesIter> {
+    return IterFilter<core:prelude/string.wado/StrCharIndicesIter> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"(*self), pred: pred };
+}
+
+pub fn "StrCharIndicesIter^Iterator::enumerate"(self: &StrCharIndicesIter) -> IterEnumerate<core:prelude/string.wado/StrCharIndicesIter> {
+    return IterEnumerate<core:prelude/string.wado/StrCharIndicesIter> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"(*self), count: 0 };
+}
+
+pub fn "StrCharIndicesIter^Iterator::take"(self: &StrCharIndicesIter, n: i32) -> IterTake<core:prelude/string.wado/StrCharIndicesIter> {
+    return IterTake<core:prelude/string.wado/StrCharIndicesIter> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"(*self), remaining: n };
+}
+
+pub fn "StrCharIndicesIter^Iterator::skip"(self: &StrCharIndicesIter, n: i32) -> IterSkip<core:prelude/string.wado/StrCharIndicesIter> {
+    return IterSkip<core:prelude/string.wado/StrCharIndicesIter> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"(*self), remaining: n };
 }
 
 pub fn "StrSplitIter^Iterator::next"(self: &mut StrSplitIter) -> Option<String> {
     if self.finished {
         return %0;
     }
+    let sep: &Array<u8> = &self.sep_repr as &Array<u8>;
     let limit: i32 = (self.used - self.sep_len);
     let mut i: i32 = self.pos;
     loop {
         if !(i <= limit) {
             break;
         }
-        let mut matched: bool = true;
-        let mut j: i32 = 0;
-        loop {
-            if !(j < self.sep_len) {
-                break;
+        __for_0_body: {
+            if ((self.sep_len > 0) && "core::prelude/string.wado::bytes_match_at"(self.repr, i, sep, self.sep_len)) {
+                let part: String = "core::prelude/string.wado::substring"(self.repr, self.pos, (i - self.pos));
+                self.pos = (i + self.sep_len);
+                return Option<String>::Some(part);
             }
-            __for_0_body: {
-                if (self.repr."Array<u8>^IndexValue<i32>::index_value"((i + j)) != self.sep_repr."Array<u8>^IndexValue<i32>::index_value"(j)) {
-                    matched = false;
-                    break;
-                }
-            }
-            j = (j + 1);
-        }
-        if (matched && (self.sep_len > 0)) {
-            let len: i32 = (i - self.pos);
-            let mut part: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
-            "core::builtin::core/builtin/array_copy<u8>"(&mut part, 0, self.repr, self.pos, len);
-            self.pos = (i + self.sep_len);
-            return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
         }
         i = (i + 1);
     }
-    let len: i32 = (self.used - self.pos);
-    let mut part: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
-    "core::builtin::core/builtin/array_copy<u8>"(&mut part, 0, self.repr, self.pos, len);
     self.finished = true;
-    return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
-}
-
-pub fn "StrSplitIter^Iterator::collect"(self: &mut StrSplitIter) -> List<String> {
-    let mut result: List<String> = __seq_lit: {
-        let mut __b: List<String> = "core::prelude/list.wado::List<core:prelude/string.wado/String>^SequenceLiteralBuilder::new_literal"(0);
-        break __seq_lit: __b."List<core:prelude/string.wado/String>^SequenceLiteralBuilder::build"();
-    };
-    loop {
-        let __match_4: Option<String> = self."StrSplitIter^Iterator::next"();
-        match __match_4 {
-            Some(item) => {
-                result."List<core:prelude/string.wado/String>::push"(item);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return result;
+    return Option<String>::Some("core::prelude/string.wado::substring"(self.repr, self.pos, (self.used - self.pos)));
 }
 
 pub fn "StrSplitIter^Iterator::count"(self: &mut StrSplitIter) -> i32 {
@@ -10208,66 +9162,28 @@ pub fn "StrSplitNIter^Iterator::next"(self: &mut StrSplitNIter) -> Option<String
         return %0;
     }
     if (self.remaining <= 1) {
-        let len: i32 = (self.used - self.pos);
-        let mut part: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
-        "core::builtin::core/builtin/array_copy<u8>"(&mut part, 0, self.repr, self.pos, len);
         self.finished = true;
-        return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
+        return Option<String>::Some("core::prelude/string.wado::substring"(self.repr, self.pos, (self.used - self.pos)));
     }
+    let sep: &Array<u8> = &self.sep_repr as &Array<u8>;
     let limit: i32 = (self.used - self.sep_len);
     let mut i: i32 = self.pos;
     loop {
         if !(i <= limit) {
             break;
         }
-        let mut matched: bool = true;
-        let mut j: i32 = 0;
-        loop {
-            if !(j < self.sep_len) {
-                break;
+        __for_0_body: {
+            if ((self.sep_len > 0) && "core::prelude/string.wado::bytes_match_at"(self.repr, i, sep, self.sep_len)) {
+                let part: String = "core::prelude/string.wado::substring"(self.repr, self.pos, (i - self.pos));
+                self.pos = (i + self.sep_len);
+                self.remaining = (self.remaining - 1);
+                return Option<String>::Some(part);
             }
-            __for_0_body: {
-                if (self.repr."Array<u8>^IndexValue<i32>::index_value"((i + j)) != self.sep_repr."Array<u8>^IndexValue<i32>::index_value"(j)) {
-                    matched = false;
-                    break;
-                }
-            }
-            j = (j + 1);
-        }
-        if (matched && (self.sep_len > 0)) {
-            let len: i32 = (i - self.pos);
-            let mut part: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
-            "core::builtin::core/builtin/array_copy<u8>"(&mut part, 0, self.repr, self.pos, len);
-            self.pos = (i + self.sep_len);
-            self.remaining = (self.remaining - 1);
-            return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
         }
         i = (i + 1);
     }
-    let len: i32 = (self.used - self.pos);
-    let mut part: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
-    "core::builtin::core/builtin/array_copy<u8>"(&mut part, 0, self.repr, self.pos, len);
     self.finished = true;
-    return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
-}
-
-pub fn "StrSplitNIter^Iterator::collect"(self: &mut StrSplitNIter) -> List<String> {
-    let mut result: List<String> = __seq_lit: {
-        let mut __b: List<String> = "core::prelude/list.wado::List<core:prelude/string.wado/String>^SequenceLiteralBuilder::new_literal"(0);
-        break __seq_lit: __b."List<core:prelude/string.wado/String>^SequenceLiteralBuilder::build"();
-    };
-    loop {
-        let __match_4: Option<String> = self."StrSplitNIter^Iterator::next"();
-        match __match_4 {
-            Some(item) => {
-                result."List<core:prelude/string.wado/String>::push"(item);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return result;
+    return Option<String>::Some("core::prelude/string.wado::substring"(self.repr, self.pos, (self.used - self.pos)));
 }
 
 pub fn "StrSplitNIter^Iterator::count"(self: &mut StrSplitNIter) -> i32 {
@@ -10444,10 +9360,6 @@ pub fn "StrSplitNIter^Iterator::skip"(self: &StrSplitNIter, n: i32) -> IterSkip<
     return IterSkip<core:prelude/string.wado/StrSplitNIter> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitNIter"(*self), remaining: n };
 }
 
-fn is_ascii_whitespace_byte(b: u8) -> bool {
-    return Box<char> { value: b as char }.char::is_ascii_whitespace();
-}
-
 pub fn "StrSplitWhitespaceIter^Iterator::next"(self: &mut StrSplitWhitespaceIter) -> Option<String> {
     loop {
         if !((self.pos < self.used) && "core::prelude/string.wado::is_ascii_whitespace_byte"(self.repr."Array<u8>^IndexValue<i32>::index_value"(self.pos))) {
@@ -10465,29 +9377,7 @@ pub fn "StrSplitWhitespaceIter^Iterator::next"(self: &mut StrSplitWhitespaceIter
         }
         self.pos = (self.pos + 1);
     }
-    let len: i32 = (self.pos - start);
-    let mut part: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
-    "core::builtin::core/builtin/array_copy<u8>"(&mut part, 0, self.repr, start, len);
-    return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
-}
-
-pub fn "StrSplitWhitespaceIter^Iterator::collect"(self: &mut StrSplitWhitespaceIter) -> List<String> {
-    let mut result: List<String> = __seq_lit: {
-        let mut __b: List<String> = "core::prelude/list.wado::List<core:prelude/string.wado/String>^SequenceLiteralBuilder::new_literal"(0);
-        break __seq_lit: __b."List<core:prelude/string.wado/String>^SequenceLiteralBuilder::build"();
-    };
-    loop {
-        let __match_4: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
-        match __match_4 {
-            Some(item) => {
-                result."List<core:prelude/string.wado/String>::push"(item);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return result;
+    return Option<String>::Some("core::prelude/string.wado::substring"(self.repr, start, (self.pos - start)));
 }
 
 pub fn "StrSplitWhitespaceIter^Iterator::count"(self: &mut StrSplitWhitespaceIter) -> i32 {
@@ -10679,52 +9569,25 @@ pub fn "StrLinesIter^Iterator::next"(self: &mut StrLinesIter) -> Option<String> 
         }
         let b: u8 = self.repr."Array<u8>^IndexValue<i32>::index_value"(self.pos);
         if (b == 10) {
-            let len: i32 = (self.pos - start);
-            let mut part: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
-            "core::builtin::core/builtin/array_copy<u8>"(&mut part, 0, self.repr, start, len);
+            let part: String = "core::prelude/string.wado::substring"(self.repr, start, (self.pos - start));
             self.pos = (self.pos + 1);
-            return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
+            return Option<String>::Some(part);
         }
         if (b == 13) {
-            let len: i32 = (self.pos - start);
-            let mut part: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
-            "core::builtin::core/builtin/array_copy<u8>"(&mut part, 0, self.repr, start, len);
+            let part: String = "core::prelude/string.wado::substring"(self.repr, start, (self.pos - start));
             self.pos = (self.pos + 1);
             if ((self.pos < self.used) && (self.repr."Array<u8>^IndexValue<i32>::index_value"(self.pos) == 10)) {
                 self.pos = (self.pos + 1);
             }
-            return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
+            return Option<String>::Some(part);
         }
         self.pos = (self.pos + 1);
     }
-    let len: i32 = (self.pos - start);
-    if (len > 0) {
-        let mut part: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
-        "core::builtin::core/builtin/array_copy<u8>"(&mut part, 0, self.repr, start, len);
-        self.finished = true;
-        return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
-    }
     self.finished = true;
-    return %16;
-}
-
-pub fn "StrLinesIter^Iterator::collect"(self: &mut StrLinesIter) -> List<String> {
-    let mut result: List<String> = __seq_lit: {
-        let mut __b: List<String> = "core::prelude/list.wado::List<core:prelude/string.wado/String>^SequenceLiteralBuilder::new_literal"(0);
-        break __seq_lit: __b."List<core:prelude/string.wado/String>^SequenceLiteralBuilder::build"();
-    };
-    loop {
-        let __match_4: Option<String> = self."StrLinesIter^Iterator::next"();
-        match __match_4 {
-            Some(item) => {
-                result."List<core:prelude/string.wado/String>::push"(item);
-            },
-            _ => {
-                break;
-            },
-        };
+    if (self.pos > start) {
+        return Option<String>::Some("core::prelude/string.wado::substring"(self.repr, start, (self.pos - start)));
     }
-    return result;
+    return %11;
 }
 
 pub fn "StrLinesIter^Iterator::count"(self: &mut StrLinesIter) -> i32 {
@@ -10901,250 +9764,942 @@ pub fn "StrLinesIter^Iterator::skip"(self: &StrLinesIter, n: i32) -> IterSkip<co
     return IterSkip<core:prelude/string.wado/StrLinesIter> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrLinesIter"(*self), remaining: n };
 }
 
-pub fn "StrCharIndicesIter^Iterator::next"(self: &mut StrCharIndicesIter) -> Option<[i32, char]> {
-    if (self.byte_index >= self.used) {
+pub fn String::new() -> String {
+    return "core::prelude/string.wado::String::with_capacity"(0);
+}
+
+pub fn String::with_capacity(capacity: i32) -> String {
+    return String { repr: "core::builtin::core/builtin/array_new<u8>"(capacity) as Array<u8>, used: 0 };
+}
+
+pub fn String::len(self: &String) -> i32 {
+    return self.used;
+}
+
+pub fn String::is_empty(self: &String) -> bool {
+    return (self.used == 0);
+}
+
+pub fn String::get_byte_unchecked(self: &String, index: i32) -> u8 {
+    return self.repr."Array<u8>^IndexValue<i32>::index_value"(index);
+}
+
+pub fn String::set_byte_unchecked(self: &mut String, index: i32, value: u8) {
+    self.repr."Array<u8>^IndexAssign<i32>::index_assign"(index, value);
+}
+
+pub fn String::as_bytes(self: &String) -> ArraySlice<u8> with stores[self] {
+    return "core::prelude/slice.wado::ArraySlice<u8>::internal_new"(&self.repr as &Array<u8>, 0, self.used) as ArraySlice<u8>;
+}
+
+fn String::internal_raw_bytes(self: &String) -> &Array<u8> {
+    return &self.repr as &Array<u8>;
+}
+
+fn String::internal_raw_bytes_mut(self: &mut String) -> &mut Array<u8> {
+    return &mut self.repr as &mut Array<u8>;
+}
+
+fn String::internal_from_utf8_raw(bytes: Array<u8>, len: i32) -> String {
+    return String { repr: "ops.mess_dirty.wado::$value_copy$Array<u8>"(bytes as Array<u8>), used: len };
+}
+
+fn String::realloc_to(self: &mut String, new_capacity: i32) {
+    let mut new_repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(new_capacity);
+    "core::builtin::core/builtin/array_copy<u8>"(&mut new_repr, 0, &self.repr as &Array<u8>, 0, self.used);
+    self.repr = new_repr as Array<u8>;
+}
+
+pub fn String::grow(self: &mut String, min_capacity: i32) {
+    let capacity: i32 = self.repr."Array<u8>::len"();
+    if (min_capacity <= capacity) {
+        return;
+    }
+    self.String::realloc_to(core::rt::i32_max(core::rt::i32_max((capacity * 2), min_capacity), 8));
+}
+
+fn String::internal_reserve_uninit(self: &mut String, n: i32) -> i32 {
+    let new_used: i32 = (self.used + n);
+    if (new_used > self.repr."Array<u8>::len"()) {
+        core::builtin::cold_path();
+        self.String::grow(new_used);
+    }
+    let start: i32 = self.used;
+    self.used = new_used;
+    return start;
+}
+
+fn String::internal_append_from_memory(self: &mut String, ptr: i32, len: i32) {
+    if (len == 0) {
+        return;
+    }
+    let start: i32 = self.String::internal_reserve_uninit(len);
+    let mut i: i32 = 0;
+    loop {
+        if !(i < len) {
+            break;
+        }
+        __for_0_body: {
+            self.String::set_byte_unchecked((start + i), core::builtin::i32_load8_u((ptr + i)));
+        }
+        i = (i + 1);
+    }
+}
+
+pub fn String::append_byte_filled(self: &mut String, byte: u8, n: i32) {
+    if (n <= 0) {
+        return;
+    }
+    let start: i32 = self.String::internal_reserve_uninit(n);
+    "core::builtin::core/builtin/array_fill<u8>"(&mut self.repr as &mut Array<u8>, start, byte, n);
+}
+
+pub fn String::push_str(self: &mut String, other: &String) {
+    let other_len: i32 = other.String::len();
+    if (other_len == 0) {
+        return;
+    }
+    let start: i32 = self.String::internal_reserve_uninit(other_len);
+    "core::builtin::core/builtin/array_copy<u8>"(&mut self.repr as &mut Array<u8>, start, &other.repr as &Array<u8>, 0, other_len);
+}
+
+pub fn String::push_str_range_unchecked(self: &mut String, s: &String, start: i32, end: i32) {
+    let n: i32 = (end - start);
+    if (n <= 0) {
+        return;
+    }
+    let dst: i32 = self.String::internal_reserve_uninit(n);
+    "core::builtin::core/builtin/array_copy<u8>"(&mut self.repr as &mut Array<u8>, dst, &s.repr as &Array<u8>, start, n);
+}
+
+pub fn String::bytes(self: &String) -> StrUtf8ByteIter with stores[self] {
+    return StrUtf8ByteIter { repr: &self.repr as &Array<u8>, used: self.used, index: 0 };
+}
+
+pub fn String::chars(self: &String) -> StrCharIter with stores[self] {
+    return StrCharIter { repr: &self.repr as &Array<u8>, used: self.used, byte_index: 0 };
+}
+
+pub fn String::char_indices(self: &String) -> StrCharIndicesIter with stores[self] {
+    return StrCharIndicesIter { repr: &self.repr as &Array<u8>, used: self.used, byte_index: 0 };
+}
+
+pub fn String::to_chars(self: &String) -> List<char> {
+    let bytes: ArraySlice<u8> = self.String::as_bytes();
+    let len: i32 = self.used;
+    let mut chars: List<char> = "core::prelude/list.wado::List<char>::with_capacity"(len);
+    let mut i: i32 = 0;
+    loop {
+        if !(i < len) {
+            break;
+        }
+        let b0: u8 = bytes."ArraySlice<u8>::get_unchecked"(i);
+        if (b0 < 128) {
+            chars."List<char>::push"("core::prelude/primitive.wado::char::from_u32_unchecked"(b0 as u32));
+            i = (i + 1);
+            continue;
+        }
+        let scalar: Utf8Scalar = "core::prelude/string.wado::decode_utf8_scalar"("ops.mess_dirty.wado::$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(bytes), i, len);
+        chars."List<char>::push"("core::prelude/primitive.wado::char::from_u32_unchecked"(scalar.code));
+        i = (i + scalar.advance);
+    }
+    return chars;
+}
+
+pub fn String::char_at_byte(self: &String, byte_index: i32) -> Option<char> {
+    if (byte_index >= self.used) {
         return %0;
     }
-    let idx: i32 = self.byte_index;
-    let b0: u8 = self.repr."Array<u8>^IndexValue<i32>::index_value"(self.byte_index);
-    self.byte_index = (self.byte_index + 1);
-    if (b0 < 128) {
-        return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(b0 as u32)]);
+    if ((byte_index + "core::prelude/string.wado::utf8_seq_len"(self.repr."Array<u8>^IndexValue<i32>::index_value"(byte_index))) > self.used) {
+        return %1;
     }
-    if (b0 < 224) {
-        let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"(self.byte_index) as u32;
-        self.byte_index = (self.byte_index + 1);
-        let code: u32 = (((b0 as u32 & 31) << 6) | (b1 & 63));
-        return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(code)]);
-    }
-    if (b0 < 240) {
-        let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"(self.byte_index) as u32;
-        let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((self.byte_index + 1)) as u32;
-        self.byte_index = (self.byte_index + 2);
-        let code: u32 = ((((b0 as u32 & 15) << 12) | ((b1 & 63) << 6)) | (b2 & 63));
-        return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(code)]);
-    }
-    let b1: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"(self.byte_index) as u32;
-    let b2: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((self.byte_index + 1)) as u32;
-    let b3: u32 = self.repr."Array<u8>^IndexValue<i32>::index_value"((self.byte_index + 2)) as u32;
-    self.byte_index = (self.byte_index + 3);
-    let code: u32 = (((((b0 as u32 & 7) << 18) | ((b1 & 63) << 12)) | ((b2 & 63) << 6)) | (b3 & 63));
-    return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(code)]);
+    return Option<char>::Some(self.String::char_at_byte_unchecked(byte_index));
 }
 
-pub fn "StrCharIndicesIter^Iterator::collect"(self: &mut StrCharIndicesIter) -> List<[i32, char]> {
-    let mut result: List<[i32, char]> = __seq_lit: {
-        let mut __b: List<[i32, char]> = "core::prelude/list.wado::List<[i32,char]>^SequenceLiteralBuilder::new_literal"(0);
-        break __seq_lit: __b."List<[i32,char]>^SequenceLiteralBuilder::build"();
-    };
+pub fn String::char_at_byte_unchecked(self: &String, byte_index: i32) -> char {
+    return "core::prelude/primitive.wado::char::from_u32_unchecked"("core::prelude/string.wado::decode_char_at"(&self.repr as &Array<u8>, byte_index).0);
+}
+
+pub fn String::push(self: &mut String, c: char) {
+    if ((self.used + 4) > self.repr."Array<u8>::len"()) {
+        core::builtin::cold_path();
+        self.String::grow((self.used + 4));
+    }
+    self.used = (self.used + "core::prelude/string.wado::encode_char"(&mut self.repr as &mut Array<u8>, self.used, c as u32));
+}
+
+pub fn String::truncate(self: &mut String, byte_len: i32) {
+    if (byte_len >= self.used) {
+        return;
+    }
+    __assert_0: {
+        let __v0: i32 = byte_len;
+        let __cond: bool = (__v0 >= 0);
+        if !__cond {
+            core::builtin::cold_path();
+            core::rt::panic(__tmpl: {
+                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(144);
+                __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
+                __r.String::push_str(&String { repr: packed"String::truncate", used: 16 });
+                __r.String::push_str(&String { repr: packed" at ", used: 4 });
+                __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
+                __r.String::push_str(&String { repr: packed":", used: 1 });
+                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: 650 }."i32^Display::fmt"(&mut __f);
+                __r.String::push_str(&String { repr: packed": ", used: 2 });
+                __r.String::push_str(&String { repr: packed"negative length", used: 15 });
+                __r.String::push_str(&String { repr: packed"\ncondition: byte_len >= 0\n", used: 26 });
+                __r.String::push_str(&String { repr: packed"byte_len: ", used: 10 });
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: __v0 }."i32^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&String { repr: packed"\n", used: 1 });
+                break __tmpl: __r;
+            });
+        }
+    }
+    __assert_1: {
+        let __v0: bool = self.String::is_char_boundary(byte_len);
+        let __cond: bool = __v0;
+        if !__cond {
+            core::builtin::cold_path();
+            core::rt::panic(__tmpl: {
+                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(185);
+                __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
+                __r.String::push_str(&String { repr: packed"String::truncate", used: 16 });
+                __r.String::push_str(&String { repr: packed" at ", used: 4 });
+                __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
+                __r.String::push_str(&String { repr: packed":", used: 1 });
+                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: 651 }."i32^Display::fmt"(&mut __f);
+                __r.String::push_str(&String { repr: packed": ", used: 2 });
+                __r.String::push_str(&String { repr: packed"not on a UTF-8 character boundary", used: 33 });
+                __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_len)\n", used: 44 });
+                __r.String::push_str(&String { repr: packed"self.is_char_boundary(byte_len): ", used: 33 });
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<bool> { value: __v0 }."bool^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&String { repr: packed"\n", used: 1 });
+                break __tmpl: __r;
+            });
+        }
+    }
+    self.String::truncate_unchecked(byte_len);
+}
+
+pub fn String::truncate_unchecked(self: &mut String, byte_len: i32) {
+    self.used = byte_len;
+}
+
+pub fn String::truncate_chars(self: &mut String, char_count: i32) {
+    let mut byte_pos: i32 = 0;
+    let mut chars_seen: i32 = 0;
     loop {
-        let __match_4: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
+        if !((byte_pos < self.used) && (chars_seen < char_count)) {
+            break;
+        }
+        byte_pos = (byte_pos + "core::prelude/string.wado::utf8_seq_len"(self.repr."Array<u8>^IndexValue<i32>::index_value"(byte_pos)));
+        chars_seen = (chars_seen + 1);
+    }
+    self.used = byte_pos;
+}
+
+pub fn String::is_char_boundary(self: &String, byte_index: i32) -> bool {
+    if ((byte_index == 0) || (byte_index == self.used)) {
+        return true;
+    }
+    if ((byte_index < 0) || (byte_index > self.used)) {
+        return false;
+    }
+    let b: u8 = self.repr."Array<u8>^IndexValue<i32>::index_value"(byte_index);
+    return ((b < 128) || (b >= 192));
+}
+
+pub fn String::pop(self: &mut String) -> Option<char> {
+    if (self.used == 0) {
+        return %1;
+    }
+    let pos: i32 = "core::prelude/string.wado::char_start_backward"(&self.repr as &Array<u8>, (self.used - 1));
+    let code: u32 = "core::prelude/string.wado::decode_char_at"(&self.repr as &Array<u8>, pos).0;
+    self.used = pos;
+    return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(code));
+}
+
+pub fn String::clear(self: &mut String) {
+    self.used = 0;
+}
+
+pub fn String::capacity(self: &String) -> i32 {
+    return self.repr."Array<u8>::len"();
+}
+
+pub fn String::reserve(self: &mut String, additional: i32) {
+    let required: i32 = (self.used + additional);
+    if (required > self.repr."Array<u8>::len"()) {
+        self.String::grow(required);
+    }
+}
+
+pub fn String::shrink_to_fit(self: &mut String) {
+    if (self.repr."Array<u8>::len"() > self.used) {
+        self.String::realloc_to(self.used);
+    }
+}
+
+pub fn String::trim_ascii_start(self: &String) -> String {
+    let mut start: i32 = 0;
+    loop {
+        if !((start < self.used) && "core::prelude/string.wado::is_ascii_whitespace_byte"(self.repr."Array<u8>^IndexValue<i32>::index_value"(start))) {
+            break;
+        }
+        start = (start + 1);
+    }
+    return self.String::substr_bytes(start, self.used);
+}
+
+pub fn String::trim_ascii_end(self: &String) -> String {
+    let mut end: i32 = self.used;
+    loop {
+        if !((end > 0) && "core::prelude/string.wado::is_ascii_whitespace_byte"(self.repr."Array<u8>^IndexValue<i32>::index_value"((end - 1)))) {
+            break;
+        }
+        end = (end - 1);
+    }
+    return self.String::substr_bytes(0, end);
+}
+
+pub fn String::trim_ascii(self: &String) -> String {
+    return self.String::trim_ascii_start().String::trim_ascii_end();
+}
+
+pub fn String::trim_start(self: &String) -> String {
+    let mut iter: StrCharIter = self.String::chars();
+    let mut start: i32 = 0;
+    loop {
+        let __match_4: Option<char> = iter."StrCharIter^Iterator::next"();
         match __match_4 {
-            Some(item) => {
-                result."List<[i32,char]>::push"(item);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return result;
-}
-
-pub fn "StrCharIndicesIter^Iterator::count"(self: &mut StrCharIndicesIter) -> i32 {
-    let mut n: i32 = 0;
-    loop {
-        let __match_2: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
-        match __match_2 {
-            Some(_) => {
-                n = (n + 1);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return n;
-}
-
-pub fn "StrCharIndicesIter^Iterator::for_each"(self: &mut StrCharIndicesIter, f: fn mut([i32, char]) -> ()) {
-    loop {
-        let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
-        match __match_3 {
-            Some(item) => {
-                f(item);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-}
-
-pub fn "StrCharIndicesIter^Iterator::find"(self: &mut StrCharIndicesIter, pred: fn mut([i32, char]) -> bool) -> Option<[i32, char]> {
-    loop {
-        let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
-        match __match_3 {
-            Some(item) => {
-                if pred("ops.mess_dirty.wado::$value_copy$[i32,char]"(item)) {
-                    return Option<[i32, char]>::Some("ops.mess_dirty.wado::$value_copy$[i32,char]"(item));
+            Some(c) => {
+                if !Box<char> { value: c }.char::is_whitespace() {
+                    break;
                 }
+                start = (start + Box<char> { value: c }.char::len_utf8());
             },
             _ => {
                 break;
             },
         };
     }
-    return %0;
+    return self.String::substr_bytes(start, self.used);
 }
 
-pub fn "StrCharIndicesIter^Iterator::any"(self: &mut StrCharIndicesIter, pred: fn mut([i32, char]) -> bool) -> bool {
+pub fn String::trim_end(self: &String) -> String {
+    let repr: &Array<u8> = &self.repr as &Array<u8>;
+    let mut end: i32 = self.used;
     loop {
-        let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
-        match __match_3 {
-            Some(item) => {
-                if pred(item) {
-                    return true;
-                }
-            },
-            _ => {
-                break;
-            },
-        };
+        if !(end > 0) {
+            break;
+        }
+        let pos: i32 = "core::prelude/string.wado::char_start_backward"(repr, (end - 1));
+        let ch: char = "core::prelude/primitive.wado::char::from_u32_unchecked"("core::prelude/string.wado::decode_char_at"(repr, pos).0);
+        if !Box<char> { value: ch }.char::is_whitespace() {
+            break;
+        }
+        end = pos;
     }
-    return false;
+    return self.String::substr_bytes(0, end);
 }
 
-pub fn "StrCharIndicesIter^Iterator::all"(self: &mut StrCharIndicesIter, pred: fn mut([i32, char]) -> bool) -> bool {
+pub fn String::trim(self: &String) -> String {
+    return self.String::trim_start().String::trim_end();
+}
+
+pub fn String::to_ascii_lowercase(self: &String) -> String {
+    return "core::prelude/string.wado::String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>>"(self.String::chars()."StrCharIter^Iterator::map<char>"(&__Closure_0 {  }));
+}
+
+pub fn String::to_ascii_uppercase(self: &String) -> String {
+    return "core::prelude/string.wado::String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>>"(self.String::chars()."StrCharIter^Iterator::map<char>"(&__Closure_1 {  }));
+}
+
+pub fn String::eq_ignore_ascii_case(self: &String, other: String) -> bool {
+    let len: i32 = self.String::len();
+    if (len != other.String::len()) {
+        return false;
+    }
+    let a: &Array<u8> = &self.repr as &Array<u8>;
+    let b: &Array<u8> = &other.repr as &Array<u8>;
+    let mut i: i32 = 0;
     loop {
-        let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
-        match __match_3 {
-            Some(item) => {
-                if !pred(item) {
-                    return false;
-                }
-            },
-            _ => {
-                break;
-            },
-        };
+        if !(i < len) {
+            break;
+        }
+        __for_0_body: {
+            if ("core::prelude/string.wado::byte_to_ascii_lowercase"(a."Array<u8>^IndexValue<i32>::index_value"(i)) != "core::prelude/string.wado::byte_to_ascii_lowercase"(b."Array<u8>^IndexValue<i32>::index_value"(i))) {
+                return false;
+            }
+        }
+        i = (i + 1);
     }
     return true;
 }
 
-pub fn "StrCharIndicesIter^Iterator::last"(self: &mut StrCharIndicesIter) -> Option<[i32, char]> {
-    let mut result: Option<[i32, char]> = %0;
+pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
+    __assert_0: {
+        let __v0: i32 = start;
+        let __v1: bool = (0 <= __v0);
+        let __v2: i32 = start;
+        let __v3: i32 = end;
+        let __v4: bool = (__v2 <= __v3);
+        let __v5: bool = (__v1 && __v4);
+        let __v6: i32 = end;
+        let __v7: i32 = self.used;
+        let __v8: bool = (__v6 <= __v7);
+        let __cond: bool = (__v5 && __v8);
+        if !__cond {
+            core::builtin::cold_path();
+            core::rt::panic(__tmpl: {
+                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(410);
+                __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
+                __r.String::push_str(&String { repr: packed"String::substr_bytes", used: 20 });
+                __r.String::push_str(&String { repr: packed" at ", used: 4 });
+                __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
+                __r.String::push_str(&String { repr: packed":", used: 1 });
+                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: 814 }."i32^Display::fmt"(&mut __f);
+                __r.String::push_str(&String { repr: packed": ", used: 2 });
+                __r.String::push_str(&String { repr: packed"byte range out of bounds", used: 24 });
+                __r.String::push_str(&String { repr: packed"\ncondition: 0 <= start && start <= end && end <= self.used\n", used: 59 });
+                __r.String::push_str(&String { repr: packed"start: ", used: 7 });
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: __v0 }."i32^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&String { repr: packed"\n", used: 1 });
+                __r.String::push_str(&String { repr: packed"0 <= start: ", used: 12 });
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<bool> { value: __v1 }."bool^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&String { repr: packed"\n", used: 1 });
+                __r.String::push_str(&String { repr: packed"start: ", used: 7 });
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: __v2 }."i32^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&String { repr: packed"\n", used: 1 });
+                __r.String::push_str(&String { repr: packed"end: ", used: 5 });
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: __v3 }."i32^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&String { repr: packed"\n", used: 1 });
+                __r.String::push_str(&String { repr: packed"start <= end: ", used: 14 });
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<bool> { value: __v4 }."bool^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&String { repr: packed"\n", used: 1 });
+                __r.String::push_str(&String { repr: packed"0 <= start && start <= end: ", used: 28 });
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<bool> { value: __v5 }."bool^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&String { repr: packed"\n", used: 1 });
+                __r.String::push_str(&String { repr: packed"end: ", used: 5 });
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: __v6 }."i32^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&String { repr: packed"\n", used: 1 });
+                __r.String::push_str(&String { repr: packed"self.used: ", used: 11 });
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: __v7 }."i32^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&String { repr: packed"\n", used: 1 });
+                __r.String::push_str(&String { repr: packed"end <= self.used: ", used: 18 });
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<bool> { value: __v8 }."bool^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&String { repr: packed"\n", used: 1 });
+                break __tmpl: __r;
+            });
+        }
+    }
+    __assert_1: {
+        let __v0: bool = self.String::is_char_boundary(start);
+        let __v1: bool = self.String::is_char_boundary(end);
+        let __cond: bool = (__v0 && __v1);
+        if !__cond {
+            core::builtin::cold_path();
+            core::rt::panic(__tmpl: {
+                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(254);
+                __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
+                __r.String::push_str(&String { repr: packed"String::substr_bytes", used: 20 });
+                __r.String::push_str(&String { repr: packed" at ", used: 4 });
+                __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
+                __r.String::push_str(&String { repr: packed":", used: 1 });
+                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: 815 }."i32^Display::fmt"(&mut __f);
+                __r.String::push_str(&String { repr: packed": ", used: 2 });
+                __r.String::push_str(&String { repr: packed"byte range not on UTF-8 character boundaries", used: 44 });
+                __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(start) && self.is_char_boundary(end)\n", used: 71 });
+                __r.String::push_str(&String { repr: packed"self.is_char_boundary(start): ", used: 30 });
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<bool> { value: __v0 }."bool^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&String { repr: packed"\n", used: 1 });
+                __r.String::push_str(&String { repr: packed"self.is_char_boundary(end): ", used: 28 });
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<bool> { value: __v1 }."bool^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&String { repr: packed"\n", used: 1 });
+                break __tmpl: __r;
+            });
+        }
+    }
+    return self.String::substr_bytes_unchecked(start, end);
+}
+
+pub fn String::substr_bytes_unchecked(self: &String, start: i32, end: i32) -> String {
+    if (end <= start) {
+        return "core::prelude/string.wado::String::with_capacity"(0);
+    }
+    return "core::prelude/string.wado::substring"(&self.repr as &Array<u8>, start, (end - start));
+}
+
+pub fn String::contains(self: &String, pat: String) -> bool {
+    return match self.String::find(pat) {
+        Some(_) => true,
+        _ => false,
+    };
+}
+
+pub fn String::starts_with(self: &String, pat: String) -> bool {
+    let pat_len: i32 = pat.String::len();
+    if (pat_len > self.used) {
+        return false;
+    }
+    return "core::prelude/string.wado::bytes_match_at"(&self.repr as &Array<u8>, 0, &pat.repr as &Array<u8>, pat_len);
+}
+
+pub fn String::ends_with(self: &String, pat: String) -> bool {
+    let pat_len: i32 = pat.String::len();
+    if (pat_len > self.used) {
+        return false;
+    }
+    return "core::prelude/string.wado::bytes_match_at"(&self.repr as &Array<u8>, (self.used - pat_len), &pat.repr as &Array<u8>, pat_len);
+}
+
+pub fn String::strip_prefix(self: &String, prefix: String) -> Option<String> {
+    if !self.String::starts_with("ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(prefix)) {
+        return %0;
+    }
+    let start: i32 = prefix.String::len();
+    return Option<String>::Some("core::prelude/string.wado::substring"(&self.repr as &Array<u8>, start, (self.used - start)));
+}
+
+pub fn String::strip_suffix(self: &String, suffix: String) -> Option<String> {
+    if !self.String::ends_with("ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(suffix)) {
+        return %0;
+    }
+    return Option<String>::Some("core::prelude/string.wado::substring"(&self.repr as &Array<u8>, 0, (self.used - suffix.String::len())));
+}
+
+pub fn String::find(self: &String, pat: String) -> Option<i32> {
+    let pat_len: i32 = pat.String::len();
+    if (pat_len == 0) {
+        return Option<i32>::Some(0);
+    }
+    if (pat_len > self.used) {
+        return %2;
+    }
+    let self_repr: &Array<u8> = &self.repr as &Array<u8>;
+    let pat_repr: &Array<u8> = &pat.repr as &Array<u8>;
+    let limit: i32 = (self.used - pat_len);
+    let mut i: i32 = 0;
     loop {
-        let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
-        match __match_3 {
-            Some(item) => {
-                result = Option<[i32, char]>::Some(item);
+        if !(i <= limit) {
+            break;
+        }
+        __for_0_body: {
+            if "core::prelude/string.wado::bytes_match_at"(self_repr, i, pat_repr, pat_len) {
+                return Option<i32>::Some(i);
+            }
+        }
+        i = (i + 1);
+    }
+    return %5;
+}
+
+pub fn String::rfind(self: &String, pat: String) -> Option<i32> {
+    let pat_len: i32 = pat.String::len();
+    if (pat_len == 0) {
+        return Option<i32>::Some(self.used);
+    }
+    if (pat_len > self.used) {
+        return %1;
+    }
+    let self_repr: &Array<u8> = &self.repr as &Array<u8>;
+    let pat_repr: &Array<u8> = &pat.repr as &Array<u8>;
+    let mut i: i32 = (self.used - pat_len);
+    loop {
+        if "core::prelude/string.wado::bytes_match_at"(self_repr, i, pat_repr, pat_len) {
+            return Option<i32>::Some(i);
+        }
+        if (i == 0) {
+            break;
+        }
+        i = (i - 1);
+    }
+    return %4;
+}
+
+pub fn String::contains_char(self: &String, ch: char) -> bool {
+    __for_of_2: {
+        let mut __iter_2: StrCharIter = "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(self.String::chars()."core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"());
+        loop {
+            let __match_4: Option<char> = __iter_2."StrCharIter^Iterator::next"();
+            match __match_4 {
+                Some(c) => {
+                    if (c == ch) {
+                        return true;
+                    }
+                },
+                _ => {
+                    break;
+                },
+            };
+        }
+    }
+    return false;
+}
+
+pub fn String::find_char(self: &String, pred: fn mut(char) -> bool) -> Option<i32> {
+    let mut iter: StrCharIter = self.String::chars();
+    let mut byte_index: i32 = 0;
+    loop {
+        let __match_5: Option<char> = iter."StrCharIter^Iterator::next"();
+        match __match_5 {
+            Some(c) => {
+                __for_0_body: {
+                    if pred(c) {
+                        return Option<i32>::Some(byte_index);
+                    }
+                }
+                byte_index = (byte_index + Box<char> { value: c }.char::len_utf8());
             },
             _ => {
                 break;
             },
         };
+    }
+    return %1;
+}
+
+fn String::make_gap(self: &mut String, byte_index: i32, width: i32) {
+    let new_used: i32 = (self.used + width);
+    if (new_used > self.repr."Array<u8>::len"()) {
+        self.String::grow(new_used);
+    }
+    "core::builtin::core/builtin/array_copy<u8>"(&mut self.repr as &mut Array<u8>, (byte_index + width), &self.repr as &Array<u8>, byte_index, (self.used - byte_index));
+    self.used = new_used;
+}
+
+pub fn String::insert(self: &mut String, byte_index: i32, ch: char) {
+    __assert_0: {
+        let __v0: bool = self.String::is_char_boundary(byte_index);
+        let __cond: bool = __v0;
+        if !__cond {
+            core::builtin::cold_path();
+            core::rt::panic(__tmpl: {
+                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(189);
+                __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
+                __r.String::push_str(&String { repr: packed"String::insert", used: 14 });
+                __r.String::push_str(&String { repr: packed" at ", used: 4 });
+                __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
+                __r.String::push_str(&String { repr: packed":", used: 1 });
+                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: 960 }."i32^Display::fmt"(&mut __f);
+                __r.String::push_str(&String { repr: packed": ", used: 2 });
+                __r.String::push_str(&String { repr: packed"insert index not on UTF-8 character boundary", used: 44 });
+                __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_index)\n", used: 46 });
+                __r.String::push_str(&String { repr: packed"self.is_char_boundary(byte_index): ", used: 35 });
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<bool> { value: __v0 }."bool^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&String { repr: packed"\n", used: 1 });
+                break __tmpl: __r;
+            });
+        }
+    }
+    self.String::insert_unchecked(byte_index, ch);
+}
+
+pub fn String::insert_unchecked(self: &mut String, byte_index: i32, ch: char) {
+    self.String::make_gap(byte_index, Box<char> { value: ch }.char::len_utf8());
+    "core::prelude/string.wado::encode_char"(&mut self.repr as &mut Array<u8>, byte_index, ch as u32);
+}
+
+pub fn String::insert_str(self: &mut String, byte_index: i32, s: String) {
+    __assert_0: {
+        let __v0: bool = self.String::is_char_boundary(byte_index);
+        let __cond: bool = __v0;
+        if !__cond {
+            core::builtin::cold_path();
+            core::rt::panic(__tmpl: {
+                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(189);
+                __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
+                __r.String::push_str(&String { repr: packed"String::insert_str", used: 18 });
+                __r.String::push_str(&String { repr: packed" at ", used: 4 });
+                __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
+                __r.String::push_str(&String { repr: packed":", used: 1 });
+                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: 977 }."i32^Display::fmt"(&mut __f);
+                __r.String::push_str(&String { repr: packed": ", used: 2 });
+                __r.String::push_str(&String { repr: packed"insert_str index not on UTF-8 character boundary", used: 48 });
+                __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_index)\n", used: 46 });
+                __r.String::push_str(&String { repr: packed"self.is_char_boundary(byte_index): ", used: 35 });
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<bool> { value: __v0 }."bool^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&String { repr: packed"\n", used: 1 });
+                break __tmpl: __r;
+            });
+        }
+    }
+    self.String::insert_str_unchecked(byte_index, s);
+}
+
+pub fn String::insert_str_unchecked(self: &mut String, byte_index: i32, s: String) {
+    let s_len: i32 = s.String::len();
+    if (s_len == 0) {
+        return;
+    }
+    self.String::make_gap(byte_index, s_len);
+    "core::builtin::core/builtin/array_copy<u8>"(&mut self.repr as &mut Array<u8>, byte_index, &s.repr as &Array<u8>, 0, s_len);
+}
+
+pub fn String::remove(self: &mut String, byte_index: i32) -> char {
+    __assert_0: {
+        let __v0: i32 = byte_index;
+        let __v1: bool = (__v0 >= 0);
+        let __v2: i32 = byte_index;
+        let __v3: i32 = self.used;
+        let __v4: bool = (__v2 < __v3);
+        let __cond: bool = (__v1 && __v4);
+        if !__cond {
+            core::builtin::cold_path();
+            core::rt::panic(__tmpl: {
+                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(306);
+                __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
+                __r.String::push_str(&String { repr: packed"String::remove", used: 14 });
+                __r.String::push_str(&String { repr: packed" at ", used: 4 });
+                __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
+                __r.String::push_str(&String { repr: packed":", used: 1 });
+                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: 998 }."i32^Display::fmt"(&mut __f);
+                __r.String::push_str(&String { repr: packed": ", used: 2 });
+                __r.String::push_str(&String { repr: packed"index out of bounds", used: 19 });
+                __r.String::push_str(&String { repr: packed"\ncondition: byte_index >= 0 && byte_index < self.used\n", used: 54 });
+                __r.String::push_str(&String { repr: packed"byte_index: ", used: 12 });
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: __v0 }."i32^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&String { repr: packed"\n", used: 1 });
+                __r.String::push_str(&String { repr: packed"byte_index >= 0: ", used: 17 });
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<bool> { value: __v1 }."bool^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&String { repr: packed"\n", used: 1 });
+                __r.String::push_str(&String { repr: packed"byte_index: ", used: 12 });
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: __v2 }."i32^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&String { repr: packed"\n", used: 1 });
+                __r.String::push_str(&String { repr: packed"self.used: ", used: 11 });
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: __v3 }."i32^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&String { repr: packed"\n", used: 1 });
+                __r.String::push_str(&String { repr: packed"byte_index < self.used: ", used: 24 });
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<bool> { value: __v4 }."bool^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&String { repr: packed"\n", used: 1 });
+                break __tmpl: __r;
+            });
+        }
+    }
+    __assert_1: {
+        let __v0: bool = self.String::is_char_boundary(byte_index);
+        let __cond: bool = __v0;
+        if !__cond {
+            core::builtin::cold_path();
+            core::rt::panic(__tmpl: {
+                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(189);
+                __r.String::push_str(&String { repr: packed"Assertion failed in ", used: 20 });
+                __r.String::push_str(&String { repr: packed"String::remove", used: 14 });
+                __r.String::push_str(&String { repr: packed" at ", used: 4 });
+                __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
+                __r.String::push_str(&String { repr: packed":", used: 1 });
+                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: 999 }."i32^Display::fmt"(&mut __f);
+                __r.String::push_str(&String { repr: packed": ", used: 2 });
+                __r.String::push_str(&String { repr: packed"remove index not on UTF-8 character boundary", used: 44 });
+                __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_index)\n", used: 46 });
+                __r.String::push_str(&String { repr: packed"self.is_char_boundary(byte_index): ", used: 35 });
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<bool> { value: __v0 }."bool^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&String { repr: packed"\n", used: 1 });
+                break __tmpl: __r;
+            });
+        }
+    }
+    return self.String::remove_unchecked(byte_index);
+}
+
+pub fn String::remove_unchecked(self: &mut String, byte_index: i32) -> char {
+    let __pattern_temp_0: [u32, i32] = "core::prelude/string.wado::decode_char_at"(&self.repr as &Array<u8>, byte_index);
+    let code: u32 = __pattern_temp_0.0;
+    let char_len: i32 = __pattern_temp_0.1;
+    "core::builtin::core/builtin/array_copy<u8>"(&mut self.repr as &mut Array<u8>, byte_index, &self.repr as &Array<u8>, (byte_index + char_len), ((self.used - byte_index) - char_len));
+    self.used = (self.used - char_len);
+    return "core::prelude/primitive.wado::char::from_u32_unchecked"(code);
+}
+
+pub fn String::repeat(self: &String, n: i32) -> String {
+    if ((n <= 0) || (self.used == 0)) {
+        return "core::prelude/string.wado::String::with_capacity"(0);
+    }
+    let total: i32 = (self.used * n);
+    let src: &Array<u8> = &self.repr as &Array<u8>;
+    let mut repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(total);
+    let mut r: i32 = 0;
+    loop {
+        if !(r < n) {
+            break;
+        }
+        __for_0_body: {
+            "core::builtin::core/builtin/array_copy<u8>"(&mut repr, (r * self.used), src, 0, self.used);
+        }
+        r = (r + 1);
+    }
+    return String { repr: "ops.mess_dirty.wado::$value_copy$Array<u8>"(repr as Array<u8>), used: total };
+}
+
+pub fn String::replace(self: &String, from: String, to: String) -> String {
+    return self.String::replacen(from, to, -1);
+}
+
+pub fn String::replacen(self: &String, from: String, to: String, count: i32) -> String {
+    let from_len: i32 = from.String::len();
+    if (from_len == 0) {
+        return *self;
+    }
+    let self_repr: &Array<u8> = &self.repr as &Array<u8>;
+    let from_repr: &Array<u8> = &from.repr as &Array<u8>;
+    let mut result: String = "core::prelude/string.wado::String::with_capacity"(self.used);
+    let mut pos: i32 = 0;
+    let mut replacements: i32 = 0;
+    let limit: i32 = (self.used - from_len);
+    loop {
+        if !(pos <= limit) {
+            break;
+        }
+        if ((count >= 0) && (replacements >= count)) {
+            break;
+        }
+        if "core::prelude/string.wado::bytes_match_at"(self_repr, pos, from_repr, from_len) {
+            result.String::push_str(&to);
+            pos = (pos + from_len);
+            replacements = (replacements + 1);
+        } else {
+            let dst: i32 = result.String::internal_reserve_uninit(1);
+            result.String::set_byte_unchecked(dst, self.repr."Array<u8>^IndexValue<i32>::index_value"(pos));
+            pos = (pos + 1);
+        }
+    }
+    if (pos < self.used) {
+        result.String::push_str_range_unchecked(self, pos, self.used);
     }
     return result;
 }
 
-pub fn "StrCharIndicesIter^Iterator::nth"(self: &mut StrCharIndicesIter, n: i32) -> Option<[i32, char]> {
-    let mut remaining: i32 = n;
-    loop {
-        let __match_4: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
-        match __match_4 {
-            Some(item) => {
-                if (remaining <= 0) {
-                    return Option<[i32, char]>::Some(item);
-                }
-                remaining = (remaining - 1);
-            },
-            _ => {
-                break;
-            },
-        };
+pub fn String::from_utf8_slice(bytes: ArraySlice<u8>) -> Result<String, String> {
+    if !"core::prelude/string.wado::String::is_valid_utf8"("ops.mess_dirty.wado::$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(bytes)) {
+        core::builtin::cold_path();
+        return Result<String, String>::Err(String { repr: packed"invalid UTF-8", used: 13 });
     }
-    return %2;
+    return Result<String, String>::Ok(String { repr: bytes."ArraySlice<u8>::to_array"() as Array<u8>, used: bytes."ArraySlice<u8>::len"() });
 }
 
-pub fn "StrCharIndicesIter^Iterator::position"(self: &mut StrCharIndicesIter, pred: fn mut([i32, char]) -> bool) -> Option<i32> {
-    let mut idx: i32 = 0;
+pub fn String::is_valid_utf8(bytes: ArraySlice<u8>) -> bool {
+    let len: i32 = bytes."ArraySlice<u8>::len"();
+    let mut i: i32 = 0;
     loop {
-        let __match_4: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
-        match __match_4 {
-            Some(item) => {
-                if pred(item) {
-                    return Option<i32>::Some(idx);
-                }
-                idx = (idx + 1);
-            },
-            _ => {
-                break;
-            },
-        };
+        if !(i < len) {
+            break;
+        }
+        let scalar: Utf8Scalar = "core::prelude/string.wado::decode_utf8_scalar"("ops.mess_dirty.wado::$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(bytes), i, len);
+        if !scalar.valid {
+            core::builtin::cold_path();
+            return false;
+        }
+        i = (i + scalar.advance);
     }
-    return %2;
-}
-
-pub fn "StrCharIndicesIter^Iterator::reduce"(self: &mut StrCharIndicesIter, f: fn mut([i32, char], [i32, char]) -> [i32, char]) -> Option<[i32, char]> {
-    let __match_5: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
-    match __match_5 {
-        Some(first) => {
-            let mut acc: [i32, char] = first;
-            loop {
-                let __match_6: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
-                match __match_6 {
-                    Some(item) => {
-                        acc = "ops.mess_dirty.wado::$value_copy$[i32,char]"(f("ops.mess_dirty.wado::$value_copy$[i32,char]"(acc), item));
-                    },
-                    _ => {
-                        break;
-                    },
-                };
-            }
-            return Option<[i32, char]>::Some("ops.mess_dirty.wado::$value_copy$[i32,char]"(acc));
-        },
-        _ => (),
-    };
-    return %1;
-}
-
-pub fn "StrCharIndicesIter^Iterator::filter"(self: &StrCharIndicesIter, pred: fn mut([i32, char]) -> bool) -> IterFilter<core:prelude/string.wado/StrCharIndicesIter> {
-    return IterFilter<core:prelude/string.wado/StrCharIndicesIter> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"(*self), pred: pred };
-}
-
-pub fn "StrCharIndicesIter^Iterator::enumerate"(self: &StrCharIndicesIter) -> IterEnumerate<core:prelude/string.wado/StrCharIndicesIter> {
-    return IterEnumerate<core:prelude/string.wado/StrCharIndicesIter> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"(*self), count: 0 };
-}
-
-pub fn "StrCharIndicesIter^Iterator::take"(self: &StrCharIndicesIter, n: i32) -> IterTake<core:prelude/string.wado/StrCharIndicesIter> {
-    return IterTake<core:prelude/string.wado/StrCharIndicesIter> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"(*self), remaining: n };
-}
-
-pub fn "StrCharIndicesIter^Iterator::skip"(self: &StrCharIndicesIter, n: i32) -> IterSkip<core:prelude/string.wado/StrCharIndicesIter> {
-    return IterSkip<core:prelude/string.wado/StrCharIndicesIter> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"(*self), remaining: n };
+    return true;
 }
 
 pub fn String::split(self: &String, sep: String) -> StrSplitIter with stores[self] {
     let sep_len: i32 = sep.String::len();
-    return StrSplitIter { repr: self.String::internal_raw_bytes(), used: self.used, pos: 0, sep_repr: "core::prelude/string.wado::String::internal_into_raw_bytes"(sep), sep_len: sep_len, finished: false };
+    return StrSplitIter { repr: &self.repr as &Array<u8>, used: self.used, pos: 0, sep_repr: "ops.mess_dirty.wado::$value_copy$Array<u8>"(sep.repr as Array<u8>), sep_len: sep_len, finished: false };
 }
 
 pub fn String::splitn(self: &String, n: i32, sep: String) -> StrSplitNIter with stores[self] {
     let sep_len: i32 = sep.String::len();
-    return StrSplitNIter { repr: self.String::internal_raw_bytes(), used: self.used, pos: 0, sep_repr: "core::prelude/string.wado::String::internal_into_raw_bytes"(sep), sep_len: sep_len, remaining: n, finished: (n <= 0) };
+    return StrSplitNIter { repr: &self.repr as &Array<u8>, used: self.used, pos: 0, sep_repr: "ops.mess_dirty.wado::$value_copy$Array<u8>"(sep.repr as Array<u8>), sep_len: sep_len, remaining: n, finished: (n <= 0) };
 }
 
 pub fn String::split_whitespace(self: &String) -> StrSplitWhitespaceIter with stores[self] {
-    return StrSplitWhitespaceIter { repr: self.String::internal_raw_bytes(), used: self.used, pos: 0 };
+    return StrSplitWhitespaceIter { repr: &self.repr as &Array<u8>, used: self.used, pos: 0 };
 }
 
 pub fn String::lines(self: &String) -> StrLinesIter with stores[self] {
-    return StrLinesIter { repr: self.String::internal_raw_bytes(), used: self.used, pos: 0, finished: false };
+    return StrLinesIter { repr: &self.repr as &Array<u8>, used: self.used, pos: 0, finished: false };
 }
 
-pub fn String::char_indices(self: &String) -> StrCharIndicesIter with stores[self] {
-    return StrCharIndicesIter { repr: self.String::internal_raw_bytes(), used: self.used, byte_index: 0 };
+pub fn "String^Add::add"(self: &String, other: &String) -> String {
+    let mut result: String = "core::prelude/string.wado::String::with_capacity"((self.String::len() + other.String::len()));
+    result.String::push_str(self);
+    result.String::push_str(other);
+    return result;
+}
+
+pub fn "String^Eq::eq"(self: &String, other: &String) -> bool {
+    let len: i32 = self.String::len();
+    if (len != other.String::len()) {
+        return false;
+    }
+    return "core::prelude/string.wado::bytes_match_at"(&self.repr as &Array<u8>, 0, &other.repr as &Array<u8>, len);
+}
+
+fn "String^LenientFromStr::from_str_lenient"(s: &String) -> Result<String, LenientParseError> {
+    return Result<String, LenientParseError>::Ok("ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(*s));
+}
+
+pub fn "String^Ord::cmp"(self: &String, other: &String) -> Ordering {
+    let len_a: i32 = self.String::len();
+    let len_b: i32 = other.String::len();
+    let min_len: i32 = core::rt::i32_min(len_a, len_b);
+    let a_repr: &Array<u8> = &self.repr as &Array<u8>;
+    let b_repr: &Array<u8> = &other.repr as &Array<u8>;
+    let mut i: i32 = 0;
+    loop {
+        if !(i < min_len) {
+            break;
+        }
+        __for_0_body: {
+            let a_byte: u8 = a_repr."Array<u8>^IndexValue<i32>::index_value"(i);
+            let b_byte: u8 = b_repr."Array<u8>^IndexValue<i32>::index_value"(i);
+            if (a_byte < b_byte) {
+                return Ordering::Less;
+            }
+            if (a_byte > b_byte) {
+                return Ordering::Greater;
+            }
+        }
+        i = (i + 1);
+    }
+    if (len_a < len_b) {
+        return Ordering::Less;
+    }
+    if (len_a > len_b) {
+        return Ordering::Greater;
+    }
+    return Ordering::Equal;
+}
+
+pub fn "String^Default::default"() -> String {
+    return String { repr: packed"", used: 0 };
+}
+
+pub fn "String^From<char>::from"(value: char) -> String {
+    let mut s: String = "core::prelude/string.wado::String::with_capacity"(4);
+    s.String::push(value);
+    return s;
 }
 
 pub fn "Utf8Scalar^Inspect::inspect"(self: &Utf8Scalar, f: &mut Formatter) {
@@ -11175,6 +10730,19 @@ pub fn "StrUtf8ByteIter^Inspect::inspect"(self: &StrUtf8ByteIter, f: &mut Format
 
 pub fn "StrCharIter^Inspect::inspect"(self: &StrCharIter, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"StrCharIter { ", used: 14 });
+    f.Formatter::write_str(&String { repr: packed"repr: ", used: 6 });
+    self.repr."&Array<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(&String { repr: packed", ", used: 2 });
+    f.Formatter::write_str(&String { repr: packed"used: ", used: 6 });
+    Box<i32> { value: self.used }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str(&String { repr: packed", ", used: 2 });
+    f.Formatter::write_str(&String { repr: packed"byte_index: ", used: 12 });
+    Box<i32> { value: self.byte_index }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str(&String { repr: packed" }", used: 2 });
+}
+
+pub fn "StrCharIndicesIter^Inspect::inspect"(self: &StrCharIndicesIter, f: &mut Formatter) {
+    f.Formatter::write_str(&String { repr: packed"StrCharIndicesIter { ", used: 21 });
     f.Formatter::write_str(&String { repr: packed"repr: ", used: 6 });
     self.repr."&Array<u8>^Inspect::inspect"(f);
     f.Formatter::write_str(&String { repr: packed", ", used: 2 });
@@ -11262,19 +10830,6 @@ pub fn "StrLinesIter^Inspect::inspect"(self: &StrLinesIter, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed" }", used: 2 });
 }
 
-pub fn "StrCharIndicesIter^Inspect::inspect"(self: &StrCharIndicesIter, f: &mut Formatter) {
-    f.Formatter::write_str(&String { repr: packed"StrCharIndicesIter { ", used: 21 });
-    f.Formatter::write_str(&String { repr: packed"repr: ", used: 6 });
-    self.repr."&Array<u8>^Inspect::inspect"(f);
-    f.Formatter::write_str(&String { repr: packed", ", used: 2 });
-    f.Formatter::write_str(&String { repr: packed"used: ", used: 6 });
-    Box<i32> { value: self.used }."i32^Inspect::inspect"(f);
-    f.Formatter::write_str(&String { repr: packed", ", used: 2 });
-    f.Formatter::write_str(&String { repr: packed"byte_index: ", used: 12 });
-    Box<i32> { value: self.byte_index }."i32^Inspect::inspect"(f);
-    f.Formatter::write_str(&String { repr: packed" }", used: 2 });
-}
-
 pub fn "Future<unknown>^Inspect::inspect"(self: &Future<unknown>, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"Future<unknown>#0x", used: 18 });
     Box<i32> { value: *self as i32 }."i32^LowerHex::fmt"(f);
@@ -11324,11 +10879,11 @@ pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
 pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -11372,6 +10927,23 @@ pub fn "StrUtf8ByteIter^InspectAlt::inspect_alt"(self: &StrUtf8ByteIter, f: &mut
 
 pub fn "StrCharIter^InspectAlt::inspect_alt"(self: &StrCharIter, f: &mut Formatter) {
     f.Formatter::open_brace(String { repr: packed"StrCharIter {", used: 13 });
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&String { repr: packed"repr: ", used: 6 });
+    self.repr."&Array<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&String { repr: packed",", used: 1 });
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&String { repr: packed"used: ", used: 6 });
+    Box<i32> { value: self.used }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&String { repr: packed",", used: 1 });
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&String { repr: packed"byte_index: ", used: 12 });
+    Box<i32> { value: self.byte_index }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&String { repr: packed",", used: 1 });
+    f.Formatter::close_brace(String { repr: packed"}", used: 1 });
+}
+
+pub fn "StrCharIndicesIter^InspectAlt::inspect_alt"(self: &StrCharIndicesIter, f: &mut Formatter) {
+    f.Formatter::open_brace(String { repr: packed"StrCharIndicesIter {", used: 20 });
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&String { repr: packed"repr: ", used: 6 });
     self.repr."&Array<u8>^InspectAlt::inspect_alt"(f);
@@ -11487,23 +11059,6 @@ pub fn "StrLinesIter^InspectAlt::inspect_alt"(self: &StrLinesIter, f: &mut Forma
     f.Formatter::close_brace(String { repr: packed"}", used: 1 });
 }
 
-pub fn "StrCharIndicesIter^InspectAlt::inspect_alt"(self: &StrCharIndicesIter, f: &mut Formatter) {
-    f.Formatter::open_brace(String { repr: packed"StrCharIndicesIter {", used: 20 });
-    f.Formatter::write_newline_indent();
-    f.Formatter::write_str(&String { repr: packed"repr: ", used: 6 });
-    self.repr."&Array<u8>^InspectAlt::inspect_alt"(f);
-    f.Formatter::write_str(&String { repr: packed",", used: 1 });
-    f.Formatter::write_newline_indent();
-    f.Formatter::write_str(&String { repr: packed"used: ", used: 6 });
-    Box<i32> { value: self.used }."i32^InspectAlt::inspect_alt"(f);
-    f.Formatter::write_str(&String { repr: packed",", used: 1 });
-    f.Formatter::write_newline_indent();
-    f.Formatter::write_str(&String { repr: packed"byte_index: ", used: 12 });
-    Box<i32> { value: self.byte_index }."i32^InspectAlt::inspect_alt"(f);
-    f.Formatter::write_str(&String { repr: packed",", used: 1 });
-    f.Formatter::close_brace(String { repr: packed"}", used: 1 });
-}
-
 pub fn "Future<unknown>^InspectAlt::inspect_alt"(self: &Future<unknown>, f: &mut Formatter) {
     self."Future<unknown>^Inspect::inspect"(f);
 }
@@ -11546,11 +11101,11 @@ pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter
 
 pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -11607,11 +11162,11 @@ pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
 pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -11661,11 +11216,11 @@ pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter
 
 pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -11780,11 +11335,11 @@ pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
 pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -11855,11 +11410,11 @@ pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter
 
 pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -12236,11 +11791,11 @@ pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
 pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -12290,11 +11845,11 @@ pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter
 
 pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -13115,11 +12670,11 @@ pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
 pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -13169,11 +12724,11 @@ pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter
 
 pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -13250,11 +12805,11 @@ pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
 pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -13308,11 +12863,11 @@ pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter
 
 pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -13753,11 +13308,11 @@ pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
 pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -13811,11 +13366,11 @@ pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter
 
 pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -13930,11 +13485,11 @@ pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
 pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -14006,11 +13561,11 @@ pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter
 
 pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
 
-pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
@@ -14090,42 +13645,6 @@ pub fn "&&Array<u8>^Inspect::inspect"(self: &&&Array<u8>, f: &mut Formatter) {
     *inner."Array<u8>^Inspect::inspect"(f);
 }
 
-pub fn "List<[i32,char]>::push"(self: &mut List<[i32, char]>, value: [i32, char]) with stores[value] {
-    let used: i32 = self.used;
-    if (used >= self.repr."Array<[i32,char]>::len"()) {
-        core::builtin::cold_path();
-        self."List<[i32,char]>::grow"();
-    }
-    self.repr."Array<[i32,char]>^IndexAssign<i32>::index_assign"(used, value);
-    self.used = (used + 1);
-}
-
-fn "List<[i32,char]>^SequenceLiteralBuilder::build"(self: &List<[i32, char]>) -> List<[i32, char]> {
-    return *self;
-}
-
-fn "List<[i32,char]>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> List<[i32, char]> {
-    return "core::prelude/list.wado::List<[i32,char]>::with_capacity"(capacity);
-}
-
-pub fn "List<core:prelude/string.wado/String>::push"(self: &mut List<String>, value: String) with stores[value] {
-    let used: i32 = self.used;
-    if (used >= self.repr."Array<core:prelude/string.wado/String>::len"()) {
-        core::builtin::cold_path();
-        self."List<core:prelude/string.wado/String>::grow"();
-    }
-    self.repr."Array<core:prelude/string.wado/String>^IndexAssign<i32>::index_assign"(used, value);
-    self.used = (used + 1);
-}
-
-fn "List<core:prelude/string.wado/String>^SequenceLiteralBuilder::build"(self: &List<String>) -> List<String> {
-    return *self;
-}
-
-fn "List<core:prelude/string.wado/String>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> List<String> {
-    return "core::prelude/list.wado::List<core:prelude/string.wado/String>::with_capacity"(capacity);
-}
-
 pub fn "ArraySlice<u8>::len"(self: &ArraySlice<u8>) -> i32 {
     return (self.end - self.start);
 }
@@ -14166,10 +13685,6 @@ pub fn "String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.w
     return s;
 }
 
-pub fn "List<char>::with_capacity"(capacity: i32) -> List<char> {
-    return List<char> { repr: core::builtin::array_new::<char>(capacity), used: 0 };
-}
-
 pub fn "List<char>::push"(self: &mut List<char>, value: char) with stores[value] {
     let used: i32 = self.used;
     if (used >= self.repr."Array<char>::len"()) {
@@ -14180,30 +13695,26 @@ pub fn "List<char>::push"(self: &mut List<char>, value: char) with stores[value]
     self.used = (used + 1);
 }
 
-fn "List<char>^SequenceLiteralBuilder::build"(self: &List<char>) -> List<char> {
-    return *self;
-}
-
-fn "List<char>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> List<char> {
-    return "core::prelude/list.wado::List<char>::with_capacity"(capacity);
+pub fn "List<char>::with_capacity"(capacity: i32) -> List<char> {
+    return List<char> { repr: core::builtin::array_new::<char>(capacity), used: 0 };
 }
 
 fn "core/builtin/array_fill<u8>"(arr: &mut Array<u8>, offset: i32, value: u8, len: i32);
-
-fn "Array<u8>^IndexAssign<i32>::index_assign"(self: &mut Array<u8>, index: i32, value: u8) with stores[value] {
-    core::builtin::array_set::<u8>(self, index, value);
-}
 
 fn "ArraySlice<u8>::internal_new"(repr: &Array<u8>, start: i32, end: i32) -> ArraySlice<u8> with stores[repr] {
     return ArraySlice<u8> { repr: repr, start: start, end: end };
 }
 
-fn "Array<u8>^IndexValue<i32>::index_value"(self: &Array<u8>, index: i32) -> u8 {
-    return core::builtin::array_get::<u8>(self, index);
-}
-
 pub fn "ArraySlice<u8>::get_unchecked"(self: &ArraySlice<u8>, index: i32) -> u8 {
     return core::builtin::array_get::<u8>(self.repr, (self.start + index));
+}
+
+fn "Array<u8>^IndexAssign<i32>::index_assign"(self: &mut Array<u8>, index: i32, value: u8) with stores[value] {
+    core::builtin::array_set::<u8>(self, index, value);
+}
+
+fn "Array<u8>^IndexValue<i32>::index_value"(self: &Array<u8>, index: i32) -> u8 {
+    return core::builtin::array_get::<u8>(self, index);
 }
 
 fn "core/builtin/select<u64>"(cond: bool, if_true: u64, if_false: u64) -> u64;
@@ -14338,7 +13849,7 @@ fn "List<u8>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> List<u8> {
 }
 
 pub fn "String::from_utf8<core:prelude/list.wado/List<u8>>"(bytes: List<u8>) -> Result<String, String> {
-    let collected: List<u8> = bytes."List<u8>^IntoIterator::into_iter"()."ArrayIter<u8>::collect"();
+    let collected: List<u8> = bytes."List<u8>^IntoIterator::into_iter"()."ArrayIter<u8>::collect<core:prelude/list.wado/List<u8>>"();
     return "core::prelude/string.wado::String::from_utf8_slice"(collected."List<u8>::as_slice"());
 }
 
@@ -14388,6 +13899,16 @@ fn "List<u8>^IntoIterator::into_iter"(self: &List<u8>) -> ArrayIter<u8> {
 }
 
 pub fn "ArrayIter<u8>::collect"(self: &mut ArrayIter<u8>) -> List<u8> {
+    let remaining: i32 = core::rt::i32_max((self.end - self.index), 0);
+    let mut repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(remaining);
+    if (remaining > 0) {
+        "core::builtin::core/builtin/array_copy<u8>"(&mut repr, 0, self.repr, self.index, remaining);
+    }
+    self.index = self.end;
+    return "core::prelude/list.wado::List<u8>::internal_from_raw"(repr, remaining);
+}
+
+pub fn "ArrayIter<u8>::collect<core:prelude/list.wado/List<u8>>"(self: &mut ArrayIter<u8>) -> List<u8> {
     let remaining: i32 = core::rt::i32_max((self.end - self.index), 0);
     let mut repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(remaining);
     if (remaining > 0) {
@@ -14482,46 +14003,6 @@ fn "IterMap<core:prelude/string.wado/StrCharIter,char>^Iterator::next"(self: &mu
 
 fn "IterMap<core:prelude/string.wado/StrCharIter,char>^IntoIterator::into_iter"(self: &IterMap<core:prelude/string.wado/StrCharIter,char>) -> IterMap<core:prelude/string.wado/StrCharIter,char> {
     return *self;
-}
-
-pub fn "List<core:prelude/string.wado/String>::with_capacity"(capacity: i32) -> List<String> {
-    return List<core:prelude/string.wado/String> { repr: core::builtin::array_new::<String>(capacity), used: 0 };
-}
-
-fn "Array<core:prelude/string.wado/String>^IndexAssign<i32>::index_assign"(self: &mut Array<String>, index: i32, value: String) with stores[value] {
-    core::builtin::array_set::<String>(self, index, value);
-}
-
-pub fn "List<core:prelude/string.wado/String>::grow"(self: &mut List<String>) {
-    let capacity: i32 = self.repr."Array<core:prelude/string.wado/String>::len"();
-    let new_capacity: i32 = core::rt::i32_max((capacity * 2), 4);
-    let mut new_repr: Array<String> = core::builtin::array_new::<String>(new_capacity);
-    core::builtin::array_copy::<String>(&mut new_repr, 0, &self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
-pub fn "Array<core:prelude/string.wado/String>::len"(self: &Array<String>) -> i32 {
-    return core::builtin::array_len(self);
-}
-
-pub fn "List<[i32,char]>::with_capacity"(capacity: i32) -> List<[i32, char]> {
-    return List<[i32,char]> { repr: core::builtin::array_new::<[i32, char]>(capacity), used: 0 };
-}
-
-fn "Array<[i32,char]>^IndexAssign<i32>::index_assign"(self: &mut Array<[i32, char]>, index: i32, value: [i32, char]) with stores[value] {
-    core::builtin::array_set::<[i32, char]>(self, index, value);
-}
-
-pub fn "List<[i32,char]>::grow"(self: &mut List<[i32, char]>) {
-    let capacity: i32 = self.repr."Array<[i32,char]>::len"();
-    let new_capacity: i32 = core::rt::i32_max((capacity * 2), 4);
-    let mut new_repr: Array<[i32, char]> = core::builtin::array_new::<[i32, char]>(new_capacity);
-    core::builtin::array_copy::<[i32, char]>(&mut new_repr, 0, &self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
-pub fn "Array<[i32,char]>::len"(self: &Array<[i32, char]>) -> i32 {
-    return core::builtin::array_len(self);
 }
 
 fn "core/prelude/array.wado/write_seq_inspect_alt<u8>"(repr: &Array<u8>, len: i32, f: &mut Formatter, marker: bool, limit: i32) {
@@ -14698,16 +14179,20 @@ fn "$value_copy$core:prelude/types.wado/WaitEvent"(v: WaitEvent) -> WaitEvent {
     return WaitEvent { code: v.code, handle: v.handle, payload: v.payload };
 }
 
-fn "$value_copy$core:prelude/string.wado/StrCharIndicesIter"(v: StrCharIndicesIter) -> StrCharIndicesIter {
-    return StrCharIndicesIter { repr: v.repr, used: v.used, byte_index: v.byte_index };
+fn "$value_copy$Array<u8>"(v: Array<u8>) -> Array<u8> {
+    return core::builtin::array_clone::<u8>(&v);
 }
 
-fn "$value_copy$[i32,char]"(v: [i32, char]) -> [i32, char] {
-    return [i32,char] { 0: v.0, 1: v.1 };
+fn "$value_copy$core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>"(v: IterMap<core:prelude/string.wado/StrCharIter,char>) -> IterMap<core:prelude/string.wado/StrCharIter,char> {
+    return IterMap<core:prelude/string.wado/StrCharIter,char> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(v.inner), f: v.f };
 }
 
-fn "$value_copy$core:prelude/list.wado/List<[i32,char]>"(v: List<[i32, char]>) -> List<[i32, char]> {
-    return List<[i32,char]> { repr: core::builtin::array_clone::<[i32, char]>(&v.repr), used: v.used };
+fn "$value_copy$core:prelude/string.wado/Utf8Scalar"(v: Utf8Scalar) -> Utf8Scalar {
+    return Utf8Scalar { code: v.code, advance: v.advance, valid: v.valid };
+}
+
+fn "$value_copy$core:prelude/list.wado/List<char>"(v: List<char>) -> List<char> {
+    return List<char> { repr: core::builtin::array_clone::<char>(&v.repr), used: v.used };
 }
 
 fn "$value_copy$core:prelude/string.wado/StrLinesIter"(v: StrLinesIter) -> StrLinesIter {
@@ -14726,24 +14211,16 @@ fn "$value_copy$core:prelude/string.wado/StrSplitIter"(v: StrSplitIter) -> StrSp
     return StrSplitIter { repr: v.repr, used: v.used, pos: v.pos, sep_repr: core::builtin::array_clone::<u8>(&v.sep_repr), sep_len: v.sep_len, finished: v.finished };
 }
 
-fn "$value_copy$core:prelude/list.wado/List<core:prelude/string.wado/String>"(v: List<String>) -> List<String> {
-    return List<core:prelude/string.wado/String> { repr: core::builtin::array_clone::<String>(&v.repr), used: v.used };
+fn "$value_copy$core:prelude/string.wado/StrCharIndicesIter"(v: StrCharIndicesIter) -> StrCharIndicesIter {
+    return StrCharIndicesIter { repr: v.repr, used: v.used, byte_index: v.byte_index };
 }
 
-fn "$value_copy$Array<u8>"(v: Array<u8>) -> Array<u8> {
-    return core::builtin::array_clone::<u8>(&v);
+fn "$value_copy$[i32,char]"(v: [i32, char]) -> [i32, char] {
+    return [i32,char] { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>"(v: IterMap<core:prelude/string.wado/StrCharIter,char>) -> IterMap<core:prelude/string.wado/StrCharIter,char> {
-    return IterMap<core:prelude/string.wado/StrCharIter,char> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(v.inner), f: v.f };
-}
-
-fn "$value_copy$core:prelude/string.wado/Utf8Scalar"(v: Utf8Scalar) -> Utf8Scalar {
-    return Utf8Scalar { code: v.code, advance: v.advance, valid: v.valid };
-}
-
-fn "$value_copy$core:prelude/list.wado/List<char>"(v: List<char>) -> List<char> {
-    return List<char> { repr: core::builtin::array_clone::<char>(&v.repr), used: v.used };
+fn "$value_copy$[u32,i32]"(v: [u32, i32]) -> [u32, i32] {
+    return [u32,i32] { 0: v.0, 1: v.1 };
 }
 
 fn "$value_copy$core:prelude/string.wado/StrUtf8ByteIter"(v: StrUtf8ByteIter) -> StrUtf8ByteIter {
@@ -14843,9 +14320,9 @@ fn "$value_copy$core:prelude/string.wado/String"(v: String) -> String {
 
 fn array_new();
 
-fn array_set();
-
 fn array_get();
+
+fn array_set();
 
 fn array_copy();
 

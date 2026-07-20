@@ -131,14 +131,23 @@ pub trait IntoIterator {
 ### 3. FromIterator Trait
 
 ```wado
-/// Create a collection from an iterator
-pub trait FromIterator<T> {
-    /// Creates a value from an iterator
-    fn from_iter(iter: impl Iterator) -> Self;
+/// Create a collection from any iterable of `Elem`.
+internal trait FromIterator {
+    type Elem;
+    fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self;
+}
+
+impl FromIterator for List<T> {
+    type Elem = T;
+    fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> List<T> { ... }
 }
 ```
 
-**Simplification**: Instead of `fn from_iter<I: Iterator<Item = T>>(iter: I)`, we use `impl Iterator`. The compiler checks element type compatibility at usage sites.
+The element is an associated type (`Elem`), so the `collect` bound spells it
+with the associated-binding form `FromIterator<Elem = Self::Item>` — the trait's
+own generic argument cannot be filled positionally in a bound. A newtype over a
+`FromIterator` base inherits the impl, so `collect()` can target it directly
+(see [Newtype Semantics](./wep-2026-01-29-newtype-semantics.md), wado-lang/wado#1623).
 
 ### 4. No `iter_mut()` - Wasm GC Limitation
 

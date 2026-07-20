@@ -16,6 +16,7 @@ use {
 } from "./lexer_gen.wado";
 use { CodeWriter } from "./wadopoet.wado";
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
+use { SuperOp } from "./superclass.wado";
 use { TreeMap } from "core:collections";
 
 fn parse_grammar(input: String) -> Grammar {
@@ -159,7 +160,8 @@ test "gen_lexer: case-colliding rule names emit distinct try fns" {
     let fields: List<MemberField> = [];
     let methods: List<String> = [];
     let members = MemberDecls { fields, methods };
-    gen_lexer(&mut w, &g, &lits, &atn_class, &members, false);
+    let no_ops: List<SuperOp> = [];
+    gen_lexer(&mut w, &g, &lits, &atn_class, &members, false, &"", &no_ops);
     let out = w.to_string();
     assert out.contains("fn try_ID("), out;
     assert out.contains("fn try_Id("), out;

@@ -37,7 +37,7 @@ impl Deserialize for ChatResponse;
 
 global MODEL_NAME: String = "google/gemma-4-26b-a4b-it:free";
 
-fn send_post(api_key: String, body: List<u8>) -> Response with Client {
+fn send_post<B: AsByteSlice>(api_key: String, body: B) -> Response with Client {
     let [body_rx, body_tx] = Stream::<u8>::new();
     let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
 
@@ -71,7 +71,7 @@ fn send_post(api_key: String, body: List<u8>) -> Response with Client {
     // calls rendezvous with it and the whole body flows out without
     // deadlock.
     let subtask = Client::send(req);
-    body_tx.write(body);
+    body_tx.write(body.as_byte_slice().to_list());
     body_tx.drop();
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 
@@ -111,13 +111,10 @@ export fn run() with Stdout, Stderr, Environment, Client {
             content: "Explain WebAssembly briefly",
         },
     ];
-    let request_body = to_bytes(&ChatRequest {
+    let resp = send_post(api_key, to_bytes(&ChatRequest {
         model: MODEL_NAME,
         messages,
-    }).unwrap();
-
-    // `send_post` streams the body out over the CM boundary as `list<u8>`.
-    let resp = send_post(api_key, request_body as List<u8>);
+    }).unwrap());
     let status = resp.get_status_code();
     let body = read_body(resp);
 

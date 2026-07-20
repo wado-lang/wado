@@ -14,19 +14,11 @@ use std::io;
 use std::path::{Path, PathBuf};
 use wado_compiler::hashmap::IndexSet;
 
-use glob::{MatchOptions, Pattern, PatternError};
+use glob::{Pattern, PatternError};
 
-/// Match options used throughout the walker. `require_literal_separator: true`
-/// makes `*` honour path components — `src/*.wado` matches direct children
-/// only, and `**` is required to cross directories. This matches both
-/// standard shell glob convention and `.gitignore` semantics, and keeps the
-/// CLI `--filter`, `--exclude`, and `[test].exclude` patterns interpreted
-/// the same way.
-pub const WALK_MATCH_OPTIONS: MatchOptions = MatchOptions {
-    case_sensitive: true,
-    require_literal_separator: true,
-    require_literal_leading_dot: false,
-};
+/// The walker's glob match options. Defined once in `wado-lsp` so
+/// workspace-member matching and test discovery interpret patterns identically.
+pub use wado_lsp::workspace::WALK_MATCH_OPTIONS;
 
 /// Compiled set of `[test].exclude` / `--exclude` glob patterns.
 ///

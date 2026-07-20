@@ -1,0 +1,187 @@
+//! gale-highlight: grammar-agnostic rendering helpers for Gale-generated
+//! highlighters.
+//!
+//! Everything here speaks only `String` / prelude types, so it is shared across
+//! every `.g4`. The grammar-specific `highlight()` function (which lives in the
+//! generated parser's inlined runtime, and traffics in per-grammar runtime
+//! types) is passed in as a `fn(&String) -> String` value — never as a type, so
+//! no grammar-specific runtime type ever crosses this package boundary.
+
+use { eprintln, Stderr } from "core:cli";
+use { parse as parse_args } from "core:args";
+use { Deserialize } from "core:serde";
+use { MonotonicClock } from "wasi:clocks";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+
+struct Options {
+    output_dir: String,
+    #[serde(positional)]
+    inputs: List<String> = [],
+}
+impl Deserialize for Options;
+
+/// A batch highlight CLI, generic over the grammar. Reads each input file,
+/// renders it via `highlight`, and writes the HTML fragment to
+/// `<output_dir>/<path>.html`. Logs per-file timing and a closing `stats:` line.
+///
+/// The output is a bare `<span class="...">` fragment — bring your own CSS and
+/// page shell to display it (see `example/standalone.wado` for a starting
+/// point). `highlight` is a grammar's fragment renderer.
+///
+///     run_cli(my_grammar::highlight, args());
+pub fn run_cli(highlight: fn(&String) -> String, args: List<String>) with Stderr, Preopens, MonotonicClock {
+    let opts = match parse_args::<Options>(args) {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln(`error: ${e.message}`);
+            eprintln("usage: <cmd> --output-dir <dir> <input> ...");
+            return;
+        },
+    };
+    if opts.inputs.len() == 0 {
+        eprintln("error: no input files given");
+        return;
+    }
+
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("error: no preopened directories available");
+        return;
+    }
+    let root = dirs[0].0;
+
+    let mut count = 0;
+    let mut sum: u64 = 0;
+    let mut min: u64 = 0;
+    let mut max: u64 = 0;
+    for let path of &opts.inputs {
+        if let Some(ns) = highlight_file(&root, path, &opts.output_dir, highlight) {
+            if count == 0 || ns < min {
+                min = ns;
+            }
+            if count == 0 || ns > max {
+                max = ns;
+            }
+            sum += ns;
+            count += 1;
+        }
+    }
+    if count > 0 {
+        let min_ms = min as f64 / 1000000.0;
+        let max_ms = max as f64 / 1000000.0;
+        let avg_ms = sum as f64 / count as f64 / 1000000.0;
+        eprintln(`stats: ${count} files | min ${min_ms:.3} ms | max ${max_ms:.3} ms | avg ${avg_ms:.3} ms`);
+    }
+}
+
+/// Highlight one file and write it under `output_dir`, preserving the input's
+/// path. Returns the render duration in nanoseconds, or `null` if skipped.
+fn highlight_file(
+    root: &Descriptor,
+    path: &String,
+    output_dir: &String,
+    highlight: fn(&String) -> String,
+) -> Option<u64> with Stderr, MonotonicClock {
+    let file = match root.open_at(
+        PathFlags::none(),
+        *path,
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    ).wait() {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln(`error: ${*path}: cannot open file: ${e:?}`);
+            return null;
+        },
+    };
+    let input = match String::from_utf8(read_all(&file)) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln(`error: ${*path}: not valid UTF-8: ${e}`);
+            return null;
+        },
+    };
+
+    let start = MonotonicClock::now();
+    let html = highlight(&input);
+    let elapsed = MonotonicClock::now() - start;
+    let ms = elapsed as f64 / 1000000.0;
+
+    let out_path = `${*output_dir}/${*path}.html`;
+    if !ensure_parent_dirs(root, &out_path) {
+        return null;
+    }
+    if !write_file(root, &out_path, &html) {
+        return null;
+    }
+    eprintln(`${*path} -> ${out_path} (${ms:.3} ms)`);
+    return Option::Some(elapsed as u64);
+}
+
+/// `mkdir -p` on every directory prefix of `path`. An already-existing
+/// directory is not an error.
+fn ensure_parent_dirs(root: &Descriptor, path: &String) -> bool with Stderr {
+    let mut components: List<String> = path.split("/").collect();
+    components.pop();  // drop the filename; only its parent dirs are created
+    let mut prefix = String::new();
+    for let comp of &components {
+        if comp.is_empty() || *comp == "." {
+            continue;
+        }
+        if !prefix.is_empty() {
+            prefix.push('/');
+        }
+        prefix.push_str(comp);
+        if let Err(e) = root.create_directory_at(prefix).wait() {
+            if e matches { Exist } {
+                continue;
+            }
+            eprintln(`error: ${prefix}: cannot create directory: ${e:?}`);
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Write `source` to `path`, creating or truncating it. Returns `false` on
+/// failure (already reported).
+fn write_file(root: &Descriptor, path: &String, source: &String) -> bool with Stderr {
+    let file = match root.open_at(
+        PathFlags::none(),
+        *path,
+        OpenFlags::Create | OpenFlags::Truncate,
+        DescriptorFlags::Read | DescriptorFlags::Write,
+    ).wait() {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln(`error: ${*path}: cannot open for writing: ${e:?}`);
+            return false;
+        },
+    };
+    let bytes: List<u8> = source.bytes().collect();
+    let [rx, tx] = Stream::<u8>::new();
+    let sub = file.write_via_stream(rx, 0 as Filesize);
+    tx.write(bytes);
+    tx.drop();
+    if let Some(Err(e)) = sub.read() {
+        eprintln(`error: ${*path}: write failed: ${e:?}`);
+        sub.drop();
+        return false;
+    }
+    sub.drop();
+    return true;
+}
+
+fn read_all(file: &Descriptor) -> List<u8> {
+    let [read_stream, _done] = file.read_via_stream(0 as Filesize);
+    let mut result: List<u8> = [];
+    loop {
+        let chunk = read_stream.read(65536);
+        if chunk.len() == 0 {
+            break;
+        }
+        result.extend(&chunk);
+    }
+    read_stream.drop();
+    return result;
+}

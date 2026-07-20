@@ -84,61 +84,65 @@ type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32; 
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(23)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(24)
+type "functype//core:prelude/string.wado/encode_char" = fn(ref Array<u8>, i32, u32) -> i32;  // TypeId(24)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(25)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(25)
 
-type "functype//core:rt/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(26)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(26)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(27)
+type "functype//core:rt/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(27)
 
-type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(28)
+type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(28)
 
-type "functype//core:rt/wait_for_blocked" = fn(i32) -> i32;  // TypeId(29)
+type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(29)
 
-type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(30)
+type "functype//core:rt/wait_for_blocked" = fn(i32) -> i32;  // TypeId(30)
 
-type "functype//core:rt/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(31)
+type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(31)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(32)
+type "functype//core:rt/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(32)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(33)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(33)
 
-type "functype//core:prelude/primitive.wado/i32^Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(34)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(34)
 
-type "functype//core:prelude/primitive.wado/bool^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<bool>", ref "core:prelude/format.wado//Formatter");  // TypeId(35)
+type "functype//core:prelude/primitive.wado/i32^Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(35)
 
-type "functype//core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(36)
+type "functype//core:prelude/primitive.wado/bool^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<bool>", ref "core:prelude/format.wado//Formatter");  // TypeId(36)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(37)
+type "functype//core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(37)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(38)
+type "functype//core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(38)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(39)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(39)
 
-type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref Array<u8>, ref Array<u8>, i32) -> bool;  // TypeId(40)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(40)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(41)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(41)
 
-type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(42)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(42)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(43)
+type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(43)
 
-type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(44)
+type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(44)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(45)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(45)
 
-type "functype//core:prelude/tuple.wado/[]<i32,core:prelude/string.wado/String>^Eq::eq" = fn(ref "tuple//[i32, core:prelude/string.wado/String]", ref "tuple//[i32, core:prelude/string.wado/String]") -> bool;  // TypeId(46)
+type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(46)
 
-type "functype//core:prelude/tuple.wado/[]<i32>^Eq::eq" = fn(ref "tuple//[i32]", ref "tuple//[i32]") -> bool;  // TypeId(47)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(47)
 
-type "functype//core:prelude/tuple.wado/[]<i32,core:prelude/string.wado/String,bool>^Eq::eq" = fn(ref "tuple//[i32, core:prelude/string.wado/String, bool]", ref "tuple//[i32, core:prelude/string.wado/String, bool]") -> bool;  // TypeId(48)
+type "functype//core:prelude/tuple.wado/[]<i32,core:prelude/string.wado/String>^Eq::eq" = fn(ref "tuple//[i32, core:prelude/string.wado/String]", ref "tuple//[i32, core:prelude/string.wado/String]") -> bool;  // TypeId(48)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(49)
+type "functype//core:prelude/tuple.wado/[]<i32>^Eq::eq" = fn(ref "tuple//[i32]", ref "tuple//[i32]") -> bool;  // TypeId(49)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(50)
+type "functype//core:prelude/tuple.wado/[]<i32,core:prelude/string.wado/String,bool>^Eq::eq" = fn(ref "tuple//[i32, core:prelude/string.wado/String, bool]", ref "tuple//[i32, core:prelude/string.wado/String, bool]") -> bool;  // TypeId(50)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(51)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(51)
+
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(52)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(53)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -154,38 +158,38 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:variadic_trait_bound.wado::__modules_initialized: bool = 0;
-global global:variadic_trait_bound.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 97, 34, 44, 32, 116, 114, 117, 101, 93, 44, 32, 91, 49, 44, 32, 34, 97, 34, 44, 32, 102, 97, 108, 115, 101, 93, 41, 58, 32)), used: 44 };
-global global:variadic_trait_bound.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 33, 97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 97, 34, 44, 32, 116, 114, 117, 101, 93, 44, 32, 91, 49, 44, 32, 34, 97, 34, 44, 32, 102, 97, 108, 115, 101, 93, 41, 10)), used: 56 };
-global global:variadic_trait_bound.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(118, 97, 114, 105, 97, 100, 105, 99, 95, 116, 114, 97, 105, 116, 95, 98, 111, 117, 110, 100, 46, 119, 97, 100, 111)), used: 25 };
-global global:variadic_trait_bound.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32)), used: 20 };
-global global:variadic_trait_bound.wado::__const_obj_4: ref null "tuple//[i32, core:prelude/string.wado/String, bool]" = struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: 1, 1: ref.as_non_null(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(97)), used: 1 }), 2: 0 };
-global global:variadic_trait_bound.wado::__const_obj_5: ref null "tuple//[i32, core:prelude/string.wado/String, bool]" = struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: 1, 1: ref.as_non_null(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(97)), used: 1 }), 2: 1 };
-global global:variadic_trait_bound.wado::__const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 97, 34, 44, 32, 116, 114, 117, 101, 93, 44, 32, 91, 49, 44, 32, 34, 97, 34, 44, 32, 116, 114, 117, 101, 93, 41, 58, 32)), used: 43 };
-global global:variadic_trait_bound.wado::__const_obj_7: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 97, 34, 44, 32, 116, 114, 117, 101, 93, 44, 32, 91, 49, 44, 32, 34, 97, 34, 44, 32, 116, 114, 117, 101, 93, 41, 10)), used: 54 };
-global global:variadic_trait_bound.wado::__const_obj_12: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 52, 50, 93, 44, 32, 91, 57, 57, 93, 41, 58, 32)), used: 23 };
-global global:variadic_trait_bound.wado::__const_obj_13: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 33, 97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 52, 50, 93, 44, 32, 91, 57, 57, 93, 41, 10)), used: 35 };
+global global:variadic_trait_bound.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 97, 34, 44, 32, 116, 114, 117, 101, 93, 44, 32, 91, 49, 44, 32, 34, 97, 34, 44, 32, 102, 97, 108, 115, 101, 93, 41, 58, 32), used: 44 };
+global global:variadic_trait_bound.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 33, 97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 97, 34, 44, 32, 116, 114, 117, 101, 93, 44, 32, 91, 49, 44, 32, 34, 97, 34, 44, 32, 102, 97, 108, 115, 101, 93, 41, 10), used: 56 };
+global global:variadic_trait_bound.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(118, 97, 114, 105, 97, 100, 105, 99, 95, 116, 114, 97, 105, 116, 95, 98, 111, 117, 110, 100, 46, 119, 97, 100, 111), used: 25 };
+global global:variadic_trait_bound.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32), used: 20 };
+global global:variadic_trait_bound.wado::__const_obj_4: ref null "tuple//[i32, core:prelude/string.wado/String, bool]" = struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, 2: 0 };
+global global:variadic_trait_bound.wado::__const_obj_5: ref null "tuple//[i32, core:prelude/string.wado/String, bool]" = struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, 2: 1 };
+global global:variadic_trait_bound.wado::__const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 97, 34, 44, 32, 116, 114, 117, 101, 93, 44, 32, 91, 49, 44, 32, 34, 97, 34, 44, 32, 116, 114, 117, 101, 93, 41, 58, 32), used: 43 };
+global global:variadic_trait_bound.wado::__const_obj_7: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 97, 34, 44, 32, 116, 114, 117, 101, 93, 44, 32, 91, 49, 44, 32, 34, 97, 34, 44, 32, 116, 114, 117, 101, 93, 41, 10), used: 54 };
+global global:variadic_trait_bound.wado::__const_obj_12: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 52, 50, 93, 44, 32, 91, 57, 57, 93, 41, 58, 32), used: 23 };
+global global:variadic_trait_bound.wado::__const_obj_13: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 33, 97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 52, 50, 93, 44, 32, 91, 57, 57, 93, 41, 10), used: 35 };
 global global:variadic_trait_bound.wado::__const_obj_16: ref null "tuple//[i32]" = struct.new "tuple//[i32]" { 0: 99 };
 global global:variadic_trait_bound.wado::__const_obj_17: ref null "tuple//[i32]" = struct.new "tuple//[i32]" { 0: 42 };
-global global:variadic_trait_bound.wado::__const_obj_18: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 52, 50, 93, 44, 32, 91, 52, 50, 93, 41, 58, 32)), used: 23 };
-global global:variadic_trait_bound.wado::__const_obj_19: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 52, 50, 93, 44, 32, 91, 52, 50, 93, 41, 10)), used: 34 };
-global global:variadic_trait_bound.wado::__const_obj_24: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(110, 111, 116, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 44, 32, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 41, 58, 32)), used: 39 };
-global global:variadic_trait_bound.wado::__const_obj_25: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 33, 110, 111, 116, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 44, 32, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 41, 10)), used: 51 };
+global global:variadic_trait_bound.wado::__const_obj_18: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 52, 50, 93, 44, 32, 91, 52, 50, 93, 41, 58, 32), used: 23 };
+global global:variadic_trait_bound.wado::__const_obj_19: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 52, 50, 93, 44, 32, 91, 52, 50, 93, 41, 10), used: 34 };
+global global:variadic_trait_bound.wado::__const_obj_24: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 116, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 44, 32, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 41, 58, 32), used: 39 };
+global global:variadic_trait_bound.wado::__const_obj_25: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 33, 110, 111, 116, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 44, 32, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 41, 10), used: 51 };
 global mut global:variadic_trait_bound.wado::__const_obj_28: ref null "tuple//[i32, core:prelude/string.wado/String]" = ref.null none;
 global mut global:variadic_trait_bound.wado::__const_obj_29: ref null "tuple//[i32, core:prelude/string.wado/String]" = ref.null none;
-global global:variadic_trait_bound.wado::__const_obj_30: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(110, 111, 116, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 44, 32, 91, 50, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 41, 58, 32)), used: 39 };
-global global:variadic_trait_bound.wado::__const_obj_31: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 110, 111, 116, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 44, 32, 91, 50, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 41, 10)), used: 50 };
+global global:variadic_trait_bound.wado::__const_obj_30: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 116, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 44, 32, 91, 50, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 41, 58, 32), used: 39 };
+global global:variadic_trait_bound.wado::__const_obj_31: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 110, 111, 116, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 44, 32, 91, 50, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 41, 10), used: 50 };
 global mut global:variadic_trait_bound.wado::__const_obj_34: ref null "tuple//[i32, core:prelude/string.wado/String]" = ref.null none;
 global mut global:variadic_trait_bound.wado::__const_obj_35: ref null "tuple//[i32, core:prelude/string.wado/String]" = ref.null none;
-global global:variadic_trait_bound.wado::__const_obj_36: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 44, 32, 91, 49, 44, 32, 34, 119, 111, 114, 108, 100, 34, 93, 41, 58, 32)), used: 39 };
-global global:variadic_trait_bound.wado::__const_obj_37: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 33, 97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 44, 32, 91, 49, 44, 32, 34, 119, 111, 114, 108, 100, 34, 93, 41, 10)), used: 51 };
+global global:variadic_trait_bound.wado::__const_obj_36: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 44, 32, 91, 49, 44, 32, 34, 119, 111, 114, 108, 100, 34, 93, 41, 58, 32), used: 39 };
+global global:variadic_trait_bound.wado::__const_obj_37: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 33, 97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 44, 32, 91, 49, 44, 32, 34, 119, 111, 114, 108, 100, 34, 93, 41, 10), used: 51 };
 global mut global:variadic_trait_bound.wado::__const_obj_40: ref null "tuple//[i32, core:prelude/string.wado/String]" = ref.null none;
 global mut global:variadic_trait_bound.wado::__const_obj_41: ref null "tuple//[i32, core:prelude/string.wado/String]" = ref.null none;
-global global:variadic_trait_bound.wado::__const_obj_42: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 44, 32, 91, 50, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 41, 58, 32)), used: 39 };
-global global:variadic_trait_bound.wado::__const_obj_43: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 33, 97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 44, 32, 91, 50, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 41, 10)), used: 51 };
+global global:variadic_trait_bound.wado::__const_obj_42: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 44, 32, 91, 50, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 41, 58, 32), used: 39 };
+global global:variadic_trait_bound.wado::__const_obj_43: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 33, 97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 44, 32, 91, 50, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 41, 10), used: 51 };
 global mut global:variadic_trait_bound.wado::__const_obj_46: ref null "tuple//[i32, core:prelude/string.wado/String]" = ref.null none;
 global mut global:variadic_trait_bound.wado::__const_obj_47: ref null "tuple//[i32, core:prelude/string.wado/String]" = ref.null none;
-global global:variadic_trait_bound.wado::__const_obj_48: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 44, 32, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 41, 58, 32)), used: 39 };
-global global:variadic_trait_bound.wado::__const_obj_49: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 44, 32, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 41, 10)), used: 50 };
+global global:variadic_trait_bound.wado::__const_obj_48: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 44, 32, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 41, 58, 32), used: 39 };
+global global:variadic_trait_bound.wado::__const_obj_49: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 97, 108, 108, 95, 101, 113, 117, 97, 108, 40, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 44, 32, 91, 49, 44, 32, 34, 104, 101, 108, 108, 111, 34, 93, 41, 10), used: 50 };
 global mut global:variadic_trait_bound.wado::__const_obj_52: ref null "tuple//[i32, core:prelude/string.wado/String]" = ref.null none;
 global mut global:variadic_trait_bound.wado::__const_obj_53: ref null "tuple//[i32, core:prelude/string.wado/String]" = ref.null none;
 
@@ -339,15 +343,38 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
     }
 }
 
+fn "core:prelude/string.wado/encode_char"(repr, pos, code) {
+    if code <u 128 {
+        builtin::array_set_u8(repr, pos, code & 255);
+        return 1;
+    }
+    if code <u 2048 {
+        builtin::array_set_u8(repr, pos, (192 | (code >>u 6)) & 255);
+        builtin::array_set_u8(repr, pos + 1, (128 | (code & 63)) & 255);
+        return 2;
+    }
+    if code <u 65536 {
+        builtin::array_set_u8(repr, pos, (224 | (code >>u 12)) & 255);
+        builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 6) & 63)) & 255);
+        builtin::array_set_u8(repr, pos + 2, (128 | (code & 63)) & 255);
+        return 3;
+    }
+    builtin::array_set_u8(repr, pos, (240 | (code >>u 18)) & 255);
+    builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 12) & 63)) & 255);
+    builtin::array_set_u8(repr, pos + 2, (128 | ((code >>u 6) & 63)) & 255);
+    builtin::array_set_u8(repr, pos + 3, (128 | (code & 63)) & 255);
+    return 4;
+}
+
 fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b15: block {
-        l16: loop {
-            break_if b15 i >= len;
+    b18: block {
+        l19: loop {
+            break_if b18 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l16;
+            continue l19;
         };
     };
 }
@@ -409,20 +436,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b18: block {
-        l19: loop {
-            break_if b18 offset >= count;
+    b21: block {
+        l22: loop {
+            break_if b21 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/wait_for_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b18 (if (result >> 4) == 0 -> i32 {
+            break_if b21 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l19;
+            continue l22;
         };
     };
 }
@@ -471,19 +498,22 @@ fn "core:prelude/string.wado/String::with_capacity"(capacity) {
     return struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(capacity), used: 0 };
 }
 
+fn "core:prelude/string.wado/String::realloc_to"(self, new_capacity) {
+    let new_repr: ref Array<u8>;
+    new_repr = builtin::array_new<u8>(new_capacity);
+    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    self.repr = new_repr;
+}
+
 fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref Array<u8>;
+    let a_4: i32;
     let a_6: i32;
-    let a_8: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_8 = capacity * 2; a_6 = select i32(a_8 > min_capacity, a_8, min_capacity); select i32(a_6 > 8, a_6, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
+    "core:prelude/string.wado/String::realloc_to"(self, a_4 = capacity * 2; a_6 = select i32(a_4 > min_capacity, a_4, min_capacity); select i32(a_6 > 8, a_6, 8));
 }
 
 fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
@@ -501,34 +531,13 @@ fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
 
 fn "core:prelude/string.wado/String::push_str"(self, other) {
     let other_len: i32;
-    let new_used: i32;
+    let start: i32;
     other_len = other.used;
     if other_len == 0 {
         return;
     }
-    new_used = self.used + other_len;
-    if @unlikely(new_used > builtin::array_len(self.repr)) {
-        cold_path;
-        "core:prelude/string.wado/String::grow"(self, new_used);
-    }
-    builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
-    self.used = new_used;
-}
-
-fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
-    let i: i32;
-    i = 0;
-    b27: block {
-        l28: loop {
-            break_if b27 i >= len;
-            if builtin::array_get<u8>(a, i) != builtin::array_get<u8>(b, i) {
-                return 0;
-            }
-            i = i + 1;
-            continue l28;
-        };
-    };
-    return 1;
+    start = "core:prelude/string.wado/String::internal_reserve_uninit"(self, other_len);
+    builtin::array_copy<u8>(self.repr, start, other.repr, 0, other_len);
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
@@ -536,25 +545,34 @@ fn "core:prelude/string.wado/String::push"(self, c) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
-    if c <u 128 {
-        builtin::array_set_u8(self.repr, self.used, c & 255);
-        self.used = self.used + 1;
-    } else if c <u 2048 {
-        builtin::array_set_u8(self.repr, self.used, (192 | (c >>u 6)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | (c & 63)) & 255);
-        self.used = self.used + 2;
-    } else if c <u 65536 {
-        builtin::array_set_u8(self.repr, self.used, (224 | (c >>u 12)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | (c & 63)) & 255);
-        self.used = self.used + 3;
-    } else {
-        builtin::array_set_u8(self.repr, self.used, (240 | (c >>u 18)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((c >>u 12) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((c >>u 6) & 63)) & 255);
-        builtin::array_set_u8(self.repr, self.used + 3, (128 | (c & 63)) & 255);
-        self.used = self.used + 4;
+    self.used = self.used + "core:prelude/string.wado/encode_char"(self.repr, self.used, c);
+}
+
+fn "core:prelude/string.wado/String^Eq::eq"(self, other) {
+    let len: i32;
+    let haystack: ref Array<u8>;
+    let needle: ref Array<u8>;
+    let j: i32;
+    len = self.used;
+    if len != other.used {
+        return 0;
     }
+    return __inline_bytes_match_at_2: block -> bool {
+        haystack = self.repr;
+        needle = other.repr;
+        j = 0;
+        b31: block {
+            l32: loop {
+                break_if b31 j >= len;
+                if builtin::array_get<u8>(haystack, 0 + j) != builtin::array_get<u8>(needle, j) {
+                    break __inline_bytes_match_at_2: 0;
+                }
+                j = j + 1;
+                continue l32;
+            };
+        };
+        break __inline_bytes_match_at_2: 1;
+    };
 }
 
 fn "core:prelude/format.wado/Formatter::new"(buf) {
@@ -689,33 +707,26 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 }
 
 fn "core:prelude/tuple.wado/[]<i32,core:prelude/string.wado/String>^Eq::eq"(self, other) {
-    let len_a: i32;
+    let v_20: ref "core:prelude/string.wado//String";
+    let v_21: ref "core:prelude/string.wado//String";
+    let v_22: ref "core:prelude/string.wado//String";
     let v_23: ref "core:prelude/string.wado//String";
     let v_24: ref "core:prelude/string.wado//String";
     let v_25: ref "core:prelude/string.wado//String";
     let v_26: ref "core:prelude/string.wado//String";
     let v_27: ref "core:prelude/string.wado//String";
-    let v_28: ref "core:prelude/string.wado//String";
-    let v_29: ref "core:prelude/string.wado//String";
-    let v_30: ref "core:prelude/string.wado//String";
     let __sroa___sroa___tuple_2_1_0: ref "core:prelude/string.wado//String";
     let __sroa___sroa___tuple_2_1_1: ref "core:prelude/string.wado//String";
     let __sroa___sroa___tuple_2_0_0: i32;
     let __sroa___sroa___tuple_2_0_1: i32;
-    __sroa___sroa___tuple_2_0_0 = struct.new "tuple//[[i32,core:prelude/string.wado/String], [i32,core:prelude/string.wado/String]]" { 0: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: self.0, 1: ref.as_non_null(v_23 = self.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_23.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_23.used }) }), 1: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: other.0, 1: ref.as_non_null(v_24 = other.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_24.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_24.used }) }) }.0.0;
-    __sroa___sroa___tuple_2_0_1 = struct.new "tuple//[[i32,core:prelude/string.wado/String], [i32,core:prelude/string.wado/String]]" { 0: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: self.0, 1: ref.as_non_null(v_25 = self.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_25.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_25.used }) }), 1: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: other.0, 1: ref.as_non_null(v_26 = other.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_26.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_26.used }) }) }.1.0;
-    __sroa___sroa___tuple_2_1_0 = struct.new "tuple//[[i32,core:prelude/string.wado/String], [i32,core:prelude/string.wado/String]]" { 0: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: self.0, 1: ref.as_non_null(v_27 = self.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_27.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_27.used }) }), 1: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: other.0, 1: ref.as_non_null(v_28 = other.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_28.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_28.used }) }) }.0.1;
-    __sroa___sroa___tuple_2_1_1 = struct.new "tuple//[[i32,core:prelude/string.wado/String], [i32,core:prelude/string.wado/String]]" { 0: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: self.0, 1: ref.as_non_null(v_29 = self.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_29.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_29.used }) }), 1: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: other.0, 1: ref.as_non_null(v_30 = other.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_30.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_30.used }) }) }.1.1;
+    __sroa___sroa___tuple_2_0_0 = struct.new "tuple//[[i32,core:prelude/string.wado/String], [i32,core:prelude/string.wado/String]]" { 0: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: self.0, 1: ref.as_non_null(v_20 = self.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_20.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_20.used }) }), 1: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: other.0, 1: ref.as_non_null(v_21 = other.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_21.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_21.used }) }) }.0.0;
+    __sroa___sroa___tuple_2_0_1 = struct.new "tuple//[[i32,core:prelude/string.wado/String], [i32,core:prelude/string.wado/String]]" { 0: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: self.0, 1: ref.as_non_null(v_22 = self.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_22.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_22.used }) }), 1: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: other.0, 1: ref.as_non_null(v_23 = other.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_23.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_23.used }) }) }.1.0;
+    __sroa___sroa___tuple_2_1_0 = struct.new "tuple//[[i32,core:prelude/string.wado/String], [i32,core:prelude/string.wado/String]]" { 0: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: self.0, 1: ref.as_non_null(v_24 = self.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_24.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_24.used }) }), 1: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: other.0, 1: ref.as_non_null(v_25 = other.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_25.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_25.used }) }) }.0.1;
+    __sroa___sroa___tuple_2_1_1 = struct.new "tuple//[[i32,core:prelude/string.wado/String], [i32,core:prelude/string.wado/String]]" { 0: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: self.0, 1: ref.as_non_null(v_26 = self.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_26.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_26.used }) }), 1: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: other.0, 1: ref.as_non_null(v_27 = other.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_27.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_27.used }) }) }.1.1;
     if __sroa___sroa___tuple_2_0_0 != __sroa___sroa___tuple_2_0_1 {
         return 0;
     }
-    if __inline_String_Eq__eq_8: block -> bool {
-        len_a = __sroa___sroa___tuple_2_1_0.used;
-        if len_a != __sroa___sroa___tuple_2_1_1.used {
-            break __inline_String_Eq__eq_8: 0;
-        }
-        break __inline_String_Eq__eq_8: "core:prelude/string.wado/String^Eq::eq_bytes"(__sroa___sroa___tuple_2_1_0.repr, __sroa___sroa___tuple_2_1_1.repr, len_a);
-    } == 0 {
+    if "core:prelude/string.wado/String^Eq::eq"(__sroa___sroa___tuple_2_1_0, __sroa___sroa___tuple_2_1_1) == 0 {
         return 0;
     }
     return 1;
@@ -729,7 +740,9 @@ fn "core:prelude/tuple.wado/[]<i32>^Eq::eq"(self, other) {
 }
 
 fn "core:prelude/tuple.wado/[]<i32,core:prelude/string.wado/String,bool>^Eq::eq"(self, other) {
-    let len_a: i32;
+    let v_28: ref "core:prelude/string.wado//String";
+    let v_29: ref "core:prelude/string.wado//String";
+    let v_30: ref "core:prelude/string.wado//String";
     let v_31: ref "core:prelude/string.wado//String";
     let v_32: ref "core:prelude/string.wado//String";
     let v_33: ref "core:prelude/string.wado//String";
@@ -739,31 +752,22 @@ fn "core:prelude/tuple.wado/[]<i32,core:prelude/string.wado/String,bool>^Eq::eq"
     let v_37: ref "core:prelude/string.wado//String";
     let v_38: ref "core:prelude/string.wado//String";
     let v_39: ref "core:prelude/string.wado//String";
-    let v_40: ref "core:prelude/string.wado//String";
-    let v_41: ref "core:prelude/string.wado//String";
-    let v_42: ref "core:prelude/string.wado//String";
     let __sroa___sroa___tuple_2_2_0: bool;
     let __sroa___sroa___tuple_2_2_1: bool;
     let __sroa___sroa___tuple_2_1_0: ref "core:prelude/string.wado//String";
     let __sroa___sroa___tuple_2_1_1: ref "core:prelude/string.wado//String";
     let __sroa___sroa___tuple_2_0_0: i32;
     let __sroa___sroa___tuple_2_0_1: i32;
-    __sroa___sroa___tuple_2_0_0 = struct.new "tuple//[[i32,core:prelude/string.wado/String,bool], [i32,core:prelude/string.wado/String,bool]]" { 0: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: self.0, 1: ref.as_non_null(v_31 = self.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_31.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_31.used }), 2: self.2 }), 1: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: other.0, 1: ref.as_non_null(v_32 = other.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_32.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_32.used }), 2: other.2 }) }.0.0;
-    __sroa___sroa___tuple_2_0_1 = struct.new "tuple//[[i32,core:prelude/string.wado/String,bool], [i32,core:prelude/string.wado/String,bool]]" { 0: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: self.0, 1: ref.as_non_null(v_33 = self.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_33.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_33.used }), 2: self.2 }), 1: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: other.0, 1: ref.as_non_null(v_34 = other.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_34.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_34.used }), 2: other.2 }) }.1.0;
-    __sroa___sroa___tuple_2_1_0 = struct.new "tuple//[[i32,core:prelude/string.wado/String,bool], [i32,core:prelude/string.wado/String,bool]]" { 0: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: self.0, 1: ref.as_non_null(v_35 = self.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_35.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_35.used }), 2: self.2 }), 1: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: other.0, 1: ref.as_non_null(v_36 = other.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_36.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_36.used }), 2: other.2 }) }.0.1;
-    __sroa___sroa___tuple_2_1_1 = struct.new "tuple//[[i32,core:prelude/string.wado/String,bool], [i32,core:prelude/string.wado/String,bool]]" { 0: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: self.0, 1: ref.as_non_null(v_37 = self.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_37.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_37.used }), 2: self.2 }), 1: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: other.0, 1: ref.as_non_null(v_38 = other.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_38.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_38.used }), 2: other.2 }) }.1.1;
-    __sroa___sroa___tuple_2_2_0 = struct.new "tuple//[[i32,core:prelude/string.wado/String,bool], [i32,core:prelude/string.wado/String,bool]]" { 0: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: self.0, 1: ref.as_non_null(v_39 = self.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_39.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_39.used }), 2: self.2 }), 1: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: other.0, 1: ref.as_non_null(v_40 = other.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_40.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_40.used }), 2: other.2 }) }.0.2;
-    __sroa___sroa___tuple_2_2_1 = struct.new "tuple//[[i32,core:prelude/string.wado/String,bool], [i32,core:prelude/string.wado/String,bool]]" { 0: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: self.0, 1: ref.as_non_null(v_41 = self.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_41.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_41.used }), 2: self.2 }), 1: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: other.0, 1: ref.as_non_null(v_42 = other.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_42.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_42.used }), 2: other.2 }) }.1.2;
+    __sroa___sroa___tuple_2_0_0 = struct.new "tuple//[[i32,core:prelude/string.wado/String,bool], [i32,core:prelude/string.wado/String,bool]]" { 0: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: self.0, 1: ref.as_non_null(v_28 = self.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_28.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_28.used }), 2: self.2 }), 1: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: other.0, 1: ref.as_non_null(v_29 = other.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_29.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_29.used }), 2: other.2 }) }.0.0;
+    __sroa___sroa___tuple_2_0_1 = struct.new "tuple//[[i32,core:prelude/string.wado/String,bool], [i32,core:prelude/string.wado/String,bool]]" { 0: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: self.0, 1: ref.as_non_null(v_30 = self.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_30.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_30.used }), 2: self.2 }), 1: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: other.0, 1: ref.as_non_null(v_31 = other.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_31.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_31.used }), 2: other.2 }) }.1.0;
+    __sroa___sroa___tuple_2_1_0 = struct.new "tuple//[[i32,core:prelude/string.wado/String,bool], [i32,core:prelude/string.wado/String,bool]]" { 0: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: self.0, 1: ref.as_non_null(v_32 = self.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_32.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_32.used }), 2: self.2 }), 1: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: other.0, 1: ref.as_non_null(v_33 = other.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_33.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_33.used }), 2: other.2 }) }.0.1;
+    __sroa___sroa___tuple_2_1_1 = struct.new "tuple//[[i32,core:prelude/string.wado/String,bool], [i32,core:prelude/string.wado/String,bool]]" { 0: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: self.0, 1: ref.as_non_null(v_34 = self.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_34.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_34.used }), 2: self.2 }), 1: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: other.0, 1: ref.as_non_null(v_35 = other.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_35.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_35.used }), 2: other.2 }) }.1.1;
+    __sroa___sroa___tuple_2_2_0 = struct.new "tuple//[[i32,core:prelude/string.wado/String,bool], [i32,core:prelude/string.wado/String,bool]]" { 0: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: self.0, 1: ref.as_non_null(v_36 = self.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_36.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_36.used }), 2: self.2 }), 1: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: other.0, 1: ref.as_non_null(v_37 = other.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_37.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_37.used }), 2: other.2 }) }.0.2;
+    __sroa___sroa___tuple_2_2_1 = struct.new "tuple//[[i32,core:prelude/string.wado/String,bool], [i32,core:prelude/string.wado/String,bool]]" { 0: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: self.0, 1: ref.as_non_null(v_38 = self.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_38.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_38.used }), 2: self.2 }), 1: ref.as_non_null(struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: other.0, 1: ref.as_non_null(v_39 = other.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_39.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_39.used }), 2: other.2 }) }.1.2;
     if __sroa___sroa___tuple_2_0_0 != __sroa___sroa___tuple_2_0_1 {
         return 0;
     }
-    if __inline_String_Eq__eq_12: block -> bool {
-        len_a = __sroa___sroa___tuple_2_1_0.used;
-        if len_a != __sroa___sroa___tuple_2_1_1.used {
-            break __inline_String_Eq__eq_12: 0;
-        }
-        break __inline_String_Eq__eq_12: "core:prelude/string.wado/String^Eq::eq_bytes"(__sroa___sroa___tuple_2_1_0.repr, __sroa___sroa___tuple_2_1_1.repr, len_a);
-    } == 0 {
+    if "core:prelude/string.wado/String^Eq::eq"(__sroa___sroa___tuple_2_1_0, __sroa___sroa___tuple_2_1_1) == 0 {
         return 0;
     }
     if __sroa___sroa___tuple_2_2_0 != __sroa___sroa___tuple_2_2_1 {

@@ -142,6 +142,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 return type_id;
             }
+            if let Some(self_type) = self.annotate_ctx.trait_ctx.self_type
+                && !self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .contains_type_param(self_type)
+            {
+                if let Some(resolved) = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .resolve_assoc_type(self_type, &namespaced.name)
+                {
+                    return resolved;
+                }
+                if let Some(resolved) = self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .resolve_generic_assoc_type_mono(self_type, &namespaced.name)
+                {
+                    return resolved;
+                }
+            }
             // If not found, it's an unknown associated type
             let _ = self.emit(TypeError::UnknownType {
                 name: format!("Self::{}", namespaced.name),

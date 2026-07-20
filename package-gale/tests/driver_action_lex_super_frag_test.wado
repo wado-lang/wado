@@ -1,0 +1,42 @@
+//! SuperClass predicate reached through a `fragment` reference. The
+//! `{this.enabled()}?` gate lives in `fragment GATED`, inlined into `try_KW`,
+//! so `try_KW` must declare `with SlBase` even though the call is not in KW's
+//! own body. Without `RuleRef`-following in the effect marking, generation
+//! produces a `try_KW` that calls `SlBase::enabled` without the effect clause —
+//! a generated-code compile error that would fail this test at generation time.
+
+use frag from "./grammars/wado_lex_super_frag.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/action_lex_super_frag" },
+    };
+use { SlBase, LexerView } from "./grammars/wado_lex_super_frag.g4";
+
+struct SlBaseImpl {
+    on: bool,
+}
+
+impl SlBase for SlBaseImpl {
+    fn enabled(&self, view: LexerView) -> bool {
+        resume self.on;
+    }
+}
+
+test "fragment-borne superclass predicate true: KW wins the tie" {
+    let mut base = SlBaseImpl { on: true };
+    with SlBase => &mut base do {
+        let toks = frag::tokenize(&"abc");
+        assert toks.len() >= 1, `expected at least 1 token, got ${toks.len()}`;
+        let name = frag::token_kind_name(toks.kinds[0]);
+        assert name == "KW", `expected KW, got ${name}`;
+    };
+}
+
+test "fragment-borne superclass predicate false: KW rejected, ID wins" {
+    let mut base = SlBaseImpl { on: false };
+    with SlBase => &mut base do {
+        let toks = frag::tokenize(&"abc");
+        assert toks.len() >= 1, `expected at least 1 token, got ${toks.len()}`;
+        let name = frag::token_kind_name(toks.kinds[0]);
+        assert name == "ID", `expected ID, got ${name}`;
+    };
+}

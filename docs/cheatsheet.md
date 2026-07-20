@@ -1051,7 +1051,8 @@ for let x of arr { println(`${x}`); }
 // Explicit iterator
 let mut iter = arr.into_iter();
 iter.next();                              // Option<i32>
-let rest = iter.collect();                // List<i32>
+let rest = iter.collect();                // List<i32> (default target)
+let bytes: ByteList = s.bytes().collect(); // any FromIterator target, incl. a newtype over List
 
 // Combinators
 let doubled = arr.into_iter().map(|x: i32| x * 2).collect();       // [2, 4, 6, 8, 10]

@@ -1,0 +1,253 @@
+use { parse, highlight } from "./lib.wado";
+
+/// The visible text of a highlight fragment: strip the `<span>` tags and
+/// unescape the entities the highlighter emits (`&amp;` last, so an escaped
+/// `&` in the source round-trips).
+fn visible_text(html: &String) -> String {
+    let mut out = String::new();
+    let mut in_tag = false;
+    for let c of html.chars() {
+        if in_tag {
+            if c == '>' {
+                in_tag = false;
+            }
+        } else if c == '<' {
+            in_tag = true;
+        } else {
+            out.push(c);
+        }
+    }
+    return out.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&amp;", "&");
+}
+
+/// A highlighter must parse the source and reproduce it losslessly: stripping
+/// the emitted spans yields exactly the input, so no token is dropped,
+/// duplicated, or reordered.
+fn assert_highlights(src: &String) {
+    assert parse(src).ok(), "parse failed";
+    let html = highlight(*src);
+    assert visible_text(&html) == *src, "highlighting is not text-preserving";
+}
+
+test "highlight template interpolation expression" {
+    let src = "fn f() { let n = 1; let s = `n = ${n}, at ${self.now()}`; }\n";
+    assert parse(&src).ok(), "parse failed";
+    let html = highlight(src);
+    assert html.contains("<span class=\"variable\">n</span>"), "interp identifier -> variable";
+    assert html.contains("<span class=\"keyword\">self</span>"), "interp keyword stays keyword";
+}
+
+test "highlight template format spec" {
+    let src = "fn f() -> String { let x = 1.5; return `v = ${x:0.2}`; }\n";
+    assert parse(&src).ok(), "parse failed";
+    let html = highlight(src);
+    assert html.contains("<span class=\"variable\">x</span>"), "interp expr -> variable";
+    assert html.contains("<span class=\"comment\">0.2</span>"), "format spec muted";
+}
+
+test "highlight struct literal in interpolation" {
+    let src = "struct P { x: i32 }\nfn f() -> String { return `p = ${P { x: 1 }}!`; }\n";
+    assert parse(&src).ok(), "parse failed";
+    let html = highlight(src);
+    assert html.contains("<span class=\"variable\">P</span>"), "interp struct name -> variable";
+}
+
+test "highlight nested template string" {
+    assert_highlights(&"fn f() -> String { let n = 1; return `outer ${`inner ${n}`}`; }\n");
+}
+
+test "highlight __DATA__ section" {
+    let src = "fn f() { }\n\n__DATA__\ndata body\n";
+    let html = highlight(src);
+    assert html.contains("<span class=\"comment\">__DATA__"), "data section highlighted";
+}
+
+test "highlight flags declaration" {
+    assert_highlights(&"pub flags Perms { Read, Write }\n");
+}
+
+test "highlight unit value and type" {
+    assert_highlights(&"struct S { u: () }\nfn f() -> () { let t = [1, ()]; return (); }\n");
+}
+
+test "highlight labeled block" {
+    assert_highlights(&"fn f() { scope: { break scope; } let r = outer: { break outer: 5; }; }\n");
+}
+
+test "highlight mut struct destructuring" {
+    assert_highlights(&"struct P { x: i32, y: i32 }\nfn f(p: P) { let mut { x: mx, y: my } = p; mx += 1; }\n");
+}
+
+test "highlight turbofish wildcard type" {
+    assert_highlights(&"fn f() { let x = pick::<_, bool>(1, true); }\n");
+}
+
+test "highlight array type in variant payload" {
+    assert_highlights(&"variant V { Rect([f64, f64]), Pt }\ntype T = Foo<[i32, i32], bool>;\n");
+}
+
+test "highlight chained tuple index" {
+    assert_highlights(&"fn f() { let t = [[1, 2], [3, 4]]; assert t.0.0 == 1; }\n");
+}
+
+test "highlight fn-type effect before next param" {
+    assert_highlights(&"fn a(f: fn() with Stdout, x: i32) with Stdout { f(); }\n");
+}
+
+// Grammar-coverage: highlight real Wado files and assert lossless
+// text preservation (and a clean parse) across the language surface.
+test "highlight example/cat.wado" {
+    assert_highlights(&#include_str("../../example/cat.wado"));
+}
+
+test "highlight example/closure_emit.wado" {
+    assert_highlights(&#include_str("../../example/closure_emit.wado"));
+}
+
+test "highlight example/closure_iterators.wado" {
+    assert_highlights(&#include_str("../../example/closure_iterators.wado"));
+}
+
+test "highlight example/closure_numerics.wado" {
+    assert_highlights(&#include_str("../../example/closure_numerics.wado"));
+}
+
+test "highlight example/console_mock.wado" {
+    assert_highlights(&#include_str("../../example/console_mock.wado"));
+}
+
+test "highlight example/fizzbuzz.wado" {
+    assert_highlights(&#include_str("../../example/fizzbuzz.wado"));
+}
+
+test "highlight example/hello.wado" {
+    assert_highlights(&#include_str("../../example/hello.wado"));
+}
+
+test "highlight example/hello_cm.wado" {
+    assert_highlights(&#include_str("../../example/hello_cm.wado"));
+}
+
+test "highlight example/hello_tls.wado" {
+    assert_highlights(&#include_str("../../example/hello_tls.wado"));
+}
+
+test "highlight example/http_bin.wado" {
+    assert_highlights(&#include_str("../../example/http_bin.wado"));
+}
+
+test "highlight example/http_get.wado" {
+    assert_highlights(&#include_str("../../example/http_get.wado"));
+}
+
+test "highlight example/http_mock.wado" {
+    assert_highlights(&#include_str("../../example/http_mock.wado"));
+}
+
+test "highlight example/http_server.wado" {
+    assert_highlights(&#include_str("../../example/http_server.wado"));
+}
+
+test "highlight example/iso8601.wado" {
+    assert_highlights(&#include_str("../../example/iso8601.wado"));
+}
+
+test "highlight example/json.wado" {
+    assert_highlights(&#include_str("../../example/json.wado"));
+}
+
+test "highlight example/llm.wado" {
+    assert_highlights(&#include_str("../../example/llm.wado"));
+}
+
+test "highlight example/logger_poc.wado" {
+    assert_highlights(&#include_str("../../example/logger_poc.wado"));
+}
+
+test "highlight example/mustache.wado" {
+    assert_highlights(&#include_str("../../example/mustache.wado"));
+}
+
+test "highlight example/romu.wado" {
+    assert_highlights(&#include_str("../../example/romu.wado"));
+}
+
+test "highlight example/router_bench.wado" {
+    assert_highlights(&#include_str("../../example/router_bench.wado"));
+}
+
+test "highlight example/router_common.wado" {
+    assert_highlights(&#include_str("../../example/router_common.wado"));
+}
+
+test "highlight example/router_dfa.wado" {
+    assert_highlights(&#include_str("../../example/router_dfa.wado"));
+}
+
+test "highlight example/router_linear.wado" {
+    assert_highlights(&#include_str("../../example/router_linear.wado"));
+}
+
+test "highlight example/router_radix.wado" {
+    assert_highlights(&#include_str("../../example/router_radix.wado"));
+}
+
+test "highlight example/sha256.wado" {
+    assert_highlights(&#include_str("../../example/sha256.wado"));
+}
+
+test "highlight example/simd_ascii.wado" {
+    assert_highlights(&#include_str("../../example/simd_ascii.wado"));
+}
+
+test "highlight example/simd_color.wado" {
+    assert_highlights(&#include_str("../../example/simd_color.wado"));
+}
+
+test "highlight example/simd_stats.wado" {
+    assert_highlights(&#include_str("../../example/simd_stats.wado"));
+}
+
+test "highlight example/simd_vec2d.wado" {
+    assert_highlights(&#include_str("../../example/simd_vec2d.wado"));
+}
+
+test "highlight example/tree.wado" {
+    assert_highlights(&#include_str("../../example/tree.wado"));
+}
+
+test "highlight example/uuid_v7.wado" {
+    assert_highlights(&#include_str("../../example/uuid_v7.wado"));
+}
+
+test "highlight stdlib core/allocator.wado" {
+    assert_highlights(&#include_str("../../wado-compiler/lib/core/allocator.wado"));
+}
+
+test "highlight stdlib core/json.wado" {
+    assert_highlights(&#include_str("../../wado-compiler/lib/core/json.wado"));
+}
+
+test "highlight stdlib core/kiln/worlds.wado" {
+    assert_highlights(&#include_str("../../wado-compiler/lib/core/kiln/worlds.wado"));
+}
+
+test "highlight stdlib core/prelude/string.wado" {
+    assert_highlights(&#include_str("../../wado-compiler/lib/core/prelude/string.wado"));
+}
+
+test "highlight stdlib core/prelude/types.wado" {
+    assert_highlights(&#include_str("../../wado-compiler/lib/core/prelude/types.wado"));
+}
+
+test "highlight stdlib core/serde.wado" {
+    assert_highlights(&#include_str("../../wado-compiler/lib/core/serde.wado"));
+}
+
+test "highlight stdlib wasi/filesystem/types.wado" {
+    assert_highlights(&#include_str("../../wado-compiler/lib/wasi/filesystem/types.wado"));
+}
+
+test "highlight stdlib wasi/sockets/types.wado" {
+    assert_highlights(&#include_str("../../wado-compiler/lib/wasi/sockets/types.wado"));
+}

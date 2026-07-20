@@ -1,0 +1,18 @@
+// `Reflect::<T>::fields(&self)` requires the receiver argument; omitting it is a
+// clean compile error, not a compiler ICE.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+test "unreachable" {
+    let f = Reflect::<Point>::fields();
+    assert f.0 == 0;
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "expected 1 arguments, found 0"
+}

@@ -277,39 +277,41 @@ type "functype//stream_http_response_body_string.wado/__cm_export__handle" = fn(
 
 type "functype//stream_http_response_body_string.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>" = fn(i32, ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>");  // TypeId(56)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(57)
+type "functype//core:prelude/string.wado/decode_char_at" = fn(ref Array<u8>, i32) -> [u32, i32];  // TypeId(57)
 
-type "functype//core:rt/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(58)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(58)
 
-type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(59)
+type "functype//core:rt/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(59)
 
-type "functype//core:rt/wait_for_blocked" = fn(i32) -> i32;  // TypeId(60)
+type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(60)
 
-type "functype//core:rt/future_await_blocked" = fn(i32) -> i32;  // TypeId(61)
+type "functype//core:rt/wait_for_blocked" = fn(i32) -> i32;  // TypeId(61)
 
-type "functype//core:rt/cm_stream_write_u8" = fn(i32, ref "core:prelude//List<u8>");  // TypeId(62)
+type "functype//core:rt/future_await_blocked" = fn(i32) -> i32;  // TypeId(62)
 
-type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(63)
+type "functype//core:rt/cm_stream_write_u8" = fn(i32, ref "core:prelude//List<u8>");  // TypeId(63)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(64)
+type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(64)
 
-type "functype//core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(65)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(65)
 
-type "functype//core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(66)
+type "functype//core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(66)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(67)
+type "functype//core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(67)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(68)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(68)
 
-type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(69)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(69)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(70)
+type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(70)
 
-type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(71)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(71)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(72)
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(72)
 
-type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(73)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(73)
+
+type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(74)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -1140,15 +1142,42 @@ fn "stream_http_response_body_string.wado/__cm_future_write_core:prelude/types.w
     drop("mem/realloc"(ptr, 40, 8, 0));
 }
 
+fn "core:prelude/string.wado/decode_char_at"(repr, pos) {
+    let b0: u32;
+    let b1_3: u32;
+    let b1_4: u32;
+    let b2_5: u32;
+    let b1_6: u32;
+    let b2_7: u32;
+    let b3: u32;
+    b0 = builtin::array_get<u8>(repr, pos);
+    if b0 <u 128 {
+        return b0, 1;
+    }
+    if b0 <u 224 {
+        b1_3 = builtin::array_get<u8>(repr, pos + 1);
+        return ((b0 & 31) << 6) | (b1_3 & 63), 2;
+    }
+    if b0 <u 240 {
+        b1_4 = builtin::array_get<u8>(repr, pos + 1);
+        b2_5 = builtin::array_get<u8>(repr, pos + 2);
+        return (((b0 & 15) << 12) | ((b1_4 & 63) << 6)) | (b2_5 & 63), 3;
+    }
+    b1_6 = builtin::array_get<u8>(repr, pos + 1);
+    b2_7 = builtin::array_get<u8>(repr, pos + 2);
+    b3 = builtin::array_get<u8>(repr, pos + 3);
+    return ((((b0 & 7) << 18) | ((b1_6 & 63) << 12)) | ((b2_7 & 63) << 6)) | (b3 & 63), 4;
+}
+
 fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b129: block {
-        l130: loop {
-            break_if b129 i >= len;
+    b132: block {
+        l133: loop {
+            break_if b132 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l130;
+            continue l133;
         };
     };
 }
@@ -1214,20 +1243,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b131: block {
-        l132: loop {
-            break_if b131 offset >= count;
+    b134: block {
+        l135: loop {
+            break_if b134 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/wait_for_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b131 (if (result >> 4) == 0 -> i32 {
+            break_if b134 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l132;
+            continue l135;
         };
     };
 }
@@ -1236,51 +1265,14 @@ fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
-    let b0: u8;
-    let b1_2: u32;
-    let b1_4: u32;
-    let b2_5: u32;
-    let b1_7: u32;
-    let b2_8: u32;
-    let b3: u32;
-    let self_11: ref Array<u8>;
-    let self_14: ref Array<u8>;
-    let self_17: ref Array<u8>;
-    let self_19: ref Array<u8>;
-    let self_22: ref Array<u8>;
-    let self_24: ref Array<u8>;
-    let self_26: ref Array<u8>;
     if self.byte_index >= self.used {
         return 1, 0;
     }
-    self_11 = self.repr;
-    b0 = builtin::array_get<u8>(self_11, self.byte_index);
-    self.byte_index = self.byte_index + 1;
-    if b0 <u 128 {
-        return 0, b0;
-    }
-    if b0 <u 224 {
-        self_14 = self.repr;
-        b1_2 = builtin::array_get<u8>(self_14, self.byte_index);
-        self.byte_index = self.byte_index + 1;
-        return 0, ((b0 & 31) << 6) | (b1_2 & 63);
-    }
-    if b0 <u 240 {
-        self_17 = self.repr;
-        b1_4 = builtin::array_get<u8>(self_17, self.byte_index);
-        self_19 = self.repr;
-        b2_5 = builtin::array_get<u8>(self_19, self.byte_index + 1);
-        self.byte_index = self.byte_index + 2;
-        return 0, (((b0 & 15) << 12) | ((b1_4 & 63) << 6)) | (b2_5 & 63);
-    }
-    self_22 = self.repr;
-    b1_7 = builtin::array_get<u8>(self_22, self.byte_index);
-    self_24 = self.repr;
-    b2_8 = builtin::array_get<u8>(self_24, self.byte_index + 1);
-    self_26 = self.repr;
-    b3 = builtin::array_get<u8>(self_26, self.byte_index + 2);
-    self.byte_index = self.byte_index + 3;
-    return 0, ((((b0 & 7) << 18) | ((b1_7 & 63) << 12)) | ((b2_8 & 63) << 6)) | (b3 & 63);
+    let __pattern_temp_0_mv_0: u32;
+    let __pattern_temp_0_mv_1: i32;
+    multivalue_bind [__pattern_temp_0_mv_0, __pattern_temp_0_mv_1] = "core:prelude/string.wado/decode_char_at"(self.repr, self.byte_index);
+    self.byte_index = self.byte_index + __pattern_temp_0_mv_1;
+    return 0, __pattern_temp_0_mv_0;
 }
 
 fn "core:prelude/list.wado/List<u8>::push"(self, value) {

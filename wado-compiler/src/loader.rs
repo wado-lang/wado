@@ -2053,6 +2053,19 @@ mod resolve_include_path_tests {
     }
 
     #[test]
+    fn cross_package_dependency_include_resolves_in_the_dependency_dir() {
+        // A `#include_str` in a dependency module must resolve next to that
+        // module, not under the consumer's `base_path`. `source_path` now hands
+        // the dependency its real base-relative path (`../dep/…`, not
+        // `dep:../dep/…`), so the dir prefix is kept and `base_path.join`
+        // lands in the dependency's directory.
+        let entry = "./src/main.wado";
+        let dep_module = "../dep/src/highlight/facade.wado";
+        let resolved = resolve(Some(entry), dep_module, "./themes/gale-light.css");
+        assert_eq!(resolved, "../dep/src/highlight/themes/gale-light.css");
+    }
+
+    #[test]
     fn non_relative_arg_passes_through() {
         let entry = "./main.wado";
         // `core:foo` etc. (no leading `./` / `../`) are not relative and the

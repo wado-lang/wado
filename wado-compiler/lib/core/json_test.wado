@@ -24,11 +24,12 @@ use {
     PrettyJsonSerializer,
 } from "core:json";
 
-fn assert_bytes_eq_string(bytes: &ByteList, s: &String) {
+fn assert_bytes_eq_string<B: AsByteSlice>(bytes: &B, s: &String) {
+    let actual = bytes.as_byte_slice();
     let expected: List<u8> = s.bytes().collect();
-    assert bytes.len() == expected.len();
-    for let mut i = 0; i < bytes.len(); i += 1 {
-        assert bytes[i] == expected[i];
+    assert actual.len() == expected.len();
+    for let mut i = 0; i < actual.len(); i += 1 {
+        assert actual.get_unchecked(i) == expected[i];
     }
 }
 
@@ -181,6 +182,22 @@ test "to_bytes empty string" {
     assert bytes.len() == 2;
     assert bytes[0] == 34;
     assert bytes[1] == 34;
+}
+
+test "to_string default appends no trailing char" {
+    let v: List<i32> = [1, 2];
+    assert to_string(&v).unwrap() == "[1,2]";
+}
+
+test "to_string trailing_char emits JSON Lines" {
+    let v: List<i32> = [1, 2];
+    assert to_string(&v, Option::Some('\n')).unwrap() == "[1,2]\n";
+}
+
+test "to_bytes trailing_char appends to the byte view" {
+    let bytes = to_bytes(&42, Option::Some('\n')).unwrap();
+    assert_bytes_eq_string(&bytes, &"42\n");
+    assert bytes[bytes.len() - 1] == 10;
 }
 
 test "serialize pretty struct with default indent" {
@@ -644,4 +661,25 @@ test "to_bytes_pretty matches to_string_pretty" {
             assert_bytes_eq_string(&b, &s);
         }
     }
+}
+
+test "to_bytes_pretty trailing_char appends" {
+    let u = PrettyUser { first_name: "Bo", age: 5 };
+    let b = to_bytes_pretty(&u, Option::Some('\n')).unwrap();
+    assert b[b.len() - 1] == 10;
+    if let Ok(s) = to_string_pretty(&u, Option::Some('\n')) {
+        assert_bytes_eq_string(&b, &s);
+    }
+}
+
+test "to_bytes_canonical default omits trailing char (signing-safe)" {
+    let u = PrettyUser { first_name: "Ann", age: 30 };
+    let b = to_bytes_canonical(&u).unwrap();
+    assert_bytes_eq_string(&b, &"{\"age\":30,\"firstName\":\"Ann\"}");
+}
+
+test "to_bytes_canonical trailing_char appends" {
+    let u = PrettyUser { first_name: "Ann", age: 30 };
+    let b = to_bytes_canonical(&u, Option::Some('\n')).unwrap();
+    assert_bytes_eq_string(&b, &"{\"age\":30,\"firstName\":\"Ann\"}\n");
 }

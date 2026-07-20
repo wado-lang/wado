@@ -1,0 +1,44 @@
+//! SuperClass as an effect interface (lexer). `options { superClass = SlBase }`
+//! generates `pub interface SlBase`; the alt-initial predicate `{this.enabled()}?`
+//! on KW lowers to the ambient op `SlBase::enabled()`, `try_KW` / `tokenize`
+//! carry `with SlBase`, and a hand-written `impl SlBase` handler (installed with
+//! `with SlBase => &mut base do`) decides the tie between KW and ID. Omitting the
+//! handler would be a compile error (the effect is unhandled) — the drop-safe
+//! replacement for a silently predicate-free lexer.
+
+use sup from "./grammars/wado_lex_super.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/action_lex_super" },
+    };
+use { SlBase, LexerView } from "./grammars/wado_lex_super.g4";
+
+// Base state lives on the handler — a plain user struct, separate from the Lexer.
+struct SlBaseImpl {
+    on: bool,
+}
+
+impl SlBase for SlBaseImpl {
+    fn enabled(&self, view: LexerView) -> bool {
+        resume self.on;
+    }
+}
+
+test "superclass predicate true: KW wins the tie" {
+    let mut base = SlBaseImpl { on: true };
+    with SlBase => &mut base do {
+        let toks = sup::tokenize(&"abc");
+        assert toks.len() >= 1, `expected at least 1 token, got ${toks.len()}`;
+        let name = sup::token_kind_name(toks.kinds[0]);
+        assert name == "KW", `expected KW, got ${name}`;
+    };
+}
+
+test "superclass predicate false: KW rejected, ID wins" {
+    let mut base = SlBaseImpl { on: false };
+    with SlBase => &mut base do {
+        let toks = sup::tokenize(&"abc");
+        assert toks.len() >= 1, `expected at least 1 token, got ${toks.len()}`;
+        let name = sup::token_kind_name(toks.kinds[0]);
+        assert name == "ID", `expected ID, got ${name}`;
+    };
+}

@@ -1,0 +1,34 @@
+use { Theme, stylesheet, default_theme } from "./theme.wado";
+
+test "stylesheet emits one color rule per class, in insertion order" {
+    let mut t = Theme::new();
+    t.set("keyword", "#ff0000");
+    t.set("string", "#00ff00");
+    assert stylesheet(&t) == ".keyword { color: #ff0000; }\n.string { color: #00ff00; }\n";
+}
+
+test "a dotted capture name becomes a compound selector" {
+    let mut t = Theme::new();
+    t.set("constant.builtin", "#123456");
+    assert stylesheet(&t) == ".constant.builtin { color: #123456; }\n";
+}
+
+test "set is last-write-wins" {
+    let mut t = Theme::new();
+    t.set("keyword", "#111");
+    t.set("keyword", "#222");
+    assert t.color(&"keyword").unwrap() == "#222";
+    assert stylesheet(&t) == ".keyword { color: #222; }\n";
+}
+
+test "default_theme colors the common vocabulary and leaves unknowns unstyled" {
+    let t = default_theme();
+    assert t.color(&"comment") matches { Some(_) };
+    assert t.color(&"constant.builtin") matches { Some(_) };
+    assert t.color(&"keyword") matches { Some(_) };
+    assert t.color(&"nonexistent") matches { None };
+}
+
+test "an empty theme yields an empty stylesheet" {
+    assert stylesheet(&Theme::new()) == "";
+}

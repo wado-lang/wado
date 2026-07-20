@@ -14,6 +14,7 @@
 //! | `array`               | Push collapse / data promotion / splitting  |
 //! | `const_forward`       | Struct field constant forwarding            |
 //! | `peephole`            | Constant folding, copy elision              |
+//! | `nullability_opt`     | Elide redundant `ref.as_non_null` / fold `ref.is_null` |
 //! | `elide_local`     | Write-only local elim for WIR-only locals  |
 //! | `cleanup`         | Nop/dead-code removal, normalization        |
 //! | `branch_hint`     | `br_if` selection + trap-based hint inference |
@@ -37,6 +38,8 @@ mod dedupe_const_globals;
 mod elide_local;
 mod elide_struct;
 mod init_guard;
+mod nullability;
+mod nullability_opt;
 mod nullable_ref;
 mod peephole;
 mod prune_dead_data;
@@ -116,6 +119,7 @@ pub fn optimize_wir(
             });
         }
         dce::compact_dead_items(module);
+        finalize_locals(module);
         return;
     }
 
@@ -177,8 +181,10 @@ pub fn optimize_wir(
     wir_pass("wir/run_peephole", module, profiler, |m| {
         let types = &m.types;
         for func in &mut m.functions {
+            let locals = func.declared_locals();
             if let Some(body) = &mut func.body {
-                run_peephole(body, types);
+                let null = nullability::Nullability::new(&locals);
+                run_peephole(body, &null, types);
             }
         }
     });
@@ -214,6 +220,12 @@ pub fn optimize_wir(
         flatten_variant_slots(m);
     });
     profiler.span_end("wir/phase5_peephole");
+
+    // Phase 5b: nullability-driven rewrites (elide proven-redundant
+    // `ref.as_non_null`, fold `ref.is_null` on a non-null reference).
+    wir_pass("wir/optimize_nullability", module, profiler, |m| {
+        nullability_opt::optimize_nullability(m);
+    });
 
     // Phase 6: strip write-only WIR-synthesised locals (`__match_scrut_N`,
     // multi-value temps, `__pair_temp_N`) that no TIR pass can reach, so codegen
@@ -267,4 +279,16 @@ pub fn optimize_wir(
     dce_unreachable_types(module);
     dce::compact_dead_items(module);
     profiler.span_end("wir/phase8_dce_compact");
+
+    // Phase 9: finalize the declared-local SSoT now that no pass adds or removes
+    // a `DeclareLocal`.
+    finalize_locals(module);
+}
+
+/// Freeze each function's declared locals into `func.locals` for the emitter.
+/// Called on every `optimize_wir` exit path, so `-O0` finalizes too.
+fn finalize_locals(module: &mut WirPackage) {
+    for func in &mut module.functions {
+        func.locals = func.declared_locals();
+    }
 }

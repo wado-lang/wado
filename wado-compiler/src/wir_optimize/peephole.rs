@@ -14,7 +14,8 @@
 //! against the WIR static type), so they only make sense after lowering.
 
 use crate::wir::{WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId};
-use crate::wir_optimize::util::{self, is_side_effect_free, may_trap};
+use crate::wir_optimize::nullability::Nullability;
+use crate::wir_optimize::util::{self, is_side_effect_free, may_trap_in};
 use crate::wir_visitor::{WirMutVisitor, WirRefVisitor};
 use indexmap::{IndexMap, IndexSet};
 
@@ -368,7 +369,7 @@ fn apply_in_instr(instr: &mut WirInstr, subst: &IndexMap<String, String>) {
 /// elision requires knowing every trailing instruction reachable after the
 /// copy — including those in enclosing scopes — and recursive per-scope calls
 /// cannot observe them.
-pub(super) fn run_peephole(instrs: &mut [WirInstr], _types: &[WirTypeDef]) {
+pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, _types: &[WirTypeDef]) {
     const MAX_ROUNDS: u32 = 8;
     let mut rounds = 0;
     loop {
@@ -382,7 +383,7 @@ pub(super) fn run_peephole(instrs: &mut [WirInstr], _types: &[WirTypeDef]) {
         changed |= rewrite_everywhere(instrs, &mut try_fold_branchless_increment);
         changed |= rewrite_everywhere(instrs, &mut try_drop_mask);
         changed |= rewrite_everywhere(instrs, &mut try_fold_sign_extension);
-        changed |= rewrite_everywhere(instrs, &mut try_simplify_ref_op);
+        changed |= rewrite_everywhere(instrs, &mut |instr| try_simplify_ref_op(instr, null));
         changed |= rewrite_everywhere(instrs, &mut try_relax_gc_operands);
         changed |= fuse_local_tees(instrs);
         if !changed {
@@ -995,7 +996,7 @@ fn static_ref_type(instr: &WirInstr) -> Option<(WirTypeId, bool)> {
 ///
 /// Only exact `type_id` matches are recognised; supertype/subtype narrowing
 /// (the shape variant pattern matching emits) is deliberately left untouched.
-fn try_simplify_ref_op(instr: &mut WirInstr) -> bool {
+fn try_simplify_ref_op(instr: &mut WirInstr, null: &Nullability) -> bool {
     match instr {
         WirInstr::RefCast {
             type_id,
@@ -1030,7 +1031,7 @@ fn try_simplify_ref_op(instr: &mut WirInstr) -> bool {
             // The test always succeeds when the value is exactly `$type_id`
             // and either non-null or the test accepts null.
             let always_true = src_id == *type_id && (!src_nullable || *nullable);
-            if always_true && is_side_effect_free(expr) && !may_trap(expr) {
+            if always_true && is_side_effect_free(expr) && !may_trap_in(expr, null) {
                 *instr = WirInstr::I32Const(1);
                 return true;
             }
@@ -1229,6 +1230,7 @@ fn relax_ref_local_get(instr: &mut WirInstr) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::wir::WirLocals;
     use std::rc::Rc;
 
     fn tid(index: u32) -> WirTypeId {
@@ -1432,7 +1434,7 @@ mod tests {
             nullable: true,
             expr: Box::new(local_get("p", ref_ty(7, false))),
         };
-        try_simplify_ref_op(&mut instr);
+        try_simplify_ref_op(&mut instr, &Nullability::new(&WirLocals::default()));
         assert!(matches!(instr, WirInstr::LocalGet { .. }));
     }
 
@@ -1444,7 +1446,7 @@ mod tests {
             nullable: false,
             expr: Box::new(local_get("p", ref_ty(7, true))),
         };
-        try_simplify_ref_op(&mut instr);
+        try_simplify_ref_op(&mut instr, &Nullability::new(&WirLocals::default()));
         assert!(matches!(instr, WirInstr::RefAsNonNull(_)));
     }
 
@@ -1455,7 +1457,7 @@ mod tests {
             nullable: false,
             expr: Box::new(local_get("p", ref_ty(9, false))),
         };
-        try_simplify_ref_op(&mut instr);
+        try_simplify_ref_op(&mut instr, &Nullability::new(&WirLocals::default()));
         assert!(matches!(instr, WirInstr::RefCast { .. }));
     }
 
@@ -1466,7 +1468,7 @@ mod tests {
             nullable: false,
             expr: Box::new(local_get("p", ref_ty(7, false))),
         };
-        try_simplify_ref_op(&mut instr);
+        try_simplify_ref_op(&mut instr, &Nullability::new(&WirLocals::default()));
         assert!(matches!(instr, WirInstr::I32Const(1)));
     }
 
@@ -1478,7 +1480,7 @@ mod tests {
             nullable: false,
             expr: Box::new(local_get("p", ref_ty(7, true))),
         };
-        try_simplify_ref_op(&mut instr);
+        try_simplify_ref_op(&mut instr, &Nullability::new(&WirLocals::default()));
         assert!(matches!(instr, WirInstr::RefTest { .. }));
     }
 
@@ -1689,7 +1691,7 @@ mod tests {
             then_body: vec![WirInstr::I32Const(1)],
             else_body: Some(vec![WirInstr::I32Const(2)]),
         }))];
-        run_peephole(&mut body, &[]);
+        run_peephole(&mut body, &Nullability::new(&WirLocals::default()), &[]);
         let WirInstr::Drop(inner) = &body[0] else {
             panic!("expected Drop, got {:?}", body[0]);
         };

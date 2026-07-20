@@ -25,14 +25,19 @@ assert from_string::<Point>("[1,2]") matches { Ok(p) && p.x == 1 && p.y == 2 };
 
 ## Functions
 
-### `pub fn to_bytes<T: Serialize>(value: &T) -> Result<ByteList, SerializeError>`
+### `pub fn to_bytes<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError>`
 
 Serializes a value to UTF-8 JSON NSD bytes — the primary entry point.
 
-### `pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError>`
+Returns a read-only `ByteSlice` over the serializer's UTF-8 buffer.
+`trailing_char`, when `Some`, is appended after the value.
+
+### `pub fn to_string<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<String, SerializeError>`
 
 Serializes a value to a JSON NSD string. Convenience over `to_bytes` for
 text contexts; serde I/O is bytes-primary.
+
+`trailing_char`, when `Some`, is appended after the value.
 
 ### `pub fn from_string<T: Deserialize>(input: String) -> Result<T, DeserializeError>`
 
