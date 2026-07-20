@@ -1179,7 +1179,7 @@ impl String {
             return s;
         }
         builtin::cold_path();
-        // Slow path: rebuild, one U+FFFD per invalid lead (advance = bytes to skip).
+        // Slow path: rebuild, one U+FFFD per invalid lead.
         let len = slice.len();
         let mut builder = String::with_capacity(len);
         let mut i = 0;
