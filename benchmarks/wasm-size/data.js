@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784516191878,
+  "lastUpdate": 1784524446008,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -42400,6 +42400,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 16526,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271337,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b72d12e58ff3a3e29c0c4c224ae0b844d2f38e20",
+          "message": "Merge pull request #1643 from wado-lang/claude/benchmark-fts-optimization-28kkin\n\nperf(optimizer): nullability-driven WIR rewrites on a declared-locals SSoT",
+          "timestamp": "2026-07-20T14:04:33+09:00",
+          "tree_id": "ca887064f03168349c5e53ebc41983e2c2d7170e",
+          "url": "https://github.com/wado-lang/wado/commit/b72d12e58ff3a3e29c0c4c224ae0b844d2f38e20"
+        },
+        "date": 1784524445488,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8229,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16512,
             "unit": "bytes"
           },
           {
