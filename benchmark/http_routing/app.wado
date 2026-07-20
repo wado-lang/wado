@@ -31,7 +31,7 @@ struct RouteResponse {
 type Handler = fn(Request, PathParams) -> RouteResponse;
 
 fn body_for(route: String, params: List<String>) -> List<u8> {
-    return json::to_bytes(&ApiResponse { route, params }).unwrap() as List<u8>;
+    return json::to_bytes(&ApiResponse { route, params }).unwrap().to_list();
 }
 
 /// 200 response for a parametric route.

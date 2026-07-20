@@ -103,6 +103,12 @@ impl ArraySlice<T> {
         return out;
     }
 
+    /// Copies the slice's elements into a new `List<T>`.
+    pub fn to_list(&self) -> List<T> {
+        let len = i32_max(self.end - self.start, 0);
+        return List::internal_from_raw(self.to_array(), len);
+    }
+
     /// Internal: the backing array this slice views. Paired with
     /// `internal_start`, lets bulk-copy paths (`List::extend_from_slice`)
     /// `array_copy` directly from the view without a temporary.
