@@ -20,36 +20,8 @@ pub enum Theme {
     Dark,
 }
 
-// Themes are inlined as data (not `#include_str`) so the facade is
-// self-contained when compiled into a consumer package. Selectors are
-// tree-sitter capture names, which Gale emits as HTML classes
-// (`constant.builtin` -> class="constant builtin"), so they are grammar-agnostic.
-global LIGHT_CSS: String = ".wado { background: #ffffff; color: #24292e; }
-.comment { color: #6a737d; font-style: italic; }
-.string { color: #032f62; }
-.number { color: #005cc5; }
-.keyword { color: #d73a49; }
-.variable { color: #24292e; }
-.constant { color: #005cc5; }
-.constant.builtin { color: #005cc5; }
-.type { color: #6f42c1; }
-.function { color: #6f42c1; }
-.operator { color: #d73a49; }
-.punctuation { color: #24292e; }
-";
-global DARK_CSS: String = ".wado { background: #0d1117; color: #c9d1d9; }
-.comment { color: #8b949e; font-style: italic; }
-.string { color: #a5d6ff; }
-.number { color: #79c0ff; }
-.keyword { color: #ff7b72; }
-.variable { color: #c9d1d9; }
-.constant { color: #79c0ff; }
-.constant.builtin { color: #79c0ff; }
-.type { color: #d2a8ff; }
-.function { color: #d2a8ff; }
-.operator { color: #ff7b72; }
-.punctuation { color: #c9d1d9; }
-";
+global LIGHT_CSS: String = #include_str("./themes/gale-light.css");
+global DARK_CSS: String = #include_str("./themes/gale-dark.css");
 
 /// The CSS for a built-in theme.
 pub fn theme_css(theme: Theme) -> String {
