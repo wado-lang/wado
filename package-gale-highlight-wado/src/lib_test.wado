@@ -89,6 +89,29 @@ test "highlight fragment: bare expression is text-preserving" {
     assert visible_text(&html) == src, "bare-expression fragment is text-preserving";
 }
 
+// Recovery re-entry (recover_islands): a bare statement/expression fragment the
+// start rule can't derive still recovers nested context islands. The parse
+// entry sweeps the unconsumed run and descends into unique-trigger rules
+// (`templateString` on a backtick), so a template's interpolation builds a real
+// subtree and its overrides fire — even with no enclosing `fn`/item.
+
+test "highlight fragment: bare statement recovers interpolation context" {
+    let src = "let name = 1;\nlet s = `hi ${name} ${name:0.2}`;\n";
+    let html = highlight(src);
+    assert !parse(&src).ok(), "fragment should not parse cleanly";
+    assert html.contains("<span class=\"variable\">name</span>"), "interp id -> variable in bare fragment";
+    assert html.contains("<span class=\"comment\">0.2</span>"), "format spec muted in bare fragment";
+    assert html.contains("<span class=\"keyword\">let</span>"), "surrounding keyword still highlighted";
+    assert visible_text(&html) == src, "bare-statement fragment is text-preserving";
+}
+
+test "highlight fragment: bare expression recovers interpolation context" {
+    let src = "`hi ${name}` + compute(1, 2)\n";
+    let html = highlight(src);
+    assert html.contains("<span class=\"variable\">name</span>"), "interp id -> variable in bare expression";
+    assert visible_text(&html) == src, "bare-expression fragment is text-preserving";
+}
+
 test "highlight __DATA__ section" {
     let src = "fn f() { }\n\n__DATA__\ndata body\n";
     let html = highlight(src);

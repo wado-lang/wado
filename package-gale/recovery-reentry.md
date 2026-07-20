@@ -1,6 +1,7 @@
 # Recovery Re-entry — Design (grammar-agnostic fragment structure)
 
-Status: design. Not implemented. Opt-in; off is byte-identical.
+Status: Tier 1 implemented (the `recover_islands` generator option). Tier 2
+deferred. Opt-in; off is byte-identical.
 
 ## Problem
 
@@ -56,21 +57,33 @@ generator-built table keyed by the current token; if it names a rule, call that
 rule's `_parse_<rule>`; else skip one token. Determinism comes from only
 listing tokens whose interpretation is unambiguous.
 
-### Tier 1 — unique-trigger island descent (recommended)
+### Tier 1 — delimiter-trigger island descent (implemented)
 
-A terminal `t` is a **unique trigger** for rule `R` iff `t ∈ FIRST(R)` as a
-_hard_ (consumed, non-nullable) first token and no other rule has `t` in its
-FIRST. The generator emits
+A terminal `t` is a **delimiter trigger** for rule `R` iff `t` occurs in exactly
+one parser rule's body across the whole grammar (`R`'s), and there it is a
+_direct_ leading terminal (`R`'s own leading token, not one inherited by
+expanding a `RuleRef`). The generator emits, as gated free helpers,
+`_recover_descend` (an `if`-chain over the trigger token constants → the sole
+`_parse_<rule>(p)`) and `_recover_try_descend` (the recovering-flag dance + a
+progress guard, falling back to skipping one token).
 
-```
-RECOVER_DISPATCH: token_kind -> rule_id   // only unique triggers
-```
+Two refinements were forced by real false positives and are load-bearing:
 
-During any recovery sweep, at each position: if `kinds[pos]` is in
-`RECOVER_DISPATCH`, call the mapped `_parse_<rule>(p)` to build that subtree in
-place; otherwise skip the one token into the surrounding `K_ERROR` region.
+- **Direct, not FIRST.** `BACKTICK` is in FIRST of every rule that can derive a
+  template (`literal`, `primary`, `expression`, …), so plain FIRST-uniqueness
+  never fires for it. Only `templateString` has it as a _direct_ leading token.
+- **Exclusive to one rule, not merely direct-unique.** `=` is a direct leading
+  terminal of the `forTail` _continuation_ rule (its `(':' typeRef)? '='` alt),
+  but is used pervasively elsewhere; descending into `forTail` on a stray `=`
+  ran off the input. Requiring `t` to occur in exactly one rule keeps genuine
+  delimiters (a template backtick, `${`) — tokens the lexer only ever emits at
+  their one construct — and drops common tokens.
 
-Why this is safe: a unique trigger has exactly one grammatical meaning, so
+During a recovery sweep, at each position: if `kinds[pos]` is a delimiter
+trigger, call the mapped `_parse_<rule>(p)` to build that subtree in place;
+otherwise skip the one token into the surrounding `K_ERROR` region.
+
+Why this is safe: a delimiter trigger has exactly one grammatical meaning, so
 descending is not a guess — it is the only production that terminal can begin.
 For Wado this captures precisely the context-island rules highlighting needs:
 
@@ -105,56 +118,63 @@ correct highlighting** (Tier 1 already recovers every context island). Ship it
 only if a consumer needs full fragment structure (e.g. an outline of a snippet),
 and gate it separately.
 
-## Integration points (exact)
+## Integration points (as built)
 
-1. **Top-level remainder sweep** — `_run_parse_entry` (`parser_gen.wado:467`),
-   after `entry(&mut p)`: if `p.pos` is not at `TK_EOF`, open a `K_ERROR`
-   region and sweep the remainder to EOF using the dispatch below, then close
-   it. This is where the unconsumed bare-fragment tail is captured. The region
-   is a top-level sibling after the start rule's node (the start rule already
-   closed); flat scans (highlight) see it, and consumers that iterate top-level
-   rows see it. (A single-root variant would require the start rule to sweep
-   before its `finish_node`; deferred — the sibling form needs no start-rule
-   change and suits tooling.)
+The sweep hooks the start rule's own `expect(TK_EOF, …)` rather than running
+after the entry closes the tree — so the `<error>` region nests **under the
+root**, where `to_string_tree`, LSP, and highlight all see it (an after-the-fact
+sweep in `_run_parse_entry` would leave it a top-level sibling the root's
+subtree excludes).
 
-2. **Existing error-region sweep** — `expect`'s `!sync.is_empty()` branch
-   (`parser_gen.wado:1150`): replace the bare `advance/skip` in the loop with
-   the shared descent step, so mid-parse error regions also grow real islands.
+- **`expect` (`parser_gen.wado`), gated on `recover_islands`.** After the
+  speculative-parse guard, when `kind == TK_EOF` and the current token is not
+  EOF: report one `UnexpectedToken`, open a `K_ERROR` region, loop
+  `_recover_try_descend(self)` until EOF, close the region, and match EOF. Since
+  `expect(EOF)` is called from inside the (still-open) start rule, the region
+  lands under the root. Off, this whole block is not emitted — byte-identical.
 
-Both call one emitted helper:
+The helpers (gated, emitted by `gen_recover_helpers`):
 
 ```
-// gated on the `recover_islands` option; absent otherwise (byte-identical)
-fn recover_step(p: &mut Parser) -> bool {          // true = made progress
-    let t = p.kinds[p.pos];
-    match recover_dispatch(t) {                     // static match, unique triggers
-        Some(rule_id) => {
-            let before = p.pos;
-            let was = p.recovering; p.recovering = false;
-            call_rule(p, rule_id);                   // match rule_id { RK_X => _parse_x(p), ... }
-            p.recovering = was;
-            if p.pos == before { skip_one(p); }      // progress guard
-        }
-        None => skip_one(p),
+fn _recover_descend(p: &mut Parser) -> bool {       // if-chain over trigger constants
+    let _k = p.kinds[p.pos];
+    if _k == TK_BACKTICK { _parse_template_string(p); return true; }
+    if _k == TK_INTERP_OPEN { _parse_interpolation(p); return true; }
+    // …one arm per delimiter trigger…
+    return false;
+}
+fn _recover_try_descend(p: &mut Parser) {
+    let before = p.pos; let was = p.recovering; p.recovering = false;
+    let did = _recover_descend(p);
+    p.recovering = was;
+    if !did || p.pos == before {                    // progress guard
+        let sk = p.advance(); p.tokens.mark_skipped(sk); p.b.skip(sk);
     }
-    return true;
 }
 ```
 
+The dispatch table (delimiter-trigger → `_parse_<rule>` call) is computed at
+generation time by `compute_recover_dispatch` from the exclusive-terminal +
+direct-first analysis above.
+
+Mid-parse error-region descent (extending `expect`'s `!sync.is_empty()` sweep)
+is a natural follow-up but was **not** needed for the highlight goal — a
+partially-parsed construct already builds its own subtree — so it is left out to
+keep the change minimal.
+
 ## Safety, termination, cost
 
-- **Progress guaranteed.** A unique trigger is a hard first token, so the
-  descended rule consumes ≥1 token; the `pos == before` guard skips one on the
-  (defensive) zero-consume case. Every sweep iteration advances `pos`, so a
+- **Progress guaranteed.** A delimiter trigger is a direct leading terminal, so
+  the descended rule consumes ≥1 token; the `pos == before` guard skips one on
+  the (defensive) zero-consume case. Every sweep iteration advances `pos`, so a
   sweep is O(remaining tokens); total parse stays O(n).
-- **No backtracking.** Dispatch is a table lookup / static match; nested error
-  regions inside an island are handled by ordinary rule recovery.
-- **`speculating` / `recovering`.** Descent runs only in real recovery
-  (`!p.speculating`). It clears `recovering` around each island so the called
-  rule actually parses, then restores it so the sweep continues.
-- **Diagnostics.** The sweep emits at most one region diagnostic
-  (`UnparsedInput`), respecting `max_errors`; island rules add their own,
-  capped the same way.
+- **No backtracking.** Dispatch is a static `if`-chain; nested error regions
+  inside an island are handled by ordinary rule recovery.
+- **`speculating` / `recovering`.** The hook sits after `expect`'s speculative
+  guard, so it never fires during a probe. It clears `recovering` around each
+  island so the called rule actually parses, then restores it.
+- **Diagnostics.** The sweep reports one `UnexpectedToken` for the unparsed
+  input; island rules add their own (capped by `max_errors`).
 
 ## Interaction with the shipped highlight walk
 
@@ -171,33 +191,37 @@ New generator option `recover_islands: bool` (default `false`), independent of
 with it off, the parser is byte-identical to today. `gale-highlight-*` packages
 turn it on.
 
-## TDD plan
+## TDD (as landed)
 
-Hit-case (driver tests, `recover_islands` on):
+Hit-case — `package-gale-highlight-wado/src/lib_test.wado` (`recover_islands`
+on): a bare `let s = \`hi ${name} ${name:0.2}\`;` fragment highlights
+`${name}`→`variable`and`0.2` muted, and round-trips; plus truncated / nested /
+junk-surrounded template probes stay text-preserving and bounded.
 
-- Bare `let s = \`hi ${name}\`;` → tree contains `templateString`/`interpolation`;
-  highlight marks `${name}`→`variable`,`${x:.2}` muted; text round-trips.
-- Mid-parse error region (unterminated call) grows a template island.
+Hit + rejection — `package-gale/tests/driver_cst_recover_islands_test.wado`, a
+foreign grammar whose start rule only derives `set`-led items with a `[`-
+delimited `group`:
 
-Rejection-case (mandatory, per the 2026-05 notes):
-
-- Every existing driver grammar (JSON, SQLite, calc, LR, …) parses to the **same
-  tree with the option on** for clean input — dispatch never fires on a clean
-  parse (there is no stuck position). Assert tree equality on/off.
-- A grammar where a unique-trigger token also appears legitimately: confirm the
-  clean path never reaches `recover_step`, and a _broken_ input near it makes
-  bounded progress (no runaway, one region).
+- **Rejection (the 2026-05 mandate):** the grammar is generated twice (option
+  on / off); clean inputs parse to the **same** tree — dispatch never fires
+  without a stuck position.
+- **Hit:** the fragment `[ x ]` yields `(prog (<error> (group [ x ])))` under
+  the root with the option on, and just `prog` with it off; trailing junk stays
+  bounded and still builds the island.
 
 ## Phasing
 
-1. Emit `RECOVER_DISPATCH` + `recover_step` + `call_rule` match, gated
-   (unique-trigger set from existing FIRST analysis). Wire the top-level sweep
-   and the `expect` sweep. Hit + rejection fixtures. — Tier 1.
-2. (Optional) Anchor set + ATN-resolved dispatch for full fragment structure. —
-   Tier 2, separate gate, its own rejection corpus.
+1. **Tier 1 (done):** `compute_recover_dispatch` (delimiter-trigger set from the
+   exclusive-terminal + direct-first analysis) + gated `_recover_descend` /
+   `_recover_try_descend`, wired into the `expect(EOF)` hook. Hit + rejection
+   fixtures. Enabled in `gale-highlight-wado`.
+2. **Tier 2 (deferred):** anchor set + ATN-resolved dispatch for full fragment
+   structure (parse a bare `let …` as a statement, not just its islands).
+   Separate gate, its own rejection corpus. Reuses all of Tier 1's plumbing;
+   only the dispatch decision changes.
 
 ## Recommendation
 
 Tier 1 is sufficient for correct fragment _highlighting_ and is low-risk
-(deterministic, unique-trigger only, opt-in). Tier 2 is a separate, riskier
+(deterministic, delimiter-trigger only, opt-in). Tier 2 is a separate, riskier
 capability for full fragment structure; pursue only on a concrete consumer need.

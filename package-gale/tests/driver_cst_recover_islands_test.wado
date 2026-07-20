@@ -1,0 +1,75 @@
+//! The `recover_islands` generator option: the parse entry sweeps input the
+//! start rule can't derive into an `<error>` region and descends into
+//! unique-trigger (delimiter) rules, so a bare fragment's nested constructs
+//! still build real subtrees. Off is byte-identical, so the same grammar is
+//! generated twice — with and without the option — and clean inputs must parse
+//! to the *same* tree (the rejection guarantee: the option never disturbs a
+//! clean parse, since a clean parse reaches no stuck position).
+
+use ri_on from "./grammars/recover_islands.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            output_dir: "./generated/cst_recover_islands_on",
+            options: { recover_islands: true },
+        },
+    };
+
+use ri_off from "./grammars/recover_islands_off.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            output_dir: "./generated/cst_recover_islands_off",
+        },
+    };
+
+// Rejection: with the option on, a clean parse is identical to the option-off
+// parse — the sweep only triggers at a stuck position, which a clean input
+// never reaches.
+fn assert_clean_identical(input: &String, expected: &String) {
+    let on = ri_on::to_string_tree(&ri_on::parse(input));
+    let off = ri_off::to_string_tree(&ri_off::parse(input));
+    assert on == *expected, `on:\n  expected: ${*expected}\n  actual:   ${on}`;
+    assert on == off, `option changed a clean parse:\n  on:  ${on}\n  off: ${off}`;
+    assert ri_on::parse(input).ok(), `clean input should parse cleanly: ${*input}`;
+}
+
+test "clean parse unchanged: bare item" {
+    assert_clean_identical(&"set a ;", &"(prog (item set a ;))");
+}
+
+test "clean parse unchanged: item with group" {
+    assert_clean_identical(&"set a [ b ] ;", &"(prog (item set a (group [ b ]) ;))");
+}
+
+test "clean parse unchanged: multiple items" {
+    assert_clean_identical(&"set a ; set b [ c ] ;", &"(prog (item set a ;) (item set b (group [ c ]) ;))");
+}
+
+// Hit: a fragment the start rule cannot derive (leads with `[`, not `set`).
+// The entry sweep descends into `group` on the delimiter `[`, so the group
+// builds a real subtree nested under the root inside the `<error>` region.
+test "fragment recovers a delimiter island under root" {
+    let r = ri_on::parse(&"[ x ]");
+    assert !r.ok(), "fragment should report a diagnostic";
+    let tree = ri_on::to_string_tree(&r);
+    assert tree == "(prog (<error> (group [ x ])))", `unexpected tree: ${tree}`;
+}
+
+// Off: the same fragment leaves the input unconsumed (no island, no error
+// region under root) — the tree is just the empty start rule.
+test "fragment without the option builds no island" {
+    let r = ri_off::parse(&"[ x ]");
+    assert !r.ok(), "fragment should report a diagnostic";
+    let tree = ri_off::to_string_tree(&r);
+    assert tree == "prog", `unexpected tree: ${tree}`;
+}
+
+// A stray delimiter run with junk still terminates and stays bounded: the
+// group island builds, trailing junk is skipped into the error region.
+test "fragment with trailing junk terminates" {
+    let r = ri_on::parse(&"[ y ] zzz");
+    assert !r.ok(), "fragment should report a diagnostic";
+    let tree = ri_on::to_string_tree(&r);
+    assert tree.contains("(group [ y ])"), `island missing: ${tree}`;
+}
