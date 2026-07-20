@@ -1,7 +1,7 @@
 #![generated(by = "gale", sources = ["tests/grammars/RustLexer.g4", "tests/grammars/RustParser.g4"])]
 
 // Grammar metadata from source .g4 prequels:
-//   option superClass = RustParserBase
+//   option superClass = RustLexerBase
 //   option tokenVocab = RustLexer
 
 //! Core lexing vocabulary shared by every generated parser and by Gale's
@@ -1347,6 +1347,71 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
         }
     }
     return [lo + 1, pos - line_starts[lo]];
+}
+//! Runtime support for the SuperClass effect interface (see `action.md`,
+//! "SuperClass — an effect interface"). Inlined into a generated lexer only
+//! when the grammar declares `options { superClass = Foo }`.
+//!
+//! `LexerView` is the match-window handle passed by value to every base
+//! operation. Its methods mirror the ANTLR recognizer runtime a base method
+//! reaches through `this` — lookahead (`la`, ANTLR `_input.LA`), matched text
+//! (`text`, ANTLR `getText`), and the cursor — so a hand-written `impl Foo`
+//! handler reads the lexer state alongside its own `self`. Passed by value, so
+//! the handler needs no `stores` clause; the char-stream ref it carries is why
+//! a generated `try_<rule>` that builds one declares `stores[...]`.
+
+/// A read-only window over the char stream at a lexer match site: the whole
+/// input plus the token `start` and the current match cursor `pos`.
+pub struct LexerView {
+    chars: &List<char>,
+    start: i32,
+    pos: i32,
+}
+
+impl LexerView {
+    /// ANTLR `_input.LA(k)`: `la(1)` is the char at the cursor, `la(-1)` the
+    /// one before it; out of range (including EOF) is -1. The cursor is the
+    /// current match position, so a mid-rule predicate sees the live lookahead.
+    pub fn la(&self, k: i32) -> i32 {
+        let i = if k > 0 { self.pos + k - 1 } else { self.pos + k };
+        if i < 0 || i >= self.chars.len() {
+            return -1;
+        }
+        return self.chars[i] as i32;
+    }
+
+    /// ANTLR `getText()`: the input matched by the current rule so far
+    /// (`chars[start..pos]`).
+    pub fn text(&self) -> String {
+        let mut s = String::with_capacity(if self.pos > self.start { self.pos - self.start } else { 0 });
+        for let mut i = self.start; i < self.pos; i += 1 {
+            s.push(self.chars[i]);
+        }
+        return s;
+    }
+
+    /// The token start index (absolute, into the whole input).
+    pub fn start(&self) -> i32 {
+        return self.start;
+    }
+
+    /// The current match cursor (absolute, into the whole input).
+    pub fn pos(&self) -> i32 {
+        return self.pos;
+    }
+
+    /// The char at an absolute input index, or -1 out of range.
+    pub fn char_at(&self, i: i32) -> i32 {
+        if i < 0 || i >= self.chars.len() {
+            return -1;
+        }
+        return self.chars[i] as i32;
+    }
+
+    /// The total input length in chars.
+    pub fn input_len(&self) -> i32 {
+        return self.chars.len();
+    }
 }
 //! Runtime FOLLOW-continuation gate for tail-greedy loops. Emitted into a
 //! generated parser only when lowering constructed a caller-FOLLOW gate
@@ -3018,6 +3083,12 @@ pub global TK_RPAREN: i32 = 129;
 pub global TK_EOF: i32 = 130;
 pub global TK_ERROR: i32 = 131;
 
+pub interface RustLexerBase {
+    fn sof(view: LexerView) -> bool;
+    fn float_literal_possible(view: LexerView) -> bool;
+    fn float_dot_possible(view: LexerView) -> bool;
+}
+
 struct Lexer {
     chars: List<char>,
     pos: i32,
@@ -4399,8 +4470,9 @@ fn try_BLOCK_COMMENT_OR_DOC(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_SHEBANG(chars: &List<char>, start: i32) -> i32 {
+fn try_SHEBANG(chars: &List<char>, start: i32) -> i32 with RustLexerBase, stores[chars] {
     let mut pos = start;
+    if !(RustLexerBase::sof(LexerView { chars, start, pos })) { return -1; }
     let opt_saved_24 = pos;
     let mut opt_ok_24 = false;
     rep_24: {
@@ -5290,8 +5362,9 @@ fn try_BIN_LITERAL(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_FLOAT_LITERAL(chars: &List<char>, start: i32) -> i32 {
+fn try_FLOAT_LITERAL(chars: &List<char>, start: i32) -> i32 with RustLexerBase, stores[chars] {
     let mut pos = start;
+    if !(RustLexerBase::float_literal_possible(LexerView { chars, start, pos })) { return -1; }
     let alts_saved_62 = pos;
     let mut alts_ok_62 = false;
     alts_62_0: {
@@ -5300,6 +5373,7 @@ fn try_FLOAT_LITERAL(chars: &List<char>, start: i32) -> i32 {
         if pos < 0 { break alts_62_0; }
         if pos >= chars.len() || chars[pos] != '.' { break alts_62_0; }
         pos += 1;
+        if !(RustLexerBase::float_dot_possible(LexerView { chars, start, pos })) { break alts_62_0; }
         alts_ok_62 = true;
     }
     if !alts_ok_62 {
@@ -5789,7 +5863,7 @@ fn try_RPAREN(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-pub fn tokenize(input: &String) -> TokenStream {
+pub fn tokenize(input: &String) -> TokenStream with RustLexerBase {
     let mut lexer = Lexer::new(input);
     let mut ts = TokenStream::new(&lexer.chars);
     let mut triv_lo = ts.trivia_mark();
@@ -26375,7 +26449,7 @@ fn _parse_shr(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     }
 }
 
-fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
+fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult with RustLexerBase {
     assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
@@ -26392,791 +26466,791 @@ fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> 
     return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
 }
 
-pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return parse_crate(input, max_errors);
 }
 
-pub fn parse_crate(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_crate(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_crate(p));
 }
 
-pub fn parse_macro_invocation(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_macro_invocation(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_macro_invocation(p));
 }
 
-pub fn parse_delim_token_tree(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_delim_token_tree(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_delim_token_tree(p));
 }
 
-pub fn parse_token_tree(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_token_tree(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_token_tree(p));
 }
 
-pub fn parse_token_tree_token(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_token_tree_token(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_token_tree_token(p));
 }
 
-pub fn parse_macro_invocation_semi(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_macro_invocation_semi(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_macro_invocation_semi(p));
 }
 
-pub fn parse_macro_rules_definition(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_macro_rules_definition(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_macro_rules_definition(p));
 }
 
-pub fn parse_macro_rules_def(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_macro_rules_def(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_macro_rules_def(p));
 }
 
-pub fn parse_macro_rules(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_macro_rules(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_macro_rules(p));
 }
 
-pub fn parse_macro_rule(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_macro_rule(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_macro_rule(p));
 }
 
-pub fn parse_macro_matcher(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_macro_matcher(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_macro_matcher(p));
 }
 
-pub fn parse_macro_match(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_macro_match(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_macro_match(p));
 }
 
-pub fn parse_macro_match_token(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_macro_match_token(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_macro_match_token(p));
 }
 
-pub fn parse_macro_frag_spec(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_macro_frag_spec(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_macro_frag_spec(p));
 }
 
-pub fn parse_macro_rep_sep(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_macro_rep_sep(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_macro_rep_sep(p));
 }
 
-pub fn parse_macro_rep_op(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_macro_rep_op(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_macro_rep_op(p));
 }
 
-pub fn parse_macro_transcriber(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_macro_transcriber(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_macro_transcriber(p));
 }
 
-pub fn parse_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_item(p));
 }
 
-pub fn parse_vis_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_vis_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_vis_item(p));
 }
 
-pub fn parse_macro_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_macro_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_macro_item(p));
 }
 
-pub fn parse_module(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_module(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_module(p));
 }
 
-pub fn parse_extern_crate(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_extern_crate(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_extern_crate(p));
 }
 
-pub fn parse_crate_ref(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_crate_ref(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_crate_ref(p));
 }
 
-pub fn parse_as_clause(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_as_clause(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_as_clause(p));
 }
 
-pub fn parse_use_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_use_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_use_declaration(p));
 }
 
-pub fn parse_use_tree(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_use_tree(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_use_tree(p));
 }
 
-pub fn parse_function_(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_function_(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_function_(p));
 }
 
-pub fn parse_function_qualifiers(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_function_qualifiers(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_function_qualifiers(p));
 }
 
-pub fn parse_abi(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_abi(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_abi(p));
 }
 
-pub fn parse_function_parameters(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_function_parameters(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_function_parameters(p));
 }
 
-pub fn parse_self_param(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_self_param(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_self_param(p));
 }
 
-pub fn parse_shorthand_self(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_shorthand_self(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_shorthand_self(p));
 }
 
-pub fn parse_typed_self(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_typed_self(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_typed_self(p));
 }
 
-pub fn parse_function_param(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_function_param(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_function_param(p));
 }
 
-pub fn parse_function_param_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_function_param_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_function_param_pattern(p));
 }
 
-pub fn parse_function_return_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_function_return_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_function_return_type(p));
 }
 
-pub fn parse_type_alias(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_alias(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_alias(p));
 }
 
-pub fn parse_struct_(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_struct_(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_struct_(p));
 }
 
-pub fn parse_struct_struct(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_struct_struct(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_struct_struct(p));
 }
 
-pub fn parse_tuple_struct(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_tuple_struct(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_tuple_struct(p));
 }
 
-pub fn parse_struct_fields(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_struct_fields(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_struct_fields(p));
 }
 
-pub fn parse_struct_field(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_struct_field(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_struct_field(p));
 }
 
-pub fn parse_tuple_fields(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_tuple_fields(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_tuple_fields(p));
 }
 
-pub fn parse_tuple_field(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_tuple_field(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_tuple_field(p));
 }
 
-pub fn parse_enumeration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_enumeration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_enumeration(p));
 }
 
-pub fn parse_enum_items(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_enum_items(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_enum_items(p));
 }
 
-pub fn parse_enum_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_enum_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_enum_item(p));
 }
 
-pub fn parse_enum_item_tuple(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_enum_item_tuple(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_enum_item_tuple(p));
 }
 
-pub fn parse_enum_item_struct(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_enum_item_struct(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_enum_item_struct(p));
 }
 
-pub fn parse_enum_item_discriminant(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_enum_item_discriminant(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_enum_item_discriminant(p));
 }
 
-pub fn parse_union_(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_union_(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_union_(p));
 }
 
-pub fn parse_constant_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_constant_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_constant_item(p));
 }
 
-pub fn parse_static_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_static_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_static_item(p));
 }
 
-pub fn parse_trait_(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_trait_(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_trait_(p));
 }
 
-pub fn parse_implementation(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_implementation(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_implementation(p));
 }
 
-pub fn parse_inherent_impl(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_inherent_impl(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_inherent_impl(p));
 }
 
-pub fn parse_trait_impl(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_trait_impl(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_trait_impl(p));
 }
 
-pub fn parse_extern_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_extern_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_extern_block(p));
 }
 
-pub fn parse_external_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_external_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_external_item(p));
 }
 
-pub fn parse_generic_params(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_generic_params(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_generic_params(p));
 }
 
-pub fn parse_generic_param(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_generic_param(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_generic_param(p));
 }
 
-pub fn parse_lifetime_param(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_lifetime_param(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_lifetime_param(p));
 }
 
-pub fn parse_type_param(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_param(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_param(p));
 }
 
-pub fn parse_const_param(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_const_param(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_const_param(p));
 }
 
-pub fn parse_where_clause(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_where_clause(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_where_clause(p));
 }
 
-pub fn parse_where_clause_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_where_clause_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_where_clause_item(p));
 }
 
-pub fn parse_lifetime_where_clause_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_lifetime_where_clause_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_lifetime_where_clause_item(p));
 }
 
-pub fn parse_type_bound_where_clause_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_bound_where_clause_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_bound_where_clause_item(p));
 }
 
-pub fn parse_for_lifetimes(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_for_lifetimes(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_for_lifetimes(p));
 }
 
-pub fn parse_associated_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_associated_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_associated_item(p));
 }
 
-pub fn parse_inner_attribute(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_inner_attribute(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_inner_attribute(p));
 }
 
-pub fn parse_outer_attribute(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_outer_attribute(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_outer_attribute(p));
 }
 
-pub fn parse_attr(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_attr(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_attr(p));
 }
 
-pub fn parse_attr_input(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_attr_input(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_attr_input(p));
 }
 
-pub fn parse_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_statement(p));
 }
 
-pub fn parse_let_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_let_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_let_statement(p));
 }
 
-pub fn parse_expression_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_expression_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_expression_statement(p));
 }
 
-pub fn parse_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_expression(p));
 }
 
-pub fn parse_comparison_operator(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_comparison_operator(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_comparison_operator(p));
 }
 
-pub fn parse_compound_assign_operator(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_compound_assign_operator(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_compound_assign_operator(p));
 }
 
-pub fn parse_expression_with_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_expression_with_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_expression_with_block(p));
 }
 
-pub fn parse_literal_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_literal_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_literal_expression(p));
 }
 
-pub fn parse_path_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_path_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_path_expression(p));
 }
 
-pub fn parse_block_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_block_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_block_expression(p));
 }
 
-pub fn parse_statements(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_statements(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_statements(p));
 }
 
-pub fn parse_async_block_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_async_block_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_async_block_expression(p));
 }
 
-pub fn parse_unsafe_block_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_unsafe_block_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_unsafe_block_expression(p));
 }
 
-pub fn parse_array_elements(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_array_elements(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_array_elements(p));
 }
 
-pub fn parse_tuple_elements(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_tuple_elements(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_tuple_elements(p));
 }
 
-pub fn parse_tuple_index(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_tuple_index(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_tuple_index(p));
 }
 
-pub fn parse_struct_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_struct_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_struct_expression(p));
 }
 
-pub fn parse_struct_expr_struct(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_struct_expr_struct(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_struct_expr_struct(p));
 }
 
-pub fn parse_struct_expr_fields(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_struct_expr_fields(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_struct_expr_fields(p));
 }
 
-pub fn parse_struct_expr_field(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_struct_expr_field(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_struct_expr_field(p));
 }
 
-pub fn parse_struct_base(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_struct_base(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_struct_base(p));
 }
 
-pub fn parse_struct_expr_tuple(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_struct_expr_tuple(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_struct_expr_tuple(p));
 }
 
-pub fn parse_struct_expr_unit(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_struct_expr_unit(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_struct_expr_unit(p));
 }
 
-pub fn parse_enumeration_variant_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_enumeration_variant_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_enumeration_variant_expression(p));
 }
 
-pub fn parse_enum_expr_struct(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_enum_expr_struct(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_enum_expr_struct(p));
 }
 
-pub fn parse_enum_expr_fields(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_enum_expr_fields(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_enum_expr_fields(p));
 }
 
-pub fn parse_enum_expr_field(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_enum_expr_field(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_enum_expr_field(p));
 }
 
-pub fn parse_enum_expr_tuple(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_enum_expr_tuple(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_enum_expr_tuple(p));
 }
 
-pub fn parse_enum_expr_fieldless(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_enum_expr_fieldless(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_enum_expr_fieldless(p));
 }
 
-pub fn parse_call_params(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_call_params(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_call_params(p));
 }
 
-pub fn parse_closure_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_closure_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_closure_expression(p));
 }
 
-pub fn parse_closure_parameters(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_closure_parameters(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_closure_parameters(p));
 }
 
-pub fn parse_closure_param(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_closure_param(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_closure_param(p));
 }
 
-pub fn parse_loop_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_loop_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_loop_expression(p));
 }
 
-pub fn parse_infinite_loop_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_infinite_loop_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_infinite_loop_expression(p));
 }
 
-pub fn parse_predicate_loop_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_predicate_loop_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_predicate_loop_expression(p));
 }
 
-pub fn parse_predicate_pattern_loop_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_predicate_pattern_loop_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_predicate_pattern_loop_expression(p));
 }
 
-pub fn parse_iterator_loop_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_iterator_loop_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_iterator_loop_expression(p));
 }
 
-pub fn parse_loop_label(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_loop_label(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_loop_label(p));
 }
 
-pub fn parse_if_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_if_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_if_expression(p));
 }
 
-pub fn parse_if_let_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_if_let_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_if_let_expression(p));
 }
 
-pub fn parse_match_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_match_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_match_expression(p));
 }
 
-pub fn parse_match_arms(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_match_arms(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_match_arms(p));
 }
 
-pub fn parse_match_arm_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_match_arm_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_match_arm_expression(p));
 }
 
-pub fn parse_match_arm(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_match_arm(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_match_arm(p));
 }
 
-pub fn parse_match_arm_guard(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_match_arm_guard(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_match_arm_guard(p));
 }
 
-pub fn parse_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_pattern(p));
 }
 
-pub fn parse_pattern_no_top_alt(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_pattern_no_top_alt(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_pattern_no_top_alt(p));
 }
 
-pub fn parse_pattern_without_range(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_pattern_without_range(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_pattern_without_range(p));
 }
 
-pub fn parse_literal_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_literal_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_literal_pattern(p));
 }
 
-pub fn parse_identifier_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_identifier_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_identifier_pattern(p));
 }
 
-pub fn parse_wildcard_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_wildcard_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_wildcard_pattern(p));
 }
 
-pub fn parse_rest_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_rest_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_rest_pattern(p));
 }
 
-pub fn parse_range_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_range_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_range_pattern(p));
 }
 
-pub fn parse_range_pattern_bound(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_range_pattern_bound(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_range_pattern_bound(p));
 }
 
-pub fn parse_reference_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_reference_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_reference_pattern(p));
 }
 
-pub fn parse_struct_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_struct_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_struct_pattern(p));
 }
 
-pub fn parse_struct_pattern_elements(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_struct_pattern_elements(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_struct_pattern_elements(p));
 }
 
-pub fn parse_struct_pattern_fields(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_struct_pattern_fields(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_struct_pattern_fields(p));
 }
 
-pub fn parse_struct_pattern_field(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_struct_pattern_field(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_struct_pattern_field(p));
 }
 
-pub fn parse_struct_pattern_et_cetera(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_struct_pattern_et_cetera(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_struct_pattern_et_cetera(p));
 }
 
-pub fn parse_tuple_struct_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_tuple_struct_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_tuple_struct_pattern(p));
 }
 
-pub fn parse_tuple_struct_items(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_tuple_struct_items(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_tuple_struct_items(p));
 }
 
-pub fn parse_tuple_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_tuple_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_tuple_pattern(p));
 }
 
-pub fn parse_tuple_pattern_items(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_tuple_pattern_items(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_tuple_pattern_items(p));
 }
 
-pub fn parse_grouped_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_grouped_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_grouped_pattern(p));
 }
 
-pub fn parse_slice_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_slice_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_slice_pattern(p));
 }
 
-pub fn parse_slice_pattern_items(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_slice_pattern_items(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_slice_pattern_items(p));
 }
 
-pub fn parse_path_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_path_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_path_pattern(p));
 }
 
-pub fn parse_type_(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_(p));
 }
 
-pub fn parse_type_no_bounds(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_no_bounds(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_no_bounds(p));
 }
 
-pub fn parse_parenthesized_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_parenthesized_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_parenthesized_type(p));
 }
 
-pub fn parse_never_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_never_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_never_type(p));
 }
 
-pub fn parse_tuple_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_tuple_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_tuple_type(p));
 }
 
-pub fn parse_array_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_array_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_array_type(p));
 }
 
-pub fn parse_slice_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_slice_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_slice_type(p));
 }
 
-pub fn parse_reference_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_reference_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_reference_type(p));
 }
 
-pub fn parse_raw_pointer_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_raw_pointer_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_raw_pointer_type(p));
 }
 
-pub fn parse_bare_function_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_bare_function_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_bare_function_type(p));
 }
 
-pub fn parse_function_type_qualifiers(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_function_type_qualifiers(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_function_type_qualifiers(p));
 }
 
-pub fn parse_bare_function_return_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_bare_function_return_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_bare_function_return_type(p));
 }
 
-pub fn parse_function_parameters_maybe_named_variadic(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_function_parameters_maybe_named_variadic(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_function_parameters_maybe_named_variadic(p));
 }
 
-pub fn parse_maybe_named_function_parameters(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_maybe_named_function_parameters(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_maybe_named_function_parameters(p));
 }
 
-pub fn parse_maybe_named_param(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_maybe_named_param(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_maybe_named_param(p));
 }
 
-pub fn parse_maybe_named_function_parameters_variadic(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_maybe_named_function_parameters_variadic(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_maybe_named_function_parameters_variadic(p));
 }
 
-pub fn parse_trait_object_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_trait_object_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_trait_object_type(p));
 }
 
-pub fn parse_trait_object_type_one_bound(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_trait_object_type_one_bound(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_trait_object_type_one_bound(p));
 }
 
-pub fn parse_impl_trait_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_impl_trait_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_impl_trait_type(p));
 }
 
-pub fn parse_impl_trait_type_one_bound(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_impl_trait_type_one_bound(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_impl_trait_type_one_bound(p));
 }
 
-pub fn parse_inferred_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_inferred_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_inferred_type(p));
 }
 
-pub fn parse_type_param_bounds(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_param_bounds(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_param_bounds(p));
 }
 
-pub fn parse_type_param_bound(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_param_bound(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_param_bound(p));
 }
 
-pub fn parse_trait_bound(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_trait_bound(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_trait_bound(p));
 }
 
-pub fn parse_lifetime_bounds(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_lifetime_bounds(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_lifetime_bounds(p));
 }
 
-pub fn parse_lifetime(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_lifetime(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_lifetime(p));
 }
 
-pub fn parse_simple_path(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_simple_path(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_simple_path(p));
 }
 
-pub fn parse_simple_path_segment(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_simple_path_segment(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_simple_path_segment(p));
 }
 
-pub fn parse_path_in_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_path_in_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_path_in_expression(p));
 }
 
-pub fn parse_path_expr_segment(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_path_expr_segment(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_path_expr_segment(p));
 }
 
-pub fn parse_path_ident_segment(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_path_ident_segment(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_path_ident_segment(p));
 }
 
-pub fn parse_generic_args(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_generic_args(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_generic_args(p));
 }
 
-pub fn parse_generic_arg(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_generic_arg(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_generic_arg(p));
 }
 
-pub fn parse_generic_args_const(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_generic_args_const(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_generic_args_const(p));
 }
 
-pub fn parse_generic_args_lifetimes(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_generic_args_lifetimes(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_generic_args_lifetimes(p));
 }
 
-pub fn parse_generic_args_types(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_generic_args_types(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_generic_args_types(p));
 }
 
-pub fn parse_generic_args_bindings(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_generic_args_bindings(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_generic_args_bindings(p));
 }
 
-pub fn parse_generic_args_binding(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_generic_args_binding(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_generic_args_binding(p));
 }
 
-pub fn parse_qualified_path_in_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_qualified_path_in_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_qualified_path_in_expression(p));
 }
 
-pub fn parse_qualified_path_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_qualified_path_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_qualified_path_type(p));
 }
 
-pub fn parse_qualified_path_in_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_qualified_path_in_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_qualified_path_in_type(p));
 }
 
-pub fn parse_type_path(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_path(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_path(p));
 }
 
-pub fn parse_type_path_segment(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_path_segment(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_path_segment(p));
 }
 
-pub fn parse_type_path_fn(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_path_fn(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_path_fn(p));
 }
 
-pub fn parse_type_path_inputs(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_path_inputs(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_path_inputs(p));
 }
 
-pub fn parse_visibility(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_visibility(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_visibility(p));
 }
 
-pub fn parse_identifier(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_identifier(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_identifier(p));
 }
 
-pub fn parse_keyword(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_keyword(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_keyword(p));
 }
 
-pub fn parse_macro_identifier_like_token(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_macro_identifier_like_token(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_macro_identifier_like_token(p));
 }
 
-pub fn parse_macro_literal_token(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_macro_literal_token(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_macro_literal_token(p));
 }
 
-pub fn parse_macro_punctuation_token(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_macro_punctuation_token(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_macro_punctuation_token(p));
 }
 
-pub fn parse_shl(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_shl(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_shl(p));
 }
 
-pub fn parse_shr(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_shr(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with RustLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_shr(p));
 }
 

@@ -50,24 +50,21 @@ diverge.
 only** — there is no capability gap:
 
 - Gale stores EOF as a real tree node. A rule matching `EOF` appends the
-  token via `TreeBuilder.token` (`parser_gen.wado`, the `emit_consume_kind_return`
-  EOF branch), exactly as ANTLR4 makes it a `TerminalNode` child. Child
-  count, indexing, and listener/visitor walks observe the EOF node in
-  both.
-- Only the S-expression **rendering** differs: `to_string_tree`
-  (`runtime/tree.wado`) skips empty-text terminals (`is_empty_text`,
-  which EOF satisfies) when printing. The node is present; it just is not
-  drawn.
+  token exactly as ANTLR4 makes it a terminal child. Child count, indexing,
+  and listener / visitor walks observe the EOF node in both.
+- Only the S-expression **rendering** differs: Gale's tree renderer skips
+  empty-text terminals (which EOF is) when printing. The node is present;
+  it just is not drawn.
 
-So the shape/navigation capability is identical; only the debug string
+So the shape / navigation capability is identical; only the debug string
 diverges. Rather than reverse Gale's convention (which would re-baseline
 every driver test and the whole Stage B suite), both stages normalise the
-ANTLR side to Gale's shape: Stage B strips `<EOF>` from the oracle tree
-(`strip_eof_marker`) and Stage C strips it from the descriptor `[output]`
-before the exact-match compare (`strip_tail_eof_marker`, whitespace-
-preserving so the trailing newline survives). The marker is only ever
-dropped in tail position (followed by closing parens / whitespace), so an
-`<EOF>` that is genuine token _text_ mid-tree is left untouched.
+ANTLR side to Gale's shape: Stage B strips `<EOF>` from the oracle tree and
+Stage C strips it from the descriptor output before the exact-match compare
+(whitespace-preserving, so the trailing newline survives). The marker is
+only ever dropped in tail position (followed by closing parens /
+whitespace), so an `<EOF>` that is genuine token _text_ mid-tree is left
+untouched.
 
 The contract is verified at three layered stages.
 
@@ -158,8 +155,8 @@ Two test sources cover Stage B:
 2. **Per-descriptor Stage B drivers** under
    `tests/antlr4-compat/stage_b/<Category>/<Name>_test.wado`, emitted
    by the descriptor extractor for every descriptor whose `[output]` is
-   a clean parse tree (rejected by `normalize_output_for_stage_b`
-   otherwise — action-body prints, `Token.toString` dumps, ATN traces).
+   a clean parse tree (rejected by the Stage B output normalizer
+   otherwise — action-body prints, token dumps, ATN traces).
    Two emit shapes:
    - **Full-tree** when the `[output]` root rule equals `[start]`.
      Compares `t::to_tree(&root).to_string_tree()` against the
@@ -167,8 +164,8 @@ Two test sources cover Stage B:
    - **Sub-tree** when the root differs from `[start]` — typical of
      descriptors using `@after { <ToStringTree("$r.ctx"):writeln()> }`
      to print a labelled child rather than the start rule's full tree.
-     The emitted test navigates the full tree via the runtime helper
-     `find_first_child_node` before comparing.
+     The emitted test navigates the full tree to that child before
+     comparing.
 
    Both shapes share `tests/generated/antlr4_compat_b/<C>/<N>/` for the
    generated parser.
@@ -315,10 +312,10 @@ tree shape.
 
 **Stage C output-compare (landed for the executable subset).** For a
 Parser descriptor whose `[output]` is action-print text (`<writeln(...)>`
-echoes — rejected by `normalize_output_for_stage_b` as a non-tree), the
+echoes — rejected by the Stage B output normalizer as a non-tree), the
 extractor emits `stage_c/<Category>/<Name>_output_test.wado`: it parses
-`[input]` and asserts `result.output` (the `p.emit` buffer on
-`ParseResult`) equals the descriptor `[output]`. This validates the
+`[input]` and asserts the parser's action-print output equals the
+descriptor `[output]`. This validates the
 `language = Java` parser-action translation that Phase 3 already landed —
 top-level alt actions and predicates (`SemPredEvalParser/Simple`,
 `Order`, …) produce the exact `alt N` prints. Descriptors whose actions
@@ -423,7 +420,7 @@ adaptive prediction. Matching that answer is a hard Stage A / Stage B
 contract obligation, but doing it ANTLR4's way naively is too slow for
 the very descriptor that needs it — so Gale uses a **hybrid**. This
 section records that design decision and its known approximation gaps;
-the implementation lives in `runtime/atn.wado`.
+the implementation lives in the ATN runtime module.
 
 Why a runtime simulator at all: the static FOLLOW + K-prefix path always
 has edges — not a tuning gap but a decidability one. The lookahead
@@ -480,7 +477,7 @@ left-recursive rule are covered by fixtures (`lr_complement_op.g4`,
 runtime-precision shapes (a shared delimiter past a nullable
 continuation, two enter edges sharing a first lookahead token) fall back
 to the complete simulator rather than guess. The mechanism and the full
-edge list live in `runtime/atn.wado`.
+edge list live with the ATN runtime module.
 
 ## Lexer ATN — recursive non-greedy wildcard rules
 
@@ -497,8 +494,7 @@ greedy / non-greedy loop semantics (greedy takes the longest match,
 non-greedy the shortest that still completes the rule). The behaviour was
 characterized clean-room against the published jar as a black box
 (License hygiene: run it, never read it). Rules without this
-recursive-wildcard shape are unaffected. The implementation lives in
-`runtime/latn.wado`.
+recursive-wildcard shape are unaffected. The implementation lives in the lexer ATN runtime module.
 
 ## The Descriptor Pipeline
 
@@ -549,10 +545,7 @@ tests/antlr4-compat/stage_b_oracle/<Category>/<Name>_test.wado
                     standard Wado test harness)
 ```
 
-The Wado script is self-contained: no `wado.toml`, no kiln. It uses
-`wadopoet::CodeWriter` to emit Wado source, a few `package-gale/src`
-helpers (`action_strip`, `action_templates`, `ident`), plus `core:cli`
-and `wasi:filesystem` for I/O.
+The extractor is a self-contained Wado script (no `wado.toml`, no Kiln).
 
 ### Action-template expansion
 
@@ -561,9 +554,8 @@ Upstream descriptors write action bodies, semantic predicates, and
 StringTemplate helper vocabulary (`<writeln("$e.v")>`, `<True()>`,
 `<StringList()>`, ...), which the upstream harness expands per target
 before `antlr4` ever sees the grammar. The extractor performs the same
-step for the Java target at extract time
-(`src/g4/action_templates.wado`), so the committed `.g4` files carry
-real Java action bodies instead of testsuite-only notation. The
+step for the Java target at extract time, so the committed `.g4` files
+carry real Java action bodies instead of testsuite-only notation. The
 expansion table was pinned clean-room — helper names, descriptor
 `[output]`s, and the public ANTLR4 runtime API; never the upstream
 `.stg` files (License hygiene in [`AGENTS.md`](./AGENTS.md)). An

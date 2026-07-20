@@ -422,6 +422,16 @@ fn collect_element_action_ids(elem: &Element, out: &mut List<i32>) {
     }
 }
 
+/// The ` with Foo` clause a parse-entry fn carries when the lexer declares a
+/// `superClass` — the entry calls `tokenize` (which carries the base effect),
+/// so it must propagate it. Empty when there is no superClass.
+fn superclass_clause(ctx: &GenContext) -> String {
+    if ctx.has_superclass() {
+        return ` with ${*ctx.superclass_name()}`;
+    }
+    return "";
+}
+
 /// Public `parse` entry under the emitter: tokenize, run the start
 /// rule (which drives the builder), and return a `ParseResult`. The parser is
 /// infallible; a failure leaves `p.recovering` set and the deepest error in
@@ -440,7 +450,7 @@ fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenContex
     // caller parse from any rule (ANTLR4 lets you pick a start rule; the
     // ANTLR4-compat descriptors name one), mirroring the typed parser.
     let start = rule_header(&lowered.parser_rules[0]);
-    w.begin(&"pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult");
+    w.begin(&`pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult${superclass_clause(ctx)}`);
     w.line(&`return parse_${start.snake_name}(input, max_errors);`);
     w.end();
     w.blank();
@@ -456,7 +466,9 @@ fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenContex
 /// propagated error and `p.pending`).
 fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
     w.begin(
-        &"fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult",
+        &`fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult${superclass_clause(
+            ctx,
+        )}`,
     );
     // `max_errors` caps recovery; 1 is the fail-fast minimum. 0 (or negative)
     // would suppress every diagnostic and let a broken parse report `ok()`, so
@@ -496,7 +508,11 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
 /// or LR entry's defaulted `follow` / `min_prec` arguments fill in.
 fn gen_parse_rule_entry(w: &mut CodeWriter, rule: &Rule, ctx: &GenContext) {
     let header = rule_header(rule);
-    w.begin(&`pub fn parse_${header.snake_name}(input: &String, max_errors: i32 = i32::MAX) -> ParseResult`);
+    w.begin(
+        &`pub fn parse_${header.snake_name}(input: &String, max_errors: i32 = i32::MAX) -> ParseResult${superclass_clause(
+            ctx,
+        )}`,
+    );
     let call = `_parse_${header.snake_name}(p)`;
     let entry = if entry_emits_vals(ctx, &header.name) {
         `|p: &mut Parser| \{ let _ = ${call}; \}`;
