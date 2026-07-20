@@ -1203,8 +1203,17 @@ impl Monomorphizer {
             }
         }
 
-        // Add method-level type params from key.method_type_args
-        let offset = generic.impl_type_params.len() as u32;
+        // Add method-level type params from key.method_type_args. The offset must
+        // clear the highest impl-param *index*, not the count: a concrete type in
+        // a receiver slot (`String` in `impl<V> ... for TreeMap<String, V>`) is not
+        // a param, so `V` keeps its receiver-position index (1) while the count is
+        // 1 — using the count would collide the method param onto `V`'s key.
+        let offset = generic
+            .impl_type_params
+            .iter()
+            .map(|p| p.index + 1)
+            .max()
+            .unwrap_or(0);
         for (param, &arg) in generic.type_params.iter().zip(key.method_type_args.iter()) {
             substitution.insert(offset + param.index, arg);
         }

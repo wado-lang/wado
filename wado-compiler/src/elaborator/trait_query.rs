@@ -907,20 +907,16 @@ impl TypeSystem {
             return true;
         }
 
-        // Type parameters satisfy bounds declared on them (e.g., T: Describable
-        // means T implements Describable within the scope of that declaration).
+        // A type parameter satisfies exactly the bounds declared on it. Concrete
+        // types no longer reach here as parameters — a known non-declared type arg
+        // (`String` in `impl for TreeMap<String, V>`) resolves as itself.
         if let ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } = resolved
         {
-            if let Some(bounds) = ctx.trait_ctx.type_param_bounds.get(name)
-                && bounds.iter().any(|b| b.name == trait_name)
-            {
-                return true;
-            }
-            // A concrete type named in an impl header (`String` in
-            // `impl<V> ... for TreeMap<String, V>`) is elaborated in the body as a
-            // param named after the type; resolve it against real impls so it is
-            // not mistaken for an unbounded parameter.
-            return self.find_trait_impl_for_type(ctx, scope, name, trait_name);
+            return ctx
+                .trait_ctx
+                .type_param_bounds
+                .get(name)
+                .is_some_and(|bounds| bounds.iter().any(|b| b.name == trait_name));
         }
 
         if on_bound == Some(OnBoundTrait::Ref) {
