@@ -79,13 +79,13 @@ To add an e2e grammar: drop the `.g4` in `tests/grammars/` (with `// Source:` / 
 
 ## Inlined runtime
 
-The generated parser inlines the runtime fragments in `src/runtime/*.wado` (`lex`, `diag`, `tree`, `tools` always; `follow` / `highlight` / `atn` / `latn` gated per-feature), assembled by `gen_runtime` in `codegen.wado`. Each fragment is also a real module for dev / test.
+The generated parser inlines the runtime fragments in `src/runtime/*.wado` (`lex`, `diag`, `tree`, `tools` always; `follow` / `highlight` / `atn` / `latn` gated per-feature). Each fragment is also a real module for dev / test.
 
 ## Failed approaches (do not repeat)
 
 Prediction dead-ends — the static path always has edges (a decidability limit); the complete answer is the runtime ATN simulator (see `antlr4-compatibility.md`):
 
-- RuleRef expansion via a return stack (2026-03): expanding multi-token RuleRefs during SLL prediction to cut backtracking. Tokens from inside an expanded sub-rule can't be used at the decision point without an ATN-grade depth mapping, and dedup-by-alt merges alts that share a sub-rule. Left as zero-overhead scaffolding on `SllConfig`.
+- RuleRef expansion via a return stack (2026-03): expanding multi-token RuleRefs during SLL prediction to cut backtracking. Tokens from inside an expanded sub-rule can't be used at the decision point without an ATN-grade depth mapping, and dedup-by-alt merges alts that share a sub-rule. Left as zero-overhead scaffolding.
 - LL(\*) static variant emit (2026-05), three over-broad attempts at per-(rule, follow-mask) variants. Static analysis can't distinguish "tail-greedy that should yield to the caller" from "one that legitimately re-enters" — each over-broad guard silently broke a real grammar (`htmlContent`, CSS `selector`). Superseded by the runtime FOLLOW gate; pair any LL repair with a rejection-case fixture, not just a hit-case one.
 
 Performance dead-ends (e.g. data-driven scan) live in [`perf.md`](./perf.md).
