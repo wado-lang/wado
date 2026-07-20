@@ -296,9 +296,15 @@ pub async fn execute_with_mode<H: CompilerHost>(
                         normalized.as_str(),
                     );
                 }
-                std::fs::write(&full_path, &bytes).map_err(|source| ExecuteError::Io {
-                    path: full_path.clone(),
-                    source,
+                // Atomic publish (temp + rename): the same generated output can
+                // be written by several files' compiles at once during a parallel
+                // `wado test` sweep, and a plain `fs::write` lets a concurrent
+                // reader observe a torn, half-written module.
+                crate::cache::write_atomic(&full_path, &bytes).map_err(|source| {
+                    ExecuteError::Io {
+                        path: full_path.clone(),
+                        source,
+                    }
                 })?;
             }
             ExecuteMode::DryRun => {
