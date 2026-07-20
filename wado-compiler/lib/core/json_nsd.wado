@@ -567,8 +567,8 @@ impl Deserializer for NsdDeserializer {
 
 /// Serializes a value to UTF-8 JSON NSD bytes — the primary entry point.
 ///
-/// Returns a read-only `ByteSlice` viewing the serializer's own UTF-8 buffer —
-/// no copy. `trailing_char`, when `Some`, is appended after the value.
+/// Returns a read-only `ByteSlice` over the serializer's UTF-8 buffer.
+/// `trailing_char`, when `Some`, is appended after the value.
 pub fn to_bytes<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError> {
     let mut buf: String = "";
     let mut ser = NsdSerializer { buf: &mut buf };

@@ -36,12 +36,8 @@ fn utf8_seq_len(b0: u8) -> i32 {
     return 4;
 }
 
-/// Decode the UTF-8 scalar at `repr[pos]`, returning `[code_point, byte_length]`.
-///
-/// The single unchecked decoder shared by every scan that already knows the
-/// bytes are valid UTF-8 (char iterators, `pop`, `remove`, `char_at_byte`).
-/// Callers must ensure `pos` is on a boundary and the full 1–4 byte sequence is
-/// in range. For validation use `decode_utf8_scalar` instead.
+/// Decode the UTF-8 scalar at byte offset `pos`, returning `[code_point, byte_length]`.
+/// Assumes valid UTF-8 with the full sequence in range.
 #[inline]
 fn decode_char_at(repr: &Array<u8>, pos: i32) -> [u32, i32] {
     let b0 = repr[pos] as u32;
@@ -63,8 +59,8 @@ fn decode_char_at(repr: &Array<u8>, pos: i32) -> [u32, i32] {
     return [(b0 & 0x07) << 18 | (b1 & 0x3F) << 12 | (b2 & 0x3F) << 6 | b3 & 0x3F, 4];
 }
 
-/// Encode `code` as UTF-8 into `repr` starting at `pos`, returning the byte
-/// length (1–4). `repr[pos..pos+len)` must be in bounds.
+/// Encode `code` as UTF-8 at byte offset `pos`, returning the byte length (1–4).
+/// `[pos, pos + len)` must be in bounds.
 #[inline]
 fn encode_char(repr: &mut Array<u8>, pos: i32, code: u32) -> i32 {
     if code < 0x80 {
@@ -89,8 +85,7 @@ fn encode_char(repr: &mut Array<u8>, pos: i32, code: u32) -> i32 {
     return 4;
 }
 
-/// Scan backward from `pos` to the start of the UTF-8 sequence containing it,
-/// skipping continuation bytes (0x80–0xBF). Used to locate the last character.
+/// Return the start offset of the UTF-8 sequence containing byte `pos`.
 fn char_start_backward(repr: &Array<u8>, pos: i32) -> i32 {
     let mut p = pos;
     while p > 0 {
@@ -116,27 +111,18 @@ fn bytes_match_at(haystack: &Array<u8>, pos: i32, needle: &Array<u8>, needle_len
     return true;
 }
 
-/// One UTF-8 scalar decoded from a byte slice — the single source of truth for
-/// the UTF-8 grammar shared by `from_utf8`, `from_utf8_slice`, and
-/// `from_utf8_lossy`.
+/// One UTF-8 scalar decoded from a byte slice.
 struct Utf8Scalar {
     /// Decoded code point; meaningful only when `valid`.
     code: u32,
-    /// Bytes consumed by this step. When `valid`, the sequence length (1–4).
-    /// When invalid, the structurally-consumed prefix (>= 1) to skip before
-    /// resuming — i.e. the offset of the first bad or missing byte. This is
-    /// exactly the one-`U+FFFD`-per-bad-lead recovery `from_utf8_lossy` uses.
+    /// Bytes advanced: when `valid`, the sequence length (1–4); when invalid,
+    /// the prefix (>= 1) to skip before resuming.
     advance: i32,
     valid: bool,
 }
 
-/// Decode the UTF-8 scalar starting at `bytes[start..len)`.
-///
-/// Centralizes the lead-byte classification, continuation-byte checks, and the
-/// overlong / surrogate / out-of-range rejections so the three `from_utf8*`
-/// entry points share one grammar.
+/// Decode and validate the UTF-8 scalar at `bytes[start..len)`.
 fn decode_utf8_scalar(bytes: ByteSlice, start: i32, len: i32) -> Utf8Scalar {
-    // Rejections are cold_path()-marked so the hot loop stays laid out for valid bytes.
     let b0 = bytes.get_unchecked(start);
     if b0 < 0x80 {
         return Utf8Scalar { code: b0 as u32, advance: 1, valid: true };
@@ -218,16 +204,14 @@ fn decode_utf8_scalar(bytes: ByteSlice, start: i32, len: i32) -> Utf8Scalar {
     return Utf8Scalar { code: 0, advance: 1, valid: false };
 }
 
-/// UTF-8 encoded string type with O(1) amortized push_str
+/// A UTF-8 encoded, growable string.
 #[compiler_item("string")]
 internal struct String {
     repr: ByteArray,
     used: i32,
 }
 
-/// Copy `repr[start..start+len)` into a fresh `String`. Bytes are assumed valid
-/// UTF-8. The single point where the split/strip/line iterators materialize a
-/// substring, so each yields with one `array_new` + `array_copy`.
+/// Copy `len` bytes from offset `start` into a fresh `String` (bytes assumed valid UTF-8).
 fn substring(repr: &Array<u8>, start: i32, len: i32) -> String {
     let mut part: Array<u8> = builtin::array_new(len);
     builtin::array_copy(&mut part, 0, repr, start, len);
@@ -413,14 +397,14 @@ impl Iterator for StrLinesIter {
             let b = self.repr[self.pos];
             if b == 0x0A {
                 let part = substring(self.repr, start, self.pos - start);
-                self.pos += 1;  // skip \n
+                self.pos += 1;
                 return Option::Some(part);
             }
             if b == 0x0D {
                 let part = substring(self.repr, start, self.pos - start);
-                self.pos += 1;  // skip \r
+                self.pos += 1;
                 if self.pos < self.used && self.repr[self.pos] == 0x0A {
-                    self.pos += 1;  // skip \n after \r
+                    self.pos += 1;
                 }
                 return Option::Some(part);
             }
@@ -435,13 +419,12 @@ impl Iterator for StrLinesIter {
 }
 
 impl String {
-    /// Create a new empty string with no allocated capacity.
+    /// Create a new empty string.
     pub fn new() -> String {
         return String::with_capacity(0);
     }
 
-    /// Create a new empty string with the specified capacity
-    /// The string starts empty but has space for `capacity` bytes
+    /// Create an empty string with space for `capacity` bytes.
     pub fn with_capacity(capacity: i32) -> String {
         return String { repr: builtin::array_new::<u8>(capacity) as ByteArray, used: 0 };
     }
@@ -456,13 +439,10 @@ impl String {
         return self.used == 0;
     }
 
-    /// Read the byte at `index` without bounds checks.
+    /// Read the byte at `index` without bounds checks. For safe access use `bytes()`.
     ///
     /// # Safety (caller-side preconditions)
     /// - `0 <= index < self.len()`.
-    ///
-    /// For safe byte access, use `bytes()` iterator instead. This method is
-    /// reserved for performance-critical code where bounds have been proven.
     #[compiler_item("string_get_byte_unchecked")]
     pub fn get_byte_unchecked(&self, index: i32) -> u8 {
         return self.repr[index];
@@ -472,53 +452,42 @@ impl String {
     ///
     /// # Safety (caller-side preconditions)
     /// - `0 <= index < self.len()`.
-    /// - The resulting byte sequence must remain valid UTF-8. This is the
-    ///   caller's responsibility (cf. Rust's `as_bytes_mut`, which is `unsafe`).
+    /// - The resulting byte sequence must remain valid UTF-8.
     pub fn set_byte_unchecked(&mut self, index: i32, value: u8) {
         self.repr[index] = value;
     }
 
-    /// Zero-copy view of the string's UTF-8 bytes as an `ArraySlice<u8>`.
-    /// No allocation: the slice references the string's backing buffer over
-    /// `[0, len())`. Used by the byte-based deserializers to hand a wire key
-    /// to `FieldSchema::lookup` without a `String` copy. The `AsByteSlice`
-    /// trait impl (in `core:prelude/bytes.wado`) wraps this as a `ByteSlice`.
+    /// Read-only view of the string's UTF-8 bytes as an `ArraySlice<u8>` over `[0, len())`.
     pub fn as_bytes(&self) -> ByteSlice with stores[self] {
         return ArraySlice::internal_new(&self.repr as &Array<u8>, 0, self.used) as ByteSlice;
     }
 
-    /// Internal: Shared view of the backing byte array (stdlib use only).
-    /// Returns a reference so reads scan the buffer without copying. Caller must
-    /// respect `len()` boundary.
+    /// Internal: shared reference to the string's bytes (stdlib use only).
+    /// Caller must respect the `len()` boundary.
     internal fn internal_raw_bytes(&self) -> &Array<u8> {
         return &self.repr as &Array<u8>;
     }
 
-    /// Internal: Mutable view of the backing byte array (stdlib use only).
-    /// Returns a reference so in-place writes reach the buffer; a by-value
-    /// `Array<u8>` would be deep-copied and detach the alias. Caller must
-    /// respect `len()` boundary.
+    /// Internal: mutable reference to the string's bytes (stdlib use only).
+    /// Caller must respect the `len()` boundary.
     internal fn internal_raw_bytes_mut(&mut self) -> &mut Array<u8> {
         return &mut self.repr as &mut Array<u8>;
     }
 
-    /// Internal: Create String from raw UTF-8 bytes (stdlib use only)
-    /// The bytes must be valid UTF-8. No validation is performed.
+    /// Internal: wrap already-valid UTF-8 bytes as a `String` (stdlib use only).
+    /// No validation is performed.
     internal fn internal_from_utf8_raw(bytes: Array<u8>, len: i32) -> String {
         return String { repr: bytes as ByteArray, used: len };
     }
 
-    /// Reallocate the backing buffer to exactly `new_capacity` bytes, preserving
-    /// the current `used` bytes. Shared by `grow` and `shrink_to_fit`.
+    /// Reallocate to exactly `new_capacity` bytes, preserving the current contents.
     fn realloc_to(&mut self, new_capacity: i32) {
         let mut new_repr: Array<u8> = builtin::array_new(new_capacity);
         builtin::array_copy(&mut new_repr, 0, &self.repr as &Array<u8>, 0, self.used);
         self.repr = new_repr as ByteArray;
     }
 
-    /// Ensure the string has capacity for at least `min_capacity` bytes.
-    /// If the current capacity is less than `min_capacity`, grows the buffer.
-    /// Uses amortized doubling strategy for efficiency.
+    /// Ensure capacity for at least `min_capacity` bytes.
     pub fn grow(&mut self, min_capacity: i32) {
         let capacity = self.repr.len();
         if min_capacity <= capacity {
@@ -527,15 +496,9 @@ impl String {
         self.realloc_to(i32_max(i32_max(capacity * 2, min_capacity), 8));
     }
 
-    /// Internal: Reserve `n` uninitialised bytes at the end of the string (stdlib use only).
-    /// Returns the byte offset where the caller must write exactly `n` valid UTF-8 bytes
-    /// into `internal_raw_bytes()`. The string's length is advanced immediately, so the
-    /// caller MUST fill all `n` bytes before the string is observed.
-    ///
-    /// Intended for right-to-left writes (integer/float decimal formatting) that
-    /// `array_copy` cannot express. For left-to-right bulk appends, use
-    /// `push_bytes_unchecked` or `push_str_range_unchecked` instead — they compile to
-    /// a single `array_copy` and do not require the caller to maintain a write offset.
+    /// Internal: reserve `n` uninitialised bytes at the end and return their offset
+    /// (stdlib use only). The length is advanced immediately, so the caller MUST fill
+    /// all `n` bytes.
     internal fn internal_reserve_uninit(&mut self, n: i32) -> i32 {
         let new_used = self.used + n;
         if new_used > self.repr.len() {
@@ -559,8 +522,7 @@ impl String {
         }
     }
 
-    /// Append `n` copies of `byte` to this string using array.fill.
-    /// Much faster than a loop for large n (e.g., trailing zeros in large integers).
+    /// Append `n` copies of `byte` to this string.
     pub fn append_byte_filled(&mut self, byte: u8, n: i32) {
         if n <= 0 {
             return;
@@ -569,8 +531,7 @@ impl String {
         builtin::array_fill(&mut self.repr as &mut Array<u8>, start, byte, n);
     }
 
-    /// Appends another string to this string.
-    /// Grows the string if necessary (O(1) amortized).
+    /// Append another string to this one.
     #[compiler_item("string_push_str")]
     pub fn push_str(&mut self, other: &String) {
         let other_len = other.len();
@@ -582,7 +543,7 @@ impl String {
     }
 
     /// Append the bytes of any `AsByteSlice` source (`ByteList`, `ByteArray`,
-    /// `ByteSlice`, or a `String`) in one bulk `array_copy`.
+    /// `ByteSlice`, or a `String`).
     ///
     /// # Safety (caller-side preconditions)
     /// - The resulting byte sequence must remain valid UTF-8.
@@ -596,8 +557,7 @@ impl String {
         builtin::array_copy(&mut self.repr as &mut Array<u8>, start, slice.internal_repr(), slice.internal_start(), n);
     }
 
-    /// Append the byte range `[start, end)` of `s` to this string
-    /// (bulk-copy, single `array_copy`).
+    /// Append the byte range `[start, end)` of `s` to this string.
     ///
     /// # Safety (caller-side preconditions)
     /// - `0 <= start <= end <= s.len()`.
@@ -627,14 +587,13 @@ impl String {
         return StrCharIndicesIter { repr: &self.repr as &Array<u8>, used: self.used, byte_index: 0 };
     }
 
-    /// Decode the whole string into an owned `List<char>`.
+    /// Decode the whole string into a `List<char>`.
     pub fn to_chars(&self) -> List<char> {
         let bytes = self.as_bytes();
         let len = self.used;
         let mut chars: List<char> = List::with_capacity(len);
         let mut i = 0;
         while i < len {
-            // ASCII dominates; inline it so a plain byte skips decode_utf8_scalar.
             let b0 = bytes.get_unchecked(i);
             if b0 < 0x80 {
                 chars.push(char::from_u32_unchecked(b0 as u32));
@@ -715,7 +674,7 @@ impl String {
     }
 
     /// Returns true if `byte_index` is 0, `self.len()`, or the start of a
-    /// UTF-8 character in this string. Mirrors Rust's `str::is_char_boundary`.
+    /// UTF-8 character in this string.
     pub fn is_char_boundary(&self, byte_index: i32) -> bool {
         if byte_index == 0 || byte_index == self.used {
             return true;
@@ -977,9 +936,9 @@ impl String {
         return null;
     }
 
-    /// Grow if needed and shift the bytes `[byte_index, used)` right by `width`,
-    /// leaving an uninitialised gap `[byte_index, byte_index + width)`. Advances
-    /// `used`. Shared by `insert_unchecked` and `insert_str_unchecked`.
+    /// Grow if needed and shift the bytes from `byte_index` onward right by `width`,
+    /// leaving an uninitialised gap `[byte_index, byte_index + width)`. Advances the
+    /// length.
     fn make_gap(&mut self, byte_index: i32, width: i32) {
         let new_used = self.used + width;
         if new_used > self.repr.len() {
@@ -1112,7 +1071,7 @@ impl String {
         return result;
     }
 
-    /// Build a String from any iterable of chars.
+    /// Build a `String` from an iterable of chars.
     pub fn from_iter<I: IntoIterator<Item = char>>(iter: I) -> String {
         let mut s = String::with_capacity(8);
         for let c of iter {
@@ -1121,24 +1080,14 @@ impl String {
         return s;
     }
 
-    /// Build a String from any iterable of bytes, validating that they form valid UTF-8.
-    /// Returns Ok(String) on success, or Err(String) with an error message on failure.
-    ///
-    /// Accepts any `IntoIterator` whose item is `u8`: `List<u8>`, `StrUtf8ByteIter`, etc.
+    /// Build a `String` from an iterable of bytes, validating UTF-8.
+    /// `Ok(String)` on success, `Err(message)` on invalid UTF-8.
     pub fn from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, String> {
-        // Iterating can't bulk-copy: materialize once, then validate-and-copy via from_utf8_slice.
         let collected: List<u8> = bytes.into_iter().collect();
         return String::from_utf8_slice(collected.as_slice());
     }
 
-    /// Validate a contiguous byte slice as UTF-8 and wrap it as a `String` with
-    /// a single bulk copy — no per-codepoint decode-and-re-encode.
-    ///
-    /// The validation core that `from_utf8` and the JSON deserializer route
-    /// through: one forward pass over `decode_utf8_scalar`, then one `to_array`
-    /// copy. Cheaper than a codepoint-by-codepoint rebuild whenever the bytes
-    /// already live in one buffer (e.g. a JSON string token sliced out of the
-    /// borrowed input).
+    /// Validate a contiguous byte slice as UTF-8 and wrap it as a `String`.
     pub fn from_utf8_slice(bytes: ByteSlice) -> Result<String, String> {
         if !String::is_valid_utf8(bytes) {
             builtin::cold_path();
@@ -1150,10 +1099,7 @@ impl String {
         });
     }
 
-    /// Whether `bytes` is well-formed UTF-8, in one forward `decode_utf8_scalar`
-    /// pass. Splits validation from the copy so callers that already own a
-    /// buffer can validate in place (e.g. the JSON deserializer appending a
-    /// scanned run straight into its result).
+    /// Whether `bytes` is well-formed UTF-8.
     pub fn is_valid_utf8(bytes: ByteSlice) -> bool {
         let len = bytes.len();
         let mut i = 0;
@@ -1168,18 +1114,14 @@ impl String {
         return true;
     }
 
-    /// Build a String from any iterable of bytes, replacing invalid UTF-8 sequences with U+FFFD.
-    ///
-    /// Accepts any `IntoIterator` whose item is `u8`: `List<u8>`, `StrUtf8ByteIter`, etc.
+    /// Build a `String` from an iterable of bytes, replacing invalid UTF-8 with U+FFFD.
     pub fn from_utf8_lossy<I: IntoIterator<Item = u8>>(bytes: I) -> String {
         let collected: List<u8> = bytes.into_iter().collect();
         let slice = collected.as_slice() as ByteSlice;
-        // Fast path: already valid UTF-8 — one bulk copy, no per-scalar work.
         if let Ok(s) = String::from_utf8_slice(slice) {
             return s;
         }
         builtin::cold_path();
-        // Slow path: rebuild, one U+FFFD per invalid lead.
         let len = slice.len();
         let mut builder = String::with_capacity(len);
         let mut i = 0;
@@ -1195,13 +1137,10 @@ impl String {
         return builder;
     }
 
-    /// Build a String from any iterable of bytes without UTF-8 validation.
-    ///
-    /// Accepts any `IntoIterator` whose item is `u8`: `List<u8>`, `StrUtf8ByteIter`, etc.
+    /// Build a `String` from an iterable of bytes without UTF-8 validation.
     ///
     /// # Safety
-    /// The caller must ensure the bytes form valid UTF-8, otherwise the resulting
-    /// String will contain invalid UTF-8, which may cause undefined behavior.
+    /// The caller must ensure the bytes form valid UTF-8.
     pub fn from_utf8_unchecked<I: IntoIterator<Item = u8>>(bytes: I) -> String {
         let mut builder = String::with_capacity(8);
         for let b of bytes {

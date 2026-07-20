@@ -29,8 +29,8 @@ assert from_string::<Point>("[1,2]") matches { Ok(p) && p.x == 1 && p.y == 2 };
 
 Serializes a value to UTF-8 JSON NSD bytes — the primary entry point.
 
-Returns a read-only `ByteSlice` viewing the serializer's own UTF-8 buffer —
-no copy. `trailing_char`, when `Some`, is appended after the value.
+Returns a read-only `ByteSlice` over the serializer's UTF-8 buffer.
+`trailing_char`, when `Some`, is appended after the value.
 
 ### `pub fn to_string<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<String, SerializeError>`
 
