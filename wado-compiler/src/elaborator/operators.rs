@@ -1250,7 +1250,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         base_type_id,
                         &lookup_name,
                         lookup_type_id,
-                        |s, n, t| s.find_index_assign_trait_impl(n, t, index_type),
+                        |s, n, t| s.find_index_assign_trait_impl(n, t),
                     );
                     if let Some(trait_info) = assign_info {
                         if let Some(key_type) = trait_info.index_type

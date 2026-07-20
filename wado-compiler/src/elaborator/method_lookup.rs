@@ -2688,7 +2688,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         base_type_id: TypeId,
         expected_index_type: Option<TypeId>,
     ) -> Option<IndexTraitInfo> {
-        // Look for impl IndexRef<...> for StructName
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
@@ -2907,14 +2906,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// Find `IndexAssign` trait implementation for a type
     pub(super) fn find_index_assign_trait_impl(
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-        _index_type: TypeId,
     ) -> Option<IndexAssignTraitInfo> {
-        // Look for impl IndexAssign<...> for StructName
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
@@ -2936,14 +2932,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Find `IndexMut` trait implementation for a type
     pub(super) fn find_index_mut_trait_impl(
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-        _index_type: TypeId,
     ) -> Option<IndexMutTraitInfo> {
-        // Look for impl IndexMutRef<...> for StructName
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
@@ -2973,7 +2966,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         base_type_id: TypeId,
         expected_index_type: Option<TypeId>,
     ) -> Option<IndexValueTraitInfo> {
-        // Look for impl IndexValue<...> for StructName, matching the index type
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
@@ -3405,24 +3397,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
 
-        // Get base type (unwrap reference if needed)
         let base_type_id = match self.tysys.type_table.borrow().get(container_type) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
             _ => container_type,
         };
 
-        // Get struct name from base type
         let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
             ResolvedType::Struct { name, .. } => name,
             ResolvedType::GenericInstance { name, .. } => name,
             _ => return None, // Not a struct type
         };
 
-        // Check if the type implements IndexMut
         let index_type = self.resolve_expr(&index_expr.index, ctx, None);
 
         let index_mut_info =
-            self.find_index_mut_trait_impl(&struct_name, base_type_id, index_type)?;
+            self.find_index_mut_trait_impl(&struct_name, base_type_id)?;
 
         if let Some(key_type) = index_mut_info.index_type
             && key_type != index_type
@@ -3430,7 +3419,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let _ = self.resolve_expr(&index_expr.index, ctx, Some(key_type));
         }
 
-        // Now we need to check if the method being called requires &mut self
         // First, look up method info on the OUTPUT type (what IndexMut returns)
         let output_type = index_mut_info.output_type;
         let output_base_type_id = match self.tysys.type_table.borrow().get(output_type) {
@@ -3513,8 +3501,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None; // Method doesn't need &mut, fall back to Index
         }
 
-        // Generate: container.index_mut(index).method(args)
-        // Step 1: Create container.index_mut(index) call
         let mangled_index_mut_name = MethodName::format_local(
             &struct_name,
             Some(&index_mut_info.trait_name),
@@ -3563,15 +3549,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // above; the combined walk only needed the dispatch fact. The
         // index was resolved above for its side effects.
 
-        // Step 2: Resolve method args with expected parameter types for
-        // literal coercion. Reify rebuilds the args; the combined walk only
-        // needs the `resolve_expr` fact-recording side effects.
+        // Resolve method args with expected parameter types for literal coercion.
         for (i, a) in method_call.args.iter().enumerate() {
             let expected = param_types.get(i).copied();
             self.resolve_expr(a, ctx, expected);
         }
 
-        // Step 3: Resolve method type args
         let type_args: Vec<TypeId> = method_call
             .type_args
             .iter()

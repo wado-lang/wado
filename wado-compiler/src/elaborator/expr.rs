@@ -1378,7 +1378,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let expr_type = self.resolve_expr(&index.expr, ctx, None);
 
-        // Get base type (unwrap reference if needed)
         let base_type_id = match self.tysys.type_table.borrow().get(expr_type) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
             _ => expr_type,
@@ -1491,7 +1490,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let _ = self.resolve_expr(&index.index, ctx, Some(key_type));
                 }
 
-                // Generate: *expr.index_ref(index_expr)
                 let mangled_method_name = MethodName::format_local(
                     &lookup_name,
                     Some(&trait_info.trait_name),
@@ -1554,7 +1552,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let _ = self.resolve_expr(&index.index, ctx, Some(key_type));
                 }
 
-                // Generate: expr.index_value(index_expr)
                 let mangled_method_name = MethodName::format_local(
                     &lookup_name,
                     Some(&trait_info.trait_name),
@@ -1631,7 +1628,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let (lookup_name, lookup_type_id) =
             self.tysys.newtype_base_lookup(&struct_name, base_type_id);
-        let dummy = TypeTable::UNKNOWN;
         self.index_lookup_or_newtype_base(
             &struct_name,
             base_type_id,
@@ -1646,7 +1642,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 base_type_id,
                 &lookup_name,
                 lookup_type_id,
-                |s, n, t| s.find_index_assign_trait_impl(n, t, dummy),
+                |s, n, t| s.find_index_assign_trait_impl(n, t),
             )
             .and_then(|i| i.index_type)
         })
