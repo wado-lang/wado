@@ -445,7 +445,6 @@ fn register_call_wrapper(
         stores: Vec::new(),
         compiler_item: None,
         export_name: None,
-        locals: crate::wir::WirLocals::default(),
     };
 
     ctx.register_function(func, None)
@@ -610,7 +609,6 @@ fn register_inspect_wrapper(
         stores: Vec::new(),
         compiler_item: None,
         export_name: None,
-        locals: crate::wir::WirLocals::default(),
     };
 
     ctx.register_function(func, None)

@@ -275,13 +275,4 @@ pub fn optimize_wir(
     dce_unreachable_types(module);
     dce::compact_dead_items(module);
     profiler.span_end("wir/phase8_dce_compact");
-
-    // Phase 9: finalize each function's declared-local table (the SSoT the
-    // emitter allocates from and the optimizer already queried) now that no
-    // pass adds or removes a `DeclareLocal`.
-    for func in &mut module.functions {
-        if let Some(body) = &func.body {
-            func.locals = crate::wir::WirLocals::scan(body);
-        }
-    }
 }

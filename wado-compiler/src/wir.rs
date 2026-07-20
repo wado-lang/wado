@@ -210,9 +210,6 @@ impl WasmModuleInfo {
             for instr in &mut body {
                 remap_func_ids_in_instr(instr, &func_index_remap);
             }
-            // A bundled module's body is final on arrival (it bypasses
-            // `wir_optimize`), so finalize its declared-local table here.
-            let locals = WirLocals::scan(&body);
             wir.functions.push(WirFunction {
                 name: WirName {
                     fq: func_fq.to_string(),
@@ -225,7 +222,6 @@ impl WasmModuleInfo {
                     span: None,
                     attributes: Vec::new(),
                 },
-                locals,
                 value_copy_mangle: None,
                 generic_origin: None,
                 effects: Vec::new(),
@@ -1260,11 +1256,6 @@ pub struct WirFunction {
     /// because it is the mangle (not an intern-order `TypeId`), identical
     /// types interned more than once still resolve to the one helper.
     pub value_copy_mangle: Option<String>,
-    /// Declared locals, finalized once at the end of the WIR phase from the
-    /// body's `DeclareLocal`s. The emitter allocates from it and the optimizer's
-    /// nullability oracle queries it. Empty until finalized (or for functions
-    /// synthesised outside `wir_optimize`; the emitter rescans those).
-    pub locals: WirLocals,
 }
 
 /// A function's declared locals, keyed by name in declaration order.
@@ -1301,11 +1292,6 @@ impl WirLocals {
     /// Whether `name` is declared with a non-null reference type.
     pub fn is_nonnull_ref(&self, name: &str) -> bool {
         self.types.get(name).is_some_and(WirType::is_nonnull_ref)
-    }
-
-    /// Whether any local is declared.
-    pub fn is_empty(&self) -> bool {
-        self.types.is_empty()
     }
 
     /// Declared locals, `(name, type)`, in declaration order.

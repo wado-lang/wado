@@ -788,23 +788,14 @@ impl<'a> WirEmitter<'a> {
             self.next_local = idx + 1;
         }
 
-        // Emit the WIR-phase-finalized declared locals (the `WirLocals` SSoT),
-        // then the scratch locals the emitter's own lowerings synthesise. A
-        // function synthesised outside `wir_optimize` (a bundled module's body,
-        // late CM glue) carries no finalized table, so derive it once from the
-        // same shared scan rather than special-casing every synthesis site.
+        // Emit the declared locals — the shared `WirLocals` view of the body's
+        // `DeclareLocal`s (the single source of truth) — then the scratch locals
+        // the emitter's own lowerings synthesise.
         let mut local_types: Vec<(String, ValType)> = Vec::new();
-        let scanned;
-        let declared = if !func.locals.is_empty() || func.body.is_none() {
-            &func.locals
-        } else {
-            scanned = WirLocals::scan(func.body.as_deref().unwrap_or(&[]));
-            &scanned
-        };
-        for (name, ty) in declared.iter() {
-            self.push_declared_local(name, ty, &mut local_types);
-        }
         if let Some(ref body) = func.body {
+            for (name, ty) in WirLocals::scan(body).iter() {
+                self.push_declared_local(name, ty, &mut local_types);
+            }
             for instr in body {
                 self.collect_scratch_locals(instr, &mut local_types);
             }
