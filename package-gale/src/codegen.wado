@@ -151,24 +151,17 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     ctx.set_emit_actions(should_emit_actions(grammar));
     ctx.set_action_language(&grammar.action_language);
     ctx.set_action_grammar(&grammar.name, collect_member_method_names(grammar));
-    // `options { superClass = Foo }`: a `this.<method>()` call in a lexer
-    // action / predicate becomes an ambient `Foo::<method>(view)` effect
-    // operation. Independent of `emit_actions` (which gates the java2wado
-    // parser path): a Java superClass grammar's lexer bodies lower to the
-    // effect even though its parser actions stay carved out.
+    // A lexer `superClass` becomes an effect interface, independent of
+    // `emit_actions` (which gates the java2wado parser path).
     if let Some(sc) = superclass_base_name(grammar) {
         let ops = collect_lexer_super_ops(grammar);
         if !ops.is_empty() && all_super_ops_predicates(&ops) {
-            // Predicate ops are fully wired: emit the interface and rewrite
-            // `this.<method>()` -> `Foo::<method>(view)` in place, after op
-            // collection (which scans the original `this.` sites).
             ctx.set_superclass(&sc, ops);
+            // Must follow op collection, which scans the original `this.` sites.
             rewrite_superclass_calls(grammar, &sc);
         } else if !ops.is_empty() {
-            // Action ops (`{this.m();}`) need the winner-replay path, not yet
-            // wired. Rather than emit a half-wired interface, the base is left
-            // unwired — warn loudly so the drop is visible instead of the bodies
-            // surfacing later as a cryptic generated-code error.
+            // Action ops need the (unbuilt) winner-replay path; leave the base
+            // unwired and warn, rather than emit a half-wired interface.
             ctx.warn(
                 &"superClass",
                 DiagnosticKind::UnsupportedAction,
@@ -234,10 +227,9 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // needs a longest-match tournament; the FOLLOW runtime / mask globals only
     // when lowering built a caller-FOLLOW gate (`emit_follow`).
     let ef = ctx.emit_follow();
-    // A superClass grammar cannot be highlighted: the `highlight` / `run`
-    // entries call `tokenize` / `parse`, which carry the base effect, but they
-    // have no way to install the user's handler (`run` is a CM export). Skip
-    // the highlighter (warned below) rather than emit code that cannot compile.
+    // A superClass grammar can't be highlighted: the `highlight` / exported
+    // `run` entries call `tokenize` / `parse` (base effect) but can't install
+    // the handler. Skip it (warned below) instead of emitting uncompilable code.
     let emit_highlight = options.highlight_query matches { Some(_) } && !ctx.has_superclass();
     gen_runtime(&mut w, ef, ctx.needs_atn(), needs_latn, emit_highlight, ctx.has_superclass());
     gen_token_kind(&mut w, &grammar.lexer_rules);
@@ -527,8 +519,7 @@ fn gen_runtime(
     gen_runtime_fragment(w, &#include_str("./runtime/diag.wado"));
     gen_runtime_fragment(w, &#include_str("./runtime/tree.wado"));
     gen_runtime_fragment(w, &#include_str("./runtime/tools.wado"));
-    // The `LexerView` handle passed to base effect operations. Static code, so
-    // it lives as a runtime fragment; inlined only under `superClass`.
+    // The `LexerView` handle passed to base effect operations.
     if has_superclass {
         gen_runtime_fragment(w, &#include_str("./runtime/superclass.wado"));
     }

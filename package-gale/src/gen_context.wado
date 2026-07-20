@@ -173,14 +173,10 @@ pub struct GenContext {
     /// against real declarations. Set once at codegen entry.
     grammar_name: String,
     action_member_methods: List<String>,
-    /// `options { superClass = Foo }`: the base effect-interface name, or `""`
-    /// when the grammar declares none. A `this.<method>()` action / predicate
-    /// call lowers to the ambient `Foo::<method>(view)` operation, and the
-    /// op-reachable generated fns (`try_<rule>`, `tokenize`) declare `with Foo`.
-    /// See `action.md`, "SuperClass — an effect interface".
+    /// The `superClass` base effect-interface name, or `""` when the grammar
+    /// declares none. See `action.md`, "SuperClass — an effect interface".
     superclass_name: String,
-    /// The synthesized effect operations, one per distinct `this.<method>` call
-    /// site (predicate → `fn m(view: LexerView) -> bool`, action → `fn m(view: LexerView)`).
+    /// The synthesized effect operations, one per distinct `this.<method>` site.
     superclass_ops: List<SuperOp>,
     /// `action_id`s codegen has handled (emitted, or already raised a loud
     /// diagnostic for). A post-emit sweep warns for any stamped parser action
@@ -470,8 +466,6 @@ impl GenContext {
         self.superclass_ops = ops;
     }
 
-    /// The base effect-interface name, or `""` when the grammar has no
-    /// `superClass`. A non-empty name gates every superClass emit site.
     pub fn superclass_name(&self) -> &String {
         return &self.superclass_name;
     }

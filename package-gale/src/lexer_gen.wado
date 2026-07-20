@@ -308,17 +308,12 @@ pub fn gen_lexer(
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(&grammar.options, &empty_opts);
     let keywords = collect_keyword_rules(&grammar.lexer_rules, &grammar.options);
-    // Emit lexer action / predicate bodies through the identity translator when
-    // the grammar is Wado, or when it has a `superClass` — a superClass grammar's
-    // `this.m()` sites were rewritten to `Foo::m(LexerView { .. })` (Wado) before
-    // codegen, so the identity path emits them regardless of the source language.
+    // A superClass grammar's `this.m()` was rewritten to Wado before codegen,
+    // so the identity path emits its bodies regardless of the source language.
     let ea = grammar.action_language matches { Wado } || !sc_name.is_empty();
     let act_rule_names = executed_action_rule_names(grammar);
     let has_actions = !act_rule_names.is_empty();
     let uses_modes = has_modes(&grammar.mode_names);
-    // `options { superClass = Foo }`: emit the effect interface, then thread
-    // `with Foo` onto the op-reachable generated fns. Empty `sc_name` => no
-    // superClass => byte-identical output (no interface, no effect clause).
     if !sc_name.is_empty() {
         gen_super_interface(w, sc_name, sc_ops);
     }
@@ -591,9 +586,9 @@ fn gen_lexer_match_fn(
     }
     f.add_param(&"start", &"i32");
     f.set_return_type(&"i32");
-    // A rule whose body evaluates a `Foo::op(LexerView { chars, .. })` calls the
-    // base effect, so its match fn declares `with Foo`; the view literal stores
-    // the char-stream ref, so the fn also declares `stores[...]` for it.
+    // The `Foo::op(LexerView { chars, .. })` call carries the effect and the
+    // view literal stores the char-stream ref, so declare both `with Foo` and
+    // `stores` for that ref.
     if !sc_name.is_empty() && lexer_rule_calls_super(rule, all_rules, sc_name) {
         f.add_effect(sc_name);
         if hm {
@@ -2483,8 +2478,7 @@ fn gen_tokenize_fn(
     let mut f = FnSpec::new("tokenize", Vis::Pub);
     f.add_param(&"input", &"&String");
     f.set_return_type(&"TokenStream");
-    // `tokenize` calls the op-carrying `try_<rule>` fns, so it propagates the
-    // base effect; a caller installs the handler with `with Foo => &mut base do`.
+    // `tokenize` calls the op-carrying `try_<rule>` fns, so it propagates the effect.
     if !sc_name.is_empty() {
         f.add_effect(sc_name);
     }
