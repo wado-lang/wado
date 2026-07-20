@@ -13,7 +13,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{MethodName, global_name};
 use crate::tir::{
     FunctionKind, TirEffect, TirEffectOp, TirFunction, TirParam, TirResource, TirStruct, TirTest,
-    TirVariantDecl, TypeId, TypeTable,
+    TirVariantDecl, TypeId, TypeTable, method_param_offset,
 };
 use crate::token::Span;
 
@@ -1461,12 +1461,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for (i, arg) in generic.args.iter().enumerate() {
                 if let ast::Type::Named(named) = arg {
                     let name = &named.name;
-                    // A header arg is a genuine parameter when it is declared in
-                    // `<...>` (e.g. the `i32` in `impl<i32> Wrapper<i32>`, a concrete
-                    // specialization) or is not a known type. A known type that is
-                    // *not* declared (the `String` in `impl for TreeMap<String, V>`)
-                    // is concrete and resolves as itself — matching
-                    // `is_concrete_type_arg`.
                     let is_declared_param =
                         impl_declared_params.iter().any(|p| &p.name == name);
                     if !scope.annotate_ctx.trait_ctx.type_params.contains_key(name)
@@ -1636,27 +1630,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_ctx
             .install_effect_params(&func.type_params);
 
-        // Then, collect method-level type params. Mirrors
-        // `register_generic_params` in `trait_env.rs`: `<F: fn(...)>` /
-        // `<F: fn mut(...)>` bounds are realised eagerly to the bound's
-        // function type and do NOT consume a `TypeParam` index slot, so the
-        // index space stays dense for real type params. Effect params have
-        // their own channel (`trait_ctx.effect_params`, installed above).
-        // Method-level type params start after the impl block's own type params
-        // — past the highest impl-param *index*, the SAME base the monomorphizer
-        // uses in `func_inst::instantiate_function`. The index (not the count) is
-        // load-bearing: a concrete type in a receiver slot (`String` in
-        // `impl<V> ... for TreeMap<String, V>`) is not a param, so `V` keeps its
-        // receiver-position index (1) while the count is 1 — offsetting by the
-        // count would collide the method's `<S>` onto `V`'s slot. It must NOT
-        // count the bound trait args that `bind_trait_type_params_from_impl`
-        // inserted into `trait_ctx.type_params` (e.g. the `T` of
-        // `impl Maker<i32> for X`): those are name bindings, not positional slots.
-        let offset = impl_type_params
-            .iter()
-            .map(|p| p.index + 1)
-            .max()
-            .unwrap_or(0) as usize;
+        let offset = method_param_offset(&impl_type_params) as usize;
         let mut next_idx = offset as u32;
         for param in &func.type_params {
             if param.is_effect {

@@ -3760,6 +3760,20 @@ pub struct TirTypeParam {
     pub index: u32,
 }
 
+/// Substitution-key base for method-level type params: past the highest
+/// impl-param *index*, not the count. A concrete type in a receiver slot
+/// (`String` in `impl<V> ... for TreeMap<String, V>`) is not a param, so a later
+/// param keeps a sparse index the count would undershoot, colliding a method
+/// param onto an impl slot. Elaboration and monomorphization both derive it here.
+#[must_use]
+pub fn method_param_offset(impl_type_params: &[TirTypeParam]) -> u32 {
+    impl_type_params
+        .iter()
+        .map(|p| p.index + 1)
+        .max()
+        .unwrap_or(0)
+}
+
 /// Information about monomorphization origin for instantiated items
 #[derive(Debug, Clone)]
 pub struct MonomorphInfo {

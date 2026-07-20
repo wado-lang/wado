@@ -1440,12 +1440,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.tysys.newtype_base_lookup(&struct_name, base_type_id);
 
         if !struct_name.is_empty() {
-            // A coercible compound literal subscript (`[0]` in `g[[0]]`) is a
-            // bare tuple until coerced, so resolve it against the container's
-            // declared key type up front — the same literal-to-expected-type
-            // coercion the operator path performs. A non-literal subscript
-            // resolves naturally so an overloaded container (`Array`'s `i32` vs
-            // range key) still selects its matching impl by exact type.
             let expected_key = Self::is_coercible_compound_literal(&index.index)
                 .then(|| {
                     self.index_lookup_or_newtype_base(
@@ -1469,9 +1463,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.typecheck(index_type, expected, index.index.span());
             }
 
-            // `List` keeps its optimized direct-array path for concrete reads,
-            // so skip its `IndexRef` contract here (see
-            // `uses_intrinsic_index_dispatch`).
             let index_trait_info = (!self.uses_intrinsic_index_dispatch(base_type_id))
                 .then(|| {
                     self.index_lookup_or_newtype_base(
@@ -1534,10 +1525,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return trait_info.output_type;
             }
 
-            // Try IndexValue (returns value by copy). A single exact-key lookup:
-            // the subscript already carries its coerced type (see the up-front
-            // `expected_key` coercion above), so this both disambiguates an
-            // overloaded container and resolves a coerced literal key.
             let index_value_info = self.index_lookup_or_newtype_base(
                 &struct_name,
                 base_type_id,

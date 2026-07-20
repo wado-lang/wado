@@ -2665,16 +2665,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// Whether `type_id` is `List`, whose concrete subscripts must stay
-    /// value-shaped for Container SROA: `List`'s `IndexRef` / `IndexMutRef`
-    /// bodies index its private `repr`, which the SROA pass cannot see through,
-    /// so concrete `List` access keeps the optimized direct path and its
-    /// reference traits dispatch only in generic contexts. `Array` needs no such
-    /// guard — it is not Container-SROA'd, its reference-trait bodies are the
-    /// `array_get_ref` / `array_get_mut_ref` intrinsics the optimizer already
-    /// recognizes, and a generic `Array<T>` read only binds `IndexRef` when `T`'s
-    /// declared bounds include `Ref` (so an unbounded `self.repr[i]` stays on the
-    /// value path).
+    /// Whether concrete subscripts on `type_id` take the optimized intrinsic
+    /// path instead of the `IndexRef` / `IndexMutRef` traits. `List` does: its
+    /// trait bodies index a private `repr` that Container SROA cannot see
+    /// through, so its reference traits dispatch only in generic contexts.
     pub(super) fn uses_intrinsic_index_dispatch(&self, type_id: TypeId) -> bool {
         self.tysys.type_table.borrow().as_list(type_id).is_some()
     }
@@ -3168,10 +3162,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return None;
                 }
 
-                // Verify non-type-parameter positions match the concrete type
-                // args, and that the impl's type-param bounds are satisfied —
-                // otherwise `Array<u8>` would match `impl<T: Ref> IndexRef<i32>`
-                // and read a scalar element through a boxed `&u8`.
                 let impl_block = s.get_impl_block(impl_ref);
                 if !s.tysys.verify_impl_type_compatibility(
                     &impl_block.ty,
@@ -3392,7 +3382,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // First, resolve the indexed container to get its type
         let container_type = self.resolve_expr(&index_expr.expr, ctx, None);
 
-        // `List` uses its optimized direct-access path, not its index traits.
         if self.uses_intrinsic_index_dispatch(container_type) {
             return None;
         }
@@ -3549,7 +3538,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // above; the combined walk only needed the dispatch fact. The
         // index was resolved above for its side effects.
 
-        // Resolve method args with expected parameter types for literal coercion.
         for (i, a) in method_call.args.iter().enumerate() {
             let expected = param_types.get(i).copied();
             self.resolve_expr(a, ctx, expected);

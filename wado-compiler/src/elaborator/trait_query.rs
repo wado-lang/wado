@@ -907,9 +907,6 @@ impl TypeSystem {
             return true;
         }
 
-        // A type parameter satisfies exactly the bounds declared on it. Concrete
-        // types no longer reach here as parameters — a known non-declared type arg
-        // (`String` in `impl for TreeMap<String, V>`) resolves as itself.
         if let ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } = resolved
         {
             return ctx
@@ -1544,11 +1541,6 @@ impl TypeSystem {
                     && let Some(bounds) = bounds_map.get(named.name.as_str())
                     && let Some(&type_arg) = type_args.get(i)
                 {
-                    // A type-parameter arg satisfies a bound only if that bound is
-                    // among its declared bounds (`type_implements_trait` reads
-                    // `type_param_bounds`): an unbounded `T` must not match
-                    // `impl<T: Ref> ... for C<T>`, else a container's generic
-                    // `self.repr[i]` would bind the reference impl and box scalars.
                     for bound in bounds {
                         if !self.type_implements_trait(ctx, scope, type_arg, bound) {
                             return false;

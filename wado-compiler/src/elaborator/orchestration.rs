@@ -873,9 +873,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let _ = logger.error_in(&module_source, violation);
         }
 
-        // Seal the compiler-synthesized traits: user code may not implement
-        // them. A user who declares their *own* trait of the same name owns it,
-        // so skip the seal when any user module declares that name.
         for sealed_item in [
             crate::compiler_item::CompilerItem::Reflect,
             crate::compiler_item::CompilerItem::Ref,
