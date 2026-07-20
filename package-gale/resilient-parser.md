@@ -17,7 +17,11 @@ language front ends, LSP, and syntax highlighting all work on broken input.
 - **Diagnostics are the error currency.** A clean parse has an empty diagnostic
   list; a broken parse still yields a usable tree alongside the diagnostics.
 - **Fast machine-generated highlight.** Highlight is one flat forward scan over
-  the store (rule-kind stack → `(span, class)`), no intermediate tree.
+  the store (rule-kind stack → `(span, class)`), no intermediate tree. It always
+  walks the partial tree — even on broken input — so rule-context overrides
+  survive wherever the parser built structure (a fragment's interpolation, an
+  unterminated construct); a follow-up pass default-classifies any token the
+  walk did not reach, keeping default coloring and text intact across the rest.
 
 ## The tree
 

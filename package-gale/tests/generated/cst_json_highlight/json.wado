@@ -1389,6 +1389,10 @@ pub struct HighlightVisitor {
     defaults: List<String>,
     overrides: List<ResolvedOverride>,
     rule_stack: List<i32>,
+    /// Which token indices the tree walk has already classified, so a
+    /// follow-up `hl_cover_unvisited` pass can default-classify the rest
+    /// (a resilient partial tree need not reference every token).
+    visited: List<bool>,
     pub captures: List<HighlightCapture>,
 }
 
@@ -1418,6 +1422,7 @@ impl HighlightVisitor {
             defaults: mapping.defaults,
             overrides,
             rule_stack: [],
+            visited: [],
             captures: [],
         };
     }
@@ -1451,6 +1456,10 @@ impl HighlightVisitor {
     }
 
     pub fn hl_visit_token(&mut self, toks: &TokenStream, idx: i32) {
+        while self.visited.len() <= idx {
+            self.visited.push(false);
+        }
+        self.visited[idx] = true;
         for let mut t = toks.triv_lo[idx]; t < toks.triv_hi[idx]; t += 1 {
             let cap = self.classify(toks.triv_kinds[t]);
             if !cap.is_empty() {
@@ -1465,6 +1474,31 @@ impl HighlightVisitor {
         let cap = self.classify(toks.kinds[idx]);
         if !cap.is_empty() {
             self.captures.push(HighlightCapture { capture: cap, start: toks.starts[idx], end: toks.ends[idx] });
+        }
+    }
+
+    /// Default-classify every token the tree walk did not reach, then restore
+    /// start order. A resilient parse of broken input (a fragment, an
+    /// unterminated construct) leaves a partial tree that need not reference
+    /// every token; a bare `highlight_walk` would then drop those tokens' and
+    /// their leading trivia's default highlighting. Running this after the walk
+    /// keeps keyword/string/comment coloring across the whole input while the
+    /// walk still supplies rule-context overrides wherever the parser built
+    /// structure. On a clean parse the walk covers every token, so this adds
+    /// nothing and the capture order is untouched.
+    pub fn hl_cover_unvisited(&mut self, toks: &TokenStream) {
+        let before = self.captures.len();
+        self.rule_stack = [];
+        for let mut i = 0; i < toks.len(); i += 1 {
+            if i < self.visited.len() && self.visited[i] {
+                continue;
+            }
+            self.hl_visit_token(toks, i);
+        }
+        if self.captures.len() != before {
+            self.captures.sort_by(|a: &HighlightCapture, b: &HighlightCapture| {
+                return a.start.cmp(&b.start);
+            });
         }
     }
 }
@@ -2698,13 +2732,8 @@ pub fn highlight_mapping() -> HighlightMapping {
 pub fn highlight_result(result: &ParseResult, input: &String) -> String {
     let mapping = highlight_mapping();
     let mut visitor = HighlightVisitor::new(mapping);
-    if result.diagnostics.is_empty() {
-        highlight_walk(&mut visitor, &result.tokens, &result.cst);
-    } else {
-        for let mut _i = 0; _i < result.tokens.len(); _i += 1 {
-            visitor.hl_visit_token(&result.tokens, _i);
-        }
-    }
+    highlight_walk(&mut visitor, &result.tokens, &result.cst);
+    visitor.hl_cover_unvisited(&result.tokens);
     return highlight_html(input, &visitor.captures);
 }
 

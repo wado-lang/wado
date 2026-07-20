@@ -56,6 +56,39 @@ test "highlight nested template string" {
     assert_highlights(&"fn f() -> String { let n = 1; return `outer ${`inner ${n}`}`; }\n");
 }
 
+// Fragment highlighting: an incomplete program still highlights. The resilient
+// parser yields a partial tree, so rule-context overrides (interpolation
+// identifier -> variable, muted format spec) survive wherever the parser built
+// structure, and every token keeps its default class and its text.
+
+test "highlight fragment: unterminated fn body keeps interpolation context" {
+    // Missing the closing `}` — a broken parse (diagnostics present), but the
+    // fn body and its template still parse into the tree.
+    let src = "fn f() { let x = 1.5; let s = `v = ${x:0.2}`;\n";
+    assert !parse(&src).ok(), "fragment should not parse cleanly";
+    let html = highlight(src);
+    assert html.contains("<span class=\"variable\">x</span>"), "interp expr -> variable in fragment";
+    assert html.contains("<span class=\"comment\">0.2</span>"), "format spec muted in fragment";
+    assert visible_text(&html) == src, "fragment highlighting is text-preserving";
+}
+
+test "highlight fragment: bare statements keep default classes and text" {
+    // No enclosing item — the parser cannot structure this, but every token
+    // still gets its default class and the text round-trips.
+    let src = "let name = 1;\nif name > 0 { return true; }\n";
+    let html = highlight(src);
+    assert html.contains("<span class=\"keyword\">let</span>"), "keyword highlighted in fragment";
+    assert html.contains("<span class=\"constant builtin\">true</span>"), "constant highlighted in fragment";
+    assert visible_text(&html) == src, "bare-statement fragment is text-preserving";
+}
+
+test "highlight fragment: bare expression is text-preserving" {
+    let src = "`hi ${name}` + compute(1, 2)\n";
+    let html = highlight(src);
+    assert html.contains("class=\"string\""), "template text highlighted in fragment";
+    assert visible_text(&html) == src, "bare-expression fragment is text-preserving";
+}
+
 test "highlight __DATA__ section" {
     let src = "fn f() { }\n\n__DATA__\ndata body\n";
     let html = highlight(src);
