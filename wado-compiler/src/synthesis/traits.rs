@@ -458,16 +458,7 @@ pub fn synthesize_reflect(project: &mut Package) {
     }
 }
 
-/// Synthesize `S^Reflect::type_name()`, `S^Reflect::field_names()`, and
-/// `S^Reflect::fields(&self)` (plus the `type Fields` associated tuple) for
-/// every requested struct.
-///
-/// `field_names()` builds a homogeneous string tuple and hands it to the
-/// general `List::from_tuple` prelude constructor, avoiding a hand-built `List`
-/// literal in synthesized TIR. `fields(&self)` returns the field values as a
-/// heterogeneous tuple `[self.f_0, self.f_1, …]` whose type is registered as the
-/// struct's `Fields` associated type, so `Reflect::<S>::fields(&s)` and the
-/// `Reflect<Fields = [..F]>` pack binding both project the concrete tuple.
+/// Synthesize the `Reflect` impl of every requested struct in `module`.
 fn generate_struct_reflect_impls(
     module: &mut TirModule,
     ctx: &mut SynthesisCtx<'_, '_, '_>,
@@ -478,9 +469,6 @@ fn generate_struct_reflect_impls(
     }
 
     let targets = collect_reflect_targets(module, ctx, reflect_trait_name);
-    // Nothing to synthesize in this module: skip the registry lookups (and the
-    // `require_method` invariant assertion) rather than run them for every
-    // module that merely declares a struct.
     if targets.is_empty() {
         return;
     }
@@ -533,10 +521,8 @@ fn collect_reflect_targets(
         .collect()
 }
 
-/// Synthesize one struct's three `Reflect` methods — `type_name()`,
-/// `field_names()`, `fields(&self)` — and register its `Fields` associated
-/// tuple type so trait-qualified `fields` calls and the `Reflect<Fields = [..F]>`
-/// pack binding both project the concrete tuple.
+/// Synthesize one struct's `type_name()`, `field_names()`, and `fields(&self)`
+/// methods, and register its `Fields` associated tuple type.
 fn generate_struct_reflect_methods(
     type_table: &RefCell<TypeTable>,
     env: &ReflectSynthEnv,
@@ -563,8 +549,6 @@ fn generate_struct_reflect_methods(
         let struct_type = tt.make_struct(name.clone(), module_source.clone());
         let ref_struct_type = tt.make_ref(struct_type);
         let fields_tuple_type = tt.make_tuple(fields.iter().map(|(_, ty, _)| *ty).collect());
-        // Register `S::Fields = [F_0, F_1, …]` for the `fields` return type and
-        // the pack binding to project.
         tt.register_assoc_type_resolution(
             struct_type,
             REFLECT_FIELDS_ASSOC.to_string(),

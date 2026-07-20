@@ -3025,15 +3025,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let method = static_call.method.clone();
         let self_name = self.tysys.type_table.borrow().type_name(self_ty);
 
-        // Subject struct's field types (also gates non-struct receivers).
-        // Resolved once here and reused for the `fields` return tuple, so the
-        // recorded call type is sourced from the same field list every time.
-        let Some(field_types) = self.type_lookup().struct_fields(&self_name).map(|info| {
-            info.fields
-                .iter()
-                .map(|(_, ty, _)| *ty)
-                .collect::<Vec<TypeId>>()
-        }) else {
+        let Some(field_types) = self.reflect_subject_field_types(&self_name) else {
             let _ = self.emit(TypeError::UnknownFunction {
                 name: format!("Reflect::<{self_name}>::{method}"),
                 span: static_call.span,
@@ -3058,62 +3050,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         };
 
-        // Resolve args first so errors inside them still surface, then reject a
-        // wrong arity — or, for `fields`, a receiver that is not the subject
-        // struct. Either would reach a synthesized call and trip a WIR-pipeline
-        // validation ICE, so both are caught here.
         let is_fields = method == fields_method;
-        if is_fields {
-            // `fields(&self)` takes the receiver as its one argument, by value
-            // or by reference (both coerce to the `&self` param).
-            let ref_self_ty = self.tysys.type_table.borrow_mut().make_ref(self_ty);
-            let arg_types: Vec<TypeId> = static_call
-                .args
-                .iter()
-                .map(|arg| self.resolve_expr(arg, ctx, Some(ref_self_ty)))
-                .collect();
-            if arg_types.len() != 1 {
-                let _ = self.emit(TypeError::ArgumentCountMismatch {
-                    expected: 1,
-                    found: arg_types.len(),
-                    span: static_call.span,
-                });
-                return TypeTable::ERROR;
-            }
-            let arg_ty = arg_types[0];
-            let peeled = self.tysys.type_table.borrow().peel_refs(arg_ty);
-            if arg_ty != TypeTable::ERROR && peeled != self_ty {
-                let found = self.tysys.type_table.borrow().type_name(peeled);
-                let _ = self.emit(TypeError::TypeMismatch {
-                    expected: self_name,
-                    found,
-                    span: static_call.span,
-                });
-                return TypeTable::ERROR;
-            }
+        let args_valid = if is_fields {
+            self.check_reflect_fields_receiver(self_ty, &self_name, static_call, ctx)
         } else {
-            for arg in &static_call.args {
-                self.resolve_expr(arg, ctx, None);
-            }
-            if !static_call.args.is_empty() {
-                let _ = self.emit(TypeError::ArgumentCountMismatch {
-                    expected: 0,
-                    found: static_call.args.len(),
-                    span: static_call.span,
-                });
-                return TypeTable::ERROR;
-            }
+            self.reject_reflect_metadata_args(static_call, ctx)
+        };
+        if !args_valid {
+            return TypeTable::ERROR;
         }
 
-        // Demand-synthesize `impl Reflect for T`.
         self.tysys
             .type_table
             .borrow_mut()
             .record_bound_driven_synth_request(&self_name, &module_source, &reflect_trait_name);
 
-        // `is_reflect_trait_call` admits only `type_name` / `field_names` /
-        // `fields`: `type_name` returns `String`, `fields` returns the `Fields`
-        // tuple `[F_0, F_1, …]`, and `field_names` returns `List<String>`.
         let return_type = if is_fields {
             self.tysys.type_table.borrow_mut().make_tuple(field_types)
         } else {
@@ -3147,6 +3098,73 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         return_type
+    }
+
+    /// Field types of the struct `Reflect::<T>` targets, in declaration order;
+    /// `None` when `T` is not a struct (the only reflectable kind).
+    fn reflect_subject_field_types(&self, self_name: &str) -> Option<Vec<TypeId>> {
+        self.type_lookup()
+            .struct_fields(self_name)
+            .map(|info| info.fields.iter().map(|(_, ty, _)| *ty).collect())
+    }
+
+    /// Resolve and type-check the sole receiver of `Reflect::<T>::fields`: one
+    /// argument whose type, refs peeled, is the subject struct. Returns whether
+    /// it is well-formed, emitting the diagnostic otherwise.
+    fn check_reflect_fields_receiver(
+        &mut self,
+        self_ty: TypeId,
+        self_name: &str,
+        static_call: &ast::StaticMethodCallExpr,
+        ctx: &mut FunctionContext,
+    ) -> bool {
+        let ref_self_ty = self.tysys.type_table.borrow_mut().make_ref(self_ty);
+        let arg_types: Vec<TypeId> = static_call
+            .args
+            .iter()
+            .map(|arg| self.resolve_expr(arg, ctx, Some(ref_self_ty)))
+            .collect();
+        if arg_types.len() != 1 {
+            let _ = self.emit(TypeError::ArgumentCountMismatch {
+                expected: 1,
+                found: arg_types.len(),
+                span: static_call.span,
+            });
+            return false;
+        }
+        let arg_ty = arg_types[0];
+        let peeled = self.tysys.type_table.borrow().peel_refs(arg_ty);
+        if arg_ty != TypeTable::ERROR && peeled != self_ty {
+            let found = self.tysys.type_table.borrow().type_name(peeled);
+            let _ = self.emit(TypeError::TypeMismatch {
+                expected: self_name.to_string(),
+                found,
+                span: static_call.span,
+            });
+            return false;
+        }
+        true
+    }
+
+    /// Resolve the args of a no-argument `Reflect` metadata call and reject any
+    /// that were supplied. Returns whether the call is well-formed.
+    fn reject_reflect_metadata_args(
+        &mut self,
+        static_call: &ast::StaticMethodCallExpr,
+        ctx: &mut FunctionContext,
+    ) -> bool {
+        for arg in &static_call.args {
+            self.resolve_expr(arg, ctx, None);
+        }
+        if static_call.args.is_empty() {
+            return true;
+        }
+        let _ = self.emit(TypeError::ArgumentCountMismatch {
+            expected: 0,
+            found: static_call.args.len(),
+            span: static_call.span,
+        });
+        false
     }
 
     /// Whether `prefix::method` names a `Reflect` trait-qualified static call
