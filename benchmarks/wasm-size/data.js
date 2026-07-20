@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784505134701,
+  "lastUpdate": 1784516191878,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -42341,6 +42341,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/761b84e7c30ece755a7c53dc277e4d47c45494ee"
         },
         "date": 1784505134276,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8257,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16526,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271337,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3a807a57f7102d1c1d9abd04d95e5dfb61c0b9ca",
+          "message": "Merge pull request #1642 from wado-lang/claude/reflect-implementation-continue-xhiki7\n\nfeat(reflect): synthesize fields(&self) and the Fields associated tuple",
+          "timestamp": "2026-07-20T11:46:50+09:00",
+          "tree_id": "cb0ce8dbc7abaa17ece7bf259ae1cc34deb8df0b",
+          "url": "https://github.com/wado-lang/wado/commit/3a807a57f7102d1c1d9abd04d95e5dfb61c0b9ca"
+        },
+        "date": 1784516191117,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
