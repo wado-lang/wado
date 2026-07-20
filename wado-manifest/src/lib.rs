@@ -10,7 +10,8 @@ mod version;
 pub use lockfile::{LockFile, LockFileError, LockedPackage};
 pub use manifest::{
     Dependency, DependencySource, FormatSettings, GitPin, Manifest, ManifestError, ManifestWarning,
-    Package, TestSettings, Workspace, WorkspacePackage, WorldEntry, resolve_member,
+    Package, TestSettings, Workspace, WorkspacePackage, WorldEntry, read_workspace_members,
+    resolve_member,
 };
 pub use metadata::{
     LICENSE_SECTION, MetadataSection, REPOSITORY_DIRECTORY_SECTION, license_ref_id,

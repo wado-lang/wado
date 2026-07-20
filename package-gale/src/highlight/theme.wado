@@ -1,0 +1,69 @@
+//! Theme: a capture-class -> CSS color map, plus CSS generation from it.
+//!
+//! Grammar-agnostic. The capture classes are the tree-sitter capture names a
+//! grammar's highlight query produces (`comment`, `keyword`, `constant.builtin`,
+//! ...); a theme assigns each a color, and `stylesheet` renders them to CSS.
+//! The vocabulary is grammar-defined, so the map is open: a class with no color
+//! is simply left unstyled.
+
+use { TreeMap } from "core:collections";
+
+/// A capture-class -> CSS color map. Keys are tree-sitter capture names (dotted
+/// names such as `constant.builtin` are allowed); values are any CSS color.
+pub struct Theme {
+    colors: TreeMap<String, String>,
+}
+
+impl Theme {
+    /// An empty theme. Build one up with `set`, or start from `default_theme`.
+    pub fn new() -> Theme {
+        return Theme { colors: TreeMap::new() };
+    }
+
+    /// Assign `color` to capture class `class`; last write wins.
+    pub fn set(&mut self, class: String, color: String) {
+        self.colors[class] = color;
+    }
+
+    /// The color assigned to `class`, if any.
+    pub fn color(&self, class: &String) -> Option<String> {
+        return self.colors.get(*class);
+    }
+}
+
+/// Render `theme` to a CSS stylesheet: one `color` rule per capture class. A
+/// dotted capture name maps to the compound selector it targets in the emitted
+/// markup (`constant.builtin` -> `.constant.builtin`, matching
+/// `class="constant builtin"`).
+pub fn stylesheet(theme: &Theme) -> String {
+    let mut css = String::new();
+    for let [class, color] of theme.colors.entries() {
+        let rule = `.${class} { color: ${color}; }\n`;
+        css.push_str(&rule);
+    }
+    return css;
+}
+
+/// A dark default theme keyed on the common tree-sitter capture vocabulary; a
+/// starting point to override with `Theme::set`. Classes a grammar never emits
+/// are harmless, and classes it emits but this theme omits fall back to the
+/// surrounding text color.
+pub fn default_theme() -> Theme {
+    return Theme {
+        colors: {
+            comment: "#8b949e",
+            string: "#a5d6ff",
+            number: "#79c0ff",
+            boolean: "#79c0ff",
+            constant: "#79c0ff",
+            "constant.builtin": "#79c0ff",
+            keyword: "#ff7b72",
+            function: "#d2a8ff",
+            type: "#ffa657",
+            variable: "#c9d1d9",
+            property: "#79c0ff",
+            operator: "#ff7b72",
+            punctuation: "#c9d1d9",
+        },
+    };
+}

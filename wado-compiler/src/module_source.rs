@@ -719,6 +719,12 @@ impl ModuleSource {
                     filename.to_string()
                 }
             }
+            // The real, loadable filename — not the `dep:`-prefixed `Display`
+            // (that is symbol identity). A `#include_str` in a dependency module
+            // resolves against this, so it must be the same base-relative path
+            // the module itself was loaded from, or the include would resolve
+            // against the consumer's directory instead of the dependency's.
+            Self::Dependency { path } => path.to_string(),
             other => other.to_string(),
         }
     }
@@ -872,6 +878,18 @@ mod tests {
             "./geometry.wado"
         );
         assert_eq!(interner.entry_point("hello.wado").to_string(), "hello.wado");
+    }
+
+    #[test]
+    fn dependency_source_path_is_the_loadable_path_not_the_dep_display() {
+        // `Display` is symbol identity (`dep:`-prefixed); `source_path` is the
+        // real, loadable filename a `#include_str` in the dependency resolves
+        // against. Keeping the base-relative `../` (not `dep:../…`) is what makes
+        // the include land in the dependency's directory, not the consumer's.
+        let mut interner = ModuleSourceInterner::new();
+        let source = interner.dependency("../dep/src/highlight/facade.wado");
+        assert_eq!(source.to_string(), "dep:../dep/src/highlight/facade.wado");
+        assert_eq!(source.source_path(), "../dep/src/highlight/facade.wado");
     }
 
     #[test]
