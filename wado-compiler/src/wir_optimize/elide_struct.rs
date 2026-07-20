@@ -33,7 +33,8 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirInstr, WirPackage, WirTypeDef};
-use crate::wir_optimize::util::may_trap;
+use crate::wir_optimize::nullability::Nullability;
+use crate::wir_optimize::util::may_trap_in;
 use crate::wir_visitor::WirMutVisitor;
 
 #[derive(Default)]
@@ -56,10 +57,12 @@ struct Candidate {
 
 pub(super) fn elide_single_field_struct_locals(module: &mut WirPackage) {
     for func in &mut module.functions {
+        let locals = func.declared_locals();
         let Some(body) = &mut func.body else {
             continue;
         };
-        while elide_struct_locals_one_pass(body) {}
+        let null = Nullability::new(&locals);
+        while elide_struct_locals_one_pass(body, &null) {}
     }
 }
 
@@ -80,10 +83,12 @@ pub(super) fn elide_multi_field_struct_locals(module: &mut WirPackage) {
         })
         .collect();
     for func in &mut module.functions {
+        let locals = func.declared_locals();
         let Some(body) = &mut func.body else {
             continue;
         };
-        while elide_multi_field_struct_locals_one_pass(body, &type_field_names) {}
+        let null = Nullability::new(&locals);
+        while elide_multi_field_struct_locals_one_pass(body, &type_field_names, &null) {}
     }
 }
 
@@ -470,7 +475,7 @@ fn retain_safe_candidates<V>(
 }
 
 /// One pass: collect stats, validate candidates, rewrite. Returns `true` if anything changed.
-fn elide_struct_locals_one_pass(body: &mut [WirInstr]) -> bool {
+fn elide_struct_locals_one_pass(body: &mut [WirInstr], null: &Nullability) -> bool {
     let mut stats: IndexMap<String, LocalStats> = IndexMap::default();
     let mut candidates: IndexMap<String, Candidate> = IndexMap::default();
     for instr in body.iter() {
@@ -511,7 +516,7 @@ fn elide_struct_locals_one_pass(body: &mut [WirInstr]) -> bool {
             // initializer there could skip a trap the def always fired.
             // `elide_adjacent_box_locals` still handles the trap-capable case
             // under its unconditional-adjacency discipline.
-            if may_trap(&inner) {
+            if may_trap_in(&inner, null) {
                 return None;
             }
             Some((name, inner))
@@ -562,6 +567,7 @@ fn substitute_single_field(instr: &mut WirInstr, valid: &IndexMap<String, WirIns
 fn elide_multi_field_struct_locals_one_pass(
     body: &mut [WirInstr],
     type_field_names: &[Option<Vec<String>>],
+    null: &Nullability,
 ) -> bool {
     let mut stats: IndexMap<String, LocalStats> = IndexMap::default();
     let mut candidates: IndexMap<String, Candidate> = IndexMap::default();
@@ -622,7 +628,7 @@ fn elide_multi_field_struct_locals_one_pass(
                 // A trap-capable initializer can neither be dropped (an
                 // unread field's trap would vanish) nor moved to a use that
                 // may execute conditionally.
-                if may_trap(inner) {
+                if may_trap_in(inner, null) {
                     return None;
                 }
             }
@@ -954,7 +960,7 @@ fn substitute_box_use(instr: &mut WirInstr, name: &str, field: &str, inner: &Wir
 #[cfg(test)]
 mod def_use_safety_tests {
     use super::*;
-    use crate::wir::{WirFuncId, WirName, WirType, WirTypeId};
+    use crate::wir::{WirFuncId, WirLocals, WirName, WirType, WirTypeId};
     use std::rc::Rc;
 
     fn tid() -> WirTypeId {
@@ -1000,7 +1006,10 @@ mod def_use_safety_tests {
     #[test]
     fn clean_def_use_elides() {
         let mut body = vec![box_def("b", lget("v")), box_use("b")];
-        assert!(elide_struct_locals_one_pass(&mut body));
+        assert!(elide_struct_locals_one_pass(
+            &mut body,
+            &Nullability::new(&WirLocals::default())
+        ));
         assert!(matches!(body[0], WirInstr::Nop));
         let WirInstr::Drop(inner) = &body[1] else {
             panic!("expected Drop");
@@ -1018,7 +1027,10 @@ mod def_use_safety_tests {
             lset("v", WirInstr::I32Const(9)),
             box_use("b"),
         ];
-        assert!(!elide_struct_locals_one_pass(&mut body));
+        assert!(!elide_struct_locals_one_pass(
+            &mut body,
+            &Nullability::new(&WirLocals::default())
+        ));
         assert!(matches!(body[0], WirInstr::LocalSet { .. }));
     }
 
@@ -1027,7 +1039,10 @@ mod def_use_safety_tests {
     #[test]
     fn use_before_def_blocks() {
         let mut body = vec![box_use("b"), box_def("b", WirInstr::I32Const(1))];
-        assert!(!elide_struct_locals_one_pass(&mut body));
+        assert!(!elide_struct_locals_one_pass(
+            &mut body,
+            &Nullability::new(&WirLocals::default())
+        ));
     }
 
     /// A def inside one `if` arm does not dominate a use after the `if`.
@@ -1042,7 +1057,10 @@ mod def_use_safety_tests {
             },
             box_use("b"),
         ];
-        assert!(!elide_struct_locals_one_pass(&mut body));
+        assert!(!elide_struct_locals_one_pass(
+            &mut body,
+            &Nullability::new(&WirLocals::default())
+        ));
     }
 
     /// Loop back edge: def before the loop, use and source-write inside it —
@@ -1056,7 +1074,10 @@ mod def_use_safety_tests {
                 body: vec![box_use("b"), lset("v", WirInstr::I32Const(9))],
             },
         ];
-        assert!(!elide_struct_locals_one_pass(&mut body));
+        assert!(!elide_struct_locals_one_pass(
+            &mut body,
+            &Nullability::new(&WirLocals::default())
+        ));
     }
 
     /// Precision: a def *inside* the loop re-captures per iteration, so a
@@ -1071,7 +1092,10 @@ mod def_use_safety_tests {
                 lset("v", WirInstr::I32Const(9)),
             ],
         }];
-        assert!(elide_struct_locals_one_pass(&mut body));
+        assert!(elide_struct_locals_one_pass(
+            &mut body,
+            &Nullability::new(&WirLocals::default())
+        ));
     }
 
     /// A call between the def and the use clobbers a global-reading
@@ -1085,10 +1109,16 @@ mod def_use_safety_tests {
             result_ty: WirType::I32,
         };
         let mut body = vec![box_def("b", g.clone()), call(), box_use("b")];
-        assert!(!elide_struct_locals_one_pass(&mut body));
+        assert!(!elide_struct_locals_one_pass(
+            &mut body,
+            &Nullability::new(&WirLocals::default())
+        ));
         // … but with nothing in between the same initializer elides.
         let mut body = vec![box_def("b", g), box_use("b")];
-        assert!(elide_struct_locals_one_pass(&mut body));
+        assert!(elide_struct_locals_one_pass(
+            &mut body,
+            &Nullability::new(&WirLocals::default())
+        ));
     }
 
     /// A call never writes locals, so it does not clobber a `LocalGet`
@@ -1096,7 +1126,10 @@ mod def_use_safety_tests {
     #[test]
     fn call_does_not_clobber_local_reader() {
         let mut body = vec![box_def("b", lget("v")), call(), box_use("b")];
-        assert!(elide_struct_locals_one_pass(&mut body));
+        assert!(elide_struct_locals_one_pass(
+            &mut body,
+            &Nullability::new(&WirLocals::default())
+        ));
     }
 
     /// `Select` evaluates its arms before its condition: a def in the
@@ -1120,7 +1153,10 @@ mod def_use_safety_tests {
             if_false: Box::new(WirInstr::I32Const(7)),
             ty: None,
         }))];
-        assert!(!elide_struct_locals_one_pass(&mut body));
+        assert!(!elide_struct_locals_one_pass(
+            &mut body,
+            &Nullability::new(&WirLocals::default())
+        ));
     }
 
     /// A trap-capable initializer must not be relocated by the strict pass
@@ -1129,7 +1165,10 @@ mod def_use_safety_tests {
     fn trapping_initializer_blocks() {
         let div = WirInstr::I32DivS(Box::new(lget("x")), Box::new(lget("y")));
         let mut body = vec![box_def("b", div), box_use("b")];
-        assert!(!elide_struct_locals_one_pass(&mut body));
+        assert!(!elide_struct_locals_one_pass(
+            &mut body,
+            &Nullability::new(&WirLocals::default())
+        ));
     }
 
     /// The multi-field pass must not drop an unread trapping initializer.
@@ -1154,7 +1193,8 @@ mod def_use_safety_tests {
         let field_names = vec![Some(vec!["a".to_string(), "b".to_string()])];
         assert!(!elide_multi_field_struct_locals_one_pass(
             &mut body,
-            &field_names
+            &field_names,
+            &Nullability::new(&WirLocals::default())
         ));
         // Trap-free initializers with the same shape still elide.
         let mut body = vec![
@@ -1174,7 +1214,8 @@ mod def_use_safety_tests {
         ];
         assert!(elide_multi_field_struct_locals_one_pass(
             &mut body,
-            &field_names
+            &field_names,
+            &Nullability::new(&WirLocals::default())
         ));
     }
 }

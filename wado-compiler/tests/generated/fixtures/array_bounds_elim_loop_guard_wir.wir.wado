@@ -105,7 +105,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:array_bounds_elim_loop_guard_wir.wado::__modules_initialized: bool = 0;
-global global:array_bounds_elim_loop_guard_wir.wado::__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(10, 20, 30)), used: 3 };
+global global:array_bounds_elim_loop_guard_wir.wado::__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
 
 fn "array_bounds_elim_loop_guard_wir.wado/run"() with Stdout {
     let sum: i32;
@@ -121,7 +121,6 @@ fn "array_bounds_elim_loop_guard_wir.wado/run"() with Stdout {
     };
     sum = 0;
     i = 0;
-    drop(global:array_bounds_elim_loop_guard_wir.wado::__const_obj_0.used);
     _licm_repr_30 = global:array_bounds_elim_loop_guard_wir.wado::__const_obj_0.repr;
     b0: block {
         l1: loop {

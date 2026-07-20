@@ -3,6 +3,8 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirExportDesc, WirInstr, WirPackage, WirType, WirTypeId};
 
+use super::nullability::Nullability;
+
 /// Collect all `func_ids` that must NOT be SROA'd or otherwise transformed
 /// (exports, element tables, `RefFunc` references, and helpers referenced
 /// by type from `WirInstr::ArrayClone::element_copy_type`, resolved through
@@ -175,14 +177,15 @@ pub(super) fn is_root_observable(instr: &WirInstr) -> bool {
 /// [`is_root_observable`] which the WIR optimizer deliberately keeps lax
 /// to enable CSE / dead-load elimination of trapping operations whose
 /// result IS used.
-pub(super) fn may_trap(instr: &WirInstr) -> bool {
+///
+/// A receiver's nullability comes from the [`Nullability`] oracle, not the read
+/// site's `result_ty` (inlining can leave that stale-nullable). Rewriting
+/// `result_ty` instead would cost a codegen `ref.as_non_null` per read.
+pub(super) fn may_trap_in(instr: &WirInstr, null: &Nullability) -> bool {
     // Operand-dependent: `ref.as_non_null(inner)` only traps when `inner`
-    // could itself produce null. `is_nonnull_result` recognises
-    // `struct.new`/`array.new*`/`ref.func`/`ref.i31`/already-non-null
-    // typed locals, so a `ref.as_non_null(ref.func "…")` produced by
-    // closure lowering doesn't keep the surrounding `Drop` alive.
+    // could itself produce null.
     if let WirInstr::RefAsNonNull(inner) = instr {
-        return may_trap(inner) || !inner.is_nonnull_result();
+        return may_trap_in(inner, null) || !null.is_nonnull(inner);
     }
     // Operand-dependent: `ref.cast T(struct.new T { … })` is identity
     // (`struct.new` always produces exactly `T`), so the cast can't
@@ -194,7 +197,15 @@ pub(super) fn may_trap(instr: &WirInstr) -> bool {
         } = expr.as_ref()
         && src_type == type_id
     {
-        return may_trap(expr);
+        return may_trap_in(expr, null);
+    }
+    // Operand-dependent: `struct.get` traps only on a null receiver (field
+    // indices are statically in range), `array.len` only on a null array.
+    if let WirInstr::StructGet { expr, .. } = instr {
+        return may_trap_in(expr, null) || !null.is_nonnull(expr);
+    }
+    if let WirInstr::ArrayLen(inner) = instr {
+        return may_trap_in(inner, null) || !null.is_nonnull(inner);
     }
     if matches!(
         instr,
@@ -202,13 +213,9 @@ pub(super) fn may_trap(instr: &WirInstr) -> bool {
         WirInstr::ArrayGet { .. }
         | WirInstr::ArrayGetS { .. }
         | WirInstr::ArrayGetU { .. }
-        // `array.len` traps when the array reference is null.
-        | WirInstr::ArrayLen(_)
         // `array.new_data` traps when offset + len overruns the data
         // segment.
         | WirInstr::ArrayNewData { .. }
-        // GC struct reads trap on null receiver.
-        | WirInstr::StructGet { .. }
         // Ref cast / non-null assertion trap on failure. The
         // operand-dependent early returns above peel off the
         // statically-safe shapes; whatever's left here is the
@@ -252,7 +259,7 @@ pub(super) fn may_trap(instr: &WirInstr) -> bool {
     }
     let mut trap = false;
     instr.for_each_child(&mut |child| {
-        if !trap && may_trap(child) {
+        if !trap && may_trap_in(child, null) {
             trap = true;
         }
     });
