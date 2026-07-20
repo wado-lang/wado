@@ -2670,9 +2670,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// bodies index its private `repr`, which the SROA pass cannot see through,
     /// so concrete `List` access keeps the optimized direct path and its
     /// reference traits dispatch only in generic contexts. `Array` needs no such
-    /// guard — it carries no reference-trait impls (element references come from
-    /// the `array_get_ref` / `array_get_mut_ref` intrinsics), so its raw
-    /// `self.repr[i]` reads never route through a trait.
+    /// guard — it is not Container-SROA'd, its reference-trait bodies are the
+    /// `array_get_ref` / `array_get_mut_ref` intrinsics the optimizer already
+    /// recognizes, and a generic `Array<T>` read only binds `IndexRef` when `T`'s
+    /// declared bounds include `Ref` (so an unbounded `self.repr[i]` stays on the
+    /// value path).
     pub(super) fn uses_intrinsic_index_dispatch(&self, type_id: TypeId) -> bool {
         self.tysys.type_table.borrow().as_list(type_id).is_some()
     }

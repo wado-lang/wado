@@ -908,13 +908,19 @@ impl TypeSystem {
         }
 
         // Type parameters satisfy bounds declared on them (e.g., T: Describable
-        // means T implements Describable within the scope of that declaration)
+        // means T implements Describable within the scope of that declaration).
         if let ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } = resolved
         {
-            if let Some(bounds) = ctx.trait_ctx.type_param_bounds.get(name) {
-                return bounds.iter().any(|b| b.name == trait_name);
+            if let Some(bounds) = ctx.trait_ctx.type_param_bounds.get(name)
+                && bounds.iter().any(|b| b.name == trait_name)
+            {
+                return true;
             }
-            return false;
+            // A concrete type named in an impl header (`String` in
+            // `impl<V> ... for TreeMap<String, V>`) is elaborated in the body as a
+            // param named after the type; resolve it against real impls so it is
+            // not mistaken for an unbounded parameter.
+            return self.find_trait_impl_for_type(ctx, scope, name, trait_name);
         }
 
         if on_bound == Some(OnBoundTrait::Ref) {
@@ -1542,15 +1548,11 @@ impl TypeSystem {
                     && let Some(bounds) = bounds_map.get(named.name.as_str())
                     && let Some(&type_arg) = type_args.get(i)
                 {
-                    // If the type arg is itself a type parameter (e.g., T in a generic context),
-                    // skip the bounds check. Within a bounded impl block, type params are assumed
-                    // to satisfy bounds; concrete types are checked at call sites.
-                    if matches!(
-                        self.type_table.borrow().get(type_arg),
-                        ResolvedType::TypeParam { .. }
-                    ) {
-                        continue;
-                    }
+                    // A type-parameter arg satisfies a bound only if that bound is
+                    // among its declared bounds (`type_implements_trait` reads
+                    // `type_param_bounds`): an unbounded `T` must not match
+                    // `impl<T: Ref> ... for C<T>`, else a container's generic
+                    // `self.repr[i]` would bind the reference impl and box scalars.
                     for bound in bounds {
                         if !self.type_implements_trait(ctx, scope, type_arg, bound) {
                             return false;
