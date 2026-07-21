@@ -263,10 +263,20 @@ after the first three.
       associated tuple (the remaining §10 members). `fields(&self)` returns the
       values as a heterogeneous tuple `[self.f_0, …]`; the tuple type is
       registered as the struct's `Fields` associated-type resolution.
-- [ ] Inline pack binding `impl<T: Reflect<Fields = [..F]>, ..F: Trait>` (the
-      unbuilt item from WEP 2026-03-14 §11). The bound is written inline in the
-      generic parameter list; the monomorphizer must derive `F` by projecting
-      `T`'s `Fields` tuple (`resolve_assoc_type`) rather than from the receiver.
+- Inline pack binding `impl<T: Reflect<Fields = [..F]>, ..F: Trait>` (the
+      unbuilt item from WEP 2026-03-14 §11), staged:
+  - [x] Blanket-impl selection on a synthesized bound: a struct satisfies the
+        compiler-synthesized `T: Reflect` (and `T: Default`) bound, so a blanket
+        derivation `impl<T: Reflect> Trait for T` resolves for it. The
+        blanket-candidate bound check consults synthesized-trait eligibility, not
+        only explicit `impl`s.
+  - [ ] Generic `Reflect::<T>::…` resolution: the trait-qualified call resolves
+        for a generic `T: Reflect` (deferred dispatch), not just a concrete
+        struct.
+  - [ ] Pack projection + expansion: the monomorphizer derives `F` from `T`'s
+        `Fields` tuple (`resolve_assoc_type`) rather than from the receiver, and
+        `[..F::method()]` expands per field type (including methods whose return
+        type does not mention the pack).
 - [ ] `Reflect` metadata extension — `field_meta()` (`wire_name`,
       `has_default`, `doc`, `validate`) and `type_doc()`.
 - [ ] `#[validate(…)]` attribute — parse the closed vocabulary into
