@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784631949540,
+  "lastUpdate": 1784644615713,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -42737,6 +42737,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6f6d4935529a4ce012be06d60fbb7acc11fc21d8"
         },
         "date": 1784631948758,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8143,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16466,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 272403,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "90ea95f3f404dc0367ab5cd059eb63e675bd0a6e",
+          "message": "Merge pull request #1655 from wado-lang/claude/package-gale-highlight-wado-bug-wwlv8l\n\nfix(cli): embed WIT component-type for kiln generator consumers",
+          "timestamp": "2026-07-21T23:27:01+09:00",
+          "tree_id": "fb70e3072ee6476436d3efdf2bba5863cdfb93c0",
+          "url": "https://github.com/wado-lang/wado/commit/90ea95f3f404dc0367ab5cd059eb63e675bd0a6e"
+        },
+        "date": 1784644614950,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
