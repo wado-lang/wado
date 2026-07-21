@@ -2202,7 +2202,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .iter()
                     .find(|e| matches!(type_table.get(**e), ResolvedType::TypePack { .. }))
                 {
-                    *tp
+                    // A mapped pack `..F::method()` binds the loop variable to
+                    // the (pack-independent) return type, not the pack itself.
+                    match type_table.get(*tp) {
+                        ResolvedType::TypePack {
+                            mapped_elem: Some(elem),
+                            ..
+                        } => *elem,
+                        _ => *tp,
+                    }
                 } else {
                     // For TupleZip: use the first element type (all elements have the same shape)
                     elems[0]

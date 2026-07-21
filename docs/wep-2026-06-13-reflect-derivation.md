@@ -281,10 +281,12 @@ after the first three.
   - [x] Pack projection: the monomorphizer derives `F` from `T`'s `Fields` tuple
         (`resolve_assoc_type`) rather than from the receiver, so a `for-of` over
         `Reflect::<T>::fields(self)` walks the fields with per-element dispatch.
-  - [ ] Pack-map expansion `[..F::method()]` where the method's return type does
-        not mention the pack (e.g. `[..F::json_schema()]`). Still unbuilt: today
-        such a spread collapses to arity-1. Field-value derivations use `for-of`
-        over `fields()` (above) and do not need it; schema-style derivations do.
+  - [x] Pack-map expansion `[..F::method()]` where the method's return type is
+        pack-independent (e.g. `[..F::json_schema()]`). `TypePack` gained a
+        `mapped_elem: Option<TypeId>`: `..F` (identity) vs `..F::method()` (the
+        return type repeated `|F|` times). Substitution splices it, `for-of`
+        binds the loop variable to the return type, and the value expansion
+        rewrites the call per field type. Enables schema-style derivations.
 - [ ] `Reflect` metadata extension — `field_meta()` (`wire_name`,
       `has_default`, `doc`, `validate`) and `type_doc()`.
 - [ ] `#[validate(…)]` attribute — parse the closed vocabulary into

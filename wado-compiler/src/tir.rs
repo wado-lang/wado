@@ -409,10 +409,17 @@ pub enum ResolvedType {
         index: u32,
     },
     /// Type pack parameter (e.g., `..T` in `fn foo<..T>(x: [..T])`)
-    /// Used inside tuples before monomorphization; expanded to concrete types during substitution
+    /// Used inside tuples before monomorphization; expanded to concrete types during substitution.
+    ///
+    /// `mapped_elem` distinguishes an identity pack from a pack-map:
+    /// - `None` — `..F`: each element is the pack's own element `F_i`.
+    /// - `Some(R)` — `..F::method()` whose return type `R` is pack-independent:
+    ///   each element is `R` (repeated `|F|` times). The pack still drives the
+    ///   arity via `index`; substitution splices `R` that many times.
     TypePack {
         name: String,
         index: u32,
+        mapped_elem: Option<TypeId>,
     },
     /// Generic struct instantiation (e.g., `Box<i32>`)
     /// Used to track instantiation sites before monomorphization
@@ -1770,7 +1777,22 @@ impl TypeTable {
 
     /// Create a type pack parameter (e.g., `..T` in `fn foo<..T>(x: [..T])`)
     pub fn make_type_pack(&mut self, name: String, index: u32) -> TypeId {
-        self.intern(ResolvedType::TypePack { name, index })
+        self.intern(ResolvedType::TypePack {
+            name,
+            index,
+            mapped_elem: None,
+        })
+    }
+
+    /// Create a mapped type pack — `..F::method()` whose return type `elem` is
+    /// pack-independent. Drives its arity from pack `(name, index)` but each
+    /// element is `elem`. See [`ResolvedType::TypePack`].
+    pub fn make_mapped_type_pack(&mut self, name: String, index: u32, elem: TypeId) -> TypeId {
+        self.intern(ResolvedType::TypePack {
+            name,
+            index,
+            mapped_elem: Some(elem),
+        })
     }
 
     /// Create a simple associated type projection `T::X` with no bounds or bindings.
@@ -2058,12 +2080,27 @@ impl TypeTable {
                     let mut new_elems: Vec<TypeId> = Vec::new();
                     for &e in &type_args {
                         match self.get(e).clone() {
-                            ResolvedType::TypePack { index, .. } => {
+                            ResolvedType::TypePack {
+                                index, mapped_elem, ..
+                            } => {
                                 if let Some(&pack_type) = substitution.get(&index) {
-                                    if let Some(pack_elems) = self.as_tuple(pack_type) {
-                                        new_elems.extend_from_slice(&pack_elems);
-                                    } else {
-                                        new_elems.push(pack_type);
+                                    match mapped_elem {
+                                        // Pack-map `..F::method()`: splice the
+                                        // substituted return type `|F|` times.
+                                        Some(elem) => {
+                                            let arity =
+                                                self.as_tuple(pack_type).map_or(1, |es| es.len());
+                                            let elem_sub =
+                                                self.substitute_type_params(elem, substitution);
+                                            new_elems.extend(std::iter::repeat_n(elem_sub, arity));
+                                        }
+                                        None => {
+                                            if let Some(pack_elems) = self.as_tuple(pack_type) {
+                                                new_elems.extend_from_slice(&pack_elems);
+                                            } else {
+                                                new_elems.push(pack_type);
+                                            }
+                                        }
                                     }
                                 } else {
                                     new_elems.push(e);

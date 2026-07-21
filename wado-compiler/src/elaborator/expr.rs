@@ -4085,6 +4085,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // spread element keeps the spread's own type; monomorphize
                     // expands it later.
                     elem_types.push(spread_type_id);
+                } else if let Some(mapped) = self.spread_pack_map_type(inner, spread_type_id) {
+                    // Pack-map `..F::method()` whose return type is
+                    // pack-independent: a homogeneous pack of the return type,
+                    // arity `|F|`, expanded at monomorphization.
+                    elem_types.push(mapped);
                 } else {
                     let spread_type = self.tysys.type_table.borrow().get(spread_type_id).clone();
                     if let ResolvedType::GenericInstance {
@@ -4114,6 +4119,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         self.tysys.type_table.borrow_mut().make_tuple(elem_types)
+    }
+
+    /// The `(name, index)` of the type pack a spread operand's static call is
+    /// made on: `F::method()` parses as a `Call` whose callee is a two-segment
+    /// path `F::method`; returns `Some` when `F` is a type pack in scope.
+    pub(super) fn call_pack_subject(&self, inner: &Expr) -> Option<(String, u32)> {
+        let Expr::Call(call) = inner else {
+            return None;
+        };
+        let Expr::Ident(id) = &call.callee else {
+            return None;
+        };
+        if id.segments.len() != 2 {
+            return None;
+        }
+        let subject_name = &id.segments[0].name;
+        let &(index, tid) = self.annotate_ctx.trait_ctx.type_params.get(subject_name)?;
+        matches!(
+            self.tysys.type_table.borrow().get(tid),
+            ResolvedType::TypePack { .. }
+        )
+        .then(|| (subject_name.clone(), index))
+    }
+
+    /// If `inner` is a static call on a type-pack subject (`F::method()`) whose
+    /// return type `result_type` is pack-independent, build the mapped pack
+    /// `..F::method()` — `result_type` repeated `|F|` times.
+    fn spread_pack_map_type(&mut self, inner: &Expr, result_type: TypeId) -> Option<TypeId> {
+        let (name, index) = self.call_pack_subject(inner)?;
+        Some(
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_mapped_type_pack(name, index, result_type),
+        )
     }
 
     /// Resolve the postfix `?` operator.

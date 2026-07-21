@@ -348,6 +348,7 @@ impl Monomorphizer {
                             ResolvedType::TypePack {
                                 index,
                                 name: pack_name,
+                                mapped_elem,
                             } => {
                                 let &pack_type =
                                     substitution.get(&index).unwrap_or_else(|| {
@@ -355,10 +356,25 @@ impl Monomorphizer {
                                             "TypePack `..{pack_name}` (index {index}) not found in substitution map"
                                         )
                                     });
-                                if let Some(pack_elems) = type_table.as_tuple(pack_type) {
-                                    new_elems.extend_from_slice(&pack_elems);
-                                } else {
-                                    new_elems.push(pack_type);
+                                match mapped_elem {
+                                    // Pack-map `..F::method()`: each element is the
+                                    // substituted return type, repeated `|F|` times.
+                                    Some(elem) => {
+                                        let arity = type_table
+                                            .as_tuple(pack_type)
+                                            .map_or(1, |es| es.len());
+                                        let elem_sub =
+                                            self.substitute_type(elem, substitution, type_table);
+                                        new_elems
+                                            .extend(std::iter::repeat_n(elem_sub, arity));
+                                    }
+                                    None => {
+                                        if let Some(pack_elems) = type_table.as_tuple(pack_type) {
+                                            new_elems.extend_from_slice(&pack_elems);
+                                        } else {
+                                            new_elems.push(pack_type);
+                                        }
+                                    }
                                 }
                             }
                             _ => {
