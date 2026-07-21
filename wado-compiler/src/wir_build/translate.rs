@@ -1559,6 +1559,16 @@ impl FunctionTranslator<'_, '_> {
         instrs
     }
 
+    /// Whether a value of this type leaves nothing on the Wasm stack: unit, or
+    /// a reference to unit — `&x` is transparent at the WIR level (see
+    /// `NirUnaryOp::Ref` in `translate_expr_inner`), so a reference is exactly
+    /// as empty as its referent. Positions that consume a `&()` are boxed by
+    /// `lower::plan::boxing` before reaching here; the transparent form only
+    /// survives in discarded / bound-but-unread positions.
+    pub(super) fn is_stackless_type(&self, ty: TypeId) -> bool {
+        self.type_table.peel_refs(ty) == TypeTable::UNIT
+    }
+
     /// Infer the WIR result type from the last statement in a block.
     /// Returns `Some(type)` if the last statement can produce a value, `None` otherwise.
     fn infer_stmts_result_type(&self, block_id: BlockId) -> Option<WirType> {
@@ -1569,7 +1579,7 @@ impl FunctionTranslator<'_, '_> {
             .and_then(|stmt_id| match &arena.stmts[*stmt_id].kind {
                 StmtKind::Expr(op) => {
                     let ty = self.operand_type_id(*op);
-                    if ty != TypeTable::UNIT && ty != TypeTable::NEVER {
+                    if !self.is_stackless_type(ty) && ty != TypeTable::NEVER {
                         Some(self.ctx.type_id_to_wir_type(self.type_table, ty))
                     } else {
                         None
@@ -1673,9 +1683,10 @@ impl FunctionTranslator<'_, '_> {
                 // diverging instruction; the local is declared but never assigned.
                 if self.operand_type_id(*value) == TypeTable::NEVER {
                     Some(value_instr)
-                } else if self.operand_type_id(*value) == TypeTable::UNIT {
-                    // Unit-type locals have no Wasm representation; just emit
-                    // the init expression for its side effects (usually Nop).
+                } else if self.is_stackless_type(self.operand_type_id(*value)) {
+                    // Unit-type (and `&()`-type) locals have no Wasm
+                    // representation; just emit the init expression for its
+                    // side effects (usually Nop).
                     Some(value_instr)
                 } else {
                     let local_name = self.local_name(*local_index);
@@ -1703,7 +1714,7 @@ impl FunctionTranslator<'_, '_> {
                         ExprKind::Assign { .. } | ExprKind::GlobalVarSet { .. }
                     )
                 });
-                if !is_void_instr && ty != TypeTable::UNIT && ty != TypeTable::NEVER {
+                if !is_void_instr && !self.is_stackless_type(ty) && ty != TypeTable::NEVER {
                     Some(WirInstr::Drop(Box::new(instr)))
                 } else {
                     Some(instr)

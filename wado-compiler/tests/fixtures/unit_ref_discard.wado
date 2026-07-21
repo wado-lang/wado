@@ -1,0 +1,18 @@
+// A reference to unit has no Wasm representation (`&x` lowers transparently,
+// so `&()` is as empty as `()`). Discarding or let-binding one must not emit a
+// stack `drop` / `local.set` — there is nothing on the stack to consume.
+
+test "discarded reference-to-unit statement" {
+    let u = ();
+    &u;
+    assert true;
+}
+
+test "let-bound reference-to-unit" {
+    let u = ();
+    let r = &u;
+    assert true;
+}
+
+__DATA__
+{"test": {}}
