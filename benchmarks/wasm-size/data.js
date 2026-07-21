@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784589530336,
+  "lastUpdate": 1784596001031,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -42561,6 +42561,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6610b8679d7dc6971a57925d5c6219dc707e2d0d"
         },
         "date": 1784589529631,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8143,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16466,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271128,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "42638d3c98d0817196aa3b05eeb2cacaea1597ed",
+          "message": "Merge pull request #1649 from wado-lang/claude/ref-trait-introduction-b48mft\n\nfeat(compiler): Ref/RefMut markers and reference-based indexing traits",
+          "timestamp": "2026-07-21T09:55:42+09:00",
+          "tree_id": "5edf77da977b0c370b4090e508a7d46b4f4e1537",
+          "url": "https://github.com/wado-lang/wado/commit/42638d3c98d0817196aa3b05eeb2cacaea1597ed"
+        },
+        "date": 1784596000501,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
