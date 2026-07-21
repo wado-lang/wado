@@ -973,21 +973,30 @@ pub async fn semantics<H: CompilerHost>(
     host: &H,
     filename: Option<&str>,
 ) -> Semantics {
-    semantics_for_world(source, host, filename, None).await
+    semantics_for_world(
+        source,
+        host,
+        filename,
+        None,
+        crate::kiln::InvocationIndex::new(),
+    )
+    .await
 }
 
-/// [`semantics`] with the target world threaded through, so the Kiln
-/// `Request<T>` adapter rewrite (`compile_with_options` phase 1b) is applied
-/// before analysis when `target_world == "core:kiln/generator"`. WIT emission
-/// re-derives `Semantics` off the codegen path and must see the same rewritten
-/// `generate(req: raw-request)` signature the component exports; without the
-/// rewrite it sees the un-representable generic `Request<Options>` and skips
-/// the component-type section (issue #1478).
+/// [`semantics`] with the target world and kiln redirects threaded through, so a
+/// re-analysis off the codegen path matches the main compile.
+///
+/// `target_world` drives the Kiln `Request<T>` adapter rewrite for the
+/// `core:kiln/generator` world; `invocations` redirects `use … with { generator }`
+/// clauses to their generated modules. A caller re-analyzing a kiln consumer must
+/// pass the same values the compile used, or the load fails and analysis reports
+/// incomplete.
 pub async fn semantics_for_world<H: CompilerHost>(
     source: &str,
     host: &H,
     filename: Option<&str>,
     target_world: Option<&str>,
+    invocations: crate::kiln::InvocationIndex,
 ) -> Semantics {
     let parsed = crate::parse(source);
     // Surface every recovered lex/parse error, then analyze the partial AST
@@ -1002,15 +1011,7 @@ pub async fn semantics_for_world<H: CompilerHost>(
     for e in &parsed.errors {
         host.emit_diagnostic(parse_error_diagnostic(e, filename));
     }
-    match crate::load(
-        parsed,
-        filename,
-        host,
-        crate::kiln::InvocationIndex::new(),
-        LogLevel::default(),
-    )
-    .await
-    {
+    match crate::load(parsed, filename, host, invocations, LogLevel::default()).await {
         // General entry: build TIR so consumers that read `tir_modules`
         // (kiln options extraction) work. The LSP engine uses its own
         // annotate-only path (`semantics_of(.., build_tir = false)`).

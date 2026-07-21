@@ -1572,7 +1572,7 @@ impl Parser {
 
     fn lt(&self, k: i32) -> i32 {
         let idx = self.pos + k - 1;
-        if idx >= self.tokens.len() { return self.tokens.len() - 1; }
+        if idx >= self.kinds.len() { return self.kinds.len() - 1; }
         if idx < 0 { return 0; }
         return idx;
     }
@@ -1670,7 +1670,7 @@ impl Parser {
 
     fn peek_at(&self, offset: i32) -> i32 {
         let idx = self.pos + offset;
-        if idx >= self.tokens.len() { return TK_EOF; }
+        if idx >= self.kinds.len() { return TK_EOF; }
         return self.kinds[idx];
     }
 

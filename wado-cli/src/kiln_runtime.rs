@@ -267,6 +267,17 @@ fn canonical_to_val(v: &CanonicalValue, ty: &Type) -> Result<Val, String> {
             // A present, non-wrapped value against an Option type is `Some`.
             other => Val::Option(Some(Box::new(canonical_to_val(other, &o.ty())?))),
         },
+        Type::List(l) => {
+            let CanonicalValue::List(items) = v else {
+                return Err(mismatch());
+            };
+            let elem_ty = l.ty();
+            let mut out = Vec::with_capacity(items.len());
+            for item in items {
+                out.push(canonical_to_val(item, &elem_ty)?);
+            }
+            Val::List(out)
+        }
         Type::Record(r) => {
             let CanonicalValue::Struct(entries) = v else {
                 return Err(mismatch());
@@ -281,6 +292,7 @@ fn canonical_to_val(v: &CanonicalValue, ty: &Type) -> Result<Val, String> {
                 let val = match matched {
                     Some((_, cv)) => canonical_to_val(cv, &f.ty)?,
                     None if matches!(f.ty, Type::Option(_)) => Val::Option(None),
+                    None if matches!(f.ty, Type::List(_)) => Val::List(Vec::new()),
                     None => {
                         return Err(format!("missing required options field `{}`", f.name));
                     }

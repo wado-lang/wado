@@ -56,6 +56,41 @@ test "highlight nested template string" {
     assert_highlights(&"fn f() -> String { let n = 1; return `outer ${`inner ${n}`}`; }\n");
 }
 
+test "highlight fragment: unterminated fn body keeps interpolation context" {
+    let src = "fn f() { let x = 1.5; let s = `v = ${x:0.2}`;\n";
+    assert !parse(&src).ok(), "fragment should not parse cleanly";
+    let html = highlight(src);
+    assert html.contains("<span class=\"variable\">x</span>"), "interp expr -> variable in fragment";
+    assert html.contains("<span class=\"comment\">0.2</span>"), "format spec muted in fragment";
+    assert visible_text(&html) == src, "fragment highlighting is text-preserving";
+}
+
+test "highlight fragment: bare statements keep default classes and text" {
+    let src = "let name = 1;\nif name > 0 { return true; }\n";
+    let html = highlight(src);
+    assert html.contains("<span class=\"keyword\">let</span>"), "keyword highlighted in fragment";
+    assert html.contains("<span class=\"constant builtin\">true</span>"), "constant highlighted in fragment";
+    assert visible_text(&html) == src, "bare-statement fragment is text-preserving";
+}
+
+test "highlight fragment: bare statement recovers interpolation context" {
+    let src = "let name = 1;\nlet s = `hi ${name} ${name:0.2}`;\n";
+    let html = highlight(src);
+    assert !parse(&src).ok(), "fragment should not parse cleanly";
+    assert html.contains("<span class=\"variable\">name</span>"), "interp id -> variable in bare fragment";
+    assert html.contains("<span class=\"comment\">0.2</span>"), "format spec muted in bare fragment";
+    assert html.contains("<span class=\"keyword\">let</span>"), "surrounding keyword still highlighted";
+    assert visible_text(&html) == src, "bare-statement fragment is text-preserving";
+}
+
+test "highlight fragment: bare expression recovers interpolation context" {
+    let src = "`hi ${name}` + compute(1, 2)\n";
+    let html = highlight(src);
+    assert html.contains("class=\"string\""), "template text -> string";
+    assert html.contains("<span class=\"variable\">name</span>"), "interp id -> variable in bare expression";
+    assert visible_text(&html) == src, "bare-expression fragment is text-preserving";
+}
+
 test "highlight __DATA__ section" {
     let src = "fn f() { }\n\n__DATA__\ndata body\n";
     let html = highlight(src);

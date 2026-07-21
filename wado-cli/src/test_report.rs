@@ -189,7 +189,9 @@ impl TestReporter for VerboseReporter {
             println!("=== aggregate ===");
             test::print_three_axis(grand, Some(&total_dur));
         } else {
-            println!("(wall: {total_dur})");
+            for line in test::resource_summary_lines(&total_dur) {
+                println!("{line}");
+            }
         }
     }
 }
@@ -259,8 +261,9 @@ fn print_heartbeat(state: &HeartbeatState) {
     }
 
     println!(
-        "[{}] {done}/{total} files{pct} · {counts}{eta}",
-        test::format_duration(elapsed)
+        "[{}] {done}/{total} files{pct} · {counts}{eta}{}",
+        test::format_duration(elapsed),
+        crate::rss::live_suffix().unwrap_or_default()
     );
 }
 
@@ -640,18 +643,19 @@ impl TestReporter for TapReporter {
 
     fn on_compile(&self, path: &str, event: CompileEvent, duration: Duration) {
         let dur = test::format_duration(duration);
+        let rss = crate::rss::live_suffix().unwrap_or_default();
         match event {
-            CompileEvent::Ok => self.comment(&format!("Compiled {path} ({dur})")),
+            CompileEvent::Ok => self.comment(&format!("Compiled {path} ({dur}){rss}")),
             CompileEvent::TodoModule => {
                 self.comment(&format!(
-                    "Compiled {path} (TODO module, compile error expected, {dur})"
+                    "Compiled {path} (TODO module, compile error expected, {dur}){rss}"
                 ));
                 self.doc().register_standalone(format!(
                     "ok - {path} # TODO module compile error expected"
                 ));
             }
             CompileEvent::Failed { detail } => {
-                self.comment(&format!("FAILED to compile {path} ({dur})"));
+                self.comment(&format!("FAILED to compile {path} ({dur}){rss}"));
                 let mut block = vec![format!("not ok - {path} (compile failed)")];
                 if let Some(msg) = detail {
                     block.extend(yaml_block("", &[("message", &msg)]));
