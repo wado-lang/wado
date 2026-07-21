@@ -187,7 +187,7 @@ pub fn compute_move_eligible(
         mut_receiver_methods,
         non_final: IndexSet::default(),
         aliases_live: IndexSet::default(),
-        borrow_escaped: IndexSet::default(),
+        borrow_escaped: IndexMap::default(),
         let_sources: IndexMap::default(),
         match_sources: Vec::new(),
         pending_mut_alias: Vec::new(),
@@ -269,7 +269,7 @@ pub fn compute_move_eligible(
         .filter(|idx| {
             !a.non_final.contains(idx)
                 && !a.aliases_live.contains(idx)
-                && !a.borrow_escaped.contains(idx)
+                && !a.borrow_escaped.contains_key(idx)
         })
         .collect();
 
@@ -283,12 +283,10 @@ pub fn compute_move_eligible(
     let place_spans: IndexSet<crate::token::Span> = a
         .place_cands
         .iter()
-        .filter(|(base, _)| {
-            fresh.contains(base)
-                && !a.aliases_live.contains(base)
-                && !a.borrow_escaped.contains(base)
+        .filter(|(base, top, _)| {
+            fresh.contains(base) && !a.aliases_live.contains(base) && !a.place_escaped(*base, *top)
         })
-        .map(|(_, span)| *span)
+        .map(|(_, _, span)| *span)
         .collect();
 
     MoveEligible {
@@ -739,8 +737,11 @@ struct Analyzer<'a> {
     /// Locals a persisting reference is taken of — a `&`/`&mut` that is not a
     /// transient call argument, or is passed to a callee that may store it. Such
     /// a local may be observed through the reference after its move, so it stays
-    /// copied.
-    borrow_escaped: IndexSet<u32>,
+    /// copied. Field-sensitive: a borrow of `p.f` escapes only field `f`, so a
+    /// disjoint field of `p` still moves (a borrow of `p.f` provably cannot alias
+    /// `p.g`). A whole-local / imprecise borrow (`&p`, `&p[i]`, `&*p`) escapes
+    /// every field.
+    borrow_escaped: IndexMap<u32, FieldEscape>,
     let_sources: IndexMap<u32, Vec<TirExpr>>,
     match_sources: Vec<(u32, TirExpr)>,
     /// `(by-value arg root, storage the call mutates)` pairs, resolved after
@@ -749,9 +750,18 @@ struct Analyzer<'a> {
     pending_mut_alias: Vec<(u32, Vec<u32>)>,
     exits: Vec<Exit>,
     all_locals: IndexSet<u32>,
-    /// Provisional place-level move sites `(aggregate root, materialized span)`
-    /// found at literals, filtered by the owned-storage guards after the walk.
-    place_cands: Vec<(u32, crate::token::Span)>,
+    /// Provisional place-level move sites `(aggregate root, moved top-level field,
+    /// materialized span)` found at literals, filtered by the owned-storage
+    /// guards after the walk. `None` field = a whole-value materialization.
+    place_cands: Vec<(u32, Option<u32>, crate::token::Span)>,
+}
+
+/// Which fields of a local an escaped borrow reaches. `Whole` (a `&local` or an
+/// imprecise projection) covers every field; `Fields` names the exact top-level
+/// fields borrowed via clean projections.
+enum FieldEscape {
+    Whole,
+    Fields(IndexSet<u32>),
 }
 
 impl Analyzer<'_> {
@@ -767,6 +777,36 @@ impl Analyzer<'_> {
     /// borrow is not a value consumption, so it never marks the local `non_final`
     /// — a transient borrow before a later move is fine. Projection indices in
     /// `place` (`&arr[i]`) are ordinary value-reads. Returns the referent.
+    /// Record that a persisting borrow reaches `field` of `root` (`None` = the
+    /// whole local / an imprecise projection, escaping every field).
+    fn mark_escaped(&mut self, root: u32, field: Option<u32>) {
+        let entry = self
+            .borrow_escaped
+            .entry(root)
+            .or_insert_with(|| FieldEscape::Fields(IndexSet::default()));
+        match field {
+            None => *entry = FieldEscape::Whole,
+            Some(f) => {
+                if let FieldEscape::Fields(fs) = entry {
+                    fs.insert(f);
+                }
+            }
+        }
+    }
+
+    /// Whether a persisting borrow reaches the place `root.field` (`None` field =
+    /// a whole-value move, blocked by any escaped field).
+    fn place_escaped(&self, root: u32, field: Option<u32>) -> bool {
+        match self.borrow_escaped.get(&root) {
+            None => false,
+            Some(FieldEscape::Whole) => true,
+            Some(FieldEscape::Fields(fs)) => match field {
+                None => !fs.is_empty(),
+                Some(f) => fs.contains(&f),
+            },
+        }
+    }
+
     fn borrow_read(
         &mut self,
         place: &TirExpr,
@@ -819,7 +859,7 @@ impl Analyzer<'_> {
                         .receiver_storing_methods
                         .contains(&func.module_source, &func.name)
                 {
-                    self.borrow_escaped.insert(r);
+                    self.mark_escaped(r, borrow_top_field(place));
                 }
             }
             _ => self.walk_expr(receiver, live, record),
@@ -849,7 +889,7 @@ impl Analyzer<'_> {
                         .contains(&c.module_source, &c.name)
                 })
             {
-                self.borrow_escaped.insert(r);
+                self.mark_escaped(r, borrow_top_field(place));
             }
         } else {
             self.walk_expr(arg, live, record);
@@ -1003,8 +1043,8 @@ impl Analyzer<'_> {
             if tops.windows(2).any(|w| w[0] == w[1]) {
                 continue;
             }
-            for (_, span) in sites {
-                self.place_cands.push((*base, *span));
+            for (top, span) in sites {
+                self.place_cands.push((*base, *top, *span));
             }
         }
     }
@@ -1364,7 +1404,7 @@ impl Analyzer<'_> {
                 if let Some(r) = self.borrow_read(place, live, record)
                     && record
                 {
-                    self.borrow_escaped.insert(r);
+                    self.mark_escaped(r, borrow_top_field(place));
                 }
             }
             // A struct / tuple literal is a materialization point: each direct
@@ -1407,6 +1447,27 @@ impl Analyzer<'_> {
 /// construction, a literal, an arithmetic result — aliases nothing observable,
 /// so returns `None`. Errs toward `Some` for unmodelled projection-like nodes
 /// (over-flagging only keeps a copy).
+/// The top-level field a borrow place reaches off its root local: `Some(f)` for a
+/// clean projection `local.f…`, `None` for a whole-local (`local`) or an
+/// imprecise place (through an index / deref / cast / variant payload), which
+/// conservatively escapes every field.
+fn borrow_top_field(place: &TirExpr) -> Option<u32> {
+    match &place.kind {
+        TirExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            ..
+        } => {
+            if matches!(inner.kind, TirExprKind::Local { .. }) {
+                Some(*field_index)
+            } else {
+                borrow_top_field(inner)
+            }
+        }
+        _ => None,
+    }
+}
+
 pub(crate) fn alias_root(expr: &TirExpr) -> Option<u32> {
     match &expr.kind {
         TirExprKind::Local { index, .. } => Some(*index),
