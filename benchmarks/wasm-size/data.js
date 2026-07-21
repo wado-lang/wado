@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784626843381,
+  "lastUpdate": 1784631949540,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -42713,6 +42713,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 271128,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6f6d4935529a4ce012be06d60fbb7acc11fc21d8",
+          "message": "Merge pull request #1653 from wado-lang/claude/wado-syntax-highlighting-rtxucb\n\nfeat(gale): highlight incomplete Wado programs via resilient fragment recovery",
+          "timestamp": "2026-07-21T19:55:15+09:00",
+          "tree_id": "00919e18b6e0d43b1cdca60fdf875c04a29f7b5b",
+          "url": "https://github.com/wado-lang/wado/commit/6f6d4935529a4ce012be06d60fbb7acc11fc21d8"
+        },
+        "date": 1784631948758,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8143,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16466,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 272403,
             "unit": "bytes"
           }
         ]
