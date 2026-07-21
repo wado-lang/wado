@@ -1,5 +1,6 @@
+use std::borrow::Cow;
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::{fs, io};
 
 use wado_lsp::workspace::governing_workspace;
@@ -67,30 +68,42 @@ pub(crate) fn resolve_manifest(
     member_dir: &Path,
     member_content: &str,
 ) -> Result<Manifest, DiscoveryError> {
-    // Locate the governing workspace from an absolute, `..`-free member dir.
-    // `governing_workspace` walks up with `pop()` and matches members with
-    // `strip_prefix`, so an empty, relative, or `..`-bearing dir (a bare
-    // relative entry like `src/main.wado` discovers an empty root, and a path
-    // build-dependency joins `../pkg`) fails to find the workspace — inheritance
-    // then wrongly degrades to a standalone parse that rejects an inherited-only
-    // member. Canonicalizing normalizes all three shapes to the same absolute
-    // dir an absolute entry path would produce.
-    let anchor = if member_dir.as_os_str().is_empty() {
-        Path::new(".")
-    } else {
-        member_dir
-    };
-    let canonical = fs::canonicalize(anchor).unwrap_or_else(|_| anchor.to_path_buf());
-    match find_workspace_root(&canonical, member_content) {
+    match find_workspace_root(member_dir, member_content) {
         Some(root_content) => wado_manifest::resolve_member(member_content, &root_content)
             .map_err(DiscoveryError::Parse),
         None => member_content.parse().map_err(DiscoveryError::Parse),
     }
 }
 
+/// `member_dir` normalized so [`governing_workspace`] can locate the workspace.
+///
+/// That function walks up with `pop()` and matches members with `strip_prefix`,
+/// so an empty, relative, or `..`-bearing dir cannot find the workspace root —
+/// a bare relative entry (`src/main.wado`) discovers an empty root, and a path
+/// build-dependency joins `../pkg`. Those shapes are canonicalized to the same
+/// absolute, `..`-free dir an absolute entry path already produces; an already
+/// absolute, `..`-free dir is returned untouched, so the common path pays no
+/// syscall and its symlinks are not resolved. Normalization lives here, in the
+/// CLI, because `governing_workspace` is in wasm32-only `wado-lsp` and cannot
+/// touch the filesystem.
+fn workspace_anchor(member_dir: &Path) -> Cow<'_, Path> {
+    let has_parent_dir = member_dir.components().any(|c| c == Component::ParentDir);
+    if member_dir.is_absolute() && !has_parent_dir {
+        return Cow::Borrowed(member_dir);
+    }
+    let anchor = if member_dir.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        member_dir
+    };
+    fs::canonicalize(anchor)
+        .map(Cow::Owned)
+        .unwrap_or(Cow::Borrowed(member_dir))
+}
+
 /// The workspace-root `wado.toml` contents governing `member_dir`, if any.
 fn find_workspace_root(member_dir: &Path, member_content: &str) -> Option<String> {
-    governing_workspace(member_dir, member_content).map(|(_, content)| content)
+    governing_workspace(&workspace_anchor(member_dir), member_content).map(|(_, content)| content)
 }
 
 /// The workspace root directory governing the package at `member_dir`, if it is
@@ -100,7 +113,7 @@ pub(crate) fn governing_workspace_root_dir(
 ) -> Result<Option<PathBuf>, DiscoveryError> {
     let content =
         fs::read_to_string(member_dir.join(MANIFEST_FILENAME)).map_err(DiscoveryError::Io)?;
-    Ok(governing_workspace(member_dir, &content).map(|(dir, _)| dir))
+    Ok(governing_workspace(&workspace_anchor(member_dir), &content).map(|(dir, _)| dir))
 }
 
 /// The directory a `license-file` path resolves against: the package's own root
@@ -113,7 +126,7 @@ pub(crate) fn license_file_base_dir(package_root: &Path) -> PathBuf {
     if own_manifest_declares_license_slot(&content) {
         return package_root.to_path_buf();
     }
-    governing_workspace(package_root, &content)
+    governing_workspace(&workspace_anchor(package_root), &content)
         .map(|(dir, _)| dir)
         .unwrap_or_else(|| package_root.to_path_buf())
 }
