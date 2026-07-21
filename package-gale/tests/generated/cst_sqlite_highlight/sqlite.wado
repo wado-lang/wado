@@ -1460,9 +1460,8 @@ pub struct HighlightVisitor {
     defaults: List<String>,
     overrides: List<ResolvedOverride>,
     rule_stack: List<i32>,
-    /// Which token indices the tree walk has already classified, so a
-    /// follow-up `hl_cover_unvisited` pass can default-classify the rest
-    /// (a resilient partial tree need not reference every token).
+    /// Token indices the tree walk classified, so `hl_cover_unvisited` can
+    /// default-classify the rest.
     visited: List<bool>,
     pub captures: List<HighlightCapture>,
 }
@@ -1549,14 +1548,7 @@ impl HighlightVisitor {
     }
 
     /// Default-classify every token the tree walk did not reach, then restore
-    /// start order. A resilient parse of broken input (a fragment, an
-    /// unterminated construct) leaves a partial tree that need not reference
-    /// every token; a bare `highlight_walk` would then drop those tokens' and
-    /// their leading trivia's default highlighting. Running this after the walk
-    /// keeps keyword/string/comment coloring across the whole input while the
-    /// walk still supplies rule-context overrides wherever the parser built
-    /// structure. On a clean parse the walk covers every token, so this adds
-    /// nothing and the capture order is untouched.
+    /// start order. A no-op on a clean parse (the walk covers every token).
     pub fn hl_cover_unvisited(&mut self, toks: &TokenStream) {
         let before = self.captures.len();
         self.rule_stack = [];

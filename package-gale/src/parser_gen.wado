@@ -315,7 +315,7 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // `Rule::Simple` / `MultiAlt` / `LeftRecursive` instead of
     // recomputing the classification at every emit site.
     let members = collect_parser_members(grammar, ctx);
-    gen_parser_struct(w, ctx.is_trace(), ctx.needs_atn(), ctx.emit_actions(), !ctx.fragment_entry().is_empty(), &members);
+    gen_parser_struct(w, ctx.is_trace(), ctx.needs_atn(), ctx.emit_actions(), !ctx.fragment_entries().is_empty(), &members);
     gen_member_methods(w, &members);
     if ctx.emit_actions() {
         gen_vals_structs(w, grammar);
@@ -335,7 +335,7 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // `follow_yields` / `FollowArg`). The follow-mask globals are
     // emitted by `gen_follow_mask_globals` at the end of codegen.
     gen_predicate_fns(w, ctx);
-    if !ctx.fragment_entry().is_empty() {
+    if !ctx.fragment_entries().is_empty() {
         let entries = compute_fragment_entries(grammar, ctx);
         gen_recover_helpers(w, &entries);
     }
@@ -349,7 +349,7 @@ struct RecoverFragmentEntry {
 }
 
 fn compute_fragment_entries(grammar: &Grammar, ctx: &mut GenContext) -> List<RecoverFragmentEntry> {
-    let names = *ctx.fragment_entry();
+    let names = *ctx.fragment_entries();
     let mut result: List<RecoverFragmentEntry> = [];
     let mut seen: List<String> = [];
     for let name of &names {
@@ -366,9 +366,9 @@ fn compute_fragment_entries(grammar: &Grammar, ctx: &mut GenContext) -> List<Rec
         }
         if found < 0 {
             ctx.warn(
-                &"fragment_entry",
+                &"fragment_entries",
                 DiagnosticKind::FragmentEntry,
-                `fragment_entry: unknown parser rule '${*name}'`,
+                `fragment_entries: unknown parser rule '${*name}'`,
             );
             continue;
         }

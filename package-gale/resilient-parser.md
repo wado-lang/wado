@@ -139,7 +139,7 @@ terminal recovers in place via a `recovering` flag rather than unwinding a
 impls next to `RULE_NAMES`, so `{node.kind}` prints the rule name and
 `{node.kind:?}` prints `name(id)`.
 
-**Fragment re-entry (done): the `fragment_entry` option.** A bare snippet whose
+**Fragment re-entry (done): the `fragment_entries` option.** A bare snippet whose
 tokens the start rule can't derive (e.g. a top-level statement under an `item*`
 start rule) is otherwise left unconsumed, so nested-only constructs build no
 subtree. Naming the unit rule(s) makes the start rule's `expect(EOF)` sweep the

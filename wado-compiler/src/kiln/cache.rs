@@ -204,6 +204,13 @@ fn encode_canonical_value(out: &mut Vec<u8>, v: &CanonicalValue) {
             out.push(6);
             encode_options_table(out, fields);
         }
+        CanonicalValue::List(items) => {
+            out.push(7);
+            out.extend_from_slice(&(items.len() as u64).to_le_bytes());
+            for item in items {
+                encode_canonical_value(out, item);
+            }
+        }
     }
 }
 

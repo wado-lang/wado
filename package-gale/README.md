@@ -271,15 +271,15 @@ Tooling often runs on a snippet instead — a few statements in a REPL, a
 selection sent to a highlighter — that the start rule can't derive. Those tokens
 are otherwise left unstructured.
 
-Set `fragment_entry` to the rule a fragment is a sequence of — a statement rule,
-usually — and a snippet builds real subtrees:
+Set `fragment_entries` to the rule(s) a fragment is a sequence of — a statement
+rule, usually — and a snippet builds real subtrees:
 
 ```wado
 use lang from "./Lang.g4"
     with {
         generator: {
             module: "../src/generator.wado",
-            options: { fragment_entry: "statement" },
+            options: { fragment_entries: ["statement"] },
         },
     };
 ```
@@ -287,8 +287,8 @@ use lang from "./Lang.g4"
 With a start rule of `file : item* EOF`, a pasted `let x = 1; f(x);` is not a
 valid `file`, but it _is_ a run of `statement`s — so it now parses as a sequence
 of `statement` nodes instead of being dropped. List several unit rules
-comma-separated (`"statement, item"`) to try them in order. This is what lets a
-highlighter color a snippet's interpolations and its keywords in context.
+(`["statement", "item"]`) to try them in order. This is what lets a highlighter
+color a snippet's interpolations and its keywords in context.
 
 The fragment is still reported as incomplete — `result.ok()` is `false`, with a
 diagnostic — the option only adds the structure. Unset, it costs nothing.

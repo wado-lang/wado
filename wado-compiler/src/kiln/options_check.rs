@@ -190,6 +190,18 @@ fn check_value(
             let nested = descriptor_validate_object(descriptor, obj, path, diagnostics)?;
             Some(CanonicalValue::Struct(nested))
         }
+        (OptionsType::List(inner), AttrValue::Array(items)) => {
+            let mut out = Vec::with_capacity(items.len());
+            let mut ok = true;
+            for (i, item) in items.iter().enumerate() {
+                let item_path = format!("{path}[{i}]");
+                match check_value(inner, item, &item_path, diagnostics) {
+                    Some(v) => out.push(v),
+                    None => ok = false,
+                }
+            }
+            ok.then_some(CanonicalValue::List(out))
+        }
         _ => {
             push_mismatch(diagnostics, path, ty, supplied);
             None
@@ -240,6 +252,9 @@ fn apply_default(
     }
     if matches!(field.ty, OptionsType::Option(_)) {
         return Some(CanonicalValue::None);
+    }
+    if matches!(field.ty, OptionsType::List(_)) {
+        return Some(CanonicalValue::List(Vec::new()));
     }
     diagnostics.push(Diagnostic {
         severity: Severity::Error,
@@ -346,6 +361,50 @@ mod tests {
         };
         let err = validate(&desc, None).unwrap_err();
         assert!(err.iter().any(|d| d.message.contains("required")));
+    }
+
+    #[test]
+    fn list_field_defaults_to_empty_and_validates_elements() {
+        let desc = OptionsDescriptor {
+            fields: vec![field(
+                "entries",
+                OptionsType::List(Box::new(OptionsType::String)),
+                None,
+            )],
+        };
+        // Omitted → empty list (a `List` field is optional like `Option`).
+        let result = validate(&desc, None).unwrap();
+        assert_eq!(
+            result.values,
+            vec![("entries".to_string(), CanonicalValue::List(vec![]))]
+        );
+        // Supplied array → a `List` of the element type.
+        let mut obj: IndexMap<String, AttrValue> = IndexMap::default();
+        obj.insert(
+            "entries".to_string(),
+            AttrValue::Array(vec![
+                AttrValue::String("a".to_string()),
+                AttrValue::String("b".to_string()),
+            ]),
+        );
+        let result = validate(&desc, Some(&AttrValue::Object(obj))).unwrap();
+        assert_eq!(
+            result.values,
+            vec![(
+                "entries".to_string(),
+                CanonicalValue::List(vec![
+                    CanonicalValue::String("a".to_string()),
+                    CanonicalValue::String("b".to_string()),
+                ])
+            )]
+        );
+        // A wrong element type is rejected.
+        let mut obj: IndexMap<String, AttrValue> = IndexMap::default();
+        obj.insert(
+            "entries".to_string(),
+            AttrValue::Array(vec![AttrValue::Int(1)]),
+        );
+        assert!(validate(&desc, Some(&AttrValue::Object(obj))).is_err());
     }
 
     #[test]
