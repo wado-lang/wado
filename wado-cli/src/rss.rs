@@ -35,7 +35,7 @@ fn to_mib(bytes: u64) -> u64 {
     (bytes + 512 * 1024) / (1024 * 1024)
 }
 
-pub(crate) fn heartbeat_suffix() -> Option<String> {
+pub(crate) fn live_suffix() -> Option<String> {
     RssSample::read().map(|s| format!(" · rss {}", s.current_peak_mib()))
 }
 
