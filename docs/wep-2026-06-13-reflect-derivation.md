@@ -31,8 +31,8 @@ struct `Inspect`; replace with the `Reflect`-based impl" — i.e. move derivatio
 out of the compiler into library code. The variadic substrate (type packs,
 tuple `for-of`, `[..T::method()]` expansion, variadic trait impls) is
 implemented; the two pieces derivation most needs are designed but **unbuilt**
-(WEP 2026-03-14 checklist): `Reflect` per-struct synthesis, and `where`-clause
-pack binding `T: Trait<Assoc = [..F]>`.
+(WEP 2026-03-14 checklist): `Reflect` per-struct synthesis, and inline pack
+binding `T: Reflect<Fields = [..F]>`.
 
 Bringing Jade's needs to that design surfaced gaps. Current `Reflect` exposes
 only field name + type + value. Schema derivation (and, once migrated, serde
@@ -51,7 +51,7 @@ what is decided here.
 
 In scope:
 
-- Finishing `Reflect` (per-struct synthesis + `where`-clause pack binding).
+- Finishing `Reflect` (per-struct synthesis + inline pack binding).
 - Extending `Reflect` with per-field metadata (wire name, has-default, doc,
   `#[validate]` entries) and value-free type-level projection.
 - Variant / enum / flags reflection.
@@ -61,7 +61,8 @@ In scope:
 
 Out of scope (recorded as future directions, not built here):
 
-- Refinement predicates (`foo: T where <predicate>`).
+- Refinement predicates — in-memory invariants attached to a `newtype`,
+  enforced at construction (surface syntax undecided).
 - User-defined attributes under the `@[foo(…)]` syntax.
 - Static (SMT-style) verification of any constraint.
 
@@ -73,13 +74,11 @@ The compiler's only job is to expose a type's structure at compile time. Every
 derivation — the built-in `Inspect` / serde / `Default`, Jade's `JsonSchema`,
 and future user-written ones — is a generic library `impl` over `Reflect`,
 resolved at monomorphization. No per-capability synthesizer, no macros, no
-dynamic reflection. The canonical shape, using the `where`-clause pack binding
+dynamic reflection. The canonical shape, using the inline pack binding
 established by WEP 2026-03-14 §11:
 
 ```wado
-impl<T, ..F: SomeTrait> SomeTrait for T
-where T: Reflect<Fields = [..F]>
-{
+impl<T: Reflect<Fields = [..F]>, ..F: SomeTrait> SomeTrait for T {
     fn method(&self) -> R {
         let meta = Reflect::<T>::field_meta();   // value-level per-field metadata
         let parts = [..F::method_of()];          // type-level, value-free, per field type
@@ -93,7 +92,7 @@ where T: Reflect<Fields = [..F]>
 - **Per-struct synthesis.** The compiler synthesizes `impl Reflect for S` for
   every struct `S`, with `type Fields = [F_0, F_1, …]`, `fields(&self)`
   returning the value tuple, `field_names()` the source names.
-- **`where`-clause pack binding.** `T: Reflect<Fields = [..F]>` extracts the
+- **Inline pack binding.** The bound `T: Reflect<Fields = [..F]>` extracts the
   pack `F` from the concrete `Fields` tuple at monomorphization, so a derivation
   can expand `[..F::method()]`. This is the mechanism that makes derivation
   **value-free**: `schema_for::<T>()` has no instance, yet `[..F::json_schema()]`
@@ -105,7 +104,7 @@ where T: Reflect<Fields = [..F]>
 for every eligible struct, and a user `impl Reflect for T` is a compile error.
 Sealing is what lets a derivation trust the projection: a program cannot forge a
 type's reflection. `Reflect` stays a trait (not a struct or a builtin type)
-because the derivation mechanism binds it as `where T: Reflect<Fields = [..F]>`
+because the derivation mechanism binds it as `T: Reflect<Fields = [..F]>`
 (§1) — only a trait can carry that bound and its associated `Fields` pack.
 
 Its members are reached **only** through the trait-qualified form, with the
@@ -218,7 +217,7 @@ remember to call `.validate()`):
   untrusted external data entering the program's types — is the natural and
   honest place to enforce a wire contract. Values constructed in trusted code
   (a struct literal) are deliberately _not_ checked here; whole-program
-  invariants are the future `where` refinement's job, not this attribute's.
+  invariants are the future refinement feature's job, not this attribute's.
   (Where the check physically lives — synthesized `Deserialize` now, generic
   library `Deserialize` after §5 — is a migration detail; the guarantee is the
   same either way.)
@@ -264,11 +263,10 @@ after the first three.
       associated tuple (the remaining §10 members). `fields(&self)` returns the
       values as a heterogeneous tuple `[self.f_0, …]`; the tuple type is
       registered as the struct's `Fields` associated-type resolution.
-- [ ] `where`-clause pack binding `T: Reflect<Fields = [..F]>` (the unbuilt
-      item from WEP 2026-03-14 §11). Wado has no `where` keyword, so this is
-      spelled as an inline bound `impl<T: Reflect<Fields = [..F]>, ..F: Trait>`;
-      the monomorphizer must derive `F` by projecting `T`'s `Fields` tuple
-      (`resolve_assoc_type`) rather than from the receiver.
+- [ ] Inline pack binding `impl<T: Reflect<Fields = [..F]>, ..F: Trait>` (the
+      unbuilt item from WEP 2026-03-14 §11). The bound is written inline in the
+      generic parameter list; the monomorphizer must derive `F` by projecting
+      `T`'s `Fields` tuple (`resolve_assoc_type`) rather than from the receiver.
 - [ ] `Reflect` metadata extension — `field_meta()` (`wire_name`,
       `has_default`, `doc`, `validate`) and `type_doc()`.
 - [ ] `#[validate(…)]` attribute — parse the closed vocabulary into
@@ -286,15 +284,16 @@ after the first three.
 
 ## Future directions
 
-- **Refinement predicates — `foo: T where <predicate>`.** For true _in-memory
-  invariants_, enforced at construction / `as` conversion in the `assert`
-  doctrine ("cannot be disabled, always reliable"), distinct from
-  `#[validate]`'s wire-boundary guard. Anchoring a refinement to a `newtype`
-  bounds _when_ the check fires (conversion only), à la Ada subtype predicates.
-  General predicates are enforced but opaque to schema derivation; only a
-  structured subset (comparisons, length) could map to schema keywords. This is
-  the deliberate division of labor: `#[validate]` guards data crossing the
-  boundary; `where` guards data already in memory.
+- **Refinement predicates.** In-memory invariants on a `newtype`, enforced at
+  construction / `as` conversion in the `assert` doctrine ("cannot be disabled,
+  always reliable"), distinct from `#[validate]`'s wire-boundary guard.
+  Anchoring a refinement to a `newtype` bounds _when_ the check fires
+  (conversion only), à la Ada subtype predicates. General predicates are
+  enforced but opaque to schema derivation; only a structured subset
+  (comparisons, length) could map to schema keywords. This is the deliberate
+  division of labor: `#[validate]` guards data crossing the boundary; the
+  refinement feature guards data already in memory. (Its surface syntax is
+  undecided and out of scope here.)
 - **User-defined attributes — `@[foo(…)]`.** A distinct syntax for
   library-interpreted attributes, kept visually separate from built-in `#[…]`
   so it is always clear which attributes the compiler knows and which a library
@@ -343,8 +342,8 @@ after the first three.
   first-class key versus being left to hand-authoring on a `Schema` value.
 - **Coherence.** Interaction with the variadic coherence rules still unchecked
   in WEP 2026-03-14 (non-VG-wins / VG-overlap-forbidden) when a blanket
-  `impl<T, ..F> Trait for T where T: Reflect<Fields = [..F]>` meets concrete
-  impls (e.g. a primitive's own `impl Trait`).
+  `impl<T: Reflect<Fields = [..F]>, ..F> Trait for T` meets concrete impls
+  (e.g. a primitive's own `impl Trait`).
 - **Enforcement breadth.** Whether `#[validate]` should ever also fire at
-  construction. Deferred: that is the refinement `where` feature's domain, kept
+  construction. Deferred: that is the refinement feature's domain, kept
   separate on purpose.
