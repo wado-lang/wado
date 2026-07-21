@@ -2723,26 +2723,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// Find Index trait implementation for a type
+    /// Whether concrete subscripts on `type_id` take the optimized intrinsic
+    /// path instead of the `IndexRef` / `IndexMutRef` traits. `List` does: its
+    /// trait bodies index a private `repr` that Container SROA cannot see
+    /// through, so its reference traits dispatch only in generic contexts.
+    pub(super) fn uses_intrinsic_index_dispatch(&self, type_id: TypeId) -> bool {
+        self.tysys.type_table.borrow().as_list(type_id).is_some()
+    }
+
+    /// Find an `IndexRef` impl for a type. `expected_index_type` disambiguates
+    /// overloaded impls (so a `Range` subscript does not match an `IndexRef<i32>`);
+    /// `None` matches by container name alone.
     pub(super) fn find_index_trait_impl(
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-        _index_type: TypeId,
+        expected_index_type: Option<TypeId>,
     ) -> Option<IndexTraitInfo> {
-        // Look for impl Index<...> for StructName
-        self.find_indexing_trait_impl(struct_name, base_type_id, "Index", "index", "Output", None)
-            .map(
-                |(output_type, self_kind, trait_name, impl_module_source, index_type)| {
-                    IndexTraitInfo {
-                        output_type,
-                        self_kind,
-                        trait_name,
-                        impl_module_source,
-                        index_type,
-                    }
-                },
-            )
+        self.find_indexing_trait_impl(
+            struct_name,
+            base_type_id,
+            "IndexRef",
+            "index_ref",
+            "Output",
+            expected_index_type,
+        )
+        .map(
+            |(output_type, self_kind, trait_name, impl_module_source, index_type)| IndexTraitInfo {
+                output_type,
+                self_kind,
+                trait_name,
+                impl_module_source,
+                index_type,
+            },
+        )
     }
 
     /// Find `KeyValueLiteralBuilder` trait implementation for a type.
@@ -2944,14 +2958,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// Find `IndexAssign` trait implementation for a type
     pub(super) fn find_index_assign_trait_impl(
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-        _index_type: TypeId,
     ) -> Option<IndexAssignTraitInfo> {
-        // Look for impl IndexAssign<...> for StructName
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
@@ -2973,19 +2984,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Find `IndexMut` trait implementation for a type
     pub(super) fn find_index_mut_trait_impl(
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-        _index_type: TypeId,
     ) -> Option<IndexMutTraitInfo> {
-        // Look for impl IndexMut<...> for StructName
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
-            "IndexMut",
-            "index_mut",
+            "IndexMutRef",
+            "index_mut_ref",
             "Output",
             None,
         )
@@ -3002,21 +3010,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Find `IndexValue` trait implementation for a type
+    /// Find an `IndexValue` impl for a type. `expected_index_type` disambiguates
+    /// overloaded impls; `None` matches by container name alone.
     pub(super) fn find_index_value_trait_impl(
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-        index_type: TypeId,
+        expected_index_type: Option<TypeId>,
     ) -> Option<IndexValueTraitInfo> {
-        // Look for impl IndexValue<...> for StructName, matching the index type
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
             "IndexValue",
             "index_value",
             "Output",
-            Some(index_type),
+            expected_index_type,
         )
         .map(
             |(output_type, self_kind, trait_name, impl_module_source, index_type)| {
@@ -3212,13 +3220,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return None;
                 }
 
-                // Verify non-type-parameter positions match the concrete type args
                 let impl_block = s.get_impl_block(impl_ref);
                 if !s.tysys.verify_impl_type_compatibility(
                     &impl_block.ty,
                     &concrete_type_args,
                     declared,
                 ) {
+                    return None;
+                }
+                let impl_type_params = impl_block.type_params.clone();
+                let impl_ty = impl_block.ty.clone();
+                if !concrete_type_args.is_empty()
+                    && !s.tysys.check_impl_block_bounds(
+                        &s.annotate_ctx,
+                        &s.type_lookup(),
+                        &impl_type_params,
+                        &impl_ty,
+                        Some(&concrete_type_args),
+                    )
+                {
                     return None;
                 }
 
@@ -3420,35 +3440,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // First, resolve the indexed container to get its type
         let container_type = self.resolve_expr(&index_expr.expr, ctx, None);
 
-        // Check if this is an List type (Arrays use optimized direct access, not traits)
-        let is_array = self
-            .tysys
-            .type_table
-            .borrow()
-            .as_list(container_type)
-            .is_some();
-        if is_array {
-            return None; // Use normal resolution for arrays
+        if self.uses_intrinsic_index_dispatch(container_type) {
+            return None;
         }
 
-        // Get base type (unwrap reference if needed)
         let base_type_id = match self.tysys.type_table.borrow().get(container_type) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
             _ => container_type,
         };
 
-        // Get struct name from base type
         let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
             ResolvedType::Struct { name, .. } => name,
             ResolvedType::GenericInstance { name, .. } => name,
             _ => return None, // Not a struct type
         };
 
-        // Check if the type implements IndexMut
         let index_type = self.resolve_expr(&index_expr.index, ctx, None);
 
-        let index_mut_info =
-            self.find_index_mut_trait_impl(&struct_name, base_type_id, index_type)?;
+        let index_mut_info = self.find_index_mut_trait_impl(&struct_name, base_type_id)?;
 
         if let Some(key_type) = index_mut_info.index_type
             && key_type != index_type
@@ -3456,7 +3465,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let _ = self.resolve_expr(&index_expr.index, ctx, Some(key_type));
         }
 
-        // Now we need to check if the method being called requires &mut self
         // First, look up method info on the OUTPUT type (what IndexMut returns)
         let output_type = index_mut_info.output_type;
         let output_base_type_id = match self.tysys.type_table.borrow().get(output_type) {
@@ -3539,10 +3547,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None; // Method doesn't need &mut, fall back to Index
         }
 
-        // Generate: container.index_mut(index).method(args)
-        // Step 1: Create container.index_mut(index) call
-        let mangled_index_mut_name =
-            MethodName::format_local(&struct_name, Some(&index_mut_info.trait_name), "index_mut");
+        let mangled_index_mut_name = MethodName::format_local(
+            &struct_name,
+            Some(&index_mut_info.trait_name),
+            "index_mut_ref",
+        );
 
         // IndexMut returns &mut Output
         let mut_ref_output_type = self
@@ -3568,7 +3577,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_info: Some(LocalMethodName::new(
                         struct_name.clone(),
                         Some(index_mut_info.trait_name.clone()),
-                        "index_mut".to_string(),
+                        "index_mut_ref".to_string(),
                     )),
                 },
                 self_kind: index_mut_info.self_kind,
@@ -3586,15 +3595,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // above; the combined walk only needed the dispatch fact. The
         // index was resolved above for its side effects.
 
-        // Step 2: Resolve method args with expected parameter types for
-        // literal coercion. Reify rebuilds the args; the combined walk only
-        // needs the `resolve_expr` fact-recording side effects.
         for (i, a) in method_call.args.iter().enumerate() {
             let expected = param_types.get(i).copied();
             self.resolve_expr(a, ctx, expected);
         }
 
-        // Step 3: Resolve method type args
         let type_args: Vec<TypeId> = method_call
             .type_args
             .iter()

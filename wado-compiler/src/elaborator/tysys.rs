@@ -516,11 +516,33 @@ impl TypeSystem {
                 format!("fn({}) -> {}", param_strs.join(", "), ret_str)
             }
             ResolvedType::TypeParam { name, .. } => name,
+            ResolvedType::Enum { name, .. }
+            | ResolvedType::Resource { name, .. }
+            | ResolvedType::Variant { name, .. }
+            | ResolvedType::Newtype { name, .. }
+            | ResolvedType::Flags { name, .. } => name,
+            ResolvedType::GenericResource {
+                name, type_args, ..
+            } => {
+                let args: Vec<String> = type_args
+                    .iter()
+                    .map(|&t| self.type_id_to_string(t))
+                    .collect();
+                format!("{}<{}>", name, args.join(", "))
+            }
+            ResolvedType::Reactive(inner) => {
+                format!("Reactive<{}>", self.type_id_to_string(inner))
+            }
+            ResolvedType::TypePack { name, .. } => format!("..{name}"),
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_name,
+                ..
+            } => format!("{}::{}", self.type_id_to_string(param_id), assoc_name),
             ResolvedType::Unit => "()".to_string(),
             ResolvedType::Never => "!".to_string(),
             ResolvedType::Unknown => "<unknown>".to_string(),
             ResolvedType::Error => "<error>".to_string(),
-            _ => format!("{resolved:?}"),
         }
     }
 }

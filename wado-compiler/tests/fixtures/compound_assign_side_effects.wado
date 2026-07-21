@@ -13,11 +13,11 @@ struct Cell {
     value: i32,
 }
 
-impl<i32> Index<i32> for Cell {
+impl<i32> IndexValue<i32> for Cell {
     type Output = i32;
 
-    fn index(&self, _idx: i32) -> &Self::Output {
-        return &self.value;
+    fn index_value(&self, _idx: i32) -> Self::Output {
+        return self.value;
     }
 }
 
@@ -44,20 +44,20 @@ struct Holder {
     value: i32,
 }
 
-// A custom `Index` whose `index()` has a side effect, so a nested index
-// read used as a subscript is observably evaluated once.
+// A custom `IndexValue` whose `index_value()` has a side effect, so a nested
+// index read used as a subscript is observably evaluated once.
 global mut IDX_CALLS: i32 = 0;
 
 struct SideIndex {
     data: List<i32>,
 }
 
-impl<i32> Index<i32> for SideIndex {
+impl<i32> IndexValue<i32> for SideIndex {
     type Output = i32;
 
-    fn index(&self, i: i32) -> &Self::Output {
+    fn index_value(&self, i: i32) -> Self::Output {
         IDX_CALLS += 1;
-        return &self.data[i];
+        return self.data[i];
     }
 }
 

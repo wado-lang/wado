@@ -31,6 +31,7 @@ use crate::tir_visitor::TirRefVisitor;
 fn is_container_alias_read(name: &str, monomorph_info: Option<&MonomorphInfo>) -> bool {
     matches_builtin(name, monomorph_info, "array_get")
         || matches_builtin(name, monomorph_info, "array_get_ref")
+        || matches_builtin(name, monomorph_info, "array_get_mut_ref")
 }
 
 /// Oracle the freshness checker consults for a call's return convention.

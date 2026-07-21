@@ -1,0 +1,33 @@
+// `IndexMutRef` returns `&mut Output`, so its `type Output: RefMut` bound
+// requires the element to be mutated in place. A `variant` is `Ref` (a live `&`
+// handle you can read and pattern-match) but replace-on-assign, so `&mut variant`
+// cannot write through — a container hands variants out by shared reference
+// (`IndexRef`) only. This locks in impl-site enforcement of the `RefMut`
+// associated-type bound, the mutable twin of `index_ref_scalar_output_rejected`.
+
+variant Color {
+    Red,
+    Blue(i32),
+}
+
+struct Palette {
+    slot: Color,
+}
+
+impl IndexMutRef<i32> for Palette {
+    type Output = Color;
+
+    fn index_mut_ref(&mut self, _i: i32) -> &mut Self::Output {
+        return &mut self.slot;
+    }
+}
+
+test "unreachable" {
+    assert true;
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "does not implement trait 'RefMut'"
+}

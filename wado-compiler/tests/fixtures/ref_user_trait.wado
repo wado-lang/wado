@@ -1,0 +1,36 @@
+// A user who declares their own `trait Ref` / `trait RefMut` owns that name: the
+// seal (for the compiler's sealed markers) must not fire on impls of the user's
+// traits.
+
+trait Ref {
+    fn describe(&self) -> String;
+}
+
+trait RefMut {
+    fn label(&self) -> String;
+}
+
+struct Foo {
+    a: i32,
+}
+
+impl Ref for Foo {
+    fn describe(&self) -> String {
+        return "foo";
+    }
+}
+
+impl RefMut for Foo {
+    fn label(&self) -> String {
+        return "bar";
+    }
+}
+
+test "user-defined Ref and RefMut traits work" {
+    let f = Foo { a: 1 };
+    assert f.describe() == "foo";
+    assert f.label() == "bar";
+}
+
+__DATA__
+{"test": {}}

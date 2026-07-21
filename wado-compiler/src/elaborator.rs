@@ -1830,6 +1830,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 trait_name.as_deref(),
                 impl_block.trait_type.as_ref(),
                 impl_is_concrete,
+                &impl_block.type_params,
             );
         }
 
@@ -1903,6 +1904,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Some(trait_n),
                     Some(trait_ast),
                     impl_is_concrete,
+                    &impl_block.type_params,
                 );
 
                 // Swap back, take the populated synthetic out.
