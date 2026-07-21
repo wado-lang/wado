@@ -16,7 +16,7 @@ use crate::module_source::ModuleSource;
 use crate::tir::{EffectRef, FunctionRef, ResolvedType, TypeId, TypeSet, TypeTable};
 use crate::token::Span;
 
-use crate::ast::{self, AstVisitor, Expr, Function, Item, Stmt};
+use crate::ast::{self, AstId, AstVisitor, Expr, Function, Item, Stmt};
 use crate::semantics::Semantics;
 
 /// Whether a missing `with` entry refers to a resource or a regular effect.
@@ -1236,12 +1236,29 @@ impl SemEffectWalker<'_> {
 // Semantics-based stores checking (Design B)
 // ---------------------------------------------------------------------------
 
-/// Stores checking over [`Semantics`] — the Design B stores checker. A
-/// function that lets a reference parameter
-/// escape — by returning it, storing it in a struct field, or assigning it to
-/// a global — must declare `stores[param]`. Walks the source AST, so it sees
-/// every function regardless of what reify emits and is immune to dead-code
-/// gating. Violations are returned for the caller to route.
+/// Stores checking over [`Semantics`] — the Design B reference-escape checker.
+///
+/// Two soundness obligations, both enforced before lowering so the functor
+/// optimization can trust a functor slot's declared `stores`:
+///
+/// 1. **Named-function / method honesty.** Every function whose reference
+///    parameter *escapes* (is returned, placed in an aggregate / global, stored
+///    through a reference, or forwarded to a callee that stores that position)
+///    must declare `stores[param]`.
+/// 2. **Closure coercion.** A closure type is always `stores=[]` (never
+///    inferred) and functor coercion ignores `stores`, so a closure that stores
+///    one of its own reference parameters would slip through type-checking. Each
+///    closure body is analysed with allowance `[]` — no closure parameter may
+///    escape.
+///
+/// The escape analysis mirrors `lower/plan/value_copy/stores.rs` but stays
+/// *precise* rather than the optimizer's conservative over-approximation: a
+/// value only carries a parameter reference when reference-flow reaches it, and
+/// a storing call *folds* its stored argument into the call result (gated by
+/// whether the result type can hold a reference) rather than being an
+/// unconditional escape — so a locally-consumed borrow (`self.as_bytes()` fed
+/// to a loop) is not flagged, while a genuine persistence (`return g(p)`,
+/// `GLOBAL = p`, `Wrapper { r: p }`) is.
 #[must_use]
 pub fn check_stores_semantic(sem: &Semantics) -> Vec<StoresError> {
     let mut out = Vec::new();
@@ -1249,19 +1266,29 @@ pub fn check_stores_semantic(sem: &Semantics) -> Vec<StoresError> {
         return out;
     };
 
+    let tyctx = TypeRefCtx::build(sem, state);
+    let oracle = StoresOracle::build(sem, state, &tyctx);
+
     for (src, module) in &sem.modules {
         if !crate::elaborator::liveness::is_user_authored(src) {
             continue;
         }
-        let annotations = state.module_semantics.get(src).map(|m| &m.types);
+        let Some(annotations) = state.module_semantics.get(src).map(|m| &m.types) else {
+            continue;
+        };
+        let ctx = StoresCtx {
+            sem,
+            annotations,
+            oracle: &oracle,
+            tyctx: &tyctx,
+            module: src.source_path(),
+        };
         for item in &module.items {
             match item {
-                Item::Function(func) => {
-                    check_function_stores_sem(sem, src, func, annotations, &mut out);
-                }
+                Item::Function(func) => ctx.check_function(func, &mut out),
                 Item::Impl(impl_block) => {
                     for method in &impl_block.methods {
-                        check_function_stores_sem(sem, src, method, annotations, &mut out);
+                        ctx.check_function(method, &mut out);
                     }
                 }
                 _ => {}
@@ -1271,137 +1298,1196 @@ pub fn check_stores_semantic(sem: &Semantics) -> Vec<StoresError> {
     out
 }
 
-fn check_function_stores_sem(
+/// Declared `stores[...]` positions of every function / method in the program,
+/// so a call site can look up the callee's stored parameter positions modularly
+/// (each function's own declaration is independently verified by obligation #1).
+struct StoresOracle {
+    /// Function decl [`AstId`] → declared stored parameter positions.
+    fn_stores: IndexMap<AstId, Vec<u32>>,
+    /// `(module, mangled name)` → declared stored positions (method dispatch).
+    mangled_stores: IndexMap<(ModuleSource, String), Vec<u32>>,
+    /// Function decl / variant-case [`AstId`] → parameter positions the return
+    /// value may borrow (return provenance). Distinct from `stores`: `stores`
+    /// describes external persistence, while this describes what the result
+    /// holds, so a call folds its arguments here to know what the result carries.
+    fn_returns: IndexMap<AstId, IndexSet<u32>>,
+    /// `(module, mangled name)` → return-provenance positions (method dispatch).
+    mangled_returns: IndexMap<(ModuleSource, String), IndexSet<u32>>,
+}
+
+impl StoresOracle {
+    fn build(
+        sem: &Semantics,
+        state: &crate::elaborator::orchestration::AnnotateState,
+        tyctx: &TypeRefCtx,
+    ) -> Self {
+        let mut fn_stores: IndexMap<AstId, Vec<u32>> = IndexMap::default();
+        let record = |func: &Function, fn_stores: &mut IndexMap<AstId, Vec<u32>>| {
+            let positions: Vec<u32> = func
+                .params
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| func.stores.contains(&p.name))
+                .map(|(i, _)| u32::try_from(i).unwrap())
+                .collect();
+            fn_stores.insert(func.id, positions);
+        };
+        for module in sem.modules.values() {
+            for item in &module.items {
+                match item {
+                    Item::Function(func) => record(func, &mut fn_stores),
+                    Item::Impl(impl_block) => {
+                        for method in &impl_block.methods {
+                            record(method, &mut fn_stores);
+                        }
+                    }
+                    Item::Trait(trait_decl) => {
+                        for method in &trait_decl.methods {
+                            record(method, &mut fn_stores);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        let mut mangled_stores: IndexMap<(ModuleSource, String), Vec<u32>> = IndexMap::default();
+        for (src, module_sem) in &state.module_semantics {
+            for (key, names) in &module_sem.types.method_names {
+                if let Some(positions) = fn_stores.get(key) {
+                    mangled_stores.insert((src.clone(), names.mangled.clone()), positions.clone());
+                }
+            }
+        }
+
+        let (fn_returns, mangled_returns) = build_returns(sem, state, tyctx);
+
+        Self {
+            fn_stores,
+            mangled_stores,
+            fn_returns,
+            mangled_returns,
+        }
+    }
+}
+
+/// All functions declared by an item (free function, `impl` methods, `trait`
+/// methods), for uniform iteration in the stores/returns builders.
+fn functions_of(item: &Item) -> Vec<&Function> {
+    match item {
+        Item::Function(func) => vec![func],
+        Item::Impl(impl_block) => impl_block.methods.iter().collect(),
+        Item::Trait(trait_decl) => trait_decl.methods.iter().collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// Least-fixpoint return provenance: for every function / constructor, the
+/// parameter positions its return value may borrow. The value-copy optimizer
+/// trusts a functor slot's `stores`, and the escape walk folds a call's
+/// arguments at these positions to decide what the result carries, so this must
+/// be a sound upper bound.
+///
+/// Seeds:
+/// - Variant / enum constructors wrap their single payload argument into the
+///   result, so a payload-bearing case borrows position 0.
+/// - A bodyless callee (intrinsic such as `array_get_ref`) is unanalyzable;
+///   conservatively its result may borrow any reference-holding argument.
+///
+/// Bodied functions start at ∅ and grow: each round re-derives a function's
+/// return provenance from its `return` / `task return` values (with `let` and
+/// whole-local-assign carry propagation), folding nested calls at the callees'
+/// current provenance, until no set changes.
+fn build_returns(
     sem: &Semantics,
-    module: &ModuleSource,
+    state: &crate::elaborator::orchestration::AnnotateState,
+    tyctx: &TypeRefCtx,
+) -> (
+    IndexMap<AstId, IndexSet<u32>>,
+    IndexMap<(ModuleSource, String), IndexSet<u32>>,
+) {
+    let mut fn_returns: IndexMap<AstId, IndexSet<u32>> = IndexMap::default();
+
+    for (src, module) in &sem.modules {
+        let annotations = state.module_semantics.get(src).map(|m| &m.types);
+        for item in &module.items {
+            for func in functions_of(item) {
+                let seed = if func.body.is_some() {
+                    IndexSet::default()
+                } else {
+                    bodyless_returns(func, annotations, sem, tyctx)
+                };
+                fn_returns.insert(func.id, seed);
+            }
+        }
+    }
+
+    for variants in state.tysys.all_variant_cases.values() {
+        for info in variants.values() {
+            for case in &info.cases {
+                let mut positions = IndexSet::default();
+                if !matches!(sem.types.get(case.payload), ResolvedType::Unit) {
+                    positions.insert(0);
+                }
+                fn_returns.insert(case.ast_id, positions);
+            }
+        }
+    }
+
+    loop {
+        let mangled_returns = rebuild_mangled_returns(&fn_returns, state);
+        let mut changed = false;
+        for (src, module) in &sem.modules {
+            let Some(annotations) = state.module_semantics.get(src).map(|m| &m.types) else {
+                continue;
+            };
+            for item in &module.items {
+                for func in functions_of(item) {
+                    let Some(body) = &func.body else {
+                        continue;
+                    };
+                    let computed = compute_fn_returns(
+                        func,
+                        body,
+                        sem,
+                        annotations,
+                        tyctx,
+                        &fn_returns,
+                        &mangled_returns,
+                    );
+                    let entry = fn_returns.entry(func.id).or_default();
+                    for pos in computed {
+                        changed |= entry.insert(pos);
+                    }
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
+    let mangled_returns = rebuild_mangled_returns(&fn_returns, state);
+    (fn_returns, mangled_returns)
+}
+
+/// `(module, mangled name)` → return provenance, mirroring how `mangled_stores`
+/// is built from `fn_stores`.
+fn rebuild_mangled_returns(
+    fn_returns: &IndexMap<AstId, IndexSet<u32>>,
+    state: &crate::elaborator::orchestration::AnnotateState,
+) -> IndexMap<(ModuleSource, String), IndexSet<u32>> {
+    let mut mangled: IndexMap<(ModuleSource, String), IndexSet<u32>> = IndexMap::default();
+    for (src, module_sem) in &state.module_semantics {
+        for (key, names) in &module_sem.types.method_names {
+            if let Some(positions) = fn_returns.get(key) {
+                mangled.insert((src.clone(), names.mangled.clone()), positions.clone());
+            }
+        }
+    }
+    mangled
+}
+
+/// Conservative return provenance of a bodyless callee: its result may borrow
+/// any argument whose type can hold a reference. Sound over-approximation for
+/// intrinsics whose body the checker cannot inspect.
+fn bodyless_returns(
     func: &Function,
     annotations: Option<&crate::elaborator::sem::types::TypeAnnotations>,
-    out: &mut Vec<StoresError>,
-) {
-    let Some(body) = &func.body else {
-        return;
+    sem: &Semantics,
+    tyctx: &TypeRefCtx,
+) -> IndexSet<u32> {
+    let Some(param_types) = annotations.and_then(|a| a.fn_param_types.get(&func.id)) else {
+        return (0..u32::try_from(func.params.len()).unwrap()).collect();
     };
-    // `#[ambient]` bypasses the reference discipline; test helpers are exempt.
-    if func.attrs.iter().any(|attr| attr.name == "ambient") || func.name.starts_with("__test_") {
-        return;
-    }
-    if func.params.is_empty() {
-        return;
-    }
-    let Some(annotations) = annotations else {
-        return;
-    };
-    let key = func.id;
-    let Some(param_types) = annotations.fn_param_types.get(&key) else {
-        return;
-    };
+    param_types
+        .iter()
+        .enumerate()
+        .filter(|&(_, &ty)| tyctx.can_hold_ref(&sem.types, ty))
+        .map(|(i, _)| u32::try_from(i).unwrap())
+        .collect()
+}
 
-    // Reference parameters: only `&T` / `&mut T` parameters can be stored, so
-    // only they can produce a stores violation.
-    let type_table = &sem.types;
-    let mut ref_params: IndexSet<String> = IndexSet::default();
-    for (param, &type_id) in func.params.iter().zip(param_types.iter()) {
+/// Return provenance of one bodied function: the parameter positions its
+/// `return` / `task return` values may borrow, using the current global
+/// provenance snapshot for nested calls.
+fn compute_fn_returns(
+    func: &Function,
+    body: &ast::Block,
+    sem: &Semantics,
+    annotations: &crate::elaborator::sem::types::TypeAnnotations,
+    tyctx: &TypeRefCtx,
+    fn_returns: &IndexMap<AstId, IndexSet<u32>>,
+    mangled_returns: &IndexMap<(ModuleSource, String), IndexSet<u32>>,
+) -> IndexSet<u32> {
+    let param_types = annotations
+        .fn_param_types
+        .get(&func.id)
+        .map_or(&[][..], Vec::as_slice);
+    let mut carries: IndexMap<AstId, IndexSet<u32>> = IndexMap::default();
+    for (i, (param, &type_id)) in func.params.iter().zip(param_types.iter()).enumerate() {
         if matches!(
-            type_table.get(type_id),
+            sem.types.get(type_id),
             ResolvedType::Ref(_) | ResolvedType::MutRef(_)
         ) {
-            ref_params.insert(param.name.clone());
+            carries
+                .entry(param.id)
+                .or_default()
+                .insert(u32::try_from(i).unwrap());
         }
     }
-    if ref_params.is_empty() {
-        return;
-    }
-
-    let stores: IndexSet<String> = func.stores.iter().cloned().collect();
-    let mut walker = StoresWalker {
+    let mut flow = ReturnFlow {
+        sem,
         annotations,
-        ref_params,
-        stores,
-        module: module.source_path(),
-        out,
+        tyctx,
+        fn_returns,
+        mangled_returns,
+        carries,
+        result: IndexSet::default(),
     };
-    ast::walk_block(&mut walker, body);
+    ast::walk_block(&mut flow, body);
+    flow.result
 }
 
-/// Walks a function body flagging reference parameters that escape without a
-/// matching `stores[param]` declaration.
-struct StoresWalker<'a> {
+/// Collects return provenance over a function body: seeded with the function's
+/// reference parameters, it propagates carries through `let` / whole-local
+/// assignments and unions the carries of each `return` / `task return` value.
+/// A nested closure is not descended into — its `return` is its own.
+struct ReturnFlow<'a> {
+    sem: &'a Semantics,
     annotations: &'a crate::elaborator::sem::types::TypeAnnotations,
-    /// Reference (`&T` / `&mut T`) parameter names of the enclosing function.
-    ref_params: IndexSet<String>,
-    /// `stores[...]`-declared parameter names — escapes of these are allowed.
-    stores: IndexSet<String>,
-    module: String,
-    out: &'a mut Vec<StoresError>,
+    tyctx: &'a TypeRefCtx,
+    fn_returns: &'a IndexMap<AstId, IndexSet<u32>>,
+    mangled_returns: &'a IndexMap<(ModuleSource, String), IndexSet<u32>>,
+    carries: IndexMap<AstId, IndexSet<u32>>,
+    result: IndexSet<u32>,
 }
 
-impl StoresWalker<'_> {
-    /// If `expr` is a bare reference to a reference parameter that is *not*
-    /// declared in `stores[...]`, return its name. Only a direct identifier
-    /// counts — `&x.field` and the like do not store the parameter itself.
-    fn unstored_ref_param<'e>(&self, expr: &'e Expr) -> Option<&'e str> {
-        if let Expr::Ident(ident) = expr
-            && self.ref_params.contains(&ident.name)
-            && !self.stores.contains(&ident.name)
-        {
-            return Some(&ident.name);
-        }
-        None
+impl ReturnFlow<'_> {
+    fn carries(&self, expr: &Expr) -> IndexSet<u32> {
+        carries_of(
+            expr,
+            self.sem,
+            self.tyctx,
+            self.annotations,
+            self.fn_returns,
+            self.mangled_returns,
+            &self.carries,
+        )
     }
 }
 
-impl AstVisitor for StoresWalker<'_> {
+impl AstVisitor for ReturnFlow<'_> {
     fn visit_stmt(&mut self, stmt: &Stmt) {
-        if let Stmt::Return(ret) = stmt
-            && let Some(value) = &ret.value
-            && let Some(param) = self.unstored_ref_param(value)
-        {
-            self.out.push(StoresError {
-                message: format!(
-                    "returning reference parameter '{param}' requires `stores[{param}]` declaration"
-                ),
-                span: value.span(),
-                module: self.module.clone(),
-            });
+        match stmt {
+            Stmt::Let(let_stmt) => {
+                if let Some(value) = &let_stmt.value {
+                    let carried = self.carries(value);
+                    if !carried.is_empty()
+                        && let Some(binding) = pattern_binding_id(&let_stmt.pattern)
+                    {
+                        self.carries.entry(binding).or_default().extend(carried);
+                    }
+                }
+            }
+            Stmt::Return(ret) => {
+                if let Some(value) = &ret.value {
+                    let carried = self.carries(value);
+                    self.result.extend(carried);
+                }
+            }
+            Stmt::TaskReturn(task) => {
+                let carried = self.carries(&task.value);
+                self.result.extend(carried);
+            }
+            _ => {}
         }
         ast::walk_stmt(self, stmt);
     }
 
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
-            Expr::StructLiteral(lit) => {
-                for field in &lit.fields {
-                    if let Some(param) = self.unstored_ref_param(&field.value) {
-                        self.out.push(StoresError {
-                            message: format!(
-                                "storing reference parameter '{param}' in struct field requires `stores[{param}]` declaration"
-                            ),
-                            span: field.value.span(),
-                            module: self.module.clone(),
-                        });
-                    }
-                }
-            }
+            Expr::Closure(_) => return,
             Expr::Assign(assign) => {
-                // A reference parameter assigned to a module global escapes; the
-                // assign place recorded by the elaborator (the same fact reify
-                // reads to build `GlobalVarSet`) identifies the global by name.
-                if let Some(param) = self.unstored_ref_param(&assign.value)
-                    && let Some(place) = self.annotations.assign_places.get(&assign.target.id())
-                    && let crate::elaborator::sem::types::AssignPlace::Global { name, .. } = place
-                {
-                    self.out.push(StoresError {
-                        message: format!(
-                            "storing reference parameter '{param}' in global '{name}' requires `stores[{param}]` declaration"
-                        ),
-                        span: assign.value.span(),
-                        module: self.module.clone(),
-                    });
+                let carried = self.carries(&assign.value);
+                if !carried.is_empty() {
+                    let (root, through_deref) = place_root_of(&assign.target);
+                    if let Some(ident) = root
+                        && !through_deref
+                        && global_name_of(ident, self.annotations).is_none()
+                        && !ident_is_ref_of(ident, self.sem)
+                        && let Some(def) = self.sem.references.get(&ident.id)
+                    {
+                        self.carries.entry(*def).or_default().extend(carried);
+                    }
                 }
             }
             _ => {}
         }
         ast::walk_expr(self, expr);
+    }
+}
+
+/// Answers "can a value of this type transitively hold a reference?" — the gate
+/// that keeps carrying precise: a value whose type cannot contain a reference
+/// (`i32`, `String`, `Unit`) never carries a parameter, so a storing call that
+/// returns such a type folds nothing (e.g. `list.push(x)` returning `Unit`).
+struct TypeRefCtx {
+    struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    memo: std::cell::RefCell<IndexMap<TypeId, bool>>,
+}
+
+impl TypeRefCtx {
+    fn build(sem: &Semantics, state: &crate::elaborator::orchestration::AnnotateState) -> Self {
+        let mut struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
+        for (src, module) in &sem.modules {
+            let annotations = state.module_semantics.get(src).map(|m| &m.types);
+            for item in &module.items {
+                if let Item::Struct(struct_decl) = item
+                    && let Some(field_types) =
+                        annotations.and_then(|ann| ann.struct_field_types.get(&struct_decl.id))
+                {
+                    struct_fields
+                        .insert((src.clone(), struct_decl.name.clone()), field_types.clone());
+                }
+            }
+        }
+        let mut variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>> =
+            IndexMap::default();
+        for (module, variants) in state.tysys.all_variant_cases.iter() {
+            for (variant_name, info) in variants {
+                variant_payloads.insert(
+                    (module.clone(), variant_name.clone()),
+                    info.cases.iter().map(|case| case.payload).collect(),
+                );
+            }
+        }
+        Self {
+            struct_fields,
+            variant_payloads,
+            memo: std::cell::RefCell::new(IndexMap::default()),
+        }
+    }
+
+    fn can_hold_ref(&self, tt: &TypeTable, type_id: TypeId) -> bool {
+        if let Some(&b) = self.memo.borrow().get(&type_id) {
+            return b;
+        }
+        let mut visited = TypeSet::default();
+        let r = self.walk(tt, type_id, &mut visited);
+        self.memo.borrow_mut().insert(type_id, r);
+        r
+    }
+
+    fn walk(&self, tt: &TypeTable, type_id: TypeId, visited: &mut TypeSet) -> bool {
+        if !visited.insert(type_id) {
+            return false;
+        }
+        match tt.get(type_id) {
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => true,
+            ResolvedType::Reactive(t) | ResolvedType::BuiltinArray(t) => self.walk(tt, *t, visited),
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => {
+                type_args.iter().any(|t| self.walk(tt, *t, visited))
+            }
+            ResolvedType::Newtype { base_type, .. } => self.walk(tt, *base_type, visited),
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } => self
+                .struct_fields
+                .get(&(module_source.clone(), name.clone()))
+                .is_some_and(|fields| fields.iter().any(|t| self.walk(tt, *t, visited))),
+            ResolvedType::Variant {
+                name,
+                module_source,
+            } => self
+                .variant_payloads
+                .get(&(module_source.clone(), name.clone()))
+                .is_some_and(|payloads| payloads.iter().any(|t| self.walk(tt, *t, visited))),
+            ResolvedType::Function { .. } => false,
+            ResolvedType::TypeParam { .. }
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocTypeProjection { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => true,
+            ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Flags { .. } => false,
+        }
+    }
+}
+
+/// Per-module context for the escape checks.
+struct StoresCtx<'a> {
+    sem: &'a Semantics,
+    annotations: &'a crate::elaborator::sem::types::TypeAnnotations,
+    oracle: &'a StoresOracle,
+    tyctx: &'a TypeRefCtx,
+    module: String,
+}
+
+impl StoresCtx<'_> {
+    /// Obligation #1 for one function/method, plus obligation #2 for every
+    /// closure literal in its body.
+    fn check_function(&self, func: &Function, out: &mut Vec<StoresError>) {
+        let Some(body) = &func.body else {
+            return;
+        };
+        if func.attrs.iter().any(|attr| attr.name == "ambient") || func.name.starts_with("__test_")
+        {
+            return;
+        }
+        let param_types = self
+            .annotations
+            .fn_param_types
+            .get(&func.id)
+            .map_or(&[][..], Vec::as_slice);
+
+        let mut carries: IndexMap<AstId, IndexSet<u32>> = IndexMap::default();
+        let mut names: IndexMap<u32, String> = IndexMap::default();
+        let mut allowed: IndexSet<u32> = IndexSet::default();
+        for (i, (param, &type_id)) in func.params.iter().zip(param_types.iter()).enumerate() {
+            let pos = u32::try_from(i).unwrap();
+            if matches!(
+                self.sem.types.get(type_id),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            ) {
+                carries.entry(param.id).or_default().insert(pos);
+                names.insert(pos, param.name.clone());
+            }
+            if func.stores.contains(&param.name) {
+                allowed.insert(pos);
+            }
+        }
+
+        let mut walker = RefFlow {
+            ctx: self,
+            carries,
+            names,
+            allowed,
+            is_closure: false,
+            out,
+            seen: IndexSet::default(),
+        };
+        ast::walk_block(&mut walker, body);
+    }
+
+    /// Obligation #2: a closure may not store any of its reference parameters
+    /// (allowance `[]`).
+    fn check_closure(&self, closure: &ast::ClosureExpr, out: &mut Vec<StoresError>) {
+        let Some(&type_id) = self.sem.expression_types.get(&closure.id) else {
+            return;
+        };
+        let ResolvedType::Function { params, .. } = self.sem.types.get(type_id) else {
+            return;
+        };
+        let mut carries: IndexMap<AstId, IndexSet<u32>> = IndexMap::default();
+        let mut names: IndexMap<u32, String> = IndexMap::default();
+        for (j, param) in closure.params.iter().enumerate() {
+            let pos = u32::try_from(j).unwrap();
+            if params.get(j).is_some_and(|&pt| {
+                matches!(
+                    self.sem.types.get(pt),
+                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                )
+            }) {
+                carries.entry(param.id).or_default().insert(pos);
+                names.insert(pos, param.name.clone());
+            }
+        }
+        if names.is_empty() {
+            return;
+        }
+        let mut walker = RefFlow {
+            ctx: self,
+            carries,
+            names,
+            allowed: IndexSet::default(),
+            is_closure: true,
+            out,
+            seen: IndexSet::default(),
+        };
+        walker.sink_return(&closure.body);
+        walker.visit_expr(&closure.body);
+    }
+}
+
+/// A resolved call's stored positions and its arguments in callee-position
+/// order (position 0 is a method receiver).
+struct ResolvedCall<'e> {
+    stored: Vec<u32>,
+    args: Vec<&'e Expr>,
+}
+
+/// Which persistence sink a carried reference reached (selects the message).
+enum Sink<'a> {
+    Return,
+    StructField,
+    Tuple,
+    Global(&'a str),
+    ThroughRef,
+    /// Forwarded as an argument to a callee that stores that position — the
+    /// reference persists inside the callee, so the caller stores it too.
+    Forward,
+}
+
+/// Reference-flow escape walker. Shared by both obligations; the seed
+/// (`carries` / `names`), the `allowed` allowance, and `is_closure` (wording)
+/// distinguish them. Nested closures are not descended into — each is checked
+/// as its own entity.
+struct RefFlow<'a, 'b> {
+    ctx: &'a StoresCtx<'a>,
+    /// Binding [`AstId`] → the parameter positions its reference currently carries.
+    carries: IndexMap<AstId, IndexSet<u32>>,
+    /// Parameter position → name (for diagnostics).
+    names: IndexMap<u32, String>,
+    /// Positions whose escape is allowed (declared `stores`).
+    allowed: IndexSet<u32>,
+    is_closure: bool,
+    out: &'b mut Vec<StoresError>,
+    seen: IndexSet<(usize, String)>,
+}
+
+/// A resolved call's return-provenance positions and its arguments in
+/// callee-position order (position 0 is a method receiver). The result value
+/// provably borrows the arguments at `returned`.
+struct ReturnedCall<'e> {
+    returned: IndexSet<u32>,
+    args: Vec<&'e Expr>,
+}
+
+/// Type of `expr`, preferring a binding's declared type (parameters and
+/// function-typed locals live in `local_types`, keyed by the binding's def)
+/// over the expression's recorded type.
+fn expr_type_of(expr: &Expr, sem: &Semantics) -> Option<TypeId> {
+    if let Expr::Ident(ident) = expr
+        && let Some(def) = sem.references.get(&ident.id)
+        && let Some(&ty) = sem.local_types.get(def)
+    {
+        return Some(ty);
+    }
+    sem.expression_types.get(&expr.id()).copied()
+}
+
+/// Type of an indirect call's callee identifier (a functor local / param).
+fn indirect_callee_type_of(callee: &Expr, sem: &Semantics) -> Option<TypeId> {
+    if let Expr::Ident(ident) = callee
+        && let Some(def) = sem.references.get(&ident.id)
+        && let Some(&ty) = sem.local_types.get(def)
+    {
+        return Some(ty);
+    }
+    sem.expression_types.get(&callee.id()).copied()
+}
+
+/// The parameter positions the *place* operand of `&` is rooted at, ignoring
+/// the place's own type (`&p.field` roots at `p`).
+fn place_roots_of(
+    place: &Expr,
+    sem: &Semantics,
+    carries: &IndexMap<AstId, IndexSet<u32>>,
+) -> IndexSet<u32> {
+    match place {
+        Expr::Ident(ident) => sem
+            .references
+            .get(&ident.id)
+            .and_then(|def| carries.get(def))
+            .cloned()
+            .unwrap_or_default(),
+        Expr::Unary(u) if u.op == ast::UnaryOp::Deref => place_roots_of(&u.expr, sem, carries),
+        Expr::FieldAccess(f) => place_roots_of(&f.expr, sem, carries),
+        Expr::Index(i) => place_roots_of(&i.expr, sem, carries),
+        Expr::Cast(c) => place_roots_of(&c.expr, sem, carries),
+        _ => IndexSet::default(),
+    }
+}
+
+/// Deepest identifier of an assignment target place, and whether the path
+/// crossed a dereference (a write through a reference). Pure over the AST.
+fn place_root_of(place: &Expr) -> (Option<&ast::IdentExpr>, bool) {
+    match place {
+        Expr::Ident(ident) => (Some(ident), false),
+        Expr::Unary(u) if u.op == ast::UnaryOp::Deref => {
+            let (root, _) = place_root_of(&u.expr);
+            (root, true)
+        }
+        Expr::FieldAccess(f) => place_root_of(&f.expr),
+        Expr::Index(i) => place_root_of(&i.expr),
+        Expr::Cast(c) => place_root_of(&c.expr),
+        _ => (None, false),
+    }
+}
+
+/// The global's name if this identifier resolves to a module global l-value.
+fn global_name_of(
+    ident: &ast::IdentExpr,
+    annotations: &crate::elaborator::sem::types::TypeAnnotations,
+) -> Option<String> {
+    match annotations.assign_places.get(&ident.id) {
+        Some(crate::elaborator::sem::types::AssignPlace::Global { name, .. }) => Some(name.clone()),
+        _ => None,
+    }
+}
+
+/// Whether an identifier's binding is a reference (`&T` / `&mut T`).
+fn ident_is_ref_of(ident: &ast::IdentExpr, sem: &Semantics) -> bool {
+    sem.references
+        .get(&ident.id)
+        .and_then(|def| sem.local_types.get(def))
+        .is_some_and(|&ty| {
+            matches!(
+                sem.types.get(ty),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            )
+        })
+}
+
+/// Return provenance of a callee identifier that names a free function or a
+/// variant / enum constructor case. Tries the whole-path id then each segment
+/// id, returning the first that resolves (through `references`) to a decl / case
+/// id present in `fn_returns`.
+fn ident_returns(
+    ident: &ast::IdentExpr,
+    sem: &Semantics,
+    fn_returns: &IndexMap<AstId, IndexSet<u32>>,
+) -> Option<IndexSet<u32>> {
+    std::iter::once(ident.id)
+        .chain(ident.segments.iter().map(|s| s.id))
+        .find_map(|use_id| {
+            sem.references
+                .get(&use_id)
+                .and_then(|def| fn_returns.get(def))
+                .cloned()
+        })
+}
+
+/// The parameter positions a call's *result* provably borrows, and the call's
+/// arguments in callee-position order. Mirrors `call_stored_args` but reads the
+/// per-function return provenance (`fn_returns` / `mangled_returns`) instead of
+/// declared `stores`: a result borrows an argument only at the positions the
+/// callee's return value borrows. A variant / enum constructor call resolves to
+/// its case decl id. An unresolvable direct callee borrows nothing. A functor
+/// callee is bounded by its slot's declared `stores`: obligation #2 and functor
+/// coercion already reject any function / closure that returns a borrow of a
+/// reference argument the slot does not store, so those positions soundly bound
+/// what the result can borrow (a functor slot with no `stores` on that ref
+/// parameter cannot leak it into the result).
+fn resolve_returned_args<'e>(
+    expr: &'e Expr,
+    sem: &Semantics,
+    annotations: &crate::elaborator::sem::types::TypeAnnotations,
+    fn_returns: &IndexMap<AstId, IndexSet<u32>>,
+    mangled_returns: &IndexMap<(ModuleSource, String), IndexSet<u32>>,
+) -> Option<ReturnedCall<'e>> {
+    let mangled = |func_ref: &FunctionRef| -> IndexSet<u32> {
+        mangled_returns
+            .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
+            .cloned()
+            .unwrap_or_default()
+    };
+    match expr {
+        Expr::Call(call) => {
+            let args: Vec<&Expr> = call.args.iter().collect();
+            if let Expr::Ident(ident) = &call.callee
+                && let Some(returned) = ident_returns(ident, sem, fn_returns)
+            {
+                return Some(ReturnedCall { returned, args });
+            }
+            if let Some(func_ref) = annotations
+                .static_method_dispatch
+                .get(&call.id)
+                .map(|d| &d.function_ref)
+            {
+                return Some(ReturnedCall {
+                    returned: mangled(func_ref),
+                    args,
+                });
+            }
+            if let Some(callee_ty) = indirect_callee_type_of(&call.callee, sem) {
+                let returned = match sem.types.get(callee_ty) {
+                    ResolvedType::Function { stores, .. } => stores.iter().copied().collect(),
+                    _ => (0..u32::try_from(args.len()).unwrap()).collect(),
+                };
+                return Some(ReturnedCall { returned, args });
+            }
+            Some(ReturnedCall {
+                returned: IndexSet::default(),
+                args,
+            })
+        }
+        Expr::MethodCall(mc) => {
+            let mut args: Vec<&Expr> = vec![&mc.receiver];
+            args.extend(mc.args.iter());
+            let returned = sem
+                .method_dispatch
+                .get(&mc.id)
+                .map(|d| mangled(&d.function_ref))
+                .unwrap_or_default();
+            Some(ReturnedCall { returned, args })
+        }
+        Expr::StaticMethodCall(sc) => {
+            let args: Vec<&Expr> = sc.args.iter().collect();
+            let returned = annotations
+                .static_method_dispatch
+                .get(&sc.id)
+                .map(|d| mangled(&d.function_ref))
+                .unwrap_or_default();
+            Some(ReturnedCall { returned, args })
+        }
+        _ => None,
+    }
+}
+
+/// Parameter positions the reference produced by `expr` carries — the shared
+/// reference-flow used by both the escape walk and the return-provenance
+/// fixpoint. A value whose type cannot hold a reference carries nothing. Only
+/// `&place` roots at a parameter; reading a reference-typed field / element /
+/// deref yields a reference to a *separate* object, so it carries nothing. A
+/// cast preserves reference identity; an aggregate literal unions its fields; a
+/// call folds its arguments at the callee's return-provenance positions.
+#[allow(clippy::too_many_arguments)]
+fn carries_of(
+    expr: &Expr,
+    sem: &Semantics,
+    tyctx: &TypeRefCtx,
+    annotations: &crate::elaborator::sem::types::TypeAnnotations,
+    fn_returns: &IndexMap<AstId, IndexSet<u32>>,
+    mangled_returns: &IndexMap<(ModuleSource, String), IndexSet<u32>>,
+    carries: &IndexMap<AstId, IndexSet<u32>>,
+) -> IndexSet<u32> {
+    match expr_type_of(expr, sem) {
+        Some(ty) if tyctx.can_hold_ref(&sem.types, ty) => {}
+        _ => return IndexSet::default(),
+    }
+    let recurse = |e: &Expr| {
+        carries_of(
+            e,
+            sem,
+            tyctx,
+            annotations,
+            fn_returns,
+            mangled_returns,
+            carries,
+        )
+    };
+    match expr {
+        Expr::Ident(ident) => sem
+            .references
+            .get(&ident.id)
+            .and_then(|def| carries.get(def))
+            .cloned()
+            .unwrap_or_default(),
+        Expr::Unary(u) if matches!(u.op, ast::UnaryOp::Ref | ast::UnaryOp::MutRef) => {
+            place_roots_of(&u.expr, sem, carries)
+        }
+        Expr::Cast(c) => recurse(&c.expr),
+        Expr::Call(_) | Expr::MethodCall(_) | Expr::StaticMethodCall(_) => {
+            let Some(call) =
+                resolve_returned_args(expr, sem, annotations, fn_returns, mangled_returns)
+            else {
+                return IndexSet::default();
+            };
+            let mut acc = IndexSet::default();
+            for (pos, arg) in call.args.iter().enumerate() {
+                if call.returned.contains(&u32::try_from(pos).unwrap()) {
+                    acc.extend(recurse(arg));
+                }
+            }
+            acc
+        }
+        Expr::StructLiteral(lit) => {
+            let mut acc = IndexSet::default();
+            for field in &lit.fields {
+                acc.extend(recurse(&field.value));
+            }
+            acc
+        }
+        Expr::TupleLiteral(t) => {
+            let mut acc = IndexSet::default();
+            for el in &t.elements {
+                acc.extend(recurse(el));
+            }
+            acc
+        }
+        _ => IndexSet::default(),
+    }
+}
+
+impl RefFlow<'_, '_> {
+    fn expr_type(&self, expr: &Expr) -> Option<TypeId> {
+        if let Expr::Ident(ident) = expr
+            && let Some(def) = self.ctx.sem.references.get(&ident.id)
+            && let Some(&ty) = self.ctx.sem.local_types.get(def)
+        {
+            return Some(ty);
+        }
+        self.ctx.sem.expression_types.get(&expr.id()).copied()
+    }
+
+    /// Parameter positions the reference produced by `expr` carries — the escape
+    /// walk's view, sharing [`carries_of`] with the return-provenance fixpoint so
+    /// both fold calls at the same return-provenance positions.
+    fn carries(&self, expr: &Expr) -> IndexSet<u32> {
+        carries_of(
+            expr,
+            self.ctx.sem,
+            self.ctx.tyctx,
+            self.ctx.annotations,
+            &self.ctx.oracle.fn_returns,
+            &self.ctx.oracle.mangled_returns,
+            &self.carries,
+        )
+    }
+
+    /// `None` when `expr` is not a call. An unresolvable direct callee is
+    /// trusted to store nothing; an unresolvable functor callee stores every
+    /// position.
+    fn call_stored_args<'e>(&self, expr: &'e Expr) -> Option<ResolvedCall<'e>> {
+        match expr {
+            Expr::Call(call) => {
+                let args: Vec<&Expr> = call.args.iter().collect();
+                if let Expr::Ident(ident) = &call.callee
+                    && let Some(def) = self.ctx.sem.references.get(&ident.id)
+                    && let Some(stored) = self.ctx.oracle.fn_stores.get(def)
+                {
+                    return Some(ResolvedCall {
+                        stored: stored.clone(),
+                        args,
+                    });
+                }
+                if let Some(func_ref) = self
+                    .ctx
+                    .annotations
+                    .static_method_dispatch
+                    .get(&call.id)
+                    .map(|d| &d.function_ref)
+                {
+                    return Some(ResolvedCall {
+                        stored: self.mangled_stored(func_ref),
+                        args,
+                    });
+                }
+                if let Some(callee_ty) = self.indirect_callee_type(&call.callee) {
+                    let stored = match self.ctx.sem.types.get(callee_ty) {
+                        ResolvedType::Function { stores, .. } => stores.clone(),
+                        _ => (0..u32::try_from(args.len()).unwrap()).collect(),
+                    };
+                    return Some(ResolvedCall { stored, args });
+                }
+                Some(ResolvedCall {
+                    stored: Vec::new(),
+                    args,
+                })
+            }
+            Expr::MethodCall(mc) => {
+                let mut args: Vec<&Expr> = vec![&mc.receiver];
+                args.extend(mc.args.iter());
+                let stored = self
+                    .ctx
+                    .sem
+                    .method_dispatch
+                    .get(&mc.id)
+                    .map(|d| self.mangled_stored(&d.function_ref))
+                    .unwrap_or_default();
+                Some(ResolvedCall { stored, args })
+            }
+            Expr::StaticMethodCall(sc) => {
+                let args: Vec<&Expr> = sc.args.iter().collect();
+                let stored = self
+                    .ctx
+                    .annotations
+                    .static_method_dispatch
+                    .get(&sc.id)
+                    .map(|d| self.mangled_stored(&d.function_ref))
+                    .unwrap_or_default();
+                Some(ResolvedCall { stored, args })
+            }
+            _ => None,
+        }
+    }
+
+    fn mangled_stored(&self, func_ref: &FunctionRef) -> Vec<u32> {
+        self.ctx
+            .oracle
+            .mangled_stores
+            .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Type of an indirect call's callee identifier (a functor local / param).
+    fn indirect_callee_type(&self, callee: &Expr) -> Option<TypeId> {
+        if let Expr::Ident(ident) = callee
+            && let Some(def) = self.ctx.sem.references.get(&ident.id)
+            && let Some(&ty) = self.ctx.sem.local_types.get(def)
+        {
+            return Some(ty);
+        }
+        self.ctx.sem.expression_types.get(&callee.id()).copied()
+    }
+
+    fn sink_value(&mut self, value: &Expr, sink: Sink) {
+        let carried = self.carries(value);
+        self.mark(&carried, value.span(), &sink);
+    }
+
+    /// Forwarding a reference parameter to a callee that stores it makes the
+    /// caller store it too. Only when the result cannot hold a reference is the
+    /// store provably external (a global, a write through a reference); when it
+    /// can, the store may be a managed borrow into the result, already tracked by
+    /// `carries`, so this defers. An unresolved (generic) result type is
+    /// `can_hold_ref = true` and also defers.
+    fn sink_call_args(&mut self, expr: &Expr) {
+        let Some(call) = self.call_stored_args(expr) else {
+            return;
+        };
+        if self
+            .expr_type(expr)
+            .is_some_and(|ty| self.ctx.tyctx.can_hold_ref(&self.ctx.sem.types, ty))
+        {
+            return;
+        }
+        for (pos, arg) in call.args.iter().enumerate() {
+            if call.stored.contains(&u32::try_from(pos).unwrap()) {
+                let carried = self.carries(arg);
+                self.mark(&carried, arg.span(), &Sink::Forward);
+            }
+        }
+    }
+
+    /// A `return`/task-return sink. Returning a freshly-taken borrow (`return
+    /// &self.field`, `return &xs[i]`) is a plain reference return signalled by
+    /// the `&T` return type — it does not persist the parameter the way storing
+    /// it in an aggregate / global does, so it needs no `stores`. Returning the
+    /// parameter itself, an alias of it, or a value that folded it into an
+    /// aggregate is flagged.
+    fn sink_return(&mut self, value: &Expr) {
+        if matches!(
+            value,
+            Expr::Unary(u) if matches!(u.op, ast::UnaryOp::Ref | ast::UnaryOp::MutRef)
+        ) {
+            return;
+        }
+        self.sink_value(value, Sink::Return);
+    }
+
+    fn mark(&mut self, positions: &IndexSet<u32>, span: Span, sink: &Sink) {
+        for &pos in positions {
+            if self.allowed.contains(&pos) {
+                continue;
+            }
+            let name = self.names.get(&pos).map_or("?", String::as_str);
+            let message = if self.is_closure {
+                format!(
+                    "closure may not store reference parameter '{name}' (closures cannot declare `stores`)"
+                )
+            } else {
+                match sink {
+                    Sink::Return => format!(
+                        "returning reference parameter '{name}' requires `stores[{name}]` declaration"
+                    ),
+                    Sink::StructField => format!(
+                        "storing reference parameter '{name}' in struct field requires `stores[{name}]` declaration"
+                    ),
+                    Sink::Tuple => format!(
+                        "storing reference parameter '{name}' in a tuple requires `stores[{name}]` declaration"
+                    ),
+                    Sink::Global(gname) => format!(
+                        "storing reference parameter '{name}' in global '{gname}' requires `stores[{name}]` declaration"
+                    ),
+                    Sink::ThroughRef => format!(
+                        "storing reference parameter '{name}' through a reference requires `stores[{name}]` declaration"
+                    ),
+                    Sink::Forward => format!(
+                        "passing reference parameter '{name}' to a function that stores it requires `stores[{name}]` declaration"
+                    ),
+                }
+            };
+            if !self.seen.insert((span.start, message.clone())) {
+                continue;
+            }
+            self.out.push(StoresError {
+                message,
+                span,
+                module: self.ctx.module.clone(),
+            });
+        }
+    }
+
+    /// The global's name if this identifier resolves to a module global l-value.
+    fn global_name(&self, ident: &ast::IdentExpr) -> Option<String> {
+        match self.ctx.annotations.assign_places.get(&ident.id) {
+            Some(crate::elaborator::sem::types::AssignPlace::Global { name, .. }) => {
+                Some(name.clone())
+            }
+            _ => None,
+        }
+    }
+
+    /// Whether an identifier's binding is a reference (`&T` / `&mut T`), so a
+    /// write into its projection reaches caller-visible memory.
+    fn ident_is_ref(&self, ident: &ast::IdentExpr) -> bool {
+        self.ctx
+            .sem
+            .references
+            .get(&ident.id)
+            .and_then(|def| self.ctx.sem.local_types.get(def))
+            .is_some_and(|&ty| {
+                matches!(
+                    self.ctx.sem.types.get(ty),
+                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                )
+            })
+    }
+
+    /// Reject a named-function reference argument whose declared `stores`
+    /// exceeds the functor parameter's declared `stores`.
+    fn check_functor_coercion(&mut self, call: &ast::CallExpr) {
+        let Some(param_types) = self.ctx.annotations.call_param_types.get(&call.id) else {
+            return;
+        };
+        for (arg, &param_type) in call.args.iter().zip(param_types.iter()) {
+            let ResolvedType::Function {
+                stores: expected, ..
+            } = self.ctx.sem.types.get(param_type)
+            else {
+                continue;
+            };
+            let Expr::Ident(ident) = arg else {
+                continue;
+            };
+            let Some(declared) = self
+                .ctx
+                .sem
+                .references
+                .get(&ident.id)
+                .and_then(|def| self.ctx.oracle.fn_stores.get(def))
+            else {
+                continue;
+            };
+            for pos in declared {
+                if !expected.contains(pos) {
+                    self.out.push(StoresError {
+                        message: format!(
+                            "function '{}' stores parameter {pos} but is passed where a functor that stores nothing at that position is expected",
+                            ident.name
+                        ),
+                        span: arg.span(),
+                        module: self.ctx.module.clone(),
+                    });
+                }
+            }
+        }
+    }
+
+    /// Deepest identifier of an assignment target place, and whether the path
+    /// crossed a dereference (a write through a reference).
+    fn place_root<'e>(&self, place: &'e Expr) -> (Option<&'e ast::IdentExpr>, bool) {
+        match place {
+            Expr::Ident(ident) => (Some(ident), false),
+            Expr::Unary(u) if u.op == ast::UnaryOp::Deref => {
+                let (root, _) = self.place_root(&u.expr);
+                (root, true)
+            }
+            Expr::FieldAccess(f) => self.place_root(&f.expr),
+            Expr::Index(i) => self.place_root(&i.expr),
+            Expr::Cast(c) => self.place_root(&c.expr),
+            _ => (None, false),
+        }
+    }
+}
+
+impl AstVisitor for RefFlow<'_, '_> {
+    fn visit_stmt(&mut self, stmt: &Stmt) {
+        match stmt {
+            Stmt::Let(let_stmt) => {
+                if let Some(value) = &let_stmt.value {
+                    let carried = self.carries(value);
+                    if !carried.is_empty()
+                        && let Some(binding) = pattern_binding_id(&let_stmt.pattern)
+                    {
+                        self.carries.entry(binding).or_default().extend(carried);
+                    }
+                }
+            }
+            Stmt::Return(ret) => {
+                if let Some(value) = &ret.value {
+                    self.sink_return(value);
+                }
+            }
+            Stmt::TaskReturn(task) => self.sink_return(&task.value),
+            _ => {}
+        }
+        ast::walk_stmt(self, stmt);
+    }
+
+    fn visit_expr(&mut self, expr: &Expr) {
+        match expr {
+            Expr::Closure(closure) => {
+                self.ctx.check_closure(closure, self.out);
+                return;
+            }
+            Expr::StructLiteral(lit) => {
+                for field in &lit.fields {
+                    self.sink_value(&field.value, Sink::StructField);
+                }
+            }
+            Expr::TupleLiteral(t) => {
+                for el in &t.elements {
+                    self.sink_value(el, Sink::Tuple);
+                }
+            }
+            Expr::Assign(assign) => {
+                let carried = self.carries(&assign.value);
+                if !carried.is_empty() {
+                    let (root, through_deref) = self.place_root(&assign.target);
+                    let span = assign.value.span();
+                    match root {
+                        Some(ident) => {
+                            if let Some(name) = self.global_name(ident) {
+                                self.mark(&carried, span, &Sink::Global(&name));
+                            } else if is_ident(&assign.target) && !through_deref {
+                                if let Some(def) = self.ctx.sem.references.get(&ident.id) {
+                                    self.carries.entry(*def).or_default().extend(carried);
+                                }
+                            } else if through_deref || self.ident_is_ref(ident) {
+                                self.mark(&carried, span, &Sink::ThroughRef);
+                            } else if let Some(def) = self.ctx.sem.references.get(&ident.id) {
+                                self.carries.entry(*def).or_default().extend(carried);
+                            }
+                        }
+                        None => self.mark(&carried, span, &Sink::ThroughRef),
+                    }
+                }
+            }
+            Expr::Call(call) => {
+                self.check_functor_coercion(call);
+                self.sink_call_args(expr);
+            }
+            Expr::MethodCall(_) | Expr::StaticMethodCall(_) => self.sink_call_args(expr),
+            _ => {}
+        }
+        ast::walk_expr(self, expr);
+    }
+}
+
+fn is_ident(expr: &Expr) -> bool {
+    matches!(expr, Expr::Ident(_))
+}
+
+/// The binding [`AstId`] of a simple `let` pattern, or `None` for a
+/// destructuring pattern (reference aliasing through destructuring is not
+/// tracked).
+fn pattern_binding_id(pattern: &ast::Pattern) -> Option<AstId> {
+    match pattern {
+        ast::Pattern::Ident { id, .. } | ast::Pattern::MutIdent { id, .. } => Some(*id),
+        _ => None,
     }
 }
 

@@ -1,0 +1,22 @@
+// A closure forwarding its reference parameter to a non-storing callee persists nothing and compiles.
+
+struct Parser {
+    pos: i32,
+}
+
+fn step(p: &mut Parser) {
+    p.pos += 1;
+}
+
+fn drive(p: &mut Parser, f: fn(&mut Parser)) {
+    f(p);
+}
+
+export fn run() {
+    let mut par = Parser { pos: 0 };
+    drive(&mut par, |p: &mut Parser| step(p));
+    assert par.pos == 1;
+}
+
+__DATA__
+{"stdout": ""}

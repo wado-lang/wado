@@ -1630,7 +1630,7 @@ fn "httpbin_headers.wado/__cm_binding__Fields_copy_all"(self) with Fields {
             ptr = builtin::load_i32(local.tee __elem_addr(__base_2 + (__i_5 * 16)) + 0);
             len_15 = builtin::load_i32((__elem_addr + 0) + 4);
             arr = "core:rt/memory_to_gc_array"(ptr, len_15);
-            __lifted_result_7 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_7: ref Array<u8>; __array_clone_src_7 = arr; let __array_clone_len_7: i32; __array_clone_len_7 = builtin::array_len(__array_clone_src_7); let __array_clone_dst_7: ref Array<u8>; __array_clone_dst_7 = builtin::array_new<u8>(__array_clone_len_7); builtin::array_copy<u8>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7); __array_clone_dst_7), used: len_15 };
+            __lifted_result_7 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_7: i32; __array_clone_len_7 = builtin::array_len(arr); let __array_clone_dst_7: ref Array<u8>; __array_clone_dst_7 = builtin::array_new<u8>(__array_clone_len_7); builtin::array_copy<u8>(__array_clone_dst_7, 0, arr, 0, __array_clone_len_7); __array_clone_dst_7), used: len_15 };
             __base_8 = builtin::load_i32(__elem_addr + 8);
             __result_10 = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(local.tee __count_9(builtin::load_i32((__elem_addr + 8) + 4))), used: 0 };
             __i_11 = 0;
@@ -1645,7 +1645,7 @@ fn "httpbin_headers.wado/__cm_binding__Fields_copy_all"(self) with Fields {
             if __count_9 > 0 {
                 drop("mem/realloc"(__base_8, __count_9 * 1, 1, 0));
             }
-            "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>::push"(__result_4, struct.new "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]" { 0: __lifted_result_7, 1: struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let __array_clone_src_7: ref Array<u8>; __array_clone_src_7 = __result_10.repr; let __array_clone_len_7: i32; __array_clone_len_7 = builtin::array_len(__array_clone_src_7); let __array_clone_dst_7: ref Array<u8>; __array_clone_dst_7 = builtin::array_new<u8>(__array_clone_len_7); builtin::array_copy<u8>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7); __array_clone_dst_7), used: __result_10.used } });
+            "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>::push"(__result_4, struct.new "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]" { 0: __lifted_result_7, 1: __result_10 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 0), builtin::load_i32((__elem_addr + 0) + 4), 1, 0));
             __i_5 = __i_5 + 1;
             continue l64;
@@ -2299,8 +2299,7 @@ fn "./sub/httpbin_handler.wado/parse_query_params"(query) {
     let __match_7: ref null "core:prelude/string.wado//String";
     let self_10: ref "core:prelude/string.wado//StrSplitIter";
     let value_15: ref "core:value//Value";
-    let key_18: ref "core:prelude/string.wado//String";
-    let value_19: ref "core:value//Value";
+    let value_18: ref "core:value//Value";
     params = "core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::new"();
     if query.used == 0 {
         return params;
@@ -2322,9 +2321,8 @@ fn "./sub/httpbin_handler.wado/parse_query_params"(query) {
                     "core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::insert"(params, key_5, value_15);
                 } else {
                     block {
-                        key_18 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_7: ref Array<u8>; __array_clone_src_7 = pair.repr; let __array_clone_len_7: i32; __array_clone_len_7 = builtin::array_len(__array_clone_src_7); let __array_clone_dst_7: ref Array<u8>; __array_clone_dst_7 = builtin::array_new<u8>(__array_clone_len_7); builtin::array_copy<u8>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7); __array_clone_dst_7), used: pair.used };
-                        value_19 = struct.new "core:value//Value::String" { discriminant: 7, payload_0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
-                        "core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::insert"(params, key_18, value_19);
+                        value_18 = struct.new "core:value//Value::String" { discriminant: 7, payload_0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
+                        "core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::insert"(params, pair, value_18);
                     };
                 }
             } else {
@@ -6063,7 +6061,6 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::
     let __iter_3: ref "core:prelude/slice.wado//ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>";
     let entry: ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>";
     let __match_5: ref null "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>";
-    let v: ref "core:prelude/string.wado//String";
     __b = struct.new "core:prelude//List<[core:prelude/string.wado/String,core:value/Value]>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:value/Value]">(0), used: 0 };
     __iter_3 = struct.new "core:prelude/slice.wado//ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>" { repr: self.entries.repr, index: 0, end: self.entries.used };
     b698: block {
@@ -6072,7 +6069,7 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::
             if ref.is_null(__match_5) == 0 {
                 entry = ref.as_non_null(__match_5);
                 if entry.deleted == 0 {
-                    "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:value/Value]>::push"(__b, struct.new "tuple//[core:prelude/string.wado/String, core:value/Value]" { 0: ref.as_non_null(v = entry.key; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_7: ref Array<u8>; __array_clone_src_7 = v.repr; let __array_clone_len_7: i32; __array_clone_len_7 = builtin::array_len(__array_clone_src_7); let __array_clone_dst_7: ref Array<u8>; __array_clone_dst_7 = builtin::array_new<u8>(__array_clone_len_7); builtin::array_copy<u8>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7); __array_clone_dst_7), used: v.used }), 1: ref.as_non_null("httpbin_headers.wado/$value_copy$core:value/Value"(entry.value)) });
+                    "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:value/Value]>::push"(__b, struct.new "tuple//[core:prelude/string.wado/String, core:value/Value]" { 0: entry.key, 1: entry.value });
                 }
             } else {
                 break b698;

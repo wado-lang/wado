@@ -395,6 +395,7 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, has_actions: bool
     f3.add_param(&"start", &"i32");
     f3.add_param(&"end", &"i32");
     f3.set_return_type(&"LexerSlice");
+    f3.add_stores(&"self");
     f3.emit_begin(w);
     w.line(&"return LexerSlice::new(&self.chars, start, end);");
     w.end();
@@ -1444,7 +1445,7 @@ fn gen_lexer_not(
     w.line(&"pos += 1;");
 }
 
-fn find_fragment(all_rules: &List<LexerRule>, name: &String) -> Option<&LexerRule> {
+fn find_fragment(all_rules: &List<LexerRule>, name: &String) -> Option<&LexerRule> with stores[all_rules] {
     for let rule of all_rules {
         if rule.name == *name && rule.is_fragment {
             return Option::<&LexerRule>::Some(rule);

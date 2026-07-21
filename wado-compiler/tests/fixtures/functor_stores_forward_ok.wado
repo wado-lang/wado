@@ -1,0 +1,26 @@
+// A forwarder that declares `stores[d]` may honestly persist `d` through the callee.
+
+struct Data {
+    v: i32,
+}
+
+struct Box {
+    d: &Data,
+}
+
+fn keep(d: &Data) -> Box with stores[d] {
+    return Box { d };
+}
+
+fn forward(d: &Data) -> Box with stores[d] {
+    return keep(d);
+}
+
+export fn run() {
+    let x = Data { v: 7 };
+    let b = forward(&x);
+    assert b.d.v == 7;
+}
+
+__DATA__
+{"stdout": ""}
