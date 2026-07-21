@@ -159,12 +159,8 @@ pub struct GenContext {
     /// multi-alt scan/pick/try decisions) — the `trace: true` generator
     /// option. Off by default.
     trace: bool,
-    /// Rule names a fragment is a sequence of (the `fragment_entry` generator
-    /// option; see `recovery-reentry.md`). When non-empty, the start rule's
-    /// `expect(EOF)` sweeps input it could not derive into a top-level
-    /// `<error>` region and parses each configured `_parse_<entry>` (a whole
-    /// statement / item), so a bare fragment builds real subtrees. Empty by
-    /// default — when empty the parser is byte-identical.
+    /// Rule names a fragment is a sequence of (`fragment_entry` option; see
+    /// `recovery-reentry.md`); empty disables fragment recovery.
     fragment_entry: List<String>,
     /// When set, parser emit executes retained actions (Stage C) instead of
     /// discarding them: true for grammars whose action language Gale can
@@ -435,13 +431,10 @@ impl GenContext {
         return self.trace;
     }
 
-    /// Set the fragment-entry rule names (see `recovery-reentry.md`). Non-empty
-    /// enables fragment recovery in the parse entry; empty is byte-identical.
     pub fn set_fragment_entry(&mut self, names: List<String>) {
         self.fragment_entry = names;
     }
 
-    /// Rule names a fragment is a sequence of (empty ⇒ fragment recovery off).
     pub fn fragment_entry(&self) -> &List<String> {
         return &self.fragment_entry;
     }

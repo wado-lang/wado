@@ -343,19 +343,11 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     warn_unhandled_actions(grammar, ctx);
 }
 
-/// A fragment-entry rule (`recovery-reentry.md`): when the current token is in
-/// `first_names` (its FIRST set, as `TK_*` constant names) the sweep parses this
-/// whole rule via `call` (`_parse_<rule>(p)`), building a full statement / item
-/// subtree.
 struct RecoverFragmentEntry {
     call: String,
     first_names: List<String>,
 }
 
-/// Resolve the configured `fragment_entry` rule names to their `_parse_<rule>`
-/// call plus FIRST set. An unknown name warns and is skipped. Declaration order
-/// is preserved: at a token in several entries' FIRST sets, the first listed
-/// wins (a deterministic priority, no backtracking).
 fn compute_fragment_entries(grammar: &Grammar, ctx: &mut GenContext) -> List<RecoverFragmentEntry> {
     let names = *ctx.fragment_entry();
     let mut result: List<RecoverFragmentEntry> = [];
@@ -396,11 +388,6 @@ fn compute_fragment_entries(grammar: &Grammar, ctx: &mut GenContext) -> List<Rec
     return result;
 }
 
-/// Emit the fragment-recovery helpers: a `_FRAGMENT_FIRST_<i>` FIRST-set global
-/// per entry, `_recover_fragment` (parse the first entry whose FIRST holds the
-/// current token, building a full subtree in place), and `_recover_try_descend`
-/// (the recovering-flag dance + a progress guard, skipping one token when no
-/// entry matches). Emitted only when `fragment_entry` is non-empty.
 fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragmentEntry>) {
     for let mut i = 0; i < entries.len(); i += 1 {
         w.line(&`global _FRAGMENT_FIRST_${i}: List<i32> = [${join_kinds(&entries[i].first_names)}];`);
@@ -436,8 +423,6 @@ fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragmentEntry>)
     w.line(&"p.recovering = false;");
     w.line(&"let _did = _recover_fragment(p);");
     w.line(&"p.recovering = _was;");
-    // No fragment entry starts here, or it consumed nothing (defensive): skip one
-    // token into the surrounding <error> region so the sweep always progresses.
     w.begin(&"if !_did || p.pos == _before");
     w.line(&"let _sk = p.advance();");
     w.line(&"p.tokens.mark_skipped(_sk);");
@@ -956,8 +941,6 @@ fn gen_parser_struct(
         flt.set_return_type(&"i32");
         flt.emit_begin(w);
         w.line(&"let idx = self.pos + k - 1;");
-        // Clamp to the EOF slot in `kinds` (what a caller indexes), not to a
-        // synthetic appended to `tokens` during recovery — see `peek_at`.
         w.line(&"if idx >= self.kinds.len() { return self.kinds.len() - 1; }");
         w.line(&"if idx < 0 { return 0; }");
         w.line(&"return idx;");
@@ -1183,10 +1166,6 @@ fn gen_parser_struct(
     f4.set_return_type(&"i32");
     f4.emit_begin(w);
     w.line(&"let idx = self.pos + offset;");
-    // Bound by `kinds` (the token-kind snapshot this indexes), not `tokens`:
-    // recovery appends synthetic tokens to `tokens` but not to `kinds`, so a
-    // `tokens.len()` guard lets a lookahead past the real EOF read `kinds` out
-    // of bounds. `kinds.len() - 1` is the EOF slot; past it is EOF.
     w.line(&"if idx >= self.kinds.len() { return TK_EOF; }");
     w.line(&"return self.kinds[idx];");
     w.end();
@@ -1243,10 +1222,6 @@ fn gen_parser_struct(
     );
     w.line(&"return self.pos;");
     w.end();
-    // fragment_entry: at EOF with input the start rule could not derive, sweep
-    // the remainder into an <error> region (parsing each configured fragment
-    // entry so its nested constructs still build real subtrees), report it once,
-    // and match EOF. The region nests under the current (start) rule.
     if fragment_recovery {
         w.begin(&"if kind == TK_EOF && self.kinds[self.pos] != TK_EOF");
         w.line(&"self.report_unexpected(self.tokens.span_at(self.pos));");

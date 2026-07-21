@@ -1,10 +1,6 @@
-//! The `fragment_entry` generator option (`recovery-reentry.md`): when the
-//! start rule cannot derive the input, its `expect(EOF)` sweeps the remainder
-//! into an `<error>` region under the root and parses each configured entry
-//! rule (here `stmt`), so a bare fragment builds full subtrees. Empty is
-//! byte-identical, so the grammar is generated twice — with and without the
-//! option — and clean inputs must parse to the same tree (the rejection
-//! guarantee: the option never disturbs a clean parse).
+//! The `fragment_entry` generator option (`recovery-reentry.md`). The grammar
+//! is generated twice — with the option and without — so clean inputs must
+//! parse to the same tree (the rejection guarantee).
 
 use fe_on from "./grammars/fragment_entry.g4"
     with {
@@ -23,9 +19,6 @@ use fe_off from "./grammars/fragment_entry_off.g4"
         },
     };
 
-// Rejection: with the option on, a clean parse is identical to the option-off
-// parse — the sweep only triggers at a stuck position, which a clean input
-// never reaches.
 fn assert_clean_identical(input: &String, expected: &String) {
     let on = fe_on::to_string_tree(&fe_on::parse(input));
     let off = fe_off::to_string_tree(&fe_off::parse(input));
@@ -42,9 +35,6 @@ test "clean parse unchanged: main block with statements" {
     assert_clean_identical(&"main { do x ; do y ; }", &"(prog (item (main main { (stmt do x ;) (stmt do y ;) })))");
 }
 
-// Hit: a fragment the start rule cannot derive (leads with `do`, not `set` /
-// `main`). The sweep parses each `stmt` entry, so the statements build real
-// subtrees nested under the root inside the `<error>` region.
 test "fragment recovers a statement sequence under root" {
     let r = fe_on::parse(&"do x ; do y ;");
     assert !r.ok(), "fragment should report a diagnostic";
@@ -52,8 +42,6 @@ test "fragment recovers a statement sequence under root" {
     assert tree == "(prog (<error> (stmt do x ;) (stmt do y ;)))", `unexpected tree: ${tree}`;
 }
 
-// Off: the same fragment leaves the input unconsumed — the tree is just the
-// empty start rule.
 test "fragment without the option builds nothing" {
     let r = fe_off::parse(&"do x ; do y ;");
     assert !r.ok(), "fragment should report a diagnostic";
@@ -61,8 +49,6 @@ test "fragment without the option builds nothing" {
     assert tree == "prog", `unexpected tree: ${tree}`;
 }
 
-// A token no entry accepts is skipped, and the sweep stays bounded: the `stmt`
-// island builds, the trailing junk `ID` (not in FIRST(stmt)) is skipped.
 test "fragment with trailing junk terminates" {
     let r = fe_on::parse(&"do x ; zzz");
     assert !r.ok(), "fragment should report a diagnostic";
@@ -70,10 +56,6 @@ test "fragment with trailing junk terminates" {
     assert tree.contains("(stmt do x ;)"), `island missing: ${tree}`;
 }
 
-// Regression: a fragment whose trailing entry is truncated at EOF (`do` with no
-// ID) inserts synthetic tokens while parsing the island. `peek_at`/`lt` must
-// bound their lookahead by the token-kind snapshot, not the synthetic-grown
-// token stream, or the lookahead reads out of bounds and traps.
 test "truncated trailing entry does not trap" {
     let r = fe_on::parse(&"do x ; do");
     assert !r.ok(), "fragment should report a diagnostic";
@@ -81,8 +63,6 @@ test "truncated trailing entry does not trap" {
     assert tree.contains("(stmt do x ;)"), `first island missing: ${tree}`;
 }
 
-// The CST is always balanced (every Open has a Close), even on broken fragments
-// the sweep recovers — nothing left half-open for a tree walker.
 fn assert_balanced(input: &String) {
     let r = fe_on::parse(input);
     let mut depth = 0;

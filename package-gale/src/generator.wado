@@ -34,13 +34,9 @@ pub struct Options {
     /// enter/ok/fail frames plus multi-alt scan/pick/try decisions. Off by
     /// default; set `trace: true` to debug why a grammar rejects an input.
     pub trace: bool = false,
-    /// Comma-separated rule names a fragment is a sequence of
-    /// (`recovery-reentry.md`). When non-empty, the start rule's `expect(EOF)`
-    /// sweeps input it can't derive into a top-level `<error>` region and parses
-    /// each `_parse_<entry>` (a statement / item) — e.g. `"statement"` structures
-    /// a bare statement fragment, template interpolations and all. For tooling
-    /// (highlight / LSP); empty is byte-identical. (Kiln options are scalars, so
-    /// the list is a comma-separated string.)
+    /// Comma-separated rule names a fragment is a sequence of, for tooling
+    /// (highlight / LSP); e.g. `"statement"`. Empty is byte-identical. See
+    /// `recovery-reentry.md`.
     pub fragment_entry: String = "",
 }
 
@@ -107,8 +103,6 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
         highlight_query = Option::Some(all_rules);
     }
 
-    // Kiln options are scalars, so `fragment_entry` arrives comma-separated;
-    // split it into trimmed, non-empty rule names.
     let mut fragment_entry: List<String> = [];
     for let part of req.options.fragment_entry.split(",") {
         let name = part.trim();

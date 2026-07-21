@@ -27,13 +27,6 @@ pub fn gen_highlight(
         fr.emit_begin(w);
         w.line(&"let mapping = highlight_mapping();");
         w.line(&"let mut visitor = HighlightVisitor::new(mapping);");
-        // Walk the tree so rule-context overrides apply, then default-classify
-        // any tokens the walk did not reach. The resilient parser always yields
-        // a tree (partial on broken input), so this one path highlights a
-        // fragment or unterminated construct too: the walk supplies context
-        // wherever the parser built structure, and the cover pass keeps
-        // default coloring across the rest. On a clean parse the walk covers
-        // every token, so the cover pass is a no-op.
         w.line(&"highlight_walk(&mut visitor, &result.tokens, &result.cst);");
         w.line(&"visitor.hl_cover_unvisited(&result.tokens);");
         w.line(&"return highlight_html(input, &visitor.captures);");
