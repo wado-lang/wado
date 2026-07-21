@@ -1,0 +1,71 @@
+//! The `fragment_entry` generator option (`recovery-reentry.md`): when the
+//! start rule cannot derive the input, its `expect(EOF)` sweeps the remainder
+//! into an `<error>` region under the root and parses each configured entry
+//! rule (here `stmt`), so a bare fragment builds full subtrees. Empty is
+//! byte-identical, so the grammar is generated twice — with and without the
+//! option — and clean inputs must parse to the same tree (the rejection
+//! guarantee: the option never disturbs a clean parse).
+
+use fe_on from "./grammars/fragment_entry.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            output_dir: "./generated/cst_fragment_entry_on",
+            options: { fragment_entry: "stmt" },
+        },
+    };
+
+use fe_off from "./grammars/fragment_entry_off.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            output_dir: "./generated/cst_fragment_entry_off",
+        },
+    };
+
+// Rejection: with the option on, a clean parse is identical to the option-off
+// parse — the sweep only triggers at a stuck position, which a clean input
+// never reaches.
+fn assert_clean_identical(input: &String, expected: &String) {
+    let on = fe_on::to_string_tree(&fe_on::parse(input));
+    let off = fe_off::to_string_tree(&fe_off::parse(input));
+    assert on == *expected, `on:\n  expected: ${*expected}\n  actual:   ${on}`;
+    assert on == off, `option changed a clean parse:\n  on:  ${on}\n  off: ${off}`;
+    assert fe_on::parse(input).ok(), `clean input should parse cleanly: ${*input}`;
+}
+
+test "clean parse unchanged: bare item" {
+    assert_clean_identical(&"set a ;", &"(prog (item set a ;))");
+}
+
+test "clean parse unchanged: main block with statements" {
+    assert_clean_identical(&"main { do x ; do y ; }", &"(prog (item (main main { (stmt do x ;) (stmt do y ;) })))");
+}
+
+// Hit: a fragment the start rule cannot derive (leads with `do`, not `set` /
+// `main`). The sweep parses each `stmt` entry, so the statements build real
+// subtrees nested under the root inside the `<error>` region.
+test "fragment recovers a statement sequence under root" {
+    let r = fe_on::parse(&"do x ; do y ;");
+    assert !r.ok(), "fragment should report a diagnostic";
+    let tree = fe_on::to_string_tree(&r);
+    assert tree == "(prog (<error> (stmt do x ;) (stmt do y ;)))", `unexpected tree: ${tree}`;
+}
+
+// Off: the same fragment leaves the input unconsumed — the tree is just the
+// empty start rule.
+test "fragment without the option builds nothing" {
+    let r = fe_off::parse(&"do x ; do y ;");
+    assert !r.ok(), "fragment should report a diagnostic";
+    let tree = fe_off::to_string_tree(&r);
+    assert tree == "prog", `unexpected tree: ${tree}`;
+}
+
+// A token no entry accepts is skipped, and the sweep stays bounded: the `stmt`
+// island builds, the trailing junk `ID` (not in FIRST(stmt)) is skipped.
+test "fragment with trailing junk terminates" {
+    let r = fe_on::parse(&"do x ; zzz");
+    assert !r.ok(), "fragment should report a diagnostic";
+    let tree = fe_on::to_string_tree(&r);
+    assert tree.contains("(stmt do x ;)"), `island missing: ${tree}`;
+}

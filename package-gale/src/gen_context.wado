@@ -159,13 +159,13 @@ pub struct GenContext {
     /// multi-alt scan/pick/try decisions) — the `trace: true` generator
     /// option. Off by default.
     trace: bool,
-    /// When set, the parse entry sweeps any input the start rule left
-    /// unconsumed into a top-level `<error>` region, descending into
-    /// unique-trigger rules so nested constructs still build real subtrees
-    /// (grammar-agnostic fragment recovery; see `recovery-reentry.md`). The
-    /// `recover_islands: true` generator option. Off by default — when off the
-    /// parser is byte-identical.
-    recover_islands: bool,
+    /// Rule names a fragment is a sequence of (the `fragment_entry` generator
+    /// option; see `recovery-reentry.md`). When non-empty, the start rule's
+    /// `expect(EOF)` sweeps input it could not derive into a top-level
+    /// `<error>` region and parses each configured `_parse_<entry>` (a whole
+    /// statement / item), so a bare fragment builds real subtrees. Empty by
+    /// default — when empty the parser is byte-identical.
+    fragment_entry: List<String>,
     /// When set, parser emit executes retained actions (Stage C) instead of
     /// discarding them: true for grammars whose action language Gale can
     /// currently emit (`language = Wado`). Actionless / other-language
@@ -241,7 +241,7 @@ impl GenContext {
             lr_loop_entry_decisions: [],
             atn_rule_body_decisions: [],
             trace: false,
-            recover_islands: false,
+            fragment_entry: [],
             emit_actions: false,
             action_language: ActionLanguage::Wado,
             grammar_name: "",
@@ -435,16 +435,15 @@ impl GenContext {
         return self.trace;
     }
 
-    /// Enable grammar-agnostic fragment recovery in the parse entry (the
-    /// `recover_islands: true` generator option). Off is byte-identical.
-    pub fn set_recover_islands(&mut self, on: bool) {
-        self.recover_islands = on;
+    /// Set the fragment-entry rule names (see `recovery-reentry.md`). Non-empty
+    /// enables fragment recovery in the parse entry; empty is byte-identical.
+    pub fn set_fragment_entry(&mut self, names: List<String>) {
+        self.fragment_entry = names;
     }
 
-    /// Whether the parse entry should sweep unconsumed input into a top-level
-    /// `<error>` region and descend into unique-trigger rules.
-    pub fn recover_islands(&self) -> bool {
-        return self.recover_islands;
+    /// Rule names a fragment is a sequence of (empty ⇒ fragment recovery off).
+    pub fn fragment_entry(&self) -> &List<String> {
+        return &self.fragment_entry;
     }
 
     /// Enable action execution in the generated parser (set for an emittable

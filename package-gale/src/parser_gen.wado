@@ -43,7 +43,7 @@ use {
 } from "./gen_util.wado";
 use { GenContext, is_nullable, sets_overlap, union_kind_arrays } from "./gen_context.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec, str_lit } from "./wadopoet.wado";
-use { TreeSet, TreeMap } from "core:collections";
+use { TreeSet } from "core:collections";
 use {
     PredictionNode,
     AmbiguousNode,
@@ -315,7 +315,7 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // `Rule::Simple` / `MultiAlt` / `LeftRecursive` instead of
     // recomputing the classification at every emit site.
     let members = collect_parser_members(grammar, ctx);
-    gen_parser_struct(w, ctx.is_trace(), ctx.needs_atn(), ctx.emit_actions(), ctx.recover_islands(), &members);
+    gen_parser_struct(w, ctx.is_trace(), ctx.needs_atn(), ctx.emit_actions(), !ctx.fragment_entry().is_empty(), &members);
     gen_member_methods(w, &members);
     if ctx.emit_actions() {
         gen_vals_structs(w, grammar);
@@ -335,211 +335,86 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // `follow_yields` / `FollowArg`). The follow-mask globals are
     // emitted by `gen_follow_mask_globals` at the end of codegen.
     gen_predicate_fns(w, ctx);
-    if ctx.recover_islands() {
-        let dispatch = compute_recover_dispatch(grammar, ctx);
-        gen_recover_helpers(w, &dispatch);
+    if !ctx.fragment_entry().is_empty() {
+        let entries = compute_fragment_entries(grammar, ctx);
+        gen_recover_helpers(w, &entries);
     }
     gen_parse_entry(w, lowered, ctx);
     warn_unhandled_actions(grammar, ctx);
 }
 
-/// A unique-trigger dispatch entry: a token-kind constant whose sole *direct*
-/// leading rule is `call` (the `_parse_<rule>(p)` statement to descend into it).
-struct RecoverTrigger {
-    token_const: String,
+/// A fragment-entry rule (`recovery-reentry.md`): when the current token is in
+/// `first_names` (its FIRST set, as `TK_*` constant names) the sweep parses this
+/// whole rule via `call` (`_parse_<rule>(p)`), building a full statement / item
+/// subtree.
+struct RecoverFragmentEntry {
     call: String,
+    first_names: List<String>,
 }
 
-/// Terminals that can be a rule's first consumed token *through its own
-/// structure* — never inherited by expanding a `RuleRef`. This is stricter
-/// than FIRST: `BACKTICK` is in FIRST of every rule that can derive a template,
-/// but is a *direct* leading terminal only of `templateString`. Descending on a
-/// direct-unique trigger is therefore not a guess. Over-collecting is safe (it
-/// only creates collisions that suppress a would-be trigger); under-collecting
-/// is not, so nullable prefixes are traversed via `element_is_nullable_deep`.
-fn recover_direct_first_of_rule(rule: &ParserRule, ctx: &mut GenContext) -> List<i32> {
-    let mut out: List<i32> = [];
-    for let alt of &rule.alternatives {
-        recover_direct_first_of_elems(&alt.elements, ctx, &mut out);
-    }
-    return out;
-}
-
-fn recover_direct_first_of_elems(elems: &List<Element>, ctx: &mut GenContext, out: &mut List<i32>) {
-    for let e of elems {
-        recover_direct_terminals_of_elem(e, ctx, out);
+/// Resolve the configured `fragment_entry` rule names to their `_parse_<rule>`
+/// call plus FIRST set. An unknown name warns and is skipped. Declaration order
+/// is preserved: at a token in several entries' FIRST sets, the first listed
+/// wins (a deterministic priority, no backtracking).
+fn compute_fragment_entries(grammar: &Grammar, ctx: &mut GenContext) -> List<RecoverFragmentEntry> {
+    let names = *ctx.fragment_entry();
+    let mut result: List<RecoverFragmentEntry> = [];
+    for let name of &names {
+        let mut found = -1;
+        for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
+            if grammar.parser_rules[i].name == *name {
+                found = i;
+                break;
+            }
+        }
+        if found < 0 {
+            ctx.warn(
+                &"fragment_entry",
+                DiagnosticKind::FragmentEntry,
+                `fragment_entry: unknown parser rule '${*name}'`,
+            );
+            continue;
+        }
+        let rule_name = grammar.parser_rules[found].name;
+        let snake = grammar.parser_rules[found].snake_name;
+        let emits_vals = entry_emits_vals(ctx, &rule_name);
         let mut visiting: List<String> = [];
-        if !ctx.element_is_nullable_deep(e, &mut visiting) {
-            return;
-        }
-    }
-}
-
-fn recover_direct_terminals_of_elem(e: &Element, ctx: &mut GenContext, out: &mut List<i32>) {
-    match *e {
-        Literal(l) => {
-            if l.kind_id >= 0 {
-                out.push(l.kind_id);
-            }
-        },
-        TokenRef(t) => {
-            if t.kind_id >= 0 {
-                out.push(t.kind_id);
-            }
-        },
-        Group(g) => {
-            for let alt of &g.alternatives {
-                recover_direct_first_of_elems(&alt.elements, ctx, out);
-            }
-        },
-        Repeat(rep) => recover_direct_terminals_of_elem(&rep.element, ctx, out),
-        Label(lab) => recover_direct_terminals_of_elem(&lab.element, ctx, out),
-        // A RuleRef is opaque here: its first token is *inherited*, not direct.
-        // Wildcard / Not match no specific terminal.
-        RuleRef(_) => {
-        },
-        Wildcard(_) => {
-        },
-        Not(_) => {
-        },
-    }
-}
-
-/// Every terminal kind-id that appears anywhere in a rule's own body (nested
-/// groups / repeats included, but never through a `RuleRef` — a referenced
-/// rule's tokens belong to it, not here).
-fn recover_all_terminals_of_rule(rule: &ParserRule, out: &mut List<i32>) {
-    for let alt of &rule.alternatives {
-        for let e of &alt.elements {
-            recover_all_terminals_of_elem(e, out);
-        }
-    }
-}
-
-fn recover_all_terminals_of_elem(e: &Element, out: &mut List<i32>) {
-    match *e {
-        Literal(l) => {
-            if l.kind_id >= 0 {
-                out.push(l.kind_id);
-            }
-        },
-        TokenRef(t) => {
-            if t.kind_id >= 0 {
-                out.push(t.kind_id);
-            }
-        },
-        Group(g) => {
-            for let alt of &g.alternatives {
-                for let ge of &alt.elements {
-                    recover_all_terminals_of_elem(ge, out);
-                }
-            }
-        },
-        Repeat(rep) => recover_all_terminals_of_elem(&rep.element, out),
-        Label(lab) => recover_all_terminals_of_elem(&lab.element, out),
-        RuleRef(_) => {
-        },
-        Wildcard(_) => {
-        },
-        Not(_) => {
-        },
-    }
-}
-
-/// Build the unique-trigger dispatch. A token is a safe trigger only when it is
-/// a genuine *delimiter*: it occurs in exactly one parser rule's body across the
-/// whole grammar, and there it is a direct leading terminal. That rules out a
-/// common token like `=` (a direct first of the `forTail` continuation rule but
-/// used pervasively elsewhere) while keeping true delimiters like a template
-/// backtick or `${`, which the lexer only ever emits at their one construct.
-/// Deterministic — sorted by kind id.
-fn compute_recover_dispatch(grammar: &Grammar, ctx: &mut GenContext) -> List<RecoverTrigger> {
-    // kind id -> distinct rules that mention it (>1 ⇒ not a delimiter), and the
-    // single owning rule index when the count is exactly one.
-    let mut occ_count = TreeMap::<i32, i32>::new();
-    let mut owner = TreeMap::<i32, i32>::new();
-    for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
-        let mut terms: List<i32> = [];
-        recover_all_terminals_of_rule(&grammar.parser_rules[i], &mut terms);
-        let mut local: List<i32> = [];
-        for let k of &terms {
-            if local.contains(k) {
-                continue;
-            }
-            local.push(*k);
-            let prev = match occ_count.get(*k) {
-                Some(c) => c,
-                None => 0,
-            };
-            occ_count[*k] = prev + 1;
-            owner[*k] = i;
-        }
-    }
-    // A kind is a trigger iff it occurs in exactly one rule, that rule is not
-    // the start rule, and the kind directly leads it.
-    let mut kinds: List<i32> = [];
-    let ents = occ_count.entries();
-    for let entry of &ents {
-        let kind = entry.0;
-        if entry.1 != 1 {
-            continue;
-        }
-        let rule_idx = match owner.get(kind) {
-            Some(r) => r,
-            None => -1,
-        };
-        if rule_idx <= 0 {
-            continue;
-        }
-        let name = ctx.token_name(kind);
-        if name == "TK_EOF" || name == "TK_ERROR" {
-            continue;
-        }
-        let mut firsts: List<i32> = [];
-        firsts = recover_direct_first_of_rule(&grammar.parser_rules[rule_idx], ctx);
-        if !firsts.contains(&kind) {
-            continue;
-        }
-        kinds.push(kind);
-    }
-    kinds.sort();
-    let mut result: List<RecoverTrigger> = [];
-    for let kind of &kinds {
-        let rule_idx = match owner.get(*kind) {
-            Some(r) => r,
-            None => -1,
-        };
-        if rule_idx < 0 {
-            continue;
-        }
-        let rule = &grammar.parser_rules[rule_idx];
-        let call = if entry_emits_vals(ctx, &rule.name) {
-            `let _ = _parse_${rule.snake_name}(p);`;
+        let first_ids = ctx.first_ids_of_rule(&rule_name, &mut visiting);
+        let first_names = ctx.token_names_of(&first_ids);
+        let call = if emits_vals {
+            `let _ = _parse_${snake}(p);`;
         } else {
-            `_parse_${rule.snake_name}(p);`;
+            `_parse_${snake}(p);`;
         };
-        result.push(RecoverTrigger { token_const: ctx.token_name(*kind), call });
+        result.push(RecoverFragmentEntry { call, first_names });
     }
     return result;
 }
 
-/// Emit the two free helpers the recovery sweep uses. `_recover_descend`
-/// descends into the unique-trigger rule for the current token (building a real
-/// subtree in place); `_recover_try_descend` wraps it with the recovering-flag
-/// dance and a progress guard, falling back to skipping one token into the
-/// surrounding `<error>` region. Emitted only when `recover_islands` is on.
-fn gen_recover_helpers(w: &mut CodeWriter, dispatch: &List<RecoverTrigger>) {
-    let mut d = FnSpec::new("_recover_descend");
+/// Emit the fragment-recovery helpers: a `_FRAGMENT_FIRST_<i>` FIRST-set global
+/// per entry, `_recover_fragment` (parse the first entry whose FIRST holds the
+/// current token, building a full subtree in place), and `_recover_try_descend`
+/// (the recovering-flag dance + a progress guard, skipping one token when no
+/// entry matches). Emitted only when `fragment_entry` is non-empty.
+fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragmentEntry>) {
+    for let mut i = 0; i < entries.len(); i += 1 {
+        w.line(&`global _FRAGMENT_FIRST_${i}: List<i32> = [${join_kinds(&entries[i].first_names)}];`);
+    }
+    if !entries.is_empty() {
+        w.blank();
+    }
+
+    let mut d = FnSpec::new("_recover_fragment");
     d.add_param(&"p", &"&mut Parser");
     d.set_return_type(&"bool");
     d.emit_begin(w);
-    if dispatch.is_empty() {
+    if entries.is_empty() {
         w.line(&"return false;");
     } else {
         w.line(&"let _k = p.kinds[p.pos];");
-        for let t of dispatch {
-            w.begin(&`if _k == ${t.token_const}`);
-            w.line(&t.call);
+        for let mut i = 0; i < entries.len(); i += 1 {
+            w.begin(&`if p.in_set(_k, &_FRAGMENT_FIRST_${i})`);
+            w.line(&entries[i].call);
             w.line(&"return true;");
             w.end();
         }
@@ -554,9 +429,9 @@ fn gen_recover_helpers(w: &mut CodeWriter, dispatch: &List<RecoverTrigger>) {
     w.line(&"let _before = p.pos;");
     w.line(&"let _was = p.recovering;");
     w.line(&"p.recovering = false;");
-    w.line(&"let _did = _recover_descend(p);");
+    w.line(&"let _did = _recover_fragment(p);");
     w.line(&"p.recovering = _was;");
-    // No unique-trigger rule here, or it consumed nothing (defensive): skip one
+    // No fragment entry starts here, or it consumed nothing (defensive): skip one
     // token into the surrounding <error> region so the sweep always progresses.
     w.begin(&"if !_did || p.pos == _before");
     w.line(&"let _sk = p.advance();");
@@ -878,7 +753,7 @@ fn gen_parser_struct(
     trace: bool,
     needs_atn: bool,
     emit_actions: bool,
-    recover_islands: bool,
+    fragment_recovery: bool,
     members: &MemberDecls,
 ) {
     let mut s = StructSpec::new("Parser");
@@ -1357,11 +1232,11 @@ fn gen_parser_struct(
     );
     w.line(&"return self.pos;");
     w.end();
-    // recover_islands: at EOF with input the start rule could not derive, sweep
-    // the remainder into an <error> region (descending into unique-trigger rules
-    // so a fragment's nested constructs still build real subtrees), report it
-    // once, and match EOF. The region nests under the current (start) rule.
-    if recover_islands {
+    // fragment_entry: at EOF with input the start rule could not derive, sweep
+    // the remainder into an <error> region (parsing each configured fragment
+    // entry so its nested constructs still build real subtrees), report it once,
+    // and match EOF. The region nests under the current (start) rule.
+    if fragment_recovery {
         w.begin(&"if kind == TK_EOF && self.kinds[self.pos] != TK_EOF");
         w.line(&"self.report_unexpected(self.tokens.span_at(self.pos));");
         w.line(&"self.b.start_error(self.tokens.span_at(self.pos).start);");

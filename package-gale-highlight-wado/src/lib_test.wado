@@ -89,11 +89,11 @@ test "highlight fragment: bare expression is text-preserving" {
     assert visible_text(&html) == src, "bare-expression fragment is text-preserving";
 }
 
-// Recovery re-entry (recover_islands): a bare statement/expression fragment the
-// start rule can't derive still recovers nested context islands. The parse
-// entry sweeps the unconsumed run and descends into unique-trigger rules
-// (`templateString` on a backtick), so a template's interpolation builds a real
-// subtree and its overrides fire — even with no enclosing `fn`/item.
+// Recovery re-entry (fragment_entry = "statement"): a bare statement/expression
+// fragment the start rule can't derive still recovers full structure. The parse
+// entry sweeps the unconsumed run and parses each `statement`, so a template's
+// interpolation builds a real subtree and its overrides fire — even with no
+// enclosing `fn`/item.
 
 test "highlight fragment: bare statement recovers interpolation context" {
     let src = "let name = 1;\nlet s = `hi ${name} ${name:0.2}`;\n";

@@ -139,12 +139,16 @@ terminal recovers in place via a `recovering` flag rather than unwinding a
 impls next to `RULE_NAMES`, so `{node.kind}` prints the rule name and
 `{node.kind:?}` prints `name(id)`.
 
+**Fragment re-entry (done): the `fragment_entry` option.** A bare snippet whose
+tokens the start rule can't derive (e.g. a top-level statement under an `item*`
+start rule) is otherwise left unconsumed, so nested-only constructs build no
+subtree. Naming the unit rule(s) makes the start rule's `expect(EOF)` sweep the
+remainder into an `<error>` region under the root and parse each entry, so a bare
+statement fragment builds full subtrees (opt-in, byte-identical when empty). See
+`recovery-reentry.md`.
+
 ### Deferred
 
-- **Recovery re-entry (fragment structure).** A bare snippet whose tokens the
-  start rule can't derive (e.g. a top-level statement under an `item*` start
-  rule) is left unconsumed, so nested-only constructs build no subtree. Design
-  for grammar-agnostic, backtrack-free re-entry: `recovery-reentry.md`.
 - **No-viable `K_ERROR` _node_.** The no-viable fallback carries the
   `NoViableAlternative` code but does not open an explicit `K_ERROR` node:
   the diagnostic's `rule_stack` is built on unwind, which is incompatible

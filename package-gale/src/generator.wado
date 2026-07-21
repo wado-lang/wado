@@ -34,11 +34,14 @@ pub struct Options {
     /// enter/ok/fail frames plus multi-alt scan/pick/try decisions. Off by
     /// default; set `trace: true` to debug why a grammar rejects an input.
     pub trace: bool = false,
-    /// Sweep input the start rule can't consume into a top-level `<error>`
-    /// region, descending into unique-trigger rules so a bare fragment's
-    /// nested constructs (e.g. template interpolations) still build real
-    /// subtrees. For tooling (highlight / LSP); off is byte-identical.
-    pub recover_islands: bool = false,
+    /// Comma-separated rule names a fragment is a sequence of
+    /// (`recovery-reentry.md`). When non-empty, the start rule's `expect(EOF)`
+    /// sweeps input it can't derive into a top-level `<error>` region and parses
+    /// each `_parse_<entry>` (a statement / item) — e.g. `"statement"` structures
+    /// a bare statement fragment, template interpolations and all. For tooling
+    /// (highlight / LSP); empty is byte-identical. (Kiln options are scalars, so
+    /// the list is a comma-separated string.)
+    pub fragment_entry: String = "",
 }
 
 impl Deserialize for Options;
@@ -104,10 +107,20 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
         highlight_query = Option::Some(all_rules);
     }
 
+    // Kiln options are scalars, so `fragment_entry` arrives comma-separated;
+    // split it into trimmed, non-empty rule names.
+    let mut fragment_entry: List<String> = [];
+    for let part of req.options.fragment_entry.split(",") {
+        let name = part.trim();
+        if !name.is_empty() {
+            fragment_entry.push(name);
+        }
+    }
+
     let gen_opts = GenerateOptions {
         highlight_query,
         trace: req.options.trace,
-        recover_islands: req.options.recover_islands,
+        fragment_entry,
     };
     let generated = codegen_generate(&mut grammar, &gen_opts);
     // Surface Gale's prediction-strategy diagnostics through the Kiln host so
