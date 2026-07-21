@@ -270,13 +270,21 @@ after the first three.
         derivation `impl<T: Reflect> Trait for T` resolves for it. The
         blanket-candidate bound check consults synthesized-trait eligibility, not
         only explicit `impl`s.
-  - [ ] Generic `Reflect::<T>::…` resolution: the trait-qualified call resolves
+  - Generic `Reflect::<T>::…` resolution — the trait-qualified call resolves
         for a generic `T: Reflect` (deferred dispatch), not just a concrete
-        struct.
-  - [ ] Pack projection + expansion: the monomorphizer derives `F` from `T`'s
-        `Fields` tuple (`resolve_assoc_type`) rather than from the receiver, and
-        `[..F::method()]` expands per field type (including methods whose return
-        type does not mention the pack).
+        struct:
+    - [x] Value-free members `field_names()` / `type_name()`: resolved to their
+          fixed return types and monomorphized to each struct's synthesized
+          method via a type-param-receiver dispatch.
+    - [x] `fields()`: resolves to the projected pack `[..F]` read off `T`'s
+          `Reflect<Fields = [..F]>` bound, monomorphized per struct.
+  - [x] Pack projection: the monomorphizer derives `F` from `T`'s `Fields` tuple
+        (`resolve_assoc_type`) rather than from the receiver, so a `for-of` over
+        `Reflect::<T>::fields(self)` walks the fields with per-element dispatch.
+  - [ ] Pack-map expansion `[..F::method()]` where the method's return type does
+        not mention the pack (e.g. `[..F::json_schema()]`). Still unbuilt: today
+        such a spread collapses to arity-1. Field-value derivations use `for-of`
+        over `fields()` (above) and do not need it; schema-style derivations do.
 - [ ] `Reflect` metadata extension — `field_meta()` (`wire_name`,
       `has_default`, `doc`, `validate`) and `type_doc()`.
 - [ ] `#[validate(…)]` attribute — parse the closed vocabulary into

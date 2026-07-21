@@ -601,6 +601,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
                 default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
                 index: i as u32,
+                projected_from: None,
             })
             .collect();
 
@@ -882,6 +883,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
                 default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
                 index: i as u32,
+                projected_from: None,
             })
             .collect();
 
@@ -1252,6 +1254,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
                     default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
                     index: idx,
+                    projected_from: None,
                 })
             })
             .collect();
@@ -1486,6 +1489,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             bounds: vec![],
                             default: None, // Impl type params don't have defaults
                             index: i as u32,
+                            projected_from: None,
                         });
                     }
                 }
@@ -1518,7 +1522,62 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     bounds,
                     default: None,
                     index: idx,
+                    projected_from: None,
                 });
+
+                // Projected pack binding — `impl<T: Trait<Assoc = [..F]>, ..F: …>`.
+                // A declared pack `F` that appears only in the self-type param's
+                // associated-type bound is not caller-supplied; monomorphization
+                // derives it by projecting `T`'s associated type (`T::Assoc`).
+                let projections: Vec<(String, String)> = impl_declared_params
+                    .iter()
+                    .find(|p| p.name == named.name)
+                    .into_iter()
+                    .flat_map(|t_param| &t_param.bounds)
+                    .flat_map(|bound| &bound.assoc_types)
+                    .filter_map(|assoc| match &assoc.ty {
+                        ast::Type::Tuple(elems) => Some((elems, assoc.name.clone())),
+                        _ => None,
+                    })
+                    .flat_map(|(elems, assoc_name)| {
+                        elems.iter().filter_map(move |elem| match elem {
+                            ast::Type::TypePackSpread(f_name, _) => {
+                                Some((f_name.clone(), assoc_name.clone()))
+                            }
+                            _ => None,
+                        })
+                    })
+                    .collect();
+                for (f_name, assoc_name) in projections {
+                    let Some(&(f_idx, _)) = scope.saved().type_params.get(&f_name) else {
+                        continue;
+                    };
+                    let f_type_id = scope
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_type_pack(f_name.clone(), f_idx);
+                    scope
+                        .annotate_ctx
+                        .trait_ctx
+                        .type_params
+                        .insert(f_name.clone(), (f_idx, f_type_id));
+                    let f_bounds = scope
+                        .saved()
+                        .type_param_bounds
+                        .get(&f_name)
+                        .map(|bs| bs.iter().map(|b| b.name.clone()).collect())
+                        .unwrap_or_default();
+                    impl_type_params.push(crate::tir::TirTypeParam {
+                        name: f_name,
+                        is_effect: false,
+                        is_pack: true,
+                        bounds: f_bounds,
+                        default: None,
+                        index: f_idx,
+                        projected_from: Some((idx, assoc_name)),
+                    });
+                }
             }
         } else if let ast::Type::Reference(boxed) | ast::Type::MutReference(boxed) = impl_type {
             // Reference impl case: `impl<T: Bound> Trait for &T` / `impl<T: Bound> Trait for &mut T`
@@ -1549,6 +1608,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     bounds,
                     default: None,
                     index: idx,
+                    projected_from: None,
                 });
             }
         } else if let ast::Type::Tuple(elements) = impl_type {
@@ -1581,6 +1641,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         bounds,
                         default: None,
                         index: idx,
+                        projected_from: None,
                     });
                 }
             }
@@ -1923,6 +1984,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
                     default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
                     index: idx,
+                    projected_from: None,
                 })
             })
             .collect();

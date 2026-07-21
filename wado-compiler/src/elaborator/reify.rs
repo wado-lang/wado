@@ -1016,6 +1016,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
                 default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
                 index: i as u32,
+                projected_from: None,
             })
             .collect();
         self.pending_local_structs.push(TirStruct {

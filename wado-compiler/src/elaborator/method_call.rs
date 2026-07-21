@@ -3111,12 +3111,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve `Reflect::<T>::method()` where `T` is a generic type parameter
-    /// (inside an `impl<T: Reflect> …` derivation). The value-free members
-    /// (`field_names` / `type_name`) resolve to their fixed return types; the
-    /// dispatch is recorded as a type-param receiver so monomorphization
-    /// redirects it to the concrete struct's synthesized `Struct^Reflect::method`.
-    /// `fields()` returns the field-value pack `Self::Fields`, which needs the
-    /// pack-projection path (WEP 2026-06-13 §1) and is not resolved here.
+    /// (inside an `impl<T: Reflect<Fields = [..F]>, ..F: …>` derivation). The
+    /// value-free members (`field_names` / `type_name`) resolve to their fixed
+    /// return types; `fields(self)` resolves to the projected field pack `[..F]`
+    /// read off `T`'s `Reflect<Fields = [..F]>` bound. Each is recorded as a
+    /// type-param-receiver dispatch so monomorphization redirects it to the
+    /// concrete struct's synthesized `Struct^Reflect::method`.
     fn resolve_generic_reflect_static_call(
         &mut self,
         type_param_name: &str,
@@ -3136,6 +3136,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         };
 
+        let is_fields = method == fields_method;
         let return_type = if method == type_name_method {
             self.tysys
                 .type_table
@@ -3145,21 +3146,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut tt = self.tysys.type_table.borrow_mut();
             let string_type = tt.make_compiler_struct(CompilerItem::String);
             tt.make_list(string_type)
-        } else {
-            let detail = if method == fields_method {
-                " (field-pack projection on a generic type parameter is not yet supported)"
-            } else {
-                ""
+        } else if is_fields {
+            // `fields(self)` returns `Self::Fields = [..F]`. Read the pack off
+            // `T`'s `Reflect<Fields = [..F]>` bound and resolve it in the current
+            // scope, where `F` is the projected pack registered by `resolve_method`.
+            let Some(fields_ty) = self.reflect_fields_bound_ty(type_param_name, &reflect_trait_name)
+            else {
+                let _ = self.emit(TypeError::UnknownFunction {
+                    name: format!(
+                        "Reflect::<{type_param_name}>::{method} (no `Fields = [..F]` bound on {type_param_name})"
+                    ),
+                    span: static_call.span,
+                });
+                return TypeTable::ERROR;
             };
+            fields_ty
+        } else {
             let _ = self.emit(TypeError::UnknownFunction {
-                name: format!("Reflect::<{type_param_name}>::{method}{detail}"),
+                name: format!("Reflect::<{type_param_name}>::{method}"),
                 span: static_call.span,
             });
             return TypeTable::ERROR;
         };
 
-        // `field_names` / `type_name` take no arguments.
-        if !self.reject_reflect_metadata_args(static_call, ctx) {
+        if is_fields {
+            // `fields` takes the subject as its sole receiver argument; resolve
+            // it for its fact-recording side effects.
+            for arg in &static_call.args {
+                self.resolve_expr(arg, ctx, None);
+            }
+        } else if !self.reject_reflect_metadata_args(static_call, ctx) {
             return TypeTable::ERROR;
         }
 
@@ -3178,13 +3194,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             static_call.id,
             super::sem::types::StaticMethodDispatch {
                 function_ref: func_ref,
-                param_is_mut: Vec::new(),
+                param_is_mut: if is_fields { vec![false] } else { Vec::new() },
                 type_args: Vec::new(),
                 param_defaults: Vec::new(),
             },
         );
 
         return_type
+    }
+
+    /// The `Fields = [..F]` associated-type binding on `T`'s `Reflect` bound,
+    /// resolved in the current scope (where `F` is the projected pack). `None`
+    /// when `T` carries no such bound.
+    fn reflect_fields_bound_ty(
+        &mut self,
+        type_param_name: &str,
+        reflect_trait_name: &str,
+    ) -> Option<TypeId> {
+        let fields_ast = self
+            .annotate_ctx
+            .trait_ctx
+            .type_param_bounds
+            .get(type_param_name)?
+            .iter()
+            .filter(|b| b.name == reflect_trait_name)
+            .flat_map(|b| &b.assoc_types)
+            .find_map(|assoc| match &assoc.ty {
+                ast::Type::Tuple(elems)
+                    if elems
+                        .iter()
+                        .any(|e| matches!(e, ast::Type::TypePackSpread(..))) =>
+                {
+                    Some(assoc.ty.clone())
+                }
+                _ => None,
+            })?;
+        Some(self.resolve_type(&fields_ast))
     }
 
     /// Field types of the struct `Reflect::<T>` targets, in declaration order;

@@ -1213,7 +1213,18 @@ impl Monomorphizer {
             .filter(|p| !p.is_pack)
             .count();
         for param in &generic.impl_type_params {
-            if param.is_pack {
+            if let Some((src_idx, assoc_name)) = &param.projected_from {
+                // Projected pack (`impl<T: Reflect<Fields = [..F]>, ..F: …>`):
+                // `F` is not caller-supplied. Derive it by resolving the source
+                // param's associated type (e.g. `T::Fields`) for the concrete
+                // `T` already bound above — the source param precedes the pack
+                // in `impl_type_params`, so its substitution is in place.
+                let projected = substitution
+                    .get(src_idx)
+                    .and_then(|&src| type_table.resolve_assoc_type(src, assoc_name))
+                    .unwrap_or_else(|| type_table.make_tuple(vec![]));
+                substitution.insert(param.index, projected);
+            } else if param.is_pack {
                 // Variadic pack: map the pack index to a tuple of the impl-level type args,
                 // excluding non-pack impl params.
                 let pack_args_count = key
