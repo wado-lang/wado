@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784625692736,
+  "lastUpdate": 1784626843381,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -42649,6 +42649,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d1b5904ba1c9996b9ba664fe35bac86f5805d25c"
         },
         "date": 1784625692297,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8143,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16466,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271128,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "057c57793ff9f732bc294073dd9cd4fc239aad47",
+          "message": "Merge pull request #1651 from wado-lang/claude/ci-oom-memory-debug-7iw5u3\n\nfix(compiler): remove superlinear value-graph invalidation churn (Gale O3 OOM)",
+          "timestamp": "2026-07-21T18:29:25+09:00",
+          "tree_id": "c30dde2cec011cd51fab9226bffc11534667018d",
+          "url": "https://github.com/wado-lang/wado/commit/057c57793ff9f732bc294073dd9cd4fc239aad47"
+        },
+        "date": 1784626842650,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
