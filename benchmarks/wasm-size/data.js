@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784644615713,
+  "lastUpdate": 1784673193663,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -42801,6 +42801,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 272403,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3f51ca2c626827b4d1af9eb88006b8c921128b96",
+          "message": "Merge pull request #1656 from wado-lang/claude/benchmark-sqlite-parse-perf-j5dk32\n\nfeat(optimizer): elide value-copies through functor stores and dead aggregates",
+          "timestamp": "2026-07-22T07:23:03+09:00",
+          "tree_id": "2017b2f7607770edac65e80c1e4cee63904041a8",
+          "url": "https://github.com/wado-lang/wado/commit/3f51ca2c626827b4d1af9eb88006b8c921128b96"
+        },
+        "date": 1784673193271,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8143,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16466,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271548,
             "unit": "bytes"
           }
         ]
