@@ -199,7 +199,10 @@ async fn world_semantics_and_opts(
     )
     .await
     .map_err(CliExit::error)?;
-    let invocations = run_generators(path, &host, manifest_pair).await?;
+    // Run the generators on the silent host: their warnings were not asked for
+    // by `wado wit`, and a build failure still surfaces via `run_generators`'
+    // error. The analysis below keeps the loud host so it reports diagnostics.
+    let invocations = run_generators(path, &import_host, manifest_pair).await?;
 
     let mut sem = wado_compiler::semantics_for_world(
         &source,
@@ -274,7 +277,9 @@ async fn lib_semantics_and_opts(
     )
     .await
     .map_err(CliExit::error)?;
-    let invocations = run_generators(&target.entry, &host, Some(project)).await?;
+    // Generators run on the silent host (see the world path); the loud host
+    // below still reports analysis diagnostics.
+    let invocations = run_generators(&target.entry, &import_host, Some(project)).await?;
 
     let mut sem = wado_compiler::semantics_for_world(
         &source,

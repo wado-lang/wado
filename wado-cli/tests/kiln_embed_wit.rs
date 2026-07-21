@@ -92,3 +92,61 @@ fn wit_command_emits_for_generator_consumer() {
         .success()
         .stdout(predicate::str::contains("world"));
 }
+
+/// Library-world variant of `write_project`: the `[package].lib` entry consumes
+/// the same generator. Exercises the `--lib` embedding path, which #1646 also
+/// broke (`build/lib.wasm`) and which flows through different code than the
+/// command world.
+fn write_lib_project(root: &std::path::Path) {
+    fs::write(
+        root.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"gen-lib\"\nversion = \"0.1.0\"\n\
+         lib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::write(root.join("src/gen.wado"), FIXED_OUTPUT_GENERATOR).unwrap();
+    fs::write(root.join("src/grammar.g4"), NON_WADO_SCHEMA).unwrap();
+    fs::write(
+        root.join("src/lib.wado"),
+        r#"use { hello as hello_impl } from "./grammar.g4"
+    with { generator: { module: "./gen.wado" } };
+
+export fn hello() -> i32 { return hello_impl(); }
+"#,
+    )
+    .unwrap();
+}
+
+#[test]
+fn build_lib_embeds_component_type_for_generator_consumer() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write_lib_project(root);
+    let out = root.join("out.wasm");
+
+    wado_in(root)
+        .args(["build", "--lib", "-o"])
+        .arg(&out)
+        .assert()
+        .success();
+
+    let sections = custom_sections(&out);
+    assert!(
+        sections.iter().any(|(n, _)| n == "component-type"),
+        "generator-consumer library build must embed the component-type section, got {sections:?}"
+    );
+}
+
+#[test]
+fn wit_lib_emits_for_generator_consumer() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write_lib_project(root);
+
+    wado_in(root)
+        .args(["wit", "--lib"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("world"));
+}
