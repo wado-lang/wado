@@ -1558,6 +1558,476 @@ fn generate_variant_discriminant_fn(
     )
 }
 
+/// Generate the `ReflectEnum` members for each requested enum
+/// (WEP 2026-06-13 §3b): `type_name()`, `case_meta()`, `discriminant(&self)`,
+/// and `from_discriminant(disc)`.
+pub fn synthesize_reflect_enum(project: &mut Package) {
+    let trait_env = project.trait_env.clone();
+    let first_module = project
+        .tir_modules
+        .values()
+        .next()
+        .expect("tir_modules must contain at least the entry module during synthesis");
+    let enum_trait_name = first_module
+        .type_table
+        .borrow()
+        .compiler_items()
+        .trait_name(CompilerItem::ReflectEnum)
+        .to_string();
+    let requested: IndexSet<(String, ModuleSource, String)> = first_module
+        .type_table
+        .borrow()
+        .bound_driven_synth_requests(|trait_name| trait_name == enum_trait_name)
+        .into_iter()
+        .collect();
+
+    let mut pending: IndexSet<(String, ModuleSource, String)> = IndexSet::default();
+    for module in project.tir_modules.values_mut() {
+        let module_source = module.module_source.clone();
+        let names = {
+            let tt = module.type_table.borrow();
+            TraitsStdlibNames::from_compiler_items(tt.compiler_items())
+        };
+        let mut ctx = SynthesisCtx {
+            trait_env: &trait_env,
+            pending: &mut pending,
+            requested: &requested,
+            module: module_source,
+            names: &names,
+        };
+        generate_enum_reflect_impls(module, &mut ctx, &enum_trait_name);
+    }
+}
+
+/// Synthesize the `ReflectEnum` impl of every requested enum in `module`.
+fn generate_enum_reflect_impls(
+    module: &mut TirModule,
+    ctx: &mut SynthesisCtx<'_, '_, '_>,
+    enum_trait_name: &str,
+) {
+    if module.enums.is_empty() {
+        return;
+    }
+
+    let targets: Vec<ReflectEnumTarget> = module
+        .enums
+        .iter()
+        .filter(|e| e.type_params.is_empty())
+        .filter(|e| ctx.should_synthesize(&e.name, enum_trait_name))
+        .map(|e| ReflectEnumTarget {
+            name: e.name.clone(),
+            cases: e.cases.iter().map(|c| (c.name.clone(), c.index)).collect(),
+            span: e.span,
+        })
+        .collect();
+    if targets.is_empty() {
+        return;
+    }
+
+    let module_source = module.module_source.clone();
+    let env = ReflectEnumSynthEnv::resolve(&mut module.type_table.borrow_mut());
+
+    let mut generated = Vec::new();
+    for target in &targets {
+        let methods = generate_enum_reflect_methods(
+            &module.type_table,
+            &env,
+            &module_source,
+            enum_trait_name,
+            target,
+        );
+        generated.extend(methods.into_iter().map(|f| Rc::new(RefCell::new(f))));
+        ctx.record_impl(&target.name, enum_trait_name);
+    }
+
+    module.functions.extend(generated);
+}
+
+/// An enum selected for `ReflectEnum` synthesis.
+struct ReflectEnumTarget {
+    name: String,
+    /// Per-case `(name, index)`; an enum case's discriminant is its index.
+    cases: Vec<(String, u32)>,
+    span: Span,
+}
+
+/// Module-level types and method names resolved once from the compiler-item
+/// registry and reused across every enum's `ReflectEnum` synthesis.
+struct ReflectEnumSynthEnv {
+    string_type: TypeId,
+    meta_type: TypeId,
+    meta_type_name: String,
+    meta_struct_name: String,
+    list_meta_type: TypeId,
+    from_tuple: FromTupleItem,
+    type_name_method: String,
+    case_meta_method: String,
+    discriminant_method: String,
+    from_discriminant_method: String,
+}
+
+impl ReflectEnumSynthEnv {
+    fn resolve(tt: &mut TypeTable) -> Self {
+        let string_type = tt.make_compiler_struct(CompilerItem::String);
+        let meta_type = tt.make_compiler_struct(CompilerItem::EnumCaseMeta);
+        let meta_type_name = tt.mangle_type_name(meta_type);
+        let list_meta_type = tt.make_list(meta_type);
+        let items = tt.compiler_items();
+        let meta_struct_name = items.struct_name(CompilerItem::EnumCaseMeta).to_string();
+        let (module_source, owner, name) = items.require_method(CompilerItem::ListFromTuple);
+        let from_tuple = FromTupleItem {
+            module_source: module_source.clone(),
+            owner: owner.to_string(),
+            name: name.to_string(),
+        };
+        Self {
+            string_type,
+            meta_type,
+            meta_type_name,
+            meta_struct_name,
+            list_meta_type,
+            from_tuple,
+            type_name_method: items
+                .method_name(CompilerItem::ReflectEnumTypeName)
+                .to_string(),
+            case_meta_method: items
+                .method_name(CompilerItem::ReflectEnumCaseMeta)
+                .to_string(),
+            discriminant_method: items
+                .method_name(CompilerItem::ReflectEnumDiscriminant)
+                .to_string(),
+            from_discriminant_method: items
+                .method_name(CompilerItem::ReflectEnumFromDiscriminant)
+                .to_string(),
+        }
+    }
+}
+
+/// Synthesize one enum's `type_name()`, `case_meta()`, `discriminant(&self)`,
+/// and `from_discriminant(disc)` methods.
+fn generate_enum_reflect_methods(
+    type_table: &RefCell<TypeTable>,
+    env: &ReflectEnumSynthEnv,
+    module_source: &ModuleSource,
+    enum_trait_name: &str,
+    target: &ReflectEnumTarget,
+) -> Vec<TirFunction> {
+    let span = target.span;
+
+    let type_name_fn = generate_type_name_fn(
+        &target.name,
+        env.string_type,
+        enum_trait_name,
+        &env.type_name_method,
+        span,
+    );
+
+    let (metas_tuple_type, enum_type, ref_enum_type, option_enum_type) = {
+        let mut tt = type_table.borrow_mut();
+        let metas_tuple_type =
+            tt.make_tuple(std::iter::repeat_n(env.meta_type, target.cases.len()).collect());
+        let enum_type = tt.make_enum(target.name.clone(), module_source.clone());
+        let ref_enum_type = tt.make_ref(enum_type);
+        let option_enum_type = tt.make_option(enum_type);
+        (metas_tuple_type, enum_type, ref_enum_type, option_enum_type)
+    };
+
+    let case_meta_fn = generate_enum_case_meta_fn(env, enum_trait_name, target, metas_tuple_type, span);
+    let discriminant_fn = generate_enum_discriminant_fn(
+        env,
+        enum_trait_name,
+        target,
+        enum_type,
+        ref_enum_type,
+        span,
+    );
+    let from_discriminant_fn = generate_enum_from_discriminant_fn(
+        type_table,
+        env,
+        enum_trait_name,
+        target,
+        enum_type,
+        option_enum_type,
+        span,
+    );
+
+    vec![type_name_fn, case_meta_fn, discriminant_fn, from_discriminant_fn]
+}
+
+/// Build `Enum^ReflectEnum::case_meta() -> List<EnumCaseMeta>` as
+/// `return List::<EnumCaseMeta>::from_tuple([EnumCaseMeta { … }, …]);`.
+fn generate_enum_case_meta_fn(
+    env: &ReflectEnumSynthEnv,
+    enum_trait_name: &str,
+    target: &ReflectEnumTarget,
+    metas_tuple_type: TypeId,
+    span: Span,
+) -> TirFunction {
+    let method_info = trait_method_info(&target.name, enum_trait_name, &env.case_meta_method);
+    let qualified_name = method_info.to_mangled_name();
+
+    let elements = target
+        .cases
+        .iter()
+        .map(|(case_name, index)| {
+            let fields = vec![
+                TirStructField {
+                    name: "name".to_string(),
+                    value: TirExpr::new(
+                        TirExprKind::StringLiteral(case_name.clone()),
+                        env.string_type,
+                        span,
+                    ),
+                    field_index: 0,
+                },
+                TirStructField {
+                    name: "discriminant".to_string(),
+                    value: TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value: u64::from(*index),
+                            repr: index.to_string(),
+                        },
+                        TypeTable::I32,
+                        span,
+                    ),
+                    field_index: 1,
+                },
+            ];
+            TirExpr::new(
+                TirExprKind::StructLiteral {
+                    struct_type: env.meta_type,
+                    struct_name: env.meta_struct_name.clone(),
+                    fields,
+                },
+                env.meta_type,
+                span,
+            )
+        })
+        .collect();
+    let tuple = TirExpr::new(
+        TirExprKind::TupleLiteral { elements },
+        metas_tuple_type,
+        span,
+    );
+
+    let from_tuple = LocalMethodName::new(
+        env.from_tuple.owner.clone(),
+        None,
+        env.from_tuple.name.clone(),
+    )
+    .with_struct_type_args(&[env.meta_type_name.clone()]);
+    let call = TirExpr::new(
+        TirExprKind::Call {
+            func: FunctionRef {
+                module_source: env.from_tuple.module_source.clone(),
+                name: from_tuple.to_mangled_name(),
+                monomorph_info: Some(MonomorphInfo {
+                    generic_name: format!("{}::{}", env.from_tuple.owner, env.from_tuple.name),
+                    impl_type_args: vec![env.meta_type],
+                    method_type_args: vec![metas_tuple_type],
+                    is_blanket: false,
+                }),
+                method_info: Some(from_tuple),
+            },
+            type_args: vec![metas_tuple_type],
+            args: vec![CallArg::new(tuple, false)],
+        },
+        env.list_meta_type,
+        span,
+    );
+
+    let body = TirBlock::new(
+        vec![TirStmt::new(
+            TirStmtKind::Return { value: Some(call) },
+            span,
+        )],
+        span,
+    );
+
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        vec![],
+        env.list_meta_type,
+        body,
+        vec![],
+    )
+}
+
+/// Build `Enum^ReflectEnum::discriminant(&self) -> i32` as an equality chain
+/// over the cases (an enum has no payload, so `*self == Case_k` is a plain
+/// tag compare); the last case returns unconditionally — the chain is total.
+fn generate_enum_discriminant_fn(
+    env: &ReflectEnumSynthEnv,
+    enum_trait_name: &str,
+    target: &ReflectEnumTarget,
+    enum_type: TypeId,
+    ref_enum_type: TypeId,
+    span: Span,
+) -> TirFunction {
+    let method_info = trait_method_info(&target.name, enum_trait_name, &env.discriminant_method);
+    let qualified_name = method_info.to_mangled_name();
+
+    let index_literal = |index: u32| {
+        TirExpr::new(
+            TirExprKind::IntLiteral {
+                value: u64::from(index),
+                repr: index.to_string(),
+            },
+            TypeTable::I32,
+            span,
+        )
+    };
+
+    let mut stmts = Vec::new();
+    if let Some(((_, last_index), head)) = target.cases.split_last() {
+        for (case_name, index) in head {
+            let comparison = TirExpr::new(
+                TirExprKind::Binary {
+                    op: TirBinaryOp::Eq,
+                    left: Box::new(deref_local(0, "self", ref_enum_type, enum_type, span)),
+                    right: Box::new(TirExpr::new(
+                        TirExprKind::EnumConstruct {
+                            enum_type,
+                            case_index: *index,
+                            case_name: case_name.clone(),
+                        },
+                        enum_type,
+                        span,
+                    )),
+                },
+                TypeTable::BOOL,
+                span,
+            );
+            stmts.push(TirStmt::new(
+                TirStmtKind::If {
+                    condition: comparison,
+                    then_block: TirBlock::new(
+                        vec![TirStmt::new(
+                            TirStmtKind::Return {
+                                value: Some(index_literal(*index)),
+                            },
+                            span,
+                        )],
+                        span,
+                    ),
+                    else_block: None,
+                },
+                span,
+            ));
+        }
+        stmts.push(TirStmt::new(
+            TirStmtKind::Return {
+                value: Some(index_literal(*last_index)),
+            },
+            span,
+        ));
+    } else {
+        // Uninhabited enum: the method can never be called on a value.
+        stmts.push(TirStmt::new(
+            TirStmtKind::Return {
+                value: Some(index_literal(0)),
+            },
+            span,
+        ));
+    }
+
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        vec![self_param(ref_enum_type, span)],
+        TypeTable::I32,
+        TirBlock::new(stmts, span),
+        vec![param_local("self", ref_enum_type, false)],
+    )
+}
+
+/// Build `Enum^ReflectEnum::from_discriminant(disc: i32) -> Option<Enum>` as
+/// an `if disc == k { return Some(Case_k); }` chain ending in `None`.
+fn generate_enum_from_discriminant_fn(
+    type_table: &RefCell<TypeTable>,
+    env: &ReflectEnumSynthEnv,
+    enum_trait_name: &str,
+    target: &ReflectEnumTarget,
+    enum_type: TypeId,
+    option_enum_type: TypeId,
+    span: Span,
+) -> TirFunction {
+    let method_info =
+        trait_method_info(&target.name, enum_trait_name, &env.from_discriminant_method);
+    let qualified_name = method_info.to_mangled_name();
+
+    let mut stmts = Vec::new();
+    for (case_name, index) in &target.cases {
+        let comparison = TirExpr::new(
+            TirExprKind::Binary {
+                op: TirBinaryOp::Eq,
+                left: Box::new(local_expr(0, "disc", TypeTable::I32, span)),
+                right: Box::new(TirExpr::new(
+                    TirExprKind::IntLiteral {
+                        value: u64::from(*index),
+                        repr: index.to_string(),
+                    },
+                    TypeTable::I32,
+                    span,
+                )),
+            },
+            TypeTable::BOOL,
+            span,
+        );
+        let case_value = TirExpr::new(
+            TirExprKind::EnumConstruct {
+                enum_type,
+                case_index: *index,
+                case_name: case_name.clone(),
+            },
+            enum_type,
+            span,
+        );
+        let some = crate::synthesis::common::option_some(
+            case_value,
+            option_enum_type,
+            type_table.borrow().compiler_items(),
+        );
+        stmts.push(TirStmt::new(
+            TirStmtKind::If {
+                condition: comparison,
+                then_block: TirBlock::new(
+                    vec![TirStmt::new(TirStmtKind::Return { value: Some(some) }, span)],
+                    span,
+                ),
+                else_block: None,
+            },
+            span,
+        ));
+    }
+    let none = crate::synthesis::common::option_none(
+        option_enum_type,
+        type_table.borrow().compiler_items(),
+    );
+    stmts.push(TirStmt::new(
+        TirStmtKind::Return { value: Some(none) },
+        span,
+    ));
+
+    let disc_param = TirParam {
+        name: "disc".to_string(),
+        type_id: TypeTable::I32,
+        local_index: 0,
+        is_mut: false,
+        is_mut_ref: false,
+        span,
+    };
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        vec![disc_param],
+        option_enum_type,
+        TirBlock::new(stmts, span),
+        vec![param_local("disc", TypeTable::I32, false)],
+    )
+}
+
 /// Threading of trait-impl knowledge through the synthesis sub-passes.
 ///
 /// `trait_env` exposes the AST-layer (and any prior synthesis-layer) impls

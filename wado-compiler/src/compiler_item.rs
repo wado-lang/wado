@@ -107,6 +107,9 @@ pub enum CompilerItem {
     /// `VariantCaseMeta` — the per-case descriptor struct returned by
     /// `ReflectVariant::case_meta()`; the synthesis builds its literals.
     VariantCaseMeta,
+    /// `EnumCaseMeta` — the per-case descriptor struct returned by
+    /// `ReflectEnum::case_meta()`; the synthesis builds its literals.
+    EnumCaseMeta,
     /// `Case<T, P>` — the per-case token struct minted by
     /// `ReflectVariant::cases()` (WEP 2026-06-13 §3e).
     ReflectCase,
@@ -132,6 +135,9 @@ pub enum CompilerItem {
     /// `ReflectVariant` — compile-time variant-introspection anchor; the
     /// per-variant `impl ReflectVariant for V` synthesis points at it.
     ReflectVariant,
+    /// `ReflectEnum` — compile-time enum-introspection anchor; the
+    /// per-enum `impl ReflectEnum for E` synthesis points at it.
+    ReflectEnum,
     /// `Ref` — sealed marker for reference-identity types (GC references);
     /// its `Output: Ref` bound gates the reference-returning index traits.
     Ref,
@@ -297,6 +303,15 @@ pub enum CompilerItem {
     ReflectVariantDiscriminant,
     /// `ReflectVariant::cases` — the per-case token tuple.
     ReflectVariantCases,
+    /// `ReflectEnum::type_name` — the per-enum type name.
+    ReflectEnumTypeName,
+    /// `ReflectEnum::case_meta` — the per-enum case-descriptor list.
+    ReflectEnumCaseMeta,
+    /// `ReflectEnum::discriminant` — the value's tag as `i32`.
+    ReflectEnumDiscriminant,
+    /// `ReflectEnum::from_discriminant` — the reverse bridge; unknown
+    /// tags return `None`.
+    ReflectEnumFromDiscriminant,
     /// `String::push_str` — recognised by the WIR optimiser for
     /// string-building inlining.
     StringPushStr,
@@ -438,6 +453,8 @@ impl CompilerItem {
         Self::ReflectVariant,
         Self::VariantCaseMeta,
         Self::ReflectCase,
+        Self::ReflectEnum,
+        Self::EnumCaseMeta,
         Self::Ref,
         Self::RefMut,
         Self::Eq,
@@ -497,6 +514,10 @@ impl CompilerItem {
         Self::ReflectVariantCaseMeta,
         Self::ReflectVariantDiscriminant,
         Self::ReflectVariantCases,
+        Self::ReflectEnumTypeName,
+        Self::ReflectEnumCaseMeta,
+        Self::ReflectEnumDiscriminant,
+        Self::ReflectEnumFromDiscriminant,
         Self::StringPushStr,
         Self::StringPushChar,
         Self::StringGetByteUnchecked,
@@ -568,6 +589,8 @@ impl CompilerItem {
             Self::ReflectVariant => "reflect_variant",
             Self::VariantCaseMeta => "variant_case_meta",
             Self::ReflectCase => "reflect_case",
+            Self::ReflectEnum => "reflect_enum",
+            Self::EnumCaseMeta => "enum_case_meta",
             Self::Ref => "ref",
             Self::RefMut => "ref_mut",
             Self::Eq => "eq",
@@ -627,6 +650,10 @@ impl CompilerItem {
             Self::ReflectVariantCaseMeta => "reflect_variant_case_meta",
             Self::ReflectVariantDiscriminant => "reflect_variant_discriminant",
             Self::ReflectVariantCases => "reflect_variant_cases",
+            Self::ReflectEnumTypeName => "reflect_enum_type_name",
+            Self::ReflectEnumCaseMeta => "reflect_enum_case_meta",
+            Self::ReflectEnumDiscriminant => "reflect_enum_discriminant",
+            Self::ReflectEnumFromDiscriminant => "reflect_enum_from_discriminant",
             Self::StringPushStr => "string_push_str",
             Self::StringPushChar => "string_push_char",
             Self::StringGetByteUnchecked => "string_get_byte_unchecked",
@@ -715,6 +742,8 @@ impl CompilerItem {
             | Self::ReflectVariant
             | Self::VariantCaseMeta
             | Self::ReflectCase
+            | Self::ReflectEnum
+            | Self::EnumCaseMeta
             | Self::Ref
             | Self::RefMut
             | Self::Eq
@@ -729,6 +758,10 @@ impl CompilerItem {
             | Self::ReflectVariantCaseMeta
             | Self::ReflectVariantDiscriminant
             | Self::ReflectVariantCases
+            | Self::ReflectEnumTypeName
+            | Self::ReflectEnumCaseMeta
+            | Self::ReflectEnumDiscriminant
+            | Self::ReflectEnumFromDiscriminant
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringGetByteUnchecked
@@ -846,7 +879,8 @@ impl CompilerItem {
             | Self::KilnRequest
             | Self::String
             | Self::VariantCaseMeta
-            | Self::ReflectCase => CompilerItemKind::Struct,
+            | Self::ReflectCase
+            | Self::EnumCaseMeta => CompilerItemKind::Struct,
             Self::Option | Self::Result => CompilerItemKind::Variant,
             Self::Ordering | Self::Alignment => CompilerItemKind::Enum,
             Self::SerializeError | Self::DeserializeError => CompilerItemKind::Struct,
@@ -855,6 +889,7 @@ impl CompilerItem {
             Self::Default
             | Self::Reflect
             | Self::ReflectVariant
+            | Self::ReflectEnum
             | Self::Ref
             | Self::RefMut
             | Self::Eq
@@ -894,6 +929,10 @@ impl CompilerItem {
             | Self::ReflectVariantCaseMeta
             | Self::ReflectVariantDiscriminant
             | Self::ReflectVariantCases
+            | Self::ReflectEnumTypeName
+            | Self::ReflectEnumCaseMeta
+            | Self::ReflectEnumDiscriminant
+            | Self::ReflectEnumFromDiscriminant
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringGetByteUnchecked

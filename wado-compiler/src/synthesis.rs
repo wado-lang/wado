@@ -54,6 +54,9 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
     // ReflectVariant metadata (WEP 2026-06-13 §3d).
     traits::synthesize_reflect_variant(&mut project);
 
+    // ReflectEnum metadata (WEP 2026-06-13 §3b).
+    traits::synthesize_reflect_enum(&mut project);
+
     // Snapshot the synthesis-layer impls (auto-derives + From/serde adapters)
     // onto `TraitEnv` so subsequent phases query a single source of truth
     // instead of rescanning TIR. The AST layer is preserved unchanged.

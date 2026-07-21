@@ -309,6 +309,12 @@ impl Monomorphizer {
                         &info.method_name,
                     ));
                 }
+                // A blanket static's instantiation is keyed by the blanket's
+                // own template name (`T^CaseName::by_name`), not the
+                // receiver's — mirror `collect_func_instantiation_sites_in_expr`.
+                if monomorph.is_blanket {
+                    names_to_try.insert(0, monomorph.generic_name.clone());
+                }
                 let candidates: Vec<&str> = vec![&info.base_struct_name, &info.struct_name];
                 for generic_method_name in names_to_try {
                     let key = InstantiationKey {

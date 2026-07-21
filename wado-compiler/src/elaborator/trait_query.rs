@@ -25,6 +25,7 @@ pub(super) enum OnBoundTrait {
     Default,
     Reflect,
     ReflectVariant,
+    ReflectEnum,
     Ref,
     RefMut,
     Inspect,
@@ -639,6 +640,8 @@ impl TypeSystem {
                 of(CompilerItem::Reflect, OnBoundTrait::Reflect)
             } else if trait_name == items.trait_name(CompilerItem::ReflectVariant) {
                 of(CompilerItem::ReflectVariant, OnBoundTrait::ReflectVariant)
+            } else if trait_name == items.trait_name(CompilerItem::ReflectEnum) {
+                of(CompilerItem::ReflectEnum, OnBoundTrait::ReflectEnum)
             } else if trait_name == items.trait_name(CompilerItem::Ref) {
                 of(CompilerItem::Ref, OnBoundTrait::Ref)
             } else if trait_name == items.trait_name(CompilerItem::RefMut) {
@@ -1028,6 +1031,20 @@ impl TypeSystem {
             return true;
         }
 
+        // `ReflectEnum` likewise: every enum is eligible.
+        if let ResolvedType::Enum {
+            name,
+            module_source,
+            ..
+        } = &resolved
+            && on_bound == Some(OnBoundTrait::ReflectEnum)
+        {
+            self.type_table
+                .borrow_mut()
+                .record_bound_driven_synth_request(name, module_source, trait_name);
+            return true;
+        }
+
         // Get the type name and type args for looking up implementations
         let (type_name, type_args) = match &resolved {
             ResolvedType::Struct { name, .. }
@@ -1220,7 +1237,8 @@ impl TypeSystem {
                     .find(|tp| tp.name == impl_type_name);
                 if let Some(param) = matching_param {
                     let bounds_satisfied = param.bounds.iter().all(|bound| {
-                        self.find_trait_impl_for_type(ctx, scope, type_name, &bound.name)
+                        self.synthesized_reflect_bound_holds(scope, type_name, &bound.name)
+                            || self.find_trait_impl_for_type(ctx, scope, type_name, &bound.name)
                     });
                     if bounds_satisfied {
                         return true;
@@ -1230,6 +1248,54 @@ impl TypeSystem {
         }
 
         false
+    }
+
+    /// Whether a blanket-impl bound names a compiler-synthesized reflection
+    /// trait the subject type is eligible for (`Reflect` on a struct,
+    /// `ReflectVariant` on a variant, `ReflectEnum` on an enum). These traits
+    /// have no impl blocks to find — eligibility is the type's kind, mirroring
+    /// the `TypeId`-based arms of `type_implements_trait_inner` — so the
+    /// name-based impl search alone would reject them. Records the
+    /// bound-driven synth request on a hit, as those arms do.
+    fn synthesized_reflect_bound_holds(
+        &self,
+        scope: &TypeLookup,
+        type_name: &str,
+        bound_name: &str,
+    ) -> bool {
+        let Some(on_bound) = self.classify_on_bound_trait(scope, bound_name) else {
+            return false;
+        };
+        let subject = match on_bound {
+            OnBoundTrait::Reflect => scope
+                .struct_fields(type_name)
+                .map(|info| info.module_source.clone()),
+            OnBoundTrait::ReflectVariant => scope
+                .variant_case(type_name)
+                .map(|info| info.module_source.clone()),
+            OnBoundTrait::ReflectEnum => scope
+                .enum_case(type_name)
+                .map(|info| info.module_source.clone()),
+            OnBoundTrait::Eq
+            | OnBoundTrait::Ord
+            | OnBoundTrait::Serialize
+            | OnBoundTrait::Deserialize
+            | OnBoundTrait::Default
+            | OnBoundTrait::Ref
+            | OnBoundTrait::RefMut
+            | OnBoundTrait::Inspect
+            | OnBoundTrait::InspectAlt
+            | OnBoundTrait::DisplayAlt => None,
+        };
+        let Some(module_source) = subject else {
+            return false;
+        };
+        self.type_table.borrow_mut().record_bound_driven_synth_request(
+            type_name,
+            &module_source,
+            bound_name,
+        );
+        true
     }
 }
 

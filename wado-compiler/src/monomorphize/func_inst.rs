@@ -476,6 +476,13 @@ impl Monomorphizer {
                             &info.method_name,
                         ));
                     }
+                    // A blanket static (`Color^CaseName::by_name`) has no
+                    // template under the receiver's name; the template is the
+                    // blanket's own (`T^CaseName::by_name`), carried in
+                    // `generic_name` by the type-param-receiver redirect.
+                    if monomorph.is_blanket {
+                        names_to_try.insert(0, monomorph.generic_name.clone());
+                    }
                     for generic_method_name in names_to_try {
                         if let Some(generic_func_rc) = lookup_template_with_trait_fallback(
                             generic_functions,
@@ -512,7 +519,16 @@ impl Monomorphizer {
                                     method_type_args,
                                     method_info,
                                 };
-                                let mangled = self.method_instantiation_name(&key, type_table);
+                                // `_inner` with the template's impl params so a
+                                // blanket key (`T^Trait::method` + `[Color]`)
+                                // mangles to the substituted instance name
+                                // (`Color^Trait::method`) the redirected call
+                                // targets, not `T<Color>^Trait::method`.
+                                let mangled = self.method_instantiation_name_inner(
+                                    &key,
+                                    type_table,
+                                    &generic_func.impl_type_params,
+                                );
                                 self.try_queue_function(key, mangled);
                             }
                             break;
@@ -1727,8 +1743,9 @@ impl Monomorphizer {
                             let concrete_impl_module = self
                                 .functions
                                 .impl_module(&new_info, receiver_module.as_ref());
-                            let concrete_module =
-                                concrete_impl_module.or(blanket_module).or(receiver_module);
+                            let concrete_module = concrete_impl_module
+                                .or(blanket_module.clone())
+                                .or(receiver_module);
                             let method_type_arg_tids: Vec<TypeId> = if let FunctionRef {
                                 monomorph_info: Some(mi),
                                 ..
@@ -1748,8 +1765,40 @@ impl Monomorphizer {
                             // (`List<i32>^Default::default`) must queue its impl
                             // instantiation even with no method type args of its
                             // own — they are impl-level. A non-generic receiver
-                            // (`i32^Default::default`) is a direct function.
-                            let new_monomorph = if method_type_arg_tids.is_empty()
+                            // (`i32^Default::default`) is a direct function —
+                            // unless dispatch runs through a blanket impl, whose
+                            // static instance (`Color^CaseName::by_name`) only
+                            // exists once queued with the blanket's own template
+                            // name and the concrete receiver as its impl arg.
+                            let blanket_generic_name = blanket_module
+                                .as_ref()
+                                .and_then(|_| trait_name_for_blanket)
+                                .and_then(|tn| {
+                                    let param = self
+                                        .functions
+                                        .trait_env
+                                        .blanket_impl_param_for_trait(
+                                            tn,
+                                            blanket_module.as_ref(),
+                                        )?;
+                                    Some(
+                                        LocalMethodName::new(
+                                            param,
+                                            Some(tn.to_string()),
+                                            new_info.method_name.clone(),
+                                        )
+                                        .to_mangled_name(),
+                                    )
+                                });
+                            let new_monomorph = if let Some(generic_name) = blanket_generic_name
+                            {
+                                Some(MonomorphInfo {
+                                    generic_name,
+                                    impl_type_args: vec![concrete_type_id],
+                                    method_type_args: method_type_arg_tids,
+                                    is_blanket: true,
+                                })
+                            } else if method_type_arg_tids.is_empty()
                                 && impl_type_arg_tids.is_empty()
                             {
                                 None

@@ -498,7 +498,10 @@ after the first three.
 - [ ] `#[validate]` enforcement in the synthesized `Deserialize`
       (`DeserializeError` / `InvalidValue` on violation).
 - Variant / enum / flags reflection (§3), staged per §3g:
-  - [ ] `ReflectEnum` synthesis (§3b).
+  - [x] `ReflectEnum` synthesis (§3b): the four members plus generic
+        projection under a `T: ReflectEnum` bound, including type-param
+        static calls (`T::by_name`) dispatching through a blanket impl.
+        Fixtures: `reflect_enum_meta`, `reflect_enum_derive`.
   - [ ] `ReflectFlags` synthesis with the `u64`-normalized bit bridge (§3c).
   - [x] Constructor-mapped packs: generalize `TypePack::mapped_elem` to
         per-element pack substitution (§3f).

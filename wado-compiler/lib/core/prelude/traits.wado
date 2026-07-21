@@ -118,6 +118,37 @@ internal trait ReflectVariant {
     fn cases() -> Self::CaseTokens;
 }
 
+/// Per-case descriptor returned by `ReflectEnum::case_meta()`, in
+/// declaration order. See WEP 2026-06-13 §3b.
+#[compiler_item("enum_case_meta")]
+pub struct EnumCaseMeta {
+    pub name: String,
+    pub discriminant: i32,
+}
+
+/// Compile-time enum introspection. The compiler synthesizes an impl for
+/// every enum; it cannot be implemented in user code and is callable only
+/// in monomorphized contexts (`T` a concrete enum).
+/// See WEP 2026-06-13 §3b.
+#[compiler_item("reflect_enum")]
+internal trait ReflectEnum {
+    /// Returns the enum name.
+    #[compiler_item("reflect_enum_type_name")]
+    fn type_name() -> String;
+
+    /// Returns the per-case descriptors.
+    #[compiler_item("reflect_enum_case_meta")]
+    fn case_meta() -> List<EnumCaseMeta>;
+
+    /// Returns the value's tag.
+    #[compiler_item("reflect_enum_discriminant")]
+    fn discriminant(&self) -> i32;
+
+    /// Returns the case with the given tag; `None` for an unknown tag.
+    #[compiler_item("reflect_enum_from_discriminant")]
+    fn from_discriminant(disc: i32) -> Option<Self>;
+}
+
 /// A case handle minted by `ReflectVariant::cases()`: the payload type `P`
 /// is static, the case index is a value. `extract` / `construct` bridge a
 /// variant value and its payload in both directions.
