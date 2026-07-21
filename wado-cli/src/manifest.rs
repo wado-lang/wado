@@ -67,7 +67,21 @@ pub(crate) fn resolve_manifest(
     member_dir: &Path,
     member_content: &str,
 ) -> Result<Manifest, DiscoveryError> {
-    match find_workspace_root(member_dir, member_content) {
+    // Locate the governing workspace from an absolute, `..`-free member dir.
+    // `governing_workspace` walks up with `pop()` and matches members with
+    // `strip_prefix`, so an empty, relative, or `..`-bearing dir (a bare
+    // relative entry like `src/main.wado` discovers an empty root, and a path
+    // build-dependency joins `../pkg`) fails to find the workspace — inheritance
+    // then wrongly degrades to a standalone parse that rejects an inherited-only
+    // member. Canonicalizing normalizes all three shapes to the same absolute
+    // dir an absolute entry path would produce.
+    let anchor = if member_dir.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        member_dir
+    };
+    let canonical = fs::canonicalize(anchor).unwrap_or_else(|_| anchor.to_path_buf());
+    match find_workspace_root(&canonical, member_content) {
         Some(root_content) => wado_manifest::resolve_member(member_content, &root_content)
             .map_err(DiscoveryError::Parse),
         None => member_content.parse().map_err(DiscoveryError::Parse),
