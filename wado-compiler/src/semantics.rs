@@ -983,20 +983,14 @@ pub async fn semantics<H: CompilerHost>(
     .await
 }
 
-/// [`semantics`] with the target world and kiln redirects threaded through.
+/// [`semantics`] with the target world and kiln redirects threaded through, so a
+/// re-analysis off the codegen path matches the main compile.
 ///
-/// The target world drives the Kiln `Request<T>` adapter rewrite
-/// (`compile_with_options` phase 1b), applied before analysis when
-/// `target_world == "core:kiln/generator"`. WIT emission re-derives
-/// `Semantics` off the codegen path and must see the same rewritten
-/// `generate(req: raw-request)` signature the component exports; without the
-/// rewrite it sees the un-representable generic `Request<Options>` and skips
-/// the component-type section (issue #1478).
-///
-/// `invocations` redirects `use … with { generator }` clauses to their
-/// generated modules, exactly as `CompilerOptions::invocations` does for the
-/// main compile. A caller re-analyzing a kiln consumer must pass the same
-/// index, or the load fails and the analysis reports incomplete (issue #1646).
+/// `target_world` drives the Kiln `Request<T>` adapter rewrite for the
+/// `core:kiln/generator` world; `invocations` redirects `use … with { generator }`
+/// clauses to their generated modules. A caller re-analyzing a kiln consumer must
+/// pass the same values the compile used, or the load fails and analysis reports
+/// incomplete.
 pub async fn semantics_for_world<H: CompilerHost>(
     source: &str,
     host: &H,

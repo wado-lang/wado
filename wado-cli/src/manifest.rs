@@ -75,17 +75,11 @@ pub(crate) fn resolve_manifest(
     }
 }
 
-/// `member_dir` normalized so [`governing_workspace`] can locate the workspace.
-///
-/// That function walks up with `pop()` and matches members with `strip_prefix`,
-/// so an empty, relative, or `..`-bearing dir cannot find the workspace root —
-/// a bare relative entry (`src/main.wado`) discovers an empty root, and a path
-/// build-dependency joins `../pkg`. Those shapes are canonicalized to the same
-/// absolute, `..`-free dir an absolute entry path already produces; an already
-/// absolute, `..`-free dir is returned untouched, so the common path pays no
-/// syscall and its symlinks are not resolved. Normalization lives here, in the
-/// CLI, because `governing_workspace` is in wasm32-only `wado-lsp` and cannot
-/// touch the filesystem.
+/// `member_dir` as an absolute, `..`-free path so [`governing_workspace`] (which
+/// walks up with `pop()` and matches members with `strip_prefix`) can locate the
+/// workspace. An empty, relative, or `..`-bearing dir is canonicalized; an
+/// already absolute, `..`-free dir is borrowed untouched. Canonicalization stays
+/// CLI-side because `governing_workspace` lives in wasm32-only `wado-lsp`.
 fn workspace_anchor(member_dir: &Path) -> Cow<'_, Path> {
     let has_parent_dir = member_dir.components().any(|c| c == Component::ParentDir);
     if member_dir.is_absolute() && !has_parent_dir {

@@ -1144,14 +1144,38 @@ fn wasm_to_wat(wasm: &[u8]) -> Result<String, CliExit> {
     Ok(wat)
 }
 
-/// Report a WIT-embedding failure per `explicit`: fatal for `--embed-wit`,
-/// a warning (yielding the un-embedded, still valid component) otherwise.
+/// Fatal under `--embed-wit`, otherwise a warning that yields the un-embedded
+/// (still valid, self-describing) component.
 fn skip_embed(explicit: bool, wasm: Vec<u8>, msg: &str) -> Result<Vec<u8>, CliExit> {
     if explicit {
         return Err(CliExit::error(format!("--embed-wit: {msg}")));
     }
     eprintln!("warning: skipped embedding WIT component-type section: {msg}");
     Ok(wasm)
+}
+
+/// The silent analysis host and kiln redirects the main compile produced, so a
+/// `with { generator }` consumer re-analyzes exactly as it compiled. The kiln
+/// pipeline is cache-aware, so this reuses the main compile's outputs.
+async fn reanalysis_env(
+    path: &Path,
+    source: &str,
+) -> Result<(FilesystemCompilerHost, wado_compiler::kiln::InvocationIndex), String> {
+    let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
+    let manifest_pair = load_nearest_manifest(path);
+    let host = attach_manifest_and_component_deps(
+        FilesystemCompilerHost::silent(base_path.clone()),
+        manifest_pair.as_ref(),
+        &base_path,
+        source,
+        false,
+    )
+    .await
+    .map_err(|e| format!("resolving dependencies: {e}"))?;
+    let outcome = maybe_run_pipeline(path, &host, false, manifest_pair)
+        .await
+        .map_err(|e| format!("running kiln generators: {e}"))?;
+    Ok((host, outcome.invocations))
 }
 
 /// Append the WIT `component-type` section to `wasm`, using `world_imports`
@@ -1172,33 +1196,9 @@ async fn embed_wit_section(
         return Ok(wasm);
     };
 
-    let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
-    // Mirror the main compile's analysis environment — the nearest manifest's
-    // dependency index (with prebuilt registry components, warm from the main
-    // compile) and the kiln pipeline's generator redirects — so a
-    // `with { generator }` consumer re-analyzes exactly as it compiled
-    // (issue #1646). A quiet host avoids re-emitting diagnostics; the pipeline
-    // is cache-aware, so this reuses the main compile's outputs.
-    let manifest_pair = load_nearest_manifest(path);
-    let host = match attach_manifest_and_component_deps(
-        FilesystemCompilerHost::silent(base_path.clone()),
-        manifest_pair.as_ref(),
-        &base_path,
-        &source,
-        false,
-    )
-    .await
-    {
-        Ok(host) => host,
-        Err(e) => {
-            return skip_embed(explicit, wasm, &format!("resolving dependencies: {e}"));
-        }
-    };
-    let invocations = match maybe_run_pipeline(path, &host, false, manifest_pair).await {
-        Ok(outcome) => outcome.invocations,
-        Err(e) => {
-            return skip_embed(explicit, wasm, &format!("running kiln generators: {e}"));
-        }
+    let (host, invocations) = match reanalysis_env(path, &source).await {
+        Ok(env) => env,
+        Err(msg) => return skip_embed(explicit, wasm, &msg),
     };
     let mut sem = wado_compiler::semantics_for_world(
         &source,
@@ -1343,9 +1343,7 @@ pub async fn run_returning_bytes(opts: CompileOptions) -> Result<Vec<u8>, CliExi
                     .wir_package
                     .map(|p| p.imported_cm_interfaces)
                     .unwrap_or_default();
-                // Box the embedding future: it re-runs the frontend and Kiln
-                // pipeline, so inlining its state would push the enclosing
-                // build-driver future past clippy's `large_futures` threshold.
+                // Boxed to keep the enclosing driver future under clippy's `large_futures` bound.
                 Box::pin(embed_wit_section(&opts, wasm, world_imports, explicit)).await?
             } else {
                 wasm

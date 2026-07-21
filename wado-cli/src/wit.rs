@@ -177,32 +177,9 @@ async fn world_semantics_and_opts(
         .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
 
-    // Mirror the compile host: manifest dependencies (offline, analysis tier)
-    // and the kiln pipeline's generator redirects, so a `with { generator }`
-    // consumer analyzes here as it compiles (issue #1646).
     let manifest_pair = load_nearest_manifest(path);
-    let host = attach_manifest_and_component_deps(
-        FilesystemCompilerHost::new(base_path.clone()),
-        manifest_pair.as_ref(),
-        &base_path,
-        &source,
-        false,
-    )
-    .await
-    .map_err(CliExit::error)?;
-    let import_host = attach_manifest_and_component_deps(
-        FilesystemCompilerHost::silent(base_path.clone()),
-        manifest_pair.as_ref(),
-        &base_path,
-        &source,
-        false,
-    )
-    .await
-    .map_err(CliExit::error)?;
-    // Run the generators on the silent host: their warnings were not asked for
-    // by `wado wit`, and a build failure still surfaces via `run_generators`'
-    // error. The analysis below keeps the loud host so it reports diagnostics.
-    let invocations = run_generators(path, &import_host, manifest_pair).await?;
+    let (host, quiet_host) = analysis_hosts(&base_path, manifest_pair.as_ref(), &source).await?;
+    let invocations = run_generators(path, &quiet_host, manifest_pair).await?;
 
     let mut sem = wado_compiler::semantics_for_world(
         &source,
@@ -224,12 +201,39 @@ async fn world_semantics_and_opts(
     ));
 
     let world_imports =
-        resolve_world_imports(&import_host, &source, &input, &world, invocations).await;
+        resolve_world_imports(&quiet_host, &source, &input, &world, invocations).await;
     Ok((sem, world_imports))
 }
 
-/// Run the entry's kiln generators (cache-aware, so a prior build's outputs are
-/// reused) and return the redirect index the analysis needs.
+/// The diagnostic-emitting analysis host and its silent twin, both seeded with
+/// the dependency index the main compile uses. The silent twin runs the kiln
+/// pipeline and the import probe, whose output `wado wit` does not surface.
+async fn analysis_hosts(
+    base_path: &Path,
+    project: Option<&manifest::ProjectManifest>,
+    source: &str,
+) -> Result<(FilesystemCompilerHost, FilesystemCompilerHost), CliExit> {
+    let host = attach_manifest_and_component_deps(
+        FilesystemCompilerHost::new(base_path.to_path_buf()),
+        project,
+        base_path,
+        source,
+        false,
+    )
+    .await
+    .map_err(CliExit::error)?;
+    let quiet_host = attach_manifest_and_component_deps(
+        FilesystemCompilerHost::silent(base_path.to_path_buf()),
+        project,
+        base_path,
+        source,
+        false,
+    )
+    .await
+    .map_err(CliExit::error)?;
+    Ok((host, quiet_host))
+}
+
 async fn run_generators(
     entry_file: &Path,
     host: &FilesystemCompilerHost,
@@ -259,27 +263,8 @@ async fn lib_semantics_and_opts(
         .map(Path::to_path_buf)
         .unwrap_or_default();
 
-    let host = attach_manifest_and_component_deps(
-        FilesystemCompilerHost::new(base_path.clone()),
-        Some(&project),
-        &base_path,
-        &source,
-        false,
-    )
-    .await
-    .map_err(CliExit::error)?;
-    let import_host = attach_manifest_and_component_deps(
-        FilesystemCompilerHost::silent(base_path.clone()),
-        Some(&project),
-        &base_path,
-        &source,
-        false,
-    )
-    .await
-    .map_err(CliExit::error)?;
-    // Generators run on the silent host (see the world path); the loud host
-    // below still reports analysis diagnostics.
-    let invocations = run_generators(&target.entry, &import_host, Some(project)).await?;
+    let (host, quiet_host) = analysis_hosts(&base_path, Some(&project), &source).await?;
+    let invocations = run_generators(&target.entry, &quiet_host, Some(project)).await?;
 
     let mut sem = wado_compiler::semantics_for_world(
         &source,
@@ -299,7 +284,7 @@ async fn lib_semantics_and_opts(
     ));
 
     let world_imports = resolve_lib_world_imports(
-        &import_host,
+        &quiet_host,
         &source,
         &entry_str,
         &target.interface_fq,
