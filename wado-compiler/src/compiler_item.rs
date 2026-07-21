@@ -107,6 +107,9 @@ pub enum CompilerItem {
     /// `VariantCaseMeta` — the per-case descriptor struct returned by
     /// `ReflectVariant::case_meta()`; the synthesis builds its literals.
     VariantCaseMeta,
+    /// `Case<T, P>` — the per-case token struct minted by
+    /// `ReflectVariant::cases()` (WEP 2026-06-13 §3e).
+    ReflectCase,
 
     // ── Variants (sum types) ──────────────────────────────────────────
     /// `Option<T>` — `Some(_)` / `None`.
@@ -292,6 +295,8 @@ pub enum CompilerItem {
     ReflectVariantCaseMeta,
     /// `ReflectVariant::discriminant` — the live case's tag as `i32`.
     ReflectVariantDiscriminant,
+    /// `ReflectVariant::cases` — the per-case token tuple.
+    ReflectVariantCases,
     /// `String::push_str` — recognised by the WIR optimiser for
     /// string-building inlining.
     StringPushStr,
@@ -432,6 +437,7 @@ impl CompilerItem {
         Self::Reflect,
         Self::ReflectVariant,
         Self::VariantCaseMeta,
+        Self::ReflectCase,
         Self::Ref,
         Self::RefMut,
         Self::Eq,
@@ -490,6 +496,7 @@ impl CompilerItem {
         Self::ReflectVariantTypeName,
         Self::ReflectVariantCaseMeta,
         Self::ReflectVariantDiscriminant,
+        Self::ReflectVariantCases,
         Self::StringPushStr,
         Self::StringPushChar,
         Self::StringGetByteUnchecked,
@@ -560,6 +567,7 @@ impl CompilerItem {
             Self::Reflect => "reflect",
             Self::ReflectVariant => "reflect_variant",
             Self::VariantCaseMeta => "variant_case_meta",
+            Self::ReflectCase => "reflect_case",
             Self::Ref => "ref",
             Self::RefMut => "ref_mut",
             Self::Eq => "eq",
@@ -618,6 +626,7 @@ impl CompilerItem {
             Self::ReflectVariantTypeName => "reflect_variant_type_name",
             Self::ReflectVariantCaseMeta => "reflect_variant_case_meta",
             Self::ReflectVariantDiscriminant => "reflect_variant_discriminant",
+            Self::ReflectVariantCases => "reflect_variant_cases",
             Self::StringPushStr => "string_push_str",
             Self::StringPushChar => "string_push_char",
             Self::StringGetByteUnchecked => "string_get_byte_unchecked",
@@ -705,6 +714,7 @@ impl CompilerItem {
             | Self::Reflect
             | Self::ReflectVariant
             | Self::VariantCaseMeta
+            | Self::ReflectCase
             | Self::Ref
             | Self::RefMut
             | Self::Eq
@@ -718,6 +728,7 @@ impl CompilerItem {
             | Self::ReflectVariantTypeName
             | Self::ReflectVariantCaseMeta
             | Self::ReflectVariantDiscriminant
+            | Self::ReflectVariantCases
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringGetByteUnchecked
@@ -834,7 +845,8 @@ impl CompilerItem {
             | Self::RangeInclusive
             | Self::KilnRequest
             | Self::String
-            | Self::VariantCaseMeta => CompilerItemKind::Struct,
+            | Self::VariantCaseMeta
+            | Self::ReflectCase => CompilerItemKind::Struct,
             Self::Option | Self::Result => CompilerItemKind::Variant,
             Self::Ordering | Self::Alignment => CompilerItemKind::Enum,
             Self::SerializeError | Self::DeserializeError => CompilerItemKind::Struct,
@@ -881,6 +893,7 @@ impl CompilerItem {
             | Self::ReflectVariantTypeName
             | Self::ReflectVariantCaseMeta
             | Self::ReflectVariantDiscriminant
+            | Self::ReflectVariantCases
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringGetByteUnchecked

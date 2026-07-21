@@ -95,6 +95,9 @@ pub struct VariantCaseMeta {
 /// See WEP 2026-06-13 §3.
 #[compiler_item("reflect_variant")]
 internal trait ReflectVariant {
+    /// The per-case token tuple `[Case<Self, P_0>, ...]`.
+    type CaseTokens;
+
     /// Returns the variant name.
     #[compiler_item("reflect_variant_type_name")]
     fn type_name() -> String;
@@ -106,6 +109,41 @@ internal trait ReflectVariant {
     /// Returns the live case's tag.
     #[compiler_item("reflect_variant_discriminant")]
     fn discriminant(&self) -> i32;
+
+    /// Returns the per-case tokens.
+    #[compiler_item("reflect_variant_cases")]
+    fn cases() -> Self::CaseTokens;
+}
+
+/// A case handle minted by `ReflectVariant::cases()`: the payload type `P`
+/// is static, the case index is a value. `extract` / `construct` bridge a
+/// variant value and its payload in both directions.
+/// See WEP 2026-06-13 §3e.
+#[compiler_item("reflect_case")]
+pub struct Case<T, P> {
+    index: i32,
+}
+
+impl<T, P> Case<T, P> {
+    /// The case's declaration index (== its discriminant).
+    pub fn index(&self) -> i32 {
+        return self.index;
+    }
+
+    /// Whether `v`'s live case is this case.
+    pub fn holds(&self, v: &T) -> bool {
+        return builtin::variant_tag(v) == self.index;
+    }
+
+    /// The payload of this case in `v`. Traps unless `holds(v)`.
+    pub fn extract(&self, v: &T) -> P {
+        return builtin::variant_case_extract(v, self.index);
+    }
+
+    /// Builds this case around `payload`.
+    pub fn construct(&self, payload: P) -> T {
+        return builtin::variant_case_construct(payload, self.index);
+    }
 }
 
 /// Marker for reference-identity types: those whose value is a Wasm GC

@@ -1655,6 +1655,11 @@ impl FunctionTranslator<'_, '_> {
                     .collect(),
             };
         }
+        if func.module_source.is_core_builtin()
+            && let Some(rewritten) = self.convert_case_bridge_call(func, type_args, args)
+        {
+            return rewritten;
+        }
         let mut_roots = self.call_mut_roots(func, None, args, 0);
         let tir_callee = func;
         let nir_func = convert_function_ref(func);
@@ -1668,6 +1673,149 @@ impl FunctionTranslator<'_, '_> {
                 .map(|(i, a)| self.convert_call_arg_at(a, Some(tir_callee), i, &mut_roots))
                 .collect(),
         }
+    }
+
+    /// Rewrites the `Case<V, P>` bridge markers (WEP 2026-06-13 §3e):
+    /// `builtin::variant_tag` becomes a direct tag read, and
+    /// `builtin::variant_case_extract` / `_construct` become calls to the
+    /// per-(variant, payload-type) helpers synthesized with `ReflectVariant`.
+    /// Returns `None` for every other callee.
+    fn convert_case_bridge_call(
+        &self,
+        func: &FunctionRef,
+        type_args: &[tir::TypeId],
+        args: &[CallArg],
+    ) -> Option<ExprKind> {
+        use crate::tir::matches_builtin;
+        let mi = func.monomorph_info.as_ref();
+
+        if matches_builtin(&func.name, mi, "variant_tag") && args.len() == 1 {
+            // Dispatch to the synthesized `V^ReflectVariant::discriminant`
+            // (same `&V` receiver representation as the marker's argument), so
+            // the tag read has a single lowering.
+            let arg_ty = args[0].expr.type_id;
+            let (helper_name, helper_module) = {
+                let tt = self.base.type_table.borrow();
+                // The marker's `&T` argument may already be in its lowered
+                // `Box<V>` representation — unwrap both shapes.
+                let peeled = tt.peel_refs(arg_ty);
+                let box_name = tt
+                    .compiler_items()
+                    .struct_name(crate::compiler_item::CompilerItem::Box)
+                    .to_string();
+                let unboxed = self
+                    .base
+                    .box_plan
+                    .get_box_inner_type(peeled)
+                    .or_else(|| match tt.get(peeled) {
+                        tir::ResolvedType::Struct {
+                            name,
+                            module_source,
+                            base_name: Some(base),
+                            ..
+                        } if *base == box_name => self
+                            .base
+                            .struct_fields_map
+                            .get(&(name.clone(), module_source.clone()))
+                            .and_then(|fields| fields.first())
+                            .map(|f| f.type_id),
+                        _ => None,
+                    })
+                    .unwrap_or(peeled);
+                let variant_ty = tt.peel_refs(unboxed);
+                let variant_name = match tt.get(variant_ty) {
+                    tir::ResolvedType::Variant {
+                        name,
+                        module_source,
+                    } => (name.clone(), module_source.clone()),
+                    other => panic!("variant_tag marker on non-variant type: {other:?}"),
+                };
+                let items = tt.compiler_items();
+                let name = crate::name::MethodName::format_local(
+                    &variant_name.0,
+                    Some(items.trait_name(crate::compiler_item::CompilerItem::ReflectVariant)),
+                    items.method_name(
+                        crate::compiler_item::CompilerItem::ReflectVariantDiscriminant,
+                    ),
+                );
+                (name, variant_name.1)
+            };
+            let nir_func = nir::FunctionRef {
+                module_source: helper_module,
+                name: helper_name,
+                monomorph_info: None,
+                method_info: None,
+            };
+            let func_id = self.base.interner.borrow_mut().resolve(&nir_func);
+            return Some(ExprKind::Call {
+                func_id,
+                type_args: vec![],
+                args: args
+                    .iter()
+                    .map(|a| ArenaCallArg {
+                        expr: self.convert_specialized_arg_operand(&a.expr),
+                        is_mut: a.is_mut,
+                    })
+                    .collect(),
+            });
+        }
+
+        let helper_name_for: fn(&str, &str) -> String =
+            if matches_builtin(&func.name, mi, "variant_case_extract") {
+                crate::name::case_extract_helper_name
+            } else if matches_builtin(&func.name, mi, "variant_case_construct") {
+                crate::name::case_construct_helper_name
+            } else {
+                return None;
+            };
+
+        let (variant_ty, payload_ty) = if type_args.len() == 2 {
+            (type_args[0], type_args[1])
+        } else {
+            let mi = mi.expect("case bridge marker without type args or monomorph info");
+            let ta = if mi.method_type_args.len() == 2 {
+                &mi.method_type_args
+            } else {
+                &mi.impl_type_args
+            };
+            assert!(
+                ta.len() == 2,
+                "case bridge marker expects [variant, payload] type args, got {ta:?}"
+            );
+            (ta[0], ta[1])
+        };
+
+        let (helper_name, helper_module) = {
+            let tt = self.base.type_table.borrow();
+            let name = helper_name_for(
+                &tt.mangle_type_arg_for_generic(variant_ty),
+                &tt.mangle_type_arg_for_generic(payload_ty),
+            );
+            let module = match tt.get(variant_ty) {
+                tir::ResolvedType::Variant { module_source, .. } => module_source.clone(),
+                other => panic!("case bridge marker on non-variant type: {other:?}"),
+            };
+            (name, module)
+        };
+
+        let nir_func = nir::FunctionRef {
+            module_source: helper_module,
+            name: helper_name,
+            monomorph_info: None,
+            method_info: None,
+        };
+        let func_id = self.base.interner.borrow_mut().resolve(&nir_func);
+        Some(ExprKind::Call {
+            func_id,
+            type_args: vec![],
+            args: args
+                .iter()
+                .map(|a| ArenaCallArg {
+                    expr: self.convert_specialized_arg_operand(&a.expr),
+                    is_mut: a.is_mut,
+                })
+                .collect(),
+        })
     }
 
     fn convert_pattern(&self, pattern: &TirPattern) -> PatId {

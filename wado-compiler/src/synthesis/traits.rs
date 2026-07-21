@@ -22,8 +22,9 @@ use crate::name::{LocalMethodName, MethodName};
 use crate::package::Package;
 use crate::tir::{
     CallArg, FnDispatchTrait, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType,
-    TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm, TirModule,
-    TirParam, TirPattern, TirStmt, TirStmtKind, TirStructField, TirTypeParam, TypeId, TypeTable,
+    TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLiteralPattern, TirLocal,
+    TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStructField,
+    TirTypeParam, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -908,10 +909,13 @@ struct ReflectVariantSynthEnv {
     meta_type_name: String,
     meta_struct_name: String,
     list_meta_type: TypeId,
+    case_struct_name: String,
+    case_struct_module: ModuleSource,
     from_tuple: FromTupleItem,
     type_name_method: String,
     case_meta_method: String,
     discriminant_method: String,
+    cases_method: String,
 }
 
 impl ReflectVariantSynthEnv {
@@ -922,6 +926,10 @@ impl ReflectVariantSynthEnv {
         let list_meta_type = tt.make_list(meta_type);
         let items = tt.compiler_items();
         let meta_struct_name = items.struct_name(CompilerItem::VariantCaseMeta).to_string();
+        let (case_struct_module, case_struct_name) = {
+            let (m, n) = items.require_struct(CompilerItem::ReflectCase);
+            (m.clone(), n.to_string())
+        };
         let (module_source, owner, name) = items.require_method(CompilerItem::ListFromTuple);
         let from_tuple = FromTupleItem {
             module_source: module_source.clone(),
@@ -934,6 +942,8 @@ impl ReflectVariantSynthEnv {
             meta_type_name,
             meta_struct_name,
             list_meta_type,
+            case_struct_name,
+            case_struct_module,
             from_tuple,
             type_name_method: items
                 .method_name(CompilerItem::ReflectVariantTypeName)
@@ -944,19 +954,28 @@ impl ReflectVariantSynthEnv {
             discriminant_method: items
                 .method_name(CompilerItem::ReflectVariantDiscriminant)
                 .to_string(),
+            cases_method: items
+                .method_name(CompilerItem::ReflectVariantCases)
+                .to_string(),
         }
     }
 }
 
-/// Synthesize one variant's `type_name()`, `case_meta()`, and
-/// `discriminant(&self)` methods.
+/// The `ReflectVariant` associated-type names (`type Cases` / `type
+/// CaseTokens`). Sealed and compiler-defined, like [`REFLECT_FIELDS_ASSOC`].
+const REFLECT_CASES_ASSOC: &str = "Cases";
+const REFLECT_CASE_TOKENS_ASSOC: &str = "CaseTokens";
+
+/// Synthesize one variant's `type_name()`, `case_meta()`,
+/// `discriminant(&self)`, and `cases()` methods, plus the per-payload-type
+/// `Case` `extract` / `construct` helpers its tokens dispatch to.
 fn generate_variant_reflect_methods(
     type_table: &RefCell<TypeTable>,
     env: &ReflectVariantSynthEnv,
     module_source: &ModuleSource,
     variant_trait_name: &str,
     target: &ReflectVariantTarget,
-) -> [TirFunction; 3] {
+) -> Vec<TirFunction> {
     let span = target.span;
 
     let type_name_fn = generate_type_name_fn(
@@ -967,13 +986,43 @@ fn generate_variant_reflect_methods(
         span,
     );
 
-    let (metas_tuple_type, variant_type, ref_variant_type) = {
+    let (metas_tuple_type, variant_type, ref_variant_type, token_types, token_tuple_type) = {
         let mut tt = type_table.borrow_mut();
         let metas_tuple_type =
             tt.make_tuple(std::iter::repeat_n(env.meta_type, target.cases.len()).collect());
         let variant_type = tt.make_variant(target.name.clone(), module_source.clone());
         let ref_variant_type = tt.make_ref(variant_type);
-        (metas_tuple_type, variant_type, ref_variant_type)
+        let token_types: Vec<TypeId> = target
+            .cases
+            .iter()
+            .map(|(_, _, payload)| {
+                tt.make_generic_instance(
+                    env.case_struct_name.clone(),
+                    env.case_struct_module.clone(),
+                    vec![variant_type, *payload],
+                )
+            })
+            .collect();
+        let token_tuple_type = tt.make_tuple(token_types.clone());
+        let payloads_tuple_type =
+            tt.make_tuple(target.cases.iter().map(|(_, _, p)| *p).collect());
+        tt.register_assoc_type_resolution(
+            variant_type,
+            REFLECT_CASES_ASSOC.to_string(),
+            payloads_tuple_type,
+        );
+        tt.register_assoc_type_resolution(
+            variant_type,
+            REFLECT_CASE_TOKENS_ASSOC.to_string(),
+            token_tuple_type,
+        );
+        (
+            metas_tuple_type,
+            variant_type,
+            ref_variant_type,
+            token_types,
+            token_tuple_type,
+        )
     };
 
     let case_meta_fn =
@@ -986,8 +1035,374 @@ fn generate_variant_reflect_methods(
         &env.discriminant_method,
         span,
     );
+    let cases_fn = generate_variant_cases_fn(
+        env,
+        variant_trait_name,
+        target,
+        &token_types,
+        token_tuple_type,
+        span,
+    );
 
-    [type_name_fn, case_meta_fn, discriminant_fn]
+    let mut functions = vec![type_name_fn, case_meta_fn, discriminant_fn, cases_fn];
+    functions.extend(generate_case_bridge_helpers(
+        type_table,
+        target,
+        variant_type,
+        ref_variant_type,
+        span,
+    ));
+    functions
+}
+
+/// Build `Variant^ReflectVariant::cases()` as
+/// `return [Case { index: 0 }, Case { index: 1 }, …];` — one token per case,
+/// each typed `Case<Variant, P_k>`.
+fn generate_variant_cases_fn(
+    env: &ReflectVariantSynthEnv,
+    variant_trait_name: &str,
+    target: &ReflectVariantTarget,
+    token_types: &[TypeId],
+    token_tuple_type: TypeId,
+    span: Span,
+) -> TirFunction {
+    let method_info = trait_method_info(&target.name, variant_trait_name, &env.cases_method);
+    let qualified_name = method_info.to_mangled_name();
+
+    let elements = target
+        .cases
+        .iter()
+        .zip(token_types)
+        .map(|((_, index, _), token_type)| {
+            TirExpr::new(
+                TirExprKind::StructLiteral {
+                    struct_type: *token_type,
+                    struct_name: env.case_struct_name.clone(),
+                    fields: vec![TirStructField {
+                        name: "index".to_string(),
+                        value: TirExpr::new(
+                            TirExprKind::IntLiteral {
+                                value: u64::from(*index),
+                                repr: index.to_string(),
+                            },
+                            TypeTable::I32,
+                            span,
+                        ),
+                        field_index: 0,
+                    }],
+                },
+                *token_type,
+                span,
+            )
+        })
+        .collect();
+    let tuple = TirExpr::new(
+        TirExprKind::TupleLiteral { elements },
+        token_tuple_type,
+        span,
+    );
+
+    let body = TirBlock::new(
+        vec![TirStmt::new(
+            TirStmtKind::Return { value: Some(tuple) },
+            span,
+        )],
+        span,
+    );
+
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        vec![],
+        token_tuple_type,
+        body,
+        vec![],
+    )
+}
+
+/// Synthesize the `$case_extract$V$P` / `$case_construct$V$P` helpers for
+/// every distinct payload type of `target`. `Case::<V, P>::extract` and
+/// `::construct` bodies carry `builtin::variant_case_*` markers; lowering
+/// rewrites each monomorphized marker to its helper (WEP 2026-06-13 §3e).
+fn generate_case_bridge_helpers(
+    type_table: &RefCell<TypeTable>,
+    target: &ReflectVariantTarget,
+    variant_type: TypeId,
+    ref_variant_type: TypeId,
+    span: Span,
+) -> Vec<TirFunction> {
+    let mangled_variant = type_table
+        .borrow()
+        .mangle_type_arg_for_generic(variant_type);
+
+    let mut by_payload: crate::hashmap::IndexMap<String, (TypeId, Vec<(String, u32)>)> =
+        crate::hashmap::IndexMap::default();
+    for (case_name, index, payload) in &target.cases {
+        let mangled = type_table.borrow().mangle_type_arg_for_generic(*payload);
+        by_payload
+            .entry(mangled)
+            .or_insert_with(|| (*payload, Vec::new()))
+            .1
+            .push((case_name.clone(), *index));
+    }
+
+    let mut helpers = Vec::new();
+    for (mangled_payload, (payload_type, cases)) in &by_payload {
+        helpers.push(generate_case_extract_helper(
+            crate::name::case_extract_helper_name(&mangled_variant, mangled_payload),
+            variant_type,
+            ref_variant_type,
+            *payload_type,
+            cases,
+            span,
+        ));
+        helpers.push(generate_case_construct_helper(
+            crate::name::case_construct_helper_name(&mangled_variant, mangled_payload),
+            variant_type,
+            *payload_type,
+            cases,
+            span,
+        ));
+    }
+    helpers
+}
+
+/// A call to `builtin::unreachable()` typed as `result_type`, the trap arm of
+/// the case-bridge dispatch.
+fn unreachable_call(result_type: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Call {
+            func: FunctionRef {
+                module_source: ModuleSource::builtin(),
+                name: "unreachable".to_string(),
+                monomorph_info: None,
+                method_info: None,
+            },
+            type_args: vec![],
+            args: vec![],
+        },
+        result_type,
+        span,
+    )
+}
+
+/// Dispatch `match index { k => <arm(k)>, _ => unreachable() }` over the
+/// cases sharing one payload type.
+fn case_index_dispatch(
+    index_expr: TirExpr,
+    cases: &[(String, u32)],
+    arm_body: impl Fn(&str, u32) -> TirExpr,
+    result_type: TypeId,
+    span: Span,
+) -> TirExpr {
+    let mut arms: Vec<TirMatchArm> = cases
+        .iter()
+        .map(|(case_name, index)| TirMatchArm {
+            pattern: TirPattern::Literal(TirLiteralPattern::I128(i128::from(*index))),
+            guard: None,
+            body: arm_body(case_name, *index),
+            span,
+        })
+        .collect();
+    arms.push(TirMatchArm {
+        pattern: TirPattern::Wildcard,
+        guard: None,
+        body: unreachable_call(result_type, span),
+        span,
+    });
+    TirExpr::new(
+        TirExprKind::Match {
+            expr: Box::new(index_expr),
+            arms,
+        },
+        result_type,
+        span,
+    )
+}
+
+/// Build `$case_extract$V$P(v: &V, index: i32) -> P`:
+/// trap unless `v`'s tag is `index`, then read the case's payload.
+fn generate_case_extract_helper(
+    helper_name: String,
+    variant_type: TypeId,
+    ref_variant_type: TypeId,
+    payload_type: TypeId,
+    cases: &[(String, u32)],
+    span: Span,
+) -> TirFunction {
+    let deref_v = || deref_local(0, "v", ref_variant_type, variant_type, span);
+    let index_local = || local_expr(1, "index", TypeTable::I32, span);
+
+    let tag = TirExpr::new(
+        TirExprKind::VariantTag {
+            expr: Box::new(deref_v()),
+        },
+        TypeTable::I32,
+        span,
+    );
+    let guard = TirStmt::new(
+        TirStmtKind::Expr(TirExpr::new(
+            TirExprKind::If {
+                condition: Box::new(TirExpr::new(
+                    TirExprKind::Binary {
+                        left: Box::new(tag),
+                        op: TirBinaryOp::NotEq,
+                        right: Box::new(index_local()),
+                    },
+                    TypeTable::BOOL,
+                    span,
+                )),
+                then_branch: TirBlock::new(
+                    vec![TirStmt::new(
+                        TirStmtKind::Expr(unreachable_call(TypeTable::UNIT, span)),
+                        span,
+                    )],
+                    span,
+                ),
+                else_branch: None,
+            },
+            TypeTable::UNIT,
+            span,
+        )),
+        span,
+    );
+
+    let dispatch = case_index_dispatch(
+        index_local(),
+        cases,
+        |_, index| {
+            TirExpr::new(
+                TirExprKind::VariantPayload {
+                    expr: Box::new(deref_v()),
+                    case_index: index,
+                    payload_type,
+                },
+                payload_type,
+                span,
+            )
+        },
+        payload_type,
+        span,
+    );
+
+    let body = TirBlock::new(
+        vec![
+            guard,
+            TirStmt::new(
+                TirStmtKind::Return {
+                    value: Some(dispatch),
+                },
+                span,
+            ),
+        ],
+        span,
+    );
+
+    let mut function = make_synthetic_method(
+        helper_name.clone(),
+        LocalMethodName::new(helper_name, None, String::new()),
+        vec![
+            TirParam {
+                name: "v".to_string(),
+                type_id: ref_variant_type,
+                local_index: 0,
+                is_mut: false,
+                is_mut_ref: false,
+                span,
+            },
+            TirParam {
+                name: "index".to_string(),
+                type_id: TypeTable::I32,
+                local_index: 1,
+                is_mut: false,
+                is_mut_ref: false,
+                span,
+            },
+        ],
+        payload_type,
+        body,
+        vec![
+            param_local("v", ref_variant_type, false),
+            param_local("index", TypeTable::I32, false),
+        ],
+    );
+    function.method_info = None;
+    function
+}
+
+/// Build `$case_construct$V$P(payload: P, index: i32) -> V`:
+/// construct case `index` around `payload`.
+fn generate_case_construct_helper(
+    helper_name: String,
+    variant_type: TypeId,
+    payload_type: TypeId,
+    cases: &[(String, u32)],
+    span: Span,
+) -> TirFunction {
+    let is_unit_payload = payload_type == TypeTable::UNIT;
+    let dispatch = case_index_dispatch(
+        local_expr(1, "index", TypeTable::I32, span),
+        cases,
+        |case_name, index| {
+            TirExpr::new(
+                TirExprKind::VariantConstruct {
+                    variant_type,
+                    case_index: index,
+                    case_name: case_name.to_string(),
+                    payload: if is_unit_payload {
+                        None
+                    } else {
+                        Some(Box::new(local_expr(0, "payload", payload_type, span)))
+                    },
+                },
+                variant_type,
+                span,
+            )
+        },
+        variant_type,
+        span,
+    );
+
+    let body = TirBlock::new(
+        vec![TirStmt::new(
+            TirStmtKind::Return {
+                value: Some(dispatch),
+            },
+            span,
+        )],
+        span,
+    );
+
+    let mut function = make_synthetic_method(
+        helper_name.clone(),
+        LocalMethodName::new(helper_name, None, String::new()),
+        vec![
+            TirParam {
+                name: "payload".to_string(),
+                type_id: payload_type,
+                local_index: 0,
+                is_mut: false,
+                is_mut_ref: false,
+                span,
+            },
+            TirParam {
+                name: "index".to_string(),
+                type_id: TypeTable::I32,
+                local_index: 1,
+                is_mut: false,
+                is_mut_ref: false,
+                span,
+            },
+        ],
+        variant_type,
+        body,
+        vec![
+            param_local("payload", payload_type, false),
+            param_local("index", TypeTable::I32, false),
+        ],
+    );
+    function.method_info = None;
+    function
 }
 
 /// Build `Variant^ReflectVariant::case_meta() -> List<VariantCaseMeta>` as

@@ -3354,6 +3354,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             || method
                 == items
                     .method_name(crate::compiler_item::CompilerItem::ReflectVariantDiscriminant)
+            || method == items.method_name(crate::compiler_item::CompilerItem::ReflectVariantCases)
     }
 
     /// Resolve a `ReflectVariant::<T>::method()` trait-qualified static call to
@@ -3378,7 +3379,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        let (trait_name, discriminant_method, case_meta_method, module_source) = {
+        let (trait_name, discriminant_method, case_meta_method, cases_method, module_source) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
@@ -3388,6 +3389,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .to_string(),
                 items
                     .method_name(CompilerItem::ReflectVariantCaseMeta)
+                    .to_string(),
+                items
+                    .method_name(CompilerItem::ReflectVariantCases)
                     .to_string(),
                 self.find_struct_module_source(&self_name),
             )
@@ -3410,6 +3414,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let return_type = if is_discriminant {
             TypeTable::I32
+        } else if method == cases_method {
+            let payloads: Vec<TypeId> = self
+                .lookup_variant_case(&self_name)
+                .map(|info| info.cases.iter().map(|c| c.payload).collect())
+                .unwrap_or_default();
+            let mut tt = self.tysys.type_table.borrow_mut();
+            let (case_module, case_name) = {
+                let items = tt.compiler_items();
+                let (m, n) = items.require_struct(CompilerItem::ReflectCase);
+                (m.clone(), n.to_string())
+            };
+            let tokens: Vec<TypeId> = payloads
+                .into_iter()
+                .map(|payload| {
+                    tt.make_generic_instance(
+                        case_name.clone(),
+                        case_module.clone(),
+                        vec![self_ty, payload],
+                    )
+                })
+                .collect();
+            tt.make_tuple(tokens)
         } else {
             let mut tt = self.tysys.type_table.borrow_mut();
             if method == case_meta_method {
