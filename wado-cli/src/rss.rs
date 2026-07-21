@@ -59,8 +59,8 @@ Threads:\t8
     #[test]
     fn parses_current_and_peak_rss() {
         let sample = RssSample::parse(SAMPLE_STATUS).expect("both fields present");
-        assert_eq!(sample.current, 524288 * 1024);
-        assert_eq!(sample.peak, 716800 * 1024);
+        assert_eq!(sample.current, 524_288 * 1024);
+        assert_eq!(sample.peak, 716_800 * 1024);
         assert_eq!(sample.current_peak_mib(), "512/700 MiB");
     }
 

@@ -12,7 +12,7 @@ use wado_compiler::semantics::Semantics;
 use wado_compiler::wit_emit::{self, WitEmitOptions, WitScope};
 
 use crate::args::{self, CliExit, OptSpec};
-use crate::compile::attach_manifest_deps;
+use crate::compile::{attach_manifest_and_component_deps, load_nearest_manifest};
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::manifest::{self, EntryPointKind};
 
@@ -176,10 +176,39 @@ async fn world_semantics_and_opts(
     let source = fs::read_to_string(path)
         .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
-    let host = FilesystemCompilerHost::new(base_path.clone());
 
-    let mut sem =
-        wado_compiler::semantics_for_world(&source, &host, Some(&input), world.as_deref()).await;
+    // Mirror the compile host: manifest dependencies (offline, analysis tier)
+    // and the kiln pipeline's generator redirects, so a `with { generator }`
+    // consumer analyzes here as it compiles (issue #1646).
+    let manifest_pair = load_nearest_manifest(path);
+    let host = attach_manifest_and_component_deps(
+        FilesystemCompilerHost::new(base_path.clone()),
+        manifest_pair.as_ref(),
+        &base_path,
+        &source,
+        false,
+    )
+    .await
+    .map_err(CliExit::error)?;
+    let import_host = attach_manifest_and_component_deps(
+        FilesystemCompilerHost::silent(base_path.clone()),
+        manifest_pair.as_ref(),
+        &base_path,
+        &source,
+        false,
+    )
+    .await
+    .map_err(CliExit::error)?;
+    let invocations = run_generators(path, &host, manifest_pair).await?;
+
+    let mut sem = wado_compiler::semantics_for_world(
+        &source,
+        &host,
+        Some(&input),
+        world.as_deref(),
+        invocations.clone(),
+    )
+    .await;
     if !sem.is_complete() {
         return Err(CliExit::silent_failure(1));
     }
@@ -191,9 +220,22 @@ async fn world_semantics_and_opts(
         Some(&default_interface_name(&input)),
     ));
 
-    let import_host = FilesystemCompilerHost::silent(base_path);
-    let world_imports = resolve_world_imports(&import_host, &source, &input, &world).await;
+    let world_imports =
+        resolve_world_imports(&import_host, &source, &input, &world, invocations).await;
     Ok((sem, world_imports))
+}
+
+/// Run the entry's kiln generators (cache-aware, so a prior build's outputs are
+/// reused) and return the redirect index the analysis needs.
+async fn run_generators(
+    entry_file: &Path,
+    host: &FilesystemCompilerHost,
+    manifest_pair: Option<manifest::ProjectManifest>,
+) -> Result<wado_compiler::kiln::InvocationIndex, CliExit> {
+    crate::compile::maybe_run_pipeline(entry_file, host, false, manifest_pair)
+        .await
+        .map(|outcome| outcome.invocations)
+        .map_err(|e| CliExit::error(format!("wado wit: running kiln generators: {e}")))
 }
 
 /// Analyze the `[package].lib` entry and build the emit options for the library
@@ -214,12 +256,34 @@ async fn lib_semantics_and_opts(
         .map(Path::to_path_buf)
         .unwrap_or_default();
 
-    let host = attach_manifest_deps(
+    let host = attach_manifest_and_component_deps(
         FilesystemCompilerHost::new(base_path.clone()),
         Some(&project),
         &base_path,
-    );
-    let mut sem = wado_compiler::semantics_for_world(&source, &host, Some(&entry_str), None).await;
+        &source,
+        false,
+    )
+    .await
+    .map_err(CliExit::error)?;
+    let import_host = attach_manifest_and_component_deps(
+        FilesystemCompilerHost::silent(base_path.clone()),
+        Some(&project),
+        &base_path,
+        &source,
+        false,
+    )
+    .await
+    .map_err(CliExit::error)?;
+    let invocations = run_generators(&target.entry, &host, Some(project)).await?;
+
+    let mut sem = wado_compiler::semantics_for_world(
+        &source,
+        &host,
+        Some(&entry_str),
+        None,
+        invocations.clone(),
+    )
+    .await;
     if !sem.is_complete() {
         return Err(CliExit::silent_failure(1));
     }
@@ -229,13 +293,14 @@ async fn lib_semantics_and_opts(
         None,
     ));
 
-    let import_host = attach_manifest_deps(
-        FilesystemCompilerHost::silent(base_path.clone()),
-        Some(&project),
-        &base_path,
-    );
-    let world_imports =
-        resolve_lib_world_imports(&import_host, &source, &entry_str, &target.interface_fq).await;
+    let world_imports = resolve_lib_world_imports(
+        &import_host,
+        &source,
+        &entry_str,
+        &target.interface_fq,
+        invocations,
+    )
+    .await;
     Ok((sem, world_imports))
 }
 
@@ -264,6 +329,7 @@ async fn resolve_world_imports(
     source: &str,
     input: &str,
     world: &str,
+    invocations: wado_compiler::kiln::InvocationIndex,
 ) -> Vec<String> {
     let result = wado_compiler::dump_with_host_and_world(
         source,
@@ -277,7 +343,7 @@ async fn resolve_world_imports(
         &[],
         &wado_compiler::hashmap::IndexMap::default(),
         wado_compiler::param_resolution::ParamPolicy::default(),
-        wado_compiler::kiln::InvocationIndex::default(),
+        invocations,
     )
     .await;
     imports_or_warn(result, |r| wir_imports(r.wir_package))
@@ -292,12 +358,14 @@ async fn resolve_lib_world_imports(
     source: &str,
     input: &str,
     lib_world: &str,
+    invocations: wado_compiler::kiln::InvocationIndex,
 ) -> Vec<String> {
     let options = wado_compiler::CompilerOptions {
         opt_level: wado_compiler::OptLevel::O2,
         lib_world: Some(lib_world.to_string()),
         allocator: Some("freelist".to_string()),
         retain_wir: true,
+        invocations,
         ..Default::default()
     };
     let result = wado_compiler::compile_with_options(source, host, Some(input), options).await;
