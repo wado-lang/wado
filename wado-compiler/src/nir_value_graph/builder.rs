@@ -441,6 +441,9 @@ struct Builder<'a> {
     body: &'a Body,
     pool: ValuePool,
     value_of: IndexMap<ExprId, ValueId>,
+    block_writes: IndexMap<BlockId, std::rc::Rc<crate::hashmap::IndexSet<u32>>>,
+    fresh_invalidations: crate::hashmap::IndexSet<u32>,
+    mut_escaped_sorted: Vec<u32>,
     /// `local_index → current Value` at the current program point. Cloned at
     /// branch entries so each arm walks from the pre-branch snapshot.
     current_value: IndexMap<u32, ValueId>,
@@ -501,12 +504,19 @@ impl<'a> Builder<'a> {
             body,
             pool,
             value_of: IndexMap::default(),
+            block_writes: IndexMap::default(),
+            fresh_invalidations: crate::hashmap::IndexSet::default(),
             current_value: IndexMap::default(),
             heap_state: HeapState::new(),
             field_store: IndexMap::default(),
             aliased: aliased.clone(),
             untrackable: untrackable.clone(),
             mut_escaped: mut_escaped.clone(),
+            mut_escaped_sorted: {
+                let mut v: Vec<u32> = mut_escaped.iter().copied().collect();
+                v.sort_unstable();
+                v
+            },
             ref_targets: IndexMap::default(),
             type_table,
             loop_entry_values: IndexMap::default(),
@@ -721,30 +731,17 @@ impl<'a> Builder<'a> {
     /// `mut_escaped` receiver's field version stable across it.
     fn bump_call_effects(&mut self, call: ExprId) {
         let pure = self.pure_calls.contains(&call);
-        let mut targets: Vec<u32> = if pure {
-            self.mut_escaped
-                .iter()
-                .filter(|l| self.untrackable.contains(*l))
-                .copied()
-                .collect()
-        } else {
-            self.mut_escaped.iter().copied().collect()
-        };
-        // Mint the opaques by ascending local index, not `mut_escaped`'s
-        // insertion order: opaque `ValueId`s are handed out in mint order, so
+        // Iterate ascending local index, not `mut_escaped`'s insertion order:
+        // opaque `ValueId`s and heap versions are handed out in visit order, so
         // this keeps the value graph a deterministic function of the program
         // regardless of how the alias sets were built (#1440).
-        targets.sort_unstable();
-        for l in targets {
+        for i in 0..self.mut_escaped_sorted.len() {
+            let l = self.mut_escaped_sorted[i];
+            if pure && !self.untrackable.contains(&l) {
+                continue;
+            }
             self.heap_state.bump_local(l);
-            // A `&mut`-escaped local's *scalar* value can also be overwritten by
-            // the callee (`set_bool(&mut c, false)`), not only its heap fields, so
-            // drop its tracked `current_value` to a fresh opaque. Without this the
-            // graph keeps the pre-call constant (`c = true`) for reads after the
-            // call — a stale value the WIR codegen ignores (it reads the slot) but
-            // that over-merges with the call result a fresh build splits.
-            let opaque = self.pool.fresh_opaque_with_source(OpaqueSource::Local(l));
-            self.current_value.insert(l, opaque);
+            self.invalidate_local_with_source(l, Some(OpaqueSource::Local(l)));
         }
     }
 
@@ -753,7 +750,7 @@ impl<'a> Builder<'a> {
             // A parameter's value re-emits as `local.get idx` — record the
             // source so the extractor can materialise a promoted value over it.
             let opaque = self.pool.fresh_opaque_with_source(OpaqueSource::Local(idx));
-            self.current_value.insert(idx, opaque);
+            self.set_local_value(idx, opaque);
         }
     }
 
@@ -773,7 +770,7 @@ impl<'a> Builder<'a> {
                     self.pool
                         .fresh_opaque_with_source(OpaqueSource::Local(local_index))
                 });
-                self.current_value.insert(local_index, v);
+                self.set_local_value(local_index, v);
                 // `let x = S { f: lit, … }` binds `x` to a fresh opaque; seed
                 // each pure field so a later `x.f` read forwards the literal.
                 // A promoted constant binding has no struct fields / ref target.
@@ -893,6 +890,7 @@ impl<'a> Builder<'a> {
                     // mutates goes Opaque and any field it writes is
                     // invalidated (both below). Else `false && { x = 2; true }`
                     // would commit `x = 2` and forward the never-stored value.
+                    self.fresh_invalidations.clear();
                     let saved_cur = self.current_value.clone();
                     let rhs = self.walk_operand(right);
                     let changed: crate::hashmap::IndexSet<u32> = self
@@ -904,7 +902,7 @@ impl<'a> Builder<'a> {
                         .collect();
                     for &k in &changed {
                         let opaque = self.pool.fresh_opaque();
-                        self.current_value.insert(k, opaque);
+                        self.set_local_value(k, opaque);
                     }
                     // A reference the conditionally-run rhs reassigned (or whose
                     // pointee it reassigned) no longer has a known target.
@@ -991,7 +989,7 @@ impl<'a> Builder<'a> {
                     .unwrap_or_else(|| self.pool.fresh_opaque());
                 match target_kind {
                     ExprKind::Local { index, .. } => {
-                        self.current_value.insert(index, v);
+                        self.set_local_value(index, v);
                         // `local = S { f: lit, … }` rebinds `local` to a fresh
                         // object; seed each pure field like the `Let` case so a
                         // later `local.f` read forwards the literal.
@@ -1376,12 +1374,13 @@ impl<'a> Builder<'a> {
 
     fn read_local(&mut self, idx: u32) -> ValueId {
         if let Some(&v) = self.current_value.get(&idx) {
+            self.fresh_invalidations.swap_remove(&idx);
             v
         } else {
             // Unbound locals shouldn't occur on well-typed NIR; cache a
             // fresh Opaque so subsequent reads agree.
             let v = self.pool.fresh_opaque_with_source(OpaqueSource::Local(idx));
-            self.current_value.insert(idx, v);
+            self.set_local_value(idx, v);
             v
         }
     }
@@ -1392,7 +1391,7 @@ impl<'a> Builder<'a> {
                 let v = self
                     .pool
                     .fresh_opaque_with_source(OpaqueSource::Local(local_index));
-                self.current_value.insert(local_index, v);
+                self.set_local_value(local_index, v);
             }
             PatKind::Tuple(children, _) => {
                 for c in children {
@@ -1426,7 +1425,8 @@ impl<'a> Builder<'a> {
 
     /// Capture all flow-sensitive state (`current_value`, `heap_state`,
     /// `ref_targets`) at the current program point as one [`FlowSnapshot`].
-    fn flow_snapshot(&self) -> FlowSnapshot {
+    fn flow_snapshot(&mut self) -> FlowSnapshot {
+        self.fresh_invalidations.clear();
         FlowSnapshot {
             current_value: self.current_value.clone(),
             heap: self.heap_state.snapshot(),
@@ -1437,9 +1437,29 @@ impl<'a> Builder<'a> {
     /// Reset all flow-sensitive state to a previously captured snapshot. Used
     /// between branch arms so each arm walks from the common pre-branch state.
     fn flow_restore(&mut self, snap: &FlowSnapshot) {
+        self.fresh_invalidations.clear();
         self.current_value.clone_from(&snap.current_value);
         self.heap_state.restore(snap.heap.clone());
         self.ref_targets.clone_from(&snap.ref_targets);
+    }
+
+    fn set_local_value(&mut self, idx: u32, v: ValueId) {
+        self.fresh_invalidations.swap_remove(&idx);
+        self.current_value.insert(idx, v);
+    }
+
+    fn invalidate_local_with_source(&mut self, idx: u32, source: Option<OpaqueSource>) {
+        if self.current_value.contains_key(&idx) && self.fresh_invalidations.insert(idx) {
+            let opaque = match source {
+                Some(s) => self.pool.fresh_opaque_with_source(s),
+                None => self.pool.fresh_opaque(),
+            };
+            self.current_value.insert(idx, opaque);
+        }
+    }
+
+    fn invalidate_local(&mut self, idx: u32) {
+        self.invalidate_local_with_source(idx, None);
     }
 
     /// Join an if-style two-arm endpoint over all three flow components at
@@ -1516,7 +1536,7 @@ impl<'a> Builder<'a> {
             } else {
                 self.pool.fresh_opaque()
             };
-            self.current_value.insert(idx, merged);
+            self.set_local_value(idx, merged);
         }
     }
 
@@ -1547,7 +1567,7 @@ impl<'a> Builder<'a> {
             } else {
                 consensus.unwrap_or(saved_v)
             };
-            self.current_value.insert(idx, merged);
+            self.set_local_value(idx, merged);
         }
     }
 
@@ -1733,15 +1753,17 @@ impl<'a> Builder<'a> {
                 any_guard = true;
                 // A promoted constant guard (`Operand::Value`) writes nothing.
                 if let Some(ge) = g.as_expr() {
-                    collect_writes_in_expr(self.body, ge, &mut guard_writes);
+                    collect_writes_in_expr(
+                        self.body,
+                        ge,
+                        &mut guard_writes,
+                        &mut self.block_writes,
+                    );
                 }
             }
         }
-        for idx in &guard_writes {
-            if self.current_value.contains_key(idx) {
-                let opaque = self.pool.fresh_opaque();
-                self.current_value.insert(*idx, opaque);
-            }
+        for &idx in &guard_writes {
+            self.invalidate_local(idx);
         }
         self.drop_ref_targets_for(&guard_writes);
         if any_guard {
@@ -1782,12 +1804,12 @@ impl<'a> Builder<'a> {
     /// non-builtin call — keeps its pre-loop version, so a `table.used = 256`
     /// before a builtin-only loop still forwards inside and after it.
     fn walk_loop(&mut self, body_block: crate::nir_arena::BlockId) {
-        let mut writes: crate::hashmap::IndexSet<u32> = crate::hashmap::IndexSet::default();
-        collect_writes_in_block(self.body, body_block, &mut writes);
+        let writes = writes_of_block(self.body, body_block, &mut self.block_writes);
         let heap_effects =
             collect_loop_heap_effects(self.body, &self.pure_builtin_callees, body_block);
         // Snapshot before the reassigned-local opaques below overwrite the
         // written locals' pre-loop values.
+        self.fresh_invalidations.clear();
         self.loop_entry_values
             .insert(body_block, self.current_value.clone());
         // Born-as-operands: give each written local a `LoopPhi { entry, body_iter }`
@@ -1798,19 +1820,19 @@ impl<'a> Builder<'a> {
         // `body_iter` is patched to the post-body value below. A local whose entry
         // value has no recorded type falls back to a fresh opaque.
         let mut phis: Vec<(u32, ValueId)> = Vec::new();
-        for idx in &writes {
-            let Some(&entry) = self.current_value.get(idx) else {
+        for &idx in writes.iter() {
+            let Some(&entry) = self.current_value.get(&idx) else {
                 continue;
             };
             let phi = match self.pool.type_of(entry) {
                 Some(ty) => {
                     let phi = self.pool.alloc_loop_phi(entry, ty);
-                    phis.push((*idx, phi));
+                    phis.push((idx, phi));
                     phi
                 }
                 None => self.pool.fresh_opaque(),
             };
-            self.current_value.insert(*idx, phi);
+            self.set_local_value(idx, phi);
         }
         self.drop_ref_targets_for(&writes);
         self.apply_loop_heap_effects(&heap_effects);
@@ -1827,11 +1849,8 @@ impl<'a> Builder<'a> {
                 self.pool.set_loop_phi_body_iter(*phi, body_val);
             }
         }
-        for idx in &writes {
-            if self.current_value.contains_key(idx) {
-                let opaque = self.pool.fresh_opaque();
-                self.current_value.insert(*idx, opaque);
-            }
+        for &idx in writes.iter() {
+            self.invalidate_local(idx);
         }
         self.drop_ref_targets_for(&writes);
         self.apply_loop_heap_effects(&heap_effects);
@@ -1872,16 +1891,30 @@ impl<'a> Builder<'a> {
     /// never sees. Locals not written in the subtree keep their pre-block
     /// value.
     fn dirty_all_writes_in_block(&mut self, block: crate::nir_arena::BlockId) {
-        let mut writes: crate::hashmap::IndexSet<u32> = crate::hashmap::IndexSet::default();
-        collect_writes_in_block(self.body, block, &mut writes);
-        for idx in &writes {
-            if self.current_value.contains_key(idx) {
-                let opaque = self.pool.fresh_opaque();
-                self.current_value.insert(*idx, opaque);
-            }
+        let writes = writes_of_block(self.body, block, &mut self.block_writes);
+        for &idx in writes.iter() {
+            self.invalidate_local(idx);
         }
         self.drop_ref_targets_for(&writes);
     }
+}
+
+fn writes_of_block(
+    body: &Body,
+    block: crate::nir_arena::BlockId,
+    cache: &mut IndexMap<BlockId, std::rc::Rc<crate::hashmap::IndexSet<u32>>>,
+) -> std::rc::Rc<crate::hashmap::IndexSet<u32>> {
+    if let Some(ws) = cache.get(&block) {
+        return std::rc::Rc::clone(ws);
+    }
+    let mut out = crate::hashmap::IndexSet::default();
+    let stmts = body.blocks[block].stmts.clone();
+    for s in stmts {
+        collect_writes_in_stmt(body, s, &mut out, cache);
+    }
+    let rc = std::rc::Rc::new(out);
+    cache.insert(block, std::rc::Rc::clone(&rc));
+    rc
 }
 
 /// Whether `block`'s subtree contains a `break` targeting `label`. Used by
@@ -2075,49 +2108,63 @@ fn collect_writes_in_block(
     body: &Body,
     block: crate::nir_arena::BlockId,
     out: &mut crate::hashmap::IndexSet<u32>,
+    cache: &mut IndexMap<BlockId, std::rc::Rc<crate::hashmap::IndexSet<u32>>>,
 ) {
-    let stmts = body.blocks[block].stmts.clone();
-    for s in stmts {
-        collect_writes_in_stmt(body, s, out);
-    }
+    let ws = writes_of_block(body, block, cache);
+    out.extend(ws.iter().copied());
 }
 
-fn collect_writes_in_stmt(body: &Body, stmt: StmtId, out: &mut crate::hashmap::IndexSet<u32>) {
+fn collect_writes_in_stmt(
+    body: &Body,
+    stmt: StmtId,
+    out: &mut crate::hashmap::IndexSet<u32>,
+    cache: &mut IndexMap<BlockId, std::rc::Rc<crate::hashmap::IndexSet<u32>>>,
+) {
     match &body.stmts[stmt].kind {
         StmtKind::Let {
             local_index, value, ..
         } => {
             out.insert(*local_index);
             if let Some(ve) = value.as_expr() {
-                collect_writes_in_expr(body, ve, out);
+                collect_writes_in_expr(body, ve, out, cache);
             }
         }
         StmtKind::LetDestructure { pattern, value, .. } => {
-            collect_writes_in_pattern(body, *pattern, out);
-            collect_writes_in_operand(body, *value, out);
+            collect_writes_in_pattern(body, *pattern, out, cache);
+            collect_writes_in_operand(body, *value, out, cache);
         }
         _ => {
             let mut kids = Vec::new();
             body.for_each_child(NodeRef::Stmt(stmt), |c| kids.push(c));
             for c in kids {
                 match c {
-                    NodeRef::Expr(e) => collect_writes_in_expr(body, e, out),
-                    NodeRef::Stmt(s) => collect_writes_in_stmt(body, s, out),
-                    NodeRef::Block(b) => collect_writes_in_block(body, b, out),
-                    NodeRef::Pat(p) => collect_writes_in_pattern(body, p, out),
+                    NodeRef::Expr(e) => collect_writes_in_expr(body, e, out, cache),
+                    NodeRef::Stmt(s) => collect_writes_in_stmt(body, s, out, cache),
+                    NodeRef::Block(b) => collect_writes_in_block(body, b, out, cache),
+                    NodeRef::Pat(p) => collect_writes_in_pattern(body, p, out, cache),
                 }
             }
         }
     }
 }
 
-fn collect_writes_in_operand(body: &Body, op: Operand, out: &mut crate::hashmap::IndexSet<u32>) {
+fn collect_writes_in_operand(
+    body: &Body,
+    op: Operand,
+    out: &mut crate::hashmap::IndexSet<u32>,
+    cache: &mut IndexMap<BlockId, std::rc::Rc<crate::hashmap::IndexSet<u32>>>,
+) {
     if let Some(e) = op.as_expr() {
-        collect_writes_in_expr(body, e, out);
+        collect_writes_in_expr(body, e, out, cache);
     }
 }
 
-fn collect_writes_in_expr(body: &Body, expr: ExprId, out: &mut crate::hashmap::IndexSet<u32>) {
+fn collect_writes_in_expr(
+    body: &Body,
+    expr: ExprId,
+    out: &mut crate::hashmap::IndexSet<u32>,
+    cache: &mut IndexMap<BlockId, std::rc::Rc<crate::hashmap::IndexSet<u32>>>,
+) {
     if let ExprKind::Assign { target, .. } = &body.exprs[expr].kind
         && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
     {
@@ -2127,15 +2174,20 @@ fn collect_writes_in_expr(body: &Body, expr: ExprId, out: &mut crate::hashmap::I
     body.for_each_child(NodeRef::Expr(expr), |c| kids.push(c));
     for c in kids {
         match c {
-            NodeRef::Expr(e) => collect_writes_in_expr(body, e, out),
-            NodeRef::Stmt(s) => collect_writes_in_stmt(body, s, out),
-            NodeRef::Block(b) => collect_writes_in_block(body, b, out),
-            NodeRef::Pat(p) => collect_writes_in_pattern(body, p, out),
+            NodeRef::Expr(e) => collect_writes_in_expr(body, e, out, cache),
+            NodeRef::Stmt(s) => collect_writes_in_stmt(body, s, out, cache),
+            NodeRef::Block(b) => collect_writes_in_block(body, b, out, cache),
+            NodeRef::Pat(p) => collect_writes_in_pattern(body, p, out, cache),
         }
     }
 }
 
-fn collect_writes_in_pattern(body: &Body, pat: PatId, out: &mut crate::hashmap::IndexSet<u32>) {
+fn collect_writes_in_pattern(
+    body: &Body,
+    pat: PatId,
+    out: &mut crate::hashmap::IndexSet<u32>,
+    cache: &mut IndexMap<BlockId, std::rc::Rc<crate::hashmap::IndexSet<u32>>>,
+) {
     if let PatKind::Binding { local_index, .. } = &body.pats[pat].kind {
         out.insert(*local_index);
     } else {
@@ -2143,8 +2195,8 @@ fn collect_writes_in_pattern(body: &Body, pat: PatId, out: &mut crate::hashmap::
         body.for_each_child(NodeRef::Pat(pat), |c| kids.push(c));
         for c in kids {
             match c {
-                NodeRef::Pat(p) => collect_writes_in_pattern(body, p, out),
-                NodeRef::Expr(e) => collect_writes_in_expr(body, e, out),
+                NodeRef::Pat(p) => collect_writes_in_pattern(body, p, out, cache),
+                NodeRef::Expr(e) => collect_writes_in_expr(body, e, out, cache),
                 _ => {}
             }
         }
