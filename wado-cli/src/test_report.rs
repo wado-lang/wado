@@ -189,7 +189,9 @@ impl TestReporter for VerboseReporter {
             println!("=== aggregate ===");
             test::print_three_axis(grand, Some(&total_dur));
         } else {
-            println!("(wall: {total_dur})");
+            for line in test::resource_summary_lines(&total_dur) {
+                println!("{line}");
+            }
         }
     }
 }
@@ -259,8 +261,9 @@ fn print_heartbeat(state: &HeartbeatState) {
     }
 
     println!(
-        "[{}] {done}/{total} files{pct} · {counts}{eta}",
-        test::format_duration(elapsed)
+        "[{}] {done}/{total} files{pct} · {counts}{eta}{}",
+        test::format_duration(elapsed),
+        crate::rss::heartbeat_suffix().unwrap_or_default()
     );
 }
 
