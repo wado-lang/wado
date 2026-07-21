@@ -69,3 +69,43 @@ test "fragment with trailing junk terminates" {
     let tree = fe_on::to_string_tree(&r);
     assert tree.contains("(stmt do x ;)"), `island missing: ${tree}`;
 }
+
+// Regression: a fragment whose trailing entry is truncated at EOF (`do` with no
+// ID) inserts synthetic tokens while parsing the island. `peek_at`/`lt` must
+// bound their lookahead by the token-kind snapshot, not the synthetic-grown
+// token stream, or the lookahead reads out of bounds and traps.
+test "truncated trailing entry does not trap" {
+    let r = fe_on::parse(&"do x ; do");
+    assert !r.ok(), "fragment should report a diagnostic";
+    let tree = fe_on::to_string_tree(&r);
+    assert tree.contains("(stmt do x ;)"), `first island missing: ${tree}`;
+}
+
+// The CST is always balanced (every Open has a Close), even on broken fragments
+// the sweep recovers — nothing left half-open for a tree walker.
+fn assert_balanced(input: &String) {
+    let r = fe_on::parse(input);
+    let mut depth = 0;
+    let mut min_depth = 0;
+    for let mut i = 0; i < r.cst.tag.len(); i += 1 {
+        match r.cst.tag[i] {
+            Open => depth += 1,
+            Close => depth -= 1,
+            _ => {
+            },
+        }
+        if depth < min_depth {
+            min_depth = depth;
+        }
+    }
+    assert depth == 0, `unbalanced (Open-Close=${depth}) for: ${*input}`;
+    assert min_depth >= 0, `Close before Open for: ${*input}`;
+}
+
+test "recovered fragments keep a balanced CST" {
+    assert_balanced(&"do x ; do");
+    assert_balanced(&"main { do x");
+    assert_balanced(&"main {");
+    assert_balanced(&"main { do x ; do y");
+    assert_balanced(&"do } zzz");
+}

@@ -359,7 +359,12 @@ struct RecoverFragmentEntry {
 fn compute_fragment_entries(grammar: &Grammar, ctx: &mut GenContext) -> List<RecoverFragmentEntry> {
     let names = *ctx.fragment_entry();
     let mut result: List<RecoverFragmentEntry> = [];
+    let mut seen: List<String> = [];
     for let name of &names {
+        if seen.contains(name) {
+            continue;
+        }
+        seen.push(*name);
         let mut found = -1;
         for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
             if grammar.parser_rules[i].name == *name {
@@ -951,7 +956,9 @@ fn gen_parser_struct(
         flt.set_return_type(&"i32");
         flt.emit_begin(w);
         w.line(&"let idx = self.pos + k - 1;");
-        w.line(&"if idx >= self.tokens.len() { return self.tokens.len() - 1; }");
+        // Clamp to the EOF slot in `kinds` (what a caller indexes), not to a
+        // synthetic appended to `tokens` during recovery — see `peek_at`.
+        w.line(&"if idx >= self.kinds.len() { return self.kinds.len() - 1; }");
         w.line(&"if idx < 0 { return 0; }");
         w.line(&"return idx;");
         w.end();
@@ -1176,7 +1183,11 @@ fn gen_parser_struct(
     f4.set_return_type(&"i32");
     f4.emit_begin(w);
     w.line(&"let idx = self.pos + offset;");
-    w.line(&"if idx >= self.tokens.len() { return TK_EOF; }");
+    // Bound by `kinds` (the token-kind snapshot this indexes), not `tokens`:
+    // recovery appends synthetic tokens to `tokens` but not to `kinds`, so a
+    // `tokens.len()` guard lets a lookahead past the real EOF read `kinds` out
+    // of bounds. `kinds.len() - 1` is the EOF slot; past it is EOF.
+    w.line(&"if idx >= self.kinds.len() { return TK_EOF; }");
     w.line(&"return self.kinds[idx];");
     w.end();
     w.blank();

@@ -72,28 +72,19 @@ test "highlight fragment: unterminated fn body keeps interpolation context" {
     assert visible_text(&html) == src, "fragment highlighting is text-preserving";
 }
 
+// Recovery re-entry (fragment_entry = "statement"): a bare statement/expression
+// fragment the start rule can't derive is still parsed — the entry sweeps the
+// unconsumed run and re-enters `statement` per token — so every token keeps its
+// default class and context overrides (interpolation id -> variable, muted
+// format spec) fire, all with no enclosing `fn`/item.
+
 test "highlight fragment: bare statements keep default classes and text" {
-    // No enclosing item — the parser cannot structure this, but every token
-    // still gets its default class and the text round-trips.
     let src = "let name = 1;\nif name > 0 { return true; }\n";
     let html = highlight(src);
     assert html.contains("<span class=\"keyword\">let</span>"), "keyword highlighted in fragment";
     assert html.contains("<span class=\"constant builtin\">true</span>"), "constant highlighted in fragment";
     assert visible_text(&html) == src, "bare-statement fragment is text-preserving";
 }
-
-test "highlight fragment: bare expression is text-preserving" {
-    let src = "`hi ${name}` + compute(1, 2)\n";
-    let html = highlight(src);
-    assert html.contains("class=\"string\""), "template text highlighted in fragment";
-    assert visible_text(&html) == src, "bare-expression fragment is text-preserving";
-}
-
-// Recovery re-entry (fragment_entry = "statement"): a bare statement/expression
-// fragment the start rule can't derive still recovers full structure. The parse
-// entry sweeps the unconsumed run and parses each `statement`, so a template's
-// interpolation builds a real subtree and its overrides fire — even with no
-// enclosing `fn`/item.
 
 test "highlight fragment: bare statement recovers interpolation context" {
     let src = "let name = 1;\nlet s = `hi ${name} ${name:0.2}`;\n";
@@ -108,6 +99,7 @@ test "highlight fragment: bare statement recovers interpolation context" {
 test "highlight fragment: bare expression recovers interpolation context" {
     let src = "`hi ${name}` + compute(1, 2)\n";
     let html = highlight(src);
+    assert html.contains("class=\"string\""), "template text -> string";
     assert html.contains("<span class=\"variable\">name</span>"), "interp id -> variable in bare expression";
     assert visible_text(&html) == src, "bare-expression fragment is text-preserving";
 }
