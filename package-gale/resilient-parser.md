@@ -145,7 +145,7 @@ start rule) is otherwise left unconsumed, so nested-only constructs build no
 subtree. Naming the unit rule(s) makes the start rule's `expect(EOF)` sweep the
 remainder into an `<error>` region under the root and parse each entry, so a bare
 statement fragment builds full subtrees (opt-in, byte-identical when empty). See
-`recovery-reentry.md`.
+"Parsing a fragment" in `README.md`.
 
 ### Deferred
 
