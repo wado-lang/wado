@@ -635,6 +635,207 @@ struct FromTupleItem {
     name: String,
 }
 
+impl FromTupleItem {
+    fn resolve(items: &CompilerItems) -> Self {
+        let (module_source, owner, name) = items.require_method(CompilerItem::ListFromTuple);
+        Self {
+            module_source: module_source.clone(),
+            owner: owner.to_string(),
+            name: name.to_string(),
+        }
+    }
+}
+
+/// The module-level types shared by every kind-specific reflection synthesis:
+/// the metadata struct (`VariantCaseMeta` / `EnumCaseMeta` / `FlagBitMeta`), its
+/// `List` type, and the `from_tuple` constructor its `*_meta()` member calls.
+struct ReflectMetaEnv {
+    string_type: TypeId,
+    meta_type: TypeId,
+    meta_type_name: String,
+    meta_struct_name: String,
+    list_meta_type: TypeId,
+    from_tuple: FromTupleItem,
+}
+
+impl ReflectMetaEnv {
+    fn resolve(tt: &mut TypeTable, meta_item: CompilerItem) -> Self {
+        let string_type = tt.make_compiler_struct(CompilerItem::String);
+        let meta_type = tt.make_compiler_struct(meta_item);
+        let meta_type_name = tt.mangle_type_name(meta_type);
+        let list_meta_type = tt.make_list(meta_type);
+        let items = tt.compiler_items();
+        Self {
+            string_type,
+            meta_type,
+            meta_type_name,
+            meta_struct_name: items.struct_name(meta_item).to_string(),
+            list_meta_type,
+            from_tuple: FromTupleItem::resolve(items),
+        }
+    }
+}
+
+/// Shared driver for the kind-specific reflection syntheses (`ReflectVariant` /
+/// `ReflectEnum` / `ReflectFlags`): resolve the trait's bound-driven synth
+/// requests once, then run `generate_impls` per module. Only the trait item and
+/// the per-module impl generator differ between the three kinds.
+fn synthesize_reflect_kind(
+    project: &mut Package,
+    trait_item: CompilerItem,
+    generate_impls: fn(&mut TirModule, &mut SynthesisCtx<'_, '_, '_>, &str),
+) {
+    let trait_env = project.trait_env.clone();
+    let first_module = project
+        .tir_modules
+        .values()
+        .next()
+        .expect("tir_modules must contain at least the entry module during synthesis");
+    let trait_name = first_module
+        .type_table
+        .borrow()
+        .compiler_items()
+        .trait_name(trait_item)
+        .to_string();
+    let requested: IndexSet<(String, ModuleSource, String)> = first_module
+        .type_table
+        .borrow()
+        .bound_driven_synth_requests(|t| t == trait_name)
+        .into_iter()
+        .collect();
+
+    let mut pending: IndexSet<(String, ModuleSource, String)> = IndexSet::default();
+    for module in project.tir_modules.values_mut() {
+        let module_source = module.module_source.clone();
+        let names = {
+            let tt = module.type_table.borrow();
+            TraitsStdlibNames::from_compiler_items(tt.compiler_items())
+        };
+        let mut ctx = SynthesisCtx {
+            trait_env: &trait_env,
+            pending: &mut pending,
+            requested: &requested,
+            module: module_source,
+            names: &names,
+        };
+        generate_impls(module, &mut ctx, &trait_name);
+    }
+}
+
+/// The metadata-struct pieces `generate_reflect_meta_list_fn` needs, borrowed
+/// from any kind's `SynthEnv` (all three carry these fields flat).
+struct MetaListParts<'a> {
+    meta_type: TypeId,
+    meta_struct_name: &'a str,
+    meta_type_name: &'a str,
+    list_meta_type: TypeId,
+    from_tuple: &'a FromTupleItem,
+}
+
+/// Build `Type^Trait::<meta_method>() -> List<Meta>` as
+/// `return List::<Meta>::from_tuple([Meta { .. }, ..]);` from pre-built field
+/// rows — the shared tail of `case_meta()` / `bit_meta()` across all kinds.
+fn generate_reflect_meta_list_fn(
+    method_info: LocalMethodName,
+    parts: MetaListParts<'_>,
+    metas_tuple_type: TypeId,
+    rows: Vec<Vec<TirStructField>>,
+    span: Span,
+) -> TirFunction {
+    let qualified_name = method_info.to_mangled_name();
+
+    let elements = rows
+        .into_iter()
+        .map(|fields| {
+            TirExpr::new(
+                TirExprKind::StructLiteral {
+                    struct_type: parts.meta_type,
+                    struct_name: parts.meta_struct_name.to_string(),
+                    fields,
+                },
+                parts.meta_type,
+                span,
+            )
+        })
+        .collect();
+    let tuple = TirExpr::new(
+        TirExprKind::TupleLiteral { elements },
+        metas_tuple_type,
+        span,
+    );
+
+    let from_tuple = LocalMethodName::new(
+        parts.from_tuple.owner.clone(),
+        None,
+        parts.from_tuple.name.clone(),
+    )
+    .with_struct_type_args(&[parts.meta_type_name.to_string()]);
+    let call = TirExpr::new(
+        TirExprKind::Call {
+            func: FunctionRef {
+                module_source: parts.from_tuple.module_source.clone(),
+                name: from_tuple.to_mangled_name(),
+                monomorph_info: Some(MonomorphInfo {
+                    generic_name: format!(
+                        "{}::{}",
+                        parts.from_tuple.owner, parts.from_tuple.name
+                    ),
+                    impl_type_args: vec![parts.meta_type],
+                    method_type_args: vec![metas_tuple_type],
+                    is_blanket: false,
+                }),
+                method_info: Some(from_tuple),
+            },
+            type_args: vec![metas_tuple_type],
+            args: vec![CallArg::new(tuple, false)],
+        },
+        parts.list_meta_type,
+        span,
+    );
+
+    let body = TirBlock::new(
+        vec![TirStmt::new(
+            TirStmtKind::Return { value: Some(call) },
+            span,
+        )],
+        span,
+    );
+
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        vec![],
+        parts.list_meta_type,
+        body,
+        vec![],
+    )
+}
+
+/// A metadata-struct field carrying an `i32`/`u64`/etc. integer literal.
+fn reflect_meta_int_field(name: &str, value: u64, ty: TypeId, index: u32, span: Span) -> TirStructField {
+    TirStructField {
+        name: name.to_string(),
+        value: TirExpr::new(
+            TirExprKind::IntLiteral {
+                value,
+                repr: value.to_string(),
+            },
+            ty,
+            span,
+        ),
+        field_index: index,
+    }
+}
+
+/// The leading `name: "<name>"` string field shared by every metadata struct.
+fn reflect_meta_name_field(name: &str, string_type: TypeId, span: Span) -> TirStructField {
+    TirStructField {
+        name: "name".to_string(),
+        value: TirExpr::new(TirExprKind::StringLiteral(name.to_string()), string_type, span),
+        field_index: 0,
+    }
+}
+
 /// Build `StructName^Reflect::field_names() -> List<String>` as
 /// `return List::<String>::from_tuple(["f0", "f1", ...]);`.
 ///
@@ -796,43 +997,14 @@ fn generate_type_name_fn(
 }
 
 /// Generate the `ReflectVariant` members for each requested variant
-/// (WEP 2026-06-13 §3d): `type_name()`, `case_meta()`, `discriminant(&self)`.
+/// (WEP 2026-06-13 §3d): `type_name()`, `case_meta()`, `discriminant(&self)`,
+/// `cases()`, plus the per-payload `extract` / `construct` helpers.
 pub fn synthesize_reflect_variant(project: &mut Package) {
-    let trait_env = project.trait_env.clone();
-    let first_module = project
-        .tir_modules
-        .values()
-        .next()
-        .expect("tir_modules must contain at least the entry module during synthesis");
-    let variant_trait_name = first_module
-        .type_table
-        .borrow()
-        .compiler_items()
-        .trait_name(CompilerItem::ReflectVariant)
-        .to_string();
-    let requested: IndexSet<(String, ModuleSource, String)> = first_module
-        .type_table
-        .borrow()
-        .bound_driven_synth_requests(|trait_name| trait_name == variant_trait_name)
-        .into_iter()
-        .collect();
-
-    let mut pending: IndexSet<(String, ModuleSource, String)> = IndexSet::default();
-    for module in project.tir_modules.values_mut() {
-        let module_source = module.module_source.clone();
-        let names = {
-            let tt = module.type_table.borrow();
-            TraitsStdlibNames::from_compiler_items(tt.compiler_items())
-        };
-        let mut ctx = SynthesisCtx {
-            trait_env: &trait_env,
-            pending: &mut pending,
-            requested: &requested,
-            module: module_source,
-            names: &names,
-        };
-        generate_variant_reflect_impls(module, &mut ctx, &variant_trait_name);
-    }
+    synthesize_reflect_kind(
+        project,
+        CompilerItem::ReflectVariant,
+        generate_variant_reflect_impls,
+    );
 }
 
 /// Synthesize the `ReflectVariant` impl of every requested variant in `module`.
@@ -920,21 +1092,18 @@ struct ReflectVariantSynthEnv {
 
 impl ReflectVariantSynthEnv {
     fn resolve(tt: &mut TypeTable) -> Self {
-        let string_type = tt.make_compiler_struct(CompilerItem::String);
-        let meta_type = tt.make_compiler_struct(CompilerItem::VariantCaseMeta);
-        let meta_type_name = tt.mangle_type_name(meta_type);
-        let list_meta_type = tt.make_list(meta_type);
+        let ReflectMetaEnv {
+            string_type,
+            meta_type,
+            meta_type_name,
+            meta_struct_name,
+            list_meta_type,
+            from_tuple,
+        } = ReflectMetaEnv::resolve(tt, CompilerItem::VariantCaseMeta);
         let items = tt.compiler_items();
-        let meta_struct_name = items.struct_name(CompilerItem::VariantCaseMeta).to_string();
         let (case_struct_module, case_struct_name) = {
             let (m, n) = items.require_struct(CompilerItem::ReflectCase);
             (m.clone(), n.to_string())
-        };
-        let (module_source, owner, name) = items.require_method(CompilerItem::ListFromTuple);
-        let from_tuple = FromTupleItem {
-            module_source: module_source.clone(),
-            owner: owner.to_string(),
-            name: name.to_string(),
         };
         Self {
             string_type,
@@ -957,6 +1126,16 @@ impl ReflectVariantSynthEnv {
             cases_method: items
                 .method_name(CompilerItem::ReflectVariantCases)
                 .to_string(),
+        }
+    }
+
+    fn meta_list_parts(&self) -> MetaListParts<'_> {
+        MetaListParts {
+            meta_type: self.meta_type,
+            meta_struct_name: &self.meta_struct_name,
+            meta_type_name: &self.meta_type_name,
+            list_meta_type: self.list_meta_type,
+            from_tuple: &self.from_tuple,
         }
     }
 }
@@ -1415,34 +1594,13 @@ fn generate_variant_case_meta_fn(
     span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(&target.name, variant_trait_name, &env.case_meta_method);
-    let qualified_name = method_info.to_mangled_name();
-
-    let elements = target
+    let rows = target
         .cases
         .iter()
         .map(|(case_name, index, payload)| {
-            let fields = vec![
-                TirStructField {
-                    name: "name".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::StringLiteral(case_name.clone()),
-                        env.string_type,
-                        span,
-                    ),
-                    field_index: 0,
-                },
-                TirStructField {
-                    name: "discriminant".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: u64::from(*index),
-                            repr: index.to_string(),
-                        },
-                        TypeTable::I32,
-                        span,
-                    ),
-                    field_index: 1,
-                },
+            vec![
+                reflect_meta_name_field(case_name, env.string_type, span),
+                reflect_meta_int_field("discriminant", u64::from(*index), TypeTable::I32, 1, span),
                 TirStructField {
                     name: "is_unit".to_string(),
                     value: TirExpr::new(
@@ -1452,69 +1610,10 @@ fn generate_variant_case_meta_fn(
                     ),
                     field_index: 2,
                 },
-            ];
-            TirExpr::new(
-                TirExprKind::StructLiteral {
-                    struct_type: env.meta_type,
-                    struct_name: env.meta_struct_name.clone(),
-                    fields,
-                },
-                env.meta_type,
-                span,
-            )
+            ]
         })
         .collect();
-    let tuple = TirExpr::new(
-        TirExprKind::TupleLiteral { elements },
-        metas_tuple_type,
-        span,
-    );
-
-    let from_tuple = LocalMethodName::new(
-        env.from_tuple.owner.clone(),
-        None,
-        env.from_tuple.name.clone(),
-    )
-    .with_struct_type_args(&[env.meta_type_name.clone()]);
-    let call = TirExpr::new(
-        TirExprKind::Call {
-            func: FunctionRef {
-                module_source: env.from_tuple.module_source.clone(),
-                name: from_tuple.to_mangled_name(),
-                monomorph_info: Some(MonomorphInfo {
-                    generic_name: format!(
-                        "{}::{}",
-                        env.from_tuple.owner, env.from_tuple.name
-                    ),
-                    impl_type_args: vec![env.meta_type],
-                    method_type_args: vec![metas_tuple_type],
-                    is_blanket: false,
-                }),
-                method_info: Some(from_tuple),
-            },
-            type_args: vec![metas_tuple_type],
-            args: vec![CallArg::new(tuple, false)],
-        },
-        env.list_meta_type,
-        span,
-    );
-
-    let body = TirBlock::new(
-        vec![TirStmt::new(
-            TirStmtKind::Return { value: Some(call) },
-            span,
-        )],
-        span,
-    );
-
-    make_synthetic_method(
-        qualified_name,
-        method_info,
-        vec![],
-        env.list_meta_type,
-        body,
-        vec![],
-    )
+    generate_reflect_meta_list_fn(method_info, env.meta_list_parts(), metas_tuple_type, rows, span)
 }
 
 /// Build `Variant^ReflectVariant::discriminant(&self) -> i32` as
@@ -1562,41 +1661,11 @@ fn generate_variant_discriminant_fn(
 /// (WEP 2026-06-13 §3b): `type_name()`, `case_meta()`, `discriminant(&self)`,
 /// and `from_discriminant(disc)`.
 pub fn synthesize_reflect_enum(project: &mut Package) {
-    let trait_env = project.trait_env.clone();
-    let first_module = project
-        .tir_modules
-        .values()
-        .next()
-        .expect("tir_modules must contain at least the entry module during synthesis");
-    let enum_trait_name = first_module
-        .type_table
-        .borrow()
-        .compiler_items()
-        .trait_name(CompilerItem::ReflectEnum)
-        .to_string();
-    let requested: IndexSet<(String, ModuleSource, String)> = first_module
-        .type_table
-        .borrow()
-        .bound_driven_synth_requests(|trait_name| trait_name == enum_trait_name)
-        .into_iter()
-        .collect();
-
-    let mut pending: IndexSet<(String, ModuleSource, String)> = IndexSet::default();
-    for module in project.tir_modules.values_mut() {
-        let module_source = module.module_source.clone();
-        let names = {
-            let tt = module.type_table.borrow();
-            TraitsStdlibNames::from_compiler_items(tt.compiler_items())
-        };
-        let mut ctx = SynthesisCtx {
-            trait_env: &trait_env,
-            pending: &mut pending,
-            requested: &requested,
-            module: module_source,
-            names: &names,
-        };
-        generate_enum_reflect_impls(module, &mut ctx, &enum_trait_name);
-    }
+    synthesize_reflect_kind(
+        project,
+        CompilerItem::ReflectEnum,
+        generate_enum_reflect_impls,
+    );
 }
 
 /// Synthesize the `ReflectEnum` impl of every requested enum in `module`.
@@ -1668,18 +1737,15 @@ struct ReflectEnumSynthEnv {
 
 impl ReflectEnumSynthEnv {
     fn resolve(tt: &mut TypeTable) -> Self {
-        let string_type = tt.make_compiler_struct(CompilerItem::String);
-        let meta_type = tt.make_compiler_struct(CompilerItem::EnumCaseMeta);
-        let meta_type_name = tt.mangle_type_name(meta_type);
-        let list_meta_type = tt.make_list(meta_type);
+        let ReflectMetaEnv {
+            string_type,
+            meta_type,
+            meta_type_name,
+            meta_struct_name,
+            list_meta_type,
+            from_tuple,
+        } = ReflectMetaEnv::resolve(tt, CompilerItem::EnumCaseMeta);
         let items = tt.compiler_items();
-        let meta_struct_name = items.struct_name(CompilerItem::EnumCaseMeta).to_string();
-        let (module_source, owner, name) = items.require_method(CompilerItem::ListFromTuple);
-        let from_tuple = FromTupleItem {
-            module_source: module_source.clone(),
-            owner: owner.to_string(),
-            name: name.to_string(),
-        };
         Self {
             string_type,
             meta_type,
@@ -1699,6 +1765,16 @@ impl ReflectEnumSynthEnv {
             from_discriminant_method: items
                 .method_name(CompilerItem::ReflectEnumFromDiscriminant)
                 .to_string(),
+        }
+    }
+
+    fn meta_list_parts(&self) -> MetaListParts<'_> {
+        MetaListParts {
+            meta_type: self.meta_type,
+            meta_struct_name: &self.meta_struct_name,
+            meta_type_name: &self.meta_type_name,
+            list_meta_type: self.list_meta_type,
+            from_tuple: &self.from_tuple,
         }
     }
 }
@@ -1764,99 +1840,22 @@ fn generate_enum_case_meta_fn(
     span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(&target.name, enum_trait_name, &env.case_meta_method);
-    let qualified_name = method_info.to_mangled_name();
-
-    let elements = target
+    let rows = target
         .cases
         .iter()
         .map(|(case_name, index)| {
-            let fields = vec![
-                TirStructField {
-                    name: "name".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::StringLiteral(case_name.clone()),
-                        env.string_type,
-                        span,
-                    ),
-                    field_index: 0,
-                },
-                TirStructField {
-                    name: "discriminant".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: u64::from(*index),
-                            repr: index.to_string(),
-                        },
-                        TypeTable::I32,
-                        span,
-                    ),
-                    field_index: 1,
-                },
-            ];
-            TirExpr::new(
-                TirExprKind::StructLiteral {
-                    struct_type: env.meta_type,
-                    struct_name: env.meta_struct_name.clone(),
-                    fields,
-                },
-                env.meta_type,
-                span,
-            )
+            vec![
+                reflect_meta_name_field(case_name, env.string_type, span),
+                reflect_meta_int_field("discriminant", u64::from(*index), TypeTable::I32, 1, span),
+            ]
         })
         .collect();
-    let tuple = TirExpr::new(
-        TirExprKind::TupleLiteral { elements },
-        metas_tuple_type,
-        span,
-    );
-
-    let from_tuple = LocalMethodName::new(
-        env.from_tuple.owner.clone(),
-        None,
-        env.from_tuple.name.clone(),
-    )
-    .with_struct_type_args(&[env.meta_type_name.clone()]);
-    let call = TirExpr::new(
-        TirExprKind::Call {
-            func: FunctionRef {
-                module_source: env.from_tuple.module_source.clone(),
-                name: from_tuple.to_mangled_name(),
-                monomorph_info: Some(MonomorphInfo {
-                    generic_name: format!("{}::{}", env.from_tuple.owner, env.from_tuple.name),
-                    impl_type_args: vec![env.meta_type],
-                    method_type_args: vec![metas_tuple_type],
-                    is_blanket: false,
-                }),
-                method_info: Some(from_tuple),
-            },
-            type_args: vec![metas_tuple_type],
-            args: vec![CallArg::new(tuple, false)],
-        },
-        env.list_meta_type,
-        span,
-    );
-
-    let body = TirBlock::new(
-        vec![TirStmt::new(
-            TirStmtKind::Return { value: Some(call) },
-            span,
-        )],
-        span,
-    );
-
-    make_synthetic_method(
-        qualified_name,
-        method_info,
-        vec![],
-        env.list_meta_type,
-        body,
-        vec![],
-    )
+    generate_reflect_meta_list_fn(method_info, env.meta_list_parts(), metas_tuple_type, rows, span)
 }
 
-/// Build `Enum^ReflectEnum::discriminant(&self) -> i32` as an equality chain
-/// over the cases (an enum has no payload, so `*self == Case_k` is a plain
-/// tag compare); the last case returns unconditionally — the chain is total.
+/// Build `Enum^ReflectEnum::discriminant(&self) -> i32` as `return *self as i32;`
+/// — an enum value is its i32 discriminant, so a direct cast reads the tag (the
+/// enum analog of `ReflectFlags::bits`'s `*self as u32`).
 fn generate_enum_discriminant_fn(
     env: &ReflectEnumSynthEnv,
     enum_trait_name: &str,
@@ -1868,76 +1867,26 @@ fn generate_enum_discriminant_fn(
     let method_info = trait_method_info(&target.name, enum_trait_name, &env.discriminant_method);
     let qualified_name = method_info.to_mangled_name();
 
-    let index_literal = |index: u32| {
-        TirExpr::new(
-            TirExprKind::IntLiteral {
-                value: u64::from(index),
-                repr: index.to_string(),
-            },
-            TypeTable::I32,
-            span,
-        )
-    };
-
-    let mut stmts = Vec::new();
-    if let Some(((_, last_index), head)) = target.cases.split_last() {
-        for (case_name, index) in head {
-            let comparison = TirExpr::new(
-                TirExprKind::Binary {
-                    op: TirBinaryOp::Eq,
-                    left: Box::new(deref_local(0, "self", ref_enum_type, enum_type, span)),
-                    right: Box::new(TirExpr::new(
-                        TirExprKind::EnumConstruct {
-                            enum_type,
-                            case_index: *index,
-                            case_name: case_name.clone(),
-                        },
-                        enum_type,
-                        span,
-                    )),
-                },
-                TypeTable::BOOL,
-                span,
-            );
-            stmts.push(TirStmt::new(
-                TirStmtKind::If {
-                    condition: comparison,
-                    then_block: TirBlock::new(
-                        vec![TirStmt::new(
-                            TirStmtKind::Return {
-                                value: Some(index_literal(*index)),
-                            },
-                            span,
-                        )],
-                        span,
-                    ),
-                    else_block: None,
-                },
-                span,
-            ));
-        }
-        stmts.push(TirStmt::new(
+    let as_i32 = crate::synthesis::common::cast(
+        deref_local(0, "self", ref_enum_type, enum_type, span),
+        TypeTable::I32,
+    );
+    let body = TirBlock::new(
+        vec![TirStmt::new(
             TirStmtKind::Return {
-                value: Some(index_literal(*last_index)),
+                value: Some(as_i32),
             },
             span,
-        ));
-    } else {
-        // Uninhabited enum: the method can never be called on a value.
-        stmts.push(TirStmt::new(
-            TirStmtKind::Return {
-                value: Some(index_literal(0)),
-            },
-            span,
-        ));
-    }
+        )],
+        span,
+    );
 
     make_synthetic_method(
         qualified_name,
         method_info,
         vec![self_param(ref_enum_type, span)],
         TypeTable::I32,
-        TirBlock::new(stmts, span),
+        body,
         vec![param_local("self", ref_enum_type, false)],
     )
 }
@@ -2032,41 +1981,11 @@ fn generate_enum_from_discriminant_fn(
 /// (WEP 2026-06-13 §3c): `type_name()`, `bit_meta()`, `bits(&self)`, and
 /// `from_bits(raw)` — the u64-normalized bit bridge.
 pub fn synthesize_reflect_flags(project: &mut Package) {
-    let trait_env = project.trait_env.clone();
-    let first_module = project
-        .tir_modules
-        .values()
-        .next()
-        .expect("tir_modules must contain at least the entry module during synthesis");
-    let flags_trait_name = first_module
-        .type_table
-        .borrow()
-        .compiler_items()
-        .trait_name(CompilerItem::ReflectFlags)
-        .to_string();
-    let requested: IndexSet<(String, ModuleSource, String)> = first_module
-        .type_table
-        .borrow()
-        .bound_driven_synth_requests(|trait_name| trait_name == flags_trait_name)
-        .into_iter()
-        .collect();
-
-    let mut pending: IndexSet<(String, ModuleSource, String)> = IndexSet::default();
-    for module in project.tir_modules.values_mut() {
-        let module_source = module.module_source.clone();
-        let names = {
-            let tt = module.type_table.borrow();
-            TraitsStdlibNames::from_compiler_items(tt.compiler_items())
-        };
-        let mut ctx = SynthesisCtx {
-            trait_env: &trait_env,
-            pending: &mut pending,
-            requested: &requested,
-            module: module_source,
-            names: &names,
-        };
-        generate_flags_reflect_impls(module, &mut ctx, &flags_trait_name);
-    }
+    synthesize_reflect_kind(
+        project,
+        CompilerItem::ReflectFlags,
+        generate_flags_reflect_impls,
+    );
 }
 
 /// Synthesize the `ReflectFlags` impl of every requested flags type in `module`.
@@ -2143,18 +2062,15 @@ struct ReflectFlagsSynthEnv {
 
 impl ReflectFlagsSynthEnv {
     fn resolve(tt: &mut TypeTable) -> Self {
-        let string_type = tt.make_compiler_struct(CompilerItem::String);
-        let meta_type = tt.make_compiler_struct(CompilerItem::FlagBitMeta);
-        let meta_type_name = tt.mangle_type_name(meta_type);
-        let list_meta_type = tt.make_list(meta_type);
+        let ReflectMetaEnv {
+            string_type,
+            meta_type,
+            meta_type_name,
+            meta_struct_name,
+            list_meta_type,
+            from_tuple,
+        } = ReflectMetaEnv::resolve(tt, CompilerItem::FlagBitMeta);
         let items = tt.compiler_items();
-        let meta_struct_name = items.struct_name(CompilerItem::FlagBitMeta).to_string();
-        let (module_source, owner, name) = items.require_method(CompilerItem::ListFromTuple);
-        let from_tuple = FromTupleItem {
-            module_source: module_source.clone(),
-            owner: owner.to_string(),
-            name: name.to_string(),
-        };
         Self {
             string_type,
             meta_type,
@@ -2172,6 +2088,16 @@ impl ReflectFlagsSynthEnv {
             from_bits_method: items
                 .method_name(CompilerItem::ReflectFlagsFromBits)
                 .to_string(),
+        }
+    }
+
+    fn meta_list_parts(&self) -> MetaListParts<'_> {
+        MetaListParts {
+            meta_type: self.meta_type,
+            meta_struct_name: &self.meta_struct_name,
+            meta_type_name: &self.meta_type_name,
+            list_meta_type: self.list_meta_type,
+            from_tuple: &self.from_tuple,
         }
     }
 }
@@ -2227,94 +2153,17 @@ fn generate_flags_bit_meta_fn(
     span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(&target.name, flags_trait_name, &env.bit_meta_method);
-    let qualified_name = method_info.to_mangled_name();
-
-    let elements = target
+    let rows = target
         .members
         .iter()
         .map(|(member_name, bitmask)| {
-            let fields = vec![
-                TirStructField {
-                    name: "name".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::StringLiteral(member_name.clone()),
-                        env.string_type,
-                        span,
-                    ),
-                    field_index: 0,
-                },
-                TirStructField {
-                    name: "bit".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: u64::from(*bitmask),
-                            repr: bitmask.to_string(),
-                        },
-                        TypeTable::U64,
-                        span,
-                    ),
-                    field_index: 1,
-                },
-            ];
-            TirExpr::new(
-                TirExprKind::StructLiteral {
-                    struct_type: env.meta_type,
-                    struct_name: env.meta_struct_name.clone(),
-                    fields,
-                },
-                env.meta_type,
-                span,
-            )
+            vec![
+                reflect_meta_name_field(member_name, env.string_type, span),
+                reflect_meta_int_field("bit", u64::from(*bitmask), TypeTable::U64, 1, span),
+            ]
         })
         .collect();
-    let tuple = TirExpr::new(
-        TirExprKind::TupleLiteral { elements },
-        metas_tuple_type,
-        span,
-    );
-
-    let from_tuple = LocalMethodName::new(
-        env.from_tuple.owner.clone(),
-        None,
-        env.from_tuple.name.clone(),
-    )
-    .with_struct_type_args(&[env.meta_type_name.clone()]);
-    let call = TirExpr::new(
-        TirExprKind::Call {
-            func: FunctionRef {
-                module_source: env.from_tuple.module_source.clone(),
-                name: from_tuple.to_mangled_name(),
-                monomorph_info: Some(MonomorphInfo {
-                    generic_name: format!("{}::{}", env.from_tuple.owner, env.from_tuple.name),
-                    impl_type_args: vec![env.meta_type],
-                    method_type_args: vec![metas_tuple_type],
-                    is_blanket: false,
-                }),
-                method_info: Some(from_tuple),
-            },
-            type_args: vec![metas_tuple_type],
-            args: vec![CallArg::new(tuple, false)],
-        },
-        env.list_meta_type,
-        span,
-    );
-
-    let body = TirBlock::new(
-        vec![TirStmt::new(
-            TirStmtKind::Return { value: Some(call) },
-            span,
-        )],
-        span,
-    );
-
-    make_synthetic_method(
-        qualified_name,
-        method_info,
-        vec![],
-        env.list_meta_type,
-        body,
-        vec![],
-    )
+    generate_reflect_meta_list_fn(method_info, env.meta_list_parts(), metas_tuple_type, rows, span)
 }
 
 /// Build `Flags^ReflectFlags::bits(&self) -> u64` as

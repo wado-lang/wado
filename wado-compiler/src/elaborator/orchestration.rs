@@ -876,6 +876,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for sealed_item in [
             crate::compiler_item::CompilerItem::Reflect,
             crate::compiler_item::CompilerItem::ReflectVariant,
+            crate::compiler_item::CompilerItem::ReflectEnum,
+            crate::compiler_item::CompilerItem::ReflectFlags,
             crate::compiler_item::CompilerItem::Ref,
             crate::compiler_item::CompilerItem::RefMut,
         ] {

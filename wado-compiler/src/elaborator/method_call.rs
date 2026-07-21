@@ -2,6 +2,7 @@
 
 use crate::ast::{self, AstId, Item};
 use crate::compiler_host::CompilerHost;
+use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
 use crate::tir::{
@@ -13,7 +14,64 @@ use crate::token::Span;
 use super::Elaborator;
 use super::callee::StaticMethodRef;
 use super::method_lookup::MethodInferenceInput;
+use super::trait_query::OnBoundTrait;
 use super::types::{FunctionContext, MethodInfo, TypeError};
+
+/// The two scalar-kind reflection traits share one static-call resolution shape
+/// (WEP 2026-06-13 §3b / §3c): four members — `type_name` / `<meta>` /
+/// `<value>(&self)` / `from_<value>(raw)` — differing only in the compiler items
+/// they name, the subject kind, and the scalar value type (`i32` / `u64`).
+#[derive(Clone, Copy)]
+enum ScalarReflectKind {
+    Enum,
+    Flags,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct ScalarReflectSpec {
+    kind: ScalarReflectKind,
+    on_bound: OnBoundTrait,
+    trait_item: CompilerItem,
+    meta_item: CompilerItem,
+    type_name_item: CompilerItem,
+    meta_method_item: CompilerItem,
+    value_method_item: CompilerItem,
+    from_method_item: CompilerItem,
+    /// The scalar bridge type: `i32` (discriminant) or `u64` (bits).
+    value_type: TypeId,
+}
+
+impl ScalarReflectSpec {
+    const ENUM: Self = Self {
+        kind: ScalarReflectKind::Enum,
+        on_bound: OnBoundTrait::ReflectEnum,
+        trait_item: CompilerItem::ReflectEnum,
+        meta_item: CompilerItem::EnumCaseMeta,
+        type_name_item: CompilerItem::ReflectEnumTypeName,
+        meta_method_item: CompilerItem::ReflectEnumCaseMeta,
+        value_method_item: CompilerItem::ReflectEnumDiscriminant,
+        from_method_item: CompilerItem::ReflectEnumFromDiscriminant,
+        value_type: TypeTable::I32,
+    };
+    const FLAGS: Self = Self {
+        kind: ScalarReflectKind::Flags,
+        on_bound: OnBoundTrait::ReflectFlags,
+        trait_item: CompilerItem::ReflectFlags,
+        meta_item: CompilerItem::FlagBitMeta,
+        type_name_item: CompilerItem::ReflectFlagsTypeName,
+        meta_method_item: CompilerItem::ReflectFlagsBitMeta,
+        value_method_item: CompilerItem::ReflectFlagsBits,
+        from_method_item: CompilerItem::ReflectFlagsFromBits,
+        value_type: TypeTable::U64,
+    };
+
+    fn subject_matches(self, subject: &ResolvedType) -> bool {
+        match self.kind {
+            ScalarReflectKind::Enum => matches!(subject, ResolvedType::Enum { .. }),
+            ScalarReflectKind::Flags => matches!(subject, ResolvedType::Flags { .. }),
+        }
+    }
+}
 
 /// Inputs to [`Elaborator::resolve_method_call_with`], the TIR-level method-call
 /// dispatcher. The AST-driven [`Elaborator::resolve_method_call`] is a thin
@@ -1095,22 +1153,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.resolve_reflect_variant_static_call(self_ty, static_call, ctx);
         }
 
-        // `ReflectEnum::<T>::…` — the enum analog (WEP 2026-06-13 §3b).
-        if let ast::Type::Generic(g) = &static_call.target_type
-            && self.is_reflect_enum_trait_call(&g.name, &static_call.method)
-            && let Some(self_ty_ast) = g.args.first()
-        {
-            let self_ty = self.resolve_type(self_ty_ast);
-            return self.resolve_reflect_enum_static_call(self_ty, static_call, ctx);
-        }
-
-        // `ReflectFlags::<T>::…` — the flags analog (WEP 2026-06-13 §3c).
-        if let ast::Type::Generic(g) = &static_call.target_type
-            && self.is_reflect_flags_trait_call(&g.name, &static_call.method)
-            && let Some(self_ty_ast) = g.args.first()
-        {
-            let self_ty = self.resolve_type(self_ty_ast);
-            return self.resolve_reflect_flags_static_call(self_ty, static_call, ctx);
+        // `ReflectEnum::<T>::…` / `ReflectFlags::<T>::…` — the scalar-kind
+        // analogs (WEP 2026-06-13 §3b / §3c), sharing one resolver.
+        if let ast::Type::Generic(g) = &static_call.target_type {
+            for spec in [ScalarReflectSpec::ENUM, ScalarReflectSpec::FLAGS] {
+                if self.is_reflect_scalar_trait_call(spec, &g.name, &static_call.method)
+                    && let Some(self_ty_ast) = g.args.first()
+                {
+                    let self_ty = self.resolve_type(self_ty_ast);
+                    return self.resolve_reflect_scalar_static_call(spec, self_ty, static_call, ctx);
+                }
+            }
         }
 
         // Resolve the target type first to get struct name for parameter type lookup
@@ -3649,63 +3702,68 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(tt.make_tuple(vec![token_pack]))
     }
 
-    pub(super) fn is_reflect_enum_trait_call(&self, prefix: &str, method: &str) -> bool {
-        if self
-            .tysys
-            .classify_on_bound_trait(&self.type_lookup(), prefix)
-            != Some(super::trait_query::OnBoundTrait::ReflectEnum)
-        {
+    /// Whether `prefix::method` names a member of the scalar-kind reflection
+    /// trait `spec` describes (`ReflectEnum` / `ReflectFlags`). Same scope
+    /// discipline as [`Self::is_reflect_trait_call`].
+    pub(super) fn is_reflect_scalar_trait_call(
+        &self,
+        spec: ScalarReflectSpec,
+        prefix: &str,
+        method: &str,
+    ) -> bool {
+        if self.tysys.classify_on_bound_trait(&self.type_lookup(), prefix) != Some(spec.on_bound) {
             return false;
         }
         let tt = self.tysys.type_table.borrow();
         let items = tt.compiler_items();
-        method == items.method_name(crate::compiler_item::CompilerItem::ReflectEnumTypeName)
-            || method == items.method_name(crate::compiler_item::CompilerItem::ReflectEnumCaseMeta)
-            || method
-                == items.method_name(crate::compiler_item::CompilerItem::ReflectEnumDiscriminant)
-            || method
-                == items
-                    .method_name(crate::compiler_item::CompilerItem::ReflectEnumFromDiscriminant)
+        [
+            spec.type_name_item,
+            spec.meta_method_item,
+            spec.value_method_item,
+            spec.from_method_item,
+        ]
+        .into_iter()
+        .any(|item| method == items.method_name(item))
     }
 
-    /// Resolve a `ReflectEnum::<T>::method()` trait-qualified static call to
-    /// the synthesized `T^ReflectEnum::method` and record the dispatch fact
-    /// for reify. The enum analog of [`Self::resolve_reflect_static_call`];
-    /// a type-param subject routes to the generic resolver.
-    fn resolve_reflect_enum_static_call(
+    /// Resolve a `ReflectEnum` / `ReflectFlags` `::<T>::method()` static call to
+    /// the synthesized `T^Trait::method` and record the dispatch fact for reify
+    /// (WEP 2026-06-13 §3b / §3c). Both kinds share the same four-member shape;
+    /// `spec` supplies the per-kind items and scalar value type. A type-param
+    /// subject routes to [`Self::resolve_generic_reflect_scalar_static_call`].
+    fn resolve_reflect_scalar_static_call(
         &mut self,
+        spec: ScalarReflectSpec,
         self_ty: TypeId,
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        use crate::compiler_item::CompilerItem;
         let method = static_call.method.clone();
 
         let subject = self.tysys.type_table.borrow().get(self_ty).clone();
-        if let crate::tir::ResolvedType::TypeParam { name, .. } = subject {
-            return self.resolve_generic_reflect_enum_static_call(self_ty, &name, static_call, ctx);
+        if let ResolvedType::TypeParam { name, .. } = subject {
+            return self
+                .resolve_generic_reflect_scalar_static_call(spec, self_ty, &name, static_call, ctx);
         }
 
-        let self_name = self.tysys.type_table.borrow().type_name(self_ty);
-        if !matches!(subject, crate::tir::ResolvedType::Enum { .. }) {
+        let (trait_name, self_name) = {
+            let tt = self.tysys.type_table.borrow();
+            (
+                tt.compiler_items().trait_name(spec.trait_item).to_string(),
+                tt.type_name(self_ty),
+            )
+        };
+        if !spec.subject_matches(&subject) {
             let _ = self.emit(TypeError::UnknownFunction {
-                name: format!("ReflectEnum::<{self_name}>::{method}"),
+                name: format!("{trait_name}::<{self_name}>::{method}"),
                 span: static_call.span,
             });
             return TypeTable::ERROR;
         }
 
-        let (trait_name, module_source) = {
-            let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
-            (
-                items.trait_name(CompilerItem::ReflectEnum).to_string(),
-                self.find_struct_module_source(&self_name),
-            )
-        };
-
+        let module_source = self.find_struct_module_source(&self_name);
         let Some(return_type) =
-            self.check_reflect_enum_args(self_ty, &self_name, &method, static_call, ctx)
+            self.check_reflect_scalar_args(spec, self_ty, &self_name, &method, static_call, ctx)
         else {
             return TypeTable::ERROR;
         };
@@ -3715,7 +3773,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow_mut()
             .record_bound_driven_synth_request(&self_name, &module_source, &trait_name);
 
-        let param_is_mut = self.reflect_enum_param_is_mut(&method);
+        let param_is_mut = self.reflect_scalar_param_is_mut(spec, &method);
         let func_ref = FunctionRef {
             module_source,
             name: MethodName::format_local(&self_name, Some(&trait_name), &method),
@@ -3739,34 +3797,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         return_type
     }
 
-    /// Resolve `ReflectEnum::<T>::method()` where `T` is a type parameter
-    /// (inside an `impl<T: ReflectEnum> …` derivation). All members have
-    /// fixed return types (`from_discriminant` returns `Option<T>`); each is
-    /// recorded as a type-param-receiver dispatch so monomorphization
-    /// redirects it to the concrete enum's synthesized `E^ReflectEnum::method`.
-    fn resolve_generic_reflect_enum_static_call(
+    /// Resolve a scalar-kind `Trait::<T>::method()` where `T` is a type
+    /// parameter (inside an `impl<T: Trait> …` derivation). Each member is
+    /// recorded as a type-param-receiver dispatch so monomorphization redirects
+    /// it to the concrete type's synthesized `S^Trait::method`.
+    fn resolve_generic_reflect_scalar_static_call(
         &mut self,
+        spec: ScalarReflectSpec,
         self_ty: TypeId,
         type_param_name: &str,
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        use crate::compiler_item::CompilerItem;
         let method = static_call.method.clone();
-        let trait_name = {
-            let tt = self.tysys.type_table.borrow();
-            tt.compiler_items()
-                .trait_name(CompilerItem::ReflectEnum)
-                .to_string()
-        };
+        let trait_name = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_items()
+            .trait_name(spec.trait_item)
+            .to_string();
 
         let Some(return_type) =
-            self.check_reflect_enum_args(self_ty, type_param_name, &method, static_call, ctx)
+            self.check_reflect_scalar_args(spec, self_ty, type_param_name, &method, static_call, ctx)
         else {
             return TypeTable::ERROR;
         };
 
-        let param_is_mut = self.reflect_enum_param_is_mut(&method);
+        let param_is_mut = self.reflect_scalar_param_is_mut(spec, &method);
         let mut method_info =
             LocalMethodName::new(type_param_name.to_string(), Some(trait_name), method);
         method_info.is_type_param_receiver = true;
@@ -3791,31 +3849,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         return_type
     }
 
-    /// Validate a `ReflectEnum` member call's arguments and compute its
-    /// return type (shared by the concrete and generic resolvers; `self_ty`
-    /// is the enum or the type param). `None` when ill-formed (diagnostic
-    /// already emitted).
-    fn check_reflect_enum_args(
+    /// Validate a scalar-kind member call's arguments and compute its return
+    /// type (shared by the concrete and generic resolvers; `self_ty` is the
+    /// subject or the type param). `None` when ill-formed (diagnostic already
+    /// emitted). `type_name`/`<meta>` reject args; `<value>(&self)` returns the
+    /// scalar type; `from_<value>(raw)` takes one scalar arg and returns
+    /// `Option<Self>`.
+    fn check_reflect_scalar_args(
         &mut self,
+        spec: ScalarReflectSpec,
         self_ty: TypeId,
         self_name: &str,
         method: &str,
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
-        use crate::compiler_item::CompilerItem;
-        let (type_name_method, case_meta_method, discriminant_method, from_discriminant_method) = {
+        let (type_name_method, meta_method, value_method, from_method) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
-                items.method_name(CompilerItem::ReflectEnumTypeName).to_string(),
-                items.method_name(CompilerItem::ReflectEnumCaseMeta).to_string(),
-                items
-                    .method_name(CompilerItem::ReflectEnumDiscriminant)
-                    .to_string(),
-                items
-                    .method_name(CompilerItem::ReflectEnumFromDiscriminant)
-                    .to_string(),
+                items.method_name(spec.type_name_item).to_string(),
+                items.method_name(spec.meta_method_item).to_string(),
+                items.method_name(spec.value_method_item).to_string(),
+                items.method_name(spec.from_method_item).to_string(),
             )
         };
 
@@ -3826,20 +3882,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow_mut()
                     .make_compiler_struct(CompilerItem::String)
             })
-        } else if *method == case_meta_method {
+        } else if *method == meta_method {
             self.reject_reflect_metadata_args(static_call, ctx).then(|| {
                 let mut tt = self.tysys.type_table.borrow_mut();
-                let meta_type = tt.make_compiler_struct(CompilerItem::EnumCaseMeta);
+                let meta_type = tt.make_compiler_struct(spec.meta_item);
                 tt.make_list(meta_type)
             })
-        } else if *method == discriminant_method {
+        } else if *method == value_method {
             self.check_reflect_fields_receiver(self_ty, self_name, static_call, ctx)
-                .then_some(TypeTable::I32)
-        } else if *method == from_discriminant_method {
+                .then_some(spec.value_type)
+        } else if *method == from_method {
             let arg_types: Vec<TypeId> = static_call
                 .args
                 .iter()
-                .map(|arg| self.resolve_expr(arg, ctx, Some(TypeTable::I32)))
+                .map(|arg| self.resolve_expr(arg, ctx, Some(spec.value_type)))
                 .collect();
             if arg_types.len() != 1 {
                 let _ = self.emit(TypeError::ArgumentCountMismatch {
@@ -3849,10 +3905,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
                 return None;
             }
-            if arg_types[0] != TypeTable::ERROR && arg_types[0] != TypeTable::I32 {
-                let found = self.tysys.type_table.borrow().type_name(arg_types[0]);
+            if arg_types[0] != TypeTable::ERROR && arg_types[0] != spec.value_type {
+                let (expected, found) = {
+                    let tt = self.tysys.type_table.borrow();
+                    (tt.type_name(spec.value_type), tt.type_name(arg_types[0]))
+                };
                 let _ = self.emit(TypeError::TypeMismatch {
-                    expected: "i32".to_string(),
+                    expected,
                     found,
                     span: static_call.span,
                 });
@@ -3860,252 +3919,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Some(self.tysys.type_table.borrow_mut().make_option(self_ty))
         } else {
-            unreachable!("is_reflect_enum_trait_call admits only the four trait methods")
+            unreachable!("is_reflect_scalar_trait_call admits only the four trait methods")
         }
     }
 
-    pub(super) fn is_reflect_flags_trait_call(&self, prefix: &str, method: &str) -> bool {
-        if self
-            .tysys
-            .classify_on_bound_trait(&self.type_lookup(), prefix)
-            != Some(super::trait_query::OnBoundTrait::ReflectFlags)
-        {
-            return false;
-        }
-        let tt = self.tysys.type_table.borrow();
-        let items = tt.compiler_items();
-        method == items.method_name(crate::compiler_item::CompilerItem::ReflectFlagsTypeName)
-            || method == items.method_name(crate::compiler_item::CompilerItem::ReflectFlagsBitMeta)
-            || method == items.method_name(crate::compiler_item::CompilerItem::ReflectFlagsBits)
-            || method
-                == items.method_name(crate::compiler_item::CompilerItem::ReflectFlagsFromBits)
-    }
-
-    /// Resolve a `ReflectFlags::<T>::method()` trait-qualified static call to
-    /// the synthesized `T^ReflectFlags::method` and record the dispatch fact
-    /// for reify. The flags analog of [`Self::resolve_reflect_enum_static_call`];
-    /// a type-param subject routes to the generic resolver.
-    fn resolve_reflect_flags_static_call(
-        &mut self,
-        self_ty: TypeId,
-        static_call: &ast::StaticMethodCallExpr,
-        ctx: &mut FunctionContext,
-    ) -> TypeId {
-        use crate::compiler_item::CompilerItem;
-        let method = static_call.method.clone();
-
-        let subject = self.tysys.type_table.borrow().get(self_ty).clone();
-        if let crate::tir::ResolvedType::TypeParam { name, .. } = subject {
-            return self.resolve_generic_reflect_flags_static_call(
-                self_ty,
-                &name,
-                static_call,
-                ctx,
-            );
-        }
-
-        let self_name = self.tysys.type_table.borrow().type_name(self_ty);
-        if !matches!(subject, crate::tir::ResolvedType::Flags { .. }) {
-            let _ = self.emit(TypeError::UnknownFunction {
-                name: format!("ReflectFlags::<{self_name}>::{method}"),
-                span: static_call.span,
-            });
-            return TypeTable::ERROR;
-        }
-
-        let (trait_name, module_source) = {
-            let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
-            (
-                items.trait_name(CompilerItem::ReflectFlags).to_string(),
-                self.find_struct_module_source(&self_name),
-            )
-        };
-
-        let Some(return_type) =
-            self.check_reflect_flags_args(self_ty, &self_name, &method, static_call, ctx)
-        else {
-            return TypeTable::ERROR;
-        };
-
-        self.tysys
-            .type_table
-            .borrow_mut()
-            .record_bound_driven_synth_request(&self_name, &module_source, &trait_name);
-
-        let param_is_mut = self.reflect_flags_param_is_mut(&method);
-        let func_ref = FunctionRef {
-            module_source,
-            name: MethodName::format_local(&self_name, Some(&trait_name), &method),
-            monomorph_info: None,
-            method_info: Some(LocalMethodName::new(
-                self_name.clone(),
-                Some(trait_name.clone()),
-                method.clone(),
-            )),
-        };
-        self.sem.types.static_method_dispatch.insert(
-            static_call.id,
-            super::sem::types::StaticMethodDispatch {
-                function_ref: func_ref,
-                param_is_mut,
-                type_args: Vec::new(),
-                param_defaults: Vec::new(),
-            },
-        );
-
-        return_type
-    }
-
-    /// Resolve `ReflectFlags::<T>::method()` where `T` is a type parameter
-    /// (inside an `impl<T: ReflectFlags> …` derivation), recorded as a
-    /// type-param-receiver dispatch like the enum analog.
-    fn resolve_generic_reflect_flags_static_call(
-        &mut self,
-        self_ty: TypeId,
-        type_param_name: &str,
-        static_call: &ast::StaticMethodCallExpr,
-        ctx: &mut FunctionContext,
-    ) -> TypeId {
-        use crate::compiler_item::CompilerItem;
-        let method = static_call.method.clone();
-        let trait_name = {
-            let tt = self.tysys.type_table.borrow();
-            tt.compiler_items()
-                .trait_name(CompilerItem::ReflectFlags)
-                .to_string()
-        };
-
-        let Some(return_type) =
-            self.check_reflect_flags_args(self_ty, type_param_name, &method, static_call, ctx)
-        else {
-            return TypeTable::ERROR;
-        };
-
-        let param_is_mut = self.reflect_flags_param_is_mut(&method);
-        let mut method_info =
-            LocalMethodName::new(type_param_name.to_string(), Some(trait_name), method);
-        method_info.is_type_param_receiver = true;
-        let mangled_name = method_info.to_mangled_name();
-
-        let func_ref = FunctionRef {
-            module_source: self.current_module_source.clone(),
-            name: mangled_name,
-            monomorph_info: None,
-            method_info: Some(method_info),
-        };
-        self.sem.types.static_method_dispatch.insert(
-            static_call.id,
-            super::sem::types::StaticMethodDispatch {
-                function_ref: func_ref,
-                param_is_mut,
-                type_args: Vec::new(),
-                param_defaults: Vec::new(),
-            },
-        );
-
-        return_type
-    }
-
-    /// Validate a `ReflectFlags` member call's arguments and compute its
-    /// return type (shared by the concrete and generic resolvers). `None`
-    /// when ill-formed (diagnostic already emitted).
-    fn check_reflect_flags_args(
-        &mut self,
-        self_ty: TypeId,
-        self_name: &str,
-        method: &str,
-        static_call: &ast::StaticMethodCallExpr,
-        ctx: &mut FunctionContext,
-    ) -> Option<TypeId> {
-        use crate::compiler_item::CompilerItem;
-        let (type_name_method, bit_meta_method, bits_method, from_bits_method) = {
-            let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
-            (
-                items
-                    .method_name(CompilerItem::ReflectFlagsTypeName)
-                    .to_string(),
-                items
-                    .method_name(CompilerItem::ReflectFlagsBitMeta)
-                    .to_string(),
-                items.method_name(CompilerItem::ReflectFlagsBits).to_string(),
-                items
-                    .method_name(CompilerItem::ReflectFlagsFromBits)
-                    .to_string(),
-            )
-        };
-
-        if *method == type_name_method {
-            self.reject_reflect_metadata_args(static_call, ctx).then(|| {
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_compiler_struct(CompilerItem::String)
-            })
-        } else if *method == bit_meta_method {
-            self.reject_reflect_metadata_args(static_call, ctx).then(|| {
-                let mut tt = self.tysys.type_table.borrow_mut();
-                let meta_type = tt.make_compiler_struct(CompilerItem::FlagBitMeta);
-                tt.make_list(meta_type)
-            })
-        } else if *method == bits_method {
-            self.check_reflect_fields_receiver(self_ty, self_name, static_call, ctx)
-                .then_some(TypeTable::U64)
-        } else if *method == from_bits_method {
-            let arg_types: Vec<TypeId> = static_call
-                .args
-                .iter()
-                .map(|arg| self.resolve_expr(arg, ctx, Some(TypeTable::U64)))
-                .collect();
-            if arg_types.len() != 1 {
-                let _ = self.emit(TypeError::ArgumentCountMismatch {
-                    expected: 1,
-                    found: arg_types.len(),
-                    span: static_call.span,
-                });
-                return None;
-            }
-            if arg_types[0] != TypeTable::ERROR && arg_types[0] != TypeTable::U64 {
-                let found = self.tysys.type_table.borrow().type_name(arg_types[0]);
-                let _ = self.emit(TypeError::TypeMismatch {
-                    expected: "u64".to_string(),
-                    found,
-                    span: static_call.span,
-                });
-                return None;
-            }
-            Some(self.tysys.type_table.borrow_mut().make_option(self_ty))
-        } else {
-            unreachable!("is_reflect_flags_trait_call admits only the four trait methods")
-        }
-    }
-
-    /// Per-parameter mutability of a `ReflectFlags` member's dispatch record:
-    /// `bits(&self)` and `from_bits(raw)` take one non-mut argument; the
+    /// Per-parameter mutability of a scalar-kind member's dispatch record:
+    /// `<value>(&self)` and `from_<value>(raw)` take one non-mut argument; the
     /// metadata members take none.
-    fn reflect_flags_param_is_mut(&self, method: &str) -> Vec<bool> {
-        use crate::compiler_item::CompilerItem;
+    fn reflect_scalar_param_is_mut(&self, spec: ScalarReflectSpec, method: &str) -> Vec<bool> {
         let tt = self.tysys.type_table.borrow();
         let items = tt.compiler_items();
-        if method == items.method_name(CompilerItem::ReflectFlagsBits)
-            || method == items.method_name(CompilerItem::ReflectFlagsFromBits)
-        {
-            vec![false]
-        } else {
-            Vec::new()
-        }
-    }
-
-    /// Per-parameter mutability of a `ReflectEnum` member's dispatch record:
-    /// `discriminant(&self)` and `from_discriminant(disc)` take one
-    /// non-mut argument; the metadata members take none.
-    fn reflect_enum_param_is_mut(&self, method: &str) -> Vec<bool> {
-        use crate::compiler_item::CompilerItem;
-        let tt = self.tysys.type_table.borrow();
-        let items = tt.compiler_items();
-        if method == items.method_name(CompilerItem::ReflectEnumDiscriminant)
-            || method == items.method_name(CompilerItem::ReflectEnumFromDiscriminant)
+        if method == items.method_name(spec.value_method_item)
+            || method == items.method_name(spec.from_method_item)
         {
             vec![false]
         } else {
