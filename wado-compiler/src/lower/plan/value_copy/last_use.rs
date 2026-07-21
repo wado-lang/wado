@@ -181,9 +181,12 @@ pub fn compute_move_eligible(
         all_locals.insert(i);
     }
 
+    let param_locals: IndexSet<u32> = func.params.iter().map(|p| p.local_index).collect();
     let mut a = Analyzer {
         stored_params,
         mut_receiver_methods,
+        type_table,
+        param_locals,
         non_final: IndexSet::default(),
         aliases_live: IndexSet::default(),
         borrow_escaped: IndexMap::default(),
@@ -734,6 +737,14 @@ struct Analyzer<'a> {
     /// non-stored position it is a transient borrow.
     stored_params: &'a StoredParams,
     mut_receiver_methods: &'a FuncKeySet,
+    type_table: &'a TypeTable,
+    /// Local indices that are the enclosing function's parameters. A functor
+    /// *parameter*'s declared `stores` is a sound upper bound of every value
+    /// bound to it — the frontend checks each call argument against the param's
+    /// `stores` — so an indirect call through a parameter may trust its type's
+    /// `stores`. A functor value from any other source (a `let`-bound closure, a
+    /// returned functor) is not so guaranteed and stays conservative.
+    param_locals: IndexSet<u32>,
     non_final: IndexSet<u32>,
     aliases_live: IndexSet<u32>,
     /// Locals a persisting reference is taken of — a `&`/`&mut` that is not a
@@ -843,6 +854,79 @@ impl Analyzer<'_> {
         self.stored_params
             .get(&callee.module_source, &callee.name)
             .is_some_and(|s| s.contains(&u32::try_from(pos).unwrap()))
+    }
+
+    /// The positions an indirect (functor) callee may store, from its functor
+    /// type's declared `stores` clause. `None` is conservative: every position
+    /// may be stored.
+    ///
+    /// Only a call through a functor *parameter* is trusted. A parameter's
+    /// declared `stores` is a sound upper bound of every value bound to it: the
+    /// frontend checks each call argument (closure / function) against the
+    /// parameter's `stores`, rejecting one that would store more. A functor
+    /// value from any other source (a `let`-bound closure whose synthesized type
+    /// records no `stores`, a returned functor) carries no such guarantee, so it
+    /// stays conservative and its `&`/`&mut` arguments keep their copies.
+    fn functor_stores(&self, callee: &TirExpr) -> Option<IndexSet<u32>> {
+        let TirExprKind::Local { index, .. } = &callee.kind else {
+            return None;
+        };
+        if !self.param_locals.contains(index) {
+            return None;
+        }
+        match self.type_table.get(callee.type_id) {
+            ResolvedType::Function {
+                stores,
+                return_type,
+                ..
+            } => {
+                // A functor with a bare `&T` / `&mut T` return may hand back a
+                // borrow of an argument without declaring a store (a plain
+                // reference return is a managed borrow, not persistence). That
+                // borrow could outlive the call and alias a moved-out field, so
+                // such a functor is not trusted — its arguments keep their copies.
+                if matches!(
+                    self.type_table.get(*return_type),
+                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                ) {
+                    return None;
+                }
+                Some(stores.iter().copied().collect())
+            }
+            _ => None,
+        }
+    }
+
+    /// An indirect-call argument at position `pos`: a `&`/`&mut` argument is a
+    /// transient borrow unless the functor may store that position (`None`
+    /// stores = conservative, every position escapes).
+    fn walk_indirect_arg(
+        &mut self,
+        arg: &TirExpr,
+        pos: usize,
+        stores: &Option<IndexSet<u32>>,
+        live: &mut IndexSet<u32>,
+        record: bool,
+    ) {
+        if let TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            expr: place,
+        } = &arg.kind
+        {
+            let referent = self.borrow_read(place, live, record);
+            let escapes = match stores {
+                Some(s) => s.contains(&u32::try_from(pos).unwrap()),
+                None => true,
+            };
+            if record
+                && escapes
+                && let Some(r) = referent
+            {
+                self.mark_escaped(r, borrow_top_field(place));
+            }
+        } else {
+            self.walk_expr(arg, live, record);
+        }
     }
 
     /// A method-call receiver at position 0. The auto-ref'd `&self` / `&mut self`
@@ -1402,6 +1486,20 @@ impl Analyzer<'_> {
                 for (pos, arg) in args.iter().enumerate().rev() {
                     self.walk_call_arg(arg, None, pos, live, record);
                 }
+            }
+            // An indirect (functor) call: each `&`/`&mut` argument is transient
+            // unless the callee's functor type stores that position (see
+            // `functor_stores`). The callee expression is an ordinary read.
+            TirExprKind::IndirectCall { callee, args } => {
+                let stores = self.functor_stores(callee);
+                if record {
+                    let exprs: Vec<&TirExpr> = args.iter().collect();
+                    self.mark_sibling_mut_aliases(&exprs, None);
+                }
+                for (pos, arg) in args.iter().enumerate().rev() {
+                    self.walk_indirect_arg(arg, pos, &stores, live, record);
+                }
+                self.walk_expr(callee, live, record);
             }
             // A `&`/`&mut` reached outside a call argument (a `let r = &x`, a
             // stored / returned reference) persists past the borrow, so the
