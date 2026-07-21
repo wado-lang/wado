@@ -104,6 +104,9 @@ pub enum CompilerItem {
     /// codegen (CM binding, serde, format) refers to it through this
     /// item so the Rust side never hard-codes the struct name.
     String,
+    /// `VariantCaseMeta` — the per-case descriptor struct returned by
+    /// `ReflectVariant::case_meta()`; the synthesis builds its literals.
+    VariantCaseMeta,
 
     // ── Variants (sum types) ──────────────────────────────────────────
     /// `Option<T>` — `Some(_)` / `None`.
@@ -123,6 +126,9 @@ pub enum CompilerItem {
     /// `Reflect` — compile-time struct-introspection anchor; the
     /// per-struct `impl Reflect for S` synthesis points at it.
     Reflect,
+    /// `ReflectVariant` — compile-time variant-introspection anchor; the
+    /// per-variant `impl ReflectVariant for V` synthesis points at it.
+    ReflectVariant,
     /// `Ref` — sealed marker for reference-identity types (GC references);
     /// its `Output: Ref` bound gates the reference-returning index traits.
     Ref,
@@ -280,6 +286,12 @@ pub enum CompilerItem {
     ReflectFieldNames,
     /// `Reflect::type_name` — the per-struct type name.
     ReflectTypeName,
+    /// `ReflectVariant::type_name` — the per-variant type name.
+    ReflectVariantTypeName,
+    /// `ReflectVariant::case_meta` — the per-variant case-descriptor list.
+    ReflectVariantCaseMeta,
+    /// `ReflectVariant::discriminant` — the live case's tag as `i32`.
+    ReflectVariantDiscriminant,
     /// `String::push_str` — recognised by the WIR optimiser for
     /// string-building inlining.
     StringPushStr,
@@ -418,6 +430,8 @@ impl CompilerItem {
         Self::Ordering,
         Self::Default,
         Self::Reflect,
+        Self::ReflectVariant,
+        Self::VariantCaseMeta,
         Self::Ref,
         Self::RefMut,
         Self::Eq,
@@ -473,6 +487,9 @@ impl CompilerItem {
         Self::ReflectFields,
         Self::ReflectFieldNames,
         Self::ReflectTypeName,
+        Self::ReflectVariantTypeName,
+        Self::ReflectVariantCaseMeta,
+        Self::ReflectVariantDiscriminant,
         Self::StringPushStr,
         Self::StringPushChar,
         Self::StringGetByteUnchecked,
@@ -541,6 +558,8 @@ impl CompilerItem {
             Self::Ordering => "ordering",
             Self::Default => "default",
             Self::Reflect => "reflect",
+            Self::ReflectVariant => "reflect_variant",
+            Self::VariantCaseMeta => "variant_case_meta",
             Self::Ref => "ref",
             Self::RefMut => "ref_mut",
             Self::Eq => "eq",
@@ -596,6 +615,9 @@ impl CompilerItem {
             Self::ReflectFields => "reflect_fields",
             Self::ReflectFieldNames => "reflect_field_names",
             Self::ReflectTypeName => "reflect_type_name",
+            Self::ReflectVariantTypeName => "reflect_variant_type_name",
+            Self::ReflectVariantCaseMeta => "reflect_variant_case_meta",
+            Self::ReflectVariantDiscriminant => "reflect_variant_discriminant",
             Self::StringPushStr => "string_push_str",
             Self::StringPushChar => "string_push_char",
             Self::StringGetByteUnchecked => "string_get_byte_unchecked",
@@ -681,6 +703,8 @@ impl CompilerItem {
             | Self::Ordering
             | Self::Default
             | Self::Reflect
+            | Self::ReflectVariant
+            | Self::VariantCaseMeta
             | Self::Ref
             | Self::RefMut
             | Self::Eq
@@ -691,6 +715,9 @@ impl CompilerItem {
             | Self::ReflectFields
             | Self::ReflectFieldNames
             | Self::ReflectTypeName
+            | Self::ReflectVariantTypeName
+            | Self::ReflectVariantCaseMeta
+            | Self::ReflectVariantDiscriminant
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringGetByteUnchecked
@@ -806,7 +833,8 @@ impl CompilerItem {
             | Self::RangeExclusive
             | Self::RangeInclusive
             | Self::KilnRequest
-            | Self::String => CompilerItemKind::Struct,
+            | Self::String
+            | Self::VariantCaseMeta => CompilerItemKind::Struct,
             Self::Option | Self::Result => CompilerItemKind::Variant,
             Self::Ordering | Self::Alignment => CompilerItemKind::Enum,
             Self::SerializeError | Self::DeserializeError => CompilerItemKind::Struct,
@@ -814,6 +842,7 @@ impl CompilerItem {
             Self::Formatter => CompilerItemKind::Struct,
             Self::Default
             | Self::Reflect
+            | Self::ReflectVariant
             | Self::Ref
             | Self::RefMut
             | Self::Eq
@@ -849,6 +878,9 @@ impl CompilerItem {
             | Self::ReflectFields
             | Self::ReflectFieldNames
             | Self::ReflectTypeName
+            | Self::ReflectVariantTypeName
+            | Self::ReflectVariantCaseMeta
+            | Self::ReflectVariantDiscriminant
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringGetByteUnchecked

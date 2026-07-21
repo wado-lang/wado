@@ -24,6 +24,7 @@ pub(super) enum OnBoundTrait {
     Deserialize,
     Default,
     Reflect,
+    ReflectVariant,
     Ref,
     RefMut,
     Inspect,
@@ -636,6 +637,8 @@ impl TypeSystem {
                 of(CompilerItem::Default, OnBoundTrait::Default)
             } else if trait_name == items.trait_name(CompilerItem::Reflect) {
                 of(CompilerItem::Reflect, OnBoundTrait::Reflect)
+            } else if trait_name == items.trait_name(CompilerItem::ReflectVariant) {
+                of(CompilerItem::ReflectVariant, OnBoundTrait::ReflectVariant)
             } else if trait_name == items.trait_name(CompilerItem::Ref) {
                 of(CompilerItem::Ref, OnBoundTrait::Ref)
             } else if trait_name == items.trait_name(CompilerItem::RefMut) {
@@ -1004,6 +1007,20 @@ impl TypeSystem {
             ..
         } = &resolved
             && on_bound == Some(OnBoundTrait::Reflect)
+        {
+            self.type_table
+                .borrow_mut()
+                .record_bound_driven_synth_request(name, module_source, trait_name);
+            return true;
+        }
+
+        // `ReflectVariant` likewise: every variant is eligible.
+        if let ResolvedType::Variant {
+            name,
+            module_source,
+            ..
+        } = &resolved
+            && on_bound == Some(OnBoundTrait::ReflectVariant)
         {
             self.type_table
                 .borrow_mut()

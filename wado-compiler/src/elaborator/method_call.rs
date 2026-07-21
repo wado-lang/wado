@@ -1085,6 +1085,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.resolve_reflect_static_call(self_ty, static_call, ctx);
         }
 
+        // `ReflectVariant::<T>::…` — the variant analog of the interception
+        // above (WEP 2026-06-13 §3d).
+        if let ast::Type::Generic(g) = &static_call.target_type
+            && self.is_reflect_variant_trait_call(&g.name, &static_call.method)
+            && let Some(self_ty_ast) = g.args.first()
+        {
+            let self_ty = self.resolve_type(self_ty_ast);
+            return self.resolve_reflect_variant_static_call(self_ty, static_call, ctx);
+        }
+
         // Resolve the target type first to get struct name for parameter type lookup
         let target_type_id = self.resolve_type(&static_call.target_type);
 
@@ -3324,6 +3334,117 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method == items.method_name(crate::compiler_item::CompilerItem::ReflectFieldNames)
             || method == items.method_name(crate::compiler_item::CompilerItem::ReflectTypeName)
             || method == items.method_name(crate::compiler_item::CompilerItem::ReflectFields)
+    }
+
+    /// Whether `prefix::method` names a `ReflectVariant` trait-qualified static
+    /// call. Same scope discipline as [`Self::is_reflect_trait_call`].
+    pub(super) fn is_reflect_variant_trait_call(&self, prefix: &str, method: &str) -> bool {
+        if self
+            .tysys
+            .classify_on_bound_trait(&self.type_lookup(), prefix)
+            != Some(super::trait_query::OnBoundTrait::ReflectVariant)
+        {
+            return false;
+        }
+        let tt = self.tysys.type_table.borrow();
+        let items = tt.compiler_items();
+        method == items.method_name(crate::compiler_item::CompilerItem::ReflectVariantTypeName)
+            || method
+                == items.method_name(crate::compiler_item::CompilerItem::ReflectVariantCaseMeta)
+            || method
+                == items
+                    .method_name(crate::compiler_item::CompilerItem::ReflectVariantDiscriminant)
+    }
+
+    /// Resolve a `ReflectVariant::<T>::method()` trait-qualified static call to
+    /// the synthesized `T^ReflectVariant::method` and record the dispatch fact
+    /// for reify. The variant analog of [`Self::resolve_reflect_static_call`].
+    fn resolve_reflect_variant_static_call(
+        &mut self,
+        self_ty: TypeId,
+        static_call: &ast::StaticMethodCallExpr,
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
+        use crate::compiler_item::CompilerItem;
+        let method = static_call.method.clone();
+
+        let self_name = self.tysys.type_table.borrow().type_name(self_ty);
+        let subject = self.tysys.type_table.borrow().get(self_ty).clone();
+        if !matches!(subject, crate::tir::ResolvedType::Variant { .. }) {
+            let _ = self.emit(TypeError::UnknownFunction {
+                name: format!("ReflectVariant::<{self_name}>::{method}"),
+                span: static_call.span,
+            });
+            return TypeTable::ERROR;
+        }
+
+        let (trait_name, discriminant_method, case_meta_method, module_source) = {
+            let tt = self.tysys.type_table.borrow();
+            let items = tt.compiler_items();
+            (
+                items.trait_name(CompilerItem::ReflectVariant).to_string(),
+                items
+                    .method_name(CompilerItem::ReflectVariantDiscriminant)
+                    .to_string(),
+                items
+                    .method_name(CompilerItem::ReflectVariantCaseMeta)
+                    .to_string(),
+                self.find_struct_module_source(&self_name),
+            )
+        };
+
+        let is_discriminant = method == discriminant_method;
+        let args_valid = if is_discriminant {
+            self.check_reflect_fields_receiver(self_ty, &self_name, static_call, ctx)
+        } else {
+            self.reject_reflect_metadata_args(static_call, ctx)
+        };
+        if !args_valid {
+            return TypeTable::ERROR;
+        }
+
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .record_bound_driven_synth_request(&self_name, &module_source, &trait_name);
+
+        let return_type = if is_discriminant {
+            TypeTable::I32
+        } else {
+            let mut tt = self.tysys.type_table.borrow_mut();
+            if method == case_meta_method {
+                let meta_type = tt.make_compiler_struct(CompilerItem::VariantCaseMeta);
+                tt.make_list(meta_type)
+            } else {
+                tt.make_compiler_struct(CompilerItem::String)
+            }
+        };
+
+        let func_ref = FunctionRef {
+            module_source,
+            name: MethodName::format_local(&self_name, Some(&trait_name), &method),
+            monomorph_info: None,
+            method_info: Some(LocalMethodName::new(
+                self_name.clone(),
+                Some(trait_name.clone()),
+                method.clone(),
+            )),
+        };
+        self.sem.types.static_method_dispatch.insert(
+            static_call.id,
+            super::sem::types::StaticMethodDispatch {
+                function_ref: func_ref,
+                param_is_mut: if is_discriminant {
+                    vec![false]
+                } else {
+                    Vec::new()
+                },
+                type_args: Vec::new(),
+                param_defaults: Vec::new(),
+            },
+        );
+
+        return_type
     }
 
     /// Get the operator trait and method name for a binary operator.

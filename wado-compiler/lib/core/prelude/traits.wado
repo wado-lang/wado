@@ -80,6 +80,34 @@ internal trait Reflect {
     fn type_name() -> String;
 }
 
+/// Per-case descriptor returned by `ReflectVariant::case_meta()`, in
+/// declaration order. See WEP 2026-06-13 §3.
+#[compiler_item("variant_case_meta")]
+pub struct VariantCaseMeta {
+    pub name: String,
+    pub discriminant: i32,
+    pub is_unit: bool,
+}
+
+/// Compile-time variant introspection. The compiler synthesizes an impl for
+/// every variant; it cannot be implemented in user code and is callable only
+/// in monomorphized contexts (`T` a concrete variant).
+/// See WEP 2026-06-13 §3.
+#[compiler_item("reflect_variant")]
+internal trait ReflectVariant {
+    /// Returns the variant name.
+    #[compiler_item("reflect_variant_type_name")]
+    fn type_name() -> String;
+
+    /// Returns the per-case descriptors.
+    #[compiler_item("reflect_variant_case_meta")]
+    fn case_meta() -> List<VariantCaseMeta>;
+
+    /// Returns the live case's tag.
+    #[compiler_item("reflect_variant_discriminant")]
+    fn discriminant(&self) -> i32;
+}
+
 /// Marker for reference-identity types: those whose value is a Wasm GC
 /// reference. Sealed and compiler-synthesized; user impls are rejected.
 /// See WEP 2026-01-20.
