@@ -17,7 +17,11 @@ language front ends, LSP, and syntax highlighting all work on broken input.
 - **Diagnostics are the error currency.** A clean parse has an empty diagnostic
   list; a broken parse still yields a usable tree alongside the diagnostics.
 - **Fast machine-generated highlight.** Highlight is one flat forward scan over
-  the store (rule-kind stack → `(span, class)`), no intermediate tree.
+  the store (rule-kind stack → `(span, class)`), no intermediate tree. It always
+  walks the partial tree — even on broken input — so rule-context overrides
+  survive wherever the parser built structure (a fragment's interpolation, an
+  unterminated construct); a follow-up pass default-classifies any token the
+  walk did not reach, keeping default coloring and text intact across the rest.
 
 ## The tree
 
@@ -134,6 +138,14 @@ terminal recovers in place via a `recovering` flag rather than unwinding a
 **Highlight (done): `NodeKind` `Display`/`Inspect`.** Codegen emits name-aware
 impls next to `RULE_NAMES`, so `{node.kind}` prints the rule name and
 `{node.kind:?}` prints `name(id)`.
+
+**Fragment re-entry (done): the `fragment_entries` option.** A bare snippet whose
+tokens the start rule can't derive (e.g. a top-level statement under an `item*`
+start rule) is otherwise left unconsumed, so nested-only constructs build no
+subtree. Naming the unit rule(s) makes the start rule's `expect(EOF)` sweep the
+remainder into an `<error>` region under the root and parse each entry, so a bare
+statement fragment builds full subtrees (opt-in, byte-identical when empty). See
+"Parsing a fragment" in `README.md`.
 
 ### Deferred
 

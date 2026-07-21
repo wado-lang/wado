@@ -315,7 +315,14 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // `Rule::Simple` / `MultiAlt` / `LeftRecursive` instead of
     // recomputing the classification at every emit site.
     let members = collect_parser_members(grammar, ctx);
-    gen_parser_struct(w, ctx.is_trace(), ctx.needs_atn(), ctx.emit_actions(), &members);
+    gen_parser_struct(
+        w,
+        ctx.is_trace(),
+        ctx.needs_atn(),
+        ctx.emit_actions(),
+        !ctx.fragment_entries().is_empty(),
+        &members,
+    );
     gen_member_methods(w, &members);
     if ctx.emit_actions() {
         gen_vals_structs(w, grammar);
@@ -335,8 +342,97 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // `follow_yields` / `FollowArg`). The follow-mask globals are
     // emitted by `gen_follow_mask_globals` at the end of codegen.
     gen_predicate_fns(w, ctx);
+    if !ctx.fragment_entries().is_empty() {
+        let entries = compute_fragment_entries(grammar, ctx);
+        gen_recover_helpers(w, &entries);
+    }
     gen_parse_entry(w, lowered, ctx);
     warn_unhandled_actions(grammar, ctx);
+}
+
+struct RecoverFragmentEntry {
+    call: String,
+    first_names: List<String>,
+}
+
+fn compute_fragment_entries(grammar: &Grammar, ctx: &mut GenContext) -> List<RecoverFragmentEntry> {
+    let names = *ctx.fragment_entries();
+    let mut result: List<RecoverFragmentEntry> = [];
+    let mut seen: List<String> = [];
+    for let name of &names {
+        if seen.contains(name) {
+            continue;
+        }
+        seen.push(*name);
+        let mut found = -1;
+        for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
+            if grammar.parser_rules[i].name == *name {
+                found = i;
+                break;
+            }
+        }
+        if found < 0 {
+            ctx.warn(
+                &"fragment_entries",
+                DiagnosticKind::FragmentEntry,
+                `fragment_entries: unknown parser rule '${*name}'`,
+            );
+            continue;
+        }
+        let rule_name = grammar.parser_rules[found].name;
+        let snake = grammar.parser_rules[found].snake_name;
+        let emits_vals = entry_emits_vals(ctx, &rule_name);
+        let mut visiting: List<String> = [];
+        let first_ids = ctx.first_ids_of_rule(&rule_name, &mut visiting);
+        let first_names = ctx.token_names_of(&first_ids);
+        let call = if emits_vals { `let _ = _parse_${snake}(p);` } else { `_parse_${snake}(p);` };
+        result.push(RecoverFragmentEntry { call, first_names });
+    }
+    return result;
+}
+
+fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragmentEntry>) {
+    for let mut i = 0; i < entries.len(); i += 1 {
+        w.line(&`global _FRAGMENT_FIRST_${i}: List<i32> = [${join_kinds(&entries[i].first_names)}];`);
+    }
+    if !entries.is_empty() {
+        w.blank();
+    }
+
+    let mut d = FnSpec::new("_recover_fragment");
+    d.add_param(&"p", &"&mut Parser");
+    d.set_return_type(&"bool");
+    d.emit_begin(w);
+    if entries.is_empty() {
+        w.line(&"return false;");
+    } else {
+        w.line(&"let _k = p.kinds[p.pos];");
+        for let mut i = 0; i < entries.len(); i += 1 {
+            w.begin(&`if p.in_set(_k, &_FRAGMENT_FIRST_${i})`);
+            w.line(&entries[i].call);
+            w.line(&"return true;");
+            w.end();
+        }
+        w.line(&"return false;");
+    }
+    w.end();
+    w.blank();
+
+    let mut s = FnSpec::new("_recover_try_descend");
+    s.add_param(&"p", &"&mut Parser");
+    s.emit_begin(w);
+    w.line(&"let _before = p.pos;");
+    w.line(&"let _was = p.recovering;");
+    w.line(&"p.recovering = false;");
+    w.line(&"let _did = _recover_fragment(p);");
+    w.line(&"p.recovering = _was;");
+    w.begin(&"if !_did || p.pos == _before");
+    w.line(&"let _sk = p.advance();");
+    w.line(&"p.tokens.mark_skipped(_sk);");
+    w.line(&"p.b.skip(_sk);");
+    w.end();
+    w.end();
+    w.blank();
 }
 
 /// Emit each context-free gated predicate as a standalone effect-free fn
@@ -645,7 +741,14 @@ fn gen_member_methods(w: &mut CodeWriter, members: &MemberDecls) {
     w.blank();
 }
 
-fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_actions: bool, members: &MemberDecls) {
+fn gen_parser_struct(
+    w: &mut CodeWriter,
+    trace: bool,
+    needs_atn: bool,
+    emit_actions: bool,
+    fragment_recovery: bool,
+    members: &MemberDecls,
+) {
     let mut s = StructSpec::new("Parser");
     s.add_field(&"tokens", &"TokenStream");
     // Token kinds as a bare `Array<i32>` — the hot scan/peek read. A flat
@@ -841,7 +944,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
         flt.set_return_type(&"i32");
         flt.emit_begin(w);
         w.line(&"let idx = self.pos + k - 1;");
-        w.line(&"if idx >= self.tokens.len() { return self.tokens.len() - 1; }");
+        w.line(&"if idx >= self.kinds.len() { return self.kinds.len() - 1; }");
         w.line(&"if idx < 0 { return 0; }");
         w.line(&"return idx;");
         w.end();
@@ -1066,7 +1169,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
     f4.set_return_type(&"i32");
     f4.emit_begin(w);
     w.line(&"let idx = self.pos + offset;");
-    w.line(&"if idx >= self.tokens.len() { return TK_EOF; }");
+    w.line(&"if idx >= self.kinds.len() { return TK_EOF; }");
     w.line(&"return self.kinds[idx];");
     w.end();
     w.blank();
@@ -1122,6 +1225,18 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, emit_acti
     );
     w.line(&"return self.pos;");
     w.end();
+    if fragment_recovery {
+        w.begin(&"if kind == TK_EOF && self.kinds[self.pos] != TK_EOF");
+        w.line(&"self.report_unexpected(self.tokens.span_at(self.pos));");
+        w.line(&"self.b.start_error(self.tokens.span_at(self.pos).start);");
+        w.begin(&"loop");
+        w.line(&"if self.kinds[self.pos] == TK_EOF { break; }");
+        w.line(&"_recover_try_descend(self);");
+        w.end();
+        w.line(&"self.b.finish_node(self.last_end());");
+        emit_consume_kind_return(w);
+        w.end();
+    }
     // single-token deletion: the current token is spurious, the expected one
     // follows it.
     w.begin(&"if self.peek_at(1) == kind");

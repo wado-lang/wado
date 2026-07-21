@@ -34,3 +34,26 @@ test "highlight escapes HTML entities" {
     let html = json_hl::highlight(&"\"<script>\"");
     assert html.contains("&lt;"), `missing escaped < in: ${html}`;
 }
+test "highlight broken input keeps default classes and text" {
+    // A truncated object: the resilient parser yields a partial tree, so the
+    // highlighter still walks it and default-classifies every token. The number
+    // stays highlighted and the text round-trips (spans stripped).
+    let src = "{\"key\": 42, \"x\":";
+    let html = json_hl::highlight(&src);
+    assert html.contains("class=\"number\""), `broken input lost number class: ${html}`;
+    let mut text = String::new();
+    let mut in_tag = false;
+    for let c of html.chars() {
+        if in_tag {
+            if c == '>' {
+                in_tag = false;
+            }
+        } else if c == '<' {
+            in_tag = true;
+        } else {
+            text.push(c);
+        }
+    }
+    let restored = text.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&amp;", "&");
+    assert restored == src, `broken input not text-preserving: ${restored}`;
+}
