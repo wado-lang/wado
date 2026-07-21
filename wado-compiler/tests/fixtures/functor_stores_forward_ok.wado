@@ -1,0 +1,27 @@
+// The forwarding function declares `stores[d]`, so persisting `d` through
+// `keep` into the returned box is honest and compiles.
+
+struct Data {
+    v: i32,
+}
+
+struct Box {
+    d: &Data,
+}
+
+fn keep(d: &Data) -> Box with stores[d] {
+    return Box { d };
+}
+
+fn forward(d: &Data) -> Box with stores[d] {
+    return keep(d);
+}
+
+export fn run() {
+    let x = Data { v: 7 };
+    let b = forward(&x);
+    assert b.d.v == 7;
+}
+
+__DATA__
+{"stdout": ""}

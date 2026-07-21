@@ -1,0 +1,26 @@
+// Soundness: a closure coerced to a `fn(&Node)` slot (stores=[]) must not
+// persist its own reference parameter. Here the closure stashes `p` into a
+// `Holder` struct, which the optimization would be free to treat as a
+// transient borrow — so the closure is rejected before lowering.
+
+struct Node {
+    n: i32,
+}
+
+struct Holder {
+    node: &Node,
+}
+
+fn run_with(n: &Node, f: fn(&Node)) {
+    f(n);
+}
+
+export fn run() {
+    let x = Node { n: 1 };
+    run_with(&x, |p: &Node| {
+        let _h = Holder { node: p };
+    });
+}
+
+__DATA__
+{"compile_error": "closure may not store reference parameter 'p'"}

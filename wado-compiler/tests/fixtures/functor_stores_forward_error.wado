@@ -1,0 +1,25 @@
+// Completing check #1: forwarding a reference parameter to a callee that
+// stores it makes the forwarder store it too. `keep` persists `d` into the
+// `Box` it returns, and `forward` returns that box — so `forward` must declare
+// `stores[d]`.
+
+struct Data {
+    v: i32,
+}
+
+struct Box {
+    d: &Data,
+}
+
+fn keep(d: &Data) -> Box with stores[d] {
+    return Box { d };
+}
+
+fn forward(d: &Data) -> Box {
+    return keep(d);
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "stores[d]"}

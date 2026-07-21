@@ -16,7 +16,7 @@ use crate::module_source::ModuleSource;
 use crate::tir::{EffectRef, FunctionRef, ResolvedType, TypeId, TypeSet, TypeTable};
 use crate::token::Span;
 
-use crate::ast::{self, AstVisitor, Expr, Function, Item, Stmt};
+use crate::ast::{self, AstId, AstVisitor, Expr, Function, Item, Stmt};
 use crate::semantics::Semantics;
 
 /// Whether a missing `with` entry refers to a resource or a regular effect.
@@ -1236,12 +1236,29 @@ impl SemEffectWalker<'_> {
 // Semantics-based stores checking (Design B)
 // ---------------------------------------------------------------------------
 
-/// Stores checking over [`Semantics`] — the Design B stores checker. A
-/// function that lets a reference parameter
-/// escape — by returning it, storing it in a struct field, or assigning it to
-/// a global — must declare `stores[param]`. Walks the source AST, so it sees
-/// every function regardless of what reify emits and is immune to dead-code
-/// gating. Violations are returned for the caller to route.
+/// Stores checking over [`Semantics`] — the Design B reference-escape checker.
+///
+/// Two soundness obligations, both enforced before lowering so the functor
+/// optimization can trust a functor slot's declared `stores`:
+///
+/// 1. **Named-function / method honesty.** Every function whose reference
+///    parameter *escapes* (is returned, placed in an aggregate / global, stored
+///    through a reference, or forwarded to a callee that stores that position)
+///    must declare `stores[param]`.
+/// 2. **Closure coercion.** A closure type is always `stores=[]` (never
+///    inferred) and functor coercion ignores `stores`, so a closure that stores
+///    one of its own reference parameters would slip through type-checking. Each
+///    closure body is analysed with allowance `[]` — no closure parameter may
+///    escape.
+///
+/// The escape analysis mirrors `lower/plan/value_copy/stores.rs` but stays
+/// *precise* rather than the optimizer's conservative over-approximation: a
+/// value only carries a parameter reference when reference-flow reaches it, and
+/// a storing call *folds* its stored argument into the call result (gated by
+/// whether the result type can hold a reference) rather than being an
+/// unconditional escape — so a locally-consumed borrow (`self.as_bytes()` fed
+/// to a loop) is not flagged, while a genuine persistence (`return g(p)`,
+/// `GLOBAL = p`, `Wrapper { r: p }`) is.
 #[must_use]
 pub fn check_stores_semantic(sem: &Semantics) -> Vec<StoresError> {
     let mut out = Vec::new();
@@ -1249,19 +1266,29 @@ pub fn check_stores_semantic(sem: &Semantics) -> Vec<StoresError> {
         return out;
     };
 
+    let oracle = StoresOracle::build(sem, state);
+    let tyctx = TypeRefCtx::build(sem, state);
+
     for (src, module) in &sem.modules {
         if !crate::elaborator::liveness::is_user_authored(src) {
             continue;
         }
-        let annotations = state.module_semantics.get(src).map(|m| &m.types);
+        let Some(annotations) = state.module_semantics.get(src).map(|m| &m.types) else {
+            continue;
+        };
+        let ctx = StoresCtx {
+            sem,
+            annotations,
+            oracle: &oracle,
+            tyctx: &tyctx,
+            module: src.source_path(),
+        };
         for item in &module.items {
             match item {
-                Item::Function(func) => {
-                    check_function_stores_sem(sem, src, func, annotations, &mut out);
-                }
+                Item::Function(func) => ctx.check_function(func, &mut out),
                 Item::Impl(impl_block) => {
                     for method in &impl_block.methods {
-                        check_function_stores_sem(sem, src, method, annotations, &mut out);
+                        ctx.check_function(method, &mut out);
                     }
                 }
                 _ => {}
@@ -1271,139 +1298,754 @@ pub fn check_stores_semantic(sem: &Semantics) -> Vec<StoresError> {
     out
 }
 
-fn check_function_stores_sem(
-    sem: &Semantics,
-    module: &ModuleSource,
-    func: &Function,
-    annotations: Option<&crate::elaborator::sem::types::TypeAnnotations>,
-    out: &mut Vec<StoresError>,
-) {
-    let Some(body) = &func.body else {
-        return;
-    };
-    // `#[ambient]` bypasses the reference discipline; test helpers are exempt.
-    if func.attrs.iter().any(|attr| attr.name == "ambient") || func.name.starts_with("__test_") {
-        return;
-    }
-    if func.params.is_empty() {
-        return;
-    }
-    let Some(annotations) = annotations else {
-        return;
-    };
-    let key = func.id;
-    let Some(param_types) = annotations.fn_param_types.get(&key) else {
-        return;
-    };
-
-    // Reference parameters: only `&T` / `&mut T` parameters can be stored, so
-    // only they can produce a stores violation.
-    let type_table = &sem.types;
-    let mut ref_params: IndexSet<String> = IndexSet::default();
-    for (param, &type_id) in func.params.iter().zip(param_types.iter()) {
-        if matches!(
-            type_table.get(type_id),
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        ) {
-            ref_params.insert(param.name.clone());
-        }
-    }
-    if ref_params.is_empty() {
-        return;
-    }
-
-    let stores: IndexSet<String> = func.stores.iter().cloned().collect();
-    let mut walker = StoresWalker {
-        annotations,
-        ref_params,
-        stores,
-        module: module.source_path(),
-        out,
-    };
-    ast::walk_block(&mut walker, body);
+/// Declared `stores[...]` positions of every function / method in the program,
+/// so a call site can look up the callee's stored parameter positions modularly
+/// (each function's own declaration is independently verified by obligation #1).
+struct StoresOracle {
+    /// Function decl [`AstId`] → declared stored parameter positions.
+    fn_stores: IndexMap<AstId, Vec<u32>>,
+    /// `(module, mangled name)` → declared stored positions (method dispatch).
+    mangled_stores: IndexMap<(ModuleSource, String), Vec<u32>>,
 }
 
-/// Walks a function body flagging reference parameters that escape without a
-/// matching `stores[param]` declaration.
-struct StoresWalker<'a> {
+impl StoresOracle {
+    fn build(sem: &Semantics, state: &crate::elaborator::orchestration::AnnotateState) -> Self {
+        let mut fn_stores: IndexMap<AstId, Vec<u32>> = IndexMap::default();
+        let record = |func: &Function, fn_stores: &mut IndexMap<AstId, Vec<u32>>| {
+            let positions: Vec<u32> = func
+                .params
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| func.stores.contains(&p.name))
+                .map(|(i, _)| u32::try_from(i).unwrap())
+                .collect();
+            fn_stores.insert(func.id, positions);
+        };
+        // Every module (including stdlib) so cross-module callees resolve.
+        for module in sem.modules.values() {
+            for item in &module.items {
+                match item {
+                    Item::Function(func) => record(func, &mut fn_stores),
+                    Item::Impl(impl_block) => {
+                        for method in &impl_block.methods {
+                            record(method, &mut fn_stores);
+                        }
+                    }
+                    Item::Trait(trait_decl) => {
+                        for method in &trait_decl.methods {
+                            record(method, &mut fn_stores);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        let mut mangled_stores: IndexMap<(ModuleSource, String), Vec<u32>> = IndexMap::default();
+        for (src, module_sem) in &state.module_semantics {
+            for (key, names) in &module_sem.types.method_names {
+                if let Some(positions) = fn_stores.get(key) {
+                    mangled_stores
+                        .insert((src.clone(), names.mangled.clone()), positions.clone());
+                }
+            }
+        }
+
+        Self {
+            fn_stores,
+            mangled_stores,
+        }
+    }
+}
+
+/// Answers "can a value of this type transitively hold a reference?" — the gate
+/// that keeps carrying precise: a value whose type cannot contain a reference
+/// (`i32`, `String`, `Unit`) never carries a parameter, so a storing call that
+/// returns such a type folds nothing (e.g. `list.push(x)` returning `Unit`).
+struct TypeRefCtx {
+    struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    memo: std::cell::RefCell<IndexMap<TypeId, bool>>,
+}
+
+impl TypeRefCtx {
+    fn build(sem: &Semantics, state: &crate::elaborator::orchestration::AnnotateState) -> Self {
+        let mut struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
+        for (src, module) in &sem.modules {
+            let annotations = state.module_semantics.get(src).map(|m| &m.types);
+            for item in &module.items {
+                if let Item::Struct(struct_decl) = item
+                    && let Some(field_types) =
+                        annotations.and_then(|ann| ann.struct_field_types.get(&struct_decl.id))
+                {
+                    struct_fields
+                        .insert((src.clone(), struct_decl.name.clone()), field_types.clone());
+                }
+            }
+        }
+        let mut variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>> =
+            IndexMap::default();
+        for (module, variants) in state.tysys.all_variant_cases.iter() {
+            for (variant_name, info) in variants {
+                variant_payloads.insert(
+                    (module.clone(), variant_name.clone()),
+                    info.cases.iter().map(|case| case.payload).collect(),
+                );
+            }
+        }
+        Self {
+            struct_fields,
+            variant_payloads,
+            memo: std::cell::RefCell::new(IndexMap::default()),
+        }
+    }
+
+    fn can_hold_ref(&self, tt: &TypeTable, type_id: TypeId) -> bool {
+        if let Some(&b) = self.memo.borrow().get(&type_id) {
+            return b;
+        }
+        let mut visited = TypeSet::default();
+        let r = self.walk(tt, type_id, &mut visited);
+        self.memo.borrow_mut().insert(type_id, r);
+        r
+    }
+
+    fn walk(&self, tt: &TypeTable, type_id: TypeId, visited: &mut TypeSet) -> bool {
+        if !visited.insert(type_id) {
+            return false;
+        }
+        match tt.get(type_id) {
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => true,
+            ResolvedType::Reactive(t) | ResolvedType::BuiltinArray(t) => self.walk(tt, *t, visited),
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => {
+                type_args.iter().any(|t| self.walk(tt, *t, visited))
+            }
+            ResolvedType::Newtype { base_type, .. } => self.walk(tt, *base_type, visited),
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } => self
+                .struct_fields
+                .get(&(module_source.clone(), name.clone()))
+                .is_some_and(|fields| fields.iter().any(|t| self.walk(tt, *t, visited))),
+            ResolvedType::Variant {
+                name,
+                module_source,
+            } => self
+                .variant_payloads
+                .get(&(module_source.clone(), name.clone()))
+                .is_some_and(|payloads| payloads.iter().any(|t| self.walk(tt, *t, visited))),
+            // A functor is a value (`funcref`); storing it needs no `stores`.
+            ResolvedType::Function { .. } => false,
+            // Pre-mono / unresolved: conservatively assume a reference may appear.
+            ResolvedType::TypeParam { .. }
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocTypeProjection { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => true,
+            ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Flags { .. } => false,
+        }
+    }
+}
+
+/// Per-module context for the escape checks.
+struct StoresCtx<'a> {
+    sem: &'a Semantics,
     annotations: &'a crate::elaborator::sem::types::TypeAnnotations,
-    /// Reference (`&T` / `&mut T`) parameter names of the enclosing function.
-    ref_params: IndexSet<String>,
-    /// `stores[...]`-declared parameter names — escapes of these are allowed.
-    stores: IndexSet<String>,
+    oracle: &'a StoresOracle,
+    tyctx: &'a TypeRefCtx,
     module: String,
-    out: &'a mut Vec<StoresError>,
 }
 
-impl StoresWalker<'_> {
-    /// If `expr` is a bare reference to a reference parameter that is *not*
-    /// declared in `stores[...]`, return its name. Only a direct identifier
-    /// counts — `&x.field` and the like do not store the parameter itself.
-    fn unstored_ref_param<'e>(&self, expr: &'e Expr) -> Option<&'e str> {
-        if let Expr::Ident(ident) = expr
-            && self.ref_params.contains(&ident.name)
-            && !self.stores.contains(&ident.name)
+impl StoresCtx<'_> {
+    /// Obligation #1 for one function/method, plus obligation #2 for every
+    /// closure literal in its body.
+    fn check_function(&self, func: &Function, out: &mut Vec<StoresError>) {
+        let Some(body) = &func.body else {
+            return;
+        };
+        // `#[ambient]` bypasses the reference discipline; test helpers are exempt.
+        if func.attrs.iter().any(|attr| attr.name == "ambient")
+            || func.name.starts_with("__test_")
         {
-            return Some(&ident.name);
+            return;
         }
-        None
+        // Default to no param types so a function with none still gets walked —
+        // the walk must run to discover closure literals for obligation #2.
+        let param_types = self
+            .annotations
+            .fn_param_types
+            .get(&func.id)
+            .map_or(&[][..], Vec::as_slice);
+
+        // Seed carries with the reference parameters (only `&T` / `&mut T` can
+        // be stored). `allowed` are the declared-`stores` positions.
+        let mut carries: IndexMap<AstId, IndexSet<u32>> = IndexMap::default();
+        let mut names: IndexMap<u32, String> = IndexMap::default();
+        let mut allowed: IndexSet<u32> = IndexSet::default();
+        for (i, (param, &type_id)) in func.params.iter().zip(param_types.iter()).enumerate() {
+            let pos = u32::try_from(i).unwrap();
+            if matches!(
+                self.sem.types.get(type_id),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            ) {
+                carries.entry(param.id).or_default().insert(pos);
+                names.insert(pos, param.name.clone());
+            }
+            if func.stores.contains(&param.name) {
+                allowed.insert(pos);
+            }
+        }
+
+        // Always walk: obligation #1 sinks fire only for the seeded reference
+        // parameters, but the walk also discovers closure literals (checked as
+        // their own entity for obligation #2), so it must run even for a
+        // function with no reference parameters.
+        let mut walker = RefFlow {
+            ctx: self,
+            carries,
+            names,
+            allowed,
+            is_closure: false,
+            out,
+        };
+        ast::walk_block(&mut walker, body);
+    }
+
+    /// Obligation #2: a closure may not store any of its reference parameters
+    /// (allowance `[]`).
+    fn check_closure(&self, closure: &ast::ClosureExpr, out: &mut Vec<StoresError>) {
+        let Some(&type_id) = self.sem.expression_types.get(&closure.id) else {
+            return;
+        };
+        let ResolvedType::Function { params, .. } = self.sem.types.get(type_id) else {
+            return;
+        };
+        let mut carries: IndexMap<AstId, IndexSet<u32>> = IndexMap::default();
+        let mut names: IndexMap<u32, String> = IndexMap::default();
+        for (j, param) in closure.params.iter().enumerate() {
+            let pos = u32::try_from(j).unwrap();
+            if params.get(j).is_some_and(|&pt| {
+                matches!(
+                    self.sem.types.get(pt),
+                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                )
+            }) {
+                carries.entry(param.id).or_default().insert(pos);
+                names.insert(pos, param.name.clone());
+            }
+        }
+        if names.is_empty() {
+            return;
+        }
+        let mut walker = RefFlow {
+            ctx: self,
+            carries,
+            names,
+            allowed: IndexSet::default(),
+            is_closure: true,
+            out,
+        };
+        // The closure body's value is an implicit return sink.
+        walker.sink_return(&closure.body);
+        walker.visit_expr(&closure.body);
     }
 }
 
-impl AstVisitor for StoresWalker<'_> {
-    fn visit_stmt(&mut self, stmt: &Stmt) {
-        if let Stmt::Return(ret) = stmt
-            && let Some(value) = &ret.value
-            && let Some(param) = self.unstored_ref_param(value)
+/// Which persistence sink a carried reference reached (selects the message).
+enum Sink<'a> {
+    Return,
+    StructField,
+    Tuple,
+    Global(&'a str),
+    ThroughRef,
+    /// Forwarded as an argument to a callee that stores that position — the
+    /// reference persists inside the callee, so the caller stores it too.
+    Forward,
+}
+
+/// Reference-flow escape walker. Shared by both obligations; the seed
+/// (`carries` / `names`), the `allowed` allowance, and `is_closure` (wording)
+/// distinguish them. Nested closures are not descended into — each is checked
+/// as its own entity.
+struct RefFlow<'a, 'b> {
+    ctx: &'a StoresCtx<'a>,
+    /// Binding [`AstId`] → the parameter positions its reference currently carries.
+    carries: IndexMap<AstId, IndexSet<u32>>,
+    /// Parameter position → name (for diagnostics).
+    names: IndexMap<u32, String>,
+    /// Positions whose escape is allowed (declared `stores`).
+    allowed: IndexSet<u32>,
+    is_closure: bool,
+    out: &'b mut Vec<StoresError>,
+}
+
+impl RefFlow<'_, '_> {
+    fn expr_type(&self, expr: &Expr) -> Option<TypeId> {
+        if let Expr::Ident(ident) = expr
+            && let Some(def) = self.ctx.sem.references.get(&ident.id)
+            && let Some(&ty) = self.ctx.sem.local_types.get(def)
         {
+            return Some(ty);
+        }
+        self.ctx.sem.expression_types.get(&expr.id()).copied()
+    }
+
+    /// Parameter positions the reference produced by `expr` carries. A value
+    /// whose type cannot hold a reference carries nothing.
+    fn carries(&self, expr: &Expr) -> IndexSet<u32> {
+        match self.expr_type(expr) {
+            Some(ty) if self.ctx.tyctx.can_hold_ref(&self.ctx.sem.types, ty) => {}
+            _ => return IndexSet::default(),
+        }
+        match expr {
+            Expr::Ident(ident) => self
+                .ctx
+                .sem
+                .references
+                .get(&ident.id)
+                .and_then(|def| self.carries.get(def))
+                .cloned()
+                .unwrap_or_default(),
+            // Only `&place` roots at a parameter. Reading a reference-typed
+            // field / element / deref (`self.w`, `xs[i]`, `*q`) yields the
+            // reference stored there, which points at a *separate* object, not
+            // at the container's parameter — so it carries nothing.
+            Expr::Unary(u) if matches!(u.op, ast::UnaryOp::Ref | ast::UnaryOp::MutRef) => {
+                self.place_roots(&u.expr)
+            }
+            // A cast preserves reference identity.
+            Expr::Cast(c) => self.carries(&c.expr),
+            Expr::Call(_) | Expr::MethodCall(_) | Expr::StaticMethodCall(_) => {
+                let Some((stores, args)) = self.call_stored_args(expr) else {
+                    return IndexSet::default();
+                };
+                let mut acc = IndexSet::default();
+                for (pos, arg) in args.iter().enumerate() {
+                    if stores.contains(&u32::try_from(pos).unwrap()) {
+                        acc.extend(self.carries(arg));
+                    }
+                }
+                acc
+            }
+            Expr::StructLiteral(lit) => {
+                let mut acc = IndexSet::default();
+                for field in &lit.fields {
+                    acc.extend(self.carries(&field.value));
+                }
+                acc
+            }
+            Expr::TupleLiteral(t) => {
+                let mut acc = IndexSet::default();
+                for el in &t.elements {
+                    acc.extend(self.carries(el));
+                }
+                acc
+            }
+            _ => IndexSet::default(),
+        }
+    }
+
+    /// The parameter positions the *place* operand of `&` is rooted at,
+    /// ignoring the place's own type (`&p.field` roots at `p`).
+    fn place_roots(&self, place: &Expr) -> IndexSet<u32> {
+        match place {
+            Expr::Ident(ident) => self
+                .ctx
+                .sem
+                .references
+                .get(&ident.id)
+                .and_then(|def| self.carries.get(def))
+                .cloned()
+                .unwrap_or_default(),
+            Expr::Unary(u) if u.op == ast::UnaryOp::Deref => self.place_roots(&u.expr),
+            Expr::FieldAccess(f) => self.place_roots(&f.expr),
+            Expr::Index(i) => self.place_roots(&i.expr),
+            Expr::Cast(c) => self.place_roots(&c.expr),
+            _ => IndexSet::default(),
+        }
+    }
+
+    /// The callee's stored parameter positions and the arguments indexed by
+    /// callee position (position 0 is the receiver for a method call). `None`
+    /// when `expr` is not a call. Unresolvable direct callees are trusted to
+    /// store nothing (their declaration was verified independently); an
+    /// unresolvable functor callee is conservative (every position stored).
+    fn call_stored_args<'e>(&self, expr: &'e Expr) -> Option<(Vec<u32>, Vec<&'e Expr>)> {
+        match expr {
+            Expr::Call(call) => {
+                let args: Vec<&Expr> = call.args.iter().collect();
+                if let Expr::Ident(ident) = &call.callee
+                    && let Some(def) = self.ctx.sem.references.get(&ident.id)
+                    && let Some(stores) = self.ctx.oracle.fn_stores.get(def)
+                {
+                    return Some((stores.clone(), args));
+                }
+                if let Some(func_ref) = self
+                    .ctx
+                    .annotations
+                    .static_method_dispatch
+                    .get(&call.id)
+                    .map(|d| &d.function_ref)
+                {
+                    let stores = self
+                        .ctx
+                        .oracle
+                        .mangled_stores
+                        .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
+                        .cloned()
+                        .unwrap_or_default();
+                    return Some((stores, args));
+                }
+                if let Some(callee_ty) = self.indirect_callee_type(&call.callee) {
+                    return match self.ctx.sem.types.get(callee_ty) {
+                        ResolvedType::Function { stores, .. } => Some((stores.clone(), args)),
+                        _ => Some(((0..u32::try_from(args.len()).unwrap()).collect(), args)),
+                    };
+                }
+                Some((Vec::new(), args))
+            }
+            Expr::MethodCall(mc) => {
+                let mut args: Vec<&Expr> = vec![&mc.receiver];
+                args.extend(mc.args.iter());
+                if let Some(dispatch) = self.ctx.sem.method_dispatch.get(&mc.id) {
+                    let func_ref = &dispatch.function_ref;
+                    let stores = self
+                        .ctx
+                        .oracle
+                        .mangled_stores
+                        .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
+                        .cloned()
+                        .unwrap_or_default();
+                    return Some((stores, args));
+                }
+                Some((Vec::new(), args))
+            }
+            Expr::StaticMethodCall(sc) => {
+                let args: Vec<&Expr> = sc.args.iter().collect();
+                if let Some(func_ref) = self
+                    .ctx
+                    .annotations
+                    .static_method_dispatch
+                    .get(&sc.id)
+                    .map(|d| &d.function_ref)
+                {
+                    let stores = self
+                        .ctx
+                        .oracle
+                        .mangled_stores
+                        .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
+                        .cloned()
+                        .unwrap_or_default();
+                    return Some((stores, args));
+                }
+                Some((Vec::new(), args))
+            }
+            _ => None,
+        }
+    }
+
+    /// Type of an indirect call's callee identifier (a functor local / param).
+    fn indirect_callee_type(&self, callee: &Expr) -> Option<TypeId> {
+        if let Expr::Ident(ident) = callee
+            && let Some(def) = self.ctx.sem.references.get(&ident.id)
+            && let Some(&ty) = self.ctx.sem.local_types.get(def)
+        {
+            return Some(ty);
+        }
+        self.ctx.sem.expression_types.get(&callee.id()).copied()
+    }
+
+    fn sink_value(&mut self, value: &Expr, sink: Sink) {
+        let carried = self.carries(value);
+        self.mark(&carried, value.span(), &sink);
+    }
+
+    /// A callee that stores an argument but returns a value that cannot hold a
+    /// reference has persisted that argument *externally* (a global, a write
+    /// through another reference) — it cannot be in the result. Forwarding a
+    /// reference parameter there makes the caller store it too, regardless of
+    /// whether the result is used, so this fires on the call itself (a bare
+    /// `g(p);` for its side effect).
+    ///
+    /// When the result *can* hold a reference the store may be a borrow into the
+    /// result (an iterator over `&self`, a slice); that is a managed borrow
+    /// tracked precisely by `carries` — the caller stores the parameter only if
+    /// the result escapes — so this sink defers to that path and does not fire.
+    fn sink_call_args(&mut self, expr: &Expr) {
+        let Some((stores, args)) = self.call_stored_args(expr) else {
+            return;
+        };
+        if self
+            .expr_type(expr)
+            .is_some_and(|ty| self.ctx.tyctx.can_hold_ref(&self.ctx.sem.types, ty))
+        {
+            return;
+        }
+        for (pos, arg) in args.iter().enumerate() {
+            if stores.contains(&u32::try_from(pos).unwrap()) {
+                let carried = self.carries(arg);
+                self.mark(&carried, arg.span(), &Sink::Forward);
+            }
+        }
+    }
+
+    /// A `return`/task-return sink. Returning a freshly-taken borrow (`return
+    /// &self.field`, `return &xs[i]`) is a plain reference return signalled by
+    /// the `&T` return type — it does not persist the parameter the way storing
+    /// it in an aggregate / global does, so it needs no `stores`. Returning the
+    /// parameter itself, an alias of it, or a value that folded it into an
+    /// aggregate is flagged.
+    fn sink_return(&mut self, value: &Expr) {
+        if matches!(
+            value,
+            Expr::Unary(u) if matches!(u.op, ast::UnaryOp::Ref | ast::UnaryOp::MutRef)
+        ) {
+            return;
+        }
+        self.sink_value(value, Sink::Return);
+    }
+
+    fn mark(&mut self, positions: &IndexSet<u32>, span: Span, sink: &Sink) {
+        for &pos in positions {
+            if self.allowed.contains(&pos) {
+                continue;
+            }
+            let name = self.names.get(&pos).map_or("?", String::as_str);
+            let message = if self.is_closure {
+                format!(
+                    "closure may not store reference parameter '{name}' (closures cannot declare `stores`)"
+                )
+            } else {
+                match sink {
+                    Sink::Return => format!(
+                        "returning reference parameter '{name}' requires `stores[{name}]` declaration"
+                    ),
+                    Sink::StructField => format!(
+                        "storing reference parameter '{name}' in struct field requires `stores[{name}]` declaration"
+                    ),
+                    Sink::Tuple => format!(
+                        "storing reference parameter '{name}' in a tuple requires `stores[{name}]` declaration"
+                    ),
+                    Sink::Global(gname) => format!(
+                        "storing reference parameter '{name}' in global '{gname}' requires `stores[{name}]` declaration"
+                    ),
+                    Sink::ThroughRef => format!(
+                        "storing reference parameter '{name}' through a reference requires `stores[{name}]` declaration"
+                    ),
+                    Sink::Forward => format!(
+                        "passing reference parameter '{name}' to a function that stores it requires `stores[{name}]` declaration"
+                    ),
+                }
+            };
+            if self
+                .out
+                .iter()
+                .any(|e| e.span.start == span.start && e.message == message)
+            {
+                continue;
+            }
             self.out.push(StoresError {
-                message: format!(
-                    "returning reference parameter '{param}' requires `stores[{param}]` declaration"
-                ),
-                span: value.span(),
-                module: self.module.clone(),
+                message,
+                span,
+                module: self.ctx.module.clone(),
             });
+        }
+    }
+
+    /// The global's name if this identifier resolves to a module global l-value.
+    fn global_name(&self, ident: &ast::IdentExpr) -> Option<String> {
+        match self.ctx.annotations.assign_places.get(&ident.id) {
+            Some(crate::elaborator::sem::types::AssignPlace::Global { name, .. }) => {
+                Some(name.clone())
+            }
+            _ => None,
+        }
+    }
+
+    /// Whether an identifier's binding is a reference (`&T` / `&mut T`), so a
+    /// write into its projection reaches caller-visible memory.
+    fn ident_is_ref(&self, ident: &ast::IdentExpr) -> bool {
+        self.ctx
+            .sem
+            .references
+            .get(&ident.id)
+            .and_then(|def| self.ctx.sem.local_types.get(def))
+            .is_some_and(|&ty| {
+                matches!(
+                    self.ctx.sem.types.get(ty),
+                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                )
+            })
+    }
+
+    /// Reject a named-function reference argument whose declared `stores`
+    /// exceeds the functor parameter's declared `stores`.
+    fn check_functor_coercion(&mut self, call: &ast::CallExpr) {
+        let Some(param_types) = self.ctx.annotations.call_param_types.get(&call.id) else {
+            return;
+        };
+        for (arg, &param_type) in call.args.iter().zip(param_types.iter()) {
+            let ResolvedType::Function {
+                stores: expected, ..
+            } = self.ctx.sem.types.get(param_type)
+            else {
+                continue;
+            };
+            // A closure argument is checked as its own entity; only a named
+            // function reference (an identifier resolving to a function decl)
+            // carries a declared `stores` to compare here.
+            let Expr::Ident(ident) = arg else {
+                continue;
+            };
+            let Some(declared) = self
+                .ctx
+                .sem
+                .references
+                .get(&ident.id)
+                .and_then(|def| self.ctx.oracle.fn_stores.get(def))
+            else {
+                continue;
+            };
+            for pos in declared {
+                if !expected.contains(pos) {
+                    self.out.push(StoresError {
+                        message: format!(
+                            "function '{}' stores parameter {pos} but is passed where a functor that stores nothing at that position is expected",
+                            ident.name
+                        ),
+                        span: arg.span(),
+                        module: self.ctx.module.clone(),
+                    });
+                }
+            }
+        }
+    }
+
+    /// Deepest identifier of an assignment target place, and whether the path
+    /// crossed a dereference (a write through a reference).
+    fn place_root<'e>(&self, place: &'e Expr) -> (Option<&'e ast::IdentExpr>, bool) {
+        match place {
+            Expr::Ident(ident) => (Some(ident), false),
+            Expr::Unary(u) if u.op == ast::UnaryOp::Deref => {
+                let (root, _) = self.place_root(&u.expr);
+                (root, true)
+            }
+            Expr::FieldAccess(f) => self.place_root(&f.expr),
+            Expr::Index(i) => self.place_root(&i.expr),
+            Expr::Cast(c) => self.place_root(&c.expr),
+            _ => (None, false),
+        }
+    }
+}
+
+impl AstVisitor for RefFlow<'_, '_> {
+    fn visit_stmt(&mut self, stmt: &Stmt) {
+        match stmt {
+            Stmt::Let(let_stmt) => {
+                if let Some(value) = &let_stmt.value {
+                    let carried = self.carries(value);
+                    if !carried.is_empty()
+                        && let Some(binding) = pattern_binding_id(&let_stmt.pattern)
+                    {
+                        self.carries.entry(binding).or_default().extend(carried);
+                    }
+                }
+            }
+            Stmt::Return(ret) => {
+                if let Some(value) = &ret.value {
+                    self.sink_return(value);
+                }
+            }
+            Stmt::TaskReturn(task) => self.sink_return(&task.value),
+            _ => {}
         }
         ast::walk_stmt(self, stmt);
     }
 
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
+            // A closure is checked as its own entity (obligation #2); do not
+            // descend — its `return` is not the enclosing entity's sink.
+            Expr::Closure(closure) => {
+                self.ctx.check_closure(closure, self.out);
+                return;
+            }
             Expr::StructLiteral(lit) => {
                 for field in &lit.fields {
-                    if let Some(param) = self.unstored_ref_param(&field.value) {
-                        self.out.push(StoresError {
-                            message: format!(
-                                "storing reference parameter '{param}' in struct field requires `stores[{param}]` declaration"
-                            ),
-                            span: field.value.span(),
-                            module: self.module.clone(),
-                        });
-                    }
+                    self.sink_value(&field.value, Sink::StructField);
+                }
+            }
+            Expr::TupleLiteral(t) => {
+                for el in &t.elements {
+                    self.sink_value(el, Sink::Tuple);
                 }
             }
             Expr::Assign(assign) => {
-                // A reference parameter assigned to a module global escapes; the
-                // assign place recorded by the elaborator (the same fact reify
-                // reads to build `GlobalVarSet`) identifies the global by name.
-                if let Some(param) = self.unstored_ref_param(&assign.value)
-                    && let Some(place) = self.annotations.assign_places.get(&assign.target.id())
-                    && let crate::elaborator::sem::types::AssignPlace::Global { name, .. } = place
-                {
-                    self.out.push(StoresError {
-                        message: format!(
-                            "storing reference parameter '{param}' in global '{name}' requires `stores[{param}]` declaration"
-                        ),
-                        span: assign.value.span(),
-                        module: self.module.clone(),
-                    });
+                let carried = self.carries(&assign.value);
+                if !carried.is_empty() {
+                    let (root, through_deref) = self.place_root(&assign.target);
+                    let span = assign.value.span();
+                    match root {
+                        Some(ident) => {
+                            if let Some(name) = self.global_name(ident) {
+                                self.mark(&carried, span, &Sink::Global(&name));
+                            } else if is_ident(&assign.target) && !through_deref {
+                                // Whole-local rebind (`r = value`): the local now
+                                // carries the reference (not a write through it).
+                                if let Some(def) = self.ctx.sem.references.get(&ident.id) {
+                                    self.carries.entry(*def).or_default().extend(carried);
+                                }
+                            } else if through_deref || self.ident_is_ref(ident) {
+                                // Writing into `*ref` / `ref.field` / a `&mut self`
+                                // field persists into caller-visible memory.
+                                self.mark(&carried, span, &Sink::ThroughRef);
+                            } else if let Some(def) = self.ctx.sem.references.get(&ident.id) {
+                                // A field / index of a plain local: the local now
+                                // carries the reference.
+                                self.carries.entry(*def).or_default().extend(carried);
+                            }
+                        }
+                        None => self.mark(&carried, span, &Sink::ThroughRef),
+                    }
                 }
             }
+            // Obligation #2 for a named-function reference: passing `fn_ref` to
+            // a functor parameter whose declared `stores` is narrower is unsound
+            // (the optimization trusts the slot's `stores`). The function's own
+            // `stores` was verified honest by obligation #1.
+            Expr::Call(call) => {
+                self.check_functor_coercion(call);
+                self.sink_call_args(expr);
+            }
+            Expr::MethodCall(_) | Expr::StaticMethodCall(_) => self.sink_call_args(expr),
             _ => {}
         }
         ast::walk_expr(self, expr);
     }
 }
+
+fn is_ident(expr: &Expr) -> bool {
+    matches!(expr, Expr::Ident(_))
+}
+
+/// The binding [`AstId`] of a simple `let` pattern, or `None` for a
+/// destructuring pattern (reference aliasing through destructuring is not
+/// tracked).
+fn pattern_binding_id(pattern: &ast::Pattern) -> Option<AstId> {
+    match pattern {
+        ast::Pattern::Ident { id, .. } | ast::Pattern::MutIdent { id, .. } => Some(*id),
+        _ => None,
+    }
+}
+
 
 // ---------------------------------------------------------------------------
 // Semantics-based default-value purity checking (Design B)
