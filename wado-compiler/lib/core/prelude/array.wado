@@ -5,14 +5,28 @@
 //
 // `Array<T>` is a value type: assigning it, passing it by value, or
 // returning it deep-copies the backing GC array (see WEP-2026-06-02). Its
-// length is a runtime value (`array.len`), not part of the type. Element
-// access always copies (`arr[i]` returns `T`, never `&T`) because Wasm GC
-// has no interior references; in-place mutation goes through `set` / `[i] = v`.
+// length is a runtime value (`array.len`), not part of the type. `arr[i]`
+// copies (`T`, via the direct `array.get` path); `IndexRef` / `IndexMutRef` hand
+// out element references for `Ref` / `RefMut` elements, backed by the
+// `builtin::array_get_ref` / `array_get_mut_ref` intrinsics. In-place mutation
+// goes through `set` / `[i] = v`.
 //
 // Every method is a thin wrapper over a `builtin::array_*` intrinsic, which
 // lowers directly to the matching `array.*` instruction.
 
-use { IndexValue, IndexAssign, IntoIterator, Display, DisplayAlt, Inspect, InspectAlt } from "core:prelude/traits.wado";
+use {
+    Ref,
+    RefMut,
+    IndexValue,
+    IndexAssign,
+    IndexRef,
+    IndexMutRef,
+    IntoIterator,
+    Display,
+    DisplayAlt,
+    Inspect,
+    InspectAlt,
+} from "core:prelude/traits.wado";
 use { ArraySlice, ArrayIter, ArrayRefIter, ArrayWindows, ArrayChunks } from "core:prelude/slice.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
 use { Formatter } from "core:prelude/format.wado";
@@ -125,6 +139,22 @@ impl IndexAssign<i32> for Array<T> {
 
     fn index_assign(&mut self, index: i32, value: Self::Input) with stores[value] {
         builtin::array_set(self, index, value);
+    }
+}
+
+impl<T: Ref> IndexRef<i32> for Array<T> {
+    type Output = T;
+
+    fn index_ref(&self, index: i32) -> &T {
+        return builtin::array_get_ref(self, index);
+    }
+}
+
+impl<T: RefMut> IndexMutRef<i32> for Array<T> {
+    type Output = T;
+
+    fn index_mut_ref(&mut self, index: i32) -> &mut T {
+        return builtin::array_get_mut_ref(self, index);
     }
 }
 

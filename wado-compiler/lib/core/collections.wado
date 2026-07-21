@@ -349,6 +349,32 @@ impl<K: Ord> IndexValue<K> for TreeMap<K, V> {
     }
 }
 
+// IndexRef for &map[key] -> &V (panics if key not found)
+impl<K: Ord, V: Ref> IndexRef<K> for TreeMap<K, V> {
+    type Output = V;
+
+    fn index_ref(&self, key: K) -> &V {
+        let index = self.find_index(key);
+        if index < 0 {
+            panic(`key not found: ${key:?}`);
+        }
+        return &self.entries[index].value;
+    }
+}
+
+// IndexMutRef for map[key].mutating_method() -> &mut V (panics if key not found)
+impl<K: Ord, V: RefMut> IndexMutRef<K> for TreeMap<K, V> {
+    type Output = V;
+
+    fn index_mut_ref(&mut self, key: K) -> &mut V {
+        let index = self.find_index(key);
+        if index < 0 {
+            panic(`key not found: ${key:?}`);
+        }
+        return &mut self.entries[index].value;
+    }
+}
+
 // KeyValueLiteralBuilder for { key: value, ... } -> TreeMap<String, V>
 // The blanket impl in core:prelude automatically provides KeyValueLiteral for TreeMap.
 impl KeyValueLiteralBuilder for TreeMap<String, V> {
@@ -521,7 +547,7 @@ impl<V: Deserialize> Deserialize for TreeMap<String, V> {
     }
 }
 
-impl<K: Inspect, V: Inspect> Inspect for TreeMap<K, V> {
+impl<K: Ord + Inspect, V: Inspect> Inspect for TreeMap<K, V> {
     pub fn inspect(&self, f: &mut Formatter) {
         f.write_char('{');
         let mut first = true;
@@ -540,7 +566,7 @@ impl<K: Inspect, V: Inspect> Inspect for TreeMap<K, V> {
     }
 }
 
-impl<K: InspectAlt, V: InspectAlt> InspectAlt for TreeMap<K, V> {
+impl<K: Ord + InspectAlt, V: InspectAlt> InspectAlt for TreeMap<K, V> {
     pub fn inspect_alt(&self, f: &mut Formatter) {
         if self.is_empty() {
             f.write_str(&"{}");

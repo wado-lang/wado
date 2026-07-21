@@ -1,8 +1,9 @@
-// A single-use pure scalar `let` — here the index/value parameters that
-// inlining `arr[i] = v` leaves behind — forwards into its adjacent use, so the
-// store takes its operands directly (`array_set_u8(self.repr, self.used, c &
-// 255)`) instead of routing through dead-weight locals. Index reads are
-// excluded, so read-modify-write element updates keep their pre-write value.
+// A single-use pure scalar `let` — the index/value operands that lowering
+// `arr[i] = v` leaves behind — forwards into its adjacent use, so the store
+// takes its operands directly (e.g. `array_set_u8(repr, pos, code & 255)` in the
+// UTF-8 encoder `String::push` delegates to) instead of routing through
+// dead-weight locals. Index reads are excluded, so read-modify-write element
+// updates keep their pre-write value.
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
@@ -22,5 +23,5 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "AZ:6:16\n",
-    "wir_expect:O2": ["array_set_u8(self.repr, self.used, "]
+    "wir_expect:O2": ["array_set_u8(repr, pos, code & 255)"]
 }

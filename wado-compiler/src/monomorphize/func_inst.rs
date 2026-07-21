@@ -12,7 +12,7 @@ use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBinaryOp,
     TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern,
-    TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
+    TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable, method_param_offset,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
@@ -1233,8 +1233,7 @@ impl Monomorphizer {
             }
         }
 
-        // Add method-level type params from key.method_type_args
-        let offset = generic.impl_type_params.len() as u32;
+        let offset = method_param_offset(&generic.impl_type_params);
         for (param, &arg) in generic.type_params.iter().zip(key.method_type_args.iter()) {
             substitution.insert(offset + param.index, arg);
         }

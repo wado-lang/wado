@@ -13,7 +13,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{MethodName, global_name};
 use crate::tir::{
     FunctionKind, TirEffect, TirEffectOp, TirFunction, TirParam, TirResource, TirStruct, TirTest,
-    TirVariantDecl, TypeId, TypeTable,
+    TirVariantDecl, TypeId, TypeTable, method_param_offset,
 };
 use crate::token::Span;
 
@@ -1423,6 +1423,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_name: Option<&str>,
         trait_type: Option<&Type>,
         impl_is_concrete: bool,
+        impl_declared_params: &[ast::GenericParam],
     ) -> Option<TirFunction> {
         // Use an inherited scope so the caller's `assoc_type_bindings` (set up
         // for the surrounding impl block) remain visible — `Self::Output` etc.
@@ -1460,7 +1461,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for (i, arg) in generic.args.iter().enumerate() {
                 if let ast::Type::Named(named) = arg {
                     let name = &named.name;
-                    if !scope.annotate_ctx.trait_ctx.type_params.contains_key(name) {
+                    let is_declared_param = impl_declared_params.iter().any(|p| &p.name == name);
+                    if !scope.annotate_ctx.trait_ctx.type_params.contains_key(name)
+                        && (is_declared_param
+                            || !scope
+                                .tysys
+                                .is_known_type_name_in(&scope.current_module_source, name))
+                    {
                         let type_id = scope
                             .tysys
                             .type_table
@@ -1622,23 +1629,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_ctx
             .install_effect_params(&func.type_params);
 
-        // Then, collect method-level type params. Mirrors
-        // `register_generic_params` in `trait_env.rs`: `<F: fn(...)>` /
-        // `<F: fn mut(...)>` bounds are realised eagerly to the bound's
-        // function type and do NOT consume a `TypeParam` index slot, so the
-        // index space stays dense for real type params. Effect params have
-        // their own channel (`trait_ctx.effect_params`, installed above).
-        // Method-level type params start after the impl block's own type
-        // params (`impl_type_params`) — the SAME base the monomorphizer uses
-        // when substituting (`impl_type_params.len() + param.index` in
-        // `func_inst::instantiate_function`). It must NOT count the bound trait
-        // args that `bind_trait_type_params_from_impl` just inserted into
-        // `trait_ctx.type_params` (e.g. the `T` of `impl Maker<i32> for X`):
-        // those are name-resolution bindings, not positional TypeParam slots
-        // the monomorphizer knows about, so counting them would place the
-        // method's `<U>` at an index the substitution map never fills, leaving
-        // an unsubstituted `TypeParam` to reach codegen.
-        let offset = impl_type_params.len();
+        let offset = method_param_offset(&impl_type_params) as usize;
         let mut next_idx = offset as u32;
         for param in &func.type_params {
             if param.is_effect {

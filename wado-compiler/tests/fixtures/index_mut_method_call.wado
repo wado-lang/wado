@@ -18,10 +18,10 @@ struct Container {
 }
 
 // Implement IndexMut for Container
-impl<i32> IndexMut<i32> for Container {
+impl<i32> IndexMutRef<i32> for Container {
     type Output = Counter;
 
-    fn index_mut(&mut self, _index: i32) -> &mut Self::Output {
+    fn index_mut_ref(&mut self, _index: i32) -> &mut Self::Output {
         return &mut self.item;
     }
 }
@@ -29,7 +29,7 @@ impl<i32> IndexMut<i32> for Container {
 export fn run() with Stdout {
     let mut c = Container { item: Counter { value: 0 } };
 
-    // Use IndexMut desugaring: c[0].increment() -> c.index_mut(0).increment()
+    // Use IndexMutRef desugaring: c[0].increment() -> c.index_mut_ref(0).increment()
     c[0].increment();
     c[0].increment();
     c[0].increment();

@@ -241,8 +241,6 @@ pub fn engine() -> &'static Engine {
         config.wasm_component_model_async_stackful(true);
         config.wasm_component_model_error_context(true);
         config.wasm_wide_arithmetic(true);
-        config.wasm_gc(true);
-        config.wasm_function_references(true);
         // Honor the `metadata.code.branch_hint` custom section the compiler
         // emits for `builtin::cold_path()`, matching the wado CLI runtime so
         // the e2e suite validates the hints it produces.

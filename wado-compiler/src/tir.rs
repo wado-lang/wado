@@ -2991,10 +2991,9 @@ impl FunctionRef {
             .map(|i| i.generic_name.as_str())?;
 
         match generic_name {
-            "array_get" | "array_get_ref" | "array_set" | "array_new" | "array_len"
-            | "array_copy" | "array_fill" | "array_clone" | "select" | "copy_value" => {
-                Some(format!("builtin::{generic_name}"))
-            }
+            "array_get" | "array_get_ref" | "array_get_mut_ref" | "array_set" | "array_new"
+            | "array_len" | "array_copy" | "array_fill" | "array_clone" | "select"
+            | "copy_value" => Some(format!("builtin::{generic_name}")),
             _ => None,
         }
     }
@@ -3759,6 +3758,20 @@ pub struct TirTypeParam {
     /// Default type if specified (e.g., `Effects = []`)
     pub default: Option<TypeId>,
     pub index: u32,
+}
+
+/// Substitution-key base for method-level type params: past the highest
+/// impl-param *index*, not the count. A concrete type in a receiver slot
+/// (`String` in `impl<V> ... for TreeMap<String, V>`) is not a param, so a later
+/// param keeps a sparse index the count would undershoot, colliding a method
+/// param onto an impl slot. Elaboration and monomorphization both derive it here.
+#[must_use]
+pub fn method_param_offset(impl_type_params: &[TirTypeParam]) -> u32 {
+    impl_type_params
+        .iter()
+        .map(|p| p.index + 1)
+        .max()
+        .unwrap_or(0)
 }
 
 /// Information about monomorphization origin for instantiated items

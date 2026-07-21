@@ -1,19 +1,23 @@
 // Regression: WIR const-forwarding treated a labeled block's body as
 // unconditionally executed. A reassignment after a conditional `break`
 // only runs on the fall-through path, so its field facts must not
-// survive the block: `a.len()` below is 3 when `c` breaks early and 4
+// survive the block: `a.len()` below is 5 when `c` breaks early and 6
 // otherwise, and must not fold to either constant.
+//
+// Lengths are >= 5 so the not-expected constants don't collide with the
+// UTF-8 byte-length returns (1-4) of the string encoder that `println`'s
+// formatting pulls into the WIR.
 
 use { println, Stdout } from "core:cli";
 
 #[inline("never")]
 fn f(c: bool) -> i32 {
-    let mut a: List<i32> = [1, 2, 3];
+    let mut a: List<i32> = [1, 2, 3, 4, 5];
     outer: {
         if c {
             break outer;
         }
-        a = [1, 2, 3, 4];
+        a = [1, 2, 3, 4, 5, 6];
     }
     return a.len();
 }
@@ -24,9 +28,9 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "3 4\n",
+    "stdout": "5 6\n",
     "wir_not_expect:O2": [
-        "return 4;",
-        "return 3;"
+        "return 6;",
+        "return 5;"
     ]
 }

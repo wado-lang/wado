@@ -1,0 +1,23 @@
+// `Ref` and `RefMut` are sealed: a user `impl` of either is a compile error (the
+// compiler synthesizes them for every eligible type).
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Ref for Point {
+}
+
+impl RefMut for Point {
+}
+
+test "unreachable" {
+    assert true;
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "it is a sealed"
+}

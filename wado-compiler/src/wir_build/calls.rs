@@ -494,7 +494,7 @@ impl FunctionTranslator<'_, '_> {
                     None
                 }
             }
-            "builtin::array_get_ref" => {
+            "builtin::array_get_ref" | "builtin::array_get_mut_ref" => {
                 let arr = self.translate_operand(args[0].expr);
                 let idx = self.translate_operand(args[1].expr);
                 let wir_type = self

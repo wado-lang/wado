@@ -80,30 +80,44 @@ internal trait Reflect {
     fn type_name() -> String;
 }
 
-/// Trait for immutable indexing operations.
-/// Types implementing this trait can be indexed with the `[]` operator for reading.
-internal trait Index<IndexType> {
-    type Output;
+/// Marker for reference-identity types: those whose value is a Wasm GC
+/// reference. Sealed and compiler-synthesized; user impls are rejected.
+/// See WEP 2026-01-20.
+#[compiler_item("ref")]
+internal trait Ref {
+}
+
+/// Marker for in-place-mutable reference types: `Ref` minus the replace-on-assign
+/// ones (`variant`, `fn`). A `&mut` to one of these writes through to the stored
+/// value. Sealed and compiler-synthesized; user impls are rejected.
+/// See WEP 2026-01-20.
+#[compiler_item("ref_mut")]
+internal trait RefMut {
+}
+
+/// Immutable reference indexing: `&container[i]` reads through this.
+/// `Output: Ref` — only a reference element can be handed out by reference; a
+/// value element is read through `IndexValue`.
+internal trait IndexRef<IndexType> {
+    type Output: Ref;
 
     /// Returns a reference to the element at the given index.
-    fn index(&self, index: IndexType) -> &Self::Output;
+    fn index_ref(&self, index: IndexType) -> &Self::Output;
 }
 
-/// Trait for mutable indexing operations.
-/// Types implementing this trait can be indexed with the `[]` operator to get
-/// a mutable reference: `container[i].mutating_method()`.
-/// Note: Requires Index to be implemented (supertrait relationship).
-internal trait IndexMut<IndexType> {
-    type Output;
+/// Mutable reference indexing: `container[i].mutating_method()`.
+/// `Output: RefMut` — the element must be mutated in place, so a replace-on-assign
+/// element (`variant`, `fn`) cannot be handed out mutably by reference.
+internal trait IndexMutRef<IndexType> {
+    type Output: RefMut;
 
     /// Returns a mutable reference to the element at the given index.
-    fn index_mut(&mut self, index: IndexType) -> &mut Self::Output;
+    fn index_mut_ref(&mut self, index: IndexType) -> &mut Self::Output;
 }
 
-/// Trait for index assignment operations.
-/// Types implementing this trait can be assigned via the `[]` operator: `arr[i] = value`.
-/// This is separate from `IndexMut` because in Wasm GC, you cannot get a mutable reference
-/// to primitive array elements - reading and writing are fundamentally different operations.
+/// Value-assignment indexing: `container[i] = value`.
+/// Separate from `IndexMutRef`: a scalar element has no addressable cell, so
+/// writing it by value is a distinct operation from handing out a `&mut`.
 internal trait IndexAssign<IndexType> {
     type Input;
 
@@ -111,9 +125,9 @@ internal trait IndexAssign<IndexType> {
     fn index_assign(&mut self, index: IndexType, value: Self::Input);
 }
 
-/// Trait for value-returning indexing operations.
-/// Use this for containers of primitives where references cannot be returned.
-/// Unlike `Index` which returns `&Output`, this returns `Output` by value (copy).
+/// Value-copy indexing: `container[i]` yields a copy of the element.
+/// The value-semantics counterpart to `IndexRef` for elements that cannot be
+/// aliased by reference (scalars, resources).
 internal trait IndexValue<IndexType> {
     type Output;
 

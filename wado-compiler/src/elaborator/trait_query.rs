@@ -24,6 +24,8 @@ pub(super) enum OnBoundTrait {
     Deserialize,
     Default,
     Reflect,
+    Ref,
+    RefMut,
     Inspect,
     InspectAlt,
     DisplayAlt,
@@ -150,18 +152,17 @@ pub(crate) fn canonical_decl_key_with(
 /// module that has the inputs in hand. Used by reify's
 /// `reify_impl_default_methods` to enumerate the trait's default methods
 /// for an impl block.
-pub(crate) fn find_trait_decl_methods_with_module_with(
+/// Resolve a trait declaration by name to its `TraitDecl` and owning module,
+/// local-first (a local trait shadows a same-named one elsewhere, issue #1298).
+fn find_trait_decl_with<'a>(
     trait_name: &str,
     current_module_source: &ModuleSource,
-    current_module_items: &[ast::Item],
+    current_module_items: &'a [ast::Item],
     imports: &super::sem::ModuleImports,
     symbols: &crate::symbol::SymbolTable,
     trait_env: &super::trait_env::TraitEnv,
-    loaded_modules: &IndexMap<ModuleSource, ast::Module>,
-) -> Option<(Vec<ast::Function>, ModuleSource)> {
-    // `canonical_decl_key_with` resolves the trait local-first (a local trait
-    // shadows a same-named one in another module — issue #1298), so this picks
-    // the right `Visitor` even when an unrelated `core:serde::Visitor` exists.
+    loaded_modules: &'a IndexMap<ModuleSource, ast::Module>,
+) -> Option<(&'a ast::TraitDecl, ModuleSource)> {
     let canonical_key = canonical_decl_key_with(
         trait_name,
         current_module_source,
@@ -173,16 +174,59 @@ pub(crate) fn find_trait_decl_methods_with_module_with(
         && let Some(module) = loaded_modules.get(module_src)
         && let Some(Item::Trait(trait_decl)) = module.item_by_id(*item_id)
     {
-        return Some((trait_decl.methods.clone(), module_src.clone()));
+        return Some((trait_decl, module_src.clone()));
     }
     for item in current_module_items {
         if let Item::Trait(trait_decl) = item
             && trait_decl.name == trait_name
         {
-            return Some((trait_decl.methods.clone(), current_module_source.clone()));
+            return Some((trait_decl, current_module_source.clone()));
         }
     }
     None
+}
+
+pub(crate) fn find_trait_decl_methods_with_module_with(
+    trait_name: &str,
+    current_module_source: &ModuleSource,
+    current_module_items: &[ast::Item],
+    imports: &super::sem::ModuleImports,
+    symbols: &crate::symbol::SymbolTable,
+    trait_env: &super::trait_env::TraitEnv,
+    loaded_modules: &IndexMap<ModuleSource, ast::Module>,
+) -> Option<(Vec<ast::Function>, ModuleSource)> {
+    find_trait_decl_with(
+        trait_name,
+        current_module_source,
+        current_module_items,
+        imports,
+        symbols,
+        trait_env,
+        loaded_modules,
+    )
+    .map(|(decl, module)| (decl.methods.clone(), module))
+}
+
+/// A trait declaration's associated-type declarations, resolved by name.
+pub(crate) fn find_trait_decl_assoc_types_with(
+    trait_name: &str,
+    current_module_source: &ModuleSource,
+    current_module_items: &[ast::Item],
+    imports: &super::sem::ModuleImports,
+    symbols: &crate::symbol::SymbolTable,
+    trait_env: &super::trait_env::TraitEnv,
+    loaded_modules: &IndexMap<ModuleSource, ast::Module>,
+) -> Option<Vec<ast::AssociatedTypeDecl>> {
+    find_trait_decl_with(
+        trait_name,
+        current_module_source,
+        current_module_items,
+        imports,
+        symbols,
+        trait_env,
+        loaded_modules,
+    )
+    .map(|(decl, _)| decl.associated_types.clone())
 }
 
 impl TypeSystem {
@@ -375,6 +419,80 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
+    /// A trait declaration's associated-type declarations, with their bounds.
+    pub(super) fn find_trait_decl_assoc_type_decls(
+        &self,
+        trait_name: &str,
+    ) -> Option<Vec<ast::AssociatedTypeDecl>> {
+        find_trait_decl_assoc_types_with(
+            trait_name,
+            &self.current_module_source,
+            self.current_module_items,
+            &self.sem.imports,
+            self.symbols,
+            &self.tysys.trait_env,
+            self.loaded_modules,
+        )
+    }
+
+    /// Enforce a trait's associated-type bounds (`type X: Bound`) against an
+    /// impl's bindings (`type X = Concrete`), skipping still-parametric
+    /// bindings. Only the bound's trait is checked, not its associated-type
+    /// equality constraints (`Iterator<Item = Self::Item>`).
+    pub(super) fn enforce_impl_assoc_type_bounds(&mut self, impl_block: &ast::ImplBlock) {
+        let Some(trait_type) = &impl_block.trait_type else {
+            return;
+        };
+        let trait_name = self.get_type_name(trait_type);
+        let Some(decls) = self.find_trait_decl_assoc_type_decls(&trait_name) else {
+            return;
+        };
+        for binding in &impl_block.associated_types {
+            let Some(decl) = decls.iter().find(|d| d.name == binding.name) else {
+                continue;
+            };
+            if decl.bounds.is_empty() {
+                continue;
+            }
+            let type_id = self
+                .annotate_ctx
+                .trait_ctx
+                .assoc_type_bindings
+                .get(&binding.name)
+                .copied()
+                .unwrap_or_else(|| self.resolve_type(&binding.ty));
+            if self.tysys.type_table.borrow().contains_type_param(type_id) {
+                continue;
+            }
+            for bound in &decl.bounds {
+                if bound.fn_signature.is_some() {
+                    continue;
+                }
+                if !self.tysys.type_implements_trait(
+                    &self.annotate_ctx,
+                    &self.type_lookup(),
+                    type_id,
+                    &bound.name,
+                ) {
+                    let type_name = self.tysys.type_id_to_string(type_id);
+                    let reason = self.tysys.trait_unimpl_reason_chain(
+                        &self.annotate_ctx,
+                        &self.type_lookup(),
+                        type_id,
+                        &bound.name,
+                    );
+                    let _ = self.emit(TypeError::TraitBoundNotSatisfied {
+                        type_name,
+                        trait_name: bound.name.clone(),
+                        param_name: binding.name.clone(),
+                        reason,
+                        span: binding.span,
+                    });
+                }
+            }
+        }
+    }
+
     /// Find a trait declaration's type parameters (e.g., `<T, U>` in `trait Foo<T, U>`).
     pub(super) fn find_trait_decl_type_params(
         &self,
@@ -518,6 +636,10 @@ impl TypeSystem {
                 of(CompilerItem::Default, OnBoundTrait::Default)
             } else if trait_name == items.trait_name(CompilerItem::Reflect) {
                 of(CompilerItem::Reflect, OnBoundTrait::Reflect)
+            } else if trait_name == items.trait_name(CompilerItem::Ref) {
+                of(CompilerItem::Ref, OnBoundTrait::Ref)
+            } else if trait_name == items.trait_name(CompilerItem::RefMut) {
+                of(CompilerItem::RefMut, OnBoundTrait::RefMut)
             } else if trait_name == items.trait_name(CompilerItem::Inspect) {
                 of(CompilerItem::Inspect, OnBoundTrait::Inspect)
             } else if trait_name == items.trait_name(CompilerItem::InspectAlt) {
@@ -706,6 +828,65 @@ impl TypeSystem {
         self.auto_derive_default_struct_type(scope, &name).is_some()
     }
 
+    /// The `Ref` marker's eligibility: whether a value of this type is a Wasm GC
+    /// reference (WEP 2026-01-20). A `Newtype` follows its base type.
+    pub(super) fn is_ref_identity(&self, resolved: &ResolvedType) -> bool {
+        match resolved {
+            ResolvedType::Primitive(p) => {
+                matches!(p, PrimitiveType::I128 | PrimitiveType::U128)
+            }
+            ResolvedType::Struct { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::BuiltinArray(_)
+            | ResolvedType::Function { .. }
+            | ResolvedType::Ref(_)
+            | ResolvedType::MutRef(_) => true,
+            ResolvedType::Newtype { base_type, .. } => {
+                let base = self.type_table.borrow().get(*base_type).clone();
+                self.is_ref_identity(&base)
+            }
+            ResolvedType::Enum { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::Reactive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Unknown
+            | ResolvedType::Error
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocTypeProjection { .. } => false,
+        }
+    }
+
+    /// The `RefMut` marker's eligibility: a `Ref` type whose value is mutated in
+    /// place rather than replaced on assign (WEP 2026-01-20). `variant` and `fn`
+    /// are `Ref` but boxed (replace-on-assign), so a `&mut` cannot write through
+    /// them; every other `Ref` type qualifies. A `Newtype` follows its base.
+    pub(super) fn is_ref_mut_identity(&self, scope: &TypeLookup, resolved: &ResolvedType) -> bool {
+        match resolved {
+            ResolvedType::Variant { .. } | ResolvedType::Function { .. } => false,
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } => {
+                if scope.variant_case_in(name, module_source).is_some() {
+                    false
+                } else {
+                    self.is_ref_identity(resolved)
+                }
+            }
+            ResolvedType::Newtype { base_type, .. } => {
+                let base = self.type_table.borrow().get(*base_type).clone();
+                self.is_ref_mut_identity(scope, &base)
+            }
+            _ => self.is_ref_identity(resolved),
+        }
+    }
+
     fn type_implements_trait_inner(
         &self,
         ctx: &Scope,
@@ -726,14 +907,21 @@ impl TypeSystem {
             return true;
         }
 
-        // Type parameters satisfy bounds declared on them (e.g., T: Describable
-        // means T implements Describable within the scope of that declaration)
         if let ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } = resolved
         {
-            if let Some(bounds) = ctx.trait_ctx.type_param_bounds.get(name) {
-                return bounds.iter().any(|b| b.name == trait_name);
-            }
-            return false;
+            return ctx
+                .trait_ctx
+                .type_param_bounds
+                .get(name)
+                .is_some_and(|bounds| bounds.iter().any(|b| b.name == trait_name));
+        }
+
+        if on_bound == Some(OnBoundTrait::Ref) {
+            return self.is_ref_identity(resolved);
+        }
+
+        if on_bound == Some(OnBoundTrait::RefMut) {
+            return self.is_ref_mut_identity(scope, resolved);
         }
 
         let is_eq = on_bound == Some(OnBoundTrait::Eq);
@@ -1353,15 +1541,6 @@ impl TypeSystem {
                     && let Some(bounds) = bounds_map.get(named.name.as_str())
                     && let Some(&type_arg) = type_args.get(i)
                 {
-                    // If the type arg is itself a type parameter (e.g., T in a generic context),
-                    // skip the bounds check. Within a bounded impl block, type params are assumed
-                    // to satisfy bounds; concrete types are checked at call sites.
-                    if matches!(
-                        self.type_table.borrow().get(type_arg),
-                        ResolvedType::TypeParam { .. }
-                    ) {
-                        continue;
-                    }
                     for bound in bounds {
                         if !self.type_implements_trait(ctx, scope, type_arg, bound) {
                             return false;

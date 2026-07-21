@@ -331,13 +331,13 @@ impl<K, V> TreeMap<K, V> {
     }
 }
 
-// Index trait implementation for TreeMap - read access with map[key]
-impl<K, V> Index<K> for TreeMap<K, V> {
+// IndexValue trait implementation for TreeMap - read access with map[key]
+impl<K, V> IndexValue<K> for TreeMap<K, V> {
     type Output = V;
 
-    fn index(&self, key: K) -> &Self::Output {
+    fn index_value(&self, key: K) -> Self::Output {
         if let Some(val) = self.get(&key) {
-            return &val;
+            return val;
         }
         panic(`key not found: ${key:?}`);
     }

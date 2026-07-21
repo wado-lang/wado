@@ -1845,8 +1845,14 @@ pub(crate) fn format_three_axis_lines(
         lines.push(todo_line);
     }
     if let Some(d) = duration {
-        lines.push(format!("(wall: {d})"));
+        lines.extend(resource_summary_lines(d));
     }
+    lines
+}
+
+pub(crate) fn resource_summary_lines(wall: &str) -> Vec<String> {
+    let mut lines = vec![format!("wall:    {wall}")];
+    lines.extend(crate::rss::summary_line());
     lines
 }
 

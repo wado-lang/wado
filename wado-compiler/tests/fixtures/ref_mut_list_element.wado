@@ -1,0 +1,28 @@
+// `List<T>` hands out mutable element references for in-place-mutable elements:
+// a `&mut self` method through `xs[i].method()`, a `&mut xs[i]` alias, and
+// mutation observed at the stored element.
+
+struct Counter {
+    value: i32,
+}
+
+impl Counter {
+    fn bump(&mut self) {
+        self.value += 1;
+    }
+}
+
+test "mutable element methods and aliases on List<Struct>" {
+    let mut xs: List<Counter> = [Counter { value: 0 }, Counter { value: 10 }];
+
+    xs[0].bump();
+    xs[0].bump();
+    assert xs[0].value == 2;
+
+    let r = &mut xs[1];
+    r.value = 99;
+    assert xs[1].value == 99;
+}
+
+__DATA__
+{"test": {}}
