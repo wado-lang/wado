@@ -3023,6 +3023,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TypeId {
         let method = static_call.method.clone();
+
+        // Generic subject `T: Reflect`: the concrete struct is unknown until
+        // monomorphization. Resolve the value-free members here and record a
+        // type-param-receiver dispatch that monomorphization redirects to the
+        // concrete `Struct^Reflect::method`.
+        let subject = self.tysys.type_table.borrow().get(self_ty).clone();
+        if let crate::tir::ResolvedType::TypeParam { name, .. } = subject {
+            return self.resolve_generic_reflect_static_call(&name, static_call, ctx);
+        }
+
         let self_name = self.tysys.type_table.borrow().type_name(self_ty);
 
         let Some(field_types) = self.reflect_subject_field_types(&self_name) else {
@@ -3092,6 +3102,83 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             super::sem::types::StaticMethodDispatch {
                 function_ref: func_ref,
                 param_is_mut: if is_fields { vec![false] } else { Vec::new() },
+                type_args: Vec::new(),
+                param_defaults: Vec::new(),
+            },
+        );
+
+        return_type
+    }
+
+    /// Resolve `Reflect::<T>::method()` where `T` is a generic type parameter
+    /// (inside an `impl<T: Reflect> …` derivation). The value-free members
+    /// (`field_names` / `type_name`) resolve to their fixed return types; the
+    /// dispatch is recorded as a type-param receiver so monomorphization
+    /// redirects it to the concrete struct's synthesized `Struct^Reflect::method`.
+    /// `fields()` returns the field-value pack `Self::Fields`, which needs the
+    /// pack-projection path (WEP 2026-06-13 §1) and is not resolved here.
+    fn resolve_generic_reflect_static_call(
+        &mut self,
+        type_param_name: &str,
+        static_call: &ast::StaticMethodCallExpr,
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
+        use crate::compiler_item::CompilerItem;
+        let method = static_call.method.clone();
+        let (reflect_trait_name, field_names_method, type_name_method, fields_method) = {
+            let tt = self.tysys.type_table.borrow();
+            let items = tt.compiler_items();
+            (
+                items.trait_name(CompilerItem::Reflect).to_string(),
+                items.method_name(CompilerItem::ReflectFieldNames).to_string(),
+                items.method_name(CompilerItem::ReflectTypeName).to_string(),
+                items.method_name(CompilerItem::ReflectFields).to_string(),
+            )
+        };
+
+        let return_type = if method == type_name_method {
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_compiler_struct(CompilerItem::String)
+        } else if method == field_names_method {
+            let mut tt = self.tysys.type_table.borrow_mut();
+            let string_type = tt.make_compiler_struct(CompilerItem::String);
+            tt.make_list(string_type)
+        } else {
+            let detail = if method == fields_method {
+                " (field-pack projection on a generic type parameter is not yet supported)"
+            } else {
+                ""
+            };
+            let _ = self.emit(TypeError::UnknownFunction {
+                name: format!("Reflect::<{type_param_name}>::{method}{detail}"),
+                span: static_call.span,
+            });
+            return TypeTable::ERROR;
+        };
+
+        // `field_names` / `type_name` take no arguments.
+        if !self.reject_reflect_metadata_args(static_call, ctx) {
+            return TypeTable::ERROR;
+        }
+
+        let mut method_info =
+            LocalMethodName::new(type_param_name.to_string(), Some(reflect_trait_name), method);
+        method_info.is_type_param_receiver = true;
+        let mangled_name = method_info.to_mangled_name();
+
+        let func_ref = FunctionRef {
+            module_source: self.current_module_source.clone(),
+            name: mangled_name,
+            monomorph_info: None,
+            method_info: Some(method_info),
+        };
+        self.sem.types.static_method_dispatch.insert(
+            static_call.id,
+            super::sem::types::StaticMethodDispatch {
+                function_ref: func_ref,
+                param_is_mut: Vec::new(),
                 type_args: Vec::new(),
                 param_defaults: Vec::new(),
             },
