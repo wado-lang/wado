@@ -357,14 +357,25 @@ impl Monomorphizer {
                                         )
                                     });
                                 match mapped_elem {
-                                    // Pack-map `..F::method()`: each element is the
-                                    // substituted return type, repeated `|F|` times.
+                                    // Mapped pack: substitute the element once per
+                                    // source pack element, binding the pack param to
+                                    // that element — a constructor map `[..Case<T, P>]`
+                                    // yields `Case<T, P_k>` at position k; a
+                                    // pack-independent `..F::method()` repeats its
+                                    // return type `|F|` times.
                                     Some(elem) => {
-                                        let arity =
-                                            type_table.as_tuple(pack_type).map_or(1, |es| es.len());
-                                        let elem_sub =
-                                            self.substitute_type(elem, substitution, type_table);
-                                        new_elems.extend(std::iter::repeat_n(elem_sub, arity));
+                                        let pack_elems = type_table
+                                            .as_tuple(pack_type)
+                                            .unwrap_or_else(|| vec![pack_type]);
+                                        for pe in pack_elems {
+                                            let mut elem_substitution = substitution.clone();
+                                            elem_substitution.insert(index, pe);
+                                            new_elems.push(self.substitute_type(
+                                                elem,
+                                                &elem_substitution,
+                                                type_table,
+                                            ));
+                                        }
                                     }
                                     None => {
                                         if let Some(pack_elems) = type_table.as_tuple(pack_type) {

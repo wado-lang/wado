@@ -3162,9 +3162,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `fields(self)` returns `Self::Fields = [..F]`. Read the pack off
             // `T`'s `Reflect<Fields = [..F]>` bound and resolve it in the current
             // scope, where `F` is the projected pack registered by `resolve_method`.
-            let Some(fields_ty) =
-                self.reflect_fields_bound_ty(type_param_name, &reflect_trait_name)
-            else {
+            let Some(fields_ty) = self.reflect_pack_bound_ty(
+                type_param_name,
+                &reflect_trait_name,
+                crate::synthesis::traits::REFLECT_FIELDS_ASSOC,
+            ) else {
                 let _ = self.emit(TypeError::UnknownFunction {
                     name: format!(
                         "Reflect::<{type_param_name}>::{method} (no `Fields = [..F]` bound on {type_param_name})"
@@ -3219,15 +3221,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         return_type
     }
 
-    /// The `Fields = [..F]` associated-type binding on `T`'s `Reflect` bound,
-    /// resolved in the current scope (where `F` is the projected pack). `None`
-    /// when `T` carries no such bound.
-    fn reflect_fields_bound_ty(
+    /// The `Assoc = [..F]` pack binding on `T`'s bound of the given trait
+    /// (`Fields` on `Reflect`, `Cases` on `ReflectVariant`), resolved in the
+    /// current scope (where `F` is the projected pack). `None` when `T`
+    /// carries no such bound.
+    fn reflect_pack_bound_ty(
         &mut self,
         type_param_name: &str,
         reflect_trait_name: &str,
+        assoc_name: &str,
     ) -> Option<TypeId> {
-        let fields_ast = self
+        let pack_ast = self
             .annotate_ctx
             .trait_ctx
             .type_param_bounds
@@ -3235,6 +3239,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .filter(|b| b.name == reflect_trait_name)
             .flat_map(|b| &b.assoc_types)
+            .filter(|assoc| assoc.name == assoc_name)
             .find_map(|assoc| match &assoc.ty {
                 ast::Type::Tuple(elems)
                     if elems
@@ -3245,7 +3250,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 _ => None,
             })?;
-        Some(self.resolve_type(&fields_ast))
+        Some(self.resolve_type(&pack_ast))
     }
 
     /// Field types of the struct `Reflect::<T>` targets, in declaration order;
@@ -3369,8 +3374,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         use crate::compiler_item::CompilerItem;
         let method = static_call.method.clone();
 
-        let self_name = self.tysys.type_table.borrow().type_name(self_ty);
+        // Generic subject `T: ReflectVariant`: the concrete variant is unknown
+        // until monomorphization; mirror `resolve_reflect_static_call`.
         let subject = self.tysys.type_table.borrow().get(self_ty).clone();
+        if let crate::tir::ResolvedType::TypeParam { name, .. } = subject {
+            return self.resolve_generic_reflect_variant_static_call(
+                self_ty,
+                &name,
+                static_call,
+                ctx,
+            );
+        }
+
+        let self_name = self.tysys.type_table.borrow().type_name(self_ty);
         if !matches!(subject, crate::tir::ResolvedType::Variant { .. }) {
             let _ = self.emit(TypeError::UnknownFunction {
                 name: format!("ReflectVariant::<{self_name}>::{method}"),
@@ -3471,6 +3487,148 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         return_type
+    }
+
+    /// Resolve `ReflectVariant::<T>::method()` where `T` is a type parameter
+    /// (inside an `impl<T: ReflectVariant<Cases = [..P]>, ..P: …>` derivation).
+    /// The value-free members resolve to their fixed return types; `cases()`
+    /// resolves to the constructor-mapped token pack `[..Case<T, P>]` read off
+    /// `T`'s `Cases = [..P]` bound (WEP 2026-06-13 §3f). Each is recorded as a
+    /// type-param-receiver dispatch so monomorphization redirects it to the
+    /// concrete variant's synthesized `V^ReflectVariant::method`.
+    fn resolve_generic_reflect_variant_static_call(
+        &mut self,
+        self_ty: TypeId,
+        type_param_name: &str,
+        static_call: &ast::StaticMethodCallExpr,
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
+        use crate::compiler_item::CompilerItem;
+        let method = static_call.method.clone();
+        let (trait_name, type_name_method, case_meta_method, discriminant_method, cases_method) = {
+            let tt = self.tysys.type_table.borrow();
+            let items = tt.compiler_items();
+            (
+                items.trait_name(CompilerItem::ReflectVariant).to_string(),
+                items
+                    .method_name(CompilerItem::ReflectVariantTypeName)
+                    .to_string(),
+                items
+                    .method_name(CompilerItem::ReflectVariantCaseMeta)
+                    .to_string(),
+                items
+                    .method_name(CompilerItem::ReflectVariantDiscriminant)
+                    .to_string(),
+                items
+                    .method_name(CompilerItem::ReflectVariantCases)
+                    .to_string(),
+            )
+        };
+
+        let is_discriminant = method == discriminant_method;
+        let return_type = if method == type_name_method {
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_compiler_struct(CompilerItem::String)
+        } else if method == case_meta_method {
+            let mut tt = self.tysys.type_table.borrow_mut();
+            let meta_type = tt.make_compiler_struct(CompilerItem::VariantCaseMeta);
+            tt.make_list(meta_type)
+        } else if is_discriminant {
+            TypeTable::I32
+        } else if method == cases_method {
+            let Some(tokens_ty) = self.case_tokens_bound_ty(self_ty, type_param_name, &trait_name)
+            else {
+                let _ = self.emit(TypeError::UnknownFunction {
+                    name: format!(
+                        "ReflectVariant::<{type_param_name}>::{method} (no `Cases = [..P]` bound on {type_param_name})"
+                    ),
+                    span: static_call.span,
+                });
+                return TypeTable::ERROR;
+            };
+            tokens_ty
+        } else {
+            unreachable!("is_reflect_variant_trait_call admits only the four trait methods")
+        };
+
+        let args_valid = if is_discriminant {
+            self.check_reflect_fields_receiver(self_ty, type_param_name, static_call, ctx)
+        } else {
+            self.reject_reflect_metadata_args(static_call, ctx)
+        };
+        if !args_valid {
+            return TypeTable::ERROR;
+        }
+
+        let mut method_info = LocalMethodName::new(
+            type_param_name.to_string(),
+            Some(trait_name),
+            method,
+        );
+        method_info.is_type_param_receiver = true;
+        let mangled_name = method_info.to_mangled_name();
+
+        let func_ref = FunctionRef {
+            module_source: self.current_module_source.clone(),
+            name: mangled_name,
+            monomorph_info: None,
+            method_info: Some(method_info),
+        };
+        self.sem.types.static_method_dispatch.insert(
+            static_call.id,
+            super::sem::types::StaticMethodDispatch {
+                function_ref: func_ref,
+                param_is_mut: if is_discriminant {
+                    vec![false]
+                } else {
+                    Vec::new()
+                },
+                type_args: Vec::new(),
+                param_defaults: Vec::new(),
+            },
+        );
+
+        return_type
+    }
+
+    /// The constructor-mapped token pack `[..Case<T, P>]` — the type of
+    /// `cases()` under a `T: ReflectVariant<Cases = [..P]>` bound. The pack
+    /// param recurs inside the mapped element as a scalar placeholder, so
+    /// per-element substitution binds it to `P_k`. `None` when `T` carries no
+    /// `Cases` pack bound.
+    fn case_tokens_bound_ty(
+        &mut self,
+        self_ty: TypeId,
+        type_param_name: &str,
+        trait_name: &str,
+    ) -> Option<TypeId> {
+        use crate::compiler_item::CompilerItem;
+        let cases_ty = self.reflect_pack_bound_ty(
+            type_param_name,
+            trait_name,
+            crate::synthesis::traits::REFLECT_CASES_ASSOC,
+        )?;
+        let mut tt = self.tysys.type_table.borrow_mut();
+        let elems = tt.as_tuple(cases_ty)?;
+        let (pack_name, pack_index) = elems.iter().find_map(|&e| match tt.get(e) {
+            crate::tir::ResolvedType::TypePack {
+                name,
+                index,
+                mapped_elem: None,
+            } => Some((name.clone(), *index)),
+            _ => None,
+        })?;
+        let (case_module, case_name) = {
+            let items = tt.compiler_items();
+            let (m, n) = items.require_struct(CompilerItem::ReflectCase);
+            (m.clone(), n.to_string())
+        };
+        let elem_param = tt.make_type_param(pack_name.clone(), pack_index);
+        let token = tt.make_generic_instance(case_name, case_module, vec![self_ty, elem_param]);
+        let token_pack = tt.make_mapped_type_pack(pack_name, pack_index, token);
+        Some(tt.make_tuple(vec![token_pack]))
     }
 
     /// Get the operator trait and method name for a binary operator.

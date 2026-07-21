@@ -585,7 +585,7 @@ fn generate_struct_reflect_methods(
 
 /// The `Reflect` trait's associated-type name (`type Fields`). Sealed and
 /// compiler-defined, so its spelling is fixed rather than registry-driven.
-const REFLECT_FIELDS_ASSOC: &str = "Fields";
+pub(crate) const REFLECT_FIELDS_ASSOC: &str = "Fields";
 
 /// Module-level types and method names resolved once from the compiler-item
 /// registry and reused across every struct's `Reflect` synthesis in that
@@ -963,7 +963,7 @@ impl ReflectVariantSynthEnv {
 
 /// The `ReflectVariant` associated-type names (`type Cases` / `type
 /// CaseTokens`). Sealed and compiler-defined, like [`REFLECT_FIELDS_ASSOC`].
-const REFLECT_CASES_ASSOC: &str = "Cases";
+pub(crate) const REFLECT_CASES_ASSOC: &str = "Cases";
 const REFLECT_CASE_TOKENS_ASSOC: &str = "CaseTokens";
 
 /// Synthesize one variant's `type_name()`, `case_meta()`,

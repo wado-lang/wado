@@ -500,11 +500,15 @@ after the first three.
 - Variant / enum / flags reflection (§3), staged per §3g:
   - [ ] `ReflectEnum` synthesis (§3b).
   - [ ] `ReflectFlags` synthesis with the `u64`-normalized bit bridge (§3c).
-  - [ ] Constructor-mapped packs: generalize `TypePack::mapped_elem` to
+  - [x] Constructor-mapped packs: generalize `TypePack::mapped_elem` to
         per-element pack substitution (§3f).
-  - [ ] `ReflectVariant` + `Case<T, P>`: `cases()` synthesis and the
-        `extract` / `construct` lowering (§3d–§3e); completion proof is a
-        library-code variant `Inspect` matching the synthesizer's output.
+  - [x] `ReflectVariant` + `Case<T, P>`: synthesis of the concrete members,
+        `cases()`, the `extract` / `construct` lowering, and the generic
+        `Cases = [..P]` projection with the constructor-mapped `cases()` type
+        (§3d–§3f). Fixtures: `reflect_variant_meta`, `reflect_variant_cases`,
+        `reflect_variant_derive`.
+  - [ ] Completion proof: a library-code variant `Inspect` matching the
+        synthesizer's output (§3g).
 - [ ] Migrate `Inspect` / `InspectAlt` to the `Reflect`-based impl; remove the
       compiler-magic struct path (WEP 2026-03-14's stated goal).
 - [ ] Migrate serde struct/variant `Serialize` / `Deserialize` to library code;

@@ -413,9 +413,11 @@ pub enum ResolvedType {
     ///
     /// `mapped_elem` distinguishes an identity pack from a pack-map:
     /// - `None` — `..F`: each element is the pack's own element `F_i`.
-    /// - `Some(R)` — `..F::method()` whose return type `R` is pack-independent:
-    ///   each element is `R` (repeated `|F|` times). The pack still drives the
-    ///   arity via `index`; substitution splices `R` that many times.
+    /// - `Some(R)` — a mapped pack: element `i` is `R[F := F_i]`. The pack
+    ///   param may recur inside `R` as a scalar `TypeParam` placeholder
+    ///   (constructor map, e.g. `[..Case<T, P>]` for `cases()`); a
+    ///   pack-independent `R` (`..F::method()`) degenerates to `R` repeated
+    ///   `|F|` times.
     TypePack {
         name: String,
         index: u32,
@@ -1784,9 +1786,10 @@ impl TypeTable {
         })
     }
 
-    /// Create a mapped type pack — `..F::method()` whose return type `elem` is
-    /// pack-independent. Drives its arity from pack `(name, index)` but each
-    /// element is `elem`. See [`ResolvedType::TypePack`].
+    /// Create a mapped type pack: element `i` is `elem[F := F_i]`, where the
+    /// pack param may recur in `elem` as a scalar `TypeParam` placeholder.
+    /// Drives its arity from pack `(name, index)`. See
+    /// [`ResolvedType::TypePack`].
     pub fn make_mapped_type_pack(&mut self, name: String, index: u32, elem: TypeId) -> TypeId {
         self.intern(ResolvedType::TypePack {
             name,
@@ -2085,14 +2088,25 @@ impl TypeTable {
                             } => {
                                 if let Some(&pack_type) = substitution.get(&index) {
                                     match mapped_elem {
-                                        // Pack-map `..F::method()`: splice the
-                                        // substituted return type `|F|` times.
+                                        // Mapped pack: substitute the element
+                                        // once per source pack element, binding
+                                        // the pack param to that element — a
+                                        // constructor map `[..Case<T, P>]`
+                                        // yields `Case<T, P_k>` at position k;
+                                        // a pack-independent `..F::method()`
+                                        // repeats its return type `|F|` times.
                                         Some(elem) => {
-                                            let arity =
-                                                self.as_tuple(pack_type).map_or(1, |es| es.len());
-                                            let elem_sub =
-                                                self.substitute_type_params(elem, substitution);
-                                            new_elems.extend(std::iter::repeat_n(elem_sub, arity));
+                                            let pack_elems = self
+                                                .as_tuple(pack_type)
+                                                .unwrap_or_else(|| vec![pack_type]);
+                                            for pe in pack_elems {
+                                                let mut elem_substitution = substitution.clone();
+                                                elem_substitution.insert(index, pe);
+                                                new_elems.push(self.substitute_type_params(
+                                                    elem,
+                                                    &elem_substitution,
+                                                ));
+                                            }
                                         }
                                         None => {
                                             if let Some(pack_elems) = self.as_tuple(pack_type) {

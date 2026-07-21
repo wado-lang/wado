@@ -2774,6 +2774,22 @@ impl Monomorphizer {
         };
         let by_ref = *by_ref;
 
+        // Pre-substitution pack info: the pack index read off the iterable's
+        // own type, and whether the pack is mapped (`[..Case<T, P>]`). A
+        // mapped pack drives the per-element substitution from the SOURCE
+        // pack element `P_k`, not the mapped tuple element.
+        let (iterable_pack_index, iterable_pack_mapped) = type_table
+            .as_tuple_through_ref(iterable.type_id)
+            .and_then(|(elems, _)| {
+                elems.iter().find_map(|&e| match type_table.get(e) {
+                    ResolvedType::TypePack {
+                        index, mapped_elem, ..
+                    } => Some((Some(*index), mapped_elem.is_some())),
+                    _ => None,
+                })
+            })
+            .unwrap_or((None, false));
+
         // Substitute types in the iterable to get the concrete tuple type
         self.substitute_types_in_expr(iterable, substitution, type_table, local_count, locals);
 
@@ -2789,8 +2805,10 @@ impl Monomorphizer {
                 );
             });
 
-        // Find the TypePack index in the substitution map so we can override it per element
-        let pack_index = {
+        // The TypePack index to override per element: read off the iterable's
+        // pre-substitution type when present, else fall back to scanning the
+        // substitution map for a tuple-valued entry.
+        let pack_index = iterable_pack_index.or_else(|| {
             let mut found = None;
             for (&idx, &tid) in substitution {
                 if tid == iterable_type || type_table.is_tuple(tid) {
@@ -2799,6 +2817,17 @@ impl Monomorphizer {
                 }
             }
             found
+        });
+
+        // For a mapped pack, the per-element override values are the source
+        // pack's elements (`P_k`); the mapped tuple element (`Case<V, P_k>`)
+        // stays the binding type only.
+        let mapped_source_elems: Option<Vec<TypeId>> = if iterable_pack_mapped {
+            pack_index
+                .and_then(|idx| substitution.get(&idx))
+                .and_then(|&t| type_table.as_tuple(t))
+        } else {
+            None
         };
 
         let uid = *unique_id;
@@ -3011,7 +3040,11 @@ impl Monomorphizer {
                     elem_body.stmts.extend(user_body.stmts);
                 } else {
                     let mut elem_substitution = substitution.clone();
-                    elem_substitution.insert(pack_idx, elem_type);
+                    let override_ty = mapped_source_elems
+                        .as_ref()
+                        .and_then(|es| es.get(i).copied())
+                        .unwrap_or(elem_type);
+                    elem_substitution.insert(pack_idx, override_ty);
                     self.substitute_types_in_block(
                         &mut elem_body,
                         &elem_substitution,

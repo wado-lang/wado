@@ -3660,6 +3660,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         .or_else(|| elems.first())
                         .copied()
                         .unwrap_or(TypeTable::UNKNOWN);
+                    // A mapped pack (`[..Case<T, P>]`) binds the loop variable
+                    // to the mapped element type, not the pack itself — mirror
+                    // `resolve_variadic_for_of` (stmt.rs:2205+).
+                    let inner = match type_table.get(inner) {
+                        ResolvedType::TypePack {
+                            mapped_elem: Some(elem),
+                            ..
+                        } => *elem,
+                        _ => inner,
+                    };
                     (inner, by_ref)
                 }
                 None => (TypeTable::UNKNOWN, false),
