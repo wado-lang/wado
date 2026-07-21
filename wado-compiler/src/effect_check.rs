@@ -1515,6 +1515,7 @@ impl StoresCtx<'_> {
             allowed,
             is_closure: false,
             out,
+            seen: IndexSet::default(),
         };
         ast::walk_block(&mut walker, body);
     }
@@ -1552,11 +1553,19 @@ impl StoresCtx<'_> {
             allowed: IndexSet::default(),
             is_closure: true,
             out,
+            seen: IndexSet::default(),
         };
         // The closure body's value is an implicit return sink.
         walker.sink_return(&closure.body);
         walker.visit_expr(&closure.body);
     }
+}
+
+/// A resolved call's stored positions and its arguments in callee-position
+/// order (position 0 is a method receiver).
+struct ResolvedCall<'e> {
+    stored: Vec<u32>,
+    args: Vec<&'e Expr>,
 }
 
 /// Which persistence sink a carried reference reached (selects the message).
@@ -1585,6 +1594,7 @@ struct RefFlow<'a, 'b> {
     allowed: IndexSet<u32>,
     is_closure: bool,
     out: &'b mut Vec<StoresError>,
+    seen: IndexSet<(usize, String)>,
 }
 
 impl RefFlow<'_, '_> {
@@ -1624,12 +1634,12 @@ impl RefFlow<'_, '_> {
             // A cast preserves reference identity.
             Expr::Cast(c) => self.carries(&c.expr),
             Expr::Call(_) | Expr::MethodCall(_) | Expr::StaticMethodCall(_) => {
-                let Some((stores, args)) = self.call_stored_args(expr) else {
+                let Some(call) = self.call_stored_args(expr) else {
                     return IndexSet::default();
                 };
                 let mut acc = IndexSet::default();
-                for (pos, arg) in args.iter().enumerate() {
-                    if stores.contains(&u32::try_from(pos).unwrap()) {
+                for (pos, arg) in call.args.iter().enumerate() {
+                    if call.stored.contains(&u32::try_from(pos).unwrap()) {
                         acc.extend(self.carries(arg));
                     }
                 }
@@ -1673,20 +1683,21 @@ impl RefFlow<'_, '_> {
         }
     }
 
-    /// The callee's stored parameter positions and the arguments indexed by
-    /// callee position (position 0 is the receiver for a method call). `None`
-    /// when `expr` is not a call. Unresolvable direct callees are trusted to
-    /// store nothing (their declaration was verified independently); an
-    /// unresolvable functor callee is conservative (every position stored).
-    fn call_stored_args<'e>(&self, expr: &'e Expr) -> Option<(Vec<u32>, Vec<&'e Expr>)> {
+    /// `None` when `expr` is not a call. An unresolvable direct callee is
+    /// trusted to store nothing; an unresolvable functor callee stores every
+    /// position.
+    fn call_stored_args<'e>(&self, expr: &'e Expr) -> Option<ResolvedCall<'e>> {
         match expr {
             Expr::Call(call) => {
                 let args: Vec<&Expr> = call.args.iter().collect();
                 if let Expr::Ident(ident) = &call.callee
                     && let Some(def) = self.ctx.sem.references.get(&ident.id)
-                    && let Some(stores) = self.ctx.oracle.fn_stores.get(def)
+                    && let Some(stored) = self.ctx.oracle.fn_stores.get(def)
                 {
-                    return Some((stores.clone(), args));
+                    return Some(ResolvedCall {
+                        stored: stored.clone(),
+                        args,
+                    });
                 }
                 if let Some(func_ref) = self
                     .ctx
@@ -1695,61 +1706,57 @@ impl RefFlow<'_, '_> {
                     .get(&call.id)
                     .map(|d| &d.function_ref)
                 {
-                    let stores = self
-                        .ctx
-                        .oracle
-                        .mangled_stores
-                        .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
-                        .cloned()
-                        .unwrap_or_default();
-                    return Some((stores, args));
+                    return Some(ResolvedCall {
+                        stored: self.mangled_stored(func_ref),
+                        args,
+                    });
                 }
                 if let Some(callee_ty) = self.indirect_callee_type(&call.callee) {
-                    return match self.ctx.sem.types.get(callee_ty) {
-                        ResolvedType::Function { stores, .. } => Some((stores.clone(), args)),
-                        _ => Some(((0..u32::try_from(args.len()).unwrap()).collect(), args)),
+                    let stored = match self.ctx.sem.types.get(callee_ty) {
+                        ResolvedType::Function { stores, .. } => stores.clone(),
+                        _ => (0..u32::try_from(args.len()).unwrap()).collect(),
                     };
+                    return Some(ResolvedCall { stored, args });
                 }
-                Some((Vec::new(), args))
+                Some(ResolvedCall {
+                    stored: Vec::new(),
+                    args,
+                })
             }
             Expr::MethodCall(mc) => {
                 let mut args: Vec<&Expr> = vec![&mc.receiver];
                 args.extend(mc.args.iter());
-                if let Some(dispatch) = self.ctx.sem.method_dispatch.get(&mc.id) {
-                    let func_ref = &dispatch.function_ref;
-                    let stores = self
-                        .ctx
-                        .oracle
-                        .mangled_stores
-                        .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
-                        .cloned()
-                        .unwrap_or_default();
-                    return Some((stores, args));
-                }
-                Some((Vec::new(), args))
+                let stored = self
+                    .ctx
+                    .sem
+                    .method_dispatch
+                    .get(&mc.id)
+                    .map(|d| self.mangled_stored(&d.function_ref))
+                    .unwrap_or_default();
+                Some(ResolvedCall { stored, args })
             }
             Expr::StaticMethodCall(sc) => {
                 let args: Vec<&Expr> = sc.args.iter().collect();
-                if let Some(func_ref) = self
+                let stored = self
                     .ctx
                     .annotations
                     .static_method_dispatch
                     .get(&sc.id)
-                    .map(|d| &d.function_ref)
-                {
-                    let stores = self
-                        .ctx
-                        .oracle
-                        .mangled_stores
-                        .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
-                        .cloned()
-                        .unwrap_or_default();
-                    return Some((stores, args));
-                }
-                Some((Vec::new(), args))
+                    .map(|d| self.mangled_stored(&d.function_ref))
+                    .unwrap_or_default();
+                Some(ResolvedCall { stored, args })
             }
             _ => None,
         }
+    }
+
+    fn mangled_stored(&self, func_ref: &FunctionRef) -> Vec<u32> {
+        self.ctx
+            .oracle
+            .mangled_stores
+            .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// Type of an indirect call's callee identifier (a functor local / param).
@@ -1768,19 +1775,14 @@ impl RefFlow<'_, '_> {
         self.mark(&carried, value.span(), &sink);
     }
 
-    /// A callee that stores an argument but returns a value that cannot hold a
-    /// reference has persisted that argument *externally* (a global, a write
-    /// through another reference) — it cannot be in the result. Forwarding a
-    /// reference parameter there makes the caller store it too, regardless of
-    /// whether the result is used, so this fires on the call itself (a bare
-    /// `g(p);` for its side effect).
-    ///
-    /// When the result *can* hold a reference the store may be a borrow into the
-    /// result (an iterator over `&self`, a slice); that is a managed borrow
-    /// tracked precisely by `carries` — the caller stores the parameter only if
-    /// the result escapes — so this sink defers to that path and does not fire.
+    /// Forwarding a reference parameter to a callee that stores it makes the
+    /// caller store it too. Only when the result cannot hold a reference is the
+    /// store provably external (a global, a write through a reference); when it
+    /// can, the store may be a managed borrow into the result, already tracked by
+    /// `carries`, so this defers. An unresolved (generic) result type is
+    /// `can_hold_ref = true` and also defers.
     fn sink_call_args(&mut self, expr: &Expr) {
-        let Some((stores, args)) = self.call_stored_args(expr) else {
+        let Some(call) = self.call_stored_args(expr) else {
             return;
         };
         if self
@@ -1789,8 +1791,8 @@ impl RefFlow<'_, '_> {
         {
             return;
         }
-        for (pos, arg) in args.iter().enumerate() {
-            if stores.contains(&u32::try_from(pos).unwrap()) {
+        for (pos, arg) in call.args.iter().enumerate() {
+            if call.stored.contains(&u32::try_from(pos).unwrap()) {
                 let carried = self.carries(arg);
                 self.mark(&carried, arg.span(), &Sink::Forward);
             }
@@ -1845,11 +1847,7 @@ impl RefFlow<'_, '_> {
                     ),
                 }
             };
-            if self
-                .out
-                .iter()
-                .any(|e| e.span.start == span.start && e.message == message)
-            {
+            if !self.seen.insert((span.start, message.clone())) {
                 continue;
             }
             self.out.push(StoresError {

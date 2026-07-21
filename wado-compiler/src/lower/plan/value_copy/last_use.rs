@@ -1475,8 +1475,6 @@ impl Analyzer<'_> {
                         .flatten();
                     self.mark_sibling_mut_aliases(&exprs, recv_mut_root);
                 }
-                // The receiver is position 0, so an explicit argument is at
-                // position `i + 1`.
                 for (pos, arg) in args.iter().enumerate().rev() {
                     self.walk_call_arg(&arg.expr, Some(func), pos + 1, live, record);
                 }

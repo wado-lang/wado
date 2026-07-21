@@ -161,12 +161,14 @@ pub(super) fn check_assignable(
         is_mut: actual_is_mut,
         params: actual_params,
         return_type: actual_ret,
+        stores: actual_stores,
         ..
     } = type_table.get(actual_inner)
         && let ResolvedType::Function {
             is_mut: expected_is_mut,
             params: expected_params,
             return_type: expected_ret,
+            stores: expected_stores,
             ..
         } = type_table.get(expected_inner)
     {
@@ -175,6 +177,10 @@ pub(super) fn check_assignable(
             return TypeCheckResult::Incompatible;
         }
         if actual_params.len() != expected_params.len() {
+            return TypeCheckResult::Incompatible;
+        }
+        // A functor is assignable only if `actual.stores ⊆ expected.stores`.
+        if actual_stores.iter().any(|p| !expected_stores.contains(p)) {
             return TypeCheckResult::Incompatible;
         }
         for (a, e) in actual_params.iter().zip(expected_params.iter()) {

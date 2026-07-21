@@ -117,7 +117,6 @@ fn function_stored_params(
     oracle: &StoresOracle,
     type_table: &TypeTable,
 ) -> IndexSet<u32> {
-    // local index → parameter positions whose reference it currently carries.
     let mut carries: IndexMap<u32, IndexSet<u32>> = IndexMap::default();
     for (i, p) in params.iter().enumerate() {
         if is_reference_type(p.type_id, type_table) {
@@ -154,7 +153,6 @@ impl StoresWalker<'_> {
         }
         match &expr.kind {
             TirExprKind::Local { index, .. } => self.carries.get(index).cloned().unwrap_or_default(),
-            // `&place` / `&mut place` — a reference to `place`'s root storage.
             TirExprKind::Unary {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
                 expr: place,
@@ -167,6 +165,17 @@ impl StoresWalker<'_> {
             | TirExprKind::VariantPayload { expr: inner, .. }
             | TirExprKind::Index { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. } => self.carries(inner),
+            // A reference-typed result may borrow any argument.
+            TirExprKind::Call { args, .. } => {
+                args.iter().flat_map(|a| self.carries(&a.expr)).collect()
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => std::iter::once(&**receiver)
+                .chain(args.iter().map(|a| &a.expr))
+                .flat_map(|e| self.carries(e))
+                .collect(),
+            TirExprKind::IndirectCall { args, .. } => {
+                args.iter().flat_map(|a| self.carries(a)).collect()
+            }
             _ => IndexSet::default(),
         }
     }
@@ -209,7 +218,6 @@ impl StoresWalker<'_> {
 impl TirRefVisitor for StoresWalker<'_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         match &stmt.kind {
-            // A `let`/assign of a reference carries its source's positions.
             TirStmtKind::Let {
                 local_index, value, ..
             } => {
@@ -229,8 +237,6 @@ impl TirRefVisitor for StoresWalker<'_> {
 
     fn visit_expr(&mut self, expr: &TirExpr) {
         match &expr.kind {
-            // Reassignment to a whole local carries; assignment into a place
-            // (field / deref / index) stores the reference into heap storage.
             TirExprKind::Assign { target, value } => {
                 let c = self.carries(value);
                 if !c.is_empty() {
@@ -246,7 +252,6 @@ impl TirRefVisitor for StoresWalker<'_> {
                 let c = self.carries(value);
                 self.mark(c);
             }
-            // Placing a reference into an aggregate persists it.
             TirExprKind::StructLiteral { fields, .. } => {
                 for f in fields {
                     let c = self.carries(&f.value);
