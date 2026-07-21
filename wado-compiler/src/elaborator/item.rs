@@ -1525,10 +1525,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     projected_from: None,
                 });
 
-                // Projected pack binding — `impl<T: Trait<Assoc = [..F]>, ..F: …>`.
-                // A declared pack `F` that appears only in the self-type param's
-                // associated-type bound is not caller-supplied; monomorphization
-                // derives it by projecting `T`'s associated type (`T::Assoc`).
+                // A pack `F` bound only via `T`'s associated type
+                // (`impl<T: Trait<Assoc = [..F]>, ..F: …>`) is not caller-supplied;
+                // monomorphization projects it from `T::Assoc`.
                 let projections: Vec<(String, String)> = impl_declared_params
                     .iter()
                     .find(|p| p.name == named.name)

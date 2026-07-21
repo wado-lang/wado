@@ -357,12 +357,10 @@ impl Monomorphizer {
                                         )
                                     });
                                 match mapped_elem {
-                                    // Mapped pack: substitute the element once per
-                                    // source pack element, binding the pack param to
-                                    // that element — a constructor map `[..Case<T, P>]`
-                                    // yields `Case<T, P_k>` at position k; a
-                                    // pack-independent `..F::method()` repeats its
-                                    // return type `|F|` times.
+                                    // Mapped pack: substitute `elem` once per source
+                                    // element with the pack param bound to it —
+                                    // `[..Case<T, P>]` yields `Case<T, P_k>`, a
+                                    // pack-independent `..F::method()` repeats `R`.
                                     Some(elem) => {
                                         let pack_elems = type_table
                                             .as_tuple(pack_type)

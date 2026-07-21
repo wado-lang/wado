@@ -1690,14 +1690,12 @@ impl FunctionTranslator<'_, '_> {
         let mi = func.monomorph_info.as_ref();
 
         if matches_builtin(&func.name, mi, "variant_tag") && args.len() == 1 {
-            // Dispatch to the synthesized `V^ReflectVariant::discriminant`
-            // (same `&V` receiver representation as the marker's argument), so
-            // the tag read has a single lowering.
+            // The `&V` receiver matches the marker's argument, so `discriminant`
+            // is the single lowering for the tag read.
             let arg_ty = args[0].expr.type_id;
             let (helper_name, helper_module) = {
                 let tt = self.base.type_table.borrow();
-                // The marker's `&T` argument may already be in its lowered
-                // `Box<V>` representation — unwrap both shapes.
+                // The marker's `&T` argument may already be lowered to `Box<V>`.
                 let peeled = tt.peel_refs(arg_ty);
                 let box_name = tt
                     .compiler_items()

@@ -1559,12 +1559,9 @@ impl FunctionTranslator<'_, '_> {
         instrs
     }
 
-    /// Whether a value of this type leaves nothing on the Wasm stack: unit, or
-    /// a reference to unit — `&x` is transparent at the WIR level (see
-    /// `NirUnaryOp::Ref` in `translate_expr_inner`), so a reference is exactly
-    /// as empty as its referent. Positions that consume a `&()` are boxed by
-    /// `lower::plan::boxing` before reaching here; the transparent form only
-    /// survives in discarded / bound-but-unread positions.
+    /// Whether a value of this type leaves nothing on the Wasm stack: unit, or a
+    /// reference to unit. `&x` is transparent at the WIR level, so `&()` is as
+    /// empty as `()`; a `&()` that is actually consumed was boxed upstream.
     pub(super) fn is_stackless_type(&self, ty: TypeId) -> bool {
         self.type_table.peel_refs(ty) == TypeTable::UNIT
     }

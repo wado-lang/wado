@@ -1267,13 +1267,10 @@ impl TypeSystem {
         false
     }
 
-    /// Whether a blanket-impl bound names a compiler-synthesized reflection
-    /// trait the subject type is eligible for (`Reflect` on a struct,
-    /// `ReflectVariant` on a variant, `ReflectEnum` on an enum). These traits
-    /// have no impl blocks to find — eligibility is the type's kind, mirroring
-    /// the `TypeId`-based arms of `type_implements_trait_inner` — so the
-    /// name-based impl search alone would reject them. Records the
-    /// bound-driven synth request on a hit, as those arms do.
+    /// Whether `bound_name` is a synthesized reflection trait the subject type
+    /// is eligible for by kind (`Reflect` on a struct, `ReflectVariant` on a
+    /// variant, …). These have no impl blocks, so the name-based search misses
+    /// them; a hit records the bound-driven synth request.
     fn synthesized_reflect_bound_holds(
         &self,
         scope: &TypeLookup,

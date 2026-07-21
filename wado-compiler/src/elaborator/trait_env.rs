@@ -1028,10 +1028,8 @@ impl TraitEnv {
     }
 
     /// The blanket impl's type-param name (`I` in `impl<I: Bound> Trait for I`)
-    /// for `trait_name`, preferring a blanket in `type_module`. Pairs with
-    /// [`Self::blanket_impl_module_for_trait`] to reconstruct the blanket
-    /// template's mangled name (`I^Trait::method`) when a substituted
-    /// type-param static call dispatches through a blanket impl.
+    /// for `trait_name`, preferring a blanket in `type_module`. Used to
+    /// reconstruct the blanket template's mangled name `I^Trait::method`.
     pub(crate) fn blanket_impl_param_for_trait(
         &self,
         trait_name: &str,

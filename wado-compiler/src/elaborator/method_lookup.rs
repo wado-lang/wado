@@ -1955,12 +1955,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .find(|tp| tp.name == impl_type_name)
                 .cloned();
             if let Some(param) = matching_param {
-                // Check if the receiver type satisfies ALL trait bounds. Prefer
-                // the receiver-`TypeId` check, which also recognises synthesized
-                // bounds (`Reflect`, `Default`) that have no explicit `impl`; the
-                // name-based lookup covers only real impls. The authoritative
-                // re-check happens in `candidate_matches_receiver`; this gate must
-                // not drop a viable blanket impl before it gets there.
+                // Gate on all bounds. The receiver-`TypeId` check is preferred:
+                // it recognises synthesized bounds (`Reflect`, `Default`) with no
+                // explicit `impl`, which the name-based lookup misses. A viable
+                // blanket must survive to the authoritative `candidate_matches_receiver`.
                 let bounds_satisfied = param.bounds.iter().all(|bound| {
                     let bound_trait_name = &bound.name;
                     if let Some(rt) = receiver_type_id

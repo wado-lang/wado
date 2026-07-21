@@ -476,10 +476,9 @@ impl Monomorphizer {
                             &info.method_name,
                         ));
                     }
-                    // A blanket static (`Color^CaseName::by_name`) has no
-                    // template under the receiver's name; the template is the
-                    // blanket's own (`T^CaseName::by_name`), carried in
-                    // `generic_name` by the type-param-receiver redirect.
+                    // A blanket static's template is keyed by the blanket param
+                    // (`T^CaseName::by_name`), not the receiver — it lives in
+                    // `generic_name`.
                     if monomorph.is_blanket {
                         names_to_try.insert(0, monomorph.generic_name.clone());
                     }
@@ -519,11 +518,9 @@ impl Monomorphizer {
                                     method_type_args,
                                     method_info,
                                 };
-                                // `_inner` with the template's impl params so a
-                                // blanket key (`T^Trait::method` + `[Color]`)
-                                // mangles to the substituted instance name
-                                // (`Color^Trait::method`) the redirected call
-                                // targets, not `T<Color>^Trait::method`.
+                                // Pass the template's impl params so the blanket
+                                // key mangles to `Color^Trait::method`, not
+                                // `T<Color>^Trait::method`.
                                 let mangled = self.method_instantiation_name_inner(
                                     &key,
                                     type_table,
@@ -1230,11 +1227,9 @@ impl Monomorphizer {
             .count();
         for param in &generic.impl_type_params {
             if let Some((src_idx, assoc_name)) = &param.projected_from {
-                // Projected pack (`impl<T: Reflect<Fields = [..F]>, ..F: …>`):
-                // `F` is not caller-supplied. Derive it by resolving the source
-                // param's associated type (e.g. `T::Fields`) for the concrete
-                // `T` already bound above — the source param precedes the pack
-                // in `impl_type_params`, so its substitution is in place.
+                // A projected pack `..F` (`impl<T: Reflect<Fields = [..F]>>`) is
+                // not caller-supplied: resolve `T::Fields` for the concrete `T`,
+                // which precedes the pack and is already bound.
                 let projected = substitution
                     .get(src_idx)
                     .and_then(|&src| type_table.resolve_assoc_type(src, assoc_name))
@@ -1765,11 +1760,9 @@ impl Monomorphizer {
                             // (`List<i32>^Default::default`) must queue its impl
                             // instantiation even with no method type args of its
                             // own — they are impl-level. A non-generic receiver
-                            // (`i32^Default::default`) is a direct function —
-                            // unless dispatch runs through a blanket impl, whose
-                            // static instance (`Color^CaseName::by_name`) only
-                            // exists once queued with the blanket's own template
-                            // name and the concrete receiver as its impl arg.
+                            // (`i32^Default::default`) is a direct function,
+                            // unless it dispatches through a blanket impl (see
+                            // below).
                             let blanket_generic_name = blanket_module
                                 .as_ref()
                                 .and_then(|_| trait_name_for_blanket)
@@ -2823,10 +2816,9 @@ impl Monomorphizer {
         };
         let by_ref = *by_ref;
 
-        // Pre-substitution pack info: the pack index read off the iterable's
-        // own type, and whether the pack is mapped (`[..Case<T, P>]`). A
-        // mapped pack drives the per-element substitution from the SOURCE
-        // pack element `P_k`, not the mapped tuple element.
+        // A mapped pack (`[..Case<T, P>]`) substitutes per element from the
+        // source pack element `P_k`, not the mapped tuple element, so read its
+        // index and mapped-ness off the pre-substitution type.
         let (iterable_pack_index, iterable_pack_mapped) = type_table
             .as_tuple_through_ref(iterable.type_id)
             .and_then(|(elems, _)| {
@@ -2854,9 +2846,8 @@ impl Monomorphizer {
                 );
             });
 
-        // The TypePack index to override per element: read off the iterable's
-        // pre-substitution type when present, else fall back to scanning the
-        // substitution map for a tuple-valued entry.
+        // The pack index to override per element; fall back to a tuple-valued
+        // substitution entry when the iterable carries none.
         let pack_index = iterable_pack_index.or_else(|| {
             let mut found = None;
             for (&idx, &tid) in substitution {
@@ -2868,9 +2859,8 @@ impl Monomorphizer {
             found
         });
 
-        // For a mapped pack, the per-element override values are the source
-        // pack's elements (`P_k`); the mapped tuple element (`Case<V, P_k>`)
-        // stays the binding type only.
+        // For a mapped pack the override values are the source elements `P_k`;
+        // the mapped element `Case<V, P_k>` stays the binding type only.
         let mapped_source_elems: Option<Vec<TypeId>> = if iterable_pack_mapped {
             pack_index
                 .and_then(|idx| substitution.get(&idx))

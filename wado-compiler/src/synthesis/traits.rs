@@ -722,8 +722,7 @@ fn synthesize_reflect_kind(
     }
 }
 
-/// The metadata-struct pieces `generate_reflect_meta_list_fn` needs, borrowed
-/// from any kind's `SynthEnv` (all three carry these fields flat).
+/// The metadata-struct pieces `generate_reflect_meta_list_fn` needs.
 struct MetaListParts<'a> {
     meta_type: TypeId,
     meta_struct_name: &'a str,
@@ -811,7 +810,7 @@ fn generate_reflect_meta_list_fn(
     )
 }
 
-/// A metadata-struct field carrying an `i32`/`u64`/etc. integer literal.
+/// A metadata-struct field holding an integer literal of type `ty`.
 fn reflect_meta_int_field(name: &str, value: u64, ty: TypeId, index: u32, span: Span) -> TirStructField {
     TirStructField {
         name: name.to_string(),

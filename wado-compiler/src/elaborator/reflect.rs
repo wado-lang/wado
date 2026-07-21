@@ -1,9 +1,7 @@
 //! `Reflect` / `ReflectVariant` / `ReflectEnum` / `ReflectFlags` static-call
-//! resolution (WEP 2026-06-13). These compiler-synthesized, sealed traits are
-//! addressed as `Trait::<T>::method()`; the resolvers below intercept that form
-//! (from `resolve_static_method_call`) and route it to the concrete type's
-//! synthesized `T^Trait::method`, or — under a `T: Trait` bound — to a
-//! type-param-receiver dispatch that monomorphization redirects.
+//! resolution (WEP 2026-06-13): the `Trait::<T>::method()` form that
+//! `resolve_static_method_call` intercepts and routes to the type's synthesized
+//! `T^Trait::method`.
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
