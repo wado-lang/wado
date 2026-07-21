@@ -981,7 +981,6 @@ fn "http_fields_set.wado/__cm_binding__Fields_set"(self, name, value) with Field
     let __value_base: i32;
     let __value_i: i32;
     let __value_addr: i32;
-    let __value_elem: ref "core:prelude//List<u8>";
     let __list_len: i32;
     let __list_base: i32;
     let __list_i: i32;
@@ -999,7 +998,7 @@ fn "http_fields_set.wado/__cm_binding__Fields_set"(self, name, value) with Field
     let len_44: i32;
     let arr: ref Array<u8>;
     let _licm_repr_47: ref "Array<core:prelude/list.wado/List<u8>>";
-    let _licm_repr_49: ref Array<u8>;
+    let __sroa___value_elem_repr: ref Array<u8>;
     __name_packed = "core:rt/cm_lower_string"(name);
     __value_len = value.used;
     __value_base = "mem/realloc"(0, 0, 4, __value_len * 8);
@@ -1010,16 +1009,22 @@ fn "http_fields_set.wado/__cm_binding__Fields_set"(self, name, value) with Field
             break_if b71 __value_i >= __value_len;
             __value_addr = __value_base + (__value_i * 8);
             v_23 = builtin::array_get<ref "core:prelude//List<u8>">(_licm_repr_47, __value_i);
-            __value_elem = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let __array_clone_src_2: ref Array<u8>; __array_clone_src_2 = v_23.repr; let __array_clone_len_2: i32; __array_clone_len_2 = builtin::array_len(__array_clone_src_2); let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2); __array_clone_dst_2), used: v_23.used };
-            __list_len = __value_elem.used;
+            let __array_clone_src_2: ref Array<u8>;
+            __array_clone_src_2 = v_23.repr;
+            let __array_clone_len_2: i32;
+            __array_clone_len_2 = builtin::array_len(__array_clone_src_2);
+            let __array_clone_dst_2: ref Array<u8>;
+            __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_2);
+            builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_2, 0, __array_clone_len_2);
+            __sroa___value_elem_repr = __array_clone_dst_2;
+            __list_len = v_23.used;
             __list_base = "mem/realloc"(0, 0, 1, __list_len * 1);
             __list_i = 0;
-            _licm_repr_49 = __value_elem.repr;
             b73: block {
                 l74: loop {
                     break_if b73 __list_i >= __list_len;
                     __list_addr = __list_base + (__list_i * 1);
-                    __list_elem = builtin::array_get<u8>(_licm_repr_49, __list_i);
+                    __list_elem = builtin::array_get<u8>(__sroa___value_elem_repr, __list_i);
                     builtin::store_u8(__list_addr, __list_elem);
                     __list_i = __list_i + 1;
                     continue l74;
