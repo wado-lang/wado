@@ -512,8 +512,9 @@ after the first three.
         `Cases = [..P]` projection with the constructor-mapped `cases()` type
         (§3d–§3f). Fixtures: `reflect_variant_meta`, `reflect_variant_cases`,
         `reflect_variant_derive`.
-  - [ ] Completion proof: a library-code variant `Inspect` matching the
-        synthesizer's output (§3g).
+  - [x] Completion proof: a library-code variant `Inspect` matching the
+        synthesizer's output byte for byte (§3g). Fixture:
+        `reflect_variant_inspect_proof`.
 - [ ] Migrate `Inspect` / `InspectAlt` to the `Reflect`-based impl; remove the
       compiler-magic struct path (WEP 2026-03-14's stated goal).
 - [ ] Migrate serde struct/variant `Serialize` / `Deserialize` to library code;

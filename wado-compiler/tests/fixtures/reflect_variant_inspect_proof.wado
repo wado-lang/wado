@@ -1,0 +1,49 @@
+// Completion proof (WEP 2026-06-13 §3g): variant `Inspect` written as
+// library code over the Case-token machinery reproduces the compiler
+// synthesizer's output byte for byte — the §3 design is expressive enough
+// to take over the built-in derivation.
+
+trait LibInspect {
+    fn lib_inspect(&self) -> String;
+}
+
+impl<T: ReflectVariant<Cases = [..P]>, ..P: Inspect> LibInspect for T {
+    fn lib_inspect(&self) -> String {
+        let type_name = ReflectVariant::<T>::type_name();
+        let metas = ReflectVariant::<T>::case_meta();
+        let mut out = "";
+        for let c of ReflectVariant::<T>::cases() {
+            if c.holds(self) {
+                let meta = metas[c.index()];
+                if meta.is_unit {
+                    out = `${type_name}::${meta.name}`;
+                } else {
+                    out = `${type_name}::${meta.name}(${c.extract(self):?})`;
+                }
+            }
+        }
+        return out;
+    }
+}
+
+variant Shape {
+    Circle(f64),
+    Rectangle([f64, f64]),
+    Named(String),
+    Point,
+}
+
+test "library-code variant Inspect matches the synthesizer's output" {
+    let shapes: List<Shape> = [
+        Shape::Circle(2.5),
+        Shape::Rectangle([3.0, 4.0]),
+        Shape::Named("hi"),
+        Shape::Point,
+    ];
+    for let s of shapes {
+        assert s.lib_inspect() == `${s:?}`;
+    }
+}
+
+__DATA__
+{"test": {}}
