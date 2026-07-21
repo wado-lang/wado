@@ -810,7 +810,7 @@ async fn worker_loop(
                     if let Some(stop) = stopping
                         && inflight.is_empty()
                     {
-                        return stop;
+                        return Ok(stop);
                     }
 
                     let mut job: Option<RequestJob> = None;
@@ -852,7 +852,7 @@ async fn worker_loop(
                                     service: Arc::clone(&service),
                                     job,
                                     idle_timeout: request_timeout,
-                                }));
+                                })?);
                                 handled += 1;
                                 if recycle_requests != 0 && handled >= recycle_requests {
                                     stopping = Some(WorkerStop::Recycle);
@@ -863,7 +863,8 @@ async fn worker_loop(
                     }
                 }
             })
-            .await;
+            .await
+            .and_then(|inner| inner);
 
         match stop {
             // Drop the old store (returns its pooling slots) and loop to

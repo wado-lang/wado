@@ -84,6 +84,9 @@ pub struct GenerateOptions {
     /// decisions. Off by default; enabled by `gale gen --trace` or the
     /// `trace: true` Kiln generator option.
     pub trace: bool = false,
+    /// Rule names a fragment is a sequence of, for tooling; empty is
+    /// byte-identical.
+    pub fragment_entries: List<String> = [],
 }
 
 /// Result of a codegen pass: the generated `.wado` source plus every
@@ -148,6 +151,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     let mut ctx = GenContext::new(&grammar.parser_rules, &lit_tokens);
     ctx.set_token_kinds(token_kinds);
     ctx.set_trace(options.trace);
+    ctx.set_fragment_entries(options.fragment_entries);
     ctx.set_emit_actions(should_emit_actions(grammar));
     ctx.set_action_language(&grammar.action_language);
     ctx.set_action_grammar(&grammar.name, collect_member_method_names(grammar));

@@ -2166,6 +2166,7 @@ fn "cm_component_import_catalog.wado/__cm_binding__CmCatalog_id_list_record"(v) 
     let __v_base: i32;
     let __v_i: i32;
     let __v_addr: i32;
+    let __v_elem: ref "./sub/cm-catalog.wasm//Point";
     let __outptr: i32;
     let __base: i32;
     let __count: i32;
@@ -2175,23 +2176,18 @@ fn "cm_component_import_catalog.wado/__cm_binding__CmCatalog_id_list_record"(v) 
     let __lifted_result_13: f64;
     let __lifted_result_14: f64;
     let __struct_result: ref "./sub/cm-catalog.wasm//Point";
-    let v_17: ref "./sub/cm-catalog.wasm//Point";
-    let _licm_repr_29: ref "Array<./sub/cm-catalog.wasm/Point>";
-    let __sroa___v_elem_x: f64;
-    let __sroa___v_elem_y: f64;
+    let _licm_repr_28: ref "Array<./sub/cm-catalog.wasm/Point>";
     __v_len = v.used;
     __v_base = "mem/realloc"(0, 0, 8, __v_len * 16);
     __v_i = 0;
-    _licm_repr_29 = v.repr;
+    _licm_repr_28 = v.repr;
     b77: block {
         l78: loop {
             break_if b77 __v_i >= __v_len;
             __v_addr = __v_base + (__v_i * 16);
-            v_17 = builtin::array_get<ref "./sub/cm-catalog.wasm//Point">(_licm_repr_29, __v_i);
-            __sroa___v_elem_x = v_17.x;
-            __sroa___v_elem_y = v_17.y;
-            builtin::store_i64(__v_addr, builtin::i64_reinterpret_f64(__sroa___v_elem_x));
-            builtin::store_i64(__v_addr + 8, builtin::i64_reinterpret_f64(__sroa___v_elem_y));
+            __v_elem = builtin::array_get<ref "./sub/cm-catalog.wasm//Point">(_licm_repr_28, __v_i);
+            builtin::store_i64(__v_addr, builtin::i64_reinterpret_f64(__v_elem.x));
+            builtin::store_i64(__v_addr + 8, builtin::i64_reinterpret_f64(__v_elem.y));
             __v_i = __v_i + 1;
             continue l78;
         };
@@ -2357,6 +2353,7 @@ fn "cm_component_import_catalog.wado/__cm_binding__CmCatalog_id_result_list"(v) 
     let __local_8: i32;
     let __local_9: i32;
     let __local_10: i32;
+    let __local_11: ref "./sub/cm-catalog.wasm//Point";
     let __local_13: ref "core:prelude/string.wado//String";
     let __local_14: i64;
     let __outptr: i32;
@@ -2370,16 +2367,13 @@ fn "cm_component_import_catalog.wado/__cm_binding__CmCatalog_id_result_list"(v) 
     let __lifted_result_23: f64;
     let __lifted_result_24: f64;
     let __struct_result: ref "./sub/cm-catalog.wasm//Point";
-    let v_27: ref "./sub/cm-catalog.wasm//Point";
-    let __local_5_33: ref "core:prelude/string.wado//String";
-    let __local_6_34: ref "core:prelude/format.wado//Formatter";
+    let __local_5_32: ref "core:prelude/string.wado//String";
+    let __local_6_33: ref "core:prelude/format.wado//Formatter";
     let ptr: i32;
-    let len_40: i32;
+    let len_38: i32;
     let arr: ref Array<u8>;
-    let _licm_used_42: i32;
-    let _licm_repr_43: ref "Array<./sub/cm-catalog.wasm/Point>";
-    let __sroa___list_elem_x: f64;
-    let __sroa___list_elem_y: f64;
+    let _licm_used_40: i32;
+    let _licm_repr_41: ref "Array<./sub/cm-catalog.wasm/Point>";
     __v_disc = v.discriminant;
     __v_p0 = 0;
     __v_p1 = 0;
@@ -2388,24 +2382,22 @@ fn "cm_component_import_catalog.wado/__cm_binding__CmCatalog_id_result_list"(v) 
         __local_7 = __local_5_5.used;
         __local_8 = "mem/realloc"(0, 0, 8, __local_7 * 16);
         __local_9 = 0;
-        _licm_used_42 = __local_5_5.used;
-        _licm_repr_43 = __local_5_5.repr;
+        _licm_used_40 = __local_5_5.used;
+        _licm_repr_41 = __local_5_5.repr;
         b93: block {
             l94: loop {
                 break_if b93 __local_9 >= __local_7;
                 __local_10 = __local_8 + (__local_9 * 16);
-                if @unlikely(__local_9 >= _licm_used_42) {
+                if @unlikely(__local_9 >= _licm_used_40) {
                     cold_path;
-                    "core:rt/panic"(__local_5_33 = "core:prelude/string.wado/String::with_capacity"(173); "core:prelude/string.wado/String::push_str"(__local_5_33, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5_33, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("List::index_value"), used: 17 }); "core:prelude/string.wado/String::push"(__local_5_33, 32); "core:prelude/string.wado/String::push"(__local_5_33, 97); "core:prelude/string.wado/String::push"(__local_5_33, 116); "core:prelude/string.wado/String::push"(__local_5_33, 32); "core:prelude/string.wado/String::push_str"(__local_5_33, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/list.wado"), used: 22 }); "core:prelude/string.wado/String::push"(__local_5_33, 58); __local_6_34 = "core:prelude/format.wado/Formatter::new"(__local_5_33); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 354 }, __local_6_34); "core:prelude/string.wado/String::push"(__local_5_33, 58); "core:prelude/string.wado/String::push"(__local_5_33, 32); "core:prelude/string.wado/String::push_str"(__local_5_33, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 }); "core:prelude/string.wado/String::push_str"(__local_5_33, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+                    "core:rt/panic"(__local_5_32 = "core:prelude/string.wado/String::with_capacity"(173); "core:prelude/string.wado/String::push_str"(__local_5_32, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5_32, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("List::index_value"), used: 17 }); "core:prelude/string.wado/String::push"(__local_5_32, 32); "core:prelude/string.wado/String::push"(__local_5_32, 97); "core:prelude/string.wado/String::push"(__local_5_32, 116); "core:prelude/string.wado/String::push"(__local_5_32, 32); "core:prelude/string.wado/String::push_str"(__local_5_32, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/list.wado"), used: 22 }); "core:prelude/string.wado/String::push"(__local_5_32, 58); __local_6_33 = "core:prelude/format.wado/Formatter::new"(__local_5_32); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 354 }, __local_6_33); "core:prelude/string.wado/String::push"(__local_5_32, 58); "core:prelude/string.wado/String::push"(__local_5_32, 32); "core:prelude/string.wado/String::push_str"(__local_5_32, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 }); "core:prelude/string.wado/String::push_str"(__local_5_32, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: index < self.used
-"), used: 30 }); "core:prelude/string.wado/String::push"(__local_5_33, 105); "core:prelude/string.wado/String::push"(__local_5_33, 110); "core:prelude/string.wado/String::push"(__local_5_33, 100); "core:prelude/string.wado/String::push"(__local_5_33, 101); "core:prelude/string.wado/String::push"(__local_5_33, 120); "core:prelude/string.wado/String::push"(__local_5_33, 58); "core:prelude/string.wado/String::push"(__local_5_33, 32); __local_6_34 = "core:prelude/format.wado/Formatter::new"(__local_5_33); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __local_9 }, __local_6_34); "core:prelude/string.wado/String::push"(__local_5_33, 10); "core:prelude/string.wado/String::push_str"(__local_5_33, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("self.used: "), used: 11 }); __local_6_34 = "core:prelude/format.wado/Formatter::new"(__local_5_33); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: _licm_used_42 }, __local_6_34); "core:prelude/string.wado/String::push"(__local_5_33, 10); __local_5_33);
+"), used: 30 }); "core:prelude/string.wado/String::push"(__local_5_32, 105); "core:prelude/string.wado/String::push"(__local_5_32, 110); "core:prelude/string.wado/String::push"(__local_5_32, 100); "core:prelude/string.wado/String::push"(__local_5_32, 101); "core:prelude/string.wado/String::push"(__local_5_32, 120); "core:prelude/string.wado/String::push"(__local_5_32, 58); "core:prelude/string.wado/String::push"(__local_5_32, 32); __local_6_33 = "core:prelude/format.wado/Formatter::new"(__local_5_32); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __local_9 }, __local_6_33); "core:prelude/string.wado/String::push"(__local_5_32, 10); "core:prelude/string.wado/String::push_str"(__local_5_32, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("self.used: "), used: 11 }); __local_6_33 = "core:prelude/format.wado/Formatter::new"(__local_5_32); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: _licm_used_40 }, __local_6_33); "core:prelude/string.wado/String::push"(__local_5_32, 10); __local_5_32);
                     unreachable;
                 }
-                v_27 = builtin::array_get<ref "./sub/cm-catalog.wasm//Point">(_licm_repr_43, __local_9);
-                __sroa___list_elem_x = v_27.x;
-                __sroa___list_elem_y = v_27.y;
-                builtin::store_i64(__local_10, builtin::i64_reinterpret_f64(__sroa___list_elem_x));
-                builtin::store_i64(__local_10 + 8, builtin::i64_reinterpret_f64(__sroa___list_elem_y));
+                __local_11 = builtin::array_get<ref "./sub/cm-catalog.wasm//Point">(_licm_repr_41, __local_9);
+                builtin::store_i64(__local_10, builtin::i64_reinterpret_f64(__local_11.x));
+                builtin::store_i64(__local_10 + 8, builtin::i64_reinterpret_f64(__local_11.y));
                 __local_9 = __local_9 + 1;
                 continue l94;
             };
@@ -2439,9 +2431,9 @@ condition: index < self.used
         if __count > 0 {
             drop("mem/realloc"(__base, __count * 16, 8, 0));
         }
-        __result_val = struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<./sub/cm-catalog.wasm/Point>,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude//List<./sub/cm-catalog.wasm/Point>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "./sub/cm-catalog.wasm//Point">(__result.repr)), used: __result.used } };
+        __result_val = struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<./sub/cm-catalog.wasm/Point>,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: __result };
     } else {
-        __result_val = struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<./sub/cm-catalog.wasm/Point>,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: ref.as_non_null(ptr = builtin::load_i32(__outptr + 4); len_40 = builtin::load_i32((__outptr + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_40); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_29: i32; __array_clone_len_29 = builtin::array_len(arr); let __array_clone_dst_29: ref Array<u8>; __array_clone_dst_29 = builtin::array_new<u8>(__array_clone_len_29); builtin::array_copy<u8>(__array_clone_dst_29, 0, arr, 0, __array_clone_len_29); __array_clone_dst_29), used: len_40 }) };
+        __result_val = struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<./sub/cm-catalog.wasm/Point>,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: ref.as_non_null(ptr = builtin::load_i32(__outptr + 4); len_38 = builtin::load_i32((__outptr + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr, len_38); struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_29: i32; __array_clone_len_29 = builtin::array_len(arr); let __array_clone_dst_29: ref Array<u8>; __array_clone_dst_29 = builtin::array_new<u8>(__array_clone_len_29); builtin::array_copy<u8>(__array_clone_dst_29, 0, arr, 0, __array_clone_len_29); __array_clone_dst_29), used: len_38 }) };
     }
     drop("mem/realloc"(__outptr, 12, 4, 0));
     return __result_val;
@@ -2462,22 +2454,19 @@ fn "cm_component_import_catalog.wado/__cm_binding__CmCatalog_id_list_tuple"(v) w
     let __elem_addr: i32;
     let __lifted_result_14: i32;
     let __lifted_result_15: ref "core:prelude/string.wado//String";
-    let v_17: ref "tuple//[u32, core:prelude/string.wado/String]";
-    let v_27: ref "core:prelude/string.wado//String";
     let ptr: i32;
-    let len_30: i32;
+    let len_28: i32;
     let arr: ref Array<u8>;
-    let _licm_repr_35: ref "Array<[u32,core:prelude/string.wado/String]>";
+    let _licm_repr_33: ref "Array<[u32,core:prelude/string.wado/String]>";
     __v_len = v.used;
     __v_base = "mem/realloc"(0, 0, 4, __v_len * 12);
     __v_i = 0;
-    _licm_repr_35 = v.repr;
+    _licm_repr_33 = v.repr;
     b100: block {
         l101: loop {
             break_if b100 __v_i >= __v_len;
             __v_addr = __v_base + (__v_i * 12);
-            v_17 = builtin::array_get<ref "tuple//[u32, core:prelude/string.wado/String]">(_licm_repr_35, __v_i);
-            __v_elem = struct.new "tuple//[u32, core:prelude/string.wado/String]" { 0: v_17.0, 1: ref.as_non_null(v_27 = v_17.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_29: ref Array<u8>; __array_clone_src_29 = v_27.repr; let __array_clone_len_29: i32; __array_clone_len_29 = builtin::array_len(__array_clone_src_29); let __array_clone_dst_29: ref Array<u8>; __array_clone_dst_29 = builtin::array_new<u8>(__array_clone_len_29); builtin::array_copy<u8>(__array_clone_dst_29, 0, __array_clone_src_29, 0, __array_clone_len_29); __array_clone_dst_29), used: v_27.used }) };
+            __v_elem = builtin::array_get<ref "tuple//[u32, core:prelude/string.wado/String]">(_licm_repr_33, __v_i);
             builtin::store_i32(__v_addr, __v_elem.0);
             __packed = "core:rt/cm_lower_string"(__v_elem.1);
             builtin::store_i32(__v_addr + 4, builtin::i32_wrap_i64(__packed));
@@ -2496,9 +2485,9 @@ fn "cm_component_import_catalog.wado/__cm_binding__CmCatalog_id_list_tuple"(v) w
             break_if b102 __i >= __count;
             __lifted_result_14 = builtin::load_i32(local.tee __elem_addr(__base + (__i * 12)) + 0);
             ptr = builtin::load_i32(__elem_addr + 4);
-            len_30 = builtin::load_i32((__elem_addr + 4) + 4);
-            arr = "core:rt/memory_to_gc_array"(ptr, len_30);
-            __lifted_result_15 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_29: ref Array<u8>; __array_clone_src_29 = arr; let __array_clone_len_29: i32; __array_clone_len_29 = builtin::array_len(__array_clone_src_29); let __array_clone_dst_29: ref Array<u8>; __array_clone_dst_29 = builtin::array_new<u8>(__array_clone_len_29); builtin::array_copy<u8>(__array_clone_dst_29, 0, __array_clone_src_29, 0, __array_clone_len_29); __array_clone_dst_29), used: len_30 };
+            len_28 = builtin::load_i32((__elem_addr + 4) + 4);
+            arr = "core:rt/memory_to_gc_array"(ptr, len_28);
+            __lifted_result_15 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_29: i32; __array_clone_len_29 = builtin::array_len(arr); let __array_clone_dst_29: ref Array<u8>; __array_clone_dst_29 = builtin::array_new<u8>(__array_clone_len_29); builtin::array_copy<u8>(__array_clone_dst_29, 0, arr, 0, __array_clone_len_29); __array_clone_dst_29), used: len_28 };
             "core:prelude/list.wado/List<[u32,core:prelude/string.wado/String]>::push"(__result, struct.new "tuple//[u32, core:prelude/string.wado/String]" { 0: __lifted_result_14, 1: __lifted_result_15 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 4), builtin::load_i32((__elem_addr + 4) + 4), 1, 0));
             __i = __i + 1;
@@ -2527,22 +2516,19 @@ fn "cm_component_import_catalog.wado/__cm_binding__CmCatalog_id_assoc_array"(v) 
     let __elem_addr: i32;
     let __lifted_result_14: ref "core:prelude/string.wado//String";
     let __lifted_result_15: i32;
-    let v_17: ref "tuple//[core:prelude/string.wado/String, u32]";
-    let v_27: ref "core:prelude/string.wado//String";
     let ptr: i32;
-    let len_30: i32;
+    let len_28: i32;
     let arr: ref Array<u8>;
-    let _licm_repr_35: ref "Array<[core:prelude/string.wado/String,u32]>";
+    let _licm_repr_33: ref "Array<[core:prelude/string.wado/String,u32]>";
     __v_len = v.used;
     __v_base = "mem/realloc"(0, 0, 4, __v_len * 12);
     __v_i = 0;
-    _licm_repr_35 = v.repr;
+    _licm_repr_33 = v.repr;
     b105: block {
         l106: loop {
             break_if b105 __v_i >= __v_len;
             __v_addr = __v_base + (__v_i * 12);
-            v_17 = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, u32]">(_licm_repr_35, __v_i);
-            __v_elem = struct.new "tuple//[core:prelude/string.wado/String, u32]" { 0: ref.as_non_null(v_27 = v_17.0; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_29: ref Array<u8>; __array_clone_src_29 = v_27.repr; let __array_clone_len_29: i32; __array_clone_len_29 = builtin::array_len(__array_clone_src_29); let __array_clone_dst_29: ref Array<u8>; __array_clone_dst_29 = builtin::array_new<u8>(__array_clone_len_29); builtin::array_copy<u8>(__array_clone_dst_29, 0, __array_clone_src_29, 0, __array_clone_len_29); __array_clone_dst_29), used: v_27.used }), 1: v_17.1 };
+            __v_elem = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, u32]">(_licm_repr_33, __v_i);
             __packed = "core:rt/cm_lower_string"(__v_elem.0);
             builtin::store_i32(__v_addr, builtin::i32_wrap_i64(__packed));
             builtin::store_i32(__v_addr + 4, builtin::i32_wrap_i64(__packed >> 32_i64));
@@ -2560,9 +2546,9 @@ fn "cm_component_import_catalog.wado/__cm_binding__CmCatalog_id_assoc_array"(v) 
         l108: loop {
             break_if b107 __i >= __count;
             ptr = builtin::load_i32(local.tee __elem_addr(__base + (__i * 12)) + 0);
-            len_30 = builtin::load_i32((__elem_addr + 0) + 4);
-            arr = "core:rt/memory_to_gc_array"(ptr, len_30);
-            __lifted_result_14 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_29: ref Array<u8>; __array_clone_src_29 = arr; let __array_clone_len_29: i32; __array_clone_len_29 = builtin::array_len(__array_clone_src_29); let __array_clone_dst_29: ref Array<u8>; __array_clone_dst_29 = builtin::array_new<u8>(__array_clone_len_29); builtin::array_copy<u8>(__array_clone_dst_29, 0, __array_clone_src_29, 0, __array_clone_len_29); __array_clone_dst_29), used: len_30 };
+            len_28 = builtin::load_i32((__elem_addr + 0) + 4);
+            arr = "core:rt/memory_to_gc_array"(ptr, len_28);
+            __lifted_result_14 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_len_29: i32; __array_clone_len_29 = builtin::array_len(arr); let __array_clone_dst_29: ref Array<u8>; __array_clone_dst_29 = builtin::array_new<u8>(__array_clone_len_29); builtin::array_copy<u8>(__array_clone_dst_29, 0, arr, 0, __array_clone_len_29); __array_clone_dst_29), used: len_28 };
             __lifted_result_15 = builtin::load_i32(__elem_addr + 8);
             "core:prelude/list.wado/List<[core:prelude/string.wado/String,u32]>::push"(__result, struct.new "tuple//[core:prelude/string.wado/String, u32]" { 0: __lifted_result_14, 1: __lifted_result_15 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr + 0), builtin::load_i32((__elem_addr + 0) + 4), 1, 0));
@@ -2682,19 +2668,16 @@ fn "cm_component_import_catalog.wado/__cm_binding__CmCatalog_id_list_tuple_recor
     let __lifted_result_15: f64;
     let __struct_result: ref "./sub/cm-catalog.wasm//Point";
     let __lifted_result_17: i32;
-    let v_19: ref "tuple//[./sub/cm-catalog.wasm/Point, u32]";
-    let v_29: ref "./sub/cm-catalog.wasm//Point";
-    let _licm_repr_32: ref "Array<[./sub/cm-catalog.wasm/Point,u32]>";
+    let _licm_repr_30: ref "Array<[./sub/cm-catalog.wasm/Point,u32]>";
     __v_len = v.used;
     __v_base = "mem/realloc"(0, 0, 8, __v_len * 24);
     __v_i = 0;
-    _licm_repr_32 = v.repr;
+    _licm_repr_30 = v.repr;
     b119: block {
         l120: loop {
             break_if b119 __v_i >= __v_len;
             __v_addr = __v_base + (__v_i * 24);
-            v_19 = builtin::array_get<ref "tuple//[./sub/cm-catalog.wasm/Point, u32]">(_licm_repr_32, __v_i);
-            __v_elem = struct.new "tuple//[./sub/cm-catalog.wasm/Point, u32]" { 0: ref.as_non_null(v_29 = v_19.0; struct.new "./sub/cm-catalog.wasm//Point" { x: v_29.x, y: v_29.y }), 1: v_19.1 };
+            __v_elem = builtin::array_get<ref "tuple//[./sub/cm-catalog.wasm/Point, u32]">(_licm_repr_30, __v_i);
             __struct_val = __v_elem.0;
             builtin::store_i64(__v_addr, builtin::i64_reinterpret_f64(__struct_val.x));
             builtin::store_i64(__v_addr + 8, builtin::i64_reinterpret_f64(__struct_val.y));

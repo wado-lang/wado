@@ -159,6 +159,9 @@ pub struct GenContext {
     /// multi-alt scan/pick/try decisions) — the `trace: true` generator
     /// option. Off by default.
     trace: bool,
+    /// Rule names a fragment is a sequence of (`fragment_entries` option); empty
+    /// disables fragment recovery.
+    fragment_entries: List<String>,
     /// When set, parser emit executes retained actions (Stage C) instead of
     /// discarding them: true for grammars whose action language Gale can
     /// currently emit (`language = Wado`). Actionless / other-language
@@ -234,6 +237,7 @@ impl GenContext {
             lr_loop_entry_decisions: [],
             atn_rule_body_decisions: [],
             trace: false,
+            fragment_entries: [],
             emit_actions: false,
             action_language: ActionLanguage::Wado,
             grammar_name: "",
@@ -427,6 +431,14 @@ impl GenContext {
         return self.trace;
     }
 
+    pub fn set_fragment_entries(&mut self, names: List<String>) {
+        self.fragment_entries = names;
+    }
+
+    pub fn fragment_entries(&self) -> &List<String> {
+        return &self.fragment_entries;
+    }
+
     /// Enable action execution in the generated parser (set for an emittable
     /// action language). Read by `gen_parser_struct` (the `output` buffer +
     /// `emit` method), the parse entry (`output` on `ParseResult`), and
@@ -453,11 +465,11 @@ impl GenContext {
         self.action_member_methods = member_methods;
     }
 
-    pub fn grammar_name(&self) -> &String {
+    pub fn grammar_name(&self) -> &String with stores[self] {
         return &self.grammar_name;
     }
 
-    pub fn action_member_methods(&self) -> &List<String> {
+    pub fn action_member_methods(&self) -> &List<String> with stores[self] {
         return &self.action_member_methods;
     }
 
@@ -466,7 +478,7 @@ impl GenContext {
         self.superclass_ops = ops;
     }
 
-    pub fn superclass_name(&self) -> &String {
+    pub fn superclass_name(&self) -> &String with stores[self] {
         return &self.superclass_name;
     }
 
@@ -474,7 +486,7 @@ impl GenContext {
         return !self.superclass_name.is_empty();
     }
 
-    pub fn superclass_ops(&self) -> &List<SuperOp> {
+    pub fn superclass_ops(&self) -> &List<SuperOp> with stores[self] {
         return &self.superclass_ops;
     }
 
@@ -504,7 +516,7 @@ impl GenContext {
         self.predicate_fns.push([id, *body]);
     }
 
-    pub fn predicate_fns(&self) -> &List<[i32, String]> {
+    pub fn predicate_fns(&self) -> &List<[i32, String]> with stores[self] {
         return &self.predicate_fns;
     }
 
@@ -514,7 +526,7 @@ impl GenContext {
         self.alt_bindings = bindings;
     }
 
-    pub fn alt_bindings(&self) -> &List<[bool, String, String]> {
+    pub fn alt_bindings(&self) -> &List<[bool, String, String]> with stores[self] {
         return &self.alt_bindings;
     }
 
@@ -559,7 +571,7 @@ impl GenContext {
         return -1;
     }
 
-    pub fn find_rule(&self, name: &String) -> Option<&ParserRule> {
+    pub fn find_rule(&self, name: &String) -> Option<&ParserRule> with stores[self] {
         let idx = self.rule_index.get(*name);
         if let Some(i) = idx {
             return Option::Some(&self.parser_rules[i]);
@@ -569,7 +581,7 @@ impl GenContext {
 
     /// The parser-rule table (for action attribute resolution, which validates
     /// cross-rule members against a referenced rule's `returns`).
-    pub fn parser_rules(&self) -> &List<ParserRule> {
+    pub fn parser_rules(&self) -> &List<ParserRule> with stores[self] {
         return &self.parser_rules;
     }
 
@@ -1780,7 +1792,7 @@ fn scan_element_for_single_alt_groups(elem: &Element, rule_name: &String, map: &
     }
 }
 
-fn extract_group_alts_for_scan(elem: &Element) -> Option<&List<Alternative>> {
+fn extract_group_alts_for_scan(elem: &Element) -> Option<&List<Alternative>> with stores[elem] {
     if let Group(g) = elem {
         return Option::Some(&g.alternatives);
     }

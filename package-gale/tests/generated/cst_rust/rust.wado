@@ -1350,15 +1350,12 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
 }
 //! Runtime support for the SuperClass effect interface (see `action.md`,
 //! "SuperClass — an effect interface"). Inlined into a generated lexer only
-//! when the grammar declares `options { superClass = Foo }`.
+//! under `options { superClass = Foo }`.
 //!
 //! `LexerView` is the match-window handle passed by value to every base
-//! operation. Its methods mirror the ANTLR recognizer runtime a base method
-//! reaches through `this` — lookahead (`la`, ANTLR `_input.LA`), matched text
-//! (`text`, ANTLR `getText`), and the cursor — so a hand-written `impl Foo`
-//! handler reads the lexer state alongside its own `self`. Passed by value, so
-//! the handler needs no `stores` clause; the char-stream ref it carries is why
-//! a generated `try_<rule>` that builds one declares `stores[...]`.
+//! operation, so a handler reads the lexer's lookahead / matched text alongside
+//! its own `self`. Its methods mirror the ANTLR recognizer runtime a base
+//! method reaches through `this` (`_input.LA`, `getText`, the cursor).
 
 /// A read-only window over the char stream at a lexer match site: the whole
 /// input plus the token `start` and the current match cursor `pos`.
@@ -3103,7 +3100,7 @@ impl Lexer {
         return self.pos >= self.chars.len();
     }
 
-    fn slice(&self, start: i32, end: i32) -> LexerSlice {
+    fn slice(&self, start: i32, end: i32) -> LexerSlice with stores[self] {
         return LexerSlice::new(&self.chars, start, end);
     }
 }
@@ -7297,7 +7294,7 @@ impl Parser {
 
     fn peek_at(&self, offset: i32) -> i32 {
         let idx = self.pos + offset;
-        if idx >= self.tokens.len() { return TK_EOF; }
+        if idx >= self.kinds.len() { return TK_EOF; }
         return self.kinds[idx];
     }
 

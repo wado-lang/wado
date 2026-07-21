@@ -1,0 +1,34 @@
+// A by-value field stored via shorthand then read by a pure sibling read moves instead of deep-copying.
+
+use { println, Stdout } from "core:cli";
+
+struct Wrap { data: List<i32>, count: i32 }
+
+impl Wrap {
+    fn new(data: List<i32>) -> Wrap {
+        return Wrap { data, count: data.len() * 2 };
+    }
+}
+
+fn make(n: i32) -> List<i32> {
+    let mut a: List<i32> = [];
+    let mut i = 0;
+    loop {
+        if i >= n { break; }
+        a.push(i);
+        i = i + 1;
+    }
+    return a;
+}
+
+export fn run() with Stdout {
+    let w = Wrap::new(make(3));
+    println(`${w.data.len()} ${w.count}`);
+}
+
+__DATA__
+{
+    "stdout": "3 6\n",
+    "wir_not_expect:O0": ["$value_copy$core:prelude/list.wado/List<i32>"],
+    "wir_not_expect:O2": ["$value_copy$core:prelude/list.wado/List<i32>"]
+}

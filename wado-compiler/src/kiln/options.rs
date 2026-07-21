@@ -66,6 +66,9 @@ pub enum OptionsType {
     String,
     /// `Option<T>` — missing-and-`null` both resolve to `None`.
     Option(Box<OptionsType>),
+    /// `List<T>` — a homogeneous array; a missing field resolves to the empty
+    /// list, so a `List` option is optional without an explicit default.
+    List(Box<OptionsType>),
     /// Enum with all-no-payload variants, by name.
     Enum {
         name: String,
@@ -94,6 +97,7 @@ impl OptionsType {
             OptionsType::F64 => "f64".to_string(),
             OptionsType::String => "String".to_string(),
             OptionsType::Option(inner) => format!("Option<{}>", inner.describe()),
+            OptionsType::List(inner) => format!("List<{}>", inner.describe()),
             OptionsType::Enum { name, .. } => name.clone(),
             OptionsType::Struct { name, .. } => name.clone(),
         }
@@ -117,6 +121,8 @@ pub enum CanonicalValue {
     Some(Box<CanonicalValue>),
     Enum(String),
     Struct(Vec<(String, CanonicalValue)>),
+    /// An array value; empty when a `List` field was omitted.
+    List(Vec<CanonicalValue>),
 }
 
 /// Locate `pub struct Options` in the generator's entry module and describe
@@ -234,6 +240,11 @@ fn lower_type(
     if let Some(inner_id) = types.as_option(type_id) {
         let inner = lower_type(inner_id, sem, module, field_name, visiting, diagnostics)?;
         return Some(OptionsType::Option(Box::new(inner)));
+    }
+
+    if let Some(elem_id) = types.as_list(type_id) {
+        let inner = lower_type(elem_id, sem, module, field_name, visiting, diagnostics)?;
+        return Some(OptionsType::List(Box::new(inner)));
     }
 
     match types.get(type_id) {

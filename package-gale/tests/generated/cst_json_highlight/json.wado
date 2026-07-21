@@ -1389,6 +1389,9 @@ pub struct HighlightVisitor {
     defaults: List<String>,
     overrides: List<ResolvedOverride>,
     rule_stack: List<i32>,
+    /// Token indices the tree walk classified, so `hl_cover_unvisited` can
+    /// default-classify the rest.
+    visited: List<bool>,
     pub captures: List<HighlightCapture>,
 }
 
@@ -1418,6 +1421,7 @@ impl HighlightVisitor {
             defaults: mapping.defaults,
             overrides,
             rule_stack: [],
+            visited: [],
             captures: [],
         };
     }
@@ -1451,6 +1455,10 @@ impl HighlightVisitor {
     }
 
     pub fn hl_visit_token(&mut self, toks: &TokenStream, idx: i32) {
+        while self.visited.len() <= idx {
+            self.visited.push(false);
+        }
+        self.visited[idx] = true;
         for let mut t = toks.triv_lo[idx]; t < toks.triv_hi[idx]; t += 1 {
             let cap = self.classify(toks.triv_kinds[t]);
             if !cap.is_empty() {
@@ -1465,6 +1473,24 @@ impl HighlightVisitor {
         let cap = self.classify(toks.kinds[idx]);
         if !cap.is_empty() {
             self.captures.push(HighlightCapture { capture: cap, start: toks.starts[idx], end: toks.ends[idx] });
+        }
+    }
+
+    /// Default-classify every token the tree walk did not reach, then restore
+    /// start order. A no-op on a clean parse (the walk covers every token).
+    pub fn hl_cover_unvisited(&mut self, toks: &TokenStream) {
+        let before = self.captures.len();
+        self.rule_stack = [];
+        for let mut i = 0; i < toks.len(); i += 1 {
+            if i < self.visited.len() && self.visited[i] {
+                continue;
+            }
+            self.hl_visit_token(toks, i);
+        }
+        if self.captures.len() != before {
+            self.captures.sort_by(|a: &HighlightCapture, b: &HighlightCapture| {
+                return a.start.cmp(&b.start);
+            });
         }
     }
 }
@@ -1582,7 +1608,7 @@ impl Lexer {
         return self.pos >= self.chars.len();
     }
 
-    fn slice(&self, start: i32, end: i32) -> LexerSlice {
+    fn slice(&self, start: i32, end: i32) -> LexerSlice with stores[self] {
         return LexerSlice::new(&self.chars, start, end);
     }
 }
@@ -2036,7 +2062,7 @@ impl Parser {
 
     fn peek_at(&self, offset: i32) -> i32 {
         let idx = self.pos + offset;
-        if idx >= self.tokens.len() { return TK_EOF; }
+        if idx >= self.kinds.len() { return TK_EOF; }
         return self.kinds[idx];
     }
 
@@ -2698,13 +2724,8 @@ pub fn highlight_mapping() -> HighlightMapping {
 pub fn highlight_result(result: &ParseResult, input: &String) -> String {
     let mapping = highlight_mapping();
     let mut visitor = HighlightVisitor::new(mapping);
-    if result.diagnostics.is_empty() {
-        highlight_walk(&mut visitor, &result.tokens, &result.cst);
-    } else {
-        for let mut _i = 0; _i < result.tokens.len(); _i += 1 {
-            visitor.hl_visit_token(&result.tokens, _i);
-        }
-    }
+    highlight_walk(&mut visitor, &result.tokens, &result.cst);
+    visitor.hl_cover_unvisited(&result.tokens);
     return highlight_html(input, &visitor.captures);
 }
 

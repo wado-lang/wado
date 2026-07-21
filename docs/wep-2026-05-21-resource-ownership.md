@@ -199,7 +199,15 @@ is caller-side and single-phase (`lower::translate` emits `$value_copy$T` only
 where it cannot prove move / share / fresh; no elision pass):
 
 - Move — `last_use::compute_move_eligible` plus `elaborator::liveness`'s
-  `moved_local_spans`.
+  `moved_local_spans`. This also covers a **place-level move**: at a struct /
+  tuple literal, a whole-value or clean-field materialization aliases out of a
+  _dead_ aggregate (the root is dead after the literal, sibling reads neither
+  mutate nor move it, and the materialized fields are disjoint owners) instead of
+  deep-copying — so `T { x: p.a, y: p.b }` over a dead `p`, and a shorthand store
+  `S { data, n: data.len() }` past a read-only reuse, both move. A method
+  receiver borrow escapes only if the callee stores its receiver specifically
+  (`receiver_storing_methods`), so a `&mut self` mutation like `List::push`
+  (which stores only its value) no longer pins the receiver local.
 - Freshness — `ownership.rs` return conventions (a call is fresh iff the callee
   returns owned).
 - Confinement — `confine.rs` per-parameter escape fixpoint.
@@ -228,8 +236,10 @@ helper), replacing an identity fallback that silently shared storage.
 - Move-only is a new concept for one type category; an element cannot be moved
   out of a resource-bearing aggregate (restructure around iteration); a resource
   API returns owned handles, not `&R`.
-- Open: guaranteed drops on panic (needs Wasm EH); place-level moves out of
-  aggregates.
+- Open: guaranteed drops on panic (needs Wasm EH). Place-level moves out of
+  aggregates now land at struct / tuple literals for non-resource value types;
+  moving a field out of a _live_ aggregate, or through a deref / index, still
+  copies.
 
 ## Implementation status
 
@@ -279,6 +289,9 @@ Verified against the tree.
 
 - [x] `$value_copy$T` at `copy` sites only; read-only-share; recursive-type deep
       copy; `optimize::escape` / `value_copy_elide` deleted.
+- [x] Place-level move at struct / tuple literals (whole-value / clean-field
+      materialization out of a dead aggregate); receiver-storing precision so a
+      value-storing `&mut self` method does not pin its receiver.
 - [ ] Pin representative move / copy / share decisions as e2e fixtures.
 
 ## Deferred: the `move` and `unique` keywords

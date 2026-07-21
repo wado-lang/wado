@@ -1,0 +1,30 @@
+// A persisting borrow of the same field being moved must keep the deep copy.
+
+use { println, Stdout } from "core:cli";
+
+struct P { a: List<i32> }
+struct R { x: List<i32> }
+
+fn split_same(p: P) -> i32 {
+    let r = &p.a;
+    let n = r.len();
+    let out = R { x: p.a };
+    return n + out.x.len();
+}
+
+fn make(n: i32) -> P {
+    let mut a: List<i32> = [];
+    let mut i = 0;
+    loop { if i >= n { break; } a.push(i); i = i + 1; }
+    return P { a };
+}
+
+export fn run() with Stdout {
+    println(`${split_same(make(3))}`);
+}
+
+__DATA__
+{
+    "stdout": "6\n",
+    "wir_expect:O0": ["$value_copy$core:prelude/list.wado/List<i32>"]
+}

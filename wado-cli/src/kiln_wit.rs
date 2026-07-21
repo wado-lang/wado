@@ -91,7 +91,7 @@ fn record_descriptor(
 }
 
 /// Map a WIT type onto the corresponding [`OptionsType`]. Errors on types the
-/// options model does not cover (`char`, `list`, `tuple`, `variant`, …).
+/// options model does not cover (`char`, `tuple`, `variant`, …).
 fn options_type(resolve: &wit_parser::Resolve, ty: &Type) -> Result<OptionsType, String> {
     Ok(match ty {
         Type::Bool => OptionsType::Bool,
@@ -111,6 +111,9 @@ fn options_type(resolve: &wit_parser::Resolve, ty: &Type) -> Result<OptionsType,
             match &def.kind {
                 TypeDefKind::Option(inner) => {
                     OptionsType::Option(Box::new(options_type(resolve, inner)?))
+                }
+                TypeDefKind::List(inner) => {
+                    OptionsType::List(Box::new(options_type(resolve, inner)?))
                 }
                 TypeDefKind::Enum(e) => OptionsType::Enum {
                     name: def.name.clone().unwrap_or_default(),
@@ -204,12 +207,28 @@ interface i {
         let wit = "\
 package test:bad;
 interface i {
-    record options { items: list<u32> }
+    record options { pair: tuple<u32, u32> }
 }
 ";
         let (resolve, ty) = record_type(wit, "options");
         let err = record_descriptor(&resolve, &ty).unwrap().unwrap_err();
-        assert!(err.contains("items"), "{err}");
+        assert!(err.contains("pair"), "{err}");
+    }
+
+    #[test]
+    fn maps_list_field_to_list_type() {
+        let wit = "\
+package test:names;
+interface i {
+    record options { names: list<string> }
+}
+";
+        let (resolve, ty) = record_type(wit, "options");
+        let descriptor = record_descriptor(&resolve, &ty).unwrap().unwrap();
+        assert_eq!(
+            descriptor.fields[0].ty,
+            OptionsType::List(Box::new(OptionsType::String))
+        );
     }
 
     #[test]

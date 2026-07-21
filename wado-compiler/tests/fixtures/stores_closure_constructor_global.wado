@@ -1,0 +1,21 @@
+// A closure that stores a constructor-wrapped borrow of its reference parameter into a global is flagged.
+
+struct Node {
+    v: i32,
+}
+
+global mut STASH: Option<&Node> = null;
+
+fn apply(f: fn(&Node), n: &Node) {
+    f(n);
+}
+
+export fn run() {
+    let node = Node { v: 1 };
+    apply(|q: &Node| {
+        STASH = Option::Some(q);
+    }, &node);
+}
+
+__DATA__
+{"compile_error": "closure may not store reference parameter 'q'"}

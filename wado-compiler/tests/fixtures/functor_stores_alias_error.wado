@@ -1,0 +1,15 @@
+// Aliasing a reference parameter through a `let` does not launder the escape: returning the alias needs `stores`.
+
+struct Data {
+    v: i32,
+}
+
+fn alias(p: &Data) -> &Data {
+    let r = p;
+    return r;
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "stores[p]"}

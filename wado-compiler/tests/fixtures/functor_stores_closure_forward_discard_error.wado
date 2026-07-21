@@ -1,0 +1,25 @@
+// A closure forwarding its reference parameter to an externally-storing callee (result discarded) is rejected.
+
+struct Node {
+    n: i32,
+}
+
+global mut STASHED: &Node = &Node { n: 0 };
+
+fn stash(n: &Node) with stores[n] {
+    STASHED = n;
+}
+
+fn run_with(n: &Node, f: fn(&Node)) {
+    f(n);
+}
+
+export fn run() {
+    let x = Node { n: 1 };
+    run_with(&x, |p: &Node| {
+        stash(p);
+    });
+}
+
+__DATA__
+{"compile_error": "closure may not store reference parameter 'p'"}

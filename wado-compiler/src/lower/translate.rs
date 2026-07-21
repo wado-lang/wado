@@ -282,6 +282,10 @@ struct FunctionTranslator<'a, 'p> {
     /// bodies the AST-keyed `func_moved_spans` cannot see (serde de/serialize,
     /// derives). Unioned with the span check.
     move_eligible_locals: IndexSet<u32>,
+    /// Spans of field / whole-value materializations that alias out of a *dead*
+    /// aggregate at a struct/tuple literal (place-level move): the copy is elided
+    /// exactly as for a whole-local final-use move, but for a projection.
+    move_eligible_place_spans: IndexSet<crate::token::Span>,
     /// Locals whose binding copy is elided by sharing the source storage
     /// (WEP 2026-05-21 read-only-share): a read-only local bound from a
     /// projection whose storage is provably never mutated while it is live.
@@ -331,7 +335,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 .chain(func.locals.iter().map(|l| l.type_id))
                 .any(|tid| value_copy::needs_value_copy(tid, &tt))
         };
-        let move_eligible_locals = if needs_copy_analysis {
+        let move_eligible = if needs_copy_analysis {
             let oracle = value_copy::ownership::OwnedCalls::new(
                 &base.value_copy.returns_owned,
                 &base.value_copy.returns_self_projection,
@@ -340,12 +344,14 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 func,
                 &oracle,
                 &base.type_table.borrow(),
-                &base.value_copy.functions_with_stores,
+                &base.value_copy.stored_params,
                 &base.value_copy.mut_receiver_methods,
             )
         } else {
-            IndexSet::default()
+            value_copy::last_use::MoveEligible::default()
         };
+        let move_eligible_locals = move_eligible.locals;
+        let move_eligible_place_spans = move_eligible.place_spans;
         let share_eligible_locals = if needs_copy_analysis {
             value_copy::last_use::compute_share_eligible(
                 func,
@@ -373,6 +379,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             address_taken,
             func_moved_spans,
             move_eligible_locals,
+            move_eligible_place_spans,
             share_eligible_locals,
             alias_components,
             arena: RefCell::new(Body::empty()),
@@ -394,6 +401,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             address_taken: IndexSet::default(),
             func_moved_spans: None,
             move_eligible_locals: IndexSet::default(),
+            move_eligible_place_spans: IndexSet::default(),
             share_eligible_locals: IndexSet::default(),
             alias_components: value_copy::last_use::AliasComponents::empty(),
             arena: RefCell::new(Body::empty()),
@@ -619,9 +627,15 @@ impl FunctionTranslator<'_, '_> {
         value_copy::analyze::should_wrap(value, &self.base.type_table.borrow(), &oracle)
     }
 
-    /// Whether `value` is a whole-local read that the last-use analysis marked
-    /// as the local's final use, so its consumption is a move rather than a copy.
+    /// Whether `value` is a move rather than a copy: a whole-local read at its
+    /// final use, or a field / whole-value materialization that aliases out of a
+    /// dead aggregate at a literal (place-level move, keyed by span).
     fn is_last_use_move(&self, value: &TirExpr) -> bool {
+        // Place-level move: the literal scan proved this exact materialization
+        // aliases a dead aggregate. Covers both `base.field` and a whole `base`.
+        if self.move_eligible_place_spans.contains(&value.span) {
+            return true;
+        }
         let TirExprKind::Local { index, .. } = &value.kind else {
             return false;
         };
