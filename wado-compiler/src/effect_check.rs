@@ -1266,8 +1266,8 @@ pub fn check_stores_semantic(sem: &Semantics) -> Vec<StoresError> {
         return out;
     };
 
-    let oracle = StoresOracle::build(sem, state);
     let tyctx = TypeRefCtx::build(sem, state);
+    let oracle = StoresOracle::build(sem, state, &tyctx);
 
     for (src, module) in &sem.modules {
         if !crate::elaborator::liveness::is_user_authored(src) {
@@ -1306,10 +1306,21 @@ struct StoresOracle {
     fn_stores: IndexMap<AstId, Vec<u32>>,
     /// `(module, mangled name)` → declared stored positions (method dispatch).
     mangled_stores: IndexMap<(ModuleSource, String), Vec<u32>>,
+    /// Function decl / variant-case [`AstId`] → parameter positions the return
+    /// value may borrow (return provenance). Distinct from `stores`: `stores`
+    /// describes external persistence, while this describes what the result
+    /// holds, so a call folds its arguments here to know what the result carries.
+    fn_returns: IndexMap<AstId, IndexSet<u32>>,
+    /// `(module, mangled name)` → return-provenance positions (method dispatch).
+    mangled_returns: IndexMap<(ModuleSource, String), IndexSet<u32>>,
 }
 
 impl StoresOracle {
-    fn build(sem: &Semantics, state: &crate::elaborator::orchestration::AnnotateState) -> Self {
+    fn build(
+        sem: &Semantics,
+        state: &crate::elaborator::orchestration::AnnotateState,
+        tyctx: &TypeRefCtx,
+    ) -> Self {
         let mut fn_stores: IndexMap<AstId, Vec<u32>> = IndexMap::default();
         let record = |func: &Function, fn_stores: &mut IndexMap<AstId, Vec<u32>>| {
             let positions: Vec<u32> = func
@@ -1351,10 +1362,271 @@ impl StoresOracle {
             }
         }
 
+        let (fn_returns, mangled_returns) = build_returns(sem, state, tyctx);
+
         Self {
             fn_stores,
             mangled_stores,
+            fn_returns,
+            mangled_returns,
         }
+    }
+}
+
+/// All functions declared by an item (free function, `impl` methods, `trait`
+/// methods), for uniform iteration in the stores/returns builders.
+fn functions_of(item: &Item) -> Vec<&Function> {
+    match item {
+        Item::Function(func) => vec![func],
+        Item::Impl(impl_block) => impl_block.methods.iter().collect(),
+        Item::Trait(trait_decl) => trait_decl.methods.iter().collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// Least-fixpoint return provenance: for every function / constructor, the
+/// parameter positions its return value may borrow. The value-copy optimizer
+/// trusts a functor slot's `stores`, and the escape walk folds a call's
+/// arguments at these positions to decide what the result carries, so this must
+/// be a sound upper bound.
+///
+/// Seeds:
+/// - Variant / enum constructors wrap their single payload argument into the
+///   result, so a payload-bearing case borrows position 0.
+/// - A bodyless callee (intrinsic such as `array_get_ref`) is unanalyzable;
+///   conservatively its result may borrow any reference-holding argument.
+///
+/// Bodied functions start at ∅ and grow: each round re-derives a function's
+/// return provenance from its `return` / `task return` values (with `let` and
+/// whole-local-assign carry propagation), folding nested calls at the callees'
+/// current provenance, until no set changes.
+fn build_returns(
+    sem: &Semantics,
+    state: &crate::elaborator::orchestration::AnnotateState,
+    tyctx: &TypeRefCtx,
+) -> (
+    IndexMap<AstId, IndexSet<u32>>,
+    IndexMap<(ModuleSource, String), IndexSet<u32>>,
+) {
+    let mut fn_returns: IndexMap<AstId, IndexSet<u32>> = IndexMap::default();
+
+    for (src, module) in &sem.modules {
+        let annotations = state.module_semantics.get(src).map(|m| &m.types);
+        for item in &module.items {
+            for func in functions_of(item) {
+                let seed = if func.body.is_some() {
+                    IndexSet::default()
+                } else {
+                    bodyless_returns(func, annotations, sem, tyctx)
+                };
+                fn_returns.insert(func.id, seed);
+            }
+        }
+    }
+
+    for variants in state.tysys.all_variant_cases.values() {
+        for info in variants.values() {
+            for case in &info.cases {
+                let mut positions = IndexSet::default();
+                if !matches!(sem.types.get(case.payload), ResolvedType::Unit) {
+                    positions.insert(0);
+                }
+                fn_returns.insert(case.ast_id, positions);
+            }
+        }
+    }
+
+    loop {
+        let mangled_returns = rebuild_mangled_returns(&fn_returns, state);
+        let mut changed = false;
+        for (src, module) in &sem.modules {
+            let Some(annotations) = state.module_semantics.get(src).map(|m| &m.types) else {
+                continue;
+            };
+            for item in &module.items {
+                for func in functions_of(item) {
+                    let Some(body) = &func.body else {
+                        continue;
+                    };
+                    let computed = compute_fn_returns(
+                        func,
+                        body,
+                        sem,
+                        annotations,
+                        tyctx,
+                        &fn_returns,
+                        &mangled_returns,
+                    );
+                    let entry = fn_returns.entry(func.id).or_default();
+                    for pos in computed {
+                        changed |= entry.insert(pos);
+                    }
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
+    let mangled_returns = rebuild_mangled_returns(&fn_returns, state);
+    (fn_returns, mangled_returns)
+}
+
+/// `(module, mangled name)` → return provenance, mirroring how `mangled_stores`
+/// is built from `fn_stores`.
+fn rebuild_mangled_returns(
+    fn_returns: &IndexMap<AstId, IndexSet<u32>>,
+    state: &crate::elaborator::orchestration::AnnotateState,
+) -> IndexMap<(ModuleSource, String), IndexSet<u32>> {
+    let mut mangled: IndexMap<(ModuleSource, String), IndexSet<u32>> = IndexMap::default();
+    for (src, module_sem) in &state.module_semantics {
+        for (key, names) in &module_sem.types.method_names {
+            if let Some(positions) = fn_returns.get(key) {
+                mangled.insert((src.clone(), names.mangled.clone()), positions.clone());
+            }
+        }
+    }
+    mangled
+}
+
+/// Conservative return provenance of a bodyless callee: its result may borrow
+/// any argument whose type can hold a reference. Sound over-approximation for
+/// intrinsics whose body the checker cannot inspect.
+fn bodyless_returns(
+    func: &Function,
+    annotations: Option<&crate::elaborator::sem::types::TypeAnnotations>,
+    sem: &Semantics,
+    tyctx: &TypeRefCtx,
+) -> IndexSet<u32> {
+    let Some(param_types) = annotations.and_then(|a| a.fn_param_types.get(&func.id)) else {
+        return (0..u32::try_from(func.params.len()).unwrap()).collect();
+    };
+    param_types
+        .iter()
+        .enumerate()
+        .filter(|&(_, &ty)| tyctx.can_hold_ref(&sem.types, ty))
+        .map(|(i, _)| u32::try_from(i).unwrap())
+        .collect()
+}
+
+/// Return provenance of one bodied function: the parameter positions its
+/// `return` / `task return` values may borrow, using the current global
+/// provenance snapshot for nested calls.
+fn compute_fn_returns(
+    func: &Function,
+    body: &ast::Block,
+    sem: &Semantics,
+    annotations: &crate::elaborator::sem::types::TypeAnnotations,
+    tyctx: &TypeRefCtx,
+    fn_returns: &IndexMap<AstId, IndexSet<u32>>,
+    mangled_returns: &IndexMap<(ModuleSource, String), IndexSet<u32>>,
+) -> IndexSet<u32> {
+    let param_types = annotations
+        .fn_param_types
+        .get(&func.id)
+        .map_or(&[][..], Vec::as_slice);
+    let mut carries: IndexMap<AstId, IndexSet<u32>> = IndexMap::default();
+    for (i, (param, &type_id)) in func.params.iter().zip(param_types.iter()).enumerate() {
+        if matches!(
+            sem.types.get(type_id),
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+        ) {
+            carries
+                .entry(param.id)
+                .or_default()
+                .insert(u32::try_from(i).unwrap());
+        }
+    }
+    let mut flow = ReturnFlow {
+        sem,
+        annotations,
+        tyctx,
+        fn_returns,
+        mangled_returns,
+        carries,
+        result: IndexSet::default(),
+    };
+    ast::walk_block(&mut flow, body);
+    flow.result
+}
+
+/// Collects return provenance over a function body: seeded with the function's
+/// reference parameters, it propagates carries through `let` / whole-local
+/// assignments and unions the carries of each `return` / `task return` value.
+/// A nested closure is not descended into — its `return` is its own.
+struct ReturnFlow<'a> {
+    sem: &'a Semantics,
+    annotations: &'a crate::elaborator::sem::types::TypeAnnotations,
+    tyctx: &'a TypeRefCtx,
+    fn_returns: &'a IndexMap<AstId, IndexSet<u32>>,
+    mangled_returns: &'a IndexMap<(ModuleSource, String), IndexSet<u32>>,
+    carries: IndexMap<AstId, IndexSet<u32>>,
+    result: IndexSet<u32>,
+}
+
+impl ReturnFlow<'_> {
+    fn carries(&self, expr: &Expr) -> IndexSet<u32> {
+        carries_of(
+            expr,
+            self.sem,
+            self.tyctx,
+            self.annotations,
+            self.fn_returns,
+            self.mangled_returns,
+            &self.carries,
+        )
+    }
+}
+
+impl AstVisitor for ReturnFlow<'_> {
+    fn visit_stmt(&mut self, stmt: &Stmt) {
+        match stmt {
+            Stmt::Let(let_stmt) => {
+                if let Some(value) = &let_stmt.value {
+                    let carried = self.carries(value);
+                    if !carried.is_empty()
+                        && let Some(binding) = pattern_binding_id(&let_stmt.pattern)
+                    {
+                        self.carries.entry(binding).or_default().extend(carried);
+                    }
+                }
+            }
+            Stmt::Return(ret) => {
+                if let Some(value) = &ret.value {
+                    let carried = self.carries(value);
+                    self.result.extend(carried);
+                }
+            }
+            Stmt::TaskReturn(task) => {
+                let carried = self.carries(&task.value);
+                self.result.extend(carried);
+            }
+            _ => {}
+        }
+        ast::walk_stmt(self, stmt);
+    }
+
+    fn visit_expr(&mut self, expr: &Expr) {
+        match expr {
+            Expr::Closure(_) => return,
+            Expr::Assign(assign) => {
+                let carried = self.carries(&assign.value);
+                if !carried.is_empty() {
+                    let (root, through_deref) = place_root_of(&assign.target);
+                    if let Some(ident) = root
+                        && !through_deref
+                        && global_name_of(ident, self.annotations).is_none()
+                        && !ident_is_ref_of(ident, self.sem)
+                        && let Some(def) = self.sem.references.get(&ident.id)
+                    {
+                        self.carries.entry(*def).or_default().extend(carried);
+                    }
+                }
+            }
+            _ => {}
+        }
+        ast::walk_expr(self, expr);
     }
 }
 
@@ -1597,6 +1869,271 @@ struct RefFlow<'a, 'b> {
     seen: IndexSet<(usize, String)>,
 }
 
+/// A resolved call's return-provenance positions and its arguments in
+/// callee-position order (position 0 is a method receiver). The result value
+/// provably borrows the arguments at `returned`.
+struct ReturnedCall<'e> {
+    returned: IndexSet<u32>,
+    args: Vec<&'e Expr>,
+}
+
+/// Type of `expr`, preferring a binding's declared type (parameters and
+/// function-typed locals live in `local_types`, keyed by the binding's def)
+/// over the expression's recorded type.
+fn expr_type_of(expr: &Expr, sem: &Semantics) -> Option<TypeId> {
+    if let Expr::Ident(ident) = expr
+        && let Some(def) = sem.references.get(&ident.id)
+        && let Some(&ty) = sem.local_types.get(def)
+    {
+        return Some(ty);
+    }
+    sem.expression_types.get(&expr.id()).copied()
+}
+
+/// Type of an indirect call's callee identifier (a functor local / param).
+fn indirect_callee_type_of(callee: &Expr, sem: &Semantics) -> Option<TypeId> {
+    if let Expr::Ident(ident) = callee
+        && let Some(def) = sem.references.get(&ident.id)
+        && let Some(&ty) = sem.local_types.get(def)
+    {
+        return Some(ty);
+    }
+    sem.expression_types.get(&callee.id()).copied()
+}
+
+/// The parameter positions the *place* operand of `&` is rooted at, ignoring
+/// the place's own type (`&p.field` roots at `p`).
+fn place_roots_of(
+    place: &Expr,
+    sem: &Semantics,
+    carries: &IndexMap<AstId, IndexSet<u32>>,
+) -> IndexSet<u32> {
+    match place {
+        Expr::Ident(ident) => sem
+            .references
+            .get(&ident.id)
+            .and_then(|def| carries.get(def))
+            .cloned()
+            .unwrap_or_default(),
+        Expr::Unary(u) if u.op == ast::UnaryOp::Deref => place_roots_of(&u.expr, sem, carries),
+        Expr::FieldAccess(f) => place_roots_of(&f.expr, sem, carries),
+        Expr::Index(i) => place_roots_of(&i.expr, sem, carries),
+        Expr::Cast(c) => place_roots_of(&c.expr, sem, carries),
+        _ => IndexSet::default(),
+    }
+}
+
+/// Deepest identifier of an assignment target place, and whether the path
+/// crossed a dereference (a write through a reference). Pure over the AST.
+fn place_root_of(place: &Expr) -> (Option<&ast::IdentExpr>, bool) {
+    match place {
+        Expr::Ident(ident) => (Some(ident), false),
+        Expr::Unary(u) if u.op == ast::UnaryOp::Deref => {
+            let (root, _) = place_root_of(&u.expr);
+            (root, true)
+        }
+        Expr::FieldAccess(f) => place_root_of(&f.expr),
+        Expr::Index(i) => place_root_of(&i.expr),
+        Expr::Cast(c) => place_root_of(&c.expr),
+        _ => (None, false),
+    }
+}
+
+/// The global's name if this identifier resolves to a module global l-value.
+fn global_name_of(
+    ident: &ast::IdentExpr,
+    annotations: &crate::elaborator::sem::types::TypeAnnotations,
+) -> Option<String> {
+    match annotations.assign_places.get(&ident.id) {
+        Some(crate::elaborator::sem::types::AssignPlace::Global { name, .. }) => Some(name.clone()),
+        _ => None,
+    }
+}
+
+/// Whether an identifier's binding is a reference (`&T` / `&mut T`).
+fn ident_is_ref_of(ident: &ast::IdentExpr, sem: &Semantics) -> bool {
+    sem.references
+        .get(&ident.id)
+        .and_then(|def| sem.local_types.get(def))
+        .is_some_and(|&ty| {
+            matches!(
+                sem.types.get(ty),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            )
+        })
+}
+
+/// Return provenance of a callee identifier that names a free function or a
+/// variant / enum constructor case. Tries the whole-path id then each segment
+/// id, returning the first that resolves (through `references`) to a decl / case
+/// id present in `fn_returns`.
+fn ident_returns(
+    ident: &ast::IdentExpr,
+    sem: &Semantics,
+    fn_returns: &IndexMap<AstId, IndexSet<u32>>,
+) -> Option<IndexSet<u32>> {
+    std::iter::once(ident.id)
+        .chain(ident.segments.iter().map(|s| s.id))
+        .find_map(|use_id| {
+            sem.references
+                .get(&use_id)
+                .and_then(|def| fn_returns.get(def))
+                .cloned()
+        })
+}
+
+/// The parameter positions a call's *result* provably borrows, and the call's
+/// arguments in callee-position order. Mirrors `call_stored_args` but reads the
+/// per-function return provenance (`fn_returns` / `mangled_returns`) instead of
+/// declared `stores`: a result borrows an argument only at the positions the
+/// callee's return value borrows. A variant / enum constructor call resolves to
+/// its case decl id. An unresolvable direct callee borrows nothing. A functor
+/// callee is bounded by its slot's declared `stores`: obligation #2 and functor
+/// coercion already reject any function / closure that returns a borrow of a
+/// reference argument the slot does not store, so those positions soundly bound
+/// what the result can borrow (a functor slot with no `stores` on that ref
+/// parameter cannot leak it into the result).
+fn resolve_returned_args<'e>(
+    expr: &'e Expr,
+    sem: &Semantics,
+    annotations: &crate::elaborator::sem::types::TypeAnnotations,
+    fn_returns: &IndexMap<AstId, IndexSet<u32>>,
+    mangled_returns: &IndexMap<(ModuleSource, String), IndexSet<u32>>,
+) -> Option<ReturnedCall<'e>> {
+    let mangled = |func_ref: &FunctionRef| -> IndexSet<u32> {
+        mangled_returns
+            .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
+            .cloned()
+            .unwrap_or_default()
+    };
+    match expr {
+        Expr::Call(call) => {
+            let args: Vec<&Expr> = call.args.iter().collect();
+            if let Expr::Ident(ident) = &call.callee
+                && let Some(returned) = ident_returns(ident, sem, fn_returns)
+            {
+                return Some(ReturnedCall { returned, args });
+            }
+            if let Some(func_ref) = annotations
+                .static_method_dispatch
+                .get(&call.id)
+                .map(|d| &d.function_ref)
+            {
+                return Some(ReturnedCall {
+                    returned: mangled(func_ref),
+                    args,
+                });
+            }
+            if let Some(callee_ty) = indirect_callee_type_of(&call.callee, sem) {
+                let returned = match sem.types.get(callee_ty) {
+                    ResolvedType::Function { stores, .. } => stores.iter().copied().collect(),
+                    _ => (0..u32::try_from(args.len()).unwrap()).collect(),
+                };
+                return Some(ReturnedCall { returned, args });
+            }
+            Some(ReturnedCall {
+                returned: IndexSet::default(),
+                args,
+            })
+        }
+        Expr::MethodCall(mc) => {
+            let mut args: Vec<&Expr> = vec![&mc.receiver];
+            args.extend(mc.args.iter());
+            let returned = sem
+                .method_dispatch
+                .get(&mc.id)
+                .map(|d| mangled(&d.function_ref))
+                .unwrap_or_default();
+            Some(ReturnedCall { returned, args })
+        }
+        Expr::StaticMethodCall(sc) => {
+            let args: Vec<&Expr> = sc.args.iter().collect();
+            let returned = annotations
+                .static_method_dispatch
+                .get(&sc.id)
+                .map(|d| mangled(&d.function_ref))
+                .unwrap_or_default();
+            Some(ReturnedCall { returned, args })
+        }
+        _ => None,
+    }
+}
+
+/// Parameter positions the reference produced by `expr` carries — the shared
+/// reference-flow used by both the escape walk and the return-provenance
+/// fixpoint. A value whose type cannot hold a reference carries nothing. Only
+/// `&place` roots at a parameter; reading a reference-typed field / element /
+/// deref yields a reference to a *separate* object, so it carries nothing. A
+/// cast preserves reference identity; an aggregate literal unions its fields; a
+/// call folds its arguments at the callee's return-provenance positions.
+#[allow(clippy::too_many_arguments)]
+fn carries_of(
+    expr: &Expr,
+    sem: &Semantics,
+    tyctx: &TypeRefCtx,
+    annotations: &crate::elaborator::sem::types::TypeAnnotations,
+    fn_returns: &IndexMap<AstId, IndexSet<u32>>,
+    mangled_returns: &IndexMap<(ModuleSource, String), IndexSet<u32>>,
+    carries: &IndexMap<AstId, IndexSet<u32>>,
+) -> IndexSet<u32> {
+    match expr_type_of(expr, sem) {
+        Some(ty) if tyctx.can_hold_ref(&sem.types, ty) => {}
+        _ => return IndexSet::default(),
+    }
+    let recurse = |e: &Expr| {
+        carries_of(
+            e,
+            sem,
+            tyctx,
+            annotations,
+            fn_returns,
+            mangled_returns,
+            carries,
+        )
+    };
+    match expr {
+        Expr::Ident(ident) => sem
+            .references
+            .get(&ident.id)
+            .and_then(|def| carries.get(def))
+            .cloned()
+            .unwrap_or_default(),
+        Expr::Unary(u) if matches!(u.op, ast::UnaryOp::Ref | ast::UnaryOp::MutRef) => {
+            place_roots_of(&u.expr, sem, carries)
+        }
+        Expr::Cast(c) => recurse(&c.expr),
+        Expr::Call(_) | Expr::MethodCall(_) | Expr::StaticMethodCall(_) => {
+            let Some(call) =
+                resolve_returned_args(expr, sem, annotations, fn_returns, mangled_returns)
+            else {
+                return IndexSet::default();
+            };
+            let mut acc = IndexSet::default();
+            for (pos, arg) in call.args.iter().enumerate() {
+                if call.returned.contains(&u32::try_from(pos).unwrap()) {
+                    acc.extend(recurse(arg));
+                }
+            }
+            acc
+        }
+        Expr::StructLiteral(lit) => {
+            let mut acc = IndexSet::default();
+            for field in &lit.fields {
+                acc.extend(recurse(&field.value));
+            }
+            acc
+        }
+        Expr::TupleLiteral(t) => {
+            let mut acc = IndexSet::default();
+            for el in &t.elements {
+                acc.extend(recurse(el));
+            }
+            acc
+        }
+        _ => IndexSet::default(),
+    }
+}
+
 impl RefFlow<'_, '_> {
     fn expr_type(&self, expr: &Expr) -> Option<TypeId> {
         if let Expr::Ident(ident) = expr
@@ -1608,79 +2145,19 @@ impl RefFlow<'_, '_> {
         self.ctx.sem.expression_types.get(&expr.id()).copied()
     }
 
-    /// Parameter positions the reference produced by `expr` carries. A value
-    /// whose type cannot hold a reference carries nothing.
+    /// Parameter positions the reference produced by `expr` carries — the escape
+    /// walk's view, sharing [`carries_of`] with the return-provenance fixpoint so
+    /// both fold calls at the same return-provenance positions.
     fn carries(&self, expr: &Expr) -> IndexSet<u32> {
-        match self.expr_type(expr) {
-            Some(ty) if self.ctx.tyctx.can_hold_ref(&self.ctx.sem.types, ty) => {}
-            _ => return IndexSet::default(),
-        }
-        match expr {
-            Expr::Ident(ident) => self
-                .ctx
-                .sem
-                .references
-                .get(&ident.id)
-                .and_then(|def| self.carries.get(def))
-                .cloned()
-                .unwrap_or_default(),
-            // Only `&place` roots at a parameter. Reading a reference-typed
-            // field / element / deref (`self.w`, `xs[i]`, `*q`) yields the
-            // reference stored there, which points at a *separate* object, not
-            // at the container's parameter — so it carries nothing.
-            Expr::Unary(u) if matches!(u.op, ast::UnaryOp::Ref | ast::UnaryOp::MutRef) => {
-                self.place_roots(&u.expr)
-            }
-            // A cast preserves reference identity.
-            Expr::Cast(c) => self.carries(&c.expr),
-            Expr::Call(_) | Expr::MethodCall(_) | Expr::StaticMethodCall(_) => {
-                let Some(call) = self.call_stored_args(expr) else {
-                    return IndexSet::default();
-                };
-                let mut acc = IndexSet::default();
-                for (pos, arg) in call.args.iter().enumerate() {
-                    if call.stored.contains(&u32::try_from(pos).unwrap()) {
-                        acc.extend(self.carries(arg));
-                    }
-                }
-                acc
-            }
-            Expr::StructLiteral(lit) => {
-                let mut acc = IndexSet::default();
-                for field in &lit.fields {
-                    acc.extend(self.carries(&field.value));
-                }
-                acc
-            }
-            Expr::TupleLiteral(t) => {
-                let mut acc = IndexSet::default();
-                for el in &t.elements {
-                    acc.extend(self.carries(el));
-                }
-                acc
-            }
-            _ => IndexSet::default(),
-        }
-    }
-
-    /// The parameter positions the *place* operand of `&` is rooted at,
-    /// ignoring the place's own type (`&p.field` roots at `p`).
-    fn place_roots(&self, place: &Expr) -> IndexSet<u32> {
-        match place {
-            Expr::Ident(ident) => self
-                .ctx
-                .sem
-                .references
-                .get(&ident.id)
-                .and_then(|def| self.carries.get(def))
-                .cloned()
-                .unwrap_or_default(),
-            Expr::Unary(u) if u.op == ast::UnaryOp::Deref => self.place_roots(&u.expr),
-            Expr::FieldAccess(f) => self.place_roots(&f.expr),
-            Expr::Index(i) => self.place_roots(&i.expr),
-            Expr::Cast(c) => self.place_roots(&c.expr),
-            _ => IndexSet::default(),
-        }
+        carries_of(
+            expr,
+            self.ctx.sem,
+            self.ctx.tyctx,
+            self.ctx.annotations,
+            &self.ctx.oracle.fn_returns,
+            &self.ctx.oracle.mangled_returns,
+            &self.carries,
+        )
     }
 
     /// `None` when `expr` is not a call. An unresolvable direct callee is

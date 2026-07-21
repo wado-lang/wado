@@ -1,0 +1,31 @@
+// Benign: a closure passes its reference parameter to a function returning a
+// fresh, non-reference-holding value. `fresh(q)` borrows nothing (its result
+// is an owned `Owned`), so nothing escapes — this must compile without a
+// false-positive stores violation.
+
+struct Node {
+    v: i32,
+}
+
+struct Owned {
+    v: i32,
+}
+
+fn fresh(n: &Node) -> Owned {
+    return Owned { v: n.v };
+}
+
+fn apply(f: fn(&Node), n: &Node) {
+    f(n);
+}
+
+export fn run() {
+    let node = Node { v: 7 };
+    apply(|q: &Node| {
+        let _ = fresh(q);
+    }, &node);
+    assert node.v == 7;
+}
+
+__DATA__
+{"stdout": ""}

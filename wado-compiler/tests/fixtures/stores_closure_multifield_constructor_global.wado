@@ -1,0 +1,27 @@
+// Stores violation: a closure wraps its reference parameter into a multi-field
+// variant case (a single tuple payload) and stores it in a global. `q` sits at
+// tuple position 1, so the reference-flow must descend into the tuple to flag it.
+
+struct Node {
+    v: i32,
+}
+
+variant Holder {
+    Pair([i32, &Node]),
+}
+
+global mut STASH: Option<Holder> = Option::None;
+
+fn apply(f: fn(&Node), n: &Node) {
+    f(n);
+}
+
+export fn run() {
+    let node = Node { v: 1 };
+    apply(|q: &Node| {
+        STASH = Option::Some(Holder::Pair([1, q]));
+    }, &node);
+}
+
+__DATA__
+{"compile_error": "closure may not store reference parameter 'q'"}

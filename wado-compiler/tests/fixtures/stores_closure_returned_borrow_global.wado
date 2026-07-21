@@ -1,0 +1,31 @@
+// Stores violation: a closure persists a borrow returned by a plain function.
+// `get_ref(q)` returns a managed borrow of `q` (position 0), so storing its
+// result in a global persists the closure's reference parameter — flagged.
+
+struct Inner {
+    w: i32,
+}
+
+struct Node {
+    inner: Inner,
+}
+
+global mut GLOBAL: &Inner = &Inner { w: 0 };
+
+fn get_ref(n: &Node) -> &Inner {
+    return &n.inner;
+}
+
+fn apply(f: fn(&Node), n: &Node) {
+    f(n);
+}
+
+export fn run() {
+    let node = Node { inner: Inner { w: 1 } };
+    apply(|q: &Node| {
+        GLOBAL = get_ref(q);
+    }, &node);
+}
+
+__DATA__
+{"compile_error": "closure may not store reference parameter 'q'"}
