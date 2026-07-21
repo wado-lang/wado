@@ -86,6 +86,14 @@ Removes all key-value pairs from the map.
 
 ##### `fn index_value(&self, key: K) -> Self::Output`
 
+#### `impl IndexRef<K> for TreeMap<K, V>`
+
+##### `fn index_ref(&self, key: K) -> &V`
+
+#### `impl IndexMutRef<K> for TreeMap<K, V>`
+
+##### `fn index_mut_ref(&mut self, key: K) -> &mut V`
+
 #### `impl KeyValueLiteralBuilder for TreeMap<String, V>`
 
 ##### `fn new_literal(capacity: i32) -> TreeMap<String, V>`

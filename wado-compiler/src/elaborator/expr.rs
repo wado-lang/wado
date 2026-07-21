@@ -1629,7 +1629,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 base_type_id,
                 &lookup_name,
                 lookup_type_id,
-                |s, n, t| s.find_index_assign_trait_impl(n, t),
+                super::Elaborator::find_index_assign_trait_impl,
             )
             .and_then(|i| i.index_type)
         })

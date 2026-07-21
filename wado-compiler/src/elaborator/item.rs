@@ -1461,8 +1461,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for (i, arg) in generic.args.iter().enumerate() {
                 if let ast::Type::Named(named) = arg {
                     let name = &named.name;
-                    let is_declared_param =
-                        impl_declared_params.iter().any(|p| &p.name == name);
+                    let is_declared_param = impl_declared_params.iter().any(|p| &p.name == name);
                     if !scope.annotate_ctx.trait_ctx.type_params.contains_key(name)
                         && (is_declared_param
                             || !scope
