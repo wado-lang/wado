@@ -1,8 +1,4 @@
-// Phase 2 (place-level value-copy move, whole-local): `Wrap::new` stores its
-// by-value `data` into a field via shorthand, then reads it again through a
-// pure `.len()` for a sibling field. `data` is dead after the literal, and the
-// trailing read is non-mutating, so aliasing (moving) `data` into the field is
-// sound -- no deep copy. Mirrors `Parser::new(tokens)` in the Gale parser.
+// A by-value field stored via shorthand then read by a pure sibling read moves instead of deep-copying.
 
 use { println, Stdout } from "core:cli";
 

@@ -1,10 +1,4 @@
-// Phase 1 (place-level value-copy move): a struct read only through distinct
-// field projections of a *dead* aggregate moves each field's storage out
-// instead of deep-copying it. `split`'s `c` is dead after the return and its
-// `a`/`b` are disjoint fields, so `Out { x: c.a, y: c.b }` aliases them.
-//
-// The move fold runs during TIR->NIR lowering (all -O levels), so the
-// `$value_copy$` helper must be absent even at -O0.
+// Distinct field projections of a dead aggregate move each field's storage out instead of deep-copying (all -O levels).
 
 use { println, Stdout } from "core:cli";
 

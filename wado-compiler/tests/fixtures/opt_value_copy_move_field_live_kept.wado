@@ -1,7 +1,4 @@
-// Negative control for place-level move: when the aggregate is still live after
-// the materialization, the field copy must be KEPT. Here `c` is read again
-// (`c.a.len()`) after `Out { x: c.a, .. }`, so aliasing `c.a` into `o.x` would
-// let the later `o.x.push` corrupt `c.a`. The deep copy must remain.
+// When the aggregate is still live after the materialization, the field copy must be kept.
 
 use { println, Stdout } from "core:cli";
 

@@ -179,7 +179,6 @@ pub(super) fn check_assignable(
         if actual_params.len() != expected_params.len() {
             return TypeCheckResult::Incompatible;
         }
-        // A functor is assignable only if `actual.stores ⊆ expected.stores`.
         if actual_stores.iter().any(|p| !expected_stores.contains(p)) {
             return TypeCheckResult::Incompatible;
         }

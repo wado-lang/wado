@@ -1332,7 +1332,6 @@ impl StoresOracle {
                 .collect();
             fn_stores.insert(func.id, positions);
         };
-        // Every module (including stdlib) so cross-module callees resolve.
         for module in sem.modules.values() {
             for item in &module.items {
                 match item {
@@ -1709,9 +1708,7 @@ impl TypeRefCtx {
                 .variant_payloads
                 .get(&(module_source.clone(), name.clone()))
                 .is_some_and(|payloads| payloads.iter().any(|t| self.walk(tt, *t, visited))),
-            // A functor is a value (`funcref`); storing it needs no `stores`.
             ResolvedType::Function { .. } => false,
-            // Pre-mono / unresolved: conservatively assume a reference may appear.
             ResolvedType::TypeParam { .. }
             | ResolvedType::TypePack { .. }
             | ResolvedType::AssocTypeProjection { .. }
@@ -1743,22 +1740,17 @@ impl StoresCtx<'_> {
         let Some(body) = &func.body else {
             return;
         };
-        // `#[ambient]` bypasses the reference discipline; test helpers are exempt.
         if func.attrs.iter().any(|attr| attr.name == "ambient")
             || func.name.starts_with("__test_")
         {
             return;
         }
-        // Default to no param types so a function with none still gets walked —
-        // the walk must run to discover closure literals for obligation #2.
         let param_types = self
             .annotations
             .fn_param_types
             .get(&func.id)
             .map_or(&[][..], Vec::as_slice);
 
-        // Seed carries with the reference parameters (only `&T` / `&mut T` can
-        // be stored). `allowed` are the declared-`stores` positions.
         let mut carries: IndexMap<AstId, IndexSet<u32>> = IndexMap::default();
         let mut names: IndexMap<u32, String> = IndexMap::default();
         let mut allowed: IndexSet<u32> = IndexSet::default();
@@ -1776,10 +1768,6 @@ impl StoresCtx<'_> {
             }
         }
 
-        // Always walk: obligation #1 sinks fire only for the seeded reference
-        // parameters, but the walk also discovers closure literals (checked as
-        // their own entity for obligation #2), so it must run even for a
-        // function with no reference parameters.
         let mut walker = RefFlow {
             ctx: self,
             carries,
@@ -1827,7 +1815,6 @@ impl StoresCtx<'_> {
             out,
             seen: IndexSet::default(),
         };
-        // The closure body's value is an implicit return sink.
         walker.sink_return(&closure.body);
         walker.visit_expr(&closure.body);
     }
@@ -2374,9 +2361,6 @@ impl RefFlow<'_, '_> {
             else {
                 continue;
             };
-            // A closure argument is checked as its own entity; only a named
-            // function reference (an identifier resolving to a function decl)
-            // carries a declared `stores` to compare here.
             let Expr::Ident(ident) = arg else {
                 continue;
             };
@@ -2447,8 +2431,6 @@ impl AstVisitor for RefFlow<'_, '_> {
 
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
-            // A closure is checked as its own entity (obligation #2); do not
-            // descend — its `return` is not the enclosing entity's sink.
             Expr::Closure(closure) => {
                 self.ctx.check_closure(closure, self.out);
                 return;
@@ -2473,18 +2455,12 @@ impl AstVisitor for RefFlow<'_, '_> {
                             if let Some(name) = self.global_name(ident) {
                                 self.mark(&carried, span, &Sink::Global(&name));
                             } else if is_ident(&assign.target) && !through_deref {
-                                // Whole-local rebind (`r = value`): the local now
-                                // carries the reference (not a write through it).
                                 if let Some(def) = self.ctx.sem.references.get(&ident.id) {
                                     self.carries.entry(*def).or_default().extend(carried);
                                 }
                             } else if through_deref || self.ident_is_ref(ident) {
-                                // Writing into `*ref` / `ref.field` / a `&mut self`
-                                // field persists into caller-visible memory.
                                 self.mark(&carried, span, &Sink::ThroughRef);
                             } else if let Some(def) = self.ctx.sem.references.get(&ident.id) {
-                                // A field / index of a plain local: the local now
-                                // carries the reference.
                                 self.carries.entry(*def).or_default().extend(carried);
                             }
                         }
@@ -2492,10 +2468,6 @@ impl AstVisitor for RefFlow<'_, '_> {
                     }
                 }
             }
-            // Obligation #2 for a named-function reference: passing `fn_ref` to
-            // a functor parameter whose declared `stores` is narrower is unsound
-            // (the optimization trusts the slot's `stores`). The function's own
-            // `stores` was verified honest by obligation #1.
             Expr::Call(call) => {
                 self.check_functor_coercion(call);
                 self.sink_call_args(expr);

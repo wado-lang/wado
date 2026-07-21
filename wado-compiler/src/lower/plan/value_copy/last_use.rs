@@ -275,13 +275,6 @@ pub fn compute_move_eligible(
         })
         .collect();
 
-    // Place-level move: a field / whole-value materialization out of a *dead*
-    // aggregate at a literal. The literal scan already proved the aggregate dead
-    // after the literal and the sibling reads non-conflicting; here we add the
-    // owned-storage guards (same as whole-local move, minus the final-read one —
-    // the aggregate is read multiple times, but every read sits at the dead-out
-    // consumption point). `non_final` is intentionally not checked: the aggregate
-    // is legitimately read across its fields.
     let place_spans: IndexSet<crate::token::Span> = a
         .place_cands
         .iter()
@@ -880,11 +873,6 @@ impl Analyzer<'_> {
                 return_type,
                 ..
             } => {
-                // A functor with a bare `&T` / `&mut T` return may hand back a
-                // borrow of an argument without declaring a store (a plain
-                // reference return is a managed borrow, not persistence). That
-                // borrow could outlive the call and alias a moved-out field, so
-                // such a functor is not trusted — its arguments keep their copies.
                 if matches!(
                     self.type_table.get(*return_type),
                     ResolvedType::Ref(_) | ResolvedType::MutRef(_)
@@ -1145,13 +1133,9 @@ impl Analyzer<'_> {
     /// storage. Read-only borrows and deep copies leave no live alias.
     fn scan_place_uses(&self, expr: &TirExpr, conflict: &mut IndexSet<u32>) {
         match &expr.kind {
-            // A bare whole-value read outside a materialization position consumes
-            // (moves/copies) the aggregate elsewhere — keep the copy to be safe.
             TirExprKind::Local { index, .. } => {
                 conflict.insert(*index);
             }
-            // A clean field read is read-only; a field through a deref/index is
-            // not rooted at a bare local, so recurse into it.
             TirExprKind::FieldAccess { expr: inner, .. } => {
                 if clean_root(expr).is_none() {
                     self.scan_place_uses(inner, conflict);
@@ -1163,10 +1147,6 @@ impl Analyzer<'_> {
                 args,
                 ..
             } => {
-                // The receiver is auto-ref'd: `Ref` for a `&self` read-only borrow
-                // (harmless), `MutRef` for `&mut self` (mutates → conflict). A bare
-                // receiver place is a by-value (consuming) `self` — it moves the
-                // aggregate, so conflict.
                 let (recv_place, recv_ref) = match &receiver.kind {
                     TirExprKind::Unary {
                         op: op @ (TirUnaryOp::Ref | TirUnaryOp::MutRef),
@@ -1485,9 +1465,6 @@ impl Analyzer<'_> {
                     self.walk_call_arg(arg, None, pos, live, record);
                 }
             }
-            // An indirect (functor) call: each `&`/`&mut` argument is transient
-            // unless the callee's functor type stores that position (see
-            // `functor_stores`). The callee expression is an ordinary read.
             TirExprKind::IndirectCall { callee, args } => {
                 let stores = self.functor_stores(callee);
                 if record {
@@ -1512,11 +1489,6 @@ impl Analyzer<'_> {
                     self.mark_escaped(r, borrow_top_field(place));
                 }
             }
-            // A struct / tuple literal is a materialization point: each direct
-            // child that reads a whole field / value of a *dead* aggregate can
-            // alias it out instead of deep-copying (place-level move). `live`
-            // here is the literal's live-out. Recorded candidates are filtered
-            // by the owned-storage guards after the walk.
             TirExprKind::StructLiteral { fields, .. } => {
                 if record {
                     let children: Vec<&TirExpr> = fields.iter().map(|f| &f.value).collect();

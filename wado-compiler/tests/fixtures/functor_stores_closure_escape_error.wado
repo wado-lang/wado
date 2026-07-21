@@ -1,7 +1,4 @@
-// Soundness: a closure coerced to a `fn(&Node)` slot (stores=[]) must not
-// persist its own reference parameter. Here the closure stashes `p` into a
-// `Holder` struct, which the optimization would be free to treat as a
-// transient borrow — so the closure is rejected before lowering.
+// A closure coerced to a `fn(&Node)` slot may not stash its reference parameter into an aggregate.
 
 struct Node {
     n: i32,

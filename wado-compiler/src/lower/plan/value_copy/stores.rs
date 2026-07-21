@@ -61,8 +61,6 @@ pub fn compute_stored_params(project: &FlatPackage) -> StoredParams {
     let type_table = project.type_table.borrow();
     let mut computed: StoredParams = FuncKeyMap::default();
 
-    // Seed: every function stores at least its declared reference positions (a
-    // bodyless callee stores exactly those). `f.stores` names map to positions.
     for func in &project.functions {
         let func = func.borrow();
         let declared = declared_positions(&func);
@@ -165,7 +163,6 @@ impl StoresWalker<'_> {
             | TirExprKind::VariantPayload { expr: inner, .. }
             | TirExprKind::Index { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. } => self.carries(inner),
-            // A reference-typed result may borrow any argument.
             TirExprKind::Call { args, .. } => {
                 args.iter().flat_map(|a| self.carries(&a.expr)).collect()
             }

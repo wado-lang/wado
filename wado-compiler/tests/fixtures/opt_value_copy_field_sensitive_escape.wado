@@ -1,8 +1,4 @@
-// Field-sensitive borrow escape: a persisting borrow of one field must not block
-// moving a *disjoint* field out of a dead aggregate. `&p.b` (the `if let`
-// scrutinee) escapes field `b`; `p.a` is a disjoint field, so `R { x: p.a }`
-// still moves it instead of deep-copying. Sound: a borrow of `p.b` provably
-// cannot alias `p.a`.
+// A persisting borrow of one field must not block moving a disjoint field out of a dead aggregate.
 
 use { println, Stdout } from "core:cli";
 
