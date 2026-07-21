@@ -1,0 +1,38 @@
+// Negative control for place-level move: when the aggregate is still live after
+// the materialization, the field copy must be KEPT. Here `c` is read again
+// (`c.a.len()`) after `Out { x: c.a, .. }`, so aliasing `c.a` into `o.x` would
+// let the later `o.x.push` corrupt `c.a`. The deep copy must remain.
+
+use { println, Stdout } from "core:cli";
+
+struct Cols { a: List<i32>, b: List<i32> }
+struct Out { x: List<i32>, y: List<i32> }
+
+fn split_and_peek(c: Cols) -> i32 {
+    let mut o = Out { x: c.a, y: c.b };
+    o.x.push(999);
+    return c.a.len() + o.x.len();
+}
+
+fn make(n: i32) -> Cols {
+    let mut a: List<i32> = [];
+    let mut b: List<i32> = [];
+    let mut i = 0;
+    loop {
+        if i >= n { break; }
+        a.push(i);
+        b.push(i);
+        i = i + 1;
+    }
+    return Cols { a, b };
+}
+
+export fn run() with Stdout {
+    println(`${split_and_peek(make(3))}`);
+}
+
+__DATA__
+{
+    "stdout": "7\n",
+    "wir_expect:O0": ["$value_copy$core:prelude/list.wado/List<i32>"]
+}

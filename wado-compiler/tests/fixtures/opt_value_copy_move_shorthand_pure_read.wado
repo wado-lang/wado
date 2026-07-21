@@ -1,0 +1,38 @@
+// Phase 2 (place-level value-copy move, whole-local): `Wrap::new` stores its
+// by-value `data` into a field via shorthand, then reads it again through a
+// pure `.len()` for a sibling field. `data` is dead after the literal, and the
+// trailing read is non-mutating, so aliasing (moving) `data` into the field is
+// sound -- no deep copy. Mirrors `Parser::new(tokens)` in the Gale parser.
+
+use { println, Stdout } from "core:cli";
+
+struct Wrap { data: List<i32>, count: i32 }
+
+impl Wrap {
+    fn new(data: List<i32>) -> Wrap {
+        return Wrap { data, count: data.len() * 2 };
+    }
+}
+
+fn make(n: i32) -> List<i32> {
+    let mut a: List<i32> = [];
+    let mut i = 0;
+    loop {
+        if i >= n { break; }
+        a.push(i);
+        i = i + 1;
+    }
+    return a;
+}
+
+export fn run() with Stdout {
+    let w = Wrap::new(make(3));
+    println(`${w.data.len()} ${w.count}`);
+}
+
+__DATA__
+{
+    "stdout": "3 6\n",
+    "wir_not_expect:O0": ["$value_copy$core:prelude/list.wado/List<i32>"],
+    "wir_not_expect:O2": ["$value_copy$core:prelude/list.wado/List<i32>"]
+}

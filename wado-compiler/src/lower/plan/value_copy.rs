@@ -43,6 +43,12 @@ pub struct ValueCopyPlan {
     /// one is borrow-escaped and cannot be moved (the TIR move analysis runs
     /// before inlining, so `stores_aliased_locals` is not yet populated).
     pub functions_with_stores: FuncKeySet,
+    /// Functions that store their *receiver* (first parameter) specifically — its
+    /// name appears in the `stores[...]` clause. A method that stores only a
+    /// value parameter (e.g. `List::push` stores the element, not `self`) is
+    /// absent, so its receiver borrow does not escape and the receiver local
+    /// stays move-eligible.
+    pub receiver_storing_methods: FuncKeySet,
     /// Functions whose first parameter is `&mut self` — the only methods that
     /// can mutate the caller's receiver storage. The last-use move analysis
     /// treats such a call's receiver as a sibling mutation, so a by-value
@@ -75,12 +81,16 @@ pub fn plan(
     // present in `flat.functions` and seed the fixpoint.
     let conventions = ownership::compute_return_conventions(flat);
     let mut functions_with_stores = FuncKeySet::default();
+    let mut receiver_storing_methods = FuncKeySet::default();
     let mut mut_receiver_methods = FuncKeySet::default();
     let mut mut_ref_params = FuncKeyMap::default();
     for f in &flat.functions {
         let f = f.borrow();
         if !f.stores.is_empty() {
             functions_with_stores.insert(f.module_source.clone(), f.name.clone());
+            if f.params.first().is_some_and(|p| f.stores.contains(&p.name)) {
+                receiver_storing_methods.insert(f.module_source.clone(), f.name.clone());
+            }
         }
         if f.params.first().is_some_and(|p| p.is_mut_ref) {
             mut_receiver_methods.insert(f.module_source.clone(), f.name.clone());
@@ -97,6 +107,7 @@ pub fn plan(
         returns_owned: conventions.returns_owned,
         returns_self_projection: conventions.returns_self_projection,
         functions_with_stores,
+        receiver_storing_methods,
         mut_receiver_methods,
         confined_params,
         mut_ref_params,
