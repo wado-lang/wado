@@ -340,8 +340,6 @@ pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, collector: Coll
     config.wasm_component_model_async_stackful(true);
     config.wasm_wide_arithmetic(true);
     // config.wasm_stack_switching(true); // Not supported on macOS
-    config.wasm_gc(true);
-    config.wasm_function_references(true);
     // Honor the `metadata.code.branch_hint` custom section so Cranelift can
     // lay out hinted branches (from `builtin::cold_path()`) for the
     // predicted-taken path.
