@@ -360,13 +360,11 @@ impl Monomorphizer {
                                     // Pack-map `..F::method()`: each element is the
                                     // substituted return type, repeated `|F|` times.
                                     Some(elem) => {
-                                        let arity = type_table
-                                            .as_tuple(pack_type)
-                                            .map_or(1, |es| es.len());
+                                        let arity =
+                                            type_table.as_tuple(pack_type).map_or(1, |es| es.len());
                                         let elem_sub =
                                             self.substitute_type(elem, substitution, type_table);
-                                        new_elems
-                                            .extend(std::iter::repeat_n(elem_sub, arity));
+                                        new_elems.extend(std::iter::repeat_n(elem_sub, arity));
                                     }
                                     None => {
                                         if let Some(pack_elems) = type_table.as_tuple(pack_type) {

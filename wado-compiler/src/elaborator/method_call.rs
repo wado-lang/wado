@@ -3130,7 +3130,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let items = tt.compiler_items();
             (
                 items.trait_name(CompilerItem::Reflect).to_string(),
-                items.method_name(CompilerItem::ReflectFieldNames).to_string(),
+                items
+                    .method_name(CompilerItem::ReflectFieldNames)
+                    .to_string(),
                 items.method_name(CompilerItem::ReflectTypeName).to_string(),
                 items.method_name(CompilerItem::ReflectFields).to_string(),
             )
@@ -3150,7 +3152,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `fields(self)` returns `Self::Fields = [..F]`. Read the pack off
             // `T`'s `Reflect<Fields = [..F]>` bound and resolve it in the current
             // scope, where `F` is the projected pack registered by `resolve_method`.
-            let Some(fields_ty) = self.reflect_fields_bound_ty(type_param_name, &reflect_trait_name)
+            let Some(fields_ty) =
+                self.reflect_fields_bound_ty(type_param_name, &reflect_trait_name)
             else {
                 let _ = self.emit(TypeError::UnknownFunction {
                     name: format!(
@@ -3179,8 +3182,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        let mut method_info =
-            LocalMethodName::new(type_param_name.to_string(), Some(reflect_trait_name), method);
+        let mut method_info = LocalMethodName::new(
+            type_param_name.to_string(),
+            Some(reflect_trait_name),
+            method,
+        );
         method_info.is_type_param_receiver = true;
         let mangled_name = method_info.to_mangled_name();
 

@@ -168,23 +168,227 @@ monomorphized contexts.
 
 `Reflect` as designed is struct-only. Sum and bitmask types get analogous
 compile-time introspection so a derivation can lower a `variant` to JSON
-Schema `oneOf`, an `enum` to a string `enum`, and `flags` to its bit set. These
-follow §1a: each is a sealed `internal` trait reached only as
-`ReflectVariant::<T>::…` (never a bare `T::case_meta()`):
+Schema `oneOf`, an `enum` to a string `enum`, and `flags` to its bit set.
+
+### 3a. One sealed trait per type kind
+
+Reflection stays split by kind — `Reflect` (struct), `ReflectVariant`,
+`ReflectEnum`, `ReflectFlags` — rather than folding into one kind-reporting
+trait. Derivations are static and monomorphized: a derivation handles each
+kind with different code, so a per-kind bound is the natural selector. And
+since a type is exactly one kind, blanket impls over different kinds are
+disjoint by construction — `impl<T: Reflect> Trait for T` and
+`impl<T: ReflectVariant> Trait for T` can never overlap, which keeps the
+coherence question ("Open questions") no harder than the struct case. Each
+trait follows §1a: sealed, `internal`, reached only as
+`ReflectVariant::<T>::…`, never a bare `T::case_meta()`.
+
+The meta structs in this section carry only what the compiler knows without
+attribute parsing — source name, discriminant / bit, unit-ness. The §2
+metadata extension later adds `wire_name` / `doc` / `validate` to field, case,
+and bit metas uniformly, keeping this section orthogonal to §2 and §4.
+
+### 3b. `ReflectEnum`
+
+An enum value is its `i32` discriminant, so both directions of the value
+bridge are trivial:
 
 ```wado
-#[compiler_item("reflect_variant")]
-internal trait ReflectVariant {
-    type Cases;                          // payload types as a pack ([P_0, P_1, …])
-    fn case_meta() -> List<CaseMeta>;    // name, wire_name, discriminant, is_unit, doc
-    fn type_name() -> String;
+pub struct EnumCaseMeta {
+    name: String,
+    discriminant: i32,
 }
-// ReflectEnum (discriminants + names), ReflectFlags (bit names) likewise.
+
+#[compiler_item("reflect_enum")]
+internal trait ReflectEnum {
+    fn type_name() -> String;
+    fn case_meta() -> List<EnumCaseMeta>;
+    fn discriminant(&self) -> i32;
+    fn from_discriminant(disc: i32) -> Option<Self>;
+}
 ```
 
-The exact unification (one `Reflect` that reports a type kind, vs. three
-traits) is an API question (see "Open questions"); the capability set is fixed
-here.
+`from_discriminant` returns `Option` rather than trapping: its caller is
+typically a deserializer, where an unknown discriminant is a normal error, not
+a bug. Serialization is `case_meta()[discriminant()].name`; deserialization is
+the reverse lookup plus `from_discriminant`.
+
+### 3c. `ReflectFlags`
+
+```wado
+pub struct FlagBitMeta {
+    name: String,
+    bit: u64,
+}
+
+#[compiler_item("reflect_flags")]
+internal trait ReflectFlags {
+    fn type_name() -> String;
+    fn bit_meta() -> List<FlagBitMeta>;
+    fn bits(&self) -> u64;
+    fn from_bits(raw: u64) -> Option<Self>;
+}
+```
+
+`bit` / `bits()` normalize to `u64` regardless of the representation width, so
+one generic derivation covers every flags type; the widening is lossless.
+`from_bits` rejects unknown bits with `None` (CM semantics: unknown flag bits
+are an error), same `Option` rationale as `from_discriminant`.
+
+### 3d. `ReflectVariant` and the case walk
+
+```wado
+pub struct VariantCaseMeta {
+    name: String,
+    discriminant: i32,
+    is_unit: bool,
+}
+
+#[compiler_item("reflect_variant")]
+internal trait ReflectVariant {
+    type Cases;       // payload types as a pack [P_0, P_1, …]; unit cases are ()
+    type CaseTokens;  // [Case<Self, P_0>, Case<Self, P_1>, …] (§3e)
+    fn type_name() -> String;
+    fn case_meta() -> List<VariantCaseMeta>;
+    fn discriminant(&self) -> i32;
+    fn cases() -> Self::CaseTokens;
+}
+```
+
+The struct walk does not transfer to variants: `fields(&self)` returns a tuple
+because every field exists at once, but variant payloads are mutually
+exclusive — there is no value tuple to return, and any payload access is
+necessarily guarded by the runtime discriminant. Value-free derivation needs
+no new machinery; `Cases` plus the §1 pack-map already give Jade's `oneOf`:
+
+```wado
+impl<T: ReflectVariant<Cases = [..P]>, ..P: JsonSchema> JsonSchema for T {
+    fn json_schema() -> Schema {
+        let payload_schemas: List<Schema> = List::from_tuple([..P::json_schema()]);
+        // zip with case_meta() → oneOf
+    }
+}
+```
+
+Value-level derivation — serialize's case dispatch, deserialize's case
+construction — is the new problem. A dedicated match-shaped expansion syntax
+(Zig's `inline else`) was considered and rejected: it covers only the
+destructuring direction — deserialization has no scrutinee, the value is yet
+to be built — so construction would need a second mechanism anyway, and new
+surface syntax is the most expensive kind of change (parser, formatter,
+grammar, LSP). A visitor API fails differently: closures cannot be generic
+over the per-case payload type.
+
+### 3e. `Case<T, P>` tokens
+
+Payload values cannot be enumerated, but case handles can. `cases()` returns a
+tuple of tokens, one per case, each carrying the payload type statically and
+the case index as a value:
+
+```wado
+pub struct Case<T, P> {
+    index: i32,  // private; tokens are minted only by cases()
+}
+
+impl<T: ReflectVariant, P> Case<T, P> {
+    fn index(&self) -> i32 { return self.index; }
+    fn holds(&self, v: &T) -> bool {
+        return ReflectVariant::<T>::discriminant(v) == self.index;
+    }
+    #[compiler_item("reflect_case_extract")]
+    fn extract(&self, v: &T) -> P;         // payload of this case; traps if !holds(v)
+    #[compiler_item("reflect_case_construct")]
+    fn construct(&self, payload: P) -> T;  // builds this case around `payload`
+}
+```
+
+A `for-of` over `cases()` is the same heterogeneous-tuple expansion as the
+`fields()` walk: each iteration statically binds `Case<T, P_k>`, so `extract`
+returns `P_k` and `construct` accepts `P_k`, fully typed. One mechanism serves
+both directions:
+
+```wado
+// Serialize: dispatch on the live case (externally tagged form).
+impl<T: ReflectVariant<Cases = [..P]>, ..P: Serialize> Serialize for T {
+    fn serialize(&self, s: &mut Serializer) {
+        let metas = ReflectVariant::<T>::case_meta();
+        for let c of ReflectVariant::<T>::cases() {
+            if c.holds(self) {
+                let meta = metas[c.index()];
+                if meta.is_unit {
+                    s.string(&meta.name);
+                } else {
+                    s.begin_object();
+                    s.key(&meta.name);
+                    c.extract(self).serialize(s);
+                    s.end_object();
+                }
+            }
+        }
+    }
+}
+
+// Deserialize: construct the named case — the direction a match-shaped
+// syntax cannot express.
+impl<T: ReflectVariant<Cases = [..P]>, ..P: Deserialize> Deserialize for T {
+    fn deserialize(d: &mut Deserializer) -> Result<T, DeserializeError> {
+        let key = d.case_name()?;
+        let metas = ReflectVariant::<T>::case_meta();
+        for let c of ReflectVariant::<T>::cases() {
+            if metas[c.index()].name == key {
+                return Result::Ok(c.construct(Deserialize::deserialize(d)?));
+            }
+        }
+        return Result::Err(DeserializeError::unknown_case(key));
+    }
+}
+```
+
+Properties:
+
+- Safety does not depend on sealing. `extract` lowers to a discriminant switch
+  and traps on mismatch; a forged token can trap, never misread a payload.
+  Duplicate payload types (`A(i32) | B(i32)`) stay unambiguous — the lowering
+  keys on the index, not the payload type.
+- Zero-cost after optimization. `cases()` returns a literal tuple, so after
+  inlining `c.index()` is a constant, `holds` folds to `disc == k`, and the
+  unrolled loop reduces to the match chain a hand-written impl would contain.
+  No const generics needed.
+- `extract` copies the payload (value semantics), the same behavior as
+  `fields()` copying field values (see "Open questions" for a by-reference
+  sibling).
+- The name is `holds` because `matches` lexes as a keyword token (the infix
+  pattern-test operator) and cannot be a method name.
+
+### 3f. Constructor-mapped packs
+
+The one type-system addition this section needs: under a
+`T: ReflectVariant<Cases = [..P]>` bound, `cases()` has type
+`[..Case<T, P>]` — the `Cases` pack mapped through a type constructor. The §1
+pack-map splices a pack-independent return type repeated `|P|` times
+(`TypePack::mapped_elem`); this generalizes the splice to substitute the pack
+parameter per element (`Case<T, P>[P := P_k]` at position `k`). Identity packs
+(`R = P`) and constant maps (`R` without the pack parameter) become special
+cases of the same rule. At the concrete level `CaseTokens` is an ordinary
+synthesized tuple type; the mapped pack only appears in generic projection,
+exactly as `fields()` projects to `[..F]`.
+
+### 3g. Staging
+
+Ordered so each stage is independently testable and the type-system change
+lands before its consumer:
+
+1. `ReflectEnum` synthesis — no new machinery.
+2. `ReflectFlags` synthesis — the `u64` bridge only.
+3. Constructor-mapped packs — the `mapped_elem` generalization (§3f).
+4. `ReflectVariant`, `Case<T, P>`, `cases()` synthesis, and the
+   `extract` / `construct` lowering.
+
+Each stage is proven with local-trait fixtures (the `reflect_derive_schema`
+pattern); the completion proof is a library-code variant `Inspect` matching
+the current synthesizer's output. One requirement surfaced by totalizing
+`Cases`: a trait used as a `..P` bound needs a `()` impl for unit cases
+(`Inspect` has one in the prelude; serde gains one with §5 if missing).
 
 ### 4. The `#[validate(…)]` attribute
 
@@ -264,15 +468,15 @@ after the first three.
       values as a heterogeneous tuple `[self.f_0, …]`; the tuple type is
       registered as the struct's `Fields` associated-type resolution.
 - Inline pack binding `impl<T: Reflect<Fields = [..F]>, ..F: Trait>` (the
-      unbuilt item from WEP 2026-03-14 §11), staged:
+  unbuilt item from WEP 2026-03-14 §11), staged:
   - [x] Blanket-impl selection on a synthesized bound: a struct satisfies the
         compiler-synthesized `T: Reflect` (and `T: Default`) bound, so a blanket
         derivation `impl<T: Reflect> Trait for T` resolves for it. The
         blanket-candidate bound check consults synthesized-trait eligibility, not
         only explicit `impl`s.
   - Generic `Reflect::<T>::…` resolution — the trait-qualified call resolves
-        for a generic `T: Reflect` (deferred dispatch), not just a concrete
-        struct:
+    for a generic `T: Reflect` (deferred dispatch), not just a concrete
+    struct:
     - [x] Value-free members `field_names()` / `type_name()`: resolved to their
           fixed return types and monomorphized to each struct's synthesized
           method via a type-param-receiver dispatch.
@@ -293,7 +497,14 @@ after the first three.
       `ValidateEntry`; surface it on `FieldMeta::validate`.
 - [ ] `#[validate]` enforcement in the synthesized `Deserialize`
       (`DeserializeError` / `InvalidValue` on violation).
-- [ ] `ReflectVariant` / `ReflectEnum` / `ReflectFlags` synthesis.
+- Variant / enum / flags reflection (§3), staged per §3g:
+  - [ ] `ReflectEnum` synthesis (§3b).
+  - [ ] `ReflectFlags` synthesis with the `u64`-normalized bit bridge (§3c).
+  - [ ] Constructor-mapped packs: generalize `TypePack::mapped_elem` to
+        per-element pack substitution (§3f).
+  - [ ] `ReflectVariant` + `Case<T, P>`: `cases()` synthesis and the
+        `extract` / `construct` lowering (§3d–§3e); completion proof is a
+        library-code variant `Inspect` matching the synthesizer's output.
 - [ ] Migrate `Inspect` / `InspectAlt` to the `Reflect`-based impl; remove the
       compiler-magic struct path (WEP 2026-03-14's stated goal).
 - [ ] Migrate serde struct/variant `Serialize` / `Deserialize` to library code;
@@ -355,9 +566,13 @@ after the first three.
 ### Open questions
 
 - **`Reflect` metadata API shape.** Parallel `List`s vs. a single
-  `List<FieldMeta>` descriptor (chosen here) vs. associated consts; and whether
-  variant/enum/flags fold into one kind-reporting `Reflect` or stay separate
-  traits.
+  `List<FieldMeta>` descriptor (chosen here) vs. associated consts. (Whether
+  variant/enum/flags fold into one kind-reporting trait is settled: separate
+  traits, §3a.)
+- **By-reference case extraction.** `Case::extract` copies the payload (value
+  semantics). Large payloads may want a `&P`-returning sibling once the
+  `Inspect` migration can measure the copy cost; `fields()` shares the
+  property, so a fix should cover both.
 - **`#[validate]` recognized key set.** Which JSON Schema assertions earn a
   first-class key versus being left to hand-authoring on a `Schema` value.
 - **Coherence.** Interaction with the variadic coherence rules still unchecked
