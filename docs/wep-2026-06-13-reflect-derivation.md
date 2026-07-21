@@ -502,7 +502,9 @@ after the first three.
         projection under a `T: ReflectEnum` bound, including type-param
         static calls (`T::by_name`) dispatching through a blanket impl.
         Fixtures: `reflect_enum_meta`, `reflect_enum_derive`.
-  - [ ] `ReflectFlags` synthesis with the `u64`-normalized bit bridge (§3c).
+  - [x] `ReflectFlags` synthesis with the `u64`-normalized bit bridge (§3c),
+        including generic projection under a `T: ReflectFlags` bound.
+        Fixtures: `reflect_flags_meta`, `reflect_flags_derive`.
   - [x] Constructor-mapped packs: generalize `TypePack::mapped_elem` to
         per-element pack substitution (§3f).
   - [x] `ReflectVariant` + `Case<T, P>`: synthesis of the concrete members,

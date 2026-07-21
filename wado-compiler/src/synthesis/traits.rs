@@ -2028,6 +2028,425 @@ fn generate_enum_from_discriminant_fn(
     )
 }
 
+/// Generate the `ReflectFlags` members for each requested flags type
+/// (WEP 2026-06-13 §3c): `type_name()`, `bit_meta()`, `bits(&self)`, and
+/// `from_bits(raw)` — the u64-normalized bit bridge.
+pub fn synthesize_reflect_flags(project: &mut Package) {
+    let trait_env = project.trait_env.clone();
+    let first_module = project
+        .tir_modules
+        .values()
+        .next()
+        .expect("tir_modules must contain at least the entry module during synthesis");
+    let flags_trait_name = first_module
+        .type_table
+        .borrow()
+        .compiler_items()
+        .trait_name(CompilerItem::ReflectFlags)
+        .to_string();
+    let requested: IndexSet<(String, ModuleSource, String)> = first_module
+        .type_table
+        .borrow()
+        .bound_driven_synth_requests(|trait_name| trait_name == flags_trait_name)
+        .into_iter()
+        .collect();
+
+    let mut pending: IndexSet<(String, ModuleSource, String)> = IndexSet::default();
+    for module in project.tir_modules.values_mut() {
+        let module_source = module.module_source.clone();
+        let names = {
+            let tt = module.type_table.borrow();
+            TraitsStdlibNames::from_compiler_items(tt.compiler_items())
+        };
+        let mut ctx = SynthesisCtx {
+            trait_env: &trait_env,
+            pending: &mut pending,
+            requested: &requested,
+            module: module_source,
+            names: &names,
+        };
+        generate_flags_reflect_impls(module, &mut ctx, &flags_trait_name);
+    }
+}
+
+/// Synthesize the `ReflectFlags` impl of every requested flags type in `module`.
+fn generate_flags_reflect_impls(
+    module: &mut TirModule,
+    ctx: &mut SynthesisCtx<'_, '_, '_>,
+    flags_trait_name: &str,
+) {
+    if module.flags.is_empty() {
+        return;
+    }
+
+    let module_source = module.module_source.clone();
+    let targets: Vec<ReflectFlagsTarget> = module
+        .flags
+        .iter()
+        .filter(|f| ctx.should_synthesize(&f.name, flags_trait_name))
+        .filter_map(|f| {
+            let flags_type = module
+                .type_table
+                .borrow()
+                .find_flags_type(&f.name, &module_source)?;
+            Some(ReflectFlagsTarget {
+                name: f.name.clone(),
+                flags_type,
+                members: f
+                    .members
+                    .iter()
+                    .map(|m| (m.name.clone(), m.bitmask))
+                    .collect(),
+                span: f.span,
+            })
+        })
+        .collect();
+    if targets.is_empty() {
+        return;
+    }
+
+    let env = ReflectFlagsSynthEnv::resolve(&mut module.type_table.borrow_mut());
+
+    let mut generated = Vec::new();
+    for target in &targets {
+        let methods = generate_flags_reflect_methods(&module.type_table, &env, flags_trait_name, target);
+        generated.extend(methods.into_iter().map(|f| Rc::new(RefCell::new(f))));
+        ctx.record_impl(&target.name, flags_trait_name);
+    }
+
+    module.functions.extend(generated);
+}
+
+/// A flags type selected for `ReflectFlags` synthesis.
+struct ReflectFlagsTarget {
+    name: String,
+    flags_type: TypeId,
+    /// Per-member `(name, bitmask)`.
+    members: Vec<(String, u32)>,
+    span: Span,
+}
+
+/// Module-level types and method names resolved once from the compiler-item
+/// registry and reused across every flags type's `ReflectFlags` synthesis.
+struct ReflectFlagsSynthEnv {
+    string_type: TypeId,
+    meta_type: TypeId,
+    meta_type_name: String,
+    meta_struct_name: String,
+    list_meta_type: TypeId,
+    from_tuple: FromTupleItem,
+    type_name_method: String,
+    bit_meta_method: String,
+    bits_method: String,
+    from_bits_method: String,
+}
+
+impl ReflectFlagsSynthEnv {
+    fn resolve(tt: &mut TypeTable) -> Self {
+        let string_type = tt.make_compiler_struct(CompilerItem::String);
+        let meta_type = tt.make_compiler_struct(CompilerItem::FlagBitMeta);
+        let meta_type_name = tt.mangle_type_name(meta_type);
+        let list_meta_type = tt.make_list(meta_type);
+        let items = tt.compiler_items();
+        let meta_struct_name = items.struct_name(CompilerItem::FlagBitMeta).to_string();
+        let (module_source, owner, name) = items.require_method(CompilerItem::ListFromTuple);
+        let from_tuple = FromTupleItem {
+            module_source: module_source.clone(),
+            owner: owner.to_string(),
+            name: name.to_string(),
+        };
+        Self {
+            string_type,
+            meta_type,
+            meta_type_name,
+            meta_struct_name,
+            list_meta_type,
+            from_tuple,
+            type_name_method: items
+                .method_name(CompilerItem::ReflectFlagsTypeName)
+                .to_string(),
+            bit_meta_method: items
+                .method_name(CompilerItem::ReflectFlagsBitMeta)
+                .to_string(),
+            bits_method: items.method_name(CompilerItem::ReflectFlagsBits).to_string(),
+            from_bits_method: items
+                .method_name(CompilerItem::ReflectFlagsFromBits)
+                .to_string(),
+        }
+    }
+}
+
+/// Synthesize one flags type's `type_name()`, `bit_meta()`, `bits(&self)`,
+/// and `from_bits(raw)` methods.
+fn generate_flags_reflect_methods(
+    type_table: &RefCell<TypeTable>,
+    env: &ReflectFlagsSynthEnv,
+    flags_trait_name: &str,
+    target: &ReflectFlagsTarget,
+) -> Vec<TirFunction> {
+    let span = target.span;
+
+    let type_name_fn = generate_type_name_fn(
+        &target.name,
+        env.string_type,
+        flags_trait_name,
+        &env.type_name_method,
+        span,
+    );
+
+    let (metas_tuple_type, ref_flags_type, option_flags_type) = {
+        let mut tt = type_table.borrow_mut();
+        let metas_tuple_type =
+            tt.make_tuple(std::iter::repeat_n(env.meta_type, target.members.len()).collect());
+        let ref_flags_type = tt.make_ref(target.flags_type);
+        let option_flags_type = tt.make_option(target.flags_type);
+        (metas_tuple_type, ref_flags_type, option_flags_type)
+    };
+
+    let bit_meta_fn = generate_flags_bit_meta_fn(env, flags_trait_name, target, metas_tuple_type, span);
+    let bits_fn = generate_flags_bits_fn(env, flags_trait_name, target, ref_flags_type, span);
+    let from_bits_fn = generate_flags_from_bits_fn(
+        type_table,
+        env,
+        flags_trait_name,
+        target,
+        option_flags_type,
+        span,
+    );
+
+    vec![type_name_fn, bit_meta_fn, bits_fn, from_bits_fn]
+}
+
+/// Build `Flags^ReflectFlags::bit_meta() -> List<FlagBitMeta>` as
+/// `return List::<FlagBitMeta>::from_tuple([FlagBitMeta { … }, …]);`.
+fn generate_flags_bit_meta_fn(
+    env: &ReflectFlagsSynthEnv,
+    flags_trait_name: &str,
+    target: &ReflectFlagsTarget,
+    metas_tuple_type: TypeId,
+    span: Span,
+) -> TirFunction {
+    let method_info = trait_method_info(&target.name, flags_trait_name, &env.bit_meta_method);
+    let qualified_name = method_info.to_mangled_name();
+
+    let elements = target
+        .members
+        .iter()
+        .map(|(member_name, bitmask)| {
+            let fields = vec![
+                TirStructField {
+                    name: "name".to_string(),
+                    value: TirExpr::new(
+                        TirExprKind::StringLiteral(member_name.clone()),
+                        env.string_type,
+                        span,
+                    ),
+                    field_index: 0,
+                },
+                TirStructField {
+                    name: "bit".to_string(),
+                    value: TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value: u64::from(*bitmask),
+                            repr: bitmask.to_string(),
+                        },
+                        TypeTable::U64,
+                        span,
+                    ),
+                    field_index: 1,
+                },
+            ];
+            TirExpr::new(
+                TirExprKind::StructLiteral {
+                    struct_type: env.meta_type,
+                    struct_name: env.meta_struct_name.clone(),
+                    fields,
+                },
+                env.meta_type,
+                span,
+            )
+        })
+        .collect();
+    let tuple = TirExpr::new(
+        TirExprKind::TupleLiteral { elements },
+        metas_tuple_type,
+        span,
+    );
+
+    let from_tuple = LocalMethodName::new(
+        env.from_tuple.owner.clone(),
+        None,
+        env.from_tuple.name.clone(),
+    )
+    .with_struct_type_args(&[env.meta_type_name.clone()]);
+    let call = TirExpr::new(
+        TirExprKind::Call {
+            func: FunctionRef {
+                module_source: env.from_tuple.module_source.clone(),
+                name: from_tuple.to_mangled_name(),
+                monomorph_info: Some(MonomorphInfo {
+                    generic_name: format!("{}::{}", env.from_tuple.owner, env.from_tuple.name),
+                    impl_type_args: vec![env.meta_type],
+                    method_type_args: vec![metas_tuple_type],
+                    is_blanket: false,
+                }),
+                method_info: Some(from_tuple),
+            },
+            type_args: vec![metas_tuple_type],
+            args: vec![CallArg::new(tuple, false)],
+        },
+        env.list_meta_type,
+        span,
+    );
+
+    let body = TirBlock::new(
+        vec![TirStmt::new(
+            TirStmtKind::Return { value: Some(call) },
+            span,
+        )],
+        span,
+    );
+
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        vec![],
+        env.list_meta_type,
+        body,
+        vec![],
+    )
+}
+
+/// Build `Flags^ReflectFlags::bits(&self) -> u64` as
+/// `return (*self as u32) as u64;` — the widening is lossless.
+fn generate_flags_bits_fn(
+    env: &ReflectFlagsSynthEnv,
+    flags_trait_name: &str,
+    target: &ReflectFlagsTarget,
+    ref_flags_type: TypeId,
+    span: Span,
+) -> TirFunction {
+    let method_info = trait_method_info(&target.name, flags_trait_name, &env.bits_method);
+    let qualified_name = method_info.to_mangled_name();
+
+    let as_u32 = crate::synthesis::common::cast(
+        deref_local(0, "self", ref_flags_type, target.flags_type, span),
+        TypeTable::U32,
+    );
+    let as_u64 = crate::synthesis::common::cast(as_u32, TypeTable::U64);
+    let body = TirBlock::new(
+        vec![TirStmt::new(
+            TirStmtKind::Return {
+                value: Some(as_u64),
+            },
+            span,
+        )],
+        span,
+    );
+
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        vec![self_param(ref_flags_type, span)],
+        TypeTable::U64,
+        body,
+        vec![param_local("self", ref_flags_type, false)],
+    )
+}
+
+/// Build `Flags^ReflectFlags::from_bits(raw: u64) -> Option<Flags>` as
+/// `if (raw & VALID) != raw { return None; } return Some((raw as u32) as F);`
+/// — unknown bits are rejected (CM semantics).
+fn generate_flags_from_bits_fn(
+    type_table: &RefCell<TypeTable>,
+    env: &ReflectFlagsSynthEnv,
+    flags_trait_name: &str,
+    target: &ReflectFlagsTarget,
+    option_flags_type: TypeId,
+    span: Span,
+) -> TirFunction {
+    let method_info = trait_method_info(&target.name, flags_trait_name, &env.from_bits_method);
+    let qualified_name = method_info.to_mangled_name();
+
+    let valid_mask: u64 = target
+        .members
+        .iter()
+        .fold(0u64, |acc, (_, bitmask)| acc | u64::from(*bitmask));
+    let u64_literal = |value: u64| {
+        TirExpr::new(
+            TirExprKind::IntLiteral {
+                value,
+                repr: value.to_string(),
+            },
+            TypeTable::U64,
+            span,
+        )
+    };
+
+    let masked = TirExpr::new(
+        TirExprKind::Binary {
+            op: TirBinaryOp::BitAnd,
+            left: Box::new(local_expr(0, "raw", TypeTable::U64, span)),
+            right: Box::new(u64_literal(valid_mask)),
+        },
+        TypeTable::U64,
+        span,
+    );
+    let has_unknown_bits = TirExpr::new(
+        TirExprKind::Binary {
+            op: TirBinaryOp::NotEq,
+            left: Box::new(masked),
+            right: Box::new(local_expr(0, "raw", TypeTable::U64, span)),
+        },
+        TypeTable::BOOL,
+        span,
+    );
+    let none = crate::synthesis::common::option_none(
+        option_flags_type,
+        type_table.borrow().compiler_items(),
+    );
+    let reject = TirStmt::new(
+        TirStmtKind::If {
+            condition: has_unknown_bits,
+            then_block: TirBlock::new(
+                vec![TirStmt::new(TirStmtKind::Return { value: Some(none) }, span)],
+                span,
+            ),
+            else_block: None,
+        },
+        span,
+    );
+
+    let as_u32 = crate::synthesis::common::cast(
+        local_expr(0, "raw", TypeTable::U64, span),
+        TypeTable::U32,
+    );
+    let as_flags = crate::synthesis::common::cast(as_u32, target.flags_type);
+    let some = crate::synthesis::common::option_some(
+        as_flags,
+        option_flags_type,
+        type_table.borrow().compiler_items(),
+    );
+    let accept = TirStmt::new(TirStmtKind::Return { value: Some(some) }, span);
+
+    let raw_param = TirParam {
+        name: "raw".to_string(),
+        type_id: TypeTable::U64,
+        local_index: 0,
+        is_mut: false,
+        is_mut_ref: false,
+        span,
+    };
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        vec![raw_param],
+        option_flags_type,
+        TirBlock::new(vec![reject, accept], span),
+        vec![param_local("raw", TypeTable::U64, false)],
+    )
+}
+
 /// Threading of trait-impl knowledge through the synthesis sub-passes.
 ///
 /// `trait_env` exposes the AST-layer (and any prior synthesis-layer) impls

@@ -26,6 +26,7 @@ pub(super) enum OnBoundTrait {
     Reflect,
     ReflectVariant,
     ReflectEnum,
+    ReflectFlags,
     Ref,
     RefMut,
     Inspect,
@@ -642,6 +643,8 @@ impl TypeSystem {
                 of(CompilerItem::ReflectVariant, OnBoundTrait::ReflectVariant)
             } else if trait_name == items.trait_name(CompilerItem::ReflectEnum) {
                 of(CompilerItem::ReflectEnum, OnBoundTrait::ReflectEnum)
+            } else if trait_name == items.trait_name(CompilerItem::ReflectFlags) {
+                of(CompilerItem::ReflectFlags, OnBoundTrait::ReflectFlags)
             } else if trait_name == items.trait_name(CompilerItem::Ref) {
                 of(CompilerItem::Ref, OnBoundTrait::Ref)
             } else if trait_name == items.trait_name(CompilerItem::RefMut) {
@@ -1045,6 +1048,20 @@ impl TypeSystem {
             return true;
         }
 
+        // `ReflectFlags` likewise: every flags type is eligible.
+        if let ResolvedType::Flags {
+            name,
+            module_source,
+            ..
+        } = &resolved
+            && on_bound == Some(OnBoundTrait::ReflectFlags)
+        {
+            self.type_table
+                .borrow_mut()
+                .record_bound_driven_synth_request(name, module_source, trait_name);
+            return true;
+        }
+
         // Get the type name and type args for looking up implementations
         let (type_name, type_args) = match &resolved {
             ResolvedType::Struct { name, .. }
@@ -1275,6 +1292,9 @@ impl TypeSystem {
                 .map(|info| info.module_source.clone()),
             OnBoundTrait::ReflectEnum => scope
                 .enum_case(type_name)
+                .map(|info| info.module_source.clone()),
+            OnBoundTrait::ReflectFlags => scope
+                .flags_case(type_name)
                 .map(|info| info.module_source.clone()),
             OnBoundTrait::Eq
             | OnBoundTrait::Ord
