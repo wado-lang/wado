@@ -502,20 +502,6 @@ fn evaluate_literal(
             }
             Some(CanonicalValue::Struct(out))
         }
-        (TirExprKind::TupleLiteral { elements, .. }, OptionsType::List(inner)) => {
-            let mut out = Vec::with_capacity(elements.len());
-            for el in elements {
-                out.push(evaluate_literal(
-                    el,
-                    inner,
-                    types,
-                    module,
-                    field_name,
-                    diagnostics,
-                )?);
-            }
-            Some(CanonicalValue::List(out))
-        }
         (_, OptionsType::Option(inner)) => {
             evaluate_literal(expr, inner, types, module, field_name, diagnostics)
                 .map(|v| CanonicalValue::Some(Box::new(v)))
