@@ -150,7 +150,9 @@ impl StoresWalker<'_> {
             return IndexSet::default();
         }
         match &expr.kind {
-            TirExprKind::Local { index, .. } => self.carries.get(index).cloned().unwrap_or_default(),
+            TirExprKind::Local { index, .. } => {
+                self.carries.get(index).cloned().unwrap_or_default()
+            }
             TirExprKind::Unary {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
                 expr: place,
@@ -181,7 +183,9 @@ impl StoresWalker<'_> {
     /// regardless of the place's own type — `&p.field` roots at `p`.
     fn place_roots(&self, place: &TirExpr) -> IndexSet<u32> {
         match &place.kind {
-            TirExprKind::Local { index, .. } => self.carries.get(index).cloned().unwrap_or_default(),
+            TirExprKind::Local { index, .. } => {
+                self.carries.get(index).cloned().unwrap_or_default()
+            }
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::VariantPayload { expr: inner, .. }

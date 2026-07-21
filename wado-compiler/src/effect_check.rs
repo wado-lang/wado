@@ -1355,8 +1355,7 @@ impl StoresOracle {
         for (src, module_sem) in &state.module_semantics {
             for (key, names) in &module_sem.types.method_names {
                 if let Some(positions) = fn_stores.get(key) {
-                    mangled_stores
-                        .insert((src.clone(), names.mangled.clone()), positions.clone());
+                    mangled_stores.insert((src.clone(), names.mangled.clone()), positions.clone());
                 }
             }
         }
@@ -1740,8 +1739,7 @@ impl StoresCtx<'_> {
         let Some(body) = &func.body else {
             return;
         };
-        if func.attrs.iter().any(|attr| attr.name == "ambient")
-            || func.name.starts_with("__test_")
+        if func.attrs.iter().any(|attr| attr.name == "ambient") || func.name.starts_with("__test_")
         {
             return;
         }
@@ -2492,7 +2490,6 @@ fn pattern_binding_id(pattern: &ast::Pattern) -> Option<AstId> {
         _ => None,
     }
 }
-
 
 // ---------------------------------------------------------------------------
 // Semantics-based default-value purity checking (Design B)
