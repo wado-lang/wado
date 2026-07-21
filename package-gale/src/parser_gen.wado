@@ -3464,7 +3464,7 @@ fn gen_multi_alt_body(
 /// The `while` accommodates a theoretical future where lower stacks
 /// multiple scalar labels (`a=b=expr`); the g4 parser does not produce
 /// that today, but the loop is free defensive cost.
-fn peel_scalar_label(elem: &Element) -> &Element {
+fn peel_scalar_label(elem: &Element) -> &Element with stores[elem] {
     let mut cur = elem;
     loop {
         if let Label(lab) = cur {
