@@ -7,16 +7,15 @@ use fe_on from "./grammars/fragment_entry.g4"
         generator: {
             module: "../src/generator.wado",
             output_dir: "./generated/cst_fragment_entry_on",
-            options: { fragment_entries: ["stmt"] },
+            options: {
+                fragment_entries: ["stmt"],
+            },
         },
     };
 
 use fe_off from "./grammars/fragment_entry_off.g4"
     with {
-        generator: {
-            module: "../src/generator.wado",
-            output_dir: "./generated/cst_fragment_entry_off",
-        },
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_fragment_entry_off" },
     };
 
 fn assert_clean_identical(input: &String, expected: &String) {

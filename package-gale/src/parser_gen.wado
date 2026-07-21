@@ -315,7 +315,14 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // `Rule::Simple` / `MultiAlt` / `LeftRecursive` instead of
     // recomputing the classification at every emit site.
     let members = collect_parser_members(grammar, ctx);
-    gen_parser_struct(w, ctx.is_trace(), ctx.needs_atn(), ctx.emit_actions(), !ctx.fragment_entries().is_empty(), &members);
+    gen_parser_struct(
+        w,
+        ctx.is_trace(),
+        ctx.needs_atn(),
+        ctx.emit_actions(),
+        !ctx.fragment_entries().is_empty(),
+        &members,
+    );
     gen_member_methods(w, &members);
     if ctx.emit_actions() {
         gen_vals_structs(w, grammar);
@@ -378,11 +385,7 @@ fn compute_fragment_entries(grammar: &Grammar, ctx: &mut GenContext) -> List<Rec
         let mut visiting: List<String> = [];
         let first_ids = ctx.first_ids_of_rule(&rule_name, &mut visiting);
         let first_names = ctx.token_names_of(&first_ids);
-        let call = if emits_vals {
-            `let _ = _parse_${snake}(p);`;
-        } else {
-            `_parse_${snake}(p);`;
-        };
+        let call = if emits_vals { `let _ = _parse_${snake}(p);` } else { `_parse_${snake}(p);` };
         result.push(RecoverFragmentEntry { call, first_names });
     }
     return result;
