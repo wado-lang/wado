@@ -17,6 +17,7 @@ pub mod confine;
 pub mod funcset;
 pub mod last_use;
 pub mod ownership;
+pub mod stores;
 pub mod synthesize;
 
 use crate::flat_package::FlatPackage;
@@ -38,17 +39,14 @@ pub struct ValueCopyPlan {
     /// finalized by `.build()` is not defensively copied. Superset of
     /// `returns_owned`.
     pub returns_self_projection: FuncKeySet,
-    /// Functions with a non-empty `stores[...]` clause — a callee that may
-    /// persist a reference passed to it. A local whose `&`/`&mut` is passed to
-    /// one is borrow-escaped and cannot be moved (the TIR move analysis runs
-    /// before inlining, so `stores_aliased_locals` is not yet populated).
-    pub functions_with_stores: FuncKeySet,
-    /// Functions that store their *receiver* (first parameter) specifically — its
-    /// name appears in the `stores[...]` clause. A method that stores only a
-    /// value parameter (e.g. `List::push` stores the element, not `self`) is
-    /// absent, so its receiver borrow does not escape and the receiver local
-    /// stays move-eligible.
-    pub receiver_storing_methods: FuncKeySet,
+    /// Per-callee, per-position reference-storage: which parameter positions a
+    /// callee may persist a reference to. A local whose `&`/`&mut` is passed at
+    /// a *stored* position is borrow-escaped and cannot be moved; passed at a
+    /// non-stored position it is a transient borrow. Interprocedurally inferred
+    /// (a least fixpoint over the call graph), so it is a sound superset of the
+    /// declared `stores[...]` clauses and catches undeclared stores too. Position
+    /// 0 is the receiver, so `receiver_storing_methods` is subsumed by this.
+    pub stored_params: stores::StoredParams,
     /// Functions whose first parameter is `&mut self` — the only methods that
     /// can mutate the caller's receiver storage. The last-use move analysis
     /// treats such a call's receiver as a sibling mutation, so a by-value
@@ -80,18 +78,11 @@ pub fn plan(
     // Computed after synthesis so the value-copy helpers (always owned) are
     // present in `flat.functions` and seed the fixpoint.
     let conventions = ownership::compute_return_conventions(flat);
-    let mut functions_with_stores = FuncKeySet::default();
-    let mut receiver_storing_methods = FuncKeySet::default();
+    let stored_params = stores::compute_stored_params(flat);
     let mut mut_receiver_methods = FuncKeySet::default();
     let mut mut_ref_params = FuncKeyMap::default();
     for f in &flat.functions {
         let f = f.borrow();
-        if !f.stores.is_empty() {
-            functions_with_stores.insert(f.module_source.clone(), f.name.clone());
-            if f.params.first().is_some_and(|p| f.stores.contains(&p.name)) {
-                receiver_storing_methods.insert(f.module_source.clone(), f.name.clone());
-            }
-        }
         if f.params.first().is_some_and(|p| p.is_mut_ref) {
             mut_receiver_methods.insert(f.module_source.clone(), f.name.clone());
         }
@@ -106,8 +97,7 @@ pub fn plan(
         name_for_type,
         returns_owned: conventions.returns_owned,
         returns_self_projection: conventions.returns_self_projection,
-        functions_with_stores,
-        receiver_storing_methods,
+        stored_params,
         mut_receiver_methods,
         confined_params,
         mut_ref_params,

@@ -344,8 +344,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 func,
                 &oracle,
                 &base.type_table.borrow(),
-                &base.value_copy.functions_with_stores,
-                &base.value_copy.receiver_storing_methods,
+                &base.value_copy.stored_params,
                 &base.value_copy.mut_receiver_methods,
             )
         } else {

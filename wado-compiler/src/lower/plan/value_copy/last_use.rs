@@ -41,6 +41,7 @@
 use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
 use super::ownership::OwnedCalls;
+use super::stores::StoredParams;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
     FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm,
@@ -162,8 +163,7 @@ pub fn compute_move_eligible(
     func: &TirFunction,
     oracle: &OwnedCalls,
     type_table: &TypeTable,
-    functions_with_stores: &FuncKeySet,
-    receiver_storing_methods: &FuncKeySet,
+    stored_params: &StoredParams,
     mut_receiver_methods: &FuncKeySet,
 ) -> MoveEligible {
     let Some(body) = &func.body else {
@@ -182,8 +182,7 @@ pub fn compute_move_eligible(
     }
 
     let mut a = Analyzer {
-        functions_with_stores,
-        receiver_storing_methods,
+        stored_params,
         mut_receiver_methods,
         non_final: IndexSet::default(),
         aliases_live: IndexSet::default(),
@@ -729,8 +728,11 @@ struct Exit {
 }
 
 struct Analyzer<'a> {
-    functions_with_stores: &'a FuncKeySet,
-    receiver_storing_methods: &'a FuncKeySet,
+    /// Per-callee reference-storage: `stored_params(callee)` is the set of
+    /// parameter positions the callee may persist a reference to (position 0 is
+    /// the receiver). A `&`/`&mut` argument at a stored position escapes; at a
+    /// non-stored position it is a transient borrow.
+    stored_params: &'a StoredParams,
     mut_receiver_methods: &'a FuncKeySet,
     non_final: IndexSet<u32>,
     aliases_live: IndexSet<u32>,
@@ -834,12 +836,20 @@ impl Analyzer<'_> {
         }
     }
 
-    /// A method-call receiver. The auto-ref'd `&self` / `&mut self` receiver is a
-    /// transient borrow that escapes only if the callee stores its *receiver*
-    /// specifically (`receiver_storing_methods`) — a method that stores only a
-    /// value parameter (e.g. `List::push`) does not retain `self`, so the
-    /// receiver local stays move-eligible. A by-value (consuming) receiver is an
-    /// ordinary value read.
+    /// Whether the callee may persist a reference passed at position `pos`. An
+    /// absent callee (bodyless / not a project function) or one with no stored
+    /// positions stores nothing at `pos`.
+    fn callee_stores(&self, callee: &FunctionRef, pos: usize) -> bool {
+        self.stored_params
+            .get(&callee.module_source, &callee.name)
+            .is_some_and(|s| s.contains(&u32::try_from(pos).unwrap()))
+    }
+
+    /// A method-call receiver at position 0. The auto-ref'd `&self` / `&mut self`
+    /// receiver is a transient borrow that escapes only if the callee stores its
+    /// receiver position — a method that stores only a value parameter (e.g.
+    /// `List::push`) does not retain `self`, so the receiver local stays
+    /// move-eligible. A by-value (consuming) receiver is an ordinary value read.
     fn walk_method_receiver(
         &mut self,
         receiver: &TirExpr,
@@ -855,9 +865,7 @@ impl Analyzer<'_> {
                 let referent = self.borrow_read(place, live, record);
                 if record
                     && let Some(r) = referent
-                    && self
-                        .receiver_storing_methods
-                        .contains(&func.module_source, &func.name)
+                    && self.callee_stores(func, 0)
                 {
                     self.mark_escaped(r, borrow_top_field(place));
                 }
@@ -866,13 +874,15 @@ impl Analyzer<'_> {
         }
     }
 
-    /// Process a call's argument. An explicit `&`/`&mut` argument is a transient
-    /// borrow unless the callee may store it (`functions_with_stores`), in which
-    /// case the referent escapes; every other argument is an ordinary value.
+    /// Process a call's argument at position `pos`. An explicit `&`/`&mut`
+    /// argument is a transient borrow unless the callee may store that position,
+    /// in which case the referent escapes; every other argument is an ordinary
+    /// value.
     fn walk_call_arg(
         &mut self,
         arg: &TirExpr,
         callee: Option<&FunctionRef>,
+        pos: usize,
         live: &mut IndexSet<u32>,
         record: bool,
     ) {
@@ -884,10 +894,7 @@ impl Analyzer<'_> {
             let referent = self.borrow_read(place, live, record);
             if record
                 && let Some(r) = referent
-                && callee.is_some_and(|c| {
-                    self.functions_with_stores
-                        .contains(&c.module_source, &c.name)
-                })
+                && callee.is_some_and(|c| self.callee_stores(c, pos))
             {
                 self.mark_escaped(r, borrow_top_field(place));
             }
@@ -1088,25 +1095,26 @@ impl Analyzer<'_> {
                         let read_only = matches!(recv_ref, Some(TirUnaryOp::Ref))
                             && !self
                                 .mut_receiver_methods
-                                .contains(&func.module_source, &func.name);
+                                .contains(&func.module_source, &func.name)
+                            && !self.callee_stores(func, 0);
                         if !read_only {
                             conflict.insert(base);
                         }
                     }
                     None => self.scan_place_uses(recv_place, conflict),
                 }
-                for a in args {
-                    self.scan_call_arg_place_use(&a.expr, Some(func), conflict);
+                for (pos, a) in args.iter().enumerate() {
+                    self.scan_call_arg_place_use(&a.expr, Some(func), pos + 1, conflict);
                 }
             }
             TirExprKind::Call { func, args, .. } => {
-                for a in args {
-                    self.scan_call_arg_place_use(&a.expr, Some(func), conflict);
+                for (pos, a) in args.iter().enumerate() {
+                    self.scan_call_arg_place_use(&a.expr, Some(func), pos, conflict);
                 }
             }
             TirExprKind::CmRawCall { args, .. } => {
-                for a in args {
-                    self.scan_call_arg_place_use(a, None, conflict);
+                for (pos, a) in args.iter().enumerate() {
+                    self.scan_call_arg_place_use(a, None, pos, conflict);
                 }
             }
             TirExprKind::Unary {
@@ -1128,13 +1136,15 @@ impl Analyzer<'_> {
         }
     }
 
-    /// A call/method argument: an explicit `&mut base` mutates the aggregate; a
-    /// `&base` to a callee that may store it escapes; both conflict. A transient
-    /// `&base` to a non-storing callee is a harmless read-only borrow.
+    /// A call/method argument at position `pos`: an explicit `&mut base` mutates
+    /// the aggregate; a `&base` to a callee that may store that position escapes;
+    /// both conflict. A transient `&base` to a non-storing position is a harmless
+    /// read-only borrow.
     fn scan_call_arg_place_use(
         &self,
         arg: &TirExpr,
         callee: Option<&FunctionRef>,
+        pos: usize,
         conflict: &mut IndexSet<u32>,
     ) {
         match &arg.kind {
@@ -1152,10 +1162,7 @@ impl Analyzer<'_> {
                 expr: place,
             } => match clean_root(place) {
                 Some(base) => {
-                    if callee.is_some_and(|c| {
-                        self.functions_with_stores
-                            .contains(&c.module_source, &c.name)
-                    }) {
+                    if callee.is_some_and(|c| self.callee_stores(c, pos)) {
                         conflict.insert(base);
                     }
                 }
@@ -1365,8 +1372,8 @@ impl Analyzer<'_> {
                     let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
                     self.mark_sibling_mut_aliases(&exprs, None);
                 }
-                for arg in args.iter().rev() {
-                    self.walk_call_arg(&arg.expr, Some(func), live, record);
+                for (pos, arg) in args.iter().enumerate().rev() {
+                    self.walk_call_arg(&arg.expr, Some(func), pos, live, record);
                 }
             }
             TirExprKind::MethodCall {
@@ -1384,14 +1391,16 @@ impl Analyzer<'_> {
                         .flatten();
                     self.mark_sibling_mut_aliases(&exprs, recv_mut_root);
                 }
-                for arg in args.iter().rev() {
-                    self.walk_call_arg(&arg.expr, Some(func), live, record);
+                // The receiver is position 0, so an explicit argument is at
+                // position `i + 1`.
+                for (pos, arg) in args.iter().enumerate().rev() {
+                    self.walk_call_arg(&arg.expr, Some(func), pos + 1, live, record);
                 }
                 self.walk_method_receiver(receiver, func, live, record);
             }
             TirExprKind::CmRawCall { args, .. } => {
-                for arg in args.iter().rev() {
-                    self.walk_call_arg(arg, None, live, record);
+                for (pos, arg) in args.iter().enumerate().rev() {
+                    self.walk_call_arg(arg, None, pos, live, record);
                 }
             }
             // A `&`/`&mut` reached outside a call argument (a `let r = &x`, a
