@@ -442,6 +442,7 @@ fn "core:prelude/intparse.wado/lenient_int_preprocess"(s) {
     let reason_13: ref "core:prelude/string.wado//String";
     let reason_18: ref "core:prelude/string.wado//String";
     let reason_31: ref "core:prelude/string.wado//String";
+    let _licm_repr_32: ref Array<u8>;
     len = s.used;
     if len == 0 {
         return 1, ref.null none, ref.as_non_null(reason_13 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("empty integer string"), used: 20 }; struct.new "core:prelude/traits.wado//LenientParseError" { reason: reason_13 });
@@ -491,13 +492,15 @@ fn "core:prelude/intparse.wado/lenient_int_preprocess"(s) {
     }
     digit_count = 0;
     j = i;
+    _licm_repr_32 = s.repr;
     b20: block {
         l21: loop {
             break_if b20 j >= len;
             __for_0_body: block {
-                b = builtin::array_get<u8>(s.repr, j);
+                b = builtin::array_get<u8>(_licm_repr_32, j);
                 break_if __for_0_body b == 95;
                 "core:prelude/string.wado/String::push"(cleaned, b);
+                _licm_repr_32 = s.repr;
                 digit_count = digit_count + 1;
             };
             j = j + 1;
@@ -1279,6 +1282,7 @@ fn "core:prelude/string.wado/String::replacen"(self, from, to, count) {
     let j: i32;
     let value_21: u8;
     let _licm_arith_27: bool;
+    let _licm_repr_28: ref Array<u8>;
     from_len = from.used;
     if from_len == 0 {
         return self;
@@ -1290,6 +1294,7 @@ fn "core:prelude/string.wado/String::replacen"(self, from, to, count) {
     replacements = 0;
     limit = self.used - from_len;
     _licm_arith_27 = count >= 0;
+    _licm_repr_28 = self.repr;
     b127: block {
         l128: loop {
             break_if b127 pos_8 > limit;
@@ -1313,11 +1318,13 @@ fn "core:prelude/string.wado/String::replacen"(self, from, to, count) {
                 break __inline_bytes_match_at_2: 1;
             } {
                 "core:prelude/string.wado/String::push_str"(result, to);
+                _licm_repr_28 = self.repr;
                 pos_8 = pos_8 + from_len;
                 replacements = replacements + 1;
             } else {
                 dst = "core:prelude/string.wado/String::internal_reserve_uninit"(result, 1);
-                value_21 = builtin::array_get<u8>(self.repr, pos_8);
+                _licm_repr_28 = self.repr;
+                value_21 = builtin::array_get<u8>(_licm_repr_28, pos_8);
                 builtin::array_set_u8(result.repr, dst, value_21);
                 pos_8 = pos_8 + 1;
             }

@@ -82,7 +82,7 @@ Scalar and dataflow:
 
 Loop and field:
 
-- `licm` — hoist loop-invariant field-access chains and non-trapping arithmetic out of loops.
+- `licm` — hoist loop-invariant field-access chains and non-trapping arithmetic out of loops. A field load blocked only by an opaque `&mut`-call clobber of its pointee type (a may-alias, e.g. `write_escaped_string(&mut buf, &s)` where a caller could pass `buf === s`) is still hoisted, then reloaded after each clobbering statement — the clobber-free path drops the per-iteration load while an alias still sees the fresh field. An evaluation-order gate refuses when a read could observe the stale hoist.
 - `condition_implication` — eliminate bounds/range checks implied false by a dominating loop guard, `if`, short-circuit, or early-exit; drop a constant-bounded index check; and, in a forward pass, drop a redundant re-check when an earlier access already proved the same index in bounds. Subsumes WIR bounds-check elimination.
 - `loop_version_bce` — split a loop into a checks-deleted fast path and an unchanged slow path when a bound relation holds by per-iteration transitivity; a simple fill loop further collapses to `array.fill`.
 - `tmpl_hoist` — hoist a template string's backing buffer out of a loop and reuse it when the result does not escape the iteration.

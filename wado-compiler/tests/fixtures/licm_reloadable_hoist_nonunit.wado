@@ -1,0 +1,46 @@
+// Reloadable field-load hoisting — a non-unit-returning clobber in
+// statement-drop position must not block the hoist (only a non-unit clobber
+// that is the *value-producing tail* of a value-block would). `swap_out`
+// returns `i32` and is called as a dropped statement while replacing `items`;
+// `b.items` is still hoisted, and reloaded after the clobber, so the aliased
+// (`sink === b`) replacement is observed: result matches the O0 run — `1 7 7`.
+use { println, Stdout } from "core:cli";
+
+struct Bag {
+    items: List<i32>,
+}
+
+impl Bag {
+    fn swap_out(&mut self) -> i32 {
+        let old = self.items.len();
+        self.items = [7, 7, 7];
+        return old;
+    }
+}
+
+fn probe(sink: &mut Bag, b: &Bag, out: &mut List<i32>) {
+    let n = b.items.len();
+    for let mut i = 0; i < n; i += 1 {
+        out.push(b.items[i]);
+        if i == 0 {
+            sink.swap_out();
+        }
+    }
+}
+
+export fn run() with Stdout {
+    let mut bag = Bag { items: [1, 2, 3] };
+    let mut out: List<i32> = [];
+    probe(&mut bag, &bag, &mut out);
+    let mut s: String = "";
+    for let x of &out {
+        s.push_str(&`${x} `);
+    }
+    println(`${s}`);
+}
+
+__DATA__
+{
+    "stdout": "1 7 7 \n",
+    "wir_expect:O2": ["_licm_items", "= b.items"]
+}
