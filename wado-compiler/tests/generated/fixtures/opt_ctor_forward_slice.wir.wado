@@ -82,11 +82,11 @@ fn "opt_ctor_forward_slice.wado/run"() with Stderr {
     let subtask: i32;
     let __b: ref "core:prelude//List<u8>";
     let packed_6: i64;
+    let rx_7: i32;
+    let tx_8: i32;
     let packed_24: i64;
     let ptr: i32;
     let raw_len: i32;
-    let __sroa___pattern_temp_0_0: i32;
-    let __sroa___pattern_temp_0_1: i32;
     let __sroa_data_repr: ref Array<u8>;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:opt_ctor_forward_slice.wado::__modules_initialized);
@@ -94,16 +94,16 @@ fn "opt_ctor_forward_slice.wado/run"() with Stderr {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:opt_ctor_forward_slice.wado::__modules_initialized = 1;
     };
-    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed_6("wasi/stream-new"()));
-    __sroa___pattern_temp_0_1 = builtin::i32_wrap_i64(packed_6 >> 32_i64);
-    subtask = "opt_ctor_forward_slice.wado/__cm_binding__Stderr_write_via_stream"(__sroa___pattern_temp_0_0);
+    rx_7 = builtin::i32_wrap_i64(local.tee packed_6("wasi/stream-new"()));
+    tx_8 = builtin::i32_wrap_i64(packed_6 >> 32_i64);
+    subtask = "opt_ctor_forward_slice.wado/__cm_binding__Stderr_write_via_stream"(rx_7);
     __b = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111), used: 5 };
     __sroa_data_repr = __b.repr;
     ptr = builtin::i32_wrap_i64(local.tee packed_24("core:rt/cm_lower_list_u8"(__sroa_data_repr, 0, 5 - 0)));
     raw_len = builtin::i32_wrap_i64(packed_24 >> 32_i64);
-    "core:rt/cm_stream_write_drain"(__sroa___pattern_temp_0_1, ptr, raw_len, 1);
+    "core:rt/cm_stream_write_drain"(tx_8, ptr, raw_len, 1);
     drop("mem/realloc"(ptr, raw_len, 1, 0));
-    "wasi/stream-drop-writable"(__sroa___pattern_temp_0_1);
+    "wasi/stream-drop-writable"(tx_8);
     drop("opt_ctor_forward_slice.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"(subtask));
 }
 

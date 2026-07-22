@@ -1418,6 +1418,7 @@ fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
     let packed_9: i64;
     let ptr_10: i32;
     let raw_len_11: i32;
+    let end_15: i32;
     let packed_21: i64;
     let ptr_22: i32;
     let raw_len_23: i32;
@@ -1427,7 +1428,8 @@ fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
         new_repr = builtin::array_new<u8>(len + 1);
         builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
-        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9("core:rt/cm_lower_list_u8"(new_repr, 0, (len + 1) - 0)));
+        end_15 = len + 1;
+        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9("core:rt/cm_lower_list_u8"(new_repr, 0, end_15 - 0)));
         raw_len_11 = builtin::i32_wrap_i64(packed_9 >> 32_i64);
         "core:rt/cm_stream_write_drain"(tx, ptr_10, raw_len_11, 1);
         drop("mem/realloc"(ptr_10, raw_len_11, 1, 0));
@@ -1444,12 +1446,12 @@ fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
 fn "core:rt/log_stderr"(message) {
     let future_handle: i32;
     let packed: i64;
-    let __sroa___pattern_temp_0_0: i32;
-    let __sroa___pattern_temp_0_1: i32;
-    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    __sroa___pattern_temp_0_1 = builtin::i32_wrap_i64(packed >> 32_i64);
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(__sroa___pattern_temp_0_0);
-    "core:rt/write_string_to_stream"(__sroa___pattern_temp_0_1, message, 1);
+    let rx_6: i32;
+    let tx_7: i32;
+    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
+    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_6);
+    "core:rt/write_string_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(future_handle);
 }
 
@@ -2498,22 +2500,21 @@ fn "core:prelude/types.wado/Option<core:prelude/string.wado/String>^Inspect::ins
 }
 
 fn "core:prelude/tuple.wado/[]<i32,core:prelude/string.wado/String>^Inspect::inspect"(self, f) {
-    let __tuple_3: ref "tuple//[i32, core:prelude/string.wado/String]";
-    let v_5: i32;
-    let v_6: ref "core:prelude/string.wado//String";
     let s_8: ref "core:prelude/string.wado//String";
     let v_10: ref "core:prelude/string.wado//String";
     let s_18: ref "core:prelude/string.wado//String";
     let s_20: ref "core:prelude/string.wado//String";
+    let __sroa___tuple_3_0: i32;
+    let __sroa___tuple_3_1: ref "core:prelude/string.wado//String";
     s_8 = global:core:prelude/tuple.wado::__const_obj_281;
     "core:prelude/string.wado/String::push_str"(f.buf, s_8);
-    __tuple_3 = struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: self.0, 1: ref.as_non_null(v_10 = self.1; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<u8>; __array_clone_src_9 = v_10.repr; let __array_clone_len_9: i32; __array_clone_len_9 = builtin::array_len(__array_clone_src_9); let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: v_10.used }) };
-    v_5 = __tuple_3.0;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(v_5, f);
-    v_6 = __tuple_3.1;
+    __sroa___tuple_3_0 = self.0;
+    v_10 = self.1;
+    __sroa___tuple_3_1 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<u8>; __array_clone_src_9 = v_10.repr; let __array_clone_len_9: i32; __array_clone_len_9 = builtin::array_len(__array_clone_src_9); let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: v_10.used };
+    "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa___tuple_3_0, f);
     s_18 = global:inspect_2.wado::__const_obj_206;
     "core:prelude/string.wado/String::push_str"(f.buf, s_18);
-    "core:prelude/format.wado/String^Inspect::inspect"(v_6, f);
+    "core:prelude/format.wado/String^Inspect::inspect"(__sroa___tuple_3_1, f);
     s_20 = global:core:prelude/tuple.wado::__const_obj_278;
     "core:prelude/string.wado/String::push_str"(f.buf, s_20);
 }

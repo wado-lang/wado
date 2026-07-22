@@ -135,9 +135,10 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:cross_destruct_patterns.wado::__modules_initialized: bool = 0;
+global mut global:cross_destruct_patterns.wado::__const_obj_0: ref null "tuple//[cross_destruct_patterns.wado/Point, core:prelude/string.wado/String]" = ref.null none;
+global global:cross_destruct_patterns.wado::__const_obj_1: ref null "cross_destruct_patterns.wado//Tagged" = struct.new "cross_destruct_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65), used: 1 }, coords: struct.new "tuple//[i32, i32]" { 0: 10, 1: 20 } };
 
 fn "cross_destruct_patterns.wado/run"() with Stdout {
-    let tagged: ref "cross_destruct_patterns.wado//Tagged";
     let label: ref "core:prelude/string.wado//String";
     let cx: i32;
     let cy: i32;
@@ -184,17 +185,17 @@ fn "cross_destruct_patterns.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:cross_destruct_patterns.wado::__modules_initialized = 1;
     };
-    tagged = struct.new "cross_destruct_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65), used: 1 }, coords: struct.new "tuple//[i32, i32]" { 0: 10, 1: 20 } };
-    label = tagged.label;
-    __pattern_temp_1 = tagged.coords;
+    label = global:cross_destruct_patterns.wado::__const_obj_1.label;
+    __pattern_temp_1 = global:cross_destruct_patterns.wado::__const_obj_1.coords;
     cx = __pattern_temp_1.0;
     cy = __pattern_temp_1.1;
     "core:cli/println"(__local_23 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_23, label); "core:prelude/string.wado/String::push"(__local_23, 58); "core:prelude/string.wado/String::push"(__local_23, 32); __local_24 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_23 }; f_41 = __local_24; "core:prelude/primitive.wado/i32::fmt_decimal"(cx, f_41); "core:prelude/string.wado/String::push"(__local_23, 44); "core:prelude/string.wado/String::push"(__local_23, 32); __local_24 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_23 }; f_46 = __local_24; "core:prelude/primitive.wado/i32::fmt_decimal"(cy, f_46); __local_23);
     pair = struct.new "tuple//[cross_destruct_patterns.wado/Point, core:prelude/string.wado/String]" { 0: struct.new "cross_destruct_patterns.wado//Point" { x: 1, y: 2 }, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("origin"), used: 6 } };
-    __pattern_temp_3 = pair.0;
+    global:cross_destruct_patterns.wado::__const_obj_0 = pair;
+    __pattern_temp_3 = global:cross_destruct_patterns.wado::__const_obj_0.0;
     x_5 = __pattern_temp_3.x;
     y_6 = __pattern_temp_3.y;
-    name = pair.1;
+    name = global:cross_destruct_patterns.wado::__const_obj_0.1;
     "core:cli/println"(__local_25 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_25, name); "core:prelude/string.wado/String::push"(__local_25, 58); "core:prelude/string.wado/String::push"(__local_25, 32); __local_26 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_25 }; f_52 = __local_26; "core:prelude/primitive.wado/i32::fmt_decimal"(x_5, f_52); "core:prelude/string.wado/String::push"(__local_25, 44); "core:prelude/string.wado/String::push"(__local_25, 32); __local_26 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_25 }; f_57 = __local_26; "core:prelude/primitive.wado/i32::fmt_decimal"(y_6, f_57); __local_25);
     __b = struct.new "core:prelude//List<cross_destruct_patterns.wado/Tagged>" { repr: array.new_fixed<ref "cross_destruct_patterns.wado//Tagged">(struct.new "cross_destruct_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80), used: 1 }, coords: struct.new "tuple//[i32, i32]" { 0: 3, 1: 4 } }, struct.new "cross_destruct_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(81), used: 1 }, coords: struct.new "tuple//[i32, i32]" { 0: 5, 1: 6 } }), used: 2 };
     __iter_10 = struct.new "core:prelude/slice.wado//ArrayIter<cross_destruct_patterns.wado/Tagged>" { repr: __b.repr, index: 0, end: 2 };
@@ -268,6 +269,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
     let packed_9: i64;
     let ptr_10: i32;
     let raw_len_11: i32;
+    let end_15: i32;
     let packed_21: i64;
     let ptr_22: i32;
     let raw_len_23: i32;
@@ -277,7 +279,8 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
         new_repr = builtin::array_new<u8>(len + 1);
         builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
-        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9("core:rt/cm_lower_list_u8"(new_repr, 0, (len + 1) - 0)));
+        end_15 = len + 1;
+        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9("core:rt/cm_lower_list_u8"(new_repr, 0, end_15 - 0)));
         raw_len_11 = builtin::i32_wrap_i64(packed_9 >> 32_i64);
         "core:rt/cm_stream_write_drain"(tx, ptr_10, raw_len_11, 1);
         drop("mem/realloc"(ptr_10, raw_len_11, 1, 0));
@@ -294,12 +297,12 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 fn "core:cli/println"(message) with Stdout {
     let handle: i32;
     let packed: i64;
-    let __sroa___pattern_temp_0_0: i32;
-    let __sroa___pattern_temp_0_1: i32;
-    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    __sroa___pattern_temp_0_1 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "cross_destruct_patterns.wado/__cm_binding__Stdout_write_via_stream"(__sroa___pattern_temp_0_0);
-    "core:cli/write_to_stream"(__sroa___pattern_temp_0_1, message, 1);
+    let rx_6: i32;
+    let tx_7: i32;
+    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "cross_destruct_patterns.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 

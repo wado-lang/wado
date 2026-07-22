@@ -532,6 +532,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
     let packed_9: i64;
     let ptr_10: i32;
     let raw_len_11: i32;
+    let end_15: i32;
     let packed_21: i64;
     let ptr_22: i32;
     let raw_len_23: i32;
@@ -541,7 +542,8 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
         new_repr = builtin::array_new<u8>(len + 1);
         builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
-        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9("core:rt/cm_lower_list_u8"(new_repr, 0, (len + 1) - 0)));
+        end_15 = len + 1;
+        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9("core:rt/cm_lower_list_u8"(new_repr, 0, end_15 - 0)));
         raw_len_11 = builtin::i32_wrap_i64(packed_9 >> 32_i64);
         "core:rt/cm_stream_write_drain"(tx, ptr_10, raw_len_11, 1);
         drop("mem/realloc"(ptr_10, raw_len_11, 1, 0));
@@ -558,12 +560,12 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 fn "core:cli/println"(message) with Stdout {
     let handle: i32;
     let packed: i64;
-    let __sroa___pattern_temp_0_0: i32;
-    let __sroa___pattern_temp_0_1: i32;
-    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    __sroa___pattern_temp_0_1 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "parser_synth_id_collision_test.wado/__cm_binding__Stdout_write_via_stream"(__sroa___pattern_temp_0_0);
-    "core:cli/write_to_stream"(__sroa___pattern_temp_0_1, message, 1);
+    let rx_6: i32;
+    let tx_7: i32;
+    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "parser_synth_id_collision_test.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
@@ -705,6 +707,7 @@ fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
     let packed_9: i64;
     let ptr_10: i32;
     let raw_len_11: i32;
+    let end_15: i32;
     let packed_21: i64;
     let ptr_22: i32;
     let raw_len_23: i32;
@@ -714,7 +717,8 @@ fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
         new_repr = builtin::array_new<u8>(len + 1);
         builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
-        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9("core:rt/cm_lower_list_u8"(new_repr, 0, (len + 1) - 0)));
+        end_15 = len + 1;
+        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9("core:rt/cm_lower_list_u8"(new_repr, 0, end_15 - 0)));
         raw_len_11 = builtin::i32_wrap_i64(packed_9 >> 32_i64);
         "core:rt/cm_stream_write_drain"(tx, ptr_10, raw_len_11, 1);
         drop("mem/realloc"(ptr_10, raw_len_11, 1, 0));
@@ -731,12 +735,12 @@ fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
 fn "core:rt/log_stderr"(message) {
     let future_handle: i32;
     let packed: i64;
-    let __sroa___pattern_temp_0_0: i32;
-    let __sroa___pattern_temp_0_1: i32;
-    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    __sroa___pattern_temp_0_1 = builtin::i32_wrap_i64(packed >> 32_i64);
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(__sroa___pattern_temp_0_0);
-    "core:rt/write_string_to_stream"(__sroa___pattern_temp_0_1, message, 1);
+    let rx_6: i32;
+    let tx_7: i32;
+    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
+    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_6);
+    "core:rt/write_string_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(future_handle);
 }
 
@@ -1072,7 +1076,6 @@ fn "core:prelude/string.wado/String::trim_end"(self) {
     let repr: ref Array<u8>;
     let end: i32;
     let pos: i32;
-    let ch: char;
     let value: u32;
     repr = self.repr;
     end = self.used;
@@ -1080,8 +1083,8 @@ fn "core:prelude/string.wado/String::trim_end"(self) {
         l116: loop {
             break_if b115 end <= 0;
             pos = "core:prelude/string.wado/char_start_backward"(repr, end - 1);
-            ch = local.tee value("core:prelude/string.wado/decode_char_at"(repr, pos).0);
-            break_if b115 "core:prelude/primitive.wado/char::is_whitespace"(ch) == 0;
+            value = "core:prelude/string.wado/decode_char_at"(repr, pos).0;
+            break_if b115 "core:prelude/primitive.wado/char::is_whitespace"(value) == 0;
             end = pos;
             continue l116;
         };
@@ -1486,8 +1489,8 @@ fn "core:prelude/list.wado/List<char>::grow"(self) {
     let new_capacity: i32;
     let new_repr: ref Array<char>;
     let a: i32;
-    capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<char>(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
+    new_repr = builtin::array_new<char>(local.tee new_capacity(select i32(a > 4, a, 4)));
     builtin::array_copy<char>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -1497,8 +1500,8 @@ fn "core:prelude/list.wado/List<parser_synth_id_collision_test.wado/DescriptorPa
     let new_capacity: i32;
     let new_repr: ref "Array<parser_synth_id_collision_test.wado/DescriptorPair>";
     let a: i32;
-    capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<ref "parser_synth_id_collision_test.wado//DescriptorPair">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
+    new_repr = builtin::array_new<ref "parser_synth_id_collision_test.wado//DescriptorPair">(local.tee new_capacity(select i32(a > 4, a, 4)));
     builtin::array_copy<ref "parser_synth_id_collision_test.wado//DescriptorPair">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -1508,8 +1511,8 @@ fn "core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self) {
     let new_capacity: i32;
     let new_repr: ref "Array<core:prelude/string.wado/String>";
     let a: i32;
-    capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<ref "core:prelude/string.wado//String">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
+    new_repr = builtin::array_new<ref "core:prelude/string.wado//String">(local.tee new_capacity(select i32(a > 4, a, 4)));
     builtin::array_copy<ref "core:prelude/string.wado//String">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

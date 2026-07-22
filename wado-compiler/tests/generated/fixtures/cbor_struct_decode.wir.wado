@@ -694,6 +694,7 @@ fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
     let packed_9: i64;
     let ptr_10: i32;
     let raw_len_11: i32;
+    let end_15: i32;
     let packed_21: i64;
     let ptr_22: i32;
     let raw_len_23: i32;
@@ -703,7 +704,8 @@ fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
         new_repr = builtin::array_new<u8>(len + 1);
         builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
-        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9("core:rt/cm_lower_list_u8"(new_repr, 0, (len + 1) - 0)));
+        end_15 = len + 1;
+        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9("core:rt/cm_lower_list_u8"(new_repr, 0, end_15 - 0)));
         raw_len_11 = builtin::i32_wrap_i64(packed_9 >> 32_i64);
         "core:rt/cm_stream_write_drain"(tx, ptr_10, raw_len_11, 1);
         drop("mem/realloc"(ptr_10, raw_len_11, 1, 0));
@@ -720,12 +722,12 @@ fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
 fn "core:rt/log_stderr"(message) {
     let future_handle: i32;
     let packed: i64;
-    let __sroa___pattern_temp_0_0: i32;
-    let __sroa___pattern_temp_0_1: i32;
-    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    __sroa___pattern_temp_0_1 = builtin::i32_wrap_i64(packed >> 32_i64);
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(__sroa___pattern_temp_0_0);
-    "core:rt/write_string_to_stream"(__sroa___pattern_temp_0_1, message, 1);
+    let rx_6: i32;
+    let tx_7: i32;
+    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
+    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_6);
+    "core:rt/write_string_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(future_handle);
 }
 
@@ -2430,10 +2432,10 @@ fn "cbor_struct_decode.wado/Point^Deserialize::deserialize<core:cbor/CborDeseria
                     if ref.test "core:prelude/types.wado//Option<i32>::Some"(__local_8) {
                         __local_9 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__local_8).payload_0;
                         if __local_9 == 0 {
+                            d_19 = __local_2.de;
                             let __sroa___local_10_discriminant: i32;
                             let __sroa___local_10_case0_payload_0: i32;
                             let __sroa___local_10_case1_payload_0: ref null "core:serde//DeserializeError";
-                            d_19 = __local_2.de;
                             multivalue_bind [__sroa___local_10_discriminant, __sroa___local_10_case0_payload_0, __sroa___local_10_case1_payload_0] = "core:cbor/CborDeserializer^Deserializer::deserialize_i32"(d_19);
                             if __sroa___local_10_discriminant == 0 {
                                 __local_3 = __sroa___local_10_case0_payload_0;
@@ -2442,10 +2444,10 @@ fn "cbor_struct_decode.wado/Point^Deserialize::deserialize<core:cbor/CborDeseria
                                 return 1, ref.null none, ref.as_non_null(v_20 = ref.as_non_null(__sroa___local_10_case1_payload_0); struct.new "core:serde//DeserializeError" { kind: v_20.kind, message: ref.as_non_null(v_32 = v_20.message; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_5: ref Array<u8>; __array_clone_src_5 = v_32.repr; let __array_clone_len_5: i32; __array_clone_len_5 = builtin::array_len(__array_clone_src_5); let __array_clone_dst_5: ref Array<u8>; __array_clone_dst_5 = builtin::array_new<u8>(__array_clone_len_5); builtin::array_copy<u8>(__array_clone_dst_5, 0, __array_clone_src_5, 0, __array_clone_len_5); __array_clone_dst_5), used: v_32.used }), offset: v_20.offset });
                             }
                         } else if __local_9 == 1 {
+                            d_22 = __local_2.de;
                             let __sroa___local_12_discriminant: i32;
                             let __sroa___local_12_case0_payload_0: i32;
                             let __sroa___local_12_case1_payload_0: ref null "core:serde//DeserializeError";
-                            d_22 = __local_2.de;
                             multivalue_bind [__sroa___local_12_discriminant, __sroa___local_12_case0_payload_0, __sroa___local_12_case1_payload_0] = "core:cbor/CborDeserializer^Deserializer::deserialize_i32"(d_22);
                             if __sroa___local_12_discriminant == 0 {
                                 __local_4 = __sroa___local_12_case0_payload_0;
@@ -2516,8 +2518,8 @@ fn "core:prelude/list.wado/List<u8>::grow"(self) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a: i32;
-    capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a > 4, a, 4)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -2532,13 +2534,14 @@ fn "core:prelude/list.wado/List<u8>::grow_to"(self, min_capacity) {
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_8 = capacity * 2; a_6 = select i32(a_8 > min_capacity, a_8, min_capacity); select i32(a_6 > 4, a_6, 4)));
+    a_8 = capacity * 2;
+    a_6 = select i32(a_8 > min_capacity, a_8, min_capacity);
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_6 > 4, a_6, 4)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
 
 fn "core:cbor/CborStructSerializer^SerializeStruct::field<i32>"(self, name, value) {
-    let r: ref null "core:serde//SerializeError";
     let buf_5: ref "core:prelude//List<u8>";
     let repr: ref Array<u8>;
     let __sroa_ser_buf: ref "core:prelude//List<u8>";
@@ -2547,9 +2550,8 @@ fn "core:cbor/CborStructSerializer^SerializeStruct::field<i32>"(self, name, valu
     "core:prelude/list.wado/List<u8>::extend_from_slice"(buf_5, repr = name.repr; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: repr, start: 0, end: name.used });
     __sroa_ser_buf = self.buf;
     "core:cbor/write_int_i64"(__sroa_ser_buf, builtin::i64_extend_i32_s(value));
-    r = ref.null none;
     self.buf = __sroa_ser_buf;
-    return r;
+    return ref.null none;
 }
 
 fn "core:cbor/CborStructAccess^DeserializeStruct::next_field<cbor_struct_decode.wado/Point>"(self) {

@@ -268,15 +268,12 @@ fn "http_error_code_payload.wado/handle"(request) {
     let __local_54: i32;
     let __local_55: i32;
     let __local_56: i32;
-    let __local_57: ref "wasi:http/types.wado//FieldSizePayload";
-    let __local_58: ref null "core:prelude/string.wado//String";
     let __local_59: i32;
     let __local_60: i32;
     let __local_61: i32;
     let __local_62: i64;
     let __local_63: i32;
     let __local_64: i32;
-    let __local_65: ref "core:prelude/types.wado//Option<u32>";
     let __local_66: i32;
     let __local_67: i32;
     let __local_69: ref "core:prelude/types.wado//Option<u32>";
@@ -348,6 +345,8 @@ fn "http_error_code_payload.wado/handle"(request) {
     let v_152: ref "wasi:http/types.wado//FieldSizePayload";
     let v_153: ref null "core:prelude/string.wado//String";
     let __vc_payload_0: ref "core:prelude/string.wado//String";
+    let __sroa___struct_val_field_name: ref null "core:prelude/string.wado//String";
+    let __sroa___struct_val_field_size: ref "core:prelude/types.wado//Option<u32>";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:http_error_code_payload.wado::__modules_initialized);
         cold_path;
@@ -461,27 +460,27 @@ fn "http_error_code_payload.wado/handle"(request) {
             __local_56 = 0;
             if __local_51 != 0 {
                 v_152 = ref.as_non_null(__local_49);
-                __local_57 = struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: v_153 = v_152.field_name; (if ref.is_null(v_153) == 0 -> ref null "core:prelude/string.wado//String" {
+                v_153 = v_152.field_name;
+                __sroa___struct_val_field_name = (if ref.is_null(v_153) == 0 -> ref null "core:prelude/string.wado//String" {
                     __vc_payload_0 = ref.as_non_null(v_153);
                     struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = __vc_payload_0.repr; let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__array_clone_src_1); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: __vc_payload_0.used };
                 } else {
                     v_153;
-                }), field_size: v_152.field_size };
-                __local_58 = __local_57.field_name;
-                __local_59 = ref.is_null(__local_58) == 0;
+                });
+                __sroa___struct_val_field_size = v_152.field_size;
+                __local_59 = ref.is_null(__sroa___struct_val_field_name) == 0;
                 __local_60 = 0;
                 __local_61 = 0;
                 if __local_59 != 0 {
-                    __local_63 = builtin::i32_wrap_i64(local.tee __local_62("core:rt/cm_lower_string"(ref.as_non_null(__local_58))));
+                    __local_63 = builtin::i32_wrap_i64(local.tee __local_62("core:rt/cm_lower_string"(ref.as_non_null(__sroa___struct_val_field_name))));
                     __local_64 = builtin::i32_wrap_i64(__local_62 >> 32_i64);
                     __local_60 = __local_63;
                     __local_61 = __local_64;
                 }
-                __local_65 = __local_57.field_size;
-                __local_66 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_65);
+                __local_66 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__sroa___struct_val_field_size);
                 __local_67 = 0;
                 if __local_66 != 0 {
-                    __local_67 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_65).payload_0;
+                    __local_67 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__sroa___struct_val_field_size).payload_0;
                 }
                 __local_52 = __local_59;
                 __local_53 = __local_60;

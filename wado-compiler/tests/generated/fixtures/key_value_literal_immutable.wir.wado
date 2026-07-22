@@ -170,7 +170,6 @@ global global:key_value_literal_immutable.wado::__const_obj_20: ref null "core:p
 global global:key_value_literal_immutable.wado::__const_obj_21: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 118, 97, 108, 117, 101), used: 17 };
 
 fn "key_value_literal_immutable.wado/run"() with Stdout {
-    let m: ref "key_value_literal_immutable.wado//FrozenMap<i32>";
     let __v0_2: i32;
     let m2: ref "key_value_literal_immutable.wado//FrozenMap<i32>";
     let __v0_15: i32;
@@ -193,6 +192,8 @@ fn "key_value_literal_immutable.wado/run"() with Stdout {
     let __b_55: ref "core:prelude//List<i32>";
     let key_63: ref "core:prelude/string.wado//String";
     let key_66: ref "core:prelude/string.wado//String";
+    let __sroa_m_keys: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let __sroa_m_values: ref "core:prelude//List<i32>";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:key_value_literal_immutable.wado::__modules_initialized);
         cold_path;
@@ -210,8 +211,9 @@ fn "key_value_literal_immutable.wado/run"() with Stdout {
     key_46 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122), used: 1 };
     "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__b_31, key_46);
     "core:prelude/list.wado/List<i32>::push"(__b_32, 30);
-    m = struct.new "key_value_literal_immutable.wado//FrozenMap<i32>" { keys: struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude/string.wado//String">(__b_31.repr)), used: __b_31.used }, values: struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_6: ref Array<i32>; __array_clone_src_6 = __b_32.repr; let __array_clone_len_6: i32; __array_clone_len_6 = builtin::array_len(__array_clone_src_6); let __array_clone_dst_6: ref Array<i32>; __array_clone_dst_6 = builtin::array_new<i32>(__array_clone_len_6); builtin::array_copy<i32>(__array_clone_dst_6, 0, __array_clone_src_6, 0, __array_clone_len_6); __array_clone_dst_6), used: __b_32.used } };
-    __v0_2 = m.keys.used;
+    __sroa_m_keys = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude/string.wado//String">(__b_31.repr)), used: __b_31.used };
+    __sroa_m_values = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_6: ref Array<i32>; __array_clone_src_6 = __b_32.repr; let __array_clone_len_6: i32; __array_clone_len_6 = builtin::array_len(__array_clone_src_6); let __array_clone_dst_6: ref Array<i32>; __array_clone_dst_6 = builtin::array_new<i32>(__array_clone_len_6); builtin::array_copy<i32>(__array_clone_dst_6, 0, __array_clone_src_6, 0, __array_clone_len_6); __array_clone_dst_6), used: __b_32.used };
+    __v0_2 = __sroa_m_keys.used;
     if @unlikely(__v0_2 != 3) {
         cold_path;
         "core:rt/panic"(__local_17 = "core:prelude/string.wado/String::with_capacity"(124); "core:prelude/string.wado/String::push_str"(__local_17, global:key_value_literal_immutable.wado::__const_obj_3); "core:prelude/string.wado/String::push"(__local_17, 114); "core:prelude/string.wado/String::push"(__local_17, 117); "core:prelude/string.wado/String::push"(__local_17, 110); "core:prelude/string.wado/String::push"(__local_17, 32); "core:prelude/string.wado/String::push"(__local_17, 97); "core:prelude/string.wado/String::push"(__local_17, 116); "core:prelude/string.wado/String::push"(__local_17, 32); "core:prelude/string.wado/String::push_str"(__local_17, global:key_value_literal_immutable.wado::__const_obj_2); "core:prelude/string.wado/String::push"(__local_17, 58); __local_18 = "core:prelude/format.wado/Formatter::new"(__local_17); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 58 }, __local_18); "core:prelude/string.wado/String::push_str"(__local_17, global:key_value_literal_immutable.wado::__const_obj_14); "core:prelude/string.wado/String::push_str"(__local_17, global:key_value_literal_immutable.wado::__const_obj_13); __local_18 = "core:prelude/format.wado/Formatter::new"(__local_17); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_2 }, __local_18); "core:prelude/string.wado/String::push"(__local_17, 10); __local_17);
@@ -219,7 +221,7 @@ fn "key_value_literal_immutable.wado/run"() with Stdout {
     }
     let __sroa___match_27_discriminant: i32;
     let __sroa___match_27_payload_0: i32;
-    multivalue_bind [__sroa___match_27_discriminant, __sroa___match_27_payload_0] = "key_value_literal_immutable.wado/FrozenMap<i32>::get"(m, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 });
+    multivalue_bind [__sroa___match_27_discriminant, __sroa___match_27_payload_0] = "key_value_literal_immutable.wado/FrozenMap<i32>::get"(struct.new "key_value_literal_immutable.wado//FrozenMap<i32>" { keys: __sroa_m_keys, values: __sroa_m_values }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 });
     if __sroa___match_27_discriminant == 0 {
         if @unlikely(__sroa___match_27_payload_0 != 10) {
             cold_path;
@@ -230,7 +232,7 @@ fn "key_value_literal_immutable.wado/run"() with Stdout {
     }
     let __sroa___match_28_discriminant: i32;
     let __sroa___match_28_payload_0: i32;
-    multivalue_bind [__sroa___match_28_discriminant, __sroa___match_28_payload_0] = "key_value_literal_immutable.wado/FrozenMap<i32>::get"(m, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 });
+    multivalue_bind [__sroa___match_28_discriminant, __sroa___match_28_payload_0] = "key_value_literal_immutable.wado/FrozenMap<i32>::get"(struct.new "key_value_literal_immutable.wado//FrozenMap<i32>" { keys: __sroa_m_keys, values: __sroa_m_values }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 });
     if __sroa___match_28_discriminant == 0 {
         if @unlikely(__sroa___match_28_payload_0 != 20) {
             cold_path;
@@ -241,7 +243,7 @@ fn "key_value_literal_immutable.wado/run"() with Stdout {
     }
     let __sroa___match_29_discriminant: i32;
     let __sroa___match_29_payload_0: i32;
-    multivalue_bind [__sroa___match_29_discriminant, __sroa___match_29_payload_0] = "key_value_literal_immutable.wado/FrozenMap<i32>::get"(m, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122), used: 1 });
+    multivalue_bind [__sroa___match_29_discriminant, __sroa___match_29_payload_0] = "key_value_literal_immutable.wado/FrozenMap<i32>::get"(struct.new "key_value_literal_immutable.wado//FrozenMap<i32>" { keys: __sroa_m_keys, values: __sroa_m_values }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122), used: 1 });
     if __sroa___match_29_discriminant == 0 {
         if @unlikely(__sroa___match_29_payload_0 != 30) {
             cold_path;
@@ -293,6 +295,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
     let packed_9: i64;
     let ptr_10: i32;
     let raw_len_11: i32;
+    let end_15: i32;
     let packed_21: i64;
     let ptr_22: i32;
     let raw_len_23: i32;
@@ -302,7 +305,8 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
         new_repr = builtin::array_new<u8>(len + 1);
         builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
-        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9("core:rt/cm_lower_list_u8"(new_repr, 0, (len + 1) - 0)));
+        end_15 = len + 1;
+        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9("core:rt/cm_lower_list_u8"(new_repr, 0, end_15 - 0)));
         raw_len_11 = builtin::i32_wrap_i64(packed_9 >> 32_i64);
         "core:rt/cm_stream_write_drain"(tx, ptr_10, raw_len_11, 1);
         drop("mem/realloc"(ptr_10, raw_len_11, 1, 0));
@@ -319,12 +323,12 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 fn "core:cli/println"(message) with Stdout {
     let handle: i32;
     let packed: i64;
-    let __sroa___pattern_temp_0_0: i32;
-    let __sroa___pattern_temp_0_1: i32;
-    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    __sroa___pattern_temp_0_1 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "key_value_literal_immutable.wado/__cm_binding__Stdout_write_via_stream"(__sroa___pattern_temp_0_0);
-    "core:cli/write_to_stream"(__sroa___pattern_temp_0_1, message, 1);
+    let rx_6: i32;
+    let tx_7: i32;
+    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "key_value_literal_immutable.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
@@ -409,6 +413,7 @@ fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
     let packed_9: i64;
     let ptr_10: i32;
     let raw_len_11: i32;
+    let end_15: i32;
     let packed_21: i64;
     let ptr_22: i32;
     let raw_len_23: i32;
@@ -418,7 +423,8 @@ fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
         new_repr = builtin::array_new<u8>(len + 1);
         builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
-        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9("core:rt/cm_lower_list_u8"(new_repr, 0, (len + 1) - 0)));
+        end_15 = len + 1;
+        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9("core:rt/cm_lower_list_u8"(new_repr, 0, end_15 - 0)));
         raw_len_11 = builtin::i32_wrap_i64(packed_9 >> 32_i64);
         "core:rt/cm_stream_write_drain"(tx, ptr_10, raw_len_11, 1);
         drop("mem/realloc"(ptr_10, raw_len_11, 1, 0));
@@ -435,12 +441,12 @@ fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
 fn "core:rt/log_stderr"(message) {
     let future_handle: i32;
     let packed: i64;
-    let __sroa___pattern_temp_0_0: i32;
-    let __sroa___pattern_temp_0_1: i32;
-    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    __sroa___pattern_temp_0_1 = builtin::i32_wrap_i64(packed >> 32_i64);
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(__sroa___pattern_temp_0_0);
-    "core:rt/write_string_to_stream"(__sroa___pattern_temp_0_1, message, 1);
+    let rx_6: i32;
+    let tx_7: i32;
+    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
+    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_6);
+    "core:rt/write_string_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(future_handle);
 }
 
@@ -756,8 +762,8 @@ fn "core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self) {
     let new_capacity: i32;
     let new_repr: ref "Array<core:prelude/string.wado/String>";
     let a: i32;
-    capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<ref "core:prelude/string.wado//String">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
+    new_repr = builtin::array_new<ref "core:prelude/string.wado//String">(local.tee new_capacity(select i32(a > 4, a, 4)));
     builtin::array_copy<ref "core:prelude/string.wado//String">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -767,8 +773,8 @@ fn "core:prelude/list.wado/List<i32>::grow"(self) {
     let new_capacity: i32;
     let new_repr: ref Array<i32>;
     let a: i32;
-    capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<i32>(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
+    new_repr = builtin::array_new<i32>(local.tee new_capacity(select i32(a > 4, a, 4)));
     builtin::array_copy<i32>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

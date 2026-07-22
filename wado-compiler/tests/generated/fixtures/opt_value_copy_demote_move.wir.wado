@@ -168,12 +168,10 @@ global global:core:prelude/format.wado::__const_obj_32: ref null "core:prelude/s
 global global:core:prelude/format.wado::__const_obj_33: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(92, 117, 123), used: 3 };
 
 fn "opt_value_copy_demote_move.wado/process"(tokens) with Stdout {
-    let sorted: ref "core:prelude//List<core:prelude/string.wado/String>";
     let __v0_2: ref "core:prelude/string.wado//String";
     let __cond_3: bool;
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5_5: ref "core:prelude/format.wado//Formatter";
-    let __v1_11: i32;
     let __local_5_13: ref "core:prelude/string.wado//String";
     let __local_6_14: ref "core:prelude/format.wado//Formatter";
     let __v1_18: i32;
@@ -183,12 +181,15 @@ fn "opt_value_copy_demote_move.wado/process"(tokens) with Stdout {
     let __v1_26: i32;
     let __local_5_28: ref "core:prelude/string.wado//String";
     let __local_6_29: ref "core:prelude/format.wado//Formatter";
-    sorted = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude/string.wado//String">(tokens.repr)), used: tokens.used };
-    "core:prelude/string.wado/String::push_str"(__v1_11 = sorted.used; if @unlikely(0 >= __v1_11) {
+    let __sroa_sorted_repr: ref "Array<core:prelude/string.wado/String>";
+    let __sroa_sorted_used: i32;
+    __sroa_sorted_repr = builtin::array_clone_deep<ref "core:prelude/string.wado//String">(tokens.repr);
+    __sroa_sorted_used = tokens.used;
+    "core:prelude/string.wado/String::push_str"(if @unlikely(0 >= __sroa_sorted_used) {
         cold_path;
-        "core:rt/panic"(__local_5_13 = "core:prelude/string.wado/String::with_capacity"(173); "core:prelude/string.wado/String::push_str"(__local_5_13, global:opt_value_copy_demote_move.wado::__const_obj_10); "core:prelude/string.wado/String::push_str"(__local_5_13, global:opt_value_copy_demote_move.wado::__const_obj_16); "core:prelude/string.wado/String::push"(__local_5_13, 32); "core:prelude/string.wado/String::push"(__local_5_13, 97); "core:prelude/string.wado/String::push"(__local_5_13, 116); "core:prelude/string.wado/String::push"(__local_5_13, 32); "core:prelude/string.wado/String::push_str"(__local_5_13, global:opt_value_copy_demote_move.wado::__const_obj_15); "core:prelude/string.wado/String::push"(__local_5_13, 58); __local_6_14 = "core:prelude/format.wado/Formatter::new"(__local_5_13); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 354 }, __local_6_14); "core:prelude/string.wado/String::push"(__local_5_13, 58); "core:prelude/string.wado/String::push"(__local_5_13, 32); "core:prelude/string.wado/String::push_str"(__local_5_13, global:opt_value_copy_demote_move.wado::__const_obj_14); "core:prelude/string.wado/String::push_str"(__local_5_13, global:opt_value_copy_demote_move.wado::__const_obj_13); "core:prelude/string.wado/String::push"(__local_5_13, 105); "core:prelude/string.wado/String::push"(__local_5_13, 110); "core:prelude/string.wado/String::push"(__local_5_13, 100); "core:prelude/string.wado/String::push"(__local_5_13, 101); "core:prelude/string.wado/String::push"(__local_5_13, 120); "core:prelude/string.wado/String::push"(__local_5_13, 58); "core:prelude/string.wado/String::push"(__local_5_13, 32); __local_6_14 = "core:prelude/format.wado/Formatter::new"(__local_5_13); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }, __local_6_14); "core:prelude/string.wado/String::push"(__local_5_13, 10); "core:prelude/string.wado/String::push_str"(__local_5_13, global:opt_value_copy_demote_move.wado::__const_obj_12); __local_6_14 = "core:prelude/format.wado/Formatter::new"(__local_5_13); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v1_11 }, __local_6_14); "core:prelude/string.wado/String::push"(__local_5_13, 10); __local_5_13);
+        "core:rt/panic"(__local_5_13 = "core:prelude/string.wado/String::with_capacity"(173); "core:prelude/string.wado/String::push_str"(__local_5_13, global:opt_value_copy_demote_move.wado::__const_obj_10); "core:prelude/string.wado/String::push_str"(__local_5_13, global:opt_value_copy_demote_move.wado::__const_obj_16); "core:prelude/string.wado/String::push"(__local_5_13, 32); "core:prelude/string.wado/String::push"(__local_5_13, 97); "core:prelude/string.wado/String::push"(__local_5_13, 116); "core:prelude/string.wado/String::push"(__local_5_13, 32); "core:prelude/string.wado/String::push_str"(__local_5_13, global:opt_value_copy_demote_move.wado::__const_obj_15); "core:prelude/string.wado/String::push"(__local_5_13, 58); __local_6_14 = "core:prelude/format.wado/Formatter::new"(__local_5_13); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 354 }, __local_6_14); "core:prelude/string.wado/String::push"(__local_5_13, 58); "core:prelude/string.wado/String::push"(__local_5_13, 32); "core:prelude/string.wado/String::push_str"(__local_5_13, global:opt_value_copy_demote_move.wado::__const_obj_14); "core:prelude/string.wado/String::push_str"(__local_5_13, global:opt_value_copy_demote_move.wado::__const_obj_13); "core:prelude/string.wado/String::push"(__local_5_13, 105); "core:prelude/string.wado/String::push"(__local_5_13, 110); "core:prelude/string.wado/String::push"(__local_5_13, 100); "core:prelude/string.wado/String::push"(__local_5_13, 101); "core:prelude/string.wado/String::push"(__local_5_13, 120); "core:prelude/string.wado/String::push"(__local_5_13, 58); "core:prelude/string.wado/String::push"(__local_5_13, 32); __local_6_14 = "core:prelude/format.wado/Formatter::new"(__local_5_13); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }, __local_6_14); "core:prelude/string.wado/String::push"(__local_5_13, 10); "core:prelude/string.wado/String::push_str"(__local_5_13, global:opt_value_copy_demote_move.wado::__const_obj_12); __local_6_14 = "core:prelude/format.wado/Formatter::new"(__local_5_13); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __sroa_sorted_used }, __local_6_14); "core:prelude/string.wado/String::push"(__local_5_13, 10); __local_5_13);
         unreachable;
-    }; builtin::array_get<ref "core:prelude/string.wado//String">(sorted.repr, 0), global:opt_value_copy_demote_move.wado::__const_obj_24);
+    }; builtin::array_get<ref "core:prelude/string.wado//String">(__sroa_sorted_repr, 0), global:opt_value_copy_demote_move.wado::__const_obj_24);
     "core:cli/println"(__v1_18 = tokens.used; if @unlikely(0 >= __v1_18) {
         cold_path;
         "core:rt/panic"(__local_5_20 = "core:prelude/string.wado/String::with_capacity"(173); "core:prelude/string.wado/String::push_str"(__local_5_20, global:opt_value_copy_demote_move.wado::__const_obj_10); "core:prelude/string.wado/String::push_str"(__local_5_20, global:opt_value_copy_demote_move.wado::__const_obj_16); "core:prelude/string.wado/String::push"(__local_5_20, 32); "core:prelude/string.wado/String::push"(__local_5_20, 97); "core:prelude/string.wado/String::push"(__local_5_20, 116); "core:prelude/string.wado/String::push"(__local_5_20, 32); "core:prelude/string.wado/String::push_str"(__local_5_20, global:opt_value_copy_demote_move.wado::__const_obj_15); "core:prelude/string.wado/String::push"(__local_5_20, 58); __local_6_21 = "core:prelude/format.wado/Formatter::new"(__local_5_20); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 354 }, __local_6_21); "core:prelude/string.wado/String::push"(__local_5_20, 58); "core:prelude/string.wado/String::push"(__local_5_20, 32); "core:prelude/string.wado/String::push_str"(__local_5_20, global:opt_value_copy_demote_move.wado::__const_obj_14); "core:prelude/string.wado/String::push_str"(__local_5_20, global:opt_value_copy_demote_move.wado::__const_obj_13); "core:prelude/string.wado/String::push"(__local_5_20, 105); "core:prelude/string.wado/String::push"(__local_5_20, 110); "core:prelude/string.wado/String::push"(__local_5_20, 100); "core:prelude/string.wado/String::push"(__local_5_20, 101); "core:prelude/string.wado/String::push"(__local_5_20, 120); "core:prelude/string.wado/String::push"(__local_5_20, 58); "core:prelude/string.wado/String::push"(__local_5_20, 32); __local_6_21 = "core:prelude/format.wado/Formatter::new"(__local_5_20); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }, __local_6_21); "core:prelude/string.wado/String::push"(__local_5_20, 10); "core:prelude/string.wado/String::push_str"(__local_5_20, global:opt_value_copy_demote_move.wado::__const_obj_12); __local_6_21 = "core:prelude/format.wado/Formatter::new"(__local_5_20); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v1_18 }, __local_6_21); "core:prelude/string.wado/String::push"(__local_5_20, 10); __local_5_20);
@@ -245,6 +246,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
     let packed_9: i64;
     let ptr_10: i32;
     let raw_len_11: i32;
+    let end_15: i32;
     let packed_21: i64;
     let ptr_22: i32;
     let raw_len_23: i32;
@@ -254,7 +256,8 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
         new_repr = builtin::array_new<u8>(len + 1);
         builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
-        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9("core:rt/cm_lower_list_u8"(new_repr, 0, (len + 1) - 0)));
+        end_15 = len + 1;
+        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9("core:rt/cm_lower_list_u8"(new_repr, 0, end_15 - 0)));
         raw_len_11 = builtin::i32_wrap_i64(packed_9 >> 32_i64);
         "core:rt/cm_stream_write_drain"(tx, ptr_10, raw_len_11, 1);
         drop("mem/realloc"(ptr_10, raw_len_11, 1, 0));
@@ -271,12 +274,12 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 fn "core:cli/println"(message) with Stdout {
     let handle: i32;
     let packed: i64;
-    let __sroa___pattern_temp_0_0: i32;
-    let __sroa___pattern_temp_0_1: i32;
-    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    __sroa___pattern_temp_0_1 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "opt_value_copy_demote_move.wado/__cm_binding__Stdout_write_via_stream"(__sroa___pattern_temp_0_0);
-    "core:cli/write_to_stream"(__sroa___pattern_temp_0_1, message, 1);
+    let rx_6: i32;
+    let tx_7: i32;
+    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "opt_value_copy_demote_move.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
+    "core:cli/write_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
@@ -454,6 +457,7 @@ fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
     let packed_9: i64;
     let ptr_10: i32;
     let raw_len_11: i32;
+    let end_15: i32;
     let packed_21: i64;
     let ptr_22: i32;
     let raw_len_23: i32;
@@ -463,7 +467,8 @@ fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
         new_repr = builtin::array_new<u8>(len + 1);
         builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
         builtin::array_set_u8(new_repr, len, 10);
-        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9("core:rt/cm_lower_list_u8"(new_repr, 0, (len + 1) - 0)));
+        end_15 = len + 1;
+        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9("core:rt/cm_lower_list_u8"(new_repr, 0, end_15 - 0)));
         raw_len_11 = builtin::i32_wrap_i64(packed_9 >> 32_i64);
         "core:rt/cm_stream_write_drain"(tx, ptr_10, raw_len_11, 1);
         drop("mem/realloc"(ptr_10, raw_len_11, 1, 0));
@@ -480,12 +485,12 @@ fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
 fn "core:rt/log_stderr"(message) {
     let future_handle: i32;
     let packed: i64;
-    let __sroa___pattern_temp_0_0: i32;
-    let __sroa___pattern_temp_0_1: i32;
-    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    __sroa___pattern_temp_0_1 = builtin::i32_wrap_i64(packed >> 32_i64);
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(__sroa___pattern_temp_0_0);
-    "core:rt/write_string_to_stream"(__sroa___pattern_temp_0_1, message, 1);
+    let rx_6: i32;
+    let tx_7: i32;
+    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
+    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_6);
+    "core:rt/write_string_to_stream"(tx_7, message, 1);
     "wasi/future-drop-readable:transmission-cli"(future_handle);
 }
 
