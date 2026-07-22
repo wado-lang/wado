@@ -150,29 +150,43 @@ fn flattenable_inner_block(body: &Body, sid: StmtId) -> Option<(ExprId, BlockId)
     }
     // Defer while a leading statement is a shadow binding the session's
     // dissolvers own: a bare local copy (`let a = b`, the inliner's param
-    // binding) or a reference binding (`let r = &place`, `ref_elim`'s domain).
+    // binding) or a reference to a *place* (`let r = &x`, `ref_elim`'s domain).
     // Hoisting one first widens its scope and hands the same binding to
     // several session rules at once (observed: a hoisted `let self = get_x`
     // shadow stranding a fabricated `get_x.__capture_0` read after the
     // functor binding was elided). Once the shadows dissolve, the block is
     // single-tail (unwrapped by `const_branch_prune`) or flattenable here on
     // a later iteration.
+    //
+    // A reference to a *fresh value* (`let input = &String { … }`, `&f()`) is
+    // NOT such a shadow — no dissolver claims it, so `ref_elim` never resolves
+    // it and deferring would strand the block block-wrapped forever, hiding the
+    // aggregate tail from SROA. Restrict the reference deferral to place
+    // referents only.
     let no_shadow_copy = leading.iter().all(|s| {
         let StmtKind::Let { value, .. } = &body.stmts[*s].kind else {
             return true;
         };
-        !value.as_expr().is_some_and(|e| {
-            matches!(
-                body.exprs[e].kind,
-                ExprKind::Local { .. }
-                    | ExprKind::Unary {
-                        op: crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef,
-                        ..
-                    }
-            )
+        !value.as_expr().is_some_and(|e| match &body.exprs[e].kind {
+            ExprKind::Local { .. } => true,
+            ExprKind::Unary {
+                op: crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef,
+                expr: referent,
+            } => referent
+                .as_expr()
+                .is_some_and(|re| is_place_expr(&body.exprs[re].kind)),
+            _ => false,
         })
     });
     no_shadow_copy.then_some((value_e, inner))
+}
+
+/// A place expression — the lvalue forms `ref_elim` dissolves a `&`/`&mut` of.
+fn is_place_expr(kind: &ExprKind) -> bool {
+    matches!(
+        kind,
+        ExprKind::Local { .. } | ExprKind::FieldAccess { .. } | ExprKind::Index { .. }
+    )
 }
 
 #[cfg(test)]
