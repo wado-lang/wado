@@ -35,10 +35,11 @@
 //! `expr_readonly` arms mirror the former tree gate exactly to keep the
 //! soundness decision — and therefore codegen — identical.
 
+use cranelift_entity::EntityRef;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::hashmap::IndexSet;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{NirFunction, NirGlobal, NirUnaryOp};
 use crate::nir_arena::{
@@ -61,8 +62,15 @@ struct Candidate {
 }
 
 enum CandidateKind {
-    /// A `let` binding whose value is a closed constant aggregate.
-    LetBinding { local_index: u32 },
+    /// A `let` binding whose value is a closed constant aggregate. Sibling
+    /// const bindings the value reads (`sibling_lets`, in source order) are
+    /// moved into the hoisted initializer block at mutation time, so the
+    /// global's set value stays self-contained (eager-promotable, dedupable)
+    /// exactly like the pre-normal-form builder-temp block.
+    LetBinding {
+        local_index: u32,
+        sibling_lets: Vec<StmtId>,
+    },
     /// A constant aggregate literal referenced via `&` directly at an
     /// expression position (typically a call argument) with no enclosing
     /// `let` — e.g. the synthesized `serde` field key in
@@ -120,7 +128,10 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         let mut func = project.functions[func_idx].borrow_mut();
         let body = func.body.as_mut().expect("candidate function has a body");
         match kind {
-            CandidateKind::LetBinding { local_index } => {
+            CandidateKind::LetBinding {
+                local_index,
+                sibling_lets,
+            } => {
                 // Rewrite reads first (the let's own value is const and
                 // references no local index, so it is untouched), then
                 // replace the binding.
@@ -130,6 +141,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
                     "[NIR] const_object_globalization: LetBinding candidate's `let` \
                      (local {local_index}) went missing between collection and mutation"
                 );
+                inline_sibling_lets(body, local_index, &sibling_lets, &module_source, &name);
             }
             CandidateKind::InlineRef { ref_expr } => {
                 hoist_inline_ref(body, ref_expr, &module_source, &name, ty);
@@ -170,6 +182,7 @@ fn collect_candidates(
     out: &mut Vec<Candidate>,
 ) {
     let single_decl_locals = locals_declared_once(body);
+    let siblings = sibling_const_locals(body, gate, &single_decl_locals);
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Stmt(s) = node
@@ -179,7 +192,7 @@ fn collect_candidates(
                 ..
             } = &body.stmts[s].kind
             && single_decl_locals.contains(local_index)
-            && let_stmt_qualifies(body, s, gate)
+            && let Some(sibling_lets) = let_stmt_qualifies(body, s, gate, &siblings)
         {
             out.push(Candidate {
                 func_idx,
@@ -187,6 +200,7 @@ fn collect_candidates(
                 module_source: module_source.clone(),
                 kind: CandidateKind::LetBinding {
                     local_index: *local_index,
+                    sibling_lets,
                 },
             });
             continue;
@@ -326,7 +340,12 @@ fn skip_function(f: &NirFunction) -> bool {
 /// would nest one global's `GlobalVarSet` inside another's initializer — a
 /// shape nothing downstream (`wir_optimize::const_global`'s
 /// single-assignment classifier, in particular) is prepared to see.
-fn let_stmt_qualifies(body: &Body, stmt: StmtId, gate: &Gate<'_>) -> bool {
+fn let_stmt_qualifies(
+    body: &Body,
+    stmt: StmtId,
+    gate: &Gate<'_>,
+    siblings: &SiblingConsts,
+) -> Option<Vec<StmtId>> {
     let StmtKind::Let {
         local_index,
         value,
@@ -334,13 +353,208 @@ fn let_stmt_qualifies(body: &Body, stmt: StmtId, gate: &Gate<'_>) -> bool {
         ..
     } = &body.stmts[stmt].kind
     else {
-        return false;
+        return None;
     };
     let (local_index, value, type_id) = (*local_index, *value, *type_id);
-    gate.is_reference_type(type_id)
-        && is_globalizable_const_operand(body, value, &mut IndexSet::default())
-        && contains_aggregate_operand(body, value)
-        && is_readonly_body(body, local_index, gate)
+    if !gate.is_reference_type(type_id)
+        || !is_globalizable_const_operand(body, value, &mut siblings.set.clone())
+        || !is_readonly_body(body, local_index, gate)
+    {
+        return None;
+    }
+    // Sibling-const reads inside the initializer (the flattened builder-temp
+    // pair `let mut __b = <literal>; let xs = *__b`) qualify only when every
+    // read of the sibling sits inside this initializer: the hoisted
+    // `GlobalVarSet` still evaluates at the binding's flow position (sibling in
+    // scope), and confinement guarantees no other alias of the shared object
+    // exists to mutate it behind the global.
+    let used_siblings = seeded_locals_read(body, value, siblings);
+    for &l in &used_siblings {
+        if count_local_reads(body, NodeRef::Block(body.root), l)
+            != count_local_reads_operand(body, value, l)
+        {
+            return None;
+        }
+    }
+    let has_aggregate = contains_aggregate_operand(body, value)
+        || used_siblings.iter().any(|l| {
+            siblings
+                .defs
+                .get(l)
+                .is_some_and(|&d| contains_aggregate_operand(body, d))
+        });
+    if !has_aggregate {
+        return None;
+    }
+    // Source order: the moved defs must precede the tail in the initializer
+    // block exactly as they did in the function.
+    let mut lets: Vec<StmtId> = used_siblings
+        .iter()
+        .filter_map(|l| siblings.let_stmts.get(l).copied())
+        .collect();
+    lets.sort_by_key(|s| s.index());
+    Some(lets)
+}
+
+/// Sibling bindings a candidate initializer may read: declared once, never
+/// mutated (assigned, `&mut`-borrowed, `mut`-argument, or mutating-method
+/// receiver), reference-typed, and bound to a closed constant aggregate.
+/// Seeded to a fixpoint so a sibling may itself read an earlier sibling.
+#[derive(Default)]
+struct SiblingConsts {
+    set: IndexSet<u32>,
+    defs: IndexMap<u32, Operand>,
+    let_stmts: IndexMap<u32, StmtId>,
+}
+
+fn sibling_const_locals(
+    body: &Body,
+    gate: &Gate<'_>,
+    declared_once: &IndexSet<u32>,
+) -> SiblingConsts {
+    let mutated = mutated_locals(body, gate);
+    let mut sc = SiblingConsts::default();
+    loop {
+        let mut changed = false;
+        let mut stack = vec![NodeRef::Block(body.root)];
+        while let Some(node) = stack.pop() {
+            if let NodeRef::Stmt(s) = node
+                && let StmtKind::Let {
+                    local_index,
+                    value,
+                    type_id,
+                    ..
+                } = &body.stmts[s].kind
+                && declared_once.contains(local_index)
+                && !mutated.contains(local_index)
+                && !sc.set.contains(local_index)
+                && gate.is_reference_type(*type_id)
+                && is_globalizable_const_operand(body, *value, &mut sc.set.clone())
+            {
+                sc.set.insert(*local_index);
+                sc.defs.insert(*local_index, *value);
+                if let NodeRef::Stmt(sid) = node {
+                    sc.let_stmts.insert(*local_index, sid);
+                }
+                changed = true;
+            }
+            body.for_each_child(node, |c| stack.push(c));
+        }
+        if !changed {
+            break;
+        }
+    }
+    sc
+}
+
+/// Locals that may be mutated anywhere in `body`: an `Assign` target root, a
+/// `&mut` borrow root, a `mut` call argument root, or the receiver root of a
+/// method not proven non-mutating. The complement is safe to share behind an
+/// immutable global.
+fn mutated_locals(body: &Body, gate: &Gate<'_>) -> IndexSet<u32> {
+    let root_of = |e: ExprId| -> Option<u32> {
+        let mut cur = e;
+        loop {
+            match &body.exprs[cur].kind {
+                ExprKind::Local { index, .. } => return Some(*index),
+                ExprKind::FieldAccess { expr: inner, .. }
+                | ExprKind::Index { expr: inner, .. }
+                | ExprKind::Unary { expr: inner, .. }
+                | ExprKind::Cast { expr: inner, .. } => match inner.as_expr() {
+                    Some(ie) => cur = ie,
+                    None => return None,
+                },
+                _ => return None,
+            }
+        }
+    };
+    let mut out: IndexSet<u32> = IndexSet::default();
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(id) = node {
+            match &body.exprs[id].kind {
+                ExprKind::Assign { target, .. } => {
+                    if let Some(r) = root_of(*target) {
+                        out.insert(r);
+                    }
+                }
+                ExprKind::Unary {
+                    op: NirUnaryOp::MutRef,
+                    expr: inner,
+                } => {
+                    if let Some(r) = inner.as_expr().and_then(root_of) {
+                        out.insert(r);
+                    }
+                }
+                ExprKind::MethodCall {
+                    receiver,
+                    func_id,
+                    args,
+                    ..
+                } => {
+                    if gate.callee_mutates_self(*func_id) != Some(false)
+                        && let Some(r) = receiver.as_expr().and_then(root_of)
+                    {
+                        out.insert(r);
+                    }
+                    for a in args {
+                        if a.is_mut && let Some(r) = a.expr.as_expr().and_then(root_of) {
+                            out.insert(r);
+                        }
+                    }
+                }
+                ExprKind::Call { args, .. } => {
+                    for a in args {
+                        if a.is_mut && let Some(r) = a.expr.as_expr().and_then(root_of) {
+                            out.insert(r);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    out
+}
+
+/// The sibling-const locals read anywhere inside `value`.
+fn seeded_locals_read(body: &Body, value: Operand, siblings: &SiblingConsts) -> IndexSet<u32> {
+    let mut out = IndexSet::default();
+    let Some(e) = value.as_expr() else {
+        return out;
+    };
+    let mut stack = vec![NodeRef::Expr(e)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(id) = node
+            && let ExprKind::Local { index, .. } = &body.exprs[id].kind
+            && siblings.set.contains(index)
+        {
+            out.insert(*index);
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    out
+}
+
+/// Count `Local { l }` mentions under `node`.
+fn count_local_reads(body: &Body, node: NodeRef, l: u32) -> usize {
+    let mut n = 0;
+    let mut stack = vec![node];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(id) = node
+            && matches!(&body.exprs[id].kind, ExprKind::Local { index, .. } if *index == l)
+        {
+            n += 1;
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    n
+}
+
+fn count_local_reads_operand(body: &Body, op: Operand, l: u32) -> usize {
+    op.as_expr()
+        .map_or(0, |e| count_local_reads(body, NodeRef::Expr(e), l))
 }
 
 fn is_globalizable_const_operand(body: &Body, op: Operand, bound: &mut IndexSet<u32>) -> bool {
@@ -724,6 +938,73 @@ fn rewrite_reads(
 /// collected. Returns `false` if not found; the caller asserts on this,
 /// since a miss would leave the local's reads pointing at a global that's
 /// never set.
+/// Move a candidate's sibling const `let`s into the hoisted set's value,
+/// rebuilding the self-contained initializer block the pre-normal-form shape
+/// carried: `G = *__b` (sibling `__b` outside) becomes
+/// `G = { let __b = <literal>; *__b }`. Confinement (checked at candidacy)
+/// guarantees the moved bindings have no other readers.
+fn inline_sibling_lets(
+    body: &mut Body,
+    local_index: u32,
+    sibling_lets: &[StmtId],
+    module_source: &ModuleSource,
+    name: &str,
+) {
+    if sibling_lets.is_empty() {
+        return;
+    }
+    // Detach the sibling stmts from their blocks.
+    let sibling_set: IndexSet<StmtId> = sibling_lets.iter().copied().collect();
+    for bid in body.blocks.keys().collect::<Vec<_>>() {
+        let stmts = &mut body.blocks[bid].stmts;
+        if stmts.iter().any(|s| sibling_set.contains(s)) {
+            stmts.retain(|s| !sibling_set.contains(s));
+        }
+    }
+    // Find the freshly planted `GlobalVarSet` and wrap its value.
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(e) = node
+            && let ExprKind::GlobalVarSet {
+                name: n,
+                value,
+                module_source: ms,
+            } = &body.exprs[e].kind
+            && n == name
+            && ms == module_source
+        {
+            let value = *value;
+            let span = body.exprs[e].span;
+            let value_ty = match value {
+                Operand::Expr(ve) => body.exprs[ve].type_id,
+                Operand::Value(_) => TypeTable::UNIT,
+            };
+            let tail = body.stmts.push(StmtNode {
+                kind: StmtKind::Expr(value),
+                span,
+            });
+            let mut stmts: Vec<StmtId> = sibling_lets.to_vec();
+            stmts.push(tail);
+            let block = body.blocks.push(BlockNode { stmts, span });
+            let block_expr = body.exprs.push(ExprNode {
+                kind: ExprKind::Block(block),
+                type_id: value_ty,
+                span,
+            });
+            let ExprKind::GlobalVarSet { value, .. } = &mut body.exprs[e].kind else {
+                unreachable!("matched above");
+            };
+            *value = Operand::Expr(block_expr);
+            return;
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    panic!(
+        "[NIR] const_object_globalization: GlobalVarSet for {name} (local {local_index}) \
+         went missing between planting and sibling inlining"
+    );
+}
+
 fn replace_let_with_set(
     body: &mut Body,
     local_index: u32,
