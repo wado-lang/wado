@@ -609,6 +609,9 @@ pub fn walk_stmt<V: AstVisitor>(v: &mut V, stmt: &Stmt) {
             if let Some(val) = &s.value {
                 v.visit_expr(val);
             }
+            if let Some(eb) = &s.else_block {
+                v.visit_block(eb);
+            }
         }
         Stmt::Expr(s) => v.visit_expr(&s.expr),
         Stmt::Return(s) => {
@@ -1848,6 +1851,10 @@ pub struct LetStmt {
     pub ty: Option<Type>,
     /// Initializer expression, or `None` for uninitialized declarations (`let x: i32;`).
     pub value: Option<Expr>,
+    /// Diverging block of a `let PAT = EXPR else { ... };` statement. When
+    /// present the pattern may be refutable: if it matches, its bindings enter
+    /// the enclosing scope; otherwise the else block runs and must diverge.
+    pub else_block: Option<Block>,
     pub span: Span,
 }
 

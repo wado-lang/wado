@@ -597,6 +597,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
+        // `let PAT = EXPR else { ... }`: a refutable binding whose else block
+        // diverges. Bindings escape into the enclosing scope; the else block is
+        // resolved separately (without them) and must diverge.
+        if let Some(else_block) = &let_stmt.else_block {
+            self.resolve_let_else(let_stmt, value_type, else_block, ctx);
+            return;
+        }
+
         // Stage 7-B: records-only. reify rebuilds the `Let` / `LetDestructure`
         // stmt from the AST + recorded facts (`let_annotated_types`,
         // `local_types`, the binding symbols). This walk binds the pattern into
@@ -652,6 +660,82 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span);
             }
         }
+    }
+
+    /// Resolve a `let PAT = EXPR else { ... }` statement. The else block is
+    /// resolved in its own scope (it must not see the pattern bindings) and
+    /// must diverge; the refutable pattern's bindings then enter `ctx` so the
+    /// rest of the enclosing block can use them.
+    fn resolve_let_else(
+        &mut self,
+        let_stmt: &LetStmt,
+        scrutinee_type: TypeId,
+        else_block: &Block,
+        ctx: &mut FunctionContext,
+    ) {
+        self.resolve_block(else_block, ctx, None);
+        if !self.ast_block_always_exits(else_block) {
+            let _ = self.emit(TypeError::LetElseMustDiverge {
+                span: else_block.span,
+            });
+        }
+        if self.let_else_pattern_is_irrefutable(&let_stmt.pattern, scrutinee_type) {
+            let _ = self.emit(TypeError::InvalidPattern {
+                message: "irrefutable pattern in `let ... else`: the else block can never run; \
+                          use a plain `let` instead"
+                    .to_string(),
+                span: let_stmt.name_span,
+            });
+        }
+        self.resolve_if_pattern(&let_stmt.pattern, scrutinee_type, ctx, let_stmt.span);
+    }
+
+    /// Whether a `let ... else` pattern is definitely irrefutable (always
+    /// binds), which would make its else block unreachable. Conservative: only
+    /// the unambiguous top-level binding forms are flagged, so a refutable
+    /// pattern is never wrongly rejected.
+    fn let_else_pattern_is_irrefutable(
+        &mut self,
+        pattern: &Pattern,
+        scrutinee_type: TypeId,
+    ) -> bool {
+        match pattern {
+            Pattern::Wildcard | Pattern::MutIdent { .. } => true,
+            Pattern::Ident { name, .. } => {
+                // A bare ident binds a value unless it names a variant/enum
+                // case or an immutable global constant, either of which is a
+                // refutable value pattern.
+                !self.is_known_case_of_type(scrutinee_type, name, None)
+                    && !self.is_immutable_global(name)
+            }
+            // Tuple/struct destructuring can carry refutable sub-patterns; stay
+            // conservative and do not flag them, so a refutable pattern is never
+            // wrongly rejected. Literal/variant/or/range are refutable outright;
+            // `Error` is a parser-recovery placeholder.
+            Pattern::Tuple(..)
+            | Pattern::Struct { .. }
+            | Pattern::Literal(_)
+            | Pattern::Variant { .. }
+            | Pattern::Or(_)
+            | Pattern::Range { .. }
+            | Pattern::Error(_) => false,
+        }
+    }
+
+    /// Whether `name` refers to an immutable global (defined here or imported),
+    /// which in pattern position is a constant-value (refutable) match.
+    fn is_immutable_global(&self, name: &str) -> bool {
+        self.sem
+            .decls
+            .current_module_globals
+            .get(name)
+            .is_some_and(|&(_ty, mutable)| !mutable)
+            || self
+                .sem
+                .decls
+                .imported_globals
+                .get(name)
+                .is_some_and(|(_m, _n, _ty, mutable)| !*mutable)
     }
 
     /// Resolve an uninitialized let declaration: `let x: T;`

@@ -557,6 +557,13 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 }
             }
 
+            // `let PAT = EXPR else { ... }`: the else block is bound in its own
+            // scope *before* the pattern bindings are defined, so it cannot see
+            // them (they escape into the enclosing scope, not the else block).
+            if let Some(else_block) = &let_stmt.else_block {
+                self.bind_block(else_block)?;
+            }
+
             // Define the variables from the pattern as initialized
             self.bind_let_pattern(
                 &let_stmt.pattern,

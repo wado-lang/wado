@@ -282,7 +282,11 @@ impl AstVisitor for HintCollector<'_> {
     fn visit_stmt(&mut self, stmt: &Stmt) {
         match stmt {
             Stmt::Let(LetStmt {
-                pattern, ty, value, ..
+                pattern,
+                ty,
+                value,
+                else_block,
+                ..
             }) => {
                 // Only hint when the user did not annotate the binding.
                 if ty.is_none() {
@@ -291,6 +295,10 @@ impl AstVisitor for HintCollector<'_> {
                 // Still walk the initializer for hints inside it.
                 if let Some(v) = value {
                     self.visit_expr(v);
+                }
+                // `let ... else` — walk the diverging block for nested hints.
+                if let Some(eb) = else_block {
+                    self.visit_block(eb);
                 }
             }
             Stmt::ForOf(ForOfStmt {
