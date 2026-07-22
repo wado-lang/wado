@@ -1,0 +1,39 @@
+// End-to-end generic reading API (WEP 2026-06-13, Stage B+C): a serde-shaped
+// blanket derivation that resolves every field's wire key through
+// `Reflect::<T>::wire_name_policy()` + `field_tokens()` + `core:serde::wire_name`
+// and reads each value via `Field::get`, all over a type parameter `T`. The
+// concrete-call fixtures never exercise the *generic* `wire_name_policy()`
+// resolver — this does.
+
+use { wire_name } from "core:serde";
+
+trait WireRow {
+    fn wire_row(&self) -> String;
+}
+
+impl<T: Reflect<Fields = [..F]>, ..F: Inspect> WireRow for T {
+    fn wire_row(&self) -> String {
+        let policy = Reflect::<T>::wire_name_policy();
+        let mut out = "";
+        for let f of Reflect::<T>::field_tokens() {
+            out = `${out}${wire_name(&f, policy)}=${f.get(self):?};`;
+        }
+        return out;
+    }
+}
+
+#[serde(rename_all = "snake_case")]
+struct Account {
+    accountId: i32,
+    #[serde(rename = "e_mail")]
+    email: String,
+    displayName: i32,
+}
+
+test "generic derivation resolves wire names through a type param" {
+    let a = Account { accountId: 1, email: "x", displayName: 3 };
+    assert a.wire_row() == `account_id=1;e_mail="x";display_name=3;`;
+}
+
+__DATA__
+{"test": {}}
