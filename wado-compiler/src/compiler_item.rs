@@ -115,7 +115,7 @@ pub enum CompilerItem {
     FlagBitMeta,
     /// `Case<T, P>` — the per-case token struct minted by
     /// `ReflectVariant::cases()` (WEP 2026-06-13 §3e).
-    ReflectCase,
+    ReflectVariantCase,
 
     // ── Variants (sum types) ──────────────────────────────────────────
     /// `Option<T>` — `Some(_)` / `None`.
@@ -467,7 +467,7 @@ impl CompilerItem {
         Self::Reflect,
         Self::ReflectVariant,
         Self::VariantCaseMeta,
-        Self::ReflectCase,
+        Self::ReflectVariantCase,
         Self::ReflectEnum,
         Self::EnumCaseMeta,
         Self::ReflectFlags,
@@ -609,7 +609,7 @@ impl CompilerItem {
             Self::Reflect => "reflect",
             Self::ReflectVariant => "reflect_variant",
             Self::VariantCaseMeta => "variant_case_meta",
-            Self::ReflectCase => "reflect_case",
+            Self::ReflectVariantCase => "reflect_case",
             Self::ReflectEnum => "reflect_enum",
             Self::EnumCaseMeta => "enum_case_meta",
             Self::ReflectFlags => "reflect_flags",
@@ -768,7 +768,7 @@ impl CompilerItem {
             | Self::Reflect
             | Self::ReflectVariant
             | Self::VariantCaseMeta
-            | Self::ReflectCase
+            | Self::ReflectVariantCase
             | Self::ReflectEnum
             | Self::EnumCaseMeta
             | Self::ReflectFlags
@@ -912,7 +912,7 @@ impl CompilerItem {
             | Self::KilnRequest
             | Self::String
             | Self::VariantCaseMeta
-            | Self::ReflectCase
+            | Self::ReflectVariantCase
             | Self::EnumCaseMeta
             | Self::FlagBitMeta => CompilerItemKind::Struct,
             Self::Option | Self::Result => CompilerItemKind::Variant,

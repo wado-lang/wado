@@ -1108,7 +1108,7 @@ impl ReflectVariantSynthEnv {
         } = ReflectMetaEnv::resolve(tt, CompilerItem::VariantCaseMeta);
         let items = tt.compiler_items();
         let (case_struct_module, case_struct_name) = {
-            let (m, n) = items.require_struct(CompilerItem::ReflectCase);
+            let (m, n) = items.require_struct(CompilerItem::ReflectVariantCase);
             (m.clone(), n.to_string())
         };
         Self {

@@ -98,7 +98,7 @@ internal trait ReflectVariant {
     /// The per-case payload tuple `[P_0, P_1, ...]`; unit cases are `()`.
     type Cases;
 
-    /// The per-case token tuple `[Case<Self, P_0>, ...]`.
+    /// The per-case token tuple `[VariantCase<Self, P_0>, ...]`.
     type CaseTokens;
 
     /// Returns the variant name.
@@ -186,11 +186,11 @@ internal trait ReflectFlags {
 /// variant value and its payload in both directions.
 /// See WEP 2026-06-13 §3e.
 #[compiler_item("reflect_case")]
-pub struct Case<T, P> {
+pub struct VariantCase<T, P> {
     index: i32,
 }
 
-impl<T, P> Case<T, P> {
+impl<T, P> VariantCase<T, P> {
     /// The case's declaration index (== its discriminant).
     pub fn index(&self) -> i32 {
         return self.index;

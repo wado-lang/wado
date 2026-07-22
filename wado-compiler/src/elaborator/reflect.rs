@@ -485,7 +485,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut tt = self.tysys.type_table.borrow_mut();
             let (case_module, case_name) = {
                 let items = tt.compiler_items();
-                let (m, n) = items.require_struct(CompilerItem::ReflectCase);
+                let (m, n) = items.require_struct(CompilerItem::ReflectVariantCase);
                 (m.clone(), n.to_string())
             };
             let tokens: Vec<TypeId> = payloads
@@ -666,7 +666,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })?;
         let (case_module, case_name) = {
             let items = tt.compiler_items();
-            let (m, n) = items.require_struct(CompilerItem::ReflectCase);
+            let (m, n) = items.require_struct(CompilerItem::ReflectVariantCase);
             (m.clone(), n.to_string())
         };
         let elem_param = tt.make_type_param(pack_name.clone(), pack_index);
