@@ -699,8 +699,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match pattern {
             Pattern::Wildcard | Pattern::MutIdent { .. } => true,
             Pattern::Ident { name, .. } => {
-                // A bare ident binds unless it names a variant/enum case or an
-                // immutable global — either is a refutable value pattern.
                 !self.is_known_case_of_type(scrutinee_type, name, None)
                     && !self.is_immutable_global(name)
             }

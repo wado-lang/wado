@@ -296,7 +296,6 @@ impl AstVisitor for HintCollector<'_> {
                 if let Some(v) = value {
                     self.visit_expr(v);
                 }
-                // `let ... else` — walk the diverging block for nested hints.
                 if let Some(eb) = else_block {
                     self.visit_block(eb);
                 }

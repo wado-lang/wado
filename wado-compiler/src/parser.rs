@@ -8508,7 +8508,6 @@ line 2
 
     #[test]
     fn let_else_requires_initializer() {
-        // `let x: i32 else { ... }` has no initializer — rejected.
         let source = "fn f() { let x: i32 else { return; }; }";
         let result = parse(source);
         assert!(

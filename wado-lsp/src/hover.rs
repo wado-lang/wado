@@ -707,8 +707,6 @@ mod tests {
 
     #[test]
     fn hover_on_local_in_let_else_block() {
-        // A binding declared inside a `let ... else` else block renders its
-        // `let` hover — the walker must descend into the else block.
         futures::executor::block_on(async {
             let source = concat!(
                 "fn f() -> i32 {\n",

@@ -280,8 +280,6 @@ fn find_return_type_in_stmt(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt) -> Option<Ty
             }
             None
         }
-        // A `let ... else` else block runs on a failed match and commonly
-        // `return`s — its return value type feeds return-type inference.
         ast::Stmt::Let(l) => l
             .else_block
             .as_ref()

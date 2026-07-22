@@ -2118,7 +2118,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let else_type = crate::tir::block_result_type(&else_block);
         let else_span = else_block.span;
 
-        // Pattern bindings enter `ctx`, visible to the continuation (`rest`).
         let tir_pattern = self.reify_pattern(&l.pattern, scrutinee_type, ctx);
 
         let cont_stmts =
