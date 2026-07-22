@@ -355,7 +355,7 @@ labeledBlock
     ;
 
 letStatement
-    : 'let' pattern (':' typeRef)? '=' expression ';'
+    : 'let' pattern (':' typeRef)? '=' expression ('else' block)? ';'
     ;
 
 assertStatement
