@@ -18,9 +18,15 @@ use wit_encoder::{
     TypeDef, VariantCase, World, WorldItem,
 };
 
+use std::sync::Arc;
+
+use crate::component_model::CmInterfaceRegistry;
+use crate::hashmap::IndexMap;
+use crate::module_source::ModuleSource;
 use crate::name::to_kebab;
 use crate::semantics::Semantics;
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::tir::{PrimitiveType, ResolvedType, TirModule, TypeId, TypeTable};
+use crate::world_registry::WorldRegistry;
 
 /// How much of the referenced interface graph to inline into the WIT document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -93,6 +99,86 @@ pub fn wit_contract(
     }
 }
 
+/// The frontend subset the WIT emitter reads, as borrows.
+///
+/// Both a live [`Semantics`] (via [`Semantics::wit_emit_input`]) and a detached
+/// [`WitEmitSnapshot`] taken by the main compile feed the emitter through this
+/// view, so the `component-type` section and `wado wit` text are derived from
+/// the *same* analysis the codegen ran — no second frontend pass, no replay to
+/// drift (issue #1654).
+#[derive(Clone, Copy)]
+pub struct WitEmitInput<'a> {
+    /// Whether the analysis ran to completion; emission refuses partial state.
+    pub is_complete: bool,
+    /// TIR modules whose user exports and type decls seed the WIT surface.
+    pub tir_modules: &'a IndexMap<ModuleSource, TirModule>,
+    /// Resolve-time type snapshot the emitter maps to WIT types.
+    pub types: &'a TypeTable,
+    /// CM interface registry for `source_interface` resolution and `full`-scope
+    /// inlining. `None` when analysis bailed before building it.
+    pub cm_interface_registry: Option<&'a CmInterfaceRegistry>,
+    /// World registry, to partition world-conformance exports from user exports.
+    pub world_registry: Option<&'a WorldRegistry>,
+    /// Emitted world name + default interface. `None` until the CLI sets it.
+    pub wit_contract: Option<&'a WitContract>,
+}
+
+/// A detached, owned copy of the WIT-relevant frontend subset, cloned by the
+/// main compile before `Semantics` is destructured into codegen (issue #1654).
+///
+/// Carried on [`crate::CompileResult`] so the CLI can encode the
+/// `component-type` section (`wado compile`) or render WIT text (`wado wit`)
+/// from the single analysis the codegen used, instead of re-running the
+/// frontend. Only cloned when embedding is requested, so a normal compile pays
+/// nothing.
+pub struct WitEmitSnapshot {
+    tir_modules: IndexMap<ModuleSource, TirModule>,
+    types: TypeTable,
+    cm_interface_registry: Arc<CmInterfaceRegistry>,
+    world_registry: Arc<WorldRegistry>,
+    wit_contract: WitContract,
+}
+
+impl WitEmitSnapshot {
+    #[must_use]
+    pub fn new(
+        tir_modules: IndexMap<ModuleSource, TirModule>,
+        types: TypeTable,
+        cm_interface_registry: Arc<CmInterfaceRegistry>,
+        world_registry: Arc<WorldRegistry>,
+        wit_contract: WitContract,
+    ) -> Self {
+        Self {
+            tir_modules,
+            types,
+            cm_interface_registry,
+            world_registry,
+            wit_contract,
+        }
+    }
+
+    /// A borrowed [`WitEmitInput`] view over this snapshot.
+    #[must_use]
+    pub fn input(&self) -> WitEmitInput<'_> {
+        WitEmitInput {
+            is_complete: true,
+            tir_modules: &self.tir_modules,
+            types: &self.types,
+            cm_interface_registry: Some(&self.cm_interface_registry),
+            world_registry: Some(&self.world_registry),
+            wit_contract: Some(&self.wit_contract),
+        }
+    }
+}
+
+impl std::fmt::Debug for WitEmitSnapshot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WitEmitSnapshot")
+            .field("wit_contract", &self.wit_contract)
+            .finish_non_exhaustive()
+    }
+}
+
 /// A failure that prevents emitting valid WIT.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WitEmitError {
@@ -138,11 +224,22 @@ pub fn emit_wit_text(
     opts: &WitEmitOptions,
     world_imports: &[String],
 ) -> Result<String, WitEmitError> {
-    if !sem.is_complete() {
+    emit_wit_text_from(sem.wit_emit_input(), opts, world_imports)
+}
+
+/// Like [`emit_wit_text`], but from a detached [`WitEmitInput`] view, so the
+/// `wado compile` embed path and `wado wit` render from the main compile's
+/// retained subset without a second frontend analysis (issue #1654).
+pub fn emit_wit_text_from(
+    input: WitEmitInput<'_>,
+    opts: &WitEmitOptions,
+    world_imports: &[String],
+) -> Result<String, WitEmitError> {
+    if !input.is_complete {
         return Err(WitEmitError::IncompleteSemantics);
     }
 
-    let mut emitter = Emitter::new(sem);
+    let mut emitter = Emitter::new(input);
     let package = emitter.build_package(world_imports)?;
     let mut out = package.to_string();
 
@@ -161,7 +258,10 @@ pub fn emit_wit_text(
 
 /// Drives one emission pass over the frontend's TIR modules.
 struct Emitter<'a> {
-    sem: &'a Semantics,
+    tir_modules: &'a IndexMap<ModuleSource, TirModule>,
+    cm_interface_registry: Option<&'a CmInterfaceRegistry>,
+    world_registry: Option<&'a WorldRegistry>,
+    wit_contract: Option<&'a WitContract>,
     types: &'a TypeTable,
     /// User-authored type declarations keyed by source name, gathered across
     /// every loaded user module so referenced types can be looked up by name.
@@ -197,9 +297,9 @@ struct TypeDecls<'a> {
 }
 
 impl<'a> Emitter<'a> {
-    fn new(sem: &'a Semantics) -> Self {
+    fn new(input: WitEmitInput<'a>) -> Self {
         let mut decls = TypeDecls::default();
-        for module in sem.tir_modules.values() {
+        for module in input.tir_modules.values() {
             for s in &module.structs {
                 decls.structs.insert(s.name.clone(), s);
             }
@@ -217,8 +317,11 @@ impl<'a> Emitter<'a> {
             }
         }
         Self {
-            sem,
-            types: &sem.types,
+            tir_modules: input.tir_modules,
+            cm_interface_registry: input.cm_interface_registry,
+            world_registry: input.world_registry,
+            wit_contract: input.wit_contract,
+            types: input.types,
             decls,
             referenced_interfaces: BTreeSet::new(),
             pending: BTreeMap::new(),
@@ -228,14 +331,12 @@ impl<'a> Emitter<'a> {
 
     fn build_package(&mut self, world_imports: &[String]) -> Result<Package, WitEmitError> {
         let contract = self
-            .sem
-            .wit_contract()
+            .wit_contract
             .ok_or(WitEmitError::IncompleteSemantics)?
             .clone();
         let exports = self.collect_exported_functions();
         let world_info = self
-            .sem
-            .world_registry()
+            .world_registry
             .and_then(|registry| registry.get(&contract.world_fq));
 
         // World imports: the faithful set the compiled component imports,
@@ -327,7 +428,7 @@ impl<'a> Emitter<'a> {
     /// order.
     fn collect_exported_functions(&self) -> Vec<ExportedFn> {
         let mut out = Vec::new();
-        for module in self.sem.tir_modules.values() {
+        for module in self.tir_modules.values() {
             // Only user-authored modules contribute to the WIT contract; the
             // bundled allocator / runtime modules also carry `export fn`
             // (canonical-ABI realloc), but those are not part of the contract.
@@ -367,7 +468,7 @@ impl<'a> Emitter<'a> {
     /// component imports, following each interface's function and type
     /// signatures to the interfaces they reference.
     fn transitive_import_closure(&self, roots: BTreeSet<String>) -> BTreeSet<String> {
-        let Some(registry) = self.sem.cm_interface_registry() else {
+        let Some(registry) = self.cm_interface_registry else {
             return roots;
         };
         let infos: Vec<crate::component_model::CmInterfaceInfo> = registry.interfaces().collect();
@@ -409,7 +510,7 @@ impl<'a> Emitter<'a> {
     /// Build one nested `package` per referenced CM package, each holding the
     /// full reconstructed definitions of the referenced interfaces in it.
     fn build_nested_packages(&self) -> Result<Vec<wit_encoder::NestedPackage>, WitEmitError> {
-        let Some(registry) = self.sem.cm_interface_registry() else {
+        let Some(registry) = self.cm_interface_registry else {
             return Ok(Vec::new());
         };
         let infos: Vec<crate::component_model::CmInterfaceInfo> = registry.interfaces().collect();
@@ -632,8 +733,7 @@ impl<'a> Emitter<'a> {
         uses: &mut Vec<(String, String)>,
     ) -> String {
         let cm_name = self
-            .sem
-            .cm_interface_registry()
+            .cm_interface_registry
             .zip(named.source_interface.as_deref())
             .and_then(|(reg, src)| {
                 reg.get_struct_cm_name_by_source(src, &named.name)
@@ -1143,8 +1243,14 @@ fn collect_named_type_sources(ty: &crate::ast::Type, out: &mut Vec<String>) {
 /// to the empty local name when unset (callers always set it before emitting).
 #[must_use]
 pub fn world_name(sem: &Semantics) -> String {
-    let world_fq = sem
-        .wit_contract()
+    world_name_from(sem.wit_emit_input())
+}
+
+/// Like [`world_name`], but from a detached [`WitEmitInput`] view.
+#[must_use]
+pub fn world_name_from(input: WitEmitInput<'_>) -> String {
+    let world_fq = input
+        .wit_contract
         .map(|c| c.world_fq.as_str())
         .unwrap_or("");
     to_kebab(&world_local_name(world_fq))

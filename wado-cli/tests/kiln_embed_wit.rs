@@ -1,9 +1,11 @@
 //! WIT emission for a Kiln `with { generator }` consumer (issue #1646).
 //!
-//! The WIT paths re-analyze the entry off the codegen pipeline, so they must
-//! rebuild the same generator redirects and manifest dependency index the main
-//! compile used; without them the re-analysis cannot load the generated module
-//! and the component ships without its `component-type` section.
+//! The WIT section and `wado wit` text are derived from the WIT subset the main
+//! compile retains (`CompileResult::wit_emit_snapshot`, issue #1654), so they
+//! reuse the generator redirects and dependency index that compile already ran.
+//! There is no second analysis to drift: a consumer whose only path to its
+//! import is a generator redirect still ships its `component-type` section,
+//! because the section comes from the exact compile that resolved that redirect.
 
 use std::fs;
 

@@ -233,6 +233,11 @@ pub struct CompileFlags {
     /// embedding WIT, to read the faithful import plan
     /// (`imported_cm_interfaces`) without a second compile.
     pub retain_wir: bool,
+    /// When `Some`, the main compile retains the WIT-relevant subset
+    /// (`CompileResult::wit_emit_snapshot`) so the `component-type` section is
+    /// encoded from that single analysis instead of a second frontend run
+    /// (issue #1654). Set by `wado compile` when embedding is requested.
+    pub embed_wit_contract: Option<wado_compiler::wit_emit::WitContract>,
 }
 
 impl CompileOptions {
@@ -253,6 +258,7 @@ impl CompileOptions {
             param_overrides: self.param_overrides.clone(),
             param_policy: self.param_policy,
             retain_wir: false,
+            embed_wit_contract: None,
         }
     }
 }
@@ -591,6 +597,7 @@ pub async fn try_compile_with_kiln_cache(
         param_overrides: flags.param_overrides.clone(),
         param_policy: flags.param_policy,
         retain_wir: flags.retain_wir,
+        embed_wit_contract: flags.embed_wit_contract.clone(),
         ..Default::default()
     };
 
@@ -1154,70 +1161,26 @@ fn skip_embed(explicit: bool, wasm: Vec<u8>, msg: &str) -> Result<Vec<u8>, CliEx
     Ok(wasm)
 }
 
-/// The silent analysis host and kiln redirects the main compile produced, so a
-/// `with { generator }` consumer re-analyzes exactly as it compiled. The kiln
-/// pipeline is cache-aware, so this reuses the main compile's outputs.
-async fn reanalysis_env(
-    path: &Path,
-    source: &str,
-) -> Result<(FilesystemCompilerHost, wado_compiler::kiln::InvocationIndex), String> {
-    let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
-    let manifest_pair = load_nearest_manifest(path);
-    let host = attach_manifest_and_component_deps(
-        FilesystemCompilerHost::silent(base_path.clone()),
-        manifest_pair.as_ref(),
-        &base_path,
-        source,
-        false,
-    )
-    .await
-    .map_err(|e| format!("resolving dependencies: {e}"))?;
-    let outcome = maybe_run_pipeline(path, &host, false, manifest_pair)
-        .await
-        .map_err(|e| format!("running kiln generators: {e}"))?;
-    Ok((host, outcome.invocations))
-}
-
-/// Append the WIT `component-type` section to `wasm`, using `world_imports`
-/// (the faithful plan read from the main compile's retained WIR, so no second
-/// optimize pass). `explicit` is true for `--embed-wit`: it makes a failure
-/// fatal, where the default-on path only warns and yields the un-embedded
-/// (still valid, self-describing) component.
-async fn embed_wit_section(
-    opts: &CompileOptions,
+/// Append the WIT `component-type` section to `wasm`, encoded from the WIT
+/// subset the main compile retained (`CompileResult::wit_emit_snapshot`) and
+/// `world_imports` (the faithful plan read from the main compile's retained
+/// WIR). The section is derived from the single analysis codegen ran — no
+/// second frontend pass to drift from it (issue #1654). `explicit` is true for
+/// `--embed-wit`: it makes a failure fatal, where the default-on path only
+/// warns and yields the un-embedded (still valid, self-describing) component.
+fn embed_wit_section(
+    snapshot: Option<wado_compiler::wit_emit::WitEmitSnapshot>,
     wasm: Vec<u8>,
     world_imports: Vec<String>,
     explicit: bool,
 ) -> Result<Vec<u8>, CliExit> {
-    let input = &opts.input;
-    let path = Path::new(input);
-    let Ok(source) = fs::read_to_string(path) else {
-        // The file compiled moments ago; an unreadable source now is unexpected.
-        return Ok(wasm);
+    let Some(snapshot) = snapshot else {
+        // The main compile completed (`is_complete()`), so the subset is always
+        // retained when embedding was requested; a missing snapshot here is
+        // unexpected rather than a normal skip.
+        return skip_embed(explicit, wasm, "WIT analysis subset was not retained");
     };
-
-    let (host, invocations) = match reanalysis_env(path, &source).await {
-        Ok(env) => env,
-        Err(msg) => return skip_embed(explicit, wasm, &msg),
-    };
-    let mut sem = wado_compiler::semantics_for_world(
-        &source,
-        &host,
-        Some(input),
-        opts.target_world.as_deref(),
-        invocations,
-    )
-    .await;
-    if !sem.is_complete() {
-        return skip_embed(explicit, wasm, "WIT analysis did not complete");
-    }
-    sem.set_wit_contract(wado_compiler::wit_emit::wit_contract(
-        opts.target_world.as_deref(),
-        opts.lib_world.as_deref(),
-        Some(&crate::wit::default_interface_name(input)),
-    ));
-
-    match wit_bundle::embed_component_type(&wasm, &sem, &world_imports) {
+    match wit_bundle::embed_component_type_from(&wasm, snapshot.input(), &world_imports) {
         Ok(embedded) => Ok(embedded),
         Err(e) => skip_embed(explicit, wasm, &e.to_string()),
     }
@@ -1309,6 +1272,15 @@ pub async fn run_returning_bytes(opts: CompileOptions) -> Result<Vec<u8>, CliExi
 
     let mut flags = opts.flags();
     flags.retain_wir = embed.is_some();
+    // When embedding, have the main compile retain the WIT subset so the section
+    // is derived from that single analysis, not a second frontend run (#1654).
+    if embed.is_some() {
+        flags.embed_wit_contract = Some(wado_compiler::wit_emit::wit_contract(
+            opts.target_world.as_deref(),
+            opts.lib_world.as_deref(),
+            Some(&crate::wit::default_interface_name(&opts.input)),
+        ));
+    }
     let result = try_compile(&opts.input, &flags)
         .await
         .map_err(|_| CliExit::silent_failure(1))?;
@@ -1343,8 +1315,7 @@ pub async fn run_returning_bytes(opts: CompileOptions) -> Result<Vec<u8>, CliExi
                     .wir_package
                     .map(|p| p.imported_cm_interfaces)
                     .unwrap_or_default();
-                // Boxed to keep the enclosing driver future under clippy's `large_futures` bound.
-                Box::pin(embed_wit_section(&opts, wasm, world_imports, explicit)).await?
+                embed_wit_section(result.wit_emit_snapshot, wasm, world_imports, explicit)?
             } else {
                 wasm
             };

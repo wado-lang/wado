@@ -387,6 +387,7 @@ pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
         param_overrides: opts.param_overrides,
         param_policy: opts.param_policy,
         retain_wir: false,
+        embed_wit_contract: None,
     };
     let cranelift_opt = opts.opt_level.to_wasmtime();
     // `run` is a driver on the build tier (like `cargo run`): in a project it

@@ -108,6 +108,7 @@ impl TestOptions {
             param_overrides: self.param_overrides.clone(),
             param_policy: self.param_policy,
             retain_wir: false,
+            embed_wit_contract: None,
         }
     }
 }

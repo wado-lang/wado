@@ -199,6 +199,39 @@ impl Semantics {
         self.wit_contract = Some(c);
     }
 
+    /// A borrowed [`crate::wit_emit::WitEmitInput`] view over the WIT-relevant
+    /// subset, so the WIT emitter reads from this analysis directly.
+    #[must_use]
+    pub fn wit_emit_input(&self) -> crate::wit_emit::WitEmitInput<'_> {
+        crate::wit_emit::WitEmitInput {
+            is_complete: self.is_complete,
+            tir_modules: &self.tir_modules,
+            types: &self.types,
+            cm_interface_registry: self.cm_interface_registry(),
+            world_registry: self.world_registry(),
+            wit_contract: self.wit_contract.as_ref(),
+        }
+    }
+
+    /// A cloned handle to the CM interface registry `Arc`, or `None` when
+    /// analysis bailed before building it. Used by the main compile to take a
+    /// [`crate::wit_emit::WitEmitSnapshot`] before `Semantics` is destructured.
+    #[must_use]
+    pub fn cm_interface_registry_arc(&self) -> Option<std::sync::Arc<CmInterfaceRegistry>> {
+        self.state
+            .as_ref()
+            .map(|s| std::sync::Arc::clone(&s.tysys.cm_interface_registry))
+    }
+
+    /// A cloned handle to the world registry `Arc`, paired with
+    /// [`Self::cm_interface_registry_arc`] for the WIT snapshot.
+    #[must_use]
+    pub fn world_registry_arc(&self) -> Option<std::sync::Arc<WorldRegistry>> {
+        self.state
+            .as_ref()
+            .map(|s| std::sync::Arc::clone(&s.world_registry))
+    }
+
     /// Component Model world registry produced during annotate.
     ///
     /// Carries every `world` declaration the frontend has seen — stdlib
