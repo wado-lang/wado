@@ -454,25 +454,24 @@ if let Some(x) = ro {       // ro: &Option<i32>, x: &i32
 }
 ```
 
-**Let Else:** `let PATTERN = EXPR else { ... };` binds a refutable pattern
-whose bindings escape into the enclosing scope. When the pattern matches, its
-bindings are in scope for the rest of the block; when it does not, the `else`
-block runs and must diverge (`return`, `break`, `continue`, `panic`, …). This
-removes the rightward drift of a nested `if let` when the failing case is an
-early exit.
+#### Let Else
+
+`let PATTERN = EXPR else { ... };` binds a refutable pattern whose bindings
+escape into the enclosing scope. On a match they cover the rest of the block;
+otherwise the `else` block runs and must diverge (`return`, `break`,
+`continue`, `panic`, …). The `else` block does not see the bindings.
 
 ```wado
 fn parse_port(s: String) -> i32 {
     let Ok(port) = i32::from_str(&s) else {
-        return -1;              // else block must diverge
+        return -1;
     };
     return port;                // `port` is in scope here
 }
 ```
 
-The `else` block does not see the pattern's bindings. An irrefutable pattern
-(a plain binding that always matches) is rejected, since its `else` block could
-never run — use a plain `let` instead.
+An irrefutable pattern is rejected — its `else` could never run; use a plain
+`let`.
 
 ### While Loop
 

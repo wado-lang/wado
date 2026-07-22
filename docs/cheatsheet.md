@@ -527,8 +527,7 @@ while i < 10 { i += 1; }
 // While let
 while let Some(x) = iter.next() { println(`${x}`); }
 
-// Let else — refutable binding whose else block must diverge; bindings
-// escape into the enclosing scope on a match.
+// Let else — refutable binding; else must diverge, bindings escape on a match.
 let Some(x) = opt else { return; };
 println(`${x}`);                            // x in scope here
 
