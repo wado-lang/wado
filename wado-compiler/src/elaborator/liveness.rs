@@ -425,6 +425,13 @@ impl LastUseAnalyzer<'_> {
         match stmt {
             ast::Stmt::Let(l) => {
                 self.kill_pattern(&l.pattern, live);
+                // The else block diverges: its live-in starts empty (nothing
+                // after it is live) and unions in the variables it uses.
+                if let Some(eb) = &l.else_block {
+                    let mut else_live = IndexSet::default();
+                    self.walk_block(eb, &mut else_live, record);
+                    *live = union(live, &else_live);
+                }
                 if let Some(value) = &l.value {
                     self.walk_expr(value, live, record);
                 }

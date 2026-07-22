@@ -291,10 +291,14 @@ fn find_let_in_stmt(stmt: &Stmt, target: AstId, name: &str) -> Option<String> {
                 }
                 return Some(out);
             }
-            if let Some(v) = &l.value {
-                return find_let_in_expr(v, target, name);
-            }
-            None
+            l.value
+                .as_ref()
+                .and_then(|v| find_let_in_expr(v, target, name))
+                .or_else(|| {
+                    l.else_block
+                        .as_ref()
+                        .and_then(|b| find_let_in_block(b, target, name))
+                })
         }
         Stmt::Expr(s) => find_let_in_expr(&s.expr, target, name),
         Stmt::Return(s) => s
@@ -698,6 +702,24 @@ mod tests {
                 "got: {}",
                 result.contents.value,
             );
+        });
+    }
+
+    #[test]
+    fn hover_on_local_in_let_else_block() {
+        futures::executor::block_on(async {
+            let source = concat!(
+                "fn f() -> i32 {\n",
+                "    let opt: Option<i32> = Option::Some(1);\n",
+                "    let Some(x) = opt else {\n",
+                "        let msg: i32 = -1;\n",
+                "        return msg;\n",
+                "    };\n",
+                "    return x;\n",
+                "}\n",
+            );
+            let result = hover_at(source, 4, 16).await.expect("hover on msg");
+            assert_eq!(result.contents.value, "```wado\nlet msg: i32\n```");
         });
     }
 }

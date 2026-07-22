@@ -1,0 +1,17 @@
+// Test: `let ... else` binds a refutable pattern; the else block diverges.
+use { println, Stdout } from "core:cli";
+
+fn describe(opt: Option<i32>) -> i32 {
+    let Some(x) = opt else {
+        return -1;
+    };
+    return x * 2;
+}
+
+export fn run() with Stdout {
+    println(`${describe(Option::Some(21))}`);
+    println(`${describe(null)}`);
+}
+
+__DATA__
+{"stdout": "42\n-1\n"}

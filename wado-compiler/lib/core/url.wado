@@ -373,11 +373,8 @@ impl Url {
             return Result::Err(ParseError::EmptyInput);
         }
 
-        let colon = match input.find(":") {
-            Some(pos) => pos,
-            None => {
-                return Result::Err(ParseError::InvalidScheme);
-            },
+        let Some(colon) = input.find(":") else {
+            return Result::Err(ParseError::InvalidScheme);
         };
         if colon == 0 {
             return Result::Err(ParseError::InvalidScheme);

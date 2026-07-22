@@ -964,10 +964,10 @@ impl CborDeserializer {
         let slice = self.input.slice(self.pos, self.pos + n);
         let s = match String::from_utf8_slice(slice) {
             Ok(v) => v,
-            Err(_) => {
+            Err(e) => {
                 builtin::cold_path();
                 return Result::Err(DeserializeError::malformed(
-                    "invalid UTF-8 in text string",
+                    `text string contains ${e}`,
                     self.pos as i64,
                 ));
             },

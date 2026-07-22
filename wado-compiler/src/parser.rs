@@ -2264,7 +2264,7 @@ impl Parser {
     }
 
     fn parse_let_stmt(&mut self) -> ParseResult<Stmt> {
-        let mut stmt = self.parse_let_stmt_inner()?;
+        let mut stmt = self.parse_let_stmt_inner(true)?;
         let semi_span = self.expect(&TokenKind::Semicolon)?.span;
         // Extend let statement span to include the trailing semicolon
         if let Stmt::Let(ref mut l) = stmt {
@@ -2275,7 +2275,7 @@ impl Parser {
 
     /// Parse let statement without consuming trailing semicolon
     /// Used in for loop init: `for (let mut i = 0; ...)`
-    fn parse_let_stmt_inner(&mut self) -> ParseResult<Stmt> {
+    fn parse_let_stmt_inner(&mut self, allow_else: bool) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
         // Allocate the let-stmt id BEFORE descending into children so
         // leading comments preceding `let` (e.g. `// note\nlet x = ...`)
@@ -2332,6 +2332,22 @@ impl Parser {
             (None, self.peek().span)
         };
 
+        let (else_block, end_span) = if allow_else && self.check(&TokenKind::Else) {
+            if value.is_none() {
+                let span = self.peek().span;
+                return Err(ParseError {
+                    message: "`let ... else` requires an initializer".to_string(),
+                    span,
+                });
+            }
+            self.advance();
+            let block = self.parse_block()?;
+            let block_span = block.span;
+            (Some(block), block_span)
+        } else {
+            (None, end_span)
+        };
+
         Ok(Stmt::Let(LetStmt {
             id,
             pattern,
@@ -2340,6 +2356,7 @@ impl Parser {
             is_reactive,
             ty,
             value,
+            else_block,
             span: start_span.merge(&end_span),
         }))
     }
@@ -2689,7 +2706,9 @@ impl Parser {
         let init = if self.check(&TokenKind::Semicolon) {
             None
         } else if self.check(&TokenKind::Let) || self.check(&TokenKind::Reactive) {
-            Some(Box::new(self.parse_let_stmt_inner()?))
+            // A for-loop initializer has no "rest of block" to guard, so
+            // `let ... else` is not meaningful here.
+            Some(Box::new(self.parse_let_stmt_inner(false)?))
         } else {
             let expr = self.parse_expr()?;
             Some(Box::new(Stmt::Expr(ExprStmt {
@@ -8462,5 +8481,45 @@ line 2
         };
         assert_eq!(t.elements.len(), 3, "all three element slots survive");
         assert!(matches!(t.elements[1], Expr::Error(_)));
+    }
+
+    fn first_let_stmt(module: &Module) -> &LetStmt {
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected function");
+        };
+        let Stmt::Let(let_stmt) = &func.body.as_ref().unwrap().stmts[0] else {
+            panic!("expected let stmt");
+        };
+        let_stmt
+    }
+
+    #[test]
+    fn let_else_parses_else_block() {
+        let source = "fn f() { let Some(x) = opt else { return; }; }";
+        let module = parse(source).unwrap();
+        let let_stmt = first_let_stmt(&module);
+        assert!(matches!(let_stmt.pattern, Pattern::Variant { .. }));
+        let else_block = let_stmt
+            .else_block
+            .as_ref()
+            .expect("let ... else should carry an else block");
+        assert!(matches!(else_block.stmts[0], Stmt::Return(_)));
+    }
+
+    #[test]
+    fn let_else_requires_initializer() {
+        let source = "fn f() { let x: i32 else { return; }; }";
+        let result = parse(source);
+        assert!(
+            result.is_err(),
+            "let ... else without an initializer must fail to parse"
+        );
+    }
+
+    #[test]
+    fn plain_let_has_no_else_block() {
+        let source = "fn f() { let x = 1; }";
+        let module = parse(source).unwrap();
+        assert!(first_let_stmt(&module).else_block.is_none());
     }
 }

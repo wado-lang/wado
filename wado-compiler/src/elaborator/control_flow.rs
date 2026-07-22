@@ -68,7 +68,7 @@ pub(super) fn block_always_exits(ctx: CtrlFlowCtx<'_>, block: &ast::Block) -> bo
 
 fn stmt_always_exits(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt) -> bool {
     match stmt {
-        ast::Stmt::Return(_) => true,
+        ast::Stmt::Return(_) | ast::Stmt::Break(_) | ast::Stmt::Continue(_) => true,
         ast::Stmt::Expr(e) => expr_always_exits(ctx, &e.expr),
         ast::Stmt::If(if_stmt) => {
             if let Some(else_block) = &if_stmt.else_block {
@@ -280,6 +280,10 @@ fn find_return_type_in_stmt(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt) -> Option<Ty
             }
             None
         }
+        ast::Stmt::Let(l) => l
+            .else_block
+            .as_ref()
+            .and_then(|b| find_return_type_in_block(ctx, b)),
         _ => None,
     }
 }
@@ -516,7 +520,12 @@ fn any_in_stmt<P: AstTreeProbe>(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt, probe: &
                 })
         }
         ast::Stmt::Expr(e) => any_in_expr(ctx, &e.expr, probe),
-        ast::Stmt::Let(l) => l.value.as_ref().is_some_and(|v| any_in_expr(ctx, v, probe)),
+        ast::Stmt::Let(l) => {
+            l.value.as_ref().is_some_and(|v| any_in_expr(ctx, v, probe))
+                || l.else_block
+                    .as_ref()
+                    .is_some_and(|b| any_in_tree(ctx, b, probe))
+        }
         ast::Stmt::TaskReturn(tr) => any_in_expr(ctx, &tr.value, probe),
         ast::Stmt::Return(r) => r.value.as_ref().is_some_and(|v| any_in_expr(ctx, v, probe)),
         ast::Stmt::Break(b) => b.value.as_ref().is_some_and(|v| any_in_expr(ctx, v, probe)),

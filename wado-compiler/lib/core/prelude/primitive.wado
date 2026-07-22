@@ -459,11 +459,8 @@ impl LenientFromStr for char {
 
     fn from_str_lenient(s: &String) -> Result<char, LenientParseError> {
         let mut iter = s.chars();
-        let first = match iter.next() {
-            Some(c) => c,
-            None => {
-                return Result::Err(LenientParseError::new("expected exactly one character, got none"));
-            },
+        let Some(first) = iter.next() else {
+            return Result::Err(LenientParseError::new("expected exactly one character, got none"));
         };
         if iter.next() matches { Some(_) } {
             return Result::Err(LenientParseError::new("expected exactly one character, got more"));
