@@ -281,11 +281,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             fields_ty
         } else if method == field_tokens_method {
-            let Some(tokens_ty) = self.field_tokens_bound_ty(
-                self_ty,
-                type_param_name,
-                &reflect_trait_name,
-            ) else {
+            let Some(tokens_ty) =
+                self.field_tokens_bound_ty(self_ty, type_param_name, &reflect_trait_name)
+            else {
                 let _ = self.emit(TypeError::UnknownFunction {
                     name: format!(
                         "Reflect::<{type_param_name}>::{method} (no `Fields = [..F]` bound on {type_param_name})"

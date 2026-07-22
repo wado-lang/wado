@@ -67,6 +67,9 @@ internal trait Reflect {
     /// The field types as a tuple `[F_0, F_1, ...]`.
     type Fields;
 
+
+    /// The per-field token tuple `[Field<Self, F_0>, ...]`.
+    type FieldTokens;
     /// Returns the field values as a tuple.
     #[compiler_item("reflect_fields")]
     fn fields(&self) -> Self::Fields;
@@ -79,8 +82,6 @@ internal trait Reflect {
     #[compiler_item("reflect_type_name")]
     fn type_name() -> String;
 
-    /// The per-field token tuple `[Field<Self, F_0>, ...]`.
-    type FieldTokens;
 
     /// Returns the per-field tokens.
     #[compiler_item("reflect_field_tokens")]

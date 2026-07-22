@@ -4133,6 +4133,25 @@ The two values are equal.
 
 The first value is greater than the second.
 
+### `pub enum CaseStyle`
+
+The wire-naming policy declared by `#[serde(rename_all = "...")]` (casing
+not applied here — `core:serde::wire_name` resolves it). See WEP 2026-06-13.
+
+#### `Identity`
+
+#### `Camel`
+
+#### `Snake`
+
+#### `ScreamingSnake`
+
+#### `Pascal`
+
+#### `Kebab`
+
+#### `ScreamingKebab`
+
 ### `pub enum Alignment`
 
 Text alignment for padding.
@@ -4196,3 +4215,22 @@ The two values are equal.
 #### `Greater`
 
 The first value is greater than the second.
+
+### `pub enum CaseStyle`
+
+The wire-naming policy declared by `#[serde(rename_all = "...")]` (casing
+not applied here — `core:serde::wire_name` resolves it). See WEP 2026-06-13.
+
+#### `Identity`
+
+#### `Camel`
+
+#### `Snake`
+
+#### `ScreamingSnake`
+
+#### `Pascal`
+
+#### `Kebab`
+
+#### `ScreamingKebab`

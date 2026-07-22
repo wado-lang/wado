@@ -30,8 +30,7 @@ use crate::token::Span;
 
 use super::common::{
     deref_expr, make_synthetic_free_function, make_synthetic_method, param_local, ref_expr,
-    synth_span, trait_method_call,
-    write_str_stmt,
+    synth_span, trait_method_call, write_str_stmt,
 };
 
 /// Snapshot of every `core:prelude/{traits,format}` symbol name that the
@@ -568,7 +567,14 @@ fn generate_struct_reflect_methods(
         span,
     );
 
-    let (names_tuple_type, struct_type, ref_struct_type, fields_tuple_type, token_types, token_tuple_type) = {
+    let (
+        names_tuple_type,
+        struct_type,
+        ref_struct_type,
+        fields_tuple_type,
+        token_types,
+        token_tuple_type,
+    ) = {
         let mut tt = type_table.borrow_mut();
         let names_tuple_type =
             tt.make_tuple(std::iter::repeat_n(env.string_type, field_names.len()).collect());
