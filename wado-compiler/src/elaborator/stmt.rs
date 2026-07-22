@@ -1435,25 +1435,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         ref_binding,
                     );
                 }
-                // Check if the identifier refers to an immutable global constant
-                if !matches!(pattern, Pattern::MutIdent { .. }) {
-                    if let Some(&(_ty, mutable)) = self.sem.decls.current_module_globals.get(name)
-                        && !mutable
-                    {
-                        // Constant-value pattern: introduces no binding, but the
-                        // global is read here — record the use→def edge so it is
-                        // not flagged as dead code (mirrors the expression path).
-                        self.record_item_reference_by_name(*id, name);
-                        return Vec::new();
-                    }
-                    if let Some((_source_module, _original_name, _ty, mutable)) =
-                        self.sem.decls.imported_globals.get(name)
-                        && !*mutable
-                    {
-                        // Constant-value pattern: introduces no binding.
-                        self.record_item_reference_by_name(*id, name);
-                        return Vec::new();
-                    }
+                // Immutable global constant: a constant-value pattern that
+                // introduces no binding but reads the global — record the
+                // use→def edge so it is not flagged dead (mirrors the expr path).
+                if !matches!(pattern, Pattern::MutIdent { .. }) && self.is_immutable_global(name) {
+                    self.record_item_reference_by_name(*id, name);
+                    return Vec::new();
                 }
                 let is_mut = matches!(pattern, Pattern::MutIdent { .. });
                 let binding_type = match ref_binding {
