@@ -64,7 +64,7 @@ test {
 pub struct Instant {
     /// Whole seconds since the Unix epoch. Negative values are before it.
     pub seconds: i64,
-    /// Sub-second component, always in `0..1_000_000_000`. Incrementing
+    /// Sub-second component, always in `0..<1_000_000_000`. Incrementing
     /// `nanoseconds` always moves forward in time, even when `seconds < 0`
     /// (e.g. one nanosecond before the epoch is
     /// `Instant { seconds: -1, nanoseconds: 999_999_999 }`). Use `Instant::new`
@@ -299,7 +299,7 @@ fn format_offset_suffix(offset_seconds: i64) -> String {
 
 impl Instant {
     /// Construct an instant `nanoseconds` after `seconds` since the Unix epoch,
-    /// normalizing so the stored sub-second part lands in `0..1_000_000_000`
+    /// normalizing so the stored sub-second part lands in `0..<1_000_000_000`
     /// even when `nanoseconds` is negative or `>= 1_000_000_000`. This is the
     /// canonical funnel that upholds the field invariant the accessors rely on.
     pub fn new(seconds: i64, nanoseconds: i64) -> Instant {
@@ -660,7 +660,7 @@ fn read_two_digits(text: &String, i: i32) -> Result<i64, DeserializeError> {
     return Result::Ok(tens * 10 + ones);
 }
 
-/// Parse the mandatory RFC 3339 zone designator in `text[start..end]` into a
+/// Parse the mandatory RFC 3339 zone designator in `text[start..<end]` into a
 /// signed second offset: `"Z"`/`"z"` yields 0, `±hh:mm` its offset. Errors on an
 /// absent, malformed, or out-of-range offset.
 fn parse_zone_designator(text: &String, start: i32, end: i32) -> Result<i64, DeserializeError> {

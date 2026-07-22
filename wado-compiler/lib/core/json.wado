@@ -978,7 +978,7 @@ impl JsonDeserializer {
         let prefix_start = self.pos;
         let prefix = self.scan_string_run(prefix_start);
 
-        // Fast path: no escapes. The token is `input[prefix_start..prefix.end)`;
+        // Fast path: no escapes. The token is `input[prefix_start..<prefix.end]`;
         // only string *content* can be multi-byte — JSON structure is ASCII.
         if prefix.end < input_len && !prefix.at_escape {
             let result = self.take_scanned_run(prefix_start, prefix.end, prefix.high_bits < 0x80)?;

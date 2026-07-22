@@ -137,7 +137,7 @@ pub global Z_DEFLATED: i32 = 8;
 pub global MAX_WBITS: i32 = 15;
 
 
-/// Computes an Adler-32 checksum over `buf[offset..offset+len]`, starting from `adler`.
+/// Computes an Adler-32 checksum over `buf[offset..<offset + len]`, starting from `adler`.
 pub fn adler32(adler: u32, buf: &ByteList, offset: i32, len: i32) -> u32 {
     let base: u32 = 65521;
     let nmax = 5552;
@@ -263,7 +263,7 @@ fn build_crc_table() -> List<u32> {
     return table;
 }
 
-/// Computes a CRC-32 checksum over `buf[offset..offset+len]`, starting from `crc`.
+/// Computes a CRC-32 checksum over `buf[offset..<offset + len]`, starting from `crc`.
 pub fn crc32(crc: u32, buf: &ByteList, offset: i32, len: i32) -> u32 {
     let table = CRC_TABLE;
     let mut c = crc ^ 0xFFFFFFFF;
@@ -396,9 +396,9 @@ global MAXBITS: i32 = 15;
 
 // Length and distance code tables shared by the deflate functions.
 // These reproduce the two tables in RFC 1951 section 3.2.5: length codes
-// 257..285 map to lengths 3..258 (LENGTH_BASE) plus 0..5 extra bits
-// (LENGTH_EXTRA), and distance codes 0..29 map to distances 1..32768
-// (DIST_BASE) plus 0..13 extra bits (DIST_EXTRA).
+// 257..=285 map to lengths 3..=258 (LENGTH_BASE) plus 0..=5 extra bits
+// (LENGTH_EXTRA), and distance codes 0..=29 map to distances 1..=32768
+// (DIST_BASE) plus 0..=13 extra bits (DIST_EXTRA).
 global LENGTH_BASE: List<i32> = [
     3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258,
 ];
@@ -424,22 +424,22 @@ fn inflate_table(
     bits_in: i32,
     work: &mut List<u16>,
 ) -> [i32, i32, i32] {
-    // Length codes 257..285 base
+    // Length codes 257..=285 base
     let lbase: List<u16> = [
         3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227,
         258, 0, 0,
     ];
-    // Length codes 257..285 extra
+    // Length codes 257..=285 extra
     let lext: List<u16> = [
         16, 16, 16, 16, 16, 16, 16, 16, 17, 17, 17, 17, 18, 18, 18, 18, 19, 19, 19, 19, 20, 20, 20, 20, 21, 21, 21, 21,
         16, 64, 204,
     ];
-    // Distance codes 0..29 base
+    // Distance codes 0..=29 base
     let dbase: List<u16> = [
         1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097,
         6145, 8193, 12289, 16385, 24577, 0, 0,
     ];
-    // Distance codes 0..29 extra
+    // Distance codes 0..=29 extra
     let dext: List<u16> = [
         16, 16, 16, 16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 23, 24, 24, 25, 25, 26, 26, 27, 27, 28, 28,
         29, 29, 64, 64,
@@ -1624,7 +1624,7 @@ fn build_fixed_dtree() -> List<EncCode> {
     return tree;
 }
 
-// Direct lookup table: length_codes[length - 3] = code index (0..28)
+// Direct lookup table: length_codes[length - 3] = code index (0..=28)
 // Built using the zlib tr_static_init algorithm
 fn build_length_codes(extra_lbits: &List<i32>) -> ByteList {
     let mut table = ByteList::filled(256, 0);
@@ -1646,7 +1646,7 @@ fn build_length_codes(extra_lbits: &List<i32>) -> ByteList {
 fn build_dist_codes(extra_dbits: &List<i32>) -> ByteList {
     let mut table = ByteList::filled(512, 0);
     let mut dist = 0;
-    // First 16 codes: direct entries (covers dist 1..256)
+    // First 16 codes: direct entries (covers dist 1..=256)
     for let mut code = 0; code < 16; code += 1 {
         let count = 1 << extra_dbits[code];
         for let mut n = 0; n < count; n += 1 {
@@ -1654,7 +1654,7 @@ fn build_dist_codes(extra_dbits: &List<i32>) -> ByteList {
             dist += 1;
         }
     }
-    // Remaining codes 16..29: shifted entries (covers dist 257..32768)
+    // Remaining codes 16..=29: shifted entries (covers dist 257..=32768)
     dist = dist >> 7;
     for let mut code = 16; code < 30; code += 1 {
         let count = 1 << extra_dbits[code] - 7;
@@ -2144,7 +2144,7 @@ fn write_dynamic_block(
     length_codes_table: &ByteList,
     dist_codes_table: &ByteList,
 ) {
-    // 0..255=literal, 256=EOB, 257+=length
+    // 0..=255=literal, 256=EOB, 257+=length
     // distance for each length symbol (0 for literals)
 
 

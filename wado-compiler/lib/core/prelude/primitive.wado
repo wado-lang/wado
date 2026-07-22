@@ -175,7 +175,7 @@ fn count_digits_u64_base(val_i64: i64, bits_per_digit: i32) -> i32 {
     // Check high 32 bits
     let high32: i64 = val_i64 >> 32 & 0xFFFFFFFF;
     if high32 != 0 {
-        // Bit is somewhere in bits 32..63
+        // Bit is somewhere in bits 32..=63
         let mut b: i32 = 63;
         while b >= 32 {
             if val_i64 >> b as i64 & 1 != 0 {
@@ -185,7 +185,7 @@ fn count_digits_u64_base(val_i64: i64, bits_per_digit: i32) -> i32 {
             b -= 1;
         }
     } else {
-        // Bit is somewhere in bits 0..31
+        // Bit is somewhere in bits 0..=31
         let mut b: i32 = 31;
         while b >= 0 {
             if val_i64 >> b as i64 & 1 != 0 {
@@ -271,7 +271,7 @@ impl LenientFromStr for bool {
 impl char {
     /// Converts a Unicode scalar value (u32) to a char.
     /// Returns null if the value is not a valid Unicode scalar value
-    /// (i.e., surrogates 0xD800..0xDFFF or values > 0x10FFFF).
+    /// (i.e., surrogates 0xD800..=0xDFFF or values > 0x10FFFF).
     pub fn from_u32(value: u32) -> Option<char> {
         if value > 0x10FFFF {
             return null;
