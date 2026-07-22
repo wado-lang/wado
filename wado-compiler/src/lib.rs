@@ -243,6 +243,11 @@ pub struct CompilerOptions {
     /// instead of conforming to a fixed WASI world. Sets `target_world` to this
     /// FQ and bypasses the static world-registry lookup.
     pub lib_world: Option<String>,
+    /// Force the library's exports into the default interface (the A-grouping)
+    /// even when no signature references a named type. Set when the library
+    /// implements a foreign interface (a provider component), whose consumers
+    /// connect by interface FQ.
+    pub lib_interface_export: bool,
     /// Compile-time parameter overrides from the CLI's `-D NAME=value` flags.
     /// Consumed by the param-resolution pass against `#[param]` globals; an
     /// entry matching no declaration is reported per `param_policy.unknown`.
@@ -268,6 +273,7 @@ impl Default for CompilerOptions {
             codegen_flags: Vec::new(),
             unused_diagnostics: true,
             lib_world: None,
+            lib_interface_export: false,
             param_overrides: crate::hashmap::IndexMap::default(),
             param_policy: param_resolution::ParamPolicy::default(),
         }
@@ -466,6 +472,7 @@ fn synthesize_lib_world_info(
     entry_module: Option<&ast::Module>,
     reexports: &[world_registry::WorldExportInfo],
     submodule_type_names: &crate::hashmap::IndexSet<String>,
+    force_interface_export: bool,
 ) -> world_registry::WorldInfo {
     use crate::ast::Item;
     use crate::world_registry::{WorldExportInfo, WorldInfo};
@@ -505,7 +512,7 @@ fn synthesize_lib_world_info(
         e.params.iter().any(|(_, ty)| lib_sig_uses_named_type(ty))
             || e.return_type.as_ref().is_some_and(lib_sig_uses_named_type)
     });
-    if references_named_type {
+    if references_named_type || force_interface_export {
         for export in &mut exports {
             export.from_interface_fq = Some(fq.to_string());
         }
@@ -951,7 +958,13 @@ fn compile_after_load<H: CompilerHost>(
 
     let mut lib_world_info = synth_world_fq.as_ref().map(|fq| {
         let entry = sem.modules.get(&sem.entry_module_source);
-        synthesize_lib_world_info(fq, entry, &lib_surface.submodule_exports, &lib_type_names)
+        synthesize_lib_world_info(
+            fq,
+            entry,
+            &lib_surface.submodule_exports,
+            &lib_type_names,
+            options.lib_interface_export,
+        )
     });
 
     if options.lib_world.is_some()

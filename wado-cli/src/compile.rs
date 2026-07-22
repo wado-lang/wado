@@ -88,6 +88,10 @@ pub struct CompileOptions {
     /// the compiler synthesizes a library world from the entry module's
     /// `export fn`s and exports each one as a Component Model function.
     pub lib_world: Option<String>,
+    /// `--implement <fq>`: build a provider component — a library world whose
+    /// exports are forced into the interface named by `lib_world`, so the
+    /// artifact satisfies another component's import of that interface.
+    pub lib_interface_export: bool,
     /// `-D NAME=value` compile-time parameter overrides.
     pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
     /// `--param-*` policy levels.
@@ -138,6 +142,7 @@ impl CompileOptions {
             no_cache: false,
             codegen_flags: Vec::new(),
             lib_world,
+            lib_interface_export: false,
             param_overrides: wado_compiler::hashmap::IndexMap::default(),
             param_policy: wado_compiler::param_resolution::ParamPolicy::default(),
             no_embed_wit: false,
@@ -224,6 +229,9 @@ pub struct CompileFlags {
     pub codegen_flags: Vec<String>,
     /// Library world FQ for `--lib`. Forwarded to `CompilerOptions::lib_world`.
     pub lib_world: Option<String>,
+    /// Force library exports into the `lib_world` interface (`--implement`).
+    /// Forwarded to `CompilerOptions::lib_interface_export`.
+    pub lib_interface_export: bool,
     /// `-D NAME=value` compile-time parameter overrides. Forwarded to
     /// `CompilerOptions::param_overrides`.
     pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
@@ -250,6 +258,7 @@ impl CompileOptions {
             test_name_filters: Vec::new(),
             codegen_flags: self.codegen_flags.clone(),
             lib_world: self.lib_world.clone(),
+            lib_interface_export: self.lib_interface_export,
             param_overrides: self.param_overrides.clone(),
             param_policy: self.param_policy,
             retain_wir: false,
@@ -263,6 +272,7 @@ enum Opt {
     Format,
     WatToStdout,
     World,
+    Implement,
     OptLevel,
     InlineThreshold,
     OptIterations,
@@ -282,6 +292,7 @@ impl Opt {
         Self::Format,
         Self::WatToStdout,
         Self::World,
+        Self::Implement,
         Self::OptLevel,
         Self::InlineThreshold,
         Self::OptIterations,
@@ -316,6 +327,14 @@ impl Opt {
                 desc: "Output WAT to stdout (shorthand for --format wat -o /dev/stdout)",
             },
             Self::World => args::WORLD_SPEC,
+            Self::Implement => args::OptSpec {
+                long: Some("implement"),
+                short: None,
+                value: Some("<fq>"),
+                desc: "Build a provider component: export the file's `export fn`s as \
+                                   the interface <fq> (ns:pkg/name@ver), satisfying another \
+                                   component's import of it",
+            },
             Self::OptLevel => args::OPT_LEVEL_SPEC,
             Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
             Self::OptIterations => args::OPT_ITERATIONS_SPEC,
@@ -371,6 +390,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     let mut wat_to_stdout = false;
     let mut log_level = args::DEFAULT_LOG_LEVEL;
     let mut target_world: Option<String> = None;
+    let mut implement: Option<String> = None;
     let mut skip_validation = false;
     let mut inline_threshold: Option<usize> = None;
     let mut opt_iterations: Option<u32> = None;
@@ -394,6 +414,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
                 }
                 Opt::WatToStdout => wat_to_stdout = true,
                 Opt::World => target_world = Some(args::require_string(&mut parser)?),
+                Opt::Implement => implement = Some(args::require_string(&mut parser)?),
                 Opt::OptLevel => opt_level = parse_opt_level_arg(&mut parser)?,
                 Opt::InlineThreshold => {
                     inline_threshold = Some(args::parse_inline_threshold_arg(
@@ -432,6 +453,13 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         ));
     }
 
+    if implement.is_some() && target_world.is_some() {
+        return Err(CliExit::error(
+            "`--implement` and `--world` are mutually exclusive: a provider \
+             component targets the library world of the implemented interface",
+        ));
+    }
+
     // `compile` is the file-scoped primitive: it takes one explicit `.wado`
     // file and never reads `wado.toml` to discover an entry or embed metadata.
     // Project builds (worlds, metadata, `build/<world>.wasm`) are `wado build`.
@@ -464,7 +492,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         allocator,
         no_cache,
         codegen_flags,
-        lib_world: None,
+        lib_interface_export: implement.is_some(),
+        lib_world: implement,
         param_overrides: param_args.overrides,
         param_policy: param_args.policy,
         no_embed_wit,
@@ -588,6 +617,7 @@ pub async fn try_compile_with_kiln_cache(
         test_name_filters: flags.test_name_filters.clone(),
         codegen_flags: flags.codegen_flags.clone(),
         lib_world: flags.lib_world.clone(),
+        lib_interface_export: flags.lib_interface_export,
         param_overrides: flags.param_overrides.clone(),
         param_policy: flags.param_policy,
         retain_wir: flags.retain_wir,
