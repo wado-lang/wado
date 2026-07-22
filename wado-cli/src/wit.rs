@@ -150,8 +150,9 @@ pub async fn run(opts: WitOptions) -> Result<(), CliExit> {
         world_snapshot_and_imports(opts.input, opts.world, &usage).await?
     };
 
-    let text = wit_emit::emit_wit_text_from(snapshot.input(), &WitEmitOptions { scope }, &world_imports)
-        .map_err(|e| CliExit::error(format!("wado wit: {e}")))?;
+    let text =
+        wit_emit::emit_wit_text_from(snapshot.input(), &WitEmitOptions { scope }, &world_imports)
+            .map_err(|e| CliExit::error(format!("wado wit: {e}")))?;
 
     match opts.output {
         Some(file) => {
@@ -283,7 +284,9 @@ async fn compile_wit_snapshot(
     // subset, so this is unreachable; surface it loudly rather than as a silent
     // exit-1 should a future change ever break that invariant.
     let snapshot = result.wit_emit_snapshot.ok_or_else(|| {
-        CliExit::error("wado wit: compiler did not retain the WIT subset (internal error)".to_string())
+        CliExit::error(
+            "wado wit: compiler did not retain the WIT subset (internal error)".to_string(),
+        )
     })?;
     Ok((snapshot, wir_imports(result.wir_package)))
 }
