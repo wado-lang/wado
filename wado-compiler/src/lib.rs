@@ -192,6 +192,17 @@ pub struct DumpResult {
     pub trivia: comment::TriviaMap,
 }
 
+/// A provider component supplied to satisfy a dependency's guest-effect import.
+/// Built with `--implement <import_fq>`, so it exports that interface; codegen
+/// wires `provider.export[import_fq] -> dependency.import[import_fq]`.
+#[derive(Debug, Clone)]
+pub struct ProviderComponent {
+    /// The interface FQ the provider exports and the dependency imports.
+    pub import_fq: String,
+    /// The provider component bytes.
+    pub bytes: Vec<u8>,
+}
+
 /// Compilation options for the compiler
 #[derive(Debug, Clone)]
 pub struct CompilerOptions {
@@ -248,6 +259,10 @@ pub struct CompilerOptions {
     /// implements a foreign interface (a provider component), whose consumers
     /// connect by interface FQ.
     pub lib_interface_export: bool,
+    /// Provider components that satisfy a dependency's guest-effect imports.
+    /// Each is composed as a sibling and wired `provider.export[fq] ->
+    /// dependency.import[fq]` (research-cm-boundary-callbacks.md).
+    pub providers: Vec<ProviderComponent>,
     /// Compile-time parameter overrides from the CLI's `-D NAME=value` flags.
     /// Consumed by the param-resolution pass against `#[param]` globals; an
     /// entry matching no declaration is reported per `param_policy.unknown`.
@@ -274,6 +289,7 @@ impl Default for CompilerOptions {
             unused_diagnostics: true,
             lib_world: None,
             lib_interface_export: false,
+            providers: Vec::new(),
             param_overrides: crate::hashmap::IndexMap::default(),
             param_policy: param_resolution::ParamPolicy::default(),
         }
@@ -828,7 +844,12 @@ fn compile_after_load<H: CompilerHost>(
     // emits and share their logic with the LSP.
     {
         let _span = logger.span("effect-check");
-        let diags = effect_check::check_semantics(&sem);
+        let provided_import_fqs: crate::hashmap::IndexSet<String> = options
+            .providers
+            .iter()
+            .map(|p| p.import_fq.clone())
+            .collect();
+        let diags = effect_check::check_semantics(&sem, provided_import_fqs);
         let move_errors = resource_move_check::check_resource_moves_semantic(&sem);
         let had_error = !diags.is_empty() || !move_errors.is_empty();
         for error in diags.effects {
@@ -1356,7 +1377,7 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 14: Emit Wasm (WirPackage → Wasm component bytes) ===
     let wasm = {
         let _span = logger.span("codegen");
-        codegen::emit_wasm(&nir, &wir_package)
+        codegen::emit_wasm(&nir, &wir_package, &options.providers)
     };
 
     // Return the entry AST for tooling
@@ -2070,6 +2091,7 @@ export fn id_bool(v: bool) -> bool { return v; }
             Some(&module),
             &[],
             &crate::hashmap::IndexSet::default(),
+            false,
         );
 
         assert_eq!(world.fq_name, "wado:mylib/mylib@0.1.0");
@@ -2093,6 +2115,7 @@ export fn id_bool(v: bool) -> bool { return v; }
             None,
             &[],
             &crate::hashmap::IndexSet::default(),
+            false,
         );
         assert!(world.exports.is_empty());
     }
@@ -2113,6 +2136,7 @@ export fn id_points(v: List<Point>) -> List<Point> { return v; }
             Some(&module),
             &[],
             &crate::hashmap::IndexSet::default(),
+            false,
         );
         assert!(
             world
@@ -2137,6 +2161,7 @@ export fn id_opt(v: Option<String>) -> Option<String> { return v; }
             Some(&module),
             &[],
             &crate::hashmap::IndexSet::default(),
+            false,
         );
         assert!(
             world.exports.iter().all(|e| e.from_interface_fq.is_none()),

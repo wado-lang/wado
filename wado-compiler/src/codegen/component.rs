@@ -29,6 +29,7 @@ pub fn build_component(
     project: &NirPackage,
     core_module: &[u8],
     wir_package: &WirPackage,
+    providers: &[crate::ProviderComponent],
 ) -> Vec<u8> {
     let wasm_modules = &wir_package.wasm_modules;
     let mut builder = ComponentBuilder::default();
@@ -412,7 +413,7 @@ pub fn build_component(
     append_interface_instance_exports(&mut component_bytes, &ctx, component_plan);
 
     // Compose in imported CM component dependencies so the result is standalone.
-    compose_dependency_components(component_bytes, project, &wir_package.import_plan)
+    compose_dependency_components(component_bytes, project, &wir_package.import_plan, providers)
 }
 
 fn wado_type_to_cm_primitive(ty: &Type) -> ComponentValType {
@@ -4014,9 +4015,10 @@ fn compose_dependency_components(
     program_bytes: Vec<u8>,
     project: &NirPackage,
     import_plan: &[crate::wir::ImportEntry],
+    providers: &[crate::ProviderComponent],
 ) -> Vec<u8> {
     use crate::wir::ImportKind;
-    use wasm_compose::graph::{Component, CompositionGraph, EncodeOptions};
+    use wasm_compose::graph::{Component, ComponentId, CompositionGraph, EncodeOptions, InstanceId};
     use wasmparser::Validator;
 
     let dependency_fqs: IndexSet<&str> = import_plan
@@ -4024,7 +4026,7 @@ fn compose_dependency_components(
         .filter(|e| e.kind == ImportKind::Component)
         .map(|e| e.fq.as_str())
         .collect();
-    if dependency_fqs.is_empty() {
+    if dependency_fqs.is_empty() && providers.is_empty() {
         return program_bytes;
     }
 
@@ -4035,6 +4037,10 @@ fn compose_dependency_components(
         let program = Component::from_bytes(&mut validator, "program", program_bytes.clone())?;
         let program_id = graph.add_component(program)?;
         let program_inst = graph.instantiate(program_id)?;
+
+        // Each composed dependency's (component, instance), so a provider can be
+        // wired into whichever dependency imports the interface it satisfies.
+        let mut dep_instances: Vec<(ComponentId, InstanceId)> = Vec::new();
 
         // Instantiate each dependency, connecting its exports to program imports.
         for asset in project.wasm_assets.values() {
@@ -4049,6 +4055,7 @@ fn compose_dependency_components(
             let dep = Component::from_bytes(&mut validator, "dependency", asset.bytes.clone())?;
             let dep_id = graph.add_component(dep)?;
             let dep_inst = graph.instantiate(dep_id)?;
+            dep_instances.push((dep_id, dep_inst));
 
             for fq in provides {
                 let dep_export = graph
@@ -4062,6 +4069,33 @@ fn compose_dependency_components(
                     .map(|(idx, _)| idx)
                     .ok_or_else(|| anyhow::anyhow!("program missing import `{fq}`"))?;
                 graph.connect(dep_inst, Some(dep_export), program_inst, program_import)?;
+            }
+        }
+
+        // Wire each provider's exported interface into the dependency that
+        // imports it — the acyclic `provider -> dependency` shape (UseCases #8).
+        for provider in providers {
+            let fq = provider.import_fq.as_str();
+            let prov = Component::from_bytes(&mut validator, "provider", provider.bytes.clone())?;
+            let prov_id = graph.add_component(prov)?;
+            let prov_inst = graph.instantiate(prov_id)?;
+            let prov_export = graph
+                .get_component(prov_id)
+                .and_then(|c| c.export_by_name(fq))
+                .map(|(idx, _, _)| idx)
+                .ok_or_else(|| anyhow::anyhow!("provider missing export `{fq}`"))?;
+
+            let mut wired = false;
+            for &(dep_id, dep_inst) in &dep_instances {
+                if let Some((import_idx, _)) =
+                    graph.get_component(dep_id).and_then(|c| c.import_by_name(fq))
+                {
+                    graph.connect(prov_inst, Some(prov_export), dep_inst, import_idx)?;
+                    wired = true;
+                }
+            }
+            if !wired {
+                anyhow::bail!("no composed dependency imports provider interface `{fq}`");
             }
         }
 

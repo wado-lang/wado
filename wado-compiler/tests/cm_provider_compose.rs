@@ -119,3 +119,65 @@ fn provider_satisfies_dep_import_and_roundtrips() {
         .expect("Wrapped.text");
     assert_eq!(*text, Val::String("[wado:x]".into()), "round-trip value");
 }
+
+/// The compiler-integrated path: a consumer that imports `sub/hlc.wasm` and
+/// calls `Hlc::wrap` with **no handler** compiles when a provider is supplied
+/// (`CompilerOptions::providers` discharges the reconstructed effect and
+/// `compose_dependency_components` wires the provider into the dependency).
+/// The produced component is standalone and runs the round-trip.
+#[test]
+fn provider_option_discharges_and_composes_through_codegen() {
+    let provider = compile_provider();
+
+    let consumer_src = r#"
+use { Hlc } from "./sub/hlc.wasm" with { type: "wasm" };
+export fn go(code: String, lang: String) -> String {
+    return Hlc::wrap(code, lang).text;
+}
+"#;
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/provider_consumer.wado");
+    let options = CompilerOptions {
+        opt_level: OptLevel::O2,
+        lib_world: Some("test:consumer/consumer@0.1.0".to_string()),
+        providers: vec![wado_compiler::ProviderComponent {
+            import_fq: GUEST_IFACE_FQ.to_string(),
+            bytes: provider,
+        }],
+        ..Default::default()
+    };
+    let composed = common::compile_source_with_compiler_options(Path::new(path), consumer_src, options)
+        .expect("consumer compiles: provider discharges Highlight and composes in")
+        .wasm;
+
+    // The provider satisfies the import, so the composed component no longer
+    // imports the highlight interface.
+    let decoded = wit_component::decode(&composed).expect("decode composed");
+    let wit_component::DecodedWasm::Component(resolve, world) = decoded else {
+        panic!("expected a component");
+    };
+    let still_imports_highlight = resolve.worlds[world].imports.iter().any(|(_, item)| {
+        matches!(item, wit_parser::WorldItem::Interface { id, .. }
+            if resolve.interfaces[*id].name.as_deref() == Some("highlight"))
+    });
+    assert!(
+        !still_imports_highlight,
+        "provider should have satisfied the highlight import"
+    );
+
+    let mut config = wasmtime::Config::new();
+    config.wasm_component_model(true);
+    let engine = wasmtime::Engine::new(&config).unwrap();
+    let component =
+        wasmtime::component::Component::new(&engine, &composed).expect("composed validates");
+    let linker = wasmtime::component::Linker::new(&engine);
+    let mut store = wasmtime::Store::new(&engine, ());
+    let instance = linker.instantiate(&mut store, &component).expect("instantiate");
+
+    let go = instance
+        .get_typed_func::<(&str, &str), (String,)>(&mut store, "go")
+        .expect("go export (code, lang) -> string");
+    let (text,) = go
+        .call(&mut store, ("y", "wado"))
+        .expect("consumer.go -> hlc.wrap -> hlc.highlight-import -> provider");
+    assert_eq!(text, "[wado:y]", "round-trip through the composed provider");
+}

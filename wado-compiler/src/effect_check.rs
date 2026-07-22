@@ -277,7 +277,7 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
     let Some(state) = sem.state.as_ref() else {
         return out;
     };
-    let data = OwnedEffectData::build(sem, state);
+    let data = OwnedEffectData::build(sem, state, IndexSet::default());
     run_effect_checks(sem, &data.index(), &mut out);
     out
 }
@@ -286,12 +286,15 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
 /// shared [`OwnedEffectData`] once. Used by the batch driver and the LSP so
 /// effect / stores / purity stay in lockstep across both.
 #[must_use]
-pub fn check_semantics(sem: &Semantics) -> SemanticDiagnostics {
+pub fn check_semantics(
+    sem: &Semantics,
+    provided_import_fqs: IndexSet<String>,
+) -> SemanticDiagnostics {
     let mut diags = SemanticDiagnostics::default();
     let Some(state) = sem.state.as_ref() else {
         return diags;
     };
-    let data = OwnedEffectData::build(sem, state);
+    let data = OwnedEffectData::build(sem, state, provided_import_fqs);
     let index = data.index();
     run_effect_checks(sem, &index, &mut diags.effects);
     run_purity_checks(sem, &index, &mut diags.purity);
@@ -358,10 +361,18 @@ struct OwnedEffectData {
     effect_by_name: IndexMap<String, EffectRef>,
     interface_meta: IndexMap<String, (ModuleSource, Option<String>)>,
     effect_by_cm_fq: IndexMap<String, EffectRef>,
+    /// CM interface FQs the consumer satisfies with a provider component; a
+    /// reconstructed host-leaf import in this set is discharged (composition-
+    /// relative — it bottoms out at a fused sibling, not the host).
+    provided_import_fqs: IndexSet<String>,
 }
 
 impl OwnedEffectData {
-    fn build(sem: &Semantics, state: &crate::elaborator::orchestration::AnnotateState) -> Self {
+    fn build(
+        sem: &Semantics,
+        state: &crate::elaborator::orchestration::AnnotateState,
+        provided_import_fqs: IndexSet<String>,
+    ) -> Self {
         // Resolved effect lists, indexed two ways: by the function's
         // declaration key (free calls resolve through `references`) and by
         // `(module, mangled name)` (method dispatch carries a `FunctionRef`).
@@ -487,6 +498,7 @@ impl OwnedEffectData {
             effect_by_name,
             interface_meta,
             effect_by_cm_fq,
+            provided_import_fqs,
         }
     }
 
@@ -503,6 +515,7 @@ impl OwnedEffectData {
             effect_by_name: &self.effect_by_name,
             interface_meta: &self.interface_meta,
             effect_by_cm_fq: &self.effect_by_cm_fq,
+            provided_import_fqs: &self.provided_import_fqs,
         }
     }
 }
@@ -533,6 +546,8 @@ struct EffectIndex<'a> {
     /// CM interface FQ → the effect it declares, for reconstructing a
     /// component's host-leaf imports into effects.
     effect_by_cm_fq: &'a IndexMap<String, EffectRef>,
+    /// CM interface FQs the consumer provides (discharged in reconstruction).
+    provided_import_fqs: &'a IndexSet<String>,
 }
 
 fn check_function_effects_sem(
@@ -917,6 +932,7 @@ impl SemEffectWalker<'_> {
             return registry
                 .host_leaf_imports_for(fq)
                 .iter()
+                .filter(|leaf| !self.index.provided_import_fqs.contains(leaf.as_str()))
                 .filter_map(|leaf| self.index.effect_by_cm_fq.get(leaf).cloned())
                 .collect();
         }
@@ -2506,7 +2522,7 @@ pub fn check_default_purity_semantic(sem: &Semantics) -> Vec<DefaultPurityError>
     let Some(state) = sem.state.as_ref() else {
         return out;
     };
-    let data = OwnedEffectData::build(sem, state);
+    let data = OwnedEffectData::build(sem, state, IndexSet::default());
     run_purity_checks(sem, &data.index(), &mut out);
     out
 }
