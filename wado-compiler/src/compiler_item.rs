@@ -116,6 +116,9 @@ pub enum CompilerItem {
     /// `Case<T, P>` — the per-case token struct minted by
     /// `ReflectVariant::cases()` (WEP 2026-06-13 §3e).
     ReflectVariantCase,
+    /// `Field<T, F>` — the per-field token struct minted by
+    /// `Reflect::field_tokens()` (WEP 2026-06-13).
+    ReflectField,
 
     // ── Variants (sum types) ──────────────────────────────────────────
     /// `Option<T>` — `Some(_)` / `None`.
@@ -144,6 +147,9 @@ pub enum CompilerItem {
     /// `ReflectFlags` — compile-time flags-introspection anchor; the
     /// per-flags `impl ReflectFlags for F` synthesis points at it.
     ReflectFlags,
+    /// `Member` — the sealed attr-reading face implemented by every
+    /// `Field<T, F>` token (WEP 2026-06-13).
+    Member,
     /// `Ref` — sealed marker for reference-identity types (GC references);
     /// its `Output: Ref` bound gates the reference-returning index traits.
     Ref,
@@ -301,6 +307,12 @@ pub enum CompilerItem {
     ReflectFieldNames,
     /// `Reflect::type_name` — the per-struct type name.
     ReflectTypeName,
+    /// `Reflect::field_tokens` — the per-field token tuple.
+    ReflectFieldTokens,
+    /// `Member::name` — the token's source field name.
+    MemberName,
+    /// `Member::wire_name_override` — the token's raw `#[serde(rename)]` value.
+    MemberWireNameOverride,
     /// `ReflectVariant::type_name` — the per-variant type name.
     ReflectVariantTypeName,
     /// `ReflectVariant::case_meta` — the per-variant case-descriptor list.
@@ -468,10 +480,12 @@ impl CompilerItem {
         Self::ReflectVariant,
         Self::VariantCaseMeta,
         Self::ReflectVariantCase,
+        Self::ReflectField,
         Self::ReflectEnum,
         Self::EnumCaseMeta,
         Self::ReflectFlags,
         Self::FlagBitMeta,
+        Self::Member,
         Self::Ref,
         Self::RefMut,
         Self::Eq,
@@ -527,6 +541,9 @@ impl CompilerItem {
         Self::ReflectFields,
         Self::ReflectFieldNames,
         Self::ReflectTypeName,
+        Self::ReflectFieldTokens,
+        Self::MemberName,
+        Self::MemberWireNameOverride,
         Self::ReflectVariantTypeName,
         Self::ReflectVariantCaseMeta,
         Self::ReflectVariantDiscriminant,
@@ -610,10 +627,12 @@ impl CompilerItem {
             Self::ReflectVariant => "reflect_variant",
             Self::VariantCaseMeta => "variant_case_meta",
             Self::ReflectVariantCase => "reflect_variant_case",
+            Self::ReflectField => "reflect_field",
             Self::ReflectEnum => "reflect_enum",
             Self::EnumCaseMeta => "enum_case_meta",
             Self::ReflectFlags => "reflect_flags",
             Self::FlagBitMeta => "flag_bit_meta",
+            Self::Member => "member",
             Self::Ref => "ref",
             Self::RefMut => "ref_mut",
             Self::Eq => "eq",
@@ -669,6 +688,9 @@ impl CompilerItem {
             Self::ReflectFields => "reflect_fields",
             Self::ReflectFieldNames => "reflect_field_names",
             Self::ReflectTypeName => "reflect_type_name",
+            Self::ReflectFieldTokens => "reflect_field_tokens",
+            Self::MemberName => "member_name",
+            Self::MemberWireNameOverride => "member_wire_name_override",
             Self::ReflectVariantTypeName => "reflect_variant_type_name",
             Self::ReflectVariantCaseMeta => "reflect_variant_case_meta",
             Self::ReflectVariantDiscriminant => "reflect_variant_discriminant",
@@ -769,10 +791,12 @@ impl CompilerItem {
             | Self::ReflectVariant
             | Self::VariantCaseMeta
             | Self::ReflectVariantCase
+            | Self::ReflectField
             | Self::ReflectEnum
             | Self::EnumCaseMeta
             | Self::ReflectFlags
             | Self::FlagBitMeta
+            | Self::Member
             | Self::Ref
             | Self::RefMut
             | Self::Eq
@@ -783,6 +807,9 @@ impl CompilerItem {
             | Self::ReflectFields
             | Self::ReflectFieldNames
             | Self::ReflectTypeName
+            | Self::ReflectFieldTokens
+            | Self::MemberName
+            | Self::MemberWireNameOverride
             | Self::ReflectVariantTypeName
             | Self::ReflectVariantCaseMeta
             | Self::ReflectVariantDiscriminant
@@ -913,6 +940,7 @@ impl CompilerItem {
             | Self::String
             | Self::VariantCaseMeta
             | Self::ReflectVariantCase
+            | Self::ReflectField
             | Self::EnumCaseMeta
             | Self::FlagBitMeta => CompilerItemKind::Struct,
             Self::Option | Self::Result => CompilerItemKind::Variant,
@@ -925,6 +953,7 @@ impl CompilerItem {
             | Self::ReflectVariant
             | Self::ReflectEnum
             | Self::ReflectFlags
+            | Self::Member
             | Self::Ref
             | Self::RefMut
             | Self::Eq
@@ -960,6 +989,9 @@ impl CompilerItem {
             | Self::ReflectFields
             | Self::ReflectFieldNames
             | Self::ReflectTypeName
+            | Self::ReflectFieldTokens
+            | Self::MemberName
+            | Self::MemberWireNameOverride
             | Self::ReflectVariantTypeName
             | Self::ReflectVariantCaseMeta
             | Self::ReflectVariantDiscriminant

@@ -78,6 +78,26 @@ internal trait Reflect {
     /// Returns the struct name.
     #[compiler_item("reflect_type_name")]
     fn type_name() -> String;
+
+    /// The per-field token tuple `[Field<Self, F_0>, ...]`.
+    type FieldTokens;
+
+    /// Returns the per-field tokens.
+    #[compiler_item("reflect_field_tokens")]
+    fn field_tokens() -> Self::FieldTokens;
+}
+
+/// The attr-reading face of a struct-field token. Sealed and
+/// compiler-synthesized; user impls are rejected. See WEP 2026-06-13.
+#[compiler_item("member")]
+internal trait Member {
+    /// The source field name.
+    #[compiler_item("member_name")]
+    fn name(&self) -> String;
+
+    /// The raw `#[serde(rename)]` value (casing not applied), or `None`.
+    #[compiler_item("member_wire_name_override")]
+    fn wire_name_override(&self) -> Option<String>;
 }
 
 /// Per-case descriptor returned by `ReflectVariant::case_meta()`, in
@@ -209,6 +229,50 @@ impl<T, P> VariantCase<T, P> {
     /// Builds this case around `payload`.
     pub fn construct(&self, payload: P) -> T {
         return builtin::variant_case_construct(payload, self.index);
+    }
+}
+
+/// A field handle minted by `Reflect::field_tokens()`: the field type `F`
+/// is static, the metadata is baked in as literal fields. `get` reads the
+/// field value out of a struct value. See WEP 2026-06-13.
+#[compiler_item("reflect_field")]
+pub struct Field<T, F> {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+impl<T, F> Field<T, F> {
+    /// The field's declaration index.
+    pub fn index(&self) -> i32 {
+        return self.index;
+    }
+
+    /// Whether the field declares a default value.
+    pub fn has_default(&self) -> bool {
+        return self.has_default;
+    }
+
+    /// Whether the field is marked `#[secret]`.
+    pub fn is_secret(&self) -> bool {
+        return self.is_secret;
+    }
+
+    /// The value of this field in `v`.
+    pub fn get(&self, v: &T) -> F {
+        return builtin::struct_field_get(v, self.index);
+    }
+}
+
+impl<T, F> Member for Field<T, F> {
+    fn name(&self) -> String {
+        return self.field_name;
+    }
+
+    fn wire_name_override(&self) -> Option<String> {
+        return self.wire_override;
     }
 }
 

@@ -1772,6 +1772,56 @@ impl FunctionTranslator<'_, '_> {
             });
         }
 
+        if matches_builtin(&func.name, mi, "struct_field_get") {
+            let (struct_ty, field_ty) = if type_args.len() == 2 {
+                (type_args[0], type_args[1])
+            } else {
+                let mi = mi.expect("struct_field_get marker without type args or monomorph info");
+                let ta = if mi.method_type_args.len() == 2 {
+                    &mi.method_type_args
+                } else {
+                    &mi.impl_type_args
+                };
+                assert!(
+                    ta.len() == 2,
+                    "struct_field_get marker expects [struct, field] type args, got {ta:?}"
+                );
+                (ta[0], ta[1])
+            };
+
+            let (helper_name, helper_module) = {
+                let tt = self.base.type_table.borrow();
+                let name = crate::name::field_get_helper_name(
+                    &tt.mangle_type_arg_for_generic(struct_ty),
+                    &tt.mangle_type_arg_for_generic(field_ty),
+                );
+                let module = match tt.get(struct_ty) {
+                    tir::ResolvedType::Struct { module_source, .. } => module_source.clone(),
+                    other => panic!("struct_field_get marker on non-struct type: {other:?}"),
+                };
+                (name, module)
+            };
+
+            let nir_func = nir::FunctionRef {
+                module_source: helper_module,
+                name: helper_name,
+                monomorph_info: None,
+                method_info: None,
+            };
+            let func_id = self.base.interner.borrow_mut().resolve(&nir_func);
+            return Some(ExprKind::Call {
+                func_id,
+                type_args: vec![],
+                args: args
+                    .iter()
+                    .map(|a| ArenaCallArg {
+                        expr: self.convert_specialized_arg_operand(&a.expr),
+                        is_mut: a.is_mut,
+                    })
+                    .collect(),
+            });
+        }
+
         let helper_name_for: fn(&str, &str) -> String =
             if matches_builtin(&func.name, mi, "variant_case_extract") {
                 crate::name::case_extract_helper_name

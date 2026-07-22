@@ -88,7 +88,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // concrete `Struct^Reflect::method`.
         let subject = self.tysys.type_table.borrow().get(self_ty).clone();
         if let crate::tir::ResolvedType::TypeParam { name, .. } = subject {
-            return self.resolve_generic_reflect_static_call(&name, static_call, ctx);
+            return self.resolve_generic_reflect_static_call(self_ty, &name, static_call, ctx);
         }
 
         let self_name = self.tysys.type_table.borrow().type_name(self_ty);
@@ -101,7 +101,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         };
 
-        let (reflect_trait_name, type_name_method, fields_method, module_source) = {
+        let (reflect_trait_name, type_name_method, fields_method, field_tokens_method, module_source) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
@@ -114,11 +114,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 items
                     .method_name(crate::compiler_item::CompilerItem::ReflectFields)
                     .to_string(),
+                items
+                    .method_name(crate::compiler_item::CompilerItem::ReflectFieldTokens)
+                    .to_string(),
                 self.find_struct_module_source(&self_name),
             )
         };
 
         let is_fields = method == fields_method;
+        let is_field_tokens = method == field_tokens_method;
         let args_valid = if is_fields {
             self.check_reflect_fields_receiver(self_ty, &self_name, static_call, ctx)
         } else {
@@ -135,6 +139,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let return_type = if is_fields {
             self.tysys.type_table.borrow_mut().make_tuple(field_types)
+        } else if is_field_tokens {
+            let mut tt = self.tysys.type_table.borrow_mut();
+            let (field_module, field_name) = {
+                let items = tt.compiler_items();
+                let (m, n) = items.require_struct(crate::compiler_item::CompilerItem::ReflectField);
+                (m.clone(), n.to_string())
+            };
+            let tokens: Vec<TypeId> = field_types
+                .into_iter()
+                .map(|field_ty| {
+                    tt.make_generic_instance(
+                        field_name.clone(),
+                        field_module.clone(),
+                        vec![self_ty, field_ty],
+                    )
+                })
+                .collect();
+            tt.make_tuple(tokens)
         } else {
             let mut tt = self.tysys.type_table.borrow_mut();
             let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
@@ -177,13 +199,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// concrete struct's synthesized `Struct^Reflect::method`.
     fn resolve_generic_reflect_static_call(
         &mut self,
+        self_ty: TypeId,
         type_param_name: &str,
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
         use crate::compiler_item::CompilerItem;
         let method = static_call.method.clone();
-        let (reflect_trait_name, field_names_method, type_name_method, fields_method) = {
+        let (
+            reflect_trait_name,
+            field_names_method,
+            type_name_method,
+            fields_method,
+            field_tokens_method,
+        ) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
@@ -193,6 +222,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .to_string(),
                 items.method_name(CompilerItem::ReflectTypeName).to_string(),
                 items.method_name(CompilerItem::ReflectFields).to_string(),
+                items
+                    .method_name(CompilerItem::ReflectFieldTokens)
+                    .to_string(),
             )
         };
 
@@ -224,6 +256,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return TypeTable::ERROR;
             };
             fields_ty
+        } else if method == field_tokens_method {
+            // `field_tokens()` returns the constructor-mapped token pack
+            // `[..Field<T, F>]` read off `T`'s `Fields = [..F]` bound.
+            let Some(tokens_ty) = self.field_tokens_bound_ty(
+                self_ty,
+                type_param_name,
+                &reflect_trait_name,
+            ) else {
+                let _ = self.emit(TypeError::UnknownFunction {
+                    name: format!(
+                        "Reflect::<{type_param_name}>::{method} (no `Fields = [..F]` bound on {type_param_name})"
+                    ),
+                    span: static_call.span,
+                });
+                return TypeTable::ERROR;
+            };
+            tokens_ty
         } else {
             let _ = self.emit(TypeError::UnknownFunction {
                 name: format!("Reflect::<{type_param_name}>::{method}"),
@@ -387,6 +436,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method == items.method_name(crate::compiler_item::CompilerItem::ReflectFieldNames)
             || method == items.method_name(crate::compiler_item::CompilerItem::ReflectTypeName)
             || method == items.method_name(crate::compiler_item::CompilerItem::ReflectFields)
+            || method == items.method_name(crate::compiler_item::CompilerItem::ReflectFieldTokens)
     }
 
     /// Whether `prefix::method` names a `ReflectVariant` trait-qualified static
@@ -671,6 +721,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let elem_param = tt.make_type_param(pack_name.clone(), pack_index);
         let token = tt.make_generic_instance(case_name, case_module, vec![self_ty, elem_param]);
+        let token_pack = tt.make_mapped_type_pack(pack_name, pack_index, token);
+        Some(tt.make_tuple(vec![token_pack]))
+    }
+
+    /// The constructor-mapped token pack `[..Field<T, F>]` — the type of
+    /// `field_tokens()` under a `T: Reflect<Fields = [..F]>` bound. The variant
+    /// analog is [`Self::case_tokens_bound_ty`]; both map the projected element
+    /// pack through a token constructor. `None` when `T` carries no `Fields`
+    /// pack bound.
+    fn field_tokens_bound_ty(
+        &mut self,
+        self_ty: TypeId,
+        type_param_name: &str,
+        reflect_trait_name: &str,
+    ) -> Option<TypeId> {
+        use crate::compiler_item::CompilerItem;
+        let fields_ty = self.reflect_pack_bound_ty(
+            type_param_name,
+            reflect_trait_name,
+            crate::synthesis::traits::REFLECT_FIELDS_ASSOC,
+        )?;
+        let mut tt = self.tysys.type_table.borrow_mut();
+        let elems = tt.as_tuple(fields_ty)?;
+        let (pack_name, pack_index) = elems.iter().find_map(|&e| match tt.get(e) {
+            crate::tir::ResolvedType::TypePack {
+                name,
+                index,
+                mapped_elem: None,
+            } => Some((name.clone(), *index)),
+            _ => None,
+        })?;
+        let (field_module, field_name) = {
+            let items = tt.compiler_items();
+            let (m, n) = items.require_struct(CompilerItem::ReflectField);
+            (m.clone(), n.to_string())
+        };
+        let elem_param = tt.make_type_param(pack_name.clone(), pack_index);
+        let token = tt.make_generic_instance(field_name, field_module, vec![self_ty, elem_param]);
         let token_pack = tt.make_mapped_type_pack(pack_name, pack_index, token);
         Some(tt.make_tuple(vec![token_pack]))
     }
