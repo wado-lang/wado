@@ -424,9 +424,6 @@ impl LastUseAnalyzer<'_> {
     fn walk_stmt(&mut self, stmt: &ast::Stmt, live: &mut IndexSet<AstId>, record: bool) {
         match stmt {
             ast::Stmt::Let(l) => {
-                // `live` reflects the statements after this one — for a
-                // `let ... else` that is the match-success continuation. Kill
-                // the pattern bindings (defined here) from it.
                 self.kill_pattern(&l.pattern, live);
                 // The else block diverges: its live-in starts empty (nothing
                 // after it is live) and unions in the variables it uses.

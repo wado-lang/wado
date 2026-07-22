@@ -1851,9 +1851,9 @@ pub struct LetStmt {
     pub ty: Option<Type>,
     /// Initializer expression, or `None` for uninitialized declarations (`let x: i32;`).
     pub value: Option<Expr>,
-    /// Diverging block of a `let PAT = EXPR else { ... };` statement. When
-    /// present the pattern may be refutable: if it matches, its bindings enter
-    /// the enclosing scope; otherwise the else block runs and must diverge.
+    /// Diverging `else` block of a `let PAT = EXPR else { ... };`. When present
+    /// the pattern may be refutable: on a match its bindings enter the enclosing
+    /// scope, otherwise this block runs and must diverge.
     pub else_block: Option<Block>,
     pub span: Span,
 }

@@ -2332,8 +2332,6 @@ impl Parser {
             (None, self.peek().span)
         };
 
-        // `let PAT = EXPR else { ... };` — a diverging else block for a
-        // refutable binding. Only valid with an initializer.
         let (else_block, end_span) = if allow_else && self.check(&TokenKind::Else) {
             if value.is_none() {
                 let span = self.peek().span;

@@ -2007,10 +2007,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let len = slice.len();
         let mut stmts = Vec::new();
         for (i, s) in slice.iter().enumerate() {
-            // `let PAT = EXPR else { ... }` desugars to a two-arm `Match`: the
-            // then-arm is the rest of this block (so the refutable pattern's
-            // bindings are in scope for it), the wildcard arm is the diverging
-            // else block. This consumes the remaining statements.
+            // `reify_let_else` consumes the rest of the block as its then-arm,
+            // so stop here after emitting it.
             if let ast::Stmt::Let(l) = s
                 && l.else_block.is_some()
             {

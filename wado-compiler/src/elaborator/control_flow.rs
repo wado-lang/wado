@@ -69,10 +69,8 @@ pub(super) fn block_always_exits(ctx: CtrlFlowCtx<'_>, block: &ast::Block) -> bo
 fn stmt_always_exits(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt) -> bool {
     match stmt {
         ast::Stmt::Return(_) => true,
-        // `break`/`continue` transfer control out of the current block before
-        // its end, so the block exits. (`block_result_type` already treats
-        // them as `Never`.) A `let ... else { break; }` inside a loop relies on
-        // this to satisfy the diverging-else requirement.
+        // `break`/`continue` exit the current block, so a `let ... else` in a
+        // loop can diverge through them (already `Never` in `block_result_type`).
         ast::Stmt::Break(_) | ast::Stmt::Continue(_) => true,
         ast::Stmt::Expr(e) => expr_always_exits(ctx, &e.expr),
         ast::Stmt::If(if_stmt) => {

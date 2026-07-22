@@ -597,9 +597,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // `let PAT = EXPR else { ... }`: a refutable binding whose else block
-        // diverges. Bindings escape into the enclosing scope; the else block is
-        // resolved separately (without them) and must diverge.
         if let Some(else_block) = &let_stmt.else_block {
             self.resolve_let_else(let_stmt, value_type, else_block, ctx);
             return;
@@ -702,16 +699,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match pattern {
             Pattern::Wildcard | Pattern::MutIdent { .. } => true,
             Pattern::Ident { name, .. } => {
-                // A bare ident binds a value unless it names a variant/enum
-                // case or an immutable global constant, either of which is a
-                // refutable value pattern.
+                // A bare ident binds unless it names a variant/enum case or an
+                // immutable global — either is a refutable value pattern.
                 !self.is_known_case_of_type(scrutinee_type, name, None)
                     && !self.is_immutable_global(name)
             }
-            // Tuple/struct destructuring can carry refutable sub-patterns; stay
-            // conservative and do not flag them, so a refutable pattern is never
-            // wrongly rejected. Literal/variant/or/range are refutable outright;
-            // `Error` is a parser-recovery placeholder.
+            // Destructuring may hold refutable sub-patterns; the rest are
+            // refutable outright (or a parser-recovery placeholder). Never flag.
             Pattern::Tuple(..)
             | Pattern::Struct { .. }
             | Pattern::Literal(_)
