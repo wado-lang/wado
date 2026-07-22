@@ -82,6 +82,7 @@ mod field_scalarize;
 mod gate;
 mod inline;
 mod labeled_block_fusion;
+mod let_block_flatten;
 mod licm;
 mod loop_version_bce;
 mod match_to_switch;
@@ -705,6 +706,11 @@ fn run_optimization_passes(
         gated!("nir/peephole", |p, g| peephole::run_peephole(p, g, false));
         // `labeled_block_fusion` moved into the post-inline `nir/peephole`
         // session as `LabeledBlockFusionRule`; see `optimize/peephole.rs`.
+        // Normal form for `sroa`: no `let` binds a straight-line value-position
+        // block. Runs between the peephole session and `sroa` — never inside
+        // the session — so the session's pristine-map rules and `sroa`'s
+        // direct-literal matcher each see a consistent shape.
+        gated!("nir/let_block_flatten", let_block_flatten::flatten_let_blocks);
         gated!("nir/sroa", scalar_replace_aggregates);
         gated!("nir/copy_prop", propagate_copies);
         // DAE / DRVE after `copy_prop` shrinks signatures and discards unused

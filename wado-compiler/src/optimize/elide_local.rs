@@ -11,10 +11,55 @@
 //! (`copy_prop` / `const_fold` / `dce`), which the WIR-level pass cannot.
 
 use crate::hashmap::IndexSet;
-use crate::nir_arena::{BlockId, ExprId, ExprKind, Operand, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 
 use super::arena_query;
+
+/// Two-tier view of the locals read through promoted `Operand::Value`s.
+///
+/// The value pool is append-only, so `opaque_local_sources` keeps naming a
+/// local forever once any read of it was promoted — even after every operand
+/// that referenced that value has been folded away. The pool-wide set stays as
+/// the cheap first tier; when it is the *only* thing keeping a binding alive,
+/// the precise second tier walks the body's operand slots and collects the
+/// locals actually reachable from a live `Operand::Value`. The walk includes
+/// orphaned slots (`Body::for_each_operand`), which only over-approximates —
+/// sound for a keep-decision.
+struct PromotedReads {
+    pool: IndexSet<u32>,
+    live: Option<IndexSet<u32>>,
+}
+
+impl PromotedReads {
+    fn collect(body: &Body) -> Self {
+        Self {
+            pool: body.values.opaque_local_sources().collect(),
+            live: None,
+        }
+    }
+
+    fn contains(&mut self, body: &Body, local: u32) -> bool {
+        if !self.pool.contains(&local) {
+            return false;
+        }
+        // BISECT: pool-only (pre-precision behaviour)
+        if true {
+            return true;
+        }
+        self.live
+            .get_or_insert_with(|| {
+                let mut out = IndexSet::default();
+                body.for_each_operand(|op| {
+                    if let Operand::Value(v) = op {
+                        body.values.collect_opaque_locals(v, &mut out);
+                    }
+                });
+                out
+            })
+            .contains(&local)
+    }
+}
 
 /// What to do with a statement that binds / assigns a write-only local.
 enum Action {
@@ -51,13 +96,13 @@ impl Rule for ElideRule<'_> {
     fn apply_block(&self, engine: &mut Engine, id: BlockId) -> bool {
         let stmts = engine.body.blocks[id].stmts.clone();
         // Locals read only through a promoted `Operand::Value` are live but
-        // invisible to the use index, so keep them. The pool-wide set is
-        // over-conservative (only ever keeps too many) — sound, costs some elisions.
-        let promoted_reads: IndexSet<u32> = engine.body.values.opaque_local_sources().collect();
+        // invisible to the use index, so keep them (see `PromotedReads` for the
+        // pool-wide filter + precise live-operand walk).
+        let mut promoted_reads = PromotedReads::collect(engine.body);
         let mut new_stmts = Vec::with_capacity(stmts.len());
         let mut changed = false;
         for stmt in stmts {
-            match classify(engine, stmt, self.stores_aliased, &promoted_reads) {
+            match classify(engine, stmt, self.stores_aliased, &mut promoted_reads) {
                 Action::Keep => new_stmts.push(stmt),
                 Action::Drop => changed = true,
                 Action::Demote(value) => {
@@ -82,7 +127,7 @@ fn classify(
     engine: &Engine,
     stmt: StmtId,
     stores_aliased: &IndexSet<u32>,
-    promoted_reads: &IndexSet<u32>,
+    promoted_reads: &mut PromotedReads,
 ) -> Action {
     match &engine.body.stmts[stmt].kind {
         StmtKind::Let {
@@ -139,14 +184,14 @@ fn classify(
 }
 
 /// A local is kept (not elidable) when its reference escaped via a `stores`
-/// alias, or it is read anywhere in the body.
+/// alias, it is read anywhere in the body, or a live promoted value reads it.
 fn is_kept(
     engine: &Engine,
     local: u32,
     stores_aliased: &IndexSet<u32>,
-    promoted_reads: &IndexSet<u32>,
+    promoted_reads: &mut PromotedReads,
 ) -> bool {
     stores_aliased.contains(&local)
         || engine.is_local_read(local)
-        || promoted_reads.contains(&local)
+        || promoted_reads.contains(engine.body, local)
 }

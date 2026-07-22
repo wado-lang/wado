@@ -70,10 +70,11 @@ pub enum GatedPass {
     SroaParam,
     ValueCopyDemote,
     ScalarForward,
+    LetBlockFlatten,
 }
 
 impl GatedPass {
-    const COUNT: usize = 14;
+    const COUNT: usize = 15;
 }
 
 /// Static call graph over [`FuncId`]s, built once at loop start.
@@ -265,6 +266,7 @@ mod tests {
             GatedPass::SroaParam,
             GatedPass::ValueCopyDemote,
             GatedPass::ScalarForward,
+            GatedPass::LetBlockFlatten,
         ];
         for p in all {
             match p {
@@ -281,7 +283,8 @@ mod tests {
                 | GatedPass::Drve
                 | GatedPass::SroaParam
                 | GatedPass::ValueCopyDemote
-                | GatedPass::ScalarForward => {}
+                | GatedPass::ScalarForward
+                | GatedPass::LetBlockFlatten => {}
             }
         }
         assert_eq!(all.len(), GatedPass::COUNT);

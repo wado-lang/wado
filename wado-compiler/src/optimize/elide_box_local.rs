@@ -109,6 +109,11 @@ impl Rule for ElideBoxLocalRule {
             // into the use site, which keeps its own `type_id` / `span` (the
             // field-access node's); a promoted constant redirects the use site's
             // operand slot to the pooled value (WEP: The Live ValueGraph).
+            crate::compiler_trace!(
+                "elide_box",
+                "elide local #{candidate}: subst into {use_site:?}, drop stmt {:?}",
+                stmts[i]
+            );
             match inner_op {
                 Operand::Expr(e) => {
                     let inner_kind =
