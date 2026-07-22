@@ -193,7 +193,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(77)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(78)
 
-type "functype//serde_serialize_variant.wado/JsonSerializer^Serializer::begin_variant" = fn(ref "serde_serialize_variant.wado//JsonSerializer", ref "core:prelude/string.wado//String") -> [i32, ref null "serde_serialize_variant.wado//JsonVariantSerializer", ref null "serde_serialize_variant.wado//SerializeError"];  // TypeId(79)
+type "functype//serde_serialize_variant.wado/JsonSerializer^Serializer::begin_variant" = fn(ref "serde_serialize_variant.wado//JsonSerializer", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> [i32, ref null "serde_serialize_variant.wado//JsonVariantSerializer", ref null "serde_serialize_variant.wado//SerializeError"];  // TypeId(79)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -222,6 +222,7 @@ global global:serde_serialize_variant.wado::__const_obj_25: ref null "core:prelu
 global global:serde_serialize_variant.wado::__const_obj_26: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(123, 34), used: 2 };
 global global:serde_serialize_variant.wado::__const_obj_27: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80, 111, 105, 110, 116), used: 5 };
 global global:serde_serialize_variant.wado::__const_obj_28: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(67, 105, 114, 99, 108, 101), used: 6 };
+global global:serde_serialize_variant.wado::__const_obj_29: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(83, 104, 97, 112, 101), used: 5 };
 
 fn "serde_serialize_variant.wado/run"() with Stdout {
     let ser: ref "serde_serialize_variant.wado//JsonSerializer";
@@ -1341,7 +1342,7 @@ fn "serde_serialize_variant.wado/JsonSerializer^Serializer::serialize_unit_varia
     return ref.null none;
 }
 
-fn "serde_serialize_variant.wado/JsonSerializer^Serializer::begin_variant"(self, variant_name) {
+fn "serde_serialize_variant.wado/JsonSerializer^Serializer::begin_variant"(self, type_name, variant_name, disc) {
     "core:prelude/string.wado/String::push_str"(self.buf, "core:prelude/string.wado/String^Add::add"("core:prelude/string.wado/String^Add::add"("core:prelude/string.wado/String^Add::add"(global:serde_serialize_variant.wado::__const_obj_26, variant_name), global:serde_serialize_variant.wado::__const_obj_25), global:serde_serialize_variant.wado::__const_obj_24));
     return 0, struct.new "serde_serialize_variant.wado//JsonVariantSerializer" { ser: self }, ref.null none;
 }
@@ -1549,7 +1550,7 @@ fn "serde_serialize_variant.wado/Shape^Serialize::serialize<serde_serialize_vari
         let __sroa_v_3_discriminant: i32;
         let __sroa_v_3_case0_payload_0: ref null "serde_serialize_variant.wado//JsonVariantSerializer";
         let __sroa_v_3_case1_payload_0: ref null "serde_serialize_variant.wado//SerializeError";
-        multivalue_bind [__sroa_v_3_discriminant, __sroa_v_3_case0_payload_0, __sroa_v_3_case1_payload_0] = "serde_serialize_variant.wado/JsonSerializer^Serializer::begin_variant"(s, global:serde_serialize_variant.wado::__const_obj_28);
+        multivalue_bind [__sroa_v_3_discriminant, __sroa_v_3_case0_payload_0, __sroa_v_3_case1_payload_0] = "serde_serialize_variant.wado/JsonSerializer^Serializer::begin_variant"(s, global:serde_serialize_variant.wado::__const_obj_29, global:serde_serialize_variant.wado::__const_obj_28, 0);
         if __sroa_v_3_discriminant == 0 {
             __local_5 = ref.as_non_null(__sroa_v_3_case0_payload_0);
             s_9 = __local_5.ser;
