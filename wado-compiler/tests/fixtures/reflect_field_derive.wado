@@ -1,10 +1,6 @@
-// Blanket derivation over `Reflect` (WEP 2026-06-13 §2): the bound
-// `Fields = [..F]` projects the field-type pack, and `field_tokens()` has the
-// constructor-mapped pack type `[..Field<T, F>]`. One generic walk reads each
-// field's name / wire-name override (via the sealed `Member` face) and its
-// value (via `Field::get`, per-field-type dispatch) — the serialize shape.
-// This exercises the generic `field_tokens()` resolution, not just the concrete
-// `Reflect::<Struct>::field_tokens()` call.
+// Blanket derivation over `Reflect` (WEP 2026-06-13 §2): a generic
+// `field_tokens()` walk reads each field's name (via the `Member` face) and its
+// value (via `Field::get`), exercising the generic resolution.
 
 trait Row {
     fn row(&self) -> String;

@@ -1,9 +1,7 @@
 // End-to-end generic reading API (WEP 2026-06-13, Stage B+C): a serde-shaped
-// blanket derivation that resolves every field's wire key through
-// `Reflect::<T>::wire_name_policy()` + `field_tokens()` + `core:serde::wire_name`
-// and reads each value via `Field::get`, all over a type parameter `T`. The
-// concrete-call fixtures never exercise the *generic* `wire_name_policy()`
-// resolver — this does.
+// blanket derivation resolving each field's wire key through the generic
+// `wire_name_policy()` + `field_tokens()` + `core:serde::wire_name`, reading
+// values via `Field::get`, all over a type parameter `T`.
 
 use { wire_name } from "core:serde";
 

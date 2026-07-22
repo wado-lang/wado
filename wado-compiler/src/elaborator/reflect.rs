@@ -281,8 +281,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             fields_ty
         } else if method == field_tokens_method {
-            // `field_tokens()` returns the constructor-mapped token pack
-            // `[..Field<T, F>]` read off `T`'s `Fields = [..F]` bound.
             let Some(tokens_ty) = self.field_tokens_bound_ty(
                 self_ty,
                 type_param_name,

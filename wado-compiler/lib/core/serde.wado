@@ -843,12 +843,7 @@ impl<..T: Deserialize> Deserialize for [..T] {
 }
 
 
-// ── Wire naming (Stage C, WEP 2026-06-13) ──────────────────────────────
-//
-// The compiler exposes naming *facts* — a member's `#[serde(rename)]` override
-// (`Member::wire_name_override`) and the struct's `#[serde(rename_all)]` policy
-// (`Reflect::wire_name_policy` as a `CaseStyle`). Casing lives here, not in the
-// compiler.
+// ── Wire naming: the compiler exposes naming facts, casing lives here ──
 
 fn case_is_separator(c: char) -> bool {
     return c == '_' || c == '-' || c == ' ';
