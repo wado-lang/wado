@@ -609,7 +609,7 @@ impl CompilerItem {
             Self::Reflect => "reflect",
             Self::ReflectVariant => "reflect_variant",
             Self::VariantCaseMeta => "variant_case_meta",
-            Self::ReflectVariantCase => "reflect_case",
+            Self::ReflectVariantCase => "reflect_variant_case",
             Self::ReflectEnum => "reflect_enum",
             Self::EnumCaseMeta => "enum_case_meta",
             Self::ReflectFlags => "reflect_flags",
