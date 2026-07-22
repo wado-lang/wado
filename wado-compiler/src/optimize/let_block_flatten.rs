@@ -1,36 +1,19 @@
 //! Flatten block-tailed `let` bindings — the value-block normal form.
 //!
-//! Inlining a helper that computes intermediate values before its result leaves
-//! the binding wrapped in a block:
+//! An inlined helper that computes intermediates before its result leaves the
+//! binding wrapped in a block, which `sroa` and other matchers — keyed on a
+//! direct `let x = <value>` — then miss:
 //!
 //! ```text
 //! let x = { let end = v.used; ArraySlice { repr: &v.repr, start: 0, end } }
+//! ⇒ let end = v.used; let x = ArraySlice { repr: &v.repr, start: 0, end }
 //! ```
 //!
-//! Downstream matchers (SROA's candidate collection most notably) key on a
-//! direct `let x = <value>`, so the wrapped value is invisible to them. This
-//! rule hoists the block's leading statements ahead of the binding and rebinds
-//! `x` to the tail value in place:
-//!
-//! ```text
-//! let end = v.used;
-//! let x = ArraySlice { repr: &v.repr, start: 0, end }
-//! ```
-//!
-//! Execution order is unchanged (the tail was already last). Applied only when
-//! the leading statements are straight-line (`Let` / `Expr` / `LetDestructure`),
-//! so no control-flow statement moves across the binding.
-//!
-//! Edit coherence: the inner block's statement list is cleared *before* the
-//! outer splice, so no statement is ever listed in two blocks — a later pop of
-//! the orphaned inner block must find it empty, otherwise a rule editing the
-//! orphan re-parents live statements into it and corrupts the parent map. The
-//! binding itself is rebound via `redirect_expr` (same `StmtId`, same local
-//! def), not re-allocated.
-//!
-//! Together with the fixed-point loop this establishes the normal form: after
-//! the post-inline peephole converges, no `let` binds a straight-line
-//! value-position `Block`.
+//! Only straight-line leading statements (`Let` / `Expr` / `LetDestructure`)
+//! are hoisted, so no control flow crosses the binding and the tail — already
+//! last — keeps its execution order. With the fixed-point loop this converges
+//! to the normal form: after the post-inline peephole, no `let` binds a
+//! straight-line value-position `Block`.
 
 use cranelift_entity::EntityRef;
 
@@ -44,14 +27,11 @@ use super::gate::{FunctionGate, GatedPass};
 
 /// Flatten every block-tailed `let` binding across the package.
 ///
-/// Runs as its own pass between the post-inline peephole and `sroa` — NOT as a
-/// rule inside the peephole session. The session's pristine-map rules
-/// (`ref_elim`, `elide_box_local`, `labeled_block_fusion`) analyse the body
-/// once at session start; a mid-session flatten changes binding shapes under
-/// their maps and the rules then interfere (observed: `ref_elim`
-/// re-materializing a read of a functor local `elide_box_local` had already
-/// elided). As a separate pass, every session sees flattened shapes only in
-/// its pristine state.
+/// Its own pass between the post-inline peephole and `sroa`, never a peephole
+/// rule: the session's pristine-map rules (`ref_elim`, `elide_box_local`,
+/// `labeled_block_fusion`) analyse once at session start, so reshaping bindings
+/// mid-session makes them interfere. A separate pass starts every session from
+/// flattened shapes.
 pub(super) fn flatten_let_blocks(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let rule = LetBlockFlattenRule;
     let len = project.functions.len();
@@ -88,24 +68,17 @@ impl Rule for LetBlockFlattenRule {
                 "flatten let stmt {sid:?}: hoist {} leading stmt(s)",
                 leading.len()
             );
-            // 1. Strip the orphan-to-be first so no statement is listed twice.
+            // Clear the inner list before splicing, so no statement is listed in
+            // two blocks. The binding keeps its `StmtId` and local def.
             engine.set_block_stmts(inner, Vec::new());
-            // 2. Splice the leading statements ahead of the binding; the
-            //    binding statement itself stays (same StmtId, same local def).
             let mut new_stmts = Vec::with_capacity(stmts.len() + leading.len());
             new_stmts.extend_from_slice(&stmts[..i]);
             new_stmts.extend_from_slice(leading);
             new_stmts.extend_from_slice(&stmts[i..]);
             engine.set_block_stmts(block, new_stmts);
-            // 3. Rebind the let's value from the block wrapper to the tail.
-            //    A skeleton tail MOVES its kind into the wrapper node
-            //    (`become_expr`), leaving the orphaned tail statement holding a
-            //    `Dead` node — the move-the-kind convention every dropping rule
-            //    follows. Redirecting the operand instead would leave the
-            //    orphan referencing the live expr, and `Engine::new`'s
-            //    arena-wide `build_parents` then lets the orphan overwrite the
-            //    live parent edge (observed: copy_prop redirecting through the
-            //    stale parent into the orphan, stranding the live read).
+            // A skeleton tail moves its kind into the wrapper (`become_expr`),
+            // leaving the orphaned tail statement a `Dead` node — never a shared
+            // id, which the parent-map tripwire rejects.
             match tail_op {
                 crate::nir_arena::Operand::Expr(tail_e) => {
                     engine.become_expr(block_expr, tail_e);
@@ -148,21 +121,15 @@ fn flattenable_inner_block(body: &Body, sid: StmtId) -> Option<(ExprId, BlockId)
     if !straight_line {
         return None;
     }
-    // Defer while a leading statement is a shadow binding the session's
-    // dissolvers own: a bare local copy (`let a = b`, the inliner's param
-    // binding) or a reference to a *place* (`let r = &x`, `ref_elim`'s domain).
-    // Hoisting one first widens its scope and hands the same binding to
-    // several session rules at once (observed: a hoisted `let self = get_x`
-    // shadow stranding a fabricated `get_x.__capture_0` read after the
-    // functor binding was elided). Once the shadows dissolve, the block is
-    // single-tail (unwrapped by `const_branch_prune`) or flattenable here on
-    // a later iteration.
-    //
-    // A reference to a *fresh value* (`let input = &String { … }`, `&f()`) is
-    // NOT such a shadow — no dissolver claims it, so `ref_elim` never resolves
-    // it and deferring would strand the block block-wrapped forever, hiding the
-    // aggregate tail from SROA. Restrict the reference deferral to place
-    // referents only.
+    // Defer while a leading statement is a shadow a session dissolver owns: a
+    // bare local copy (`let a = b`, the inliner's param binding, copy_prop's) or
+    // a reference to a *place* (`let r = &x`, ref_elim's). Hoisting one hands the
+    // same binding to several rules at once (observed: a hoisted `let self =
+    // get_x` stranded a `get_x.__capture_0` read after the functor was elided);
+    // once dissolved, the block flattens on a later iteration. A reference to a
+    // *fresh value* (`&String { … }`, `&f()`) is nobody's shadow — deferring
+    // would strand it block-wrapped forever — so the reference case gates on
+    // place referents only.
     let no_shadow_copy = leading.iter().all(|s| {
         let StmtKind::Let { value, .. } = &body.stmts[*s].kind else {
             return true;

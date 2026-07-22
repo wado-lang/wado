@@ -362,15 +362,12 @@ fn let_stmt_qualifies(
     {
         return None;
     }
-    // Sibling-const reads inside the initializer (the flattened builder-temp
-    // pair `let mut __b = <literal>; let xs = *__b`) qualify only when every
-    // read of the sibling sits inside this initializer: the hoisted
-    // `GlobalVarSet` still evaluates at the binding's flow position (sibling in
-    // scope), and confinement guarantees no other alias of the shared object
-    // exists to mutate it behind the global.
-    // Confinement: every read of a used sibling must sit inside this
-    // initializer. Tally reads across the whole body and inside `value` in one
-    // walk each (not once per sibling), then compare.
+    // A sibling-const read (the flattened builder-temp pair `let mut __b =
+    // <literal>; let xs = *__b`) qualifies only when every read of the sibling
+    // sits inside this initializer: the hoisted `GlobalVarSet` still evaluates
+    // at the binding's flow position, and confinement rules out another alias
+    // mutating the shared object behind the global. One whole-body and one
+    // in-`value` tally (not one per sibling) settle it.
     let used_siblings = seeded_locals_read(body, value, siblings);
     if !used_siblings.is_empty() {
         let body_reads = count_reads_of(body, NodeRef::Block(body.root), &used_siblings);
@@ -379,8 +376,7 @@ fn let_stmt_qualifies(
             .map(|e| count_reads_of(body, NodeRef::Expr(e), &used_siblings))
             .unwrap_or_default();
         for &l in &used_siblings {
-            if body_reads.get(&l).copied().unwrap_or(0)
-                != value_reads.get(&l).copied().unwrap_or(0)
+            if body_reads.get(&l).copied().unwrap_or(0) != value_reads.get(&l).copied().unwrap_or(0)
             {
                 return None;
             }
