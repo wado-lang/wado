@@ -1,0 +1,38 @@
+// Pack-map `[..T::method()]` where the method's return type does not mention
+// the pack (returns a concrete type, not `Self`). The spread expands per pack
+// element to a homogeneous tuple of that return type — `[R; |T|]` — rather than
+// collapsing to arity 1. Distinct from `[..T::default()]` (returns `Self`),
+// which the existing pack machinery already handled.
+
+trait Tag {
+    fn tag() -> i32;
+}
+
+impl Tag for i32 {
+    fn tag() -> i32 {
+        return 1;
+    }
+}
+
+impl Tag for bool {
+    fn tag() -> i32 {
+        return 2;
+    }
+}
+
+fn tag_sum<..T: Tag>(xs: [..T]) -> i32 {
+    let mut sum: i32 = 0;
+    for let t of [..T::tag()] {
+        sum = sum + t;
+    }
+    return sum;
+}
+
+test "pack-map with a pack-independent return expands per element" {
+    assert tag_sum([1, true]) == 3;
+    assert tag_sum([1, 2, 3]) == 3;
+    assert tag_sum([true]) == 2;
+}
+
+__DATA__
+{"test": {}}

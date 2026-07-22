@@ -1,0 +1,57 @@
+// Pack-map `[..F::method()]` where the method's return type is pack-independent
+// (WEP 2026-06-13 §1). A derivation over `Reflect` maps a static method over the
+// field-type pack `F`, producing a homogeneous tuple of the return type. This is
+// the shape a schema derivation uses (`[..F::json_schema()]`). The mapped pack
+// carries the return type and the pack's arity; monomorphization expands it per
+// field type.
+
+trait Tag {
+    fn tag() -> String;
+}
+
+impl Tag for i32 {
+    fn tag() -> String {
+        return "int";
+    }
+}
+
+impl Tag for bool {
+    fn tag() -> String {
+        return "bool";
+    }
+}
+
+trait Schema {
+    fn schema(&self) -> String;
+}
+
+impl<T: Reflect<Fields = [..F]>, ..F: Tag> Schema for T {
+    fn schema(&self) -> String {
+        let mut out: String = "";
+        for let t of [..F::tag()] {
+            if out != "" {
+                out = `${out},`;
+            }
+            out = `${out}${t}`;
+        }
+        return out;
+    }
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Mixed {
+    a: i32,
+    flag: bool,
+}
+
+test "pack-map over field types expands per field" {
+    assert (Point { x: 1, y: 2 }).schema() == "int,int";
+    assert (Mixed { a: 1, flag: true }).schema() == "int,bool";
+}
+
+__DATA__
+{"test": {}}

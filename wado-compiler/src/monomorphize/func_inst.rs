@@ -476,6 +476,12 @@ impl Monomorphizer {
                             &info.method_name,
                         ));
                     }
+                    // A blanket static's template is keyed by the blanket param
+                    // (`T^CaseName::by_name`), not the receiver — it lives in
+                    // `generic_name`.
+                    if monomorph.is_blanket {
+                        names_to_try.insert(0, monomorph.generic_name.clone());
+                    }
                     for generic_method_name in names_to_try {
                         if let Some(generic_func_rc) = lookup_template_with_trait_fallback(
                             generic_functions,
@@ -512,7 +518,14 @@ impl Monomorphizer {
                                     method_type_args,
                                     method_info,
                                 };
-                                let mangled = self.method_instantiation_name(&key, type_table);
+                                // Pass the template's impl params so the blanket
+                                // key mangles to `Color^Trait::method`, not
+                                // `T<Color>^Trait::method`.
+                                let mangled = self.method_instantiation_name_inner(
+                                    &key,
+                                    type_table,
+                                    &generic_func.impl_type_params,
+                                );
                                 self.try_queue_function(key, mangled);
                             }
                             break;
@@ -1213,7 +1226,16 @@ impl Monomorphizer {
             .filter(|p| !p.is_pack)
             .count();
         for param in &generic.impl_type_params {
-            if param.is_pack {
+            if let Some((src_idx, assoc_name)) = &param.projected_from {
+                // A projected pack `..F` (`impl<T: Reflect<Fields = [..F]>>`) is
+                // not caller-supplied: resolve `T::Fields` for the concrete `T`,
+                // which precedes the pack and is already bound.
+                let projected = substitution
+                    .get(src_idx)
+                    .and_then(|&src| type_table.resolve_assoc_type(src, assoc_name))
+                    .unwrap_or_else(|| type_table.make_tuple(vec![]));
+                substitution.insert(param.index, projected);
+            } else if param.is_pack {
                 // Variadic pack: map the pack index to a tuple of the impl-level type args,
                 // excluding non-pack impl params.
                 let pack_args_count = key
@@ -1716,8 +1738,9 @@ impl Monomorphizer {
                             let concrete_impl_module = self
                                 .functions
                                 .impl_module(&new_info, receiver_module.as_ref());
-                            let concrete_module =
-                                concrete_impl_module.or(blanket_module).or(receiver_module);
+                            let concrete_module = concrete_impl_module
+                                .or(blanket_module.clone())
+                                .or(receiver_module);
                             let method_type_arg_tids: Vec<TypeId> = if let FunctionRef {
                                 monomorph_info: Some(mi),
                                 ..
@@ -1737,8 +1760,35 @@ impl Monomorphizer {
                             // (`List<i32>^Default::default`) must queue its impl
                             // instantiation even with no method type args of its
                             // own — they are impl-level. A non-generic receiver
-                            // (`i32^Default::default`) is a direct function.
-                            let new_monomorph = if method_type_arg_tids.is_empty()
+                            // (`i32^Default::default`) is a direct function,
+                            // unless it dispatches through a blanket impl (see
+                            // below).
+                            let blanket_generic_name = blanket_module
+                                .as_ref()
+                                .and(trait_name_for_blanket)
+                                .and_then(|tn| {
+                                    let param =
+                                        self.functions.trait_env.blanket_impl_param_for_trait(
+                                            tn,
+                                            blanket_module.as_ref(),
+                                        )?;
+                                    Some(
+                                        LocalMethodName::new(
+                                            param,
+                                            Some(tn.to_string()),
+                                            new_info.method_name.clone(),
+                                        )
+                                        .to_mangled_name(),
+                                    )
+                                });
+                            let new_monomorph = if let Some(generic_name) = blanket_generic_name {
+                                Some(MonomorphInfo {
+                                    generic_name,
+                                    impl_type_args: vec![concrete_type_id],
+                                    method_type_args: method_type_arg_tids,
+                                    is_blanket: true,
+                                })
+                            } else if method_type_arg_tids.is_empty()
                                 && impl_type_arg_tids.is_empty()
                             {
                                 None
@@ -2763,6 +2813,21 @@ impl Monomorphizer {
         };
         let by_ref = *by_ref;
 
+        // A mapped pack (`[..Case<T, P>]`) substitutes per element from the
+        // source pack element `P_k`, not the mapped tuple element, so read its
+        // index and mapped-ness off the pre-substitution type.
+        let (iterable_pack_index, iterable_pack_mapped) = type_table
+            .as_tuple_through_ref(iterable.type_id)
+            .and_then(|(elems, _)| {
+                elems.iter().find_map(|&e| match type_table.get(e) {
+                    ResolvedType::TypePack {
+                        index, mapped_elem, ..
+                    } => Some((Some(*index), mapped_elem.is_some())),
+                    _ => None,
+                })
+            })
+            .unwrap_or((None, false));
+
         // Substitute types in the iterable to get the concrete tuple type
         self.substitute_types_in_expr(iterable, substitution, type_table, local_count, locals);
 
@@ -2778,8 +2843,9 @@ impl Monomorphizer {
                 );
             });
 
-        // Find the TypePack index in the substitution map so we can override it per element
-        let pack_index = {
+        // The pack index to override per element; fall back to a tuple-valued
+        // substitution entry when the iterable carries none.
+        let pack_index = iterable_pack_index.or_else(|| {
             let mut found = None;
             for (&idx, &tid) in substitution {
                 if tid == iterable_type || type_table.is_tuple(tid) {
@@ -2788,6 +2854,16 @@ impl Monomorphizer {
                 }
             }
             found
+        });
+
+        // For a mapped pack the override values are the source elements `P_k`;
+        // the mapped element `Case<V, P_k>` stays the binding type only.
+        let mapped_source_elems: Option<Vec<TypeId>> = if iterable_pack_mapped {
+            pack_index
+                .and_then(|idx| substitution.get(&idx))
+                .and_then(|&t| type_table.as_tuple(t))
+        } else {
+            None
         };
 
         let uid = *unique_id;
@@ -3000,7 +3076,11 @@ impl Monomorphizer {
                     elem_body.stmts.extend(user_body.stmts);
                 } else {
                     let mut elem_substitution = substitution.clone();
-                    elem_substitution.insert(pack_idx, elem_type);
+                    let override_ty = mapped_source_elems
+                        .as_ref()
+                        .and_then(|es| es.get(i).copied())
+                        .unwrap_or(elem_type);
+                    elem_substitution.insert(pack_idx, override_ty);
                     self.substitute_types_in_block(
                         &mut elem_body,
                         &elem_substitution,

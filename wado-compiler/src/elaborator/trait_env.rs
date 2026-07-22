@@ -1027,6 +1027,31 @@ impl TraitEnv {
         modules.first()
     }
 
+    /// The blanket impl's type-param name (`I` in `impl<I: Bound> Trait for I`)
+    /// for `trait_name`, preferring a blanket in `type_module`. Used to
+    /// reconstruct the blanket template's mangled name `I^Trait::method`.
+    pub(crate) fn blanket_impl_param_for_trait(
+        &self,
+        trait_name: &str,
+        type_module: Option<&ModuleSource>,
+    ) -> Option<String> {
+        let mut fallback = None;
+        for entry in &self.blanket_impl_index {
+            let Some(header) = self.impl_headers.get(entry) else {
+                continue;
+            };
+            if header.trait_name.as_deref() != Some(trait_name) {
+                continue;
+            }
+            let param_name = get_type_name_static(&header.ty);
+            if type_module == Some(&entry.0) {
+                return Some(param_name);
+            }
+            fallback.get_or_insert(param_name);
+        }
+        fallback
+    }
+
     /// Like [`impl_module_for`] but only returns a hit when the impl block
     /// is **fully concrete** (no `impl<T, …>` type parameters). Used by
     /// the monomorphizer when redirecting a substituted trait-method call

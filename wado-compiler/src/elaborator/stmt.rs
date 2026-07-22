@@ -383,8 +383,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let key = let_stmt.id;
             self.sem.types.let_annotated_types.insert(key, target_type);
 
-            // Special case: tuple literal with Tuple type annotation
-            if let ast::Expr::TupleLiteral(tuple_lit) = ast_value {
+            // Special case: tuple literal with Tuple type annotation. A literal
+            // with spread elements (`[..F::method()]`) needs the general
+            // `resolve_tuple_literal` path, which expands each spread; the
+            // element-wise fast path below would resolve a bare `Spread` and ICE.
+            let has_spread = matches!(ast_value, ast::Expr::TupleLiteral(t)
+                if t.elements.iter().any(|e| matches!(e, ast::Expr::Spread(..))));
+            if let ast::Expr::TupleLiteral(tuple_lit) = ast_value
+                && !has_spread
+            {
                 {
                     let tuple_elems = self.tysys.type_table.borrow().as_tuple(target_type);
                     if let Some(expected_elem_types) = tuple_elems {
@@ -2195,7 +2202,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .iter()
                     .find(|e| matches!(type_table.get(**e), ResolvedType::TypePack { .. }))
                 {
-                    *tp
+                    // A mapped pack `..F::method()` binds the loop variable to
+                    // the (pack-independent) return type, not the pack itself.
+                    match type_table.get(*tp) {
+                        ResolvedType::TypePack {
+                            mapped_elem: Some(elem),
+                            ..
+                        } => *elem,
+                        _ => *tp,
+                    }
                 } else {
                     // For TupleZip: use the first element type (all elements have the same shape)
                     elems[0]

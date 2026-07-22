@@ -1927,7 +1927,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Every trait impl on one of `names_to_check`, plus blanket impls
     /// (`impl<T: Bound> Trait for T`) whose bound the receiver satisfies.
-    fn trait_method_candidates(&mut self, names_to_check: &[String]) -> Vec<ImplBlockRef> {
+    fn trait_method_candidates(
+        &mut self,
+        names_to_check: &[String],
+        receiver_type_id: Option<TypeId>,
+    ) -> Vec<ImplBlockRef> {
         // Collect lightweight impl block references (avoiding deep clones).
         let mut impl_refs = self.collect_trait_impl_refs_multi(names_to_check);
 
@@ -1951,9 +1955,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .find(|tp| tp.name == impl_type_name)
                 .cloned();
             if let Some(param) = matching_param {
-                // Check if the receiver type satisfies ALL trait bounds
+                // Gate on all bounds. The receiver-`TypeId` check is preferred:
+                // it recognises synthesized bounds (`Reflect`, `Default`) with no
+                // explicit `impl`, which the name-based lookup misses. A viable
+                // blanket must survive to the authoritative `candidate_matches_receiver`.
                 let bounds_satisfied = param.bounds.iter().all(|bound| {
                     let bound_trait_name = &bound.name;
+                    if let Some(rt) = receiver_type_id
+                        && self.tysys.type_implements_trait(
+                            &self.annotate_ctx,
+                            &type_lookup,
+                            rt,
+                            bound_trait_name,
+                        )
+                    {
+                        return true;
+                    }
                     names_to_check.iter().any(|name| {
                         self.tysys.find_trait_impl_for_type(
                             &self.annotate_ctx,
@@ -2163,7 +2180,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut found_traits: Vec<TraitMethodMatch> = Vec::new();
 
         let names_to_check = self.newtype_chain_names(struct_name);
-        let impl_refs = self.trait_method_candidates(&names_to_check);
+        let impl_refs = self.trait_method_candidates(&names_to_check, receiver_type_id);
 
         for impl_ref in &impl_refs {
             let Some((impl_struct_name, is_blanket_type_param)) =

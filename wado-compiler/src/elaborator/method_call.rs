@@ -13,6 +13,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::callee::StaticMethodRef;
 use super::method_lookup::MethodInferenceInput;
+use super::reflect::ScalarReflectSpec;
 use super::types::{FunctionContext, MethodInfo, TypeError};
 
 /// Inputs to [`Elaborator::resolve_method_call_with`], the TIR-level method-call
@@ -1083,6 +1084,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let self_ty = self.resolve_type(self_ty_ast);
             return self.resolve_reflect_static_call(self_ty, static_call, ctx);
+        }
+
+        // `ReflectVariant::<T>::…` — the variant analog of the interception
+        // above (WEP 2026-06-13 §3d).
+        if let ast::Type::Generic(g) = &static_call.target_type
+            && self.is_reflect_variant_trait_call(&g.name, &static_call.method)
+            && let Some(self_ty_ast) = g.args.first()
+        {
+            let self_ty = self.resolve_type(self_ty_ast);
+            return self.resolve_reflect_variant_static_call(self_ty, static_call, ctx);
+        }
+
+        // `ReflectEnum::<T>::…` / `ReflectFlags::<T>::…` — the scalar-kind
+        // analogs (WEP 2026-06-13 §3b / §3c), sharing one resolver.
+        if let ast::Type::Generic(g) = &static_call.target_type {
+            for spec in [ScalarReflectSpec::ENUM, ScalarReflectSpec::FLAGS] {
+                if self.is_reflect_scalar_trait_call(spec, &g.name, &static_call.method)
+                    && let Some(self_ty_ast) = g.args.first()
+                {
+                    let self_ty = self.resolve_type(self_ty_ast);
+                    return self.resolve_reflect_scalar_static_call(
+                        spec,
+                        self_ty,
+                        static_call,
+                        ctx,
+                    );
+                }
+            }
         }
 
         // Resolve the target type first to get struct name for parameter type lookup
@@ -3010,182 +3039,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         None
-    }
-
-    /// Resolve a `Reflect::<T>::method()` trait-qualified static call to the
-    /// synthesized `T^Reflect::method` and record the dispatch fact for reify.
-    /// Self-contained: it does not go through the bare-`Type::method` static
-    /// path, so struct namespaces are never polluted with `T::field_names()`.
-    fn resolve_reflect_static_call(
-        &mut self,
-        self_ty: TypeId,
-        static_call: &ast::StaticMethodCallExpr,
-        ctx: &mut FunctionContext,
-    ) -> TypeId {
-        let method = static_call.method.clone();
-        let self_name = self.tysys.type_table.borrow().type_name(self_ty);
-
-        let Some(field_types) = self.reflect_subject_field_types(&self_name) else {
-            let _ = self.emit(TypeError::UnknownFunction {
-                name: format!("Reflect::<{self_name}>::{method}"),
-                span: static_call.span,
-            });
-            return TypeTable::ERROR;
-        };
-
-        let (reflect_trait_name, type_name_method, fields_method, module_source) = {
-            let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
-            (
-                items
-                    .trait_name(crate::compiler_item::CompilerItem::Reflect)
-                    .to_string(),
-                items
-                    .method_name(crate::compiler_item::CompilerItem::ReflectTypeName)
-                    .to_string(),
-                items
-                    .method_name(crate::compiler_item::CompilerItem::ReflectFields)
-                    .to_string(),
-                self.find_struct_module_source(&self_name),
-            )
-        };
-
-        let is_fields = method == fields_method;
-        let args_valid = if is_fields {
-            self.check_reflect_fields_receiver(self_ty, &self_name, static_call, ctx)
-        } else {
-            self.reject_reflect_metadata_args(static_call, ctx)
-        };
-        if !args_valid {
-            return TypeTable::ERROR;
-        }
-
-        self.tysys
-            .type_table
-            .borrow_mut()
-            .record_bound_driven_synth_request(&self_name, &module_source, &reflect_trait_name);
-
-        let return_type = if is_fields {
-            self.tysys.type_table.borrow_mut().make_tuple(field_types)
-        } else {
-            let mut tt = self.tysys.type_table.borrow_mut();
-            let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
-            if method == type_name_method {
-                string_type
-            } else {
-                tt.make_list(string_type)
-            }
-        };
-
-        let func_ref = FunctionRef {
-            module_source,
-            name: MethodName::format_local(&self_name, Some(&reflect_trait_name), &method),
-            monomorph_info: None,
-            method_info: Some(LocalMethodName::new(
-                self_name.clone(),
-                Some(reflect_trait_name.clone()),
-                method.clone(),
-            )),
-        };
-        self.sem.types.static_method_dispatch.insert(
-            static_call.id,
-            super::sem::types::StaticMethodDispatch {
-                function_ref: func_ref,
-                param_is_mut: if is_fields { vec![false] } else { Vec::new() },
-                type_args: Vec::new(),
-                param_defaults: Vec::new(),
-            },
-        );
-
-        return_type
-    }
-
-    /// Field types of the struct `Reflect::<T>` targets, in declaration order;
-    /// `None` when `T` is not a struct (the only reflectable kind).
-    fn reflect_subject_field_types(&self, self_name: &str) -> Option<Vec<TypeId>> {
-        self.type_lookup()
-            .struct_fields(self_name)
-            .map(|info| info.fields.iter().map(|(_, ty, _)| *ty).collect())
-    }
-
-    /// Resolve and type-check the sole receiver of `Reflect::<T>::fields`: one
-    /// argument whose type, refs peeled, is the subject struct. Returns whether
-    /// it is well-formed, emitting the diagnostic otherwise.
-    fn check_reflect_fields_receiver(
-        &mut self,
-        self_ty: TypeId,
-        self_name: &str,
-        static_call: &ast::StaticMethodCallExpr,
-        ctx: &mut FunctionContext,
-    ) -> bool {
-        let ref_self_ty = self.tysys.type_table.borrow_mut().make_ref(self_ty);
-        let arg_types: Vec<TypeId> = static_call
-            .args
-            .iter()
-            .map(|arg| self.resolve_expr(arg, ctx, Some(ref_self_ty)))
-            .collect();
-        if arg_types.len() != 1 {
-            let _ = self.emit(TypeError::ArgumentCountMismatch {
-                expected: 1,
-                found: arg_types.len(),
-                span: static_call.span,
-            });
-            return false;
-        }
-        let arg_ty = arg_types[0];
-        let peeled = self.tysys.type_table.borrow().peel_refs(arg_ty);
-        if arg_ty != TypeTable::ERROR && peeled != self_ty {
-            let found = self.tysys.type_table.borrow().type_name(peeled);
-            let _ = self.emit(TypeError::TypeMismatch {
-                expected: self_name.to_string(),
-                found,
-                span: static_call.span,
-            });
-            return false;
-        }
-        true
-    }
-
-    /// Resolve the args of a no-argument `Reflect` metadata call and reject any
-    /// that were supplied. Returns whether the call is well-formed.
-    fn reject_reflect_metadata_args(
-        &mut self,
-        static_call: &ast::StaticMethodCallExpr,
-        ctx: &mut FunctionContext,
-    ) -> bool {
-        for arg in &static_call.args {
-            self.resolve_expr(arg, ctx, None);
-        }
-        if static_call.args.is_empty() {
-            return true;
-        }
-        let _ = self.emit(TypeError::ArgumentCountMismatch {
-            expected: 0,
-            found: static_call.args.len(),
-            span: static_call.span,
-        });
-        false
-    }
-
-    /// Whether `prefix::method` names a `Reflect` trait-qualified static call
-    /// (`Reflect::<T>::field_names` / `type_name`). `prefix` must resolve to the
-    /// compiler's `Reflect` trait *in this scope* — `classify_on_bound_trait`
-    /// applies the same module check `on_bound` dispatch uses, so a user type or
-    /// trait that happens to be named `Reflect` is not hijacked. `method` is
-    /// matched through the compiler-item registry so a stdlib rename flows through.
-    pub(super) fn is_reflect_trait_call(&self, prefix: &str, method: &str) -> bool {
-        if self
-            .tysys
-            .classify_on_bound_trait(&self.type_lookup(), prefix)
-            != Some(super::trait_query::OnBoundTrait::Reflect)
-        {
-            return false;
-        }
-        let tt = self.tysys.type_table.borrow();
-        let items = tt.compiler_items();
-        method == items.method_name(crate::compiler_item::CompilerItem::ReflectFieldNames)
-            || method == items.method_name(crate::compiler_item::CompilerItem::ReflectTypeName)
-            || method == items.method_name(crate::compiler_item::CompilerItem::ReflectFields)
     }
 
     /// Get the operator trait and method name for a binary operator.

@@ -1,0 +1,125 @@
+// Blanket derivation over ReflectVariant (WEP 2026-06-13 §3b, §3e–§3f): the
+// bound `Cases = [..P]` projects the payload pack, and `cases()` has the
+// constructor-mapped pack type `[..Case<T, P>]`. One walk serves both
+// directions: `holds`/`extract` dispatch on the live case (serialize shape),
+// `construct` rebuilds a case (deserialize shape). The value-free direction
+// (`[..P::ttag()]`, the oneOf schema shape) needs only the `Cases` pack plus
+// the §1 pack-map.
+
+trait Tag {
+    fn tag(&self) -> String;
+}
+
+impl Tag for f64 {
+    fn tag(&self) -> String {
+        return `f64:${*self}`;
+    }
+}
+
+impl Tag for i32 {
+    fn tag(&self) -> String {
+        return `i32:${*self}`;
+    }
+}
+
+impl Tag for () {
+    fn tag(&self) -> String {
+        return "unit";
+    }
+}
+
+impl<T: ReflectVariant<Cases = [..P]>, ..P: Tag> Tag for T {
+    fn tag(&self) -> String {
+        let metas = ReflectVariant::<T>::case_meta();
+        let mut out = "";
+        for let c of ReflectVariant::<T>::cases() {
+            if c.holds(self) {
+                out = `${metas[c.index()].name}(${c.extract(self).tag()})`;
+            }
+        }
+        return out;
+    }
+}
+
+trait Rebuild {
+    fn rebuild(&self) -> Self;
+}
+
+impl<T: ReflectVariant<Cases = [..P]>, ..P: Tag> Rebuild for T {
+    fn rebuild(&self) -> T {
+        let mut out: Option<T> = Option::None;
+        for let c of ReflectVariant::<T>::cases() {
+            if c.holds(self) {
+                out = Option::Some(c.construct(c.extract(self)));
+            }
+        }
+        return out.unwrap();
+    }
+}
+
+trait TypeTag {
+    fn ttag() -> String;
+}
+
+impl TypeTag for f64 {
+    fn ttag() -> String {
+        return "f64";
+    }
+}
+
+impl TypeTag for i32 {
+    fn ttag() -> String {
+        return "i32";
+    }
+}
+
+impl TypeTag for () {
+    fn ttag() -> String {
+        return "unit";
+    }
+}
+
+trait OneOf {
+    fn oneof(&self) -> String;
+}
+
+impl<T: ReflectVariant<Cases = [..P]>, ..P: TypeTag> OneOf for T {
+    fn oneof(&self) -> String {
+        let mut out = "";
+        for let t of [..P::ttag()] {
+            if out != "" {
+                out = `${out}|`;
+            }
+            out = `${out}${t}`;
+        }
+        return out;
+    }
+}
+
+variant Shape {
+    Circle(f64),
+    Count(i32),
+    Point,
+}
+
+test "blanket derivation dispatches on the live case" {
+    assert Shape::Circle(2.5).tag() == "Circle(f64:2.5)";
+    assert Shape::Count(7).tag() == "Count(i32:7)";
+    assert Shape::Point.tag() == "Point(unit)";
+}
+
+test "value-free Cases pack-map builds the oneOf shape" {
+    assert Shape::Point.oneof() == "f64|i32|unit";
+}
+
+test "extract-construct round-trip rebuilds each case" {
+    let c = Shape::Circle(2.5).rebuild();
+    assert c matches { Circle(r) && r == 2.5 };
+    let n = Shape::Count(7).rebuild();
+    assert n matches { Count(v) && v == 7 };
+    let p = Shape::Point.rebuild();
+    assert p matches { Point };
+}
+
+__DATA__
+{"test": {}}

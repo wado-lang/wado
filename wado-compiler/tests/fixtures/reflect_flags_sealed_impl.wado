@@ -1,0 +1,32 @@
+// `ReflectFlags` is sealed: a user `impl ReflectFlags for F` is a compile error
+// (the compiler synthesizes the impl for every flags type).
+
+flags Perms {
+    Read,
+    Write,
+}
+
+impl ReflectFlags for Perms {
+    fn type_name() -> String {
+        return "forged";
+    }
+    fn bit_meta() -> List<FlagBitMeta> {
+        return [];
+    }
+    fn bits(&self) -> u64 {
+        return 0;
+    }
+    fn from_bits(raw: u64) -> Option<Perms> {
+        return Option::None;
+    }
+}
+
+test "unreachable" {
+    assert true;
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "cannot implement `ReflectFlags`: it is a sealed"
+}

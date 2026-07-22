@@ -140,6 +140,22 @@ struct Formatter {
     pub buf: &mut String,
 }
 
+pub struct VariantCaseMeta {
+    pub name: String,
+    pub discriminant: i32,
+    pub is_unit: bool,
+}
+
+pub struct EnumCaseMeta {
+    pub name: String,
+    pub discriminant: i32,
+}
+
+pub struct FlagBitMeta {
+    pub name: String,
+    pub bit: u64,
+}
+
 struct ConvertError {
     pub message: String,
 }
@@ -14805,6 +14821,39 @@ pub fn "Ordering^Inspect::inspect"(self: Box<core:prelude/traits.wado/Ordering>,
     };
 }
 
+pub fn "VariantCaseMeta^Inspect::inspect"(self: &VariantCaseMeta, f: &mut Formatter) {
+    f.Formatter::write_str(&String { repr: packed"VariantCaseMeta { ", used: 18 });
+    f.Formatter::write_str(&String { repr: packed"name: ", used: 6 });
+    self.name."String^Inspect::inspect"(f);
+    f.Formatter::write_str(&String { repr: packed", ", used: 2 });
+    f.Formatter::write_str(&String { repr: packed"discriminant: ", used: 14 });
+    Box<i32> { value: self.discriminant }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str(&String { repr: packed", ", used: 2 });
+    f.Formatter::write_str(&String { repr: packed"is_unit: ", used: 9 });
+    Box<bool> { value: self.is_unit }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(&String { repr: packed" }", used: 2 });
+}
+
+pub fn "EnumCaseMeta^Inspect::inspect"(self: &EnumCaseMeta, f: &mut Formatter) {
+    f.Formatter::write_str(&String { repr: packed"EnumCaseMeta { ", used: 15 });
+    f.Formatter::write_str(&String { repr: packed"name: ", used: 6 });
+    self.name."String^Inspect::inspect"(f);
+    f.Formatter::write_str(&String { repr: packed", ", used: 2 });
+    f.Formatter::write_str(&String { repr: packed"discriminant: ", used: 14 });
+    Box<i32> { value: self.discriminant }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str(&String { repr: packed" }", used: 2 });
+}
+
+pub fn "FlagBitMeta^Inspect::inspect"(self: &FlagBitMeta, f: &mut Formatter) {
+    f.Formatter::write_str(&String { repr: packed"FlagBitMeta { ", used: 14 });
+    f.Formatter::write_str(&String { repr: packed"name: ", used: 6 });
+    self.name."String^Inspect::inspect"(f);
+    f.Formatter::write_str(&String { repr: packed", ", used: 2 });
+    f.Formatter::write_str(&String { repr: packed"bit: ", used: 5 });
+    Box<u64> { value: self.bit }."u64^Inspect::inspect"(f);
+    f.Formatter::write_str(&String { repr: packed" }", used: 2 });
+}
+
 pub fn "ConvertError^Inspect::inspect"(self: &ConvertError, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"ConvertError { ", used: 15 });
     f.Formatter::write_str(&String { repr: packed"message: ", used: 9 });
@@ -14884,6 +14933,49 @@ pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Ite
 
 pub fn "Ordering^InspectAlt::inspect_alt"(self: Box<core:prelude/traits.wado/Ordering>, f: &mut Formatter) {
     self."Ordering^Inspect::inspect"(f);
+}
+
+pub fn "VariantCaseMeta^InspectAlt::inspect_alt"(self: &VariantCaseMeta, f: &mut Formatter) {
+    f.Formatter::open_brace(String { repr: packed"VariantCaseMeta {", used: 17 });
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&String { repr: packed"name: ", used: 6 });
+    self.name."String^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&String { repr: packed",", used: 1 });
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&String { repr: packed"discriminant: ", used: 14 });
+    Box<i32> { value: self.discriminant }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&String { repr: packed",", used: 1 });
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&String { repr: packed"is_unit: ", used: 9 });
+    Box<bool> { value: self.is_unit }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&String { repr: packed",", used: 1 });
+    f.Formatter::close_brace(String { repr: packed"}", used: 1 });
+}
+
+pub fn "EnumCaseMeta^InspectAlt::inspect_alt"(self: &EnumCaseMeta, f: &mut Formatter) {
+    f.Formatter::open_brace(String { repr: packed"EnumCaseMeta {", used: 14 });
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&String { repr: packed"name: ", used: 6 });
+    self.name."String^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&String { repr: packed",", used: 1 });
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&String { repr: packed"discriminant: ", used: 14 });
+    Box<i32> { value: self.discriminant }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&String { repr: packed",", used: 1 });
+    f.Formatter::close_brace(String { repr: packed"}", used: 1 });
+}
+
+pub fn "FlagBitMeta^InspectAlt::inspect_alt"(self: &FlagBitMeta, f: &mut Formatter) {
+    f.Formatter::open_brace(String { repr: packed"FlagBitMeta {", used: 13 });
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&String { repr: packed"name: ", used: 6 });
+    self.name."String^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&String { repr: packed",", used: 1 });
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&String { repr: packed"bit: ", used: 5 });
+    Box<u64> { value: self.bit }."u64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&String { repr: packed",", used: 1 });
+    f.Formatter::close_brace(String { repr: packed"}", used: 1 });
 }
 
 pub fn "ConvertError^InspectAlt::inspect_alt"(self: &ConvertError, f: &mut Formatter) {

@@ -31,6 +31,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::ast::{self, Item, Module, Type};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_host::CompilerHost;
+use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::logger::{Bail, Logger, ModuleDiag};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
@@ -874,9 +875,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
 
         for sealed_item in [
-            crate::compiler_item::CompilerItem::Reflect,
-            crate::compiler_item::CompilerItem::Ref,
-            crate::compiler_item::CompilerItem::RefMut,
+            CompilerItem::Reflect,
+            CompilerItem::ReflectVariant,
+            CompilerItem::ReflectEnum,
+            CompilerItem::ReflectFlags,
+            CompilerItem::Ref,
+            CompilerItem::RefMut,
         ] {
             let Some(sealed_name) = type_table
                 .borrow()
