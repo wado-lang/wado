@@ -795,10 +795,12 @@ Opaque i32 handle managed by the runtime.
 
 Write a chunk of data to the stream.
 
-#### `fn write_raw(&self, data: &Array<T>, len: i32)`
+#### `fn write_raw(&self, data: ArraySlice<T>)`
 
-Write raw GC array directly to the stream.
-`len` is the number of valid elements (may be less than array capacity).
+Write a byte view directly to the stream, without the deep copy that
+value-semantics `write` makes. The slice is a zero-copy window over a
+backing array (`list.as_slice()`, `array.slice(start, end)`, `string.as_bytes()`),
+so only the CM lowering copy remains.
 
 #### `fn cancel_write(&self)`
 
@@ -962,7 +964,7 @@ A borrowed, zero-copy view over a byte buffer.
 
 Converts a Unicode scalar value (u32) to a char.
 Returns null if the value is not a valid Unicode scalar value
-(i.e., surrogates 0xD800..0xDFFF or values > 0x10FFFF).
+(i.e., surrogates 0xD800..=0xDFFF or values > 0x10FFFF).
 
 #### `pub fn from_i32(value: i32) -> Option<char>`
 
@@ -3857,7 +3859,7 @@ guarantee `0 <= index < len()`; out of range reads a stale slot or traps.
 
 #### `pub fn to_array(&self) -> Array<T>`
 
-Copy the live `0..len()` elements into a fresh fixed `Array<T>` of exactly
+Copy the live `0..<len()` elements into a fresh fixed `Array<T>` of exactly
 `len()`. Hand a finished, no-longer-growing buffer to code that only
 indexes it: `Array`'s `[]` is bounds-checked by Wasm (traps on OOB)
 without `List[]`'s power-assert diagnostic, so index-heavy readers (e.g. a

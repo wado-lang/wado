@@ -149,7 +149,7 @@ Returns the zlib version string.
 
 ### `pub fn adler32(adler: u32, buf: &ByteList, offset: i32, len: i32) -> u32`
 
-Computes an Adler-32 checksum over `buf[offset..offset+len]`, starting from `adler`.
+Computes an Adler-32 checksum over `buf[offset..<offset + len]`, starting from `adler`.
 
 ### `pub fn adler32_init() -> u32`
 
@@ -164,7 +164,7 @@ Combines two Adler-32 checksums into one for concatenated data.
 
 ### `pub fn crc32(crc: u32, buf: &ByteList, offset: i32, len: i32) -> u32`
 
-Computes a CRC-32 checksum over `buf[offset..offset+len]`, starting from `crc`.
+Computes a CRC-32 checksum over `buf[offset..<offset + len]`, starting from `crc`.
 
 ### `pub fn crc32_init() -> u32`
 
