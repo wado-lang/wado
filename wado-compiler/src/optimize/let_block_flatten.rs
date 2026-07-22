@@ -174,3 +174,183 @@ fn flattenable_inner_block(body: &Body, sid: StmtId) -> Option<(ExprId, BlockId)
     });
     no_shadow_copy.then_some((value_e, inner))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::hashmap::IndexSet;
+    use crate::nir::NirLocal;
+    use crate::nir_arena::{BlockNode, ExprNode, Operand, StmtNode};
+    use crate::tir::TypeTable;
+    use crate::token::Span;
+
+    fn sp() -> Span {
+        Span::new(0, 0, 0, 0)
+    }
+
+    /// An argument-less call — a straight-line impure prefix value, so the
+    /// binding is a genuine intermediate (not a bare-local shadow the gate
+    /// defers on).
+    fn call_expr() -> ExprKind {
+        ExprKind::Call {
+            func_id: crate::nir::FuncId::from_u32(0),
+            type_args: vec![],
+            args: vec![],
+        }
+    }
+
+    fn local(name: &str) -> NirLocal {
+        NirLocal {
+            name: name.to_string(),
+            type_id: TypeTable::I32,
+            is_mut: false,
+        }
+    }
+
+    fn let_stmt(name: &str, index: u32, value: Operand) -> StmtNode {
+        StmtNode {
+            kind: StmtKind::Let {
+                name: name.to_string(),
+                local_index: index,
+                is_mut: false,
+                is_reactive: false,
+                type_id: TypeTable::I32,
+                value,
+                skip_value_copy: false,
+            },
+            span: sp(),
+        }
+    }
+
+    fn expr(body: &mut Body, kind: ExprKind) -> ExprId {
+        body.exprs.push(ExprNode {
+            kind,
+            type_id: TypeTable::I32,
+            span: sp(),
+        })
+    }
+
+    /// No statement id may appear in two blocks — the double-listing failure the
+    /// clear-inner-first ordering guards against.
+    fn assert_single_parent(body: &Body) {
+        let mut seen = IndexSet::default();
+        for (_, blk) in &body.blocks {
+            for &s in &blk.stmts {
+                assert!(seen.insert(s), "statement {s:?} appears in two blocks");
+            }
+        }
+    }
+
+    /// `let x = { let p = f(); let y = { let q = f(); (q, q) }; (p, y) }` —
+    /// nested value blocks with impure straight-line prefixes. One engine session
+    /// must fully un-nest them and keep the single-parent invariant (the nested
+    /// case that miscompiled under the old arena hand mutation).
+    #[test]
+    fn nested_value_blocks_flatten_coherently() {
+        let mut body = Body::empty();
+        let mut locals = vec![local("p"), local("q"), local("y"), local("x")];
+
+        let r = body.blocks.push(BlockNode {
+            stmts: vec![],
+            span: sp(),
+        });
+        let a = body.blocks.push(BlockNode {
+            stmts: vec![],
+            span: sp(),
+        });
+        let b = body.blocks.push(BlockNode {
+            stmts: vec![],
+            span: sp(),
+        });
+        assert_eq!(r, body.root);
+
+        let arg_q = expr(&mut body, call_expr());
+        let q1 = expr(
+            &mut body,
+            ExprKind::Local {
+                index: 1,
+                name: "q".into(),
+            },
+        );
+        let q2 = expr(
+            &mut body,
+            ExprKind::Local {
+                index: 1,
+                name: "q".into(),
+            },
+        );
+        let tuple_b = expr(
+            &mut body,
+            ExprKind::TupleLiteral {
+                elements: vec![Operand::Expr(q1), Operand::Expr(q2)],
+            },
+        );
+        let block_b = expr(&mut body, ExprKind::Block(b));
+        let arg_p = expr(&mut body, call_expr());
+        let p_use = expr(
+            &mut body,
+            ExprKind::Local {
+                index: 0,
+                name: "p".into(),
+            },
+        );
+        let y_use = expr(
+            &mut body,
+            ExprKind::Local {
+                index: 2,
+                name: "y".into(),
+            },
+        );
+        let tuple_a = expr(
+            &mut body,
+            ExprKind::TupleLiteral {
+                elements: vec![Operand::Expr(p_use), Operand::Expr(y_use)],
+            },
+        );
+        let block_a = expr(&mut body, ExprKind::Block(a));
+
+        let s_letq = body.stmts.push(let_stmt("q", 1, Operand::Expr(arg_q)));
+        let s_tailb = body.stmts.push(StmtNode {
+            kind: StmtKind::Expr(Operand::Expr(tuple_b)),
+            span: sp(),
+        });
+        let s_letp = body.stmts.push(let_stmt("p", 0, Operand::Expr(arg_p)));
+        let s_lety = body.stmts.push(let_stmt("y", 2, Operand::Expr(block_b)));
+        let s_taila = body.stmts.push(StmtNode {
+            kind: StmtKind::Expr(Operand::Expr(tuple_a)),
+            span: sp(),
+        });
+        let s_letx = body.stmts.push(let_stmt("x", 3, Operand::Expr(block_a)));
+
+        body.blocks[b].stmts = vec![s_letq, s_tailb];
+        body.blocks[a].stmts = vec![s_letp, s_lety, s_taila];
+        body.blocks[r].stmts = vec![s_letx];
+
+        let mut buffers = EngineBuffers::default();
+        let rule = LetBlockFlattenRule;
+        {
+            let mut engine = Engine::new(&mut body, &mut buffers, &mut locals);
+            engine.run(&[&rule]);
+        }
+
+        assert_single_parent(&body);
+        assert!(matches!(
+            body.exprs[block_a].kind,
+            ExprKind::TupleLiteral { .. }
+        ));
+        assert!(matches!(
+            body.exprs[block_b].kind,
+            ExprKind::TupleLiteral { .. }
+        ));
+        let root_lets: Vec<&str> = body.blocks[r]
+            .stmts
+            .iter()
+            .filter_map(|&s| match &body.stmts[s].kind {
+                StmtKind::Let { name, .. } => Some(name.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(root_lets, vec!["p", "q", "y", "x"]);
+    }
+}
