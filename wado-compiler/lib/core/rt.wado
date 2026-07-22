@@ -328,6 +328,9 @@ internal fn cm_stream_write_drain(handle: i32, ptr: i32, count: i32, elem_size: 
 
 /// CM adapter for stream.write_raw(slice) on Stream<u8>.
 /// Lowers the slice's byte window to linear memory, calls stream-write, handles BLOCKED.
+/// `#[inline(always)]` so the caller's `ArraySlice` argument is scalarized away
+/// (no intermediate slice `struct.new`) rather than crossing the call boundary.
+#[inline(always)]
 internal fn cm_stream_write_raw_u8(handle: i32, data: ArraySlice<u8>) {
     let packed = cm_lower_list_u8(data.internal_repr(), data.internal_start(), data.len());
     let ptr = packed as i32;
