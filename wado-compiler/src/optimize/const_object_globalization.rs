@@ -368,12 +368,22 @@ fn let_stmt_qualifies(
     // `GlobalVarSet` still evaluates at the binding's flow position (sibling in
     // scope), and confinement guarantees no other alias of the shared object
     // exists to mutate it behind the global.
+    // Confinement: every read of a used sibling must sit inside this
+    // initializer. Tally reads across the whole body and inside `value` in one
+    // walk each (not once per sibling), then compare.
     let used_siblings = seeded_locals_read(body, value, siblings);
-    for &l in &used_siblings {
-        if count_local_reads(body, NodeRef::Block(body.root), l)
-            != count_local_reads_operand(body, value, l)
-        {
-            return None;
+    if !used_siblings.is_empty() {
+        let body_reads = count_reads_of(body, NodeRef::Block(body.root), &used_siblings);
+        let value_reads = value
+            .as_expr()
+            .map(|e| count_reads_of(body, NodeRef::Expr(e), &used_siblings))
+            .unwrap_or_default();
+        for &l in &used_siblings {
+            if body_reads.get(&l).copied().unwrap_or(0)
+                != value_reads.get(&l).copied().unwrap_or(0)
+            {
+                return None;
+            }
         }
     }
     let has_aggregate = contains_aggregate_operand(body, value)
@@ -433,9 +443,7 @@ fn sibling_const_locals(
             {
                 sc.set.insert(*local_index);
                 sc.defs.insert(*local_index, *value);
-                if let NodeRef::Stmt(sid) = node {
-                    sc.let_stmts.insert(*local_index, sid);
-                }
+                sc.let_stmts.insert(*local_index, s);
                 changed = true;
             }
             body.for_each_child(node, |c| stack.push(c));
@@ -538,24 +546,20 @@ fn seeded_locals_read(body: &Body, value: Operand, siblings: &SiblingConsts) -> 
     out
 }
 
-/// Count `Local { l }` mentions under `node`.
-fn count_local_reads(body: &Body, node: NodeRef, l: u32) -> usize {
-    let mut n = 0;
+/// Tally reads of each local in `wanted` under `node`, in a single walk.
+fn count_reads_of(body: &Body, node: NodeRef, wanted: &IndexSet<u32>) -> IndexMap<u32, usize> {
+    let mut counts: IndexMap<u32, usize> = IndexMap::default();
     let mut stack = vec![node];
     while let Some(node) = stack.pop() {
         if let NodeRef::Expr(id) = node
-            && matches!(&body.exprs[id].kind, ExprKind::Local { index, .. } if *index == l)
+            && let ExprKind::Local { index, .. } = &body.exprs[id].kind
+            && wanted.contains(index)
         {
-            n += 1;
+            *counts.entry(*index).or_default() += 1;
         }
         body.for_each_child(node, |c| stack.push(c));
     }
-    n
-}
-
-fn count_local_reads_operand(body: &Body, op: Operand, l: u32) -> usize {
-    op.as_expr()
-        .map_or(0, |e| count_local_reads(body, NodeRef::Expr(e), l))
+    counts
 }
 
 fn is_globalizable_const_operand(body: &Body, op: Operand, bound: &mut IndexSet<u32>) -> bool {
@@ -933,12 +937,6 @@ fn rewrite_reads(
     }
 }
 
-/// Replace the `let local_index = value` statement with an inline
-/// `GlobalVarSet(name, value)`, searching the whole body exhaustively —
-/// matching [`collect_candidates`]'s reach, so this always finds whatever it
-/// collected. Returns `false` if not found; the caller asserts on this,
-/// since a miss would leave the local's reads pointing at a global that's
-/// never set.
 /// Move a candidate's sibling const `let`s into the hoisted set's value,
 /// rebuilding the self-contained initializer block the pre-normal-form shape
 /// carried: `G = *__b` (sibling `__b` outside) becomes
@@ -954,13 +952,19 @@ fn inline_sibling_lets(
     if sibling_lets.is_empty() {
         return;
     }
-    // Detach the sibling stmts from their blocks.
+    // Detach the sibling stmts from their blocks, stopping once every sibling
+    // has been relocated so a body with the siblings up front is not scanned to
+    // its end.
     let sibling_set: IndexSet<StmtId> = sibling_lets.iter().copied().collect();
+    let mut remaining = sibling_set.len();
     for bid in body.blocks.keys().collect::<Vec<_>>() {
-        let stmts = &mut body.blocks[bid].stmts;
-        if stmts.iter().any(|s| sibling_set.contains(s)) {
-            stmts.retain(|s| !sibling_set.contains(s));
+        if remaining == 0 {
+            break;
         }
+        let stmts = &mut body.blocks[bid].stmts;
+        let before = stmts.len();
+        stmts.retain(|s| !sibling_set.contains(s));
+        remaining -= before - stmts.len();
     }
     // Find the freshly planted `GlobalVarSet` and wrap its value.
     let mut stack = vec![NodeRef::Block(body.root)];
@@ -1006,6 +1010,12 @@ fn inline_sibling_lets(
     );
 }
 
+/// Replace the `let local_index = value` statement with an inline
+/// `GlobalVarSet(name, value)`, searching the whole body exhaustively —
+/// matching [`collect_candidates`]'s reach, so this always finds whatever it
+/// collected. Returns `false` if not found; the caller asserts on this,
+/// since a miss would leave the local's reads pointing at a global that's
+/// never set.
 fn replace_let_with_set(
     body: &mut Body,
     local_index: u32,
