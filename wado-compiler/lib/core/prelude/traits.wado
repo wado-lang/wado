@@ -67,6 +67,9 @@ internal trait Reflect {
     /// The field types as a tuple `[F_0, F_1, ...]`.
     type Fields;
 
+
+    /// The per-field token tuple `[Field<Self, F_0>, ...]`.
+    type FieldTokens;
     /// Returns the field values as a tuple.
     #[compiler_item("reflect_fields")]
     fn fields(&self) -> Self::Fields;
@@ -78,6 +81,41 @@ internal trait Reflect {
     /// Returns the struct name.
     #[compiler_item("reflect_type_name")]
     fn type_name() -> String;
+
+
+    /// Returns the per-field tokens.
+    #[compiler_item("reflect_field_tokens")]
+    fn field_tokens() -> Self::FieldTokens;
+
+    /// The struct's `#[serde(rename_all)]` policy (`Identity` if none).
+    #[compiler_item("reflect_wire_name_policy")]
+    fn wire_name_policy() -> CaseStyle;
+}
+
+/// The wire-naming policy declared by `#[serde(rename_all = "...")]` (casing
+/// not applied here — `core:serde::wire_name` resolves it). See WEP 2026-06-13.
+#[compiler_item("case_style")]
+pub enum CaseStyle {
+    Identity,
+    Camel,
+    Snake,
+    ScreamingSnake,
+    Pascal,
+    Kebab,
+    ScreamingKebab,
+}
+
+/// The attr-reading face of a struct-field token. Sealed and
+/// compiler-synthesized; user impls are rejected. See WEP 2026-06-13.
+#[compiler_item("member")]
+internal trait Member {
+    /// The source field name.
+    #[compiler_item("member_name")]
+    fn name(&self) -> String;
+
+    /// The raw `#[serde(rename)]` value (casing not applied), or `None`.
+    #[compiler_item("member_wire_name_override")]
+    fn wire_name_override(&self) -> Option<String>;
 }
 
 /// Per-case descriptor returned by `ReflectVariant::case_meta()`, in
@@ -98,7 +136,7 @@ internal trait ReflectVariant {
     /// The per-case payload tuple `[P_0, P_1, ...]`; unit cases are `()`.
     type Cases;
 
-    /// The per-case token tuple `[Case<Self, P_0>, ...]`.
+    /// The per-case token tuple `[VariantCase<Self, P_0>, ...]`.
     type CaseTokens;
 
     /// Returns the variant name.
@@ -185,12 +223,12 @@ internal trait ReflectFlags {
 /// is static, the case index is a value. `extract` / `construct` bridge a
 /// variant value and its payload in both directions.
 /// See WEP 2026-06-13 §3e.
-#[compiler_item("reflect_case")]
-pub struct Case<T, P> {
+#[compiler_item("reflect_variant_case")]
+pub struct VariantCase<T, P> {
     index: i32,
 }
 
-impl<T, P> Case<T, P> {
+impl<T, P> VariantCase<T, P> {
     /// The case's declaration index (== its discriminant).
     pub fn index(&self) -> i32 {
         return self.index;
@@ -209,6 +247,49 @@ impl<T, P> Case<T, P> {
     /// Builds this case around `payload`.
     pub fn construct(&self, payload: P) -> T {
         return builtin::variant_case_construct(payload, self.index);
+    }
+}
+
+/// A field handle minted by `Reflect::field_tokens()`: the field type `F` is
+/// static, and `get` reads the field's value out of a struct. See WEP 2026-06-13.
+#[compiler_item("reflect_field")]
+pub struct Field<T, F> {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+impl<T, F> Field<T, F> {
+    /// The field's declaration index.
+    pub fn index(&self) -> i32 {
+        return self.index;
+    }
+
+    /// Whether the field declares a default value.
+    pub fn has_default(&self) -> bool {
+        return self.has_default;
+    }
+
+    /// Whether the field is marked `#[secret]`.
+    pub fn is_secret(&self) -> bool {
+        return self.is_secret;
+    }
+
+    /// The value of this field in `v`.
+    pub fn get(&self, v: &T) -> F {
+        return builtin::struct_field_get(v, self.index);
+    }
+}
+
+impl<T, F> Member for Field<T, F> {
+    fn name(&self) -> String {
+        return self.field_name;
+    }
+
+    fn wire_name_override(&self) -> Option<String> {
+        return self.wire_override;
     }
 }
 

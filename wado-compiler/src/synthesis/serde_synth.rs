@@ -4006,6 +4006,24 @@ fn deserialize_error_literal_with_expr(
 mod tests {
     use super::*;
 
+    /// Ground-truth heck outputs for an edge corpus. `core:serde::apply_case`
+    /// (the library port used by reflect-based derivations) must match these
+    /// exact strings — the same vectors are asserted in `serde_test.wado`. If
+    /// heck changes, this fails first and the Wado vectors are updated in step.
+    #[test]
+    fn rename_all_edge_corpus_locks_heck_output() {
+        let snake = |s: &str| apply_rename_all(s, "snake_case");
+        assert_eq!(snake("userID"), "user_id");
+        assert_eq!(snake("HTTPStatus"), "http_status");
+        assert_eq!(snake("parseHTTP"), "parse_http");
+        assert_eq!(snake("IOError"), "io_error");
+        assert_eq!(snake("iOS"), "i_os");
+        assert_eq!(snake("field2Name"), "field2_name");
+        assert_eq!(snake("Apple2Banana"), "apple2_banana");
+        assert_eq!(apply_rename_all("HTTPStatus", "camelCase"), "httpStatus");
+        assert_eq!(apply_rename_all("userID", "PascalCase"), "UserId");
+    }
+
     #[test]
     fn rename_all_from_snake_field() {
         assert_eq!(apply_rename_all("user_name", "camelCase"), "userName");

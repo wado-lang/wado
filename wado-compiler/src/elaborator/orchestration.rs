@@ -879,6 +879,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             CompilerItem::ReflectVariant,
             CompilerItem::ReflectEnum,
             CompilerItem::ReflectFlags,
+            CompilerItem::Member,
             CompilerItem::Ref,
             CompilerItem::RefMut,
         ] {

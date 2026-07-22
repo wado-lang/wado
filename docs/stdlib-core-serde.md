@@ -86,6 +86,18 @@ impl Deserialize for Config;
 //   -> Config { host: "localhost", port: 0, timeout: 30 }
 ```
 
+## Functions
+
+### `pub fn apply_case(style: CaseStyle, s: String) -> String`
+
+Apply a `CaseStyle` to an identifier. `Identity` returns `s` unchanged.
+Matches Rust's `heck` (the compiler's `apply_rename_all`).
+
+### `pub fn wire_name<M: Member>(m: &M, policy: CaseStyle) -> String`
+
+Resolve a member's wire name: its `#[serde(rename)]` override wins,
+else the type's `rename_all` policy applies, else identity.
+
 ## Traits
 
 ### `pub trait SerializeSeq`
