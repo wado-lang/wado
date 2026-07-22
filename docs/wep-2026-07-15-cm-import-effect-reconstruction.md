@@ -243,3 +243,7 @@ host-provided resources are unchanged.
 - [WIT and Wado Mapping](./wep-2026-01-29-wit-wado-mapping.md)
 - [Effect Handler](./wep-2026-04-11-effect-handler.md)
 - [Design Philosophy](./design-philosophy.md)
+- [Research: Callbacks across the CM Boundary](./research-cm-boundary-callbacks.md)
+  — the producing mirror: a guest effect lowered to a component import, and how
+  a consumer satisfies it (provider composition; donut wrapping and engine
+  limits surveyed there).
