@@ -50,8 +50,8 @@ use { Parser } from "./Calc.g4" with { // Gale parses ANTLR4 grammar files
 ### Wasm Imports
 
 A `.wasm` / `.wat` asset is imported with `with { type: "wasm" | "wat" }`. The
-compiler detects from the binary whether the file is a **core module** or a
-**Component Model component** — both use `type: "wasm"`. See [WEP: Wasm Module Import](./wep-2026-01-10-wasm-import.md) and [WEP: Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md).
+compiler detects from the binary whether the file is a core module or a
+Component Model component — both use `type: "wasm"`. See [WEP: Wasm Module Import](./wep-2026-01-10-wasm-import.md) and [WEP: Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md).
 
 ```wado
 // Core wasm / wat: each export becomes a free function.

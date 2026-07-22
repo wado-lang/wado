@@ -31,9 +31,9 @@ let PATTERN = EXPR else { DIVERGING_BLOCK };
   error.
 - `PATTERN` may be refutable (`Some(x)`, `Ok(v)`, a variant, a tuple/struct
   with refutable sub-patterns, …).
-- When the pattern matches, its bindings enter the **enclosing** scope and are
+- When the pattern matches, its bindings enter the enclosing scope and are
   visible for the rest of the block — exactly as a plain `let` would bind them.
-- When the pattern does not match, the `else` block runs. It must **diverge**
+- When the pattern does not match, the `else` block runs. It must diverge
   on every path (`return`, `break`, `continue`, `panic`, `unreachable`, or a
   call to a `Never`-returning function).
 - The `else` block does not see the pattern's bindings.
@@ -68,7 +68,7 @@ initializer has no "rest of block" to guard, so `else` is not accepted there).
 
 `let ... else` desugars, at reify time, into a two-arm `Match` — the same
 lowering `if let` uses (`reify_let_chain_stmts`), with one twist: the then-arm
-is the **rest of the enclosing block**, so the pattern's bindings are in scope
+is the rest of the enclosing block, so the pattern's bindings are in scope
 for it, and the wildcard arm is the diverging `else` block:
 
 ```
