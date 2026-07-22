@@ -949,18 +949,14 @@ fn join_camel(words: &List<String>, first_upper: bool) -> String {
 /// Apply a `CaseStyle` to an identifier. `Identity` returns `s` unchanged.
 /// Matches Rust's `heck` (the compiler's `apply_rename_all`).
 pub fn apply_case(style: CaseStyle, s: String) -> String {
-    if style matches { Identity } {
-        return s;
-    }
-    let words = split_words(&s);
     return match style {
         Identity => s,
-        Snake => join_words(&words, &"_", false),
-        ScreamingSnake => join_words(&words, &"_", true),
-        Kebab => join_words(&words, &"-", false),
-        ScreamingKebab => join_words(&words, &"-", true),
-        Camel => join_camel(&words, false),
-        Pascal => join_camel(&words, true),
+        Snake => join_words(&split_words(&s), &"_", false),
+        ScreamingSnake => join_words(&split_words(&s), &"_", true),
+        Kebab => join_words(&split_words(&s), &"-", false),
+        ScreamingKebab => join_words(&split_words(&s), &"-", true),
+        Camel => join_camel(&split_words(&s), false),
+        Pascal => join_camel(&split_words(&s), true),
     };
 }
 

@@ -364,13 +364,21 @@ test "apply_case already_snake_case" {
     assert apply_case(CaseStyle::Pascal, "already_snake_case") == "AlreadySnakeCase";
 }
 
-test "apply_case trailing-acronym and all-caps (heck parity)" {
-    // A trailing all-caps run is one word: userID -> user, id
+// Heck-parity contract: these vectors mirror
+// `serde_synth::tests::rename_all_edge_corpus_locks_heck_output` exactly, so the
+// library port and the compiler's `apply_rename_all` (heck) stay in lock-step.
+test "apply_case heck-parity edge corpus" {
     assert apply_case(CaseStyle::Snake, "userID") == "user_id";
-    assert apply_case(CaseStyle::Camel, "userID") == "userId";
-    // A leading acronym breaks before the word that starts the lowercase run.
     assert apply_case(CaseStyle::Snake, "HTTPStatus") == "http_status";
+    assert apply_case(CaseStyle::Snake, "parseHTTP") == "parse_http";
+    assert apply_case(CaseStyle::Snake, "IOError") == "io_error";
+    assert apply_case(CaseStyle::Snake, "iOS") == "i_os";
+    assert apply_case(CaseStyle::Snake, "field2Name") == "field2_name";
+    assert apply_case(CaseStyle::Snake, "Apple2Banana") == "apple2_banana";
+    assert apply_case(CaseStyle::Camel, "HTTPStatus") == "httpStatus";
+    assert apply_case(CaseStyle::Pascal, "userID") == "UserId";
     // A bare all-caps token collapses to one lowercase word.
     assert apply_case(CaseStyle::Snake, "ID") == "id";
     assert apply_case(CaseStyle::Pascal, "ID") == "Id";
+    assert apply_case(CaseStyle::Camel, "userID") == "userId";
 }
