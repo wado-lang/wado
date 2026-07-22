@@ -92,10 +92,6 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
         }
     }
 
-    if !b.errors.is_empty() {
-        return Err(b.errors.join("; "));
-    }
-
     // The component's own imports are its host-leaf capabilities. Collect every
     // imported interface FQ so effect reconstruction can map them onto the
     // consumer's effects; imported world-level functions/types are not a v1
@@ -108,6 +104,23 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
             WorldItem::Function(_) | WorldItem::Type { .. } => None,
         })
         .collect();
+
+    // A non-WASI import is a guest effect the consumer must provide: materialize
+    // it as an impl-able `#[cm]` interface so effect reconstruction resolves the
+    // requirement and a `with h do` handler can satisfy it. WASI leaves resolve
+    // to their auto-loaded stdlib effect and need no synthesis here.
+    for (_, item) in &resolve.worlds[world].imports {
+        if let WorldItem::Interface { id, .. } = item {
+            let fq = interface_fq(resolve, *id);
+            if !fq.starts_with("wasi:") {
+                b.emit_interface(resolve, *id, &fq);
+            }
+        }
+    }
+
+    if !b.errors.is_empty() {
+        return Err(b.errors.join("; "));
+    }
 
     // Carry the host-leaf set on the synthesized module so the registration
     // path (`fold_component_interfaces`) recovers it from the AST alone.

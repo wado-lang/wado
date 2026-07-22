@@ -3499,7 +3499,14 @@ pub(crate) fn fold_component_interfaces(
 
 /// Exported interface FQs of a component-binding module. Empty for a core-wasm
 /// asset (whose decls carry `#[canonical(...)]`, not `#[cm(...)]` interfaces).
+///
+/// A reconstructed *import* interface (a guest effect the consumer provides) is
+/// synthesized into the same module but is not composed from the dependency's
+/// exports, so it is excluded via the module's host-leaf import list.
 fn component_interface_fqs(module: &Module) -> Vec<String> {
+    let imports: IndexSet<String> = crate::wit_consume::module_host_leaf_imports(module)
+        .into_iter()
+        .collect();
     module
         .items
         .iter()
@@ -3510,5 +3517,6 @@ fn component_interface_fqs(module: &Module) -> Vec<String> {
                 .find_map(|a| a.as_cm_import().map(crate::ast::CmImport::interface_path)),
             _ => None,
         })
+        .filter(|fq| !imports.contains(fq))
         .collect()
 }
