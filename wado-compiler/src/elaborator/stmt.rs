@@ -716,22 +716,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Whether `name` refers to an immutable global (defined here or imported),
-    /// which in pattern position is a constant-value (refutable) match.
-    fn is_immutable_global(&self, name: &str) -> bool {
-        self.sem
-            .decls
-            .current_module_globals
-            .get(name)
-            .is_some_and(|&(_ty, mutable)| !mutable)
-            || self
-                .sem
-                .decls
-                .imported_globals
-                .get(name)
-                .is_some_and(|(_m, _n, _ty, mutable)| !*mutable)
-    }
-
     /// Resolve an uninitialized let declaration: `let x: T;`
     ///
     /// Emits a `TirStmtKind::Let` with a unit placeholder value so that
@@ -1351,6 +1335,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Whether `name` refers to an immutable global (defined here or imported),
+    /// which in pattern position is a constant-value (refutable) match rather
+    /// than a fresh binding.
+    fn is_immutable_global(&self, name: &str) -> bool {
+        self.sem
+            .decls
+            .current_module_globals
+            .get(name)
+            .is_some_and(|&(_ty, mutable)| !mutable)
+            || self
+                .sem
+                .decls
+                .imported_globals
+                .get(name)
+                .is_some_and(|(_m, _n, _ty, mutable)| !*mutable)
+    }
+
     /// Resolve a pattern in an if-pattern context with type information from the scrutinee.
     /// Match ergonomics: if the scrutinee is `&T`, peels the reference and propagates
     /// `ref_binding` so that identifier bindings get `&InnerType` instead of `InnerType`.
@@ -1410,13 +1411,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 span: name_span,
             } => {
+                let is_mut = matches!(pattern, Pattern::MutIdent { .. });
                 // A bare identifier in a pattern context could be a variant/enum case
                 // (e.g., `None`, `Red`) or a variable binding (e.g., `x`, `val`).
                 // The parser does not use case to disambiguate; instead, we check
                 // whether the name is a known case of the scrutinee type.
-                if !matches!(pattern, Pattern::MutIdent { .. })
-                    && self.is_known_case_of_type(scrutinee_type, name, None)
-                {
+                if !is_mut && self.is_known_case_of_type(scrutinee_type, name, None) {
                     // Delegate to the Variant branch with empty bindings.
                     // Preserve the identifier's AstId/span as name_id/name_span so
                     // LSP jump-to-def on `None`/`Red` still resolves to the case decl.
@@ -1438,11 +1438,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Immutable global constant: a constant-value pattern that
                 // introduces no binding but reads the global — record the
                 // use→def edge so it is not flagged dead (mirrors the expr path).
-                if !matches!(pattern, Pattern::MutIdent { .. }) && self.is_immutable_global(name) {
+                if !is_mut && self.is_immutable_global(name) {
                     self.record_item_reference_by_name(*id, name);
                     return Vec::new();
                 }
-                let is_mut = matches!(pattern, Pattern::MutIdent { .. });
                 let binding_type = match ref_binding {
                     RefBinding::Ref => self
                         .tysys

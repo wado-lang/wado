@@ -2104,9 +2104,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Mirror `resolve_let`: an annotation flows into the scrutinee as its
         // expected type (published on `let_annotated_types` during resolve).
-        let annotated_type =
-            l.ty.as_ref()
-                .and_then(|_| self.ann_let_annotated_type(l.id));
+        let annotated_type = if l.ty.is_some() {
+            self.ann_let_annotated_type(l.id)
+        } else {
+            None
+        };
         let scrutinee = self.reify_expr(value_ast, ctx, annotated_type);
         let scrutinee_type = scrutinee.type_id;
 
