@@ -162,10 +162,20 @@ fn analyze_copy_binding(
     let value_type = body.exprs[value].type_id;
 
     let source = match &body.exprs[value].kind {
-        ExprKind::Local { index, name } => CopySource::Local {
-            index: *index,
-            name: name.clone(),
-        },
+        ExprKind::Local { index, name } => {
+            crate::compiler_trace!(
+                "copy_prop",
+                "analyze: let #{local_index} = Local #{index} (value expr {value:?}, stmt {stmt:?})"
+            );
+            crate::compiler_trace!(
+                "copy_prop",
+                "  (expr parent per map: n/a in analyze — see subst traces)"
+            );
+            CopySource::Local {
+                index: *index,
+                name: name.clone(),
+            }
+        }
         ExprKind::Unary { op, expr: inner }
             if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef) =>
         {
@@ -740,8 +750,13 @@ fn apply_in_expr(
                 );
             }
             CopySource::Promoted(v) => {
+                let parent = engine.parent_of(NodeRef::Expr(id));
+                let grandparent = parent.and_then(|p| engine.parent_of(p));
                 let ok = engine.redirect_expr(id, Operand::Value(v));
-                crate::compiler_trace!("copy_prop", "subst use {id:?} -> Promoted (ok={ok})");
+                crate::compiler_trace!(
+                    "copy_prop",
+                    "subst use {id:?} -> Promoted (ok={ok}, parent={parent:?}, gp={grandparent:?})"
+                );
             }
         }
         return;

@@ -98,7 +98,22 @@ impl Rule for LetBlockFlattenRule {
             new_stmts.extend_from_slice(&stmts[i..]);
             engine.set_block_stmts(block, new_stmts);
             // 3. Rebind the let's value from the block wrapper to the tail.
-            engine.redirect_expr(block_expr, tail_op);
+            //    A skeleton tail MOVES its kind into the wrapper node
+            //    (`become_expr`), leaving the orphaned tail statement holding a
+            //    `Dead` node — the move-the-kind convention every dropping rule
+            //    follows. Redirecting the operand instead would leave the
+            //    orphan referencing the live expr, and `Engine::new`'s
+            //    arena-wide `build_parents` then lets the orphan overwrite the
+            //    live parent edge (observed: copy_prop redirecting through the
+            //    stale parent into the orphan, stranding the live read).
+            match tail_op {
+                crate::nir_arena::Operand::Expr(tail_e) => {
+                    engine.become_expr(block_expr, tail_e);
+                }
+                op @ crate::nir_arena::Operand::Value(_) => {
+                    engine.redirect_expr(block_expr, op);
+                }
+            }
             return true;
         }
         false
