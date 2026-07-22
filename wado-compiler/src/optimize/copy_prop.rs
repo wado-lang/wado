@@ -688,7 +688,26 @@ fn apply_in_expr(
     } else {
         None
     };
-    if let Some(source) = sub {
+    if let Some(mut source) = sub {
+        // Resolve `Local → Local` substitution chains before planting the read:
+        // replacing a use of `t` with its source local `s` creates a NEW read
+        // of `s`, and `s` may itself be a copy target this run drops
+        // (`let s = q; let t = s; use(t)` — both bindings in `dead_locals`).
+        // One-step substitution would strand that read on a dropped binding.
+        // Each hop applies an approved substitution, so the composition is the
+        // approved semantics; `def_count == 1` per target rules out cycles, the
+        // fuel is a defensive bound.
+        let mut fuel = 32;
+        while fuel > 0 {
+            let CopySource::Local { index, .. } = &source else {
+                break;
+            };
+            let Some(next) = substitutions.get(index) else {
+                break;
+            };
+            source = next.clone();
+            fuel -= 1;
+        }
         match source {
             CopySource::Local { index, name } => {
                 engine.replace_expr_kind(id, ExprKind::Local { index, name });

@@ -59,7 +59,7 @@ test "v4 is deterministic under a fixed Random source" {
     let mut rng = MockRandom { data: bytes_0_to_15(), pos: 0 };
     with Random => &mut rng do {
         let id = Uuid::v4();
-        // bytes 00..0f, with byte 6 -> 0x46 (version) and byte 8 -> 0x88 (variant)
+        // bytes 00..=0f, with byte 6 -> 0x46 (version) and byte 8 -> 0x88 (variant)
         assert id.to_string() == "00010203-0405-4607-8809-0a0b0c0d0e0f";
         assert id.version() == 4;
     };

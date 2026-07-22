@@ -227,7 +227,7 @@ type "functype//stream_cm_future_drop.wado/__cm_binding__Response_new" = fn(i32,
 
 type "functype//stream_cm_future_drop.wado/__cm_export__handle" = fn(i32);  // TypeId(42)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(43)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(43)
 
 type "functype//core:rt/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(44)
 
@@ -301,15 +301,12 @@ fn "stream_cm_future_drop.wado/handle"(request) {
     let __local_59: i32;
     let __local_60: i32;
     let __local_61: i32;
-    let __local_62: ref "wasi:http/types.wado//FieldSizePayload";
-    let __local_63: ref null "core:prelude/string.wado//String";
     let __local_64: i32;
     let __local_65: i32;
     let __local_66: i32;
     let __local_67: i64;
     let __local_68: i32;
     let __local_69: i32;
-    let __local_70: ref "core:prelude/types.wado//Option<u32>";
     let __local_71: i32;
     let __local_72: i32;
     let __local_74: ref "core:prelude/types.wado//Option<u32>";
@@ -385,6 +382,8 @@ fn "stream_cm_future_drop.wado/handle"(request) {
     let v_162: ref "wasi:http/types.wado//FieldSizePayload";
     let v_163: ref null "core:prelude/string.wado//String";
     let __vc_payload_0: ref "core:prelude/string.wado//String";
+    let __sroa___struct_val_field_name: ref null "core:prelude/string.wado//String";
+    let __sroa___struct_val_field_size: ref "core:prelude/types.wado//Option<u32>";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:stream_cm_future_drop.wado::__modules_initialized);
         cold_path;
@@ -502,27 +501,27 @@ fn "stream_cm_future_drop.wado/handle"(request) {
             __local_61 = 0;
             if __local_56 != 0 {
                 v_162 = ref.as_non_null(__local_54);
-                __local_62 = struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: v_163 = v_162.field_name; (if ref.is_null(v_163) == 0 -> ref null "core:prelude/string.wado//String" {
+                v_163 = v_162.field_name;
+                __sroa___struct_val_field_name = (if ref.is_null(v_163) == 0 -> ref null "core:prelude/string.wado//String" {
                     __vc_payload_0 = ref.as_non_null(v_163);
                     struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = __vc_payload_0.repr; let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__array_clone_src_1); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: __vc_payload_0.used };
                 } else {
                     v_163;
-                }), field_size: v_162.field_size };
-                __local_63 = __local_62.field_name;
-                __local_64 = ref.is_null(__local_63) == 0;
+                });
+                __sroa___struct_val_field_size = v_162.field_size;
+                __local_64 = ref.is_null(__sroa___struct_val_field_name) == 0;
                 __local_65 = 0;
                 __local_66 = 0;
                 if __local_64 != 0 {
-                    __local_68 = builtin::i32_wrap_i64(local.tee __local_67("core:rt/cm_lower_string"(ref.as_non_null(__local_63))));
+                    __local_68 = builtin::i32_wrap_i64(local.tee __local_67("core:rt/cm_lower_string"(ref.as_non_null(__sroa___struct_val_field_name))));
                     __local_69 = builtin::i32_wrap_i64(__local_67 >> 32_i64);
                     __local_65 = __local_68;
                     __local_66 = __local_69;
                 }
-                __local_70 = __local_62.field_size;
-                __local_71 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_70);
+                __local_71 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__sroa___struct_val_field_size);
                 __local_72 = 0;
                 if __local_71 != 0 {
-                    __local_72 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_70).payload_0;
+                    __local_72 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__sroa___struct_val_field_size).payload_0;
                 }
                 __local_57 = __local_64;
                 __local_58 = __local_65;
@@ -731,13 +730,13 @@ fn "stream_cm_future_drop.wado/__cm_export__handle"(request) {
     "stream_cm_future_drop.wado/handle"(request);
 }
 
-fn "core:rt/gc_array_to_memory"(arr, ptr, len) {
+fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
     b63: block {
         l64: loop {
             break_if b63 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
+            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
             i = i + 1;
             continue l64;
         };
@@ -751,7 +750,7 @@ fn "core:rt/cm_lower_string"(s) {
     len = s.used;
     bytes = s.repr;
     ptr = "mem/realloc"(0, 0, 1, len);
-    "core:rt/gc_array_to_memory"(bytes, ptr, len);
+    "core:rt/gc_array_to_memory"(bytes, 0, ptr, len);
     return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
 }
 

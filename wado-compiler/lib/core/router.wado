@@ -983,7 +983,7 @@ impl PathParamsDeserializer {
         return Result::Ok(());
     }
 
-    /// Byte-by-byte comparison of `path[start..start+pat.len())` with
+    /// Byte-by-byte comparison of `path[start..<start + pat.len()]` with
     /// `pat`. Used by `deserialize_bool` to avoid a substring allocation
     /// when checking against the constants `"true"` / `"false"`.
     fn path_bytes_eq(&self, start: i32, pat: String) -> bool {

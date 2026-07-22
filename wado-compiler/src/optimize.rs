@@ -24,18 +24,23 @@
 //!     `Result<T, E>` allocations into the consumer's `if-let` / `match` site),
 //!     `array_literal` (materialize `ArrayLiteral` from the `array_new + push`
 //!     window), `elide_local`, env-free `const_fold`, and `const_branch_prune`.
-//! 7.  `sroa` — Scalar Replacement of Aggregates.
-//! 8.  `copy_prop` — copy propagation.
-//! 9.  `dae` — Dead Argument Elimination.
-//! 10. `drve` — Dead Return Value Elimination.
-//! 11. `cse` — Loop-level Common Subexpression Elimination.
-//! 12. `store_load_forward` — store-to-load forwarding.
-//! 13. `const_folding` — partial evaluation via [`crate::niri`] (also drives
+//! 7.  `let_block_flatten` — the value-block normal form: flatten block-tailed
+//!     `let` bindings (`let x = { stmts…; tail }` → `stmts…; let x = tail`) so
+//!     `sroa`'s direct-literal matcher sees every candidate. A separate pass —
+//!     never a peephole rule — so the session's pristine-map rules and this
+//!     reshaping never interleave.
+//! 8.  `sroa` — Scalar Replacement of Aggregates.
+//! 9.  `copy_prop` — copy propagation.
+//! 10. `dae` — Dead Argument Elimination.
+//! 11. `drve` — Dead Return Value Elimination.
+//! 12. `cse` — Loop-level Common Subexpression Elimination.
+//! 13. `store_load_forward` — store-to-load forwarding.
+//! 14. `const_folding` — partial evaluation via [`crate::niri`] (also drives
 //!     alias-aware field-knowledge tracking; see `alias`). The flow-sensitive
 //!     half; the env-free folds and trivial-block pruning run in `peephole`.
-//! 14. `licm` — Loop-Invariant Code Motion.
-//! 15. `condition_implication` — eliminate conditions implied by dominators.
-//! 16. `tmpl_hoist` — hoist template-string backing buffers out of loops.
+//! 15. `licm` — Loop-Invariant Code Motion.
+//! 16. `condition_implication` — eliminate conditions implied by dominators.
+//! 17. `tmpl_hoist` — hoist template-string backing buffers out of loops.
 //!
 //! Dense `Match` → `Switch` on global initializer bodies runs once before the
 //! loop (`match_to_switch_globals`); `-O0` skips the loop and lowers everything
@@ -82,6 +87,7 @@ mod field_scalarize;
 mod gate;
 mod inline;
 mod labeled_block_fusion;
+mod let_block_flatten;
 mod licm;
 mod loop_version_bce;
 mod match_to_switch;
@@ -705,6 +711,10 @@ fn run_optimization_passes(
         gated!("nir/peephole", |p, g| peephole::run_peephole(p, g, false));
         // `labeled_block_fusion` moved into the post-inline `nir/peephole`
         // session as `LabeledBlockFusionRule`; see `optimize/peephole.rs`.
+        gated!(
+            "nir/let_block_flatten",
+            let_block_flatten::flatten_let_blocks
+        );
         gated!("nir/sroa", scalar_replace_aggregates);
         gated!("nir/copy_prop", propagate_copies);
         // DAE / DRVE after `copy_prop` shrinks signatures and discards unused

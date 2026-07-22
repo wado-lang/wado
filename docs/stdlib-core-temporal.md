@@ -64,7 +64,7 @@ Whole seconds since the Unix epoch. Negative values are before it.
 
 #### `nanoseconds: u32`
 
-Sub-second component, always in `0..1_000_000_000`. Incrementing
+Sub-second component, always in `0..<1_000_000_000`. Incrementing
 `nanoseconds` always moves forward in time, even when `seconds < 0`
 (e.g. one nanosecond before the epoch is
 `Instant { seconds: -1, nanoseconds: 999_999_999 }`). Use `Instant::new`
@@ -73,7 +73,7 @@ to normalize an arbitrary count into this range; the accessors assume it.
 #### `pub fn new(seconds: i64, nanoseconds: i64) -> Instant`
 
 Construct an instant `nanoseconds` after `seconds` since the Unix epoch,
-normalizing so the stored sub-second part lands in `0..1_000_000_000`
+normalizing so the stored sub-second part lands in `0..<1_000_000_000`
 even when `nanoseconds` is negative or `>= 1_000_000_000`. This is the
 canonical funnel that upholds the field invariant the accessors rely on.
 

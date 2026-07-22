@@ -77,13 +77,12 @@ impl StreamWritable<u8> for MockStdio {
         }
     }
 
-    fn write_raw(&mut self, this: &StreamWritable<u8>, data: &Array<u8>, len: i32) {
+    fn write_raw(&mut self, this: &StreamWritable<u8>, data: ArraySlice<u8>) {
         let _ = this;
-        let chunk = data.slice(0, len);
         if self.to_stderr {
-            self.err.extend_from_slice(chunk);
+            self.err.extend_from_slice(data);
         } else {
-            self.out.extend_from_slice(chunk);
+            self.out.extend_from_slice(data);
         }
     }
 

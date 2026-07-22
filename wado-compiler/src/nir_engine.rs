@@ -597,7 +597,21 @@ impl<'a> Engine<'a> {
         index
     }
 
-    /// Set `parent[child] = node` for every id-bearing child of every node.
+    /// Set `parent[child] = node` for every id-bearing child reachable from
+    /// the root — a live-tree walk, mirroring [`Engine::build_uses`].
+    ///
+    /// Not an arena scan: dead nodes left by earlier in-place passes (the
+    /// arena never compacts) must not claim parents. An orphan retaining an
+    /// operand reference to a live node would otherwise overwrite the live
+    /// edge (last-writer-wins) and misdirect every parent-map consumer — a
+    /// rule then edits the orphan while the live tree keeps the stale shape
+    /// (observed as `copy_prop` substituting a read through an orphaned
+    /// statement's claim, stranding the live read on a dropped binding).
+    ///
+    /// Within the live tree, a child with two parents is unconditionally a
+    /// corruption — an edit shared an id between two nodes instead of moving
+    /// the kind (`become_expr`) — so the walk panics on a double claim rather
+    /// than letting the error surface as wrong code passes later.
     ///
     /// Destructuring `self` lets the parent slices be written in place while
     /// `body` is borrowed immutably by `for_each_child`, so no intermediate
@@ -611,25 +625,21 @@ impl<'a> Engine<'a> {
             pat_parent,
             ..
         } = &mut *self.buf;
-        let mut set = |child: NodeRef, parent: NodeRef| {
-            *arena_slot_mut(child, expr_parent, stmt_parent, block_parent, pat_parent) =
-                Some(parent);
-        };
-        for id in body.exprs.keys() {
-            let parent = NodeRef::Expr(id);
-            body.for_each_child(parent, |c| set(c, parent));
-        }
-        for id in body.stmts.keys() {
-            let parent = NodeRef::Stmt(id);
-            body.for_each_child(parent, |c| set(c, parent));
-        }
-        for id in body.blocks.keys() {
-            let parent = NodeRef::Block(id);
-            body.for_each_child(parent, |c| set(c, parent));
-        }
-        for id in body.pats.keys() {
-            let parent = NodeRef::Pat(id);
-            body.for_each_child(parent, |c| set(c, parent));
+        let mut stack = vec![NodeRef::Block(body.root)];
+        while let Some(node) = stack.pop() {
+            body.for_each_child(node, |child| {
+                let slot =
+                    arena_slot_mut(child, expr_parent, stmt_parent, block_parent, pat_parent);
+                if let Some(prev) = *slot {
+                    panic!(
+                        "[NIR engine] {child:?} has two live parents ({prev:?} and {node:?}): \
+                         an edit shared a child id between two nodes — move the kind \
+                         (`become_expr`), do not share ids"
+                    );
+                }
+                *slot = Some(node);
+                stack.push(child);
+            });
         }
     }
 

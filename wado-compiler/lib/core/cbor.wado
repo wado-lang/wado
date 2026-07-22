@@ -66,7 +66,7 @@ global MAJOR_TAG: u8 = 6;  // tagged item
 global MAJOR_SIMPLE: u8 = 7;  // simple value / float
 
 // Additional-info codes in the low 5 bits of the initial byte (RFC 8949 §3).
-// Values < 24 carry the argument inline; 24..27 announce a 1/2/4/8-byte
+// Values < 24 carry the argument inline; 24..=27 announce a 1/2/4/8-byte
 // big-endian argument; 31 marks indefinite length (and, in major 7, the break).
 global AI_1BYTE: u8 = 24;
 global AI_2BYTE: u8 = 25;
@@ -107,7 +107,7 @@ global MSG_EXPECTED_ARRAY: String = "expected array";
 global MSG_EXPECTED_MAP: String = "expected map";
 global MSG_EXPECTED_MAP_FOR_STRUCT: String = "expected map for struct";
 
-/// Write a CBOR head — a major type (0..7) plus its argument in preferred
+/// Write a CBOR head — a major type (0..=7) plus its argument in preferred
 /// (shortest) form (RFC 8949 §3). Shared by integers, string/array/map
 /// lengths, and tag numbers.
 fn write_head(buf: &mut ByteList, major: u8, arg: u64) {
@@ -889,7 +889,7 @@ impl CborDeserializer {
     /// with the initial byte already consumed. The caller guarantees
     /// `ai <= AI_8BYTE`. Returns the argument as a `u64` without building a head
     /// tuple — the non-allocating core of the fast scalar decoders. The `match`
-    /// on the dense 24..27 codes lowers to a `br_table`.
+    /// on the dense 24..=27 codes lowers to a `br_table`.
     fn read_arg(&mut self, ai: u8) -> Result<u64, DeserializeError> {
         return match ai {
             AI_1BYTE => Result::Ok(self.next_byte()? as u64),
@@ -1412,7 +1412,7 @@ impl DeserializeStruct for CborStructAccess {
         // Fast path: a definite-length text key matches the schema straight from
         // the input bytes, no allocation (RFC 8949 §6.1: text-string keys).
         // Only definite lengths (ai <= AI_8BYTE) take it; indefinite (31) and
-        // reserved (28..30) fall to the slow path, where `read_head` reports the
+        // reserved (28..=30) fall to the slow path, where `read_head` reports the
         // precise malformed-head diagnostic.
         let head = self.de.peek_byte()?;
         if head >> 5 == MAJOR_TEXT && head & 0x1f <= AI_8BYTE {
