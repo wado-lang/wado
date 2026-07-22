@@ -1,0 +1,20 @@
+// Reflect wire-name policy (WEP 2026-06-13, Stage C): the struct's
+// `#[serde(rename_all)]` declaration surfaced as a `CaseStyle` value.
+// Casing itself is resolved library-side by `core:serde::wire_name`.
+
+#[serde(rename_all = "camelCase")]
+struct A {
+    user_id: i32,
+}
+
+struct B {
+    user_id: i32,
+}
+
+test "wire_name_policy reflects rename_all" {
+    assert Reflect::<A>::wire_name_policy() == CaseStyle::Camel;
+    assert Reflect::<B>::wire_name_policy() == CaseStyle::Identity;
+}
+
+__DATA__
+{"test": {}}

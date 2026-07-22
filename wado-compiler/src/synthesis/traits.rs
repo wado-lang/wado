@@ -505,9 +505,9 @@ struct ReflectFieldInfo {
     has_default: bool,
 }
 
-/// A struct selected for `Reflect` synthesis: its name, per-field info, and
-/// declaration span.
-type ReflectTarget = (String, Vec<ReflectFieldInfo>, Span);
+/// A struct selected for `Reflect` synthesis: its name, per-field info, the
+/// struct's `#[serde(rename_all)]` policy, and declaration span.
+type ReflectTarget = (String, Vec<ReflectFieldInfo>, Option<String>, Span);
 
 /// Select the structs in `module` that need a synthesized `Reflect` impl:
 /// non-generic, non-monomorphized, and actually requested by a bound.
@@ -535,6 +535,7 @@ fn collect_reflect_targets(
                         has_default: f.default_expr.is_some(),
                     })
                     .collect(),
+                s.serde_rename_all.clone(),
                 s.span,
             )
         })
@@ -551,7 +552,7 @@ fn generate_struct_reflect_methods(
     reflect_trait_name: &str,
     target: &ReflectTarget,
 ) -> Vec<TirFunction> {
-    let (name, fields, span) = target;
+    let (name, fields, rename_all, span) = target;
     let span = *span;
     let field_names: Vec<String> = fields.iter().map(|f| f.name.clone()).collect();
     let field_infos: Vec<FieldInfo> = fields
@@ -636,8 +637,22 @@ fn generate_struct_reflect_methods(
         token_tuple_type,
         span,
     );
+    let wire_name_policy_fn = generate_wire_name_policy_fn(
+        name,
+        env.case_style_type,
+        rename_all,
+        reflect_trait_name,
+        &env.wire_name_policy_method,
+        span,
+    );
 
-    let mut functions = vec![type_name_fn, field_names_fn, fields_fn, field_tokens_fn];
+    let mut functions = vec![
+        type_name_fn,
+        field_names_fn,
+        fields_fn,
+        field_tokens_fn,
+        wire_name_policy_fn,
+    ];
     functions.extend(generate_field_bridge_helpers(
         type_table,
         &field_infos,
@@ -661,6 +676,7 @@ struct ReflectSynthEnv {
     string_type: TypeId,
     list_string_type: TypeId,
     string_type_name: String,
+    case_style_type: TypeId,
     from_tuple: FromTupleItem,
     field_struct_name: String,
     field_struct_module: ModuleSource,
@@ -668,6 +684,7 @@ struct ReflectSynthEnv {
     field_names_method: String,
     fields_method: String,
     field_tokens_method: String,
+    wire_name_policy_method: String,
 }
 
 impl ReflectSynthEnv {
@@ -675,6 +692,7 @@ impl ReflectSynthEnv {
         let string_type = tt.make_compiler_struct(CompilerItem::String);
         let list_string_type = tt.make_list(string_type);
         let string_type_name = tt.mangle_type_name(string_type);
+        let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
         let items = tt.compiler_items();
         let (module_source, owner, name) = items.require_method(CompilerItem::ListFromTuple);
         let from_tuple = FromTupleItem {
@@ -690,6 +708,7 @@ impl ReflectSynthEnv {
             string_type,
             list_string_type,
             string_type_name,
+            case_style_type,
             from_tuple,
             field_struct_name,
             field_struct_module,
@@ -700,6 +719,9 @@ impl ReflectSynthEnv {
             fields_method: items.method_name(CompilerItem::ReflectFields).to_string(),
             field_tokens_method: items
                 .method_name(CompilerItem::ReflectFieldTokens)
+                .to_string(),
+            wire_name_policy_method: items
+                .method_name(CompilerItem::ReflectWireNamePolicy)
                 .to_string(),
         }
     }
@@ -1148,6 +1170,66 @@ fn generate_struct_field_tokens_fn(
         method_info,
         vec![],
         token_tuple_type,
+        body,
+        vec![],
+    )
+}
+
+/// Map a struct's `#[serde(rename_all)]` string to its `CaseStyle` case
+/// `(index, name)`. Mirrors `serde_synth::apply_rename_all`'s recognised
+/// strategies; any unknown string (and no attribute) falls back to `Identity`.
+fn case_style_variant(rename_all: &Option<String>) -> (u32, &'static str) {
+    match rename_all.as_deref() {
+        None => (0, "Identity"),
+        Some("camelCase") => (1, "Camel"),
+        Some("snake_case") => (2, "Snake"),
+        Some("SCREAMING_SNAKE_CASE") => (3, "ScreamingSnake"),
+        Some("PascalCase") => (4, "Pascal"),
+        Some("kebab-case") => (5, "Kebab"),
+        Some("SCREAMING-KEBAB-CASE") => (6, "ScreamingKebab"),
+        Some(_) => (0, "Identity"),
+    }
+}
+
+/// Build `Struct^Reflect::wire_name_policy() -> CaseStyle` as
+/// `return CaseStyle::<variant>;` — the struct's `#[serde(rename_all)]` policy
+/// as a `CaseStyle` value (casing itself is resolved library-side).
+fn generate_wire_name_policy_fn(
+    struct_name: &str,
+    case_style_type: TypeId,
+    rename_all: &Option<String>,
+    reflect_trait_name: &str,
+    wire_name_policy_method: &str,
+    span: Span,
+) -> TirFunction {
+    let method_info = trait_method_info(struct_name, reflect_trait_name, wire_name_policy_method);
+    let qualified_name = method_info.to_mangled_name();
+
+    let (case_index, case_name) = case_style_variant(rename_all);
+    let construct = TirExpr::new(
+        TirExprKind::EnumConstruct {
+            enum_type: case_style_type,
+            case_index,
+            case_name: case_name.to_string(),
+        },
+        case_style_type,
+        span,
+    );
+    let body = TirBlock::new(
+        vec![TirStmt::new(
+            TirStmtKind::Return {
+                value: Some(construct),
+            },
+            span,
+        )],
+        span,
+    );
+
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        vec![],
+        case_style_type,
         body,
         vec![],
     )

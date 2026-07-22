@@ -101,7 +101,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         };
 
-        let (reflect_trait_name, type_name_method, fields_method, field_tokens_method, module_source) = {
+        let (
+            reflect_trait_name,
+            type_name_method,
+            fields_method,
+            field_tokens_method,
+            wire_name_policy_method,
+            module_source,
+        ) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
@@ -116,6 +123,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .to_string(),
                 items
                     .method_name(crate::compiler_item::CompilerItem::ReflectFieldTokens)
+                    .to_string(),
+                items
+                    .method_name(crate::compiler_item::CompilerItem::ReflectWireNamePolicy)
                     .to_string(),
                 self.find_struct_module_source(&self_name),
             )
@@ -157,6 +167,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
                 .collect();
             tt.make_tuple(tokens)
+        } else if method == wire_name_policy_method {
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_compiler_enum(crate::compiler_item::CompilerItem::CaseStyle)
         } else {
             let mut tt = self.tysys.type_table.borrow_mut();
             let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
@@ -212,6 +227,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_name_method,
             fields_method,
             field_tokens_method,
+            wire_name_policy_method,
         ) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
@@ -225,6 +241,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 items
                     .method_name(CompilerItem::ReflectFieldTokens)
                     .to_string(),
+                items
+                    .method_name(CompilerItem::ReflectWireNamePolicy)
+                    .to_string(),
             )
         };
 
@@ -234,6 +253,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .type_table
                 .borrow_mut()
                 .make_compiler_struct(CompilerItem::String)
+        } else if method == wire_name_policy_method {
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_compiler_enum(CompilerItem::CaseStyle)
         } else if method == field_names_method {
             let mut tt = self.tysys.type_table.borrow_mut();
             let string_type = tt.make_compiler_struct(CompilerItem::String);
@@ -437,6 +461,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             || method == items.method_name(crate::compiler_item::CompilerItem::ReflectTypeName)
             || method == items.method_name(crate::compiler_item::CompilerItem::ReflectFields)
             || method == items.method_name(crate::compiler_item::CompilerItem::ReflectFieldTokens)
+            || method
+                == items.method_name(crate::compiler_item::CompilerItem::ReflectWireNamePolicy)
     }
 
     /// Whether `prefix::method` names a `ReflectVariant` trait-qualified static

@@ -131,6 +131,10 @@ pub enum CompilerItem {
     /// dispatch and by the trait-synthesis pass that emits
     /// `T^Ord::cmp` bodies.
     Ordering,
+    /// `CaseStyle` — the `#[serde(rename_all)]` policy returned by
+    /// `Reflect::wire_name_policy()` (WEP 2026-06-13). Casing is resolved
+    /// library-side by `core:serde::wire_name`.
+    CaseStyle,
 
     // ── Traits ────────────────────────────────────────────────────────
     /// `Default` — `Default::default()` synthesis anchor.
@@ -309,6 +313,8 @@ pub enum CompilerItem {
     ReflectTypeName,
     /// `Reflect::field_tokens` — the per-field token tuple.
     ReflectFieldTokens,
+    /// `Reflect::wire_name_policy` — the struct's `#[serde(rename_all)]` policy.
+    ReflectWireNamePolicy,
     /// `Member::name` — the token's source field name.
     MemberName,
     /// `Member::wire_name_override` — the token's raw `#[serde(rename)]` value.
@@ -475,6 +481,7 @@ impl CompilerItem {
         Self::Option,
         Self::Result,
         Self::Ordering,
+        Self::CaseStyle,
         Self::Default,
         Self::Reflect,
         Self::ReflectVariant,
@@ -542,6 +549,7 @@ impl CompilerItem {
         Self::ReflectFieldNames,
         Self::ReflectTypeName,
         Self::ReflectFieldTokens,
+        Self::ReflectWireNamePolicy,
         Self::MemberName,
         Self::MemberWireNameOverride,
         Self::ReflectVariantTypeName,
@@ -622,6 +630,7 @@ impl CompilerItem {
             Self::Option => "option",
             Self::Result => "result",
             Self::Ordering => "ordering",
+            Self::CaseStyle => "case_style",
             Self::Default => "default",
             Self::Reflect => "reflect",
             Self::ReflectVariant => "reflect_variant",
@@ -689,6 +698,7 @@ impl CompilerItem {
             Self::ReflectFieldNames => "reflect_field_names",
             Self::ReflectTypeName => "reflect_type_name",
             Self::ReflectFieldTokens => "reflect_field_tokens",
+            Self::ReflectWireNamePolicy => "reflect_wire_name_policy",
             Self::MemberName => "member_name",
             Self::MemberWireNameOverride => "member_wire_name_override",
             Self::ReflectVariantTypeName => "reflect_variant_type_name",
@@ -786,6 +796,7 @@ impl CompilerItem {
             | Self::Option
             | Self::Result
             | Self::Ordering
+            | Self::CaseStyle
             | Self::Default
             | Self::Reflect
             | Self::ReflectVariant
@@ -808,6 +819,7 @@ impl CompilerItem {
             | Self::ReflectFieldNames
             | Self::ReflectTypeName
             | Self::ReflectFieldTokens
+            | Self::ReflectWireNamePolicy
             | Self::MemberName
             | Self::MemberWireNameOverride
             | Self::ReflectVariantTypeName
@@ -944,7 +956,7 @@ impl CompilerItem {
             | Self::EnumCaseMeta
             | Self::FlagBitMeta => CompilerItemKind::Struct,
             Self::Option | Self::Result => CompilerItemKind::Variant,
-            Self::Ordering | Self::Alignment => CompilerItemKind::Enum,
+            Self::Ordering | Self::Alignment | Self::CaseStyle => CompilerItemKind::Enum,
             Self::SerializeError | Self::DeserializeError => CompilerItemKind::Struct,
             Self::SerializeErrorKind | Self::DeserializeErrorKind => CompilerItemKind::Enum,
             Self::Formatter => CompilerItemKind::Struct,
@@ -990,6 +1002,7 @@ impl CompilerItem {
             | Self::ReflectFieldNames
             | Self::ReflectTypeName
             | Self::ReflectFieldTokens
+            | Self::ReflectWireNamePolicy
             | Self::MemberName
             | Self::MemberWireNameOverride
             | Self::ReflectVariantTypeName
