@@ -637,15 +637,27 @@ fn "core:json/write_escaped_string"(buf, s) {
     let b: u8;
     let __local_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
+    let _licm_repr_17: ref Array<u8>;
     "core:prelude/string.wado/String::push"(buf, 34);
     n = s.used;
     run_start = 0;
     i = 0;
+<<<<<<< HEAD
     b41: block {
         l42: loop {
             break_if b41 i >= n;
+||||||| 6f6d49355
+    b46: block {
+        l47: loop {
+            break_if b46 i >= n;
+=======
+    _licm_repr_17 = s.repr;
+    b46: block {
+        l47: loop {
+            break_if b46 i >= n;
+>>>>>>> origin/main
             __for_0_body: block {
-                b = builtin::array_get<u8>(s.repr, i);
+                b = builtin::array_get<u8>(_licm_repr_17, i);
                 break_if __for_0_body (if (if b >=u 32 -> i32 {
                     b != 34;
                 } else {
@@ -656,6 +668,7 @@ fn "core:json/write_escaped_string"(buf, s) {
                     0;
                 });
                 "core:prelude/string.wado/String::push_str_range_unchecked"(buf, s, run_start, i);
+                _licm_repr_17 = s.repr;
                 if b == 34 {
                     "core:prelude/string.wado/String::push_str"(buf, global:core:json::__const_obj_26);
                 } else if b == 92 {
@@ -668,7 +681,9 @@ fn "core:json/write_escaped_string"(buf, s) {
                     "core:prelude/string.wado/String::push_str"(buf, global:core:json::__const_obj_22);
                 } else {
                     "core:prelude/string.wado/String::push_str"(buf, __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }; "core:prelude/string.wado/String::push"(__local_7, 92); "core:prelude/string.wado/String::push"(__local_7, 117); __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 48, align: 2, sign_plus: 0, zero_pad: 1, width: 4, precision: -2, indent: 0, buf: __local_7 }; "core:prelude/primitive.wado/u64::fmt_base"(builtin::i64_extend_i32_u(b), __local_8, 16, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }); __local_7);
+                    _licm_repr_17 = s.repr;
                 }
+                _licm_repr_17 = s.repr;
                 run_start = i + 1;
             };
             i = i + 1;

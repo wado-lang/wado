@@ -348,6 +348,7 @@ impl Monomorphizer {
                             ResolvedType::TypePack {
                                 index,
                                 name: pack_name,
+                                mapped_elem,
                             } => {
                                 let &pack_type =
                                     substitution.get(&index).unwrap_or_else(|| {
@@ -355,10 +356,32 @@ impl Monomorphizer {
                                             "TypePack `..{pack_name}` (index {index}) not found in substitution map"
                                         )
                                     });
-                                if let Some(pack_elems) = type_table.as_tuple(pack_type) {
-                                    new_elems.extend_from_slice(&pack_elems);
-                                } else {
-                                    new_elems.push(pack_type);
+                                match mapped_elem {
+                                    // Mapped pack: substitute `elem` once per source
+                                    // element with the pack param bound to it —
+                                    // `[..Case<T, P>]` yields `Case<T, P_k>`, a
+                                    // pack-independent `..F::method()` repeats `R`.
+                                    Some(elem) => {
+                                        let pack_elems = type_table
+                                            .as_tuple(pack_type)
+                                            .unwrap_or_else(|| vec![pack_type]);
+                                        for pe in pack_elems {
+                                            let mut elem_substitution = substitution.clone();
+                                            elem_substitution.insert(index, pe);
+                                            new_elems.push(self.substitute_type(
+                                                elem,
+                                                &elem_substitution,
+                                                type_table,
+                                            ));
+                                        }
+                                    }
+                                    None => {
+                                        if let Some(pack_elems) = type_table.as_tuple(pack_type) {
+                                            new_elems.extend_from_slice(&pack_elems);
+                                        } else {
+                                            new_elems.push(pack_type);
+                                        }
+                                    }
                                 }
                             }
                             _ => {

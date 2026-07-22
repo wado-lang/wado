@@ -41,6 +41,7 @@
 use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
 use super::ownership::OwnedCalls;
+use super::stores::StoredParams;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
     FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm,
@@ -146,21 +147,30 @@ impl TirRefVisitor for AliasEdgeCollector {
     }
 }
 
-/// Local indices the fold moves rather than copies. Empty for a bodyless
-/// function or one whose control forms (closure / handler / resume) defeat the
-/// single-observation argument.
+/// Move-eligibility facts for the value-copy fold. Empty for a bodyless function
+/// or one whose control forms (closure / handler / resume) defeat the
+/// single-observation argument. `locals` are whole-local final-use moves;
+/// `place_spans` are the spans of individual field / whole-value materializations
+/// that alias out of a *dead* aggregate at a struct / tuple literal (place-level
+/// move, keyed by the materialized expression's span).
+#[derive(Default)]
+pub struct MoveEligible {
+    pub locals: IndexSet<u32>,
+    pub place_spans: IndexSet<crate::token::Span>,
+}
+
 pub fn compute_move_eligible(
     func: &TirFunction,
     oracle: &OwnedCalls,
     type_table: &TypeTable,
-    functions_with_stores: &FuncKeySet,
+    stored_params: &StoredParams,
     mut_receiver_methods: &FuncKeySet,
-) -> IndexSet<u32> {
+) -> MoveEligible {
     let Some(body) = &func.body else {
-        return IndexSet::default();
+        return MoveEligible::default();
     };
     if has_unsupported_form(body) {
-        return IndexSet::default();
+        return MoveEligible::default();
     }
 
     let mut all_locals: IndexSet<u32> = (0..func.local_count).collect();
@@ -171,17 +181,21 @@ pub fn compute_move_eligible(
         all_locals.insert(i);
     }
 
+    let param_locals: IndexSet<u32> = func.params.iter().map(|p| p.local_index).collect();
     let mut a = Analyzer {
-        functions_with_stores,
+        stored_params,
         mut_receiver_methods,
+        type_table,
+        param_locals,
         non_final: IndexSet::default(),
         aliases_live: IndexSet::default(),
-        borrow_escaped: IndexSet::default(),
+        borrow_escaped: IndexMap::default(),
         let_sources: IndexMap::default(),
         match_sources: Vec::new(),
         pending_mut_alias: Vec::new(),
         exits: Vec::new(),
         all_locals,
+        place_cands: Vec::new(),
     };
     let mut live = IndexSet::default();
     a.walk_block(body, &mut live, true);
@@ -257,10 +271,23 @@ pub fn compute_move_eligible(
         .filter(|idx| {
             !a.non_final.contains(idx)
                 && !a.aliases_live.contains(idx)
-                && !a.borrow_escaped.contains(idx)
+                && !a.borrow_escaped.contains_key(idx)
         })
         .collect();
-    owned
+
+    let place_spans: IndexSet<crate::token::Span> = a
+        .place_cands
+        .iter()
+        .filter(|(base, top, _)| {
+            fresh.contains(base) && !a.aliases_live.contains(base) && !a.place_escaped(*base, *top)
+        })
+        .map(|(_, _, span)| *span)
+        .collect();
+
+    MoveEligible {
+        locals: owned,
+        place_spans,
+    }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -697,15 +724,30 @@ struct Exit {
 }
 
 struct Analyzer<'a> {
-    functions_with_stores: &'a FuncKeySet,
+    /// Per-callee reference-storage: `stored_params(callee)` is the set of
+    /// parameter positions the callee may persist a reference to (position 0 is
+    /// the receiver). A `&`/`&mut` argument at a stored position escapes; at a
+    /// non-stored position it is a transient borrow.
+    stored_params: &'a StoredParams,
     mut_receiver_methods: &'a FuncKeySet,
+    type_table: &'a TypeTable,
+    /// Local indices that are the enclosing function's parameters. A functor
+    /// *parameter*'s declared `stores` is a sound upper bound of every value
+    /// bound to it — the frontend checks each call argument against the param's
+    /// `stores` — so an indirect call through a parameter may trust its type's
+    /// `stores`. A functor value from any other source (a `let`-bound closure, a
+    /// returned functor) is not so guaranteed and stays conservative.
+    param_locals: IndexSet<u32>,
     non_final: IndexSet<u32>,
     aliases_live: IndexSet<u32>,
     /// Locals a persisting reference is taken of — a `&`/`&mut` that is not a
     /// transient call argument, or is passed to a callee that may store it. Such
     /// a local may be observed through the reference after its move, so it stays
-    /// copied.
-    borrow_escaped: IndexSet<u32>,
+    /// copied. Field-sensitive: a borrow of `p.f` escapes only field `f`, so a
+    /// disjoint field of `p` still moves (a borrow of `p.f` provably cannot alias
+    /// `p.g`). A whole-local / imprecise borrow (`&p`, `&p[i]`, `&*p`) escapes
+    /// every field.
+    borrow_escaped: IndexMap<u32, FieldEscape>,
     let_sources: IndexMap<u32, Vec<TirExpr>>,
     match_sources: Vec<(u32, TirExpr)>,
     /// `(by-value arg root, storage the call mutates)` pairs, resolved after
@@ -714,6 +756,18 @@ struct Analyzer<'a> {
     pending_mut_alias: Vec<(u32, Vec<u32>)>,
     exits: Vec<Exit>,
     all_locals: IndexSet<u32>,
+    /// Provisional place-level move sites `(aggregate root, moved top-level field,
+    /// materialized span)` found at literals, filtered by the owned-storage
+    /// guards after the walk. `None` field = a whole-value materialization.
+    place_cands: Vec<(u32, Option<u32>, crate::token::Span)>,
+}
+
+/// Which fields of a local an escaped borrow reaches. `Whole` (a `&local` or an
+/// imprecise projection) covers every field; `Fields` names the exact top-level
+/// fields borrowed via clean projections.
+enum FieldEscape {
+    Whole,
+    Fields(IndexSet<u32>),
 }
 
 impl Analyzer<'_> {
@@ -729,6 +783,36 @@ impl Analyzer<'_> {
     /// borrow is not a value consumption, so it never marks the local `non_final`
     /// — a transient borrow before a later move is fine. Projection indices in
     /// `place` (`&arr[i]`) are ordinary value-reads. Returns the referent.
+    /// Record that a persisting borrow reaches `field` of `root` (`None` = the
+    /// whole local / an imprecise projection, escaping every field).
+    fn mark_escaped(&mut self, root: u32, field: Option<u32>) {
+        let entry = self
+            .borrow_escaped
+            .entry(root)
+            .or_insert_with(|| FieldEscape::Fields(IndexSet::default()));
+        match field {
+            None => *entry = FieldEscape::Whole,
+            Some(f) => {
+                if let FieldEscape::Fields(fs) = entry {
+                    fs.insert(f);
+                }
+            }
+        }
+    }
+
+    /// Whether a persisting borrow reaches the place `root.field` (`None` field =
+    /// a whole-value move, blocked by any escaped field).
+    fn place_escaped(&self, root: u32, field: Option<u32>) -> bool {
+        match self.borrow_escaped.get(&root) {
+            None => false,
+            Some(FieldEscape::Whole) => true,
+            Some(FieldEscape::Fields(fs)) => match field {
+                None => !fs.is_empty(),
+                Some(f) => fs.contains(&f),
+            },
+        }
+    }
+
     fn borrow_read(
         &mut self,
         place: &TirExpr,
@@ -756,13 +840,121 @@ impl Analyzer<'_> {
         }
     }
 
-    /// Process a call's argument. An explicit `&`/`&mut` argument is a transient
-    /// borrow unless the callee may store it (`functions_with_stores`), in which
-    /// case the referent escapes; every other argument is an ordinary value.
+    /// Whether the callee may persist a reference passed at position `pos`. An
+    /// absent callee (bodyless / not a project function) or one with no stored
+    /// positions stores nothing at `pos`.
+    fn callee_stores(&self, callee: &FunctionRef, pos: usize) -> bool {
+        self.stored_params
+            .get(&callee.module_source, &callee.name)
+            .is_some_and(|s| s.contains(&u32::try_from(pos).unwrap()))
+    }
+
+    /// The positions an indirect (functor) callee may store, from its functor
+    /// type's declared `stores` clause. `None` is conservative: every position
+    /// may be stored.
+    ///
+    /// Only a call through a functor *parameter* is trusted. A parameter's
+    /// declared `stores` is a sound upper bound of every value bound to it: the
+    /// frontend checks each call argument (closure / function) against the
+    /// parameter's `stores`, rejecting one that would store more. A functor
+    /// value from any other source (a `let`-bound closure whose synthesized type
+    /// records no `stores`, a returned functor) carries no such guarantee, so it
+    /// stays conservative and its `&`/`&mut` arguments keep their copies.
+    fn functor_stores(&self, callee: &TirExpr) -> Option<IndexSet<u32>> {
+        let TirExprKind::Local { index, .. } = &callee.kind else {
+            return None;
+        };
+        if !self.param_locals.contains(index) {
+            return None;
+        }
+        match self.type_table.get(callee.type_id) {
+            ResolvedType::Function {
+                stores,
+                return_type,
+                ..
+            } => {
+                if matches!(
+                    self.type_table.get(*return_type),
+                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                ) {
+                    return None;
+                }
+                Some(stores.iter().copied().collect())
+            }
+            _ => None,
+        }
+    }
+
+    /// An indirect-call argument at position `pos`: a `&`/`&mut` argument is a
+    /// transient borrow unless the functor may store that position (`None`
+    /// stores = conservative, every position escapes).
+    fn walk_indirect_arg(
+        &mut self,
+        arg: &TirExpr,
+        pos: usize,
+        stores: &Option<IndexSet<u32>>,
+        live: &mut IndexSet<u32>,
+        record: bool,
+    ) {
+        if let TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            expr: place,
+        } = &arg.kind
+        {
+            let referent = self.borrow_read(place, live, record);
+            let escapes = match stores {
+                Some(s) => s.contains(&u32::try_from(pos).unwrap()),
+                None => true,
+            };
+            if record
+                && escapes
+                && let Some(r) = referent
+            {
+                self.mark_escaped(r, borrow_top_field(place));
+            }
+        } else {
+            self.walk_expr(arg, live, record);
+        }
+    }
+
+    /// A method-call receiver at position 0. The auto-ref'd `&self` / `&mut self`
+    /// receiver is a transient borrow that escapes only if the callee stores its
+    /// receiver position — a method that stores only a value parameter (e.g.
+    /// `List::push`) does not retain `self`, so the receiver local stays
+    /// move-eligible. A by-value (consuming) receiver is an ordinary value read.
+    fn walk_method_receiver(
+        &mut self,
+        receiver: &TirExpr,
+        func: &FunctionRef,
+        live: &mut IndexSet<u32>,
+        record: bool,
+    ) {
+        match &receiver.kind {
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                expr: place,
+            } => {
+                let referent = self.borrow_read(place, live, record);
+                if record
+                    && let Some(r) = referent
+                    && self.callee_stores(func, 0)
+                {
+                    self.mark_escaped(r, borrow_top_field(place));
+                }
+            }
+            _ => self.walk_expr(receiver, live, record),
+        }
+    }
+
+    /// Process a call's argument at position `pos`. An explicit `&`/`&mut`
+    /// argument is a transient borrow unless the callee may store that position,
+    /// in which case the referent escapes; every other argument is an ordinary
+    /// value.
     fn walk_call_arg(
         &mut self,
         arg: &TirExpr,
         callee: Option<&FunctionRef>,
+        pos: usize,
         live: &mut IndexSet<u32>,
         record: bool,
     ) {
@@ -774,12 +966,9 @@ impl Analyzer<'_> {
             let referent = self.borrow_read(place, live, record);
             if record
                 && let Some(r) = referent
-                && callee.is_some_and(|c| {
-                    self.functions_with_stores
-                        .contains(&c.module_source, &c.name)
-                })
+                && callee.is_some_and(|c| self.callee_stores(c, pos))
             {
-                self.borrow_escaped.insert(r);
+                self.mark_escaped(r, borrow_top_field(place));
             }
         } else {
             self.walk_expr(arg, live, record);
@@ -894,6 +1083,156 @@ impl Analyzer<'_> {
         super::analyze::collect_pattern_bindings(pat, &mut binds);
         for b in binds {
             live.swap_remove(&b);
+        }
+    }
+
+    /// Record place-level move candidates at a struct/tuple literal. A direct
+    /// child that materializes a whole value / clean field of an aggregate root
+    /// `base` aliases it out of the aggregate instead of deep-copying, when:
+    ///
+    /// - `base` is dead after the literal (`!live_out.contains(base)`);
+    /// - the materialization sites of `base` are non-overlapping owners (one
+    ///   whole move, or field moves with distinct top-level fields); and
+    /// - no *other* use of `base` in the literal mutates or moves its storage
+    ///   (`conflict`). Read-only borrows (`&self` method, field read) and
+    ///   independent deep copies are harmless because `base` dies right after.
+    ///
+    /// The owned-storage guards (fresh / no live alias / no escaped borrow) are
+    /// applied later, once the fixpoint is known.
+    fn collect_place_moves(&mut self, children: &[&TirExpr], live_out: &IndexSet<u32>) {
+        let mut mats: IndexMap<u32, Vec<(Option<u32>, crate::token::Span)>> = IndexMap::default();
+        let mut conflict: IndexSet<u32> = IndexSet::default();
+        for child in children {
+            if let Some((base, top)) = as_materialize(child) {
+                mats.entry(base).or_default().push((top, child.span));
+            } else {
+                self.scan_place_uses(child, &mut conflict);
+            }
+        }
+        for (base, sites) in &mats {
+            if live_out.contains(base) || conflict.contains(base) {
+                continue;
+            }
+            let has_whole = sites.iter().any(|(top, _)| top.is_none());
+            if has_whole && sites.len() > 1 {
+                continue;
+            }
+            let mut tops: Vec<u32> = sites.iter().filter_map(|(t, _)| *t).collect();
+            tops.sort_unstable();
+            if tops.windows(2).any(|w| w[0] == w[1]) {
+                continue;
+            }
+            for (top, span) in sites {
+                self.place_cands.push((*base, *top, *span));
+            }
+        }
+    }
+
+    /// Classify occurrences of an aggregate root inside a non-materialized literal
+    /// child, marking `conflict` for any use that mutates or moves the aggregate's
+    /// storage. Read-only borrows and deep copies leave no live alias.
+    fn scan_place_uses(&self, expr: &TirExpr, conflict: &mut IndexSet<u32>) {
+        match &expr.kind {
+            TirExprKind::Local { index, .. } => {
+                conflict.insert(*index);
+            }
+            TirExprKind::FieldAccess { expr: inner, .. } => {
+                if clean_root(expr).is_none() {
+                    self.scan_place_uses(inner, conflict);
+                }
+            }
+            TirExprKind::MethodCall {
+                func,
+                receiver,
+                args,
+                ..
+            } => {
+                let (recv_place, recv_ref) = match &receiver.kind {
+                    TirExprKind::Unary {
+                        op: op @ (TirUnaryOp::Ref | TirUnaryOp::MutRef),
+                        expr,
+                    } => (expr.as_ref(), Some(*op)),
+                    _ => (receiver.as_ref(), None),
+                };
+                match clean_root(recv_place) {
+                    Some(base) => {
+                        let read_only = matches!(recv_ref, Some(TirUnaryOp::Ref))
+                            && !self
+                                .mut_receiver_methods
+                                .contains(&func.module_source, &func.name)
+                            && !self.callee_stores(func, 0);
+                        if !read_only {
+                            conflict.insert(base);
+                        }
+                    }
+                    None => self.scan_place_uses(recv_place, conflict),
+                }
+                for (pos, a) in args.iter().enumerate() {
+                    self.scan_call_arg_place_use(&a.expr, Some(func), pos + 1, conflict);
+                }
+            }
+            TirExprKind::Call { func, args, .. } => {
+                for (pos, a) in args.iter().enumerate() {
+                    self.scan_call_arg_place_use(&a.expr, Some(func), pos, conflict);
+                }
+            }
+            TirExprKind::CmRawCall { args, .. } => {
+                for (pos, a) in args.iter().enumerate() {
+                    self.scan_call_arg_place_use(a, None, pos, conflict);
+                }
+            }
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                expr: place,
+            } => match clean_root(place) {
+                Some(base) => {
+                    conflict.insert(base);
+                }
+                None => self.scan_place_uses(place, conflict),
+            },
+            _ => {
+                let mut kids: Vec<&TirExpr> = Vec::new();
+                collect_child_exprs(expr, &mut kids);
+                for k in kids {
+                    self.scan_place_uses(k, conflict);
+                }
+            }
+        }
+    }
+
+    /// A call/method argument at position `pos`: an explicit `&mut base` mutates
+    /// the aggregate; a `&base` to a callee that may store that position escapes;
+    /// both conflict. A transient `&base` to a non-storing position is a harmless
+    /// read-only borrow.
+    fn scan_call_arg_place_use(
+        &self,
+        arg: &TirExpr,
+        callee: Option<&FunctionRef>,
+        pos: usize,
+        conflict: &mut IndexSet<u32>,
+    ) {
+        match &arg.kind {
+            TirExprKind::Unary {
+                op: TirUnaryOp::MutRef,
+                expr: place,
+            } => match clean_root(place) {
+                Some(base) => {
+                    conflict.insert(base);
+                }
+                None => self.scan_place_uses(place, conflict),
+            },
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref,
+                expr: place,
+            } => match clean_root(place) {
+                Some(base) => {
+                    if callee.is_some_and(|c| self.callee_stores(c, pos)) {
+                        conflict.insert(base);
+                    }
+                }
+                None => self.scan_place_uses(place, conflict),
+            },
+            _ => self.scan_place_uses(arg, conflict),
         }
     }
 
@@ -1097,8 +1436,8 @@ impl Analyzer<'_> {
                     let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
                     self.mark_sibling_mut_aliases(&exprs, None);
                 }
-                for arg in args.iter().rev() {
-                    self.walk_call_arg(&arg.expr, Some(func), live, record);
+                for (pos, arg) in args.iter().enumerate().rev() {
+                    self.walk_call_arg(&arg.expr, Some(func), pos, live, record);
                 }
             }
             TirExprKind::MethodCall {
@@ -1116,15 +1455,26 @@ impl Analyzer<'_> {
                         .flatten();
                     self.mark_sibling_mut_aliases(&exprs, recv_mut_root);
                 }
-                for arg in args.iter().rev() {
-                    self.walk_call_arg(&arg.expr, Some(func), live, record);
+                for (pos, arg) in args.iter().enumerate().rev() {
+                    self.walk_call_arg(&arg.expr, Some(func), pos + 1, live, record);
                 }
-                self.walk_expr(receiver, live, record);
+                self.walk_method_receiver(receiver, func, live, record);
             }
             TirExprKind::CmRawCall { args, .. } => {
-                for arg in args.iter().rev() {
-                    self.walk_call_arg(arg, None, live, record);
+                for (pos, arg) in args.iter().enumerate().rev() {
+                    self.walk_call_arg(arg, None, pos, live, record);
                 }
+            }
+            TirExprKind::IndirectCall { callee, args } => {
+                let stores = self.functor_stores(callee);
+                if record {
+                    let exprs: Vec<&TirExpr> = args.iter().collect();
+                    self.mark_sibling_mut_aliases(&exprs, None);
+                }
+                for (pos, arg) in args.iter().enumerate().rev() {
+                    self.walk_indirect_arg(arg, pos, &stores, live, record);
+                }
+                self.walk_expr(callee, live, record);
             }
             // A `&`/`&mut` reached outside a call argument (a `let r = &x`, a
             // stored / returned reference) persists past the borrow, so the
@@ -1136,7 +1486,25 @@ impl Analyzer<'_> {
                 if let Some(r) = self.borrow_read(place, live, record)
                     && record
                 {
-                    self.borrow_escaped.insert(r);
+                    self.mark_escaped(r, borrow_top_field(place));
+                }
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                if record {
+                    let children: Vec<&TirExpr> = fields.iter().map(|f| &f.value).collect();
+                    self.collect_place_moves(&children, live);
+                }
+                for f in fields.iter().rev() {
+                    self.walk_expr(&f.value, live, record);
+                }
+            }
+            TirExprKind::TupleLiteral { elements } => {
+                if record {
+                    let children: Vec<&TirExpr> = elements.iter().collect();
+                    self.collect_place_moves(&children, live);
+                }
+                for e in elements.iter().rev() {
+                    self.walk_expr(e, live, record);
                 }
             }
             _ => {
@@ -1156,6 +1524,27 @@ impl Analyzer<'_> {
 /// construction, a literal, an arithmetic result — aliases nothing observable,
 /// so returns `None`. Errs toward `Some` for unmodelled projection-like nodes
 /// (over-flagging only keeps a copy).
+/// The top-level field a borrow place reaches off its root local: `Some(f)` for a
+/// clean projection `local.f…`, `None` for a whole-local (`local`) or an
+/// imprecise place (through an index / deref / cast / variant payload), which
+/// conservatively escapes every field.
+fn borrow_top_field(place: &TirExpr) -> Option<u32> {
+    match &place.kind {
+        TirExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            ..
+        } => {
+            if matches!(inner.kind, TirExprKind::Local { .. }) {
+                Some(*field_index)
+            } else {
+                borrow_top_field(inner)
+            }
+        }
+        _ => None,
+    }
+}
+
 pub(crate) fn alias_root(expr: &TirExpr) -> Option<u32> {
     match &expr.kind {
         TirExprKind::Local { index, .. } => Some(*index),
@@ -1164,6 +1553,48 @@ pub(crate) fn alias_root(expr: &TirExpr) -> Option<u32> {
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::Unary { expr: inner, .. } => alias_root(inner),
         TirExprKind::Index { expr: inner, .. } => alias_root(inner),
+        _ => None,
+    }
+}
+
+/// The root local of a pure struct-field projection chain (`base`, `base.f`,
+/// `base.f.g`), or `None` if the place goes through a deref, index, cast, or
+/// variant payload — those may alias storage other than a plain field, so they
+/// are never treated as a clean whole-field read/move.
+fn clean_root(expr: &TirExpr) -> Option<u32> {
+    match &expr.kind {
+        TirExprKind::Local { index, .. } => Some(*index),
+        TirExprKind::FieldAccess { expr: inner, .. } => clean_root(inner),
+        _ => None,
+    }
+}
+
+/// The field index applied directly to the root local of a clean projection
+/// chain (`base.top.f.g` → `top`); `None` if not such a chain.
+fn top_field_of(expr: &TirExpr) -> Option<u32> {
+    match &expr.kind {
+        TirExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            ..
+        } => {
+            if matches!(inner.kind, TirExprKind::Local { .. }) {
+                Some(*field_index)
+            } else {
+                top_field_of(inner)
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Classify a literal child as a whole-value / clean-field materialization of an
+/// aggregate root: `Some((base, None))` for a bare `Local`, `Some((base,
+/// Some(top)))` for a clean field projection off `top`.
+fn as_materialize(expr: &TirExpr) -> Option<(u32, Option<u32>)> {
+    match &expr.kind {
+        TirExprKind::Local { index, .. } => Some((*index, None)),
+        TirExprKind::FieldAccess { .. } => Some((clean_root(expr)?, Some(top_field_of(expr)?))),
         _ => None,
     }
 }

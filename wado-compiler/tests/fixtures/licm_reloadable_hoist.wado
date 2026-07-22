@@ -1,0 +1,32 @@
+// Reloadable field-load hoisting (LICM): a byte scan reads `s.repr` every
+// iteration while an escape branch clobbers a same-typed `&mut String` (`buf`).
+// Because a caller may alias `buf === s`, `s.repr` is not unconditionally
+// loop-invariant; LICM hoists it into the pre-header and reloads it right after
+// each clobbering statement, so the common (clobber-free) path drops the
+// per-byte struct load. O0/O2 differential execution guards soundness; the WIR
+// checks pin the hoist (`_licm_repr` read) and the reload (`= s.repr`).
+use { println, Stdout } from "core:cli";
+
+fn escape_quotes(buf: &mut String, s: &String) {
+    let n = s.len();
+    for let mut i = 0; i < n; i += 1 {
+        let b = s.get_byte_unchecked(i);
+        if b == 0x22 {
+            buf.push_str(&"[Q]");
+        }
+    }
+}
+
+export fn run() with Stdout {
+    let mut out: String = "";
+    let src: String = "a\"b\"c\"d";
+    escape_quotes(&mut out, &src);
+    println(`${out}`);
+}
+
+__DATA__
+{
+    "stdout": "[Q][Q][Q]\n",
+    "wir_expect:O2": ["_licm_repr", "= s.repr", "array_get<u8>(_licm_repr"],
+    "wir_not_expect:O2": ["array_get<u8>(s.repr"]
+}

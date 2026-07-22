@@ -24,6 +24,9 @@ pub(super) enum OnBoundTrait {
     Deserialize,
     Default,
     Reflect,
+    ReflectVariant,
+    ReflectEnum,
+    ReflectFlags,
     Ref,
     RefMut,
     Inspect,
@@ -636,6 +639,12 @@ impl TypeSystem {
                 of(CompilerItem::Default, OnBoundTrait::Default)
             } else if trait_name == items.trait_name(CompilerItem::Reflect) {
                 of(CompilerItem::Reflect, OnBoundTrait::Reflect)
+            } else if trait_name == items.trait_name(CompilerItem::ReflectVariant) {
+                of(CompilerItem::ReflectVariant, OnBoundTrait::ReflectVariant)
+            } else if trait_name == items.trait_name(CompilerItem::ReflectEnum) {
+                of(CompilerItem::ReflectEnum, OnBoundTrait::ReflectEnum)
+            } else if trait_name == items.trait_name(CompilerItem::ReflectFlags) {
+                of(CompilerItem::ReflectFlags, OnBoundTrait::ReflectFlags)
             } else if trait_name == items.trait_name(CompilerItem::Ref) {
                 of(CompilerItem::Ref, OnBoundTrait::Ref)
             } else if trait_name == items.trait_name(CompilerItem::RefMut) {
@@ -1011,6 +1020,48 @@ impl TypeSystem {
             return true;
         }
 
+        // `ReflectVariant` likewise: every variant is eligible.
+        if let ResolvedType::Variant {
+            name,
+            module_source,
+            ..
+        } = &resolved
+            && on_bound == Some(OnBoundTrait::ReflectVariant)
+        {
+            self.type_table
+                .borrow_mut()
+                .record_bound_driven_synth_request(name, module_source, trait_name);
+            return true;
+        }
+
+        // `ReflectEnum` likewise: every enum is eligible.
+        if let ResolvedType::Enum {
+            name,
+            module_source,
+            ..
+        } = &resolved
+            && on_bound == Some(OnBoundTrait::ReflectEnum)
+        {
+            self.type_table
+                .borrow_mut()
+                .record_bound_driven_synth_request(name, module_source, trait_name);
+            return true;
+        }
+
+        // `ReflectFlags` likewise: every flags type is eligible.
+        if let ResolvedType::Flags {
+            name,
+            module_source,
+            ..
+        } = &resolved
+            && on_bound == Some(OnBoundTrait::ReflectFlags)
+        {
+            self.type_table
+                .borrow_mut()
+                .record_bound_driven_synth_request(name, module_source, trait_name);
+            return true;
+        }
+
         // Get the type name and type args for looking up implementations
         let (type_name, type_args) = match &resolved {
             ResolvedType::Struct { name, .. }
@@ -1203,7 +1254,8 @@ impl TypeSystem {
                     .find(|tp| tp.name == impl_type_name);
                 if let Some(param) = matching_param {
                     let bounds_satisfied = param.bounds.iter().all(|bound| {
-                        self.find_trait_impl_for_type(ctx, scope, type_name, &bound.name)
+                        self.synthesized_reflect_bound_holds(scope, type_name, &bound.name)
+                            || self.find_trait_impl_for_type(ctx, scope, type_name, &bound.name)
                     });
                     if bounds_satisfied {
                         return true;
@@ -1213,6 +1265,52 @@ impl TypeSystem {
         }
 
         false
+    }
+
+    /// Whether `bound_name` is a synthesized reflection trait the subject type
+    /// is eligible for by kind (`Reflect` on a struct, `ReflectVariant` on a
+    /// variant, …). These have no impl blocks, so the name-based search misses
+    /// them; a hit records the bound-driven synth request.
+    fn synthesized_reflect_bound_holds(
+        &self,
+        scope: &TypeLookup,
+        type_name: &str,
+        bound_name: &str,
+    ) -> bool {
+        let Some(on_bound) = self.classify_on_bound_trait(scope, bound_name) else {
+            return false;
+        };
+        let subject = match on_bound {
+            OnBoundTrait::Reflect => scope
+                .struct_fields(type_name)
+                .map(|info| info.module_source.clone()),
+            OnBoundTrait::ReflectVariant => scope
+                .variant_case(type_name)
+                .map(|info| info.module_source.clone()),
+            OnBoundTrait::ReflectEnum => scope
+                .enum_case(type_name)
+                .map(|info| info.module_source.clone()),
+            OnBoundTrait::ReflectFlags => scope
+                .flags_case(type_name)
+                .map(|info| info.module_source.clone()),
+            OnBoundTrait::Eq
+            | OnBoundTrait::Ord
+            | OnBoundTrait::Serialize
+            | OnBoundTrait::Deserialize
+            | OnBoundTrait::Default
+            | OnBoundTrait::Ref
+            | OnBoundTrait::RefMut
+            | OnBoundTrait::Inspect
+            | OnBoundTrait::InspectAlt
+            | OnBoundTrait::DisplayAlt => None,
+        };
+        let Some(module_source) = subject else {
+            return false;
+        };
+        self.type_table
+            .borrow_mut()
+            .record_bound_driven_synth_request(type_name, &module_source, bound_name);
+        true
     }
 }
 

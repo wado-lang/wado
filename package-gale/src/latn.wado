@@ -167,7 +167,7 @@ fn refs_rule_in_alts(
     return false;
 }
 
-fn find_lexer_rule(all_rules: &List<LexerRule>, name: &String) -> Option<&LexerRule> {
+fn find_lexer_rule(all_rules: &List<LexerRule>, name: &String) -> Option<&LexerRule> with stores[all_rules] {
     for let rule of all_rules {
         if rule.name == *name {
             return Option::<&LexerRule>::Some(rule);

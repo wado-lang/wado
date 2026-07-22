@@ -1,0 +1,22 @@
+// Forwarding a reference parameter to a storing callee makes the forwarder store it too.
+
+struct Data {
+    v: i32,
+}
+
+struct Box {
+    d: &Data,
+}
+
+fn keep(d: &Data) -> Box with stores[d] {
+    return Box { d };
+}
+
+fn forward(d: &Data) -> Box {
+    return keep(d);
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "stores[d]"}

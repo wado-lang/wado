@@ -1,0 +1,36 @@
+// ReflectFlags concrete metadata (WEP 2026-06-13 §3c): `bit` / `bits()`
+// normalize to u64 regardless of the representation width, so one generic
+// derivation covers every flags type. `from_bits` rejects unknown bits with
+// `None` (CM semantics: unknown flag bits are an error).
+
+flags Perms {
+    Read,
+    Write,
+    Execute,
+}
+
+test "type_name and bit_meta describe the flags" {
+    assert ReflectFlags::<Perms>::type_name() == "Perms";
+    let metas = ReflectFlags::<Perms>::bit_meta();
+    assert metas.len() == 3;
+    assert metas[0].name == "Read";
+    assert metas[0].bit == 1;
+    assert metas[1].bit == 2;
+    assert metas[2].name == "Execute";
+    assert metas[2].bit == 4;
+}
+
+test "bits normalizes to u64" {
+    let rw = Perms::Read | Perms::Write;
+    assert ReflectFlags::<Perms>::bits(&rw) == 3;
+}
+
+test "from_bits round-trips and rejects unknown bits" {
+    let v = ReflectFlags::<Perms>::from_bits(5);
+    assert v matches { Some(p) && p as u32 == 5 };
+    assert ReflectFlags::<Perms>::from_bits(8) matches { None };
+    assert ReflectFlags::<Perms>::from_bits(0) matches { Some(z) && z as u32 == 0 };
+}
+
+__DATA__
+{"test": {}}

@@ -409,10 +409,19 @@ pub enum ResolvedType {
         index: u32,
     },
     /// Type pack parameter (e.g., `..T` in `fn foo<..T>(x: [..T])`)
-    /// Used inside tuples before monomorphization; expanded to concrete types during substitution
+    /// Used inside tuples before monomorphization; expanded to concrete types during substitution.
+    ///
+    /// `mapped_elem` distinguishes an identity pack from a pack-map:
+    /// - `None` — `..F`: each element is the pack's own element `F_i`.
+    /// - `Some(R)` — a mapped pack: element `i` is `R[F := F_i]`. The pack
+    ///   param may recur inside `R` as a scalar `TypeParam` placeholder
+    ///   (constructor map, e.g. `[..Case<T, P>]` for `cases()`); a
+    ///   pack-independent `R` (`..F::method()`) degenerates to `R` repeated
+    ///   `|F|` times.
     TypePack {
         name: String,
         index: u32,
+        mapped_elem: Option<TypeId>,
     },
     /// Generic struct instantiation (e.g., `Box<i32>`)
     /// Used to track instantiation sites before monomorphization
@@ -1770,7 +1779,23 @@ impl TypeTable {
 
     /// Create a type pack parameter (e.g., `..T` in `fn foo<..T>(x: [..T])`)
     pub fn make_type_pack(&mut self, name: String, index: u32) -> TypeId {
-        self.intern(ResolvedType::TypePack { name, index })
+        self.intern(ResolvedType::TypePack {
+            name,
+            index,
+            mapped_elem: None,
+        })
+    }
+
+    /// Create a mapped type pack: element `i` is `elem[F := F_i]`, where the
+    /// pack param may recur in `elem` as a scalar `TypeParam` placeholder.
+    /// Drives its arity from pack `(name, index)`. See
+    /// [`ResolvedType::TypePack`].
+    pub fn make_mapped_type_pack(&mut self, name: String, index: u32, elem: TypeId) -> TypeId {
+        self.intern(ResolvedType::TypePack {
+            name,
+            index,
+            mapped_elem: Some(elem),
+        })
     }
 
     /// Create a simple associated type projection `T::X` with no bounds or bindings.
@@ -2058,12 +2083,38 @@ impl TypeTable {
                     let mut new_elems: Vec<TypeId> = Vec::new();
                     for &e in &type_args {
                         match self.get(e).clone() {
-                            ResolvedType::TypePack { index, .. } => {
+                            ResolvedType::TypePack {
+                                index, mapped_elem, ..
+                            } => {
                                 if let Some(&pack_type) = substitution.get(&index) {
-                                    if let Some(pack_elems) = self.as_tuple(pack_type) {
-                                        new_elems.extend_from_slice(&pack_elems);
-                                    } else {
-                                        new_elems.push(pack_type);
+                                    match mapped_elem {
+                                        // Mapped pack: substitute the element
+                                        // once per source pack element, binding
+                                        // the pack param to that element — a
+                                        // constructor map `[..Case<T, P>]`
+                                        // yields `Case<T, P_k>` at position k;
+                                        // a pack-independent `..F::method()`
+                                        // repeats its return type `|F|` times.
+                                        Some(elem) => {
+                                            let pack_elems = self
+                                                .as_tuple(pack_type)
+                                                .unwrap_or_else(|| vec![pack_type]);
+                                            for pe in pack_elems {
+                                                let mut elem_substitution = substitution.clone();
+                                                elem_substitution.insert(index, pe);
+                                                new_elems.push(self.substitute_type_params(
+                                                    elem,
+                                                    &elem_substitution,
+                                                ));
+                                            }
+                                        }
+                                        None => {
+                                            if let Some(pack_elems) = self.as_tuple(pack_type) {
+                                                new_elems.extend_from_slice(&pack_elems);
+                                            } else {
+                                                new_elems.push(pack_type);
+                                            }
+                                        }
                                     }
                                 } else {
                                     new_elems.push(e);
@@ -3758,6 +3809,11 @@ pub struct TirTypeParam {
     /// Default type if specified (e.g., `Effects = []`)
     pub default: Option<TypeId>,
     pub index: u32,
+    /// For a pack param bound by projection — `impl<T: Reflect<Fields = [..F]>,
+    /// ..F: Trait>` — records `(source param index, assoc type name)`. The pack
+    /// is not supplied by the caller; monomorphization derives it by resolving
+    /// the source param's associated type (e.g. `T::Fields`) to its tuple.
+    pub projected_from: Option<(u32, String)>,
 }
 
 /// Substitution-key base for method-level type params: past the highest

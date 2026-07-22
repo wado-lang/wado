@@ -1,0 +1,23 @@
+// Regression: a spread element in a tuple-annotated `let` initializer
+// (`let ys: [i32, String] = [..pair]`) ICE'd — the tuple-annotation fast path
+// resolved each element directly, hitting a bare `Spread` expression that only
+// `resolve_tuple_literal` is meant to expand. The fast path now defers a
+// spread-containing literal to the general path.
+
+test "spread element in a tuple-annotated let" {
+    let pair: [i32, String] = [1, "a"];
+    let ys: [i32, String] = [..pair];
+    assert ys.0 == 1;
+    assert ys.1 == "a";
+}
+
+test "spread with leading element in a tuple-annotated let" {
+    let rest: [i32, bool] = [2, true];
+    let ys: [String, i32, bool] = ["head", ..rest];
+    assert ys.0 == "head";
+    assert ys.1 == 2;
+    assert ys.2 == true;
+}
+
+__DATA__
+{"test": {}}

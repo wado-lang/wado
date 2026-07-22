@@ -140,6 +140,22 @@ struct Formatter {
     pub buf: &mut String,
 }
 
+pub struct VariantCaseMeta {
+    pub name: String,
+    pub discriminant: i32,
+    pub is_unit: bool,
+}
+
+pub struct EnumCaseMeta {
+    pub name: String,
+    pub discriminant: i32,
+}
+
+pub struct FlagBitMeta {
+    pub name: String,
+    pub bit: u64,
+}
+
 struct ConvertError {
     pub message: String,
 }
@@ -5928,19 +5944,21 @@ pub fn char::encode_utf8(self: Box<char>) -> List<u8> {
 
 fn "char^LenientFromStr::from_str_lenient"(s: &String) -> Result<char, LenientParseError> {
     let mut iter: StrCharIter = s.String::chars();
-    let first: char = match iter."StrCharIter^Iterator::next"() {
-        Some(c) => c,
-        None => {
+    let __match_3: Option<char> = iter."StrCharIter^Iterator::next"();
+    match __match_3 {
+        Some(first) => {
+            if match iter."StrCharIter^Iterator::next"() {
+                Some(_) => true,
+                _ => false,
+            } {
+                return Result<char, LenientParseError>::Err("core::prelude/traits.wado::LenientParseError::new"(String { repr: packed"expected exactly one character, got more", used: 40 }));
+            }
+            return Result<char, LenientParseError>::Ok(first);
+        },
+        _ => {
             return Result<char, LenientParseError>::Err("core::prelude/traits.wado::LenientParseError::new"(String { repr: packed"expected exactly one character, got none", used: 40 }));
         },
     };
-    if match iter."StrCharIter^Iterator::next"() {
-        Some(_) => true,
-        _ => false,
-    } {
-        return Result<char, LenientParseError>::Err("core::prelude/traits.wado::LenientParseError::new"(String { repr: packed"expected exactly one character, got more", used: 40 }));
-    }
-    return Result<char, LenientParseError>::Ok(first);
 }
 
 pub fn i8::max(a: i8, b: i8) -> i8 {
@@ -10969,9 +10987,24 @@ pub fn String::replacen(self: &String, from: String, to: String, count: i32) -> 
 }
 
 pub fn String::from_utf8_slice(bytes: ArraySlice<u8>) -> Result<String, String> {
-    if !"core::prelude/string.wado::String::is_valid_utf8"("mess_dirty.wado::$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(bytes)) {
-        core::builtin::cold_path();
-        return Result<String, String>::Err(String { repr: packed"invalid UTF-8", used: 13 });
+    let len: i32 = bytes."ArraySlice<u8>::len"();
+    let mut i: i32 = 0;
+    loop {
+        if !(i < len) {
+            break;
+        }
+        let scalar: Utf8Scalar = "core::prelude/string.wado::decode_utf8_scalar"("mess_dirty.wado::$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(bytes), i, len);
+        if !scalar.valid {
+            core::builtin::cold_path();
+            return Result<String, String>::Err(__tmpl: {
+                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(38);
+                __r.String::push_str(&String { repr: packed"invalid UTF-8 at byte ", used: 22 });
+                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: i }."i32^Display::fmt"(&mut __f);
+                break __tmpl: __r;
+            });
+        }
+        i = (i + scalar.advance);
     }
     return Result<String, String>::Ok(String { repr: bytes."ArraySlice<u8>::to_array"() as Array<u8>, used: bytes."ArraySlice<u8>::len"() });
 }
@@ -14806,6 +14839,39 @@ pub fn "Ordering^Inspect::inspect"(self: Box<core:prelude/traits.wado/Ordering>,
     };
 }
 
+pub fn "VariantCaseMeta^Inspect::inspect"(self: &VariantCaseMeta, f: &mut Formatter) {
+    f.Formatter::write_str(&String { repr: packed"VariantCaseMeta { ", used: 18 });
+    f.Formatter::write_str(&String { repr: packed"name: ", used: 6 });
+    self.name."String^Inspect::inspect"(f);
+    f.Formatter::write_str(&String { repr: packed", ", used: 2 });
+    f.Formatter::write_str(&String { repr: packed"discriminant: ", used: 14 });
+    Box<i32> { value: self.discriminant }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str(&String { repr: packed", ", used: 2 });
+    f.Formatter::write_str(&String { repr: packed"is_unit: ", used: 9 });
+    Box<bool> { value: self.is_unit }."bool^Inspect::inspect"(f);
+    f.Formatter::write_str(&String { repr: packed" }", used: 2 });
+}
+
+pub fn "EnumCaseMeta^Inspect::inspect"(self: &EnumCaseMeta, f: &mut Formatter) {
+    f.Formatter::write_str(&String { repr: packed"EnumCaseMeta { ", used: 15 });
+    f.Formatter::write_str(&String { repr: packed"name: ", used: 6 });
+    self.name."String^Inspect::inspect"(f);
+    f.Formatter::write_str(&String { repr: packed", ", used: 2 });
+    f.Formatter::write_str(&String { repr: packed"discriminant: ", used: 14 });
+    Box<i32> { value: self.discriminant }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str(&String { repr: packed" }", used: 2 });
+}
+
+pub fn "FlagBitMeta^Inspect::inspect"(self: &FlagBitMeta, f: &mut Formatter) {
+    f.Formatter::write_str(&String { repr: packed"FlagBitMeta { ", used: 14 });
+    f.Formatter::write_str(&String { repr: packed"name: ", used: 6 });
+    self.name."String^Inspect::inspect"(f);
+    f.Formatter::write_str(&String { repr: packed", ", used: 2 });
+    f.Formatter::write_str(&String { repr: packed"bit: ", used: 5 });
+    Box<u64> { value: self.bit }."u64^Inspect::inspect"(f);
+    f.Formatter::write_str(&String { repr: packed" }", used: 2 });
+}
+
 pub fn "ConvertError^Inspect::inspect"(self: &ConvertError, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"ConvertError { ", used: 15 });
     f.Formatter::write_str(&String { repr: packed"message: ", used: 9 });
@@ -14885,6 +14951,49 @@ pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Ite
 
 pub fn "Ordering^InspectAlt::inspect_alt"(self: Box<core:prelude/traits.wado/Ordering>, f: &mut Formatter) {
     self."Ordering^Inspect::inspect"(f);
+}
+
+pub fn "VariantCaseMeta^InspectAlt::inspect_alt"(self: &VariantCaseMeta, f: &mut Formatter) {
+    f.Formatter::open_brace(String { repr: packed"VariantCaseMeta {", used: 17 });
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&String { repr: packed"name: ", used: 6 });
+    self.name."String^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&String { repr: packed",", used: 1 });
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&String { repr: packed"discriminant: ", used: 14 });
+    Box<i32> { value: self.discriminant }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&String { repr: packed",", used: 1 });
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&String { repr: packed"is_unit: ", used: 9 });
+    Box<bool> { value: self.is_unit }."bool^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&String { repr: packed",", used: 1 });
+    f.Formatter::close_brace(String { repr: packed"}", used: 1 });
+}
+
+pub fn "EnumCaseMeta^InspectAlt::inspect_alt"(self: &EnumCaseMeta, f: &mut Formatter) {
+    f.Formatter::open_brace(String { repr: packed"EnumCaseMeta {", used: 14 });
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&String { repr: packed"name: ", used: 6 });
+    self.name."String^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&String { repr: packed",", used: 1 });
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&String { repr: packed"discriminant: ", used: 14 });
+    Box<i32> { value: self.discriminant }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&String { repr: packed",", used: 1 });
+    f.Formatter::close_brace(String { repr: packed"}", used: 1 });
+}
+
+pub fn "FlagBitMeta^InspectAlt::inspect_alt"(self: &FlagBitMeta, f: &mut Formatter) {
+    f.Formatter::open_brace(String { repr: packed"FlagBitMeta {", used: 13 });
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&String { repr: packed"name: ", used: 6 });
+    self.name."String^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&String { repr: packed",", used: 1 });
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&String { repr: packed"bit: ", used: 5 });
+    Box<u64> { value: self.bit }."u64^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&String { repr: packed",", used: 1 });
+    f.Formatter::close_brace(String { repr: packed"}", used: 1 });
 }
 
 pub fn "ConvertError^InspectAlt::inspect_alt"(self: &ConvertError, f: &mut Formatter) {
@@ -15108,10 +15217,6 @@ pub fn "&&Array<u8>^Inspect::inspect"(self: &&&Array<u8>, f: &mut Formatter) {
     *inner."Array<u8>^Inspect::inspect"(f);
 }
 
-pub fn "ArraySlice<u8>::len"(self: &ArraySlice<u8>) -> i32 {
-    return (self.end - self.start);
-}
-
 pub fn "ArraySlice<u8>::to_array"(self: &ArraySlice<u8>) -> Array<u8> {
     let len: i32 = (self.end - self.start);
     let mut out: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(core::rt::i32_max(len, 0));
@@ -15119,6 +15224,10 @@ pub fn "ArraySlice<u8>::to_array"(self: &ArraySlice<u8>) -> Array<u8> {
         "core::builtin::core/builtin/array_copy<u8>"(&mut out, 0, self.repr, self.start, len);
     }
     return out;
+}
+
+pub fn "ArraySlice<u8>::len"(self: &ArraySlice<u8>) -> i32 {
+    return (self.end - self.start);
 }
 
 fn "core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"(self: &StrCharIter) -> StrCharIter {

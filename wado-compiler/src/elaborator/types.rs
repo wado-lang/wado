@@ -44,7 +44,9 @@ pub(crate) struct VariantCaseData {
     /// Payload type for this case. Unit variants have `()` (unit type) payload.
     pub(crate) payload: TypeId,
     /// `AstId` of the case declaration (`VariantCase::id`) in the owning module.
-    pub(super) ast_id: AstId,
+    /// `pub(crate)` so the Semantics-based stores checker can key a
+    /// constructor call's return provenance by this id.
+    pub(crate) ast_id: AstId,
 }
 
 /// Variant info: module source, type parameters, and cases
@@ -328,6 +330,13 @@ pub enum TypeError {
     /// Function/method/closure with return type but no return statement
     MissingReturn {
         return_type: String,
+        span: Span,
+    },
+
+    /// The else block of a `let ... else` does not diverge. It must exit the
+    /// enclosing control flow (`return`, `break`, `continue`, `panic`, …) on
+    /// every path, since it only runs when the refutable pattern fails to bind.
+    LetElseMustDiverge {
         span: Span,
     },
 
@@ -790,6 +799,13 @@ impl TypeError {
             TypeError::MissingReturn { return_type, span } => (
                 Code::TypeMismatch,
                 format!("function with return type '{return_type}' must use explicit `return`"),
+                *span,
+            ),
+            TypeError::LetElseMustDiverge { span } => (
+                Code::TypeMismatch,
+                "the `else` block of a `let ... else` must diverge (`return`, `break`, \
+                 `continue`, `panic`, …)"
+                    .to_string(),
                 *span,
             ),
             TypeError::OrphanViolation {

@@ -1,0 +1,13 @@
+// Test: an irrefutable pattern in `let ... else` is rejected — the else
+// block can never run, so a plain `let` should be used instead.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let x = 42 else {
+        return;
+    };
+    println(`${x}`);
+}
+
+__DATA__
+{"compile_error": "irrefutable"}

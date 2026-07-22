@@ -1245,6 +1245,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // sees the concrete default (and records any bound-driven synthesis).
         self.fill_defaulted_fn_type_args(&callee, &mut type_args);
 
+        // Group flat turbofish args into the variadic pack so a pack slot holds
+        // one tuple — the per-param shape inference already produces.
+        self.group_variadic_type_args(&callee, &mut type_args);
+
         // Check trait bounds on function type arguments
         if !type_args.is_empty() {
             self.check_function_type_arg_bounds(&callee, &type_args, call.span);
@@ -2303,6 +2307,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.tysys.type_table.borrow().get(ty),
             ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
         )
+    }
+
+    /// Group flat turbofish type args into a variadic pack. `ids::<i32, bool>()`
+    /// resolves two args for a single `..T`, but the pack slot must hold one
+    /// tuple `[i32, bool]` — the per-param shape inference produces. A no-op when
+    /// the call has no pack or the args are already in per-param form (arg count
+    /// ≤ param count), so inference results and single-arg packs pass through.
+    fn group_variadic_type_args(
+        &mut self,
+        callee: &super::callee::CalleeRef,
+        type_args: &mut Vec<TypeId>,
+    ) {
+        let real: Vec<ast::GenericParam> = self
+            .lookup_function_type_params(callee)
+            .into_iter()
+            .filter(|p| !p.is_effect)
+            .collect();
+        let Some(pack_pos) = real.iter().position(|p| p.is_pack) else {
+            return;
+        };
+        if type_args.len() <= real.len() {
+            return;
+        }
+        // Single pack (guaranteed by the parser): it absorbs every arg past the
+        // non-pack params.
+        let non_pack = real.len() - 1;
+        let pack_count = type_args.len() - non_pack;
+        let pack_args: Vec<TypeId> = type_args.drain(pack_pos..pack_pos + pack_count).collect();
+        let tuple = self.tysys.type_table.borrow_mut().make_tuple(pack_args);
+        type_args.insert(pack_pos, tuple);
     }
 
     /// Look up a generic function (current or imported) and produce a temporary

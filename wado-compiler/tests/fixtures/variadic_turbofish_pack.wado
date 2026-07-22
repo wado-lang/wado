@@ -1,0 +1,42 @@
+// A variadic pack supplied by explicit turbofish must absorb every type arg
+// past the non-pack params. Previously `ids::<i32, bool>()` bound `..T` to just
+// the first arg (`[i32]`), silently dropping the rest — inference produces the
+// grouped pack tuple, but the turbofish path resolved args flatly.
+
+fn ids<..T: Default>() -> [..T] {
+    return [..T::default()];
+}
+
+fn first<A: Default, ..T: Default>() -> A {
+    return A::default();
+}
+
+fn arity<..T: Default>() -> i32 {
+    let xs: [..T] = [..T::default()];
+    return xs.len();
+}
+
+test "turbofish binds the whole variadic pack" {
+    let two: [i32, bool] = ids::<i32, bool>();
+    assert two.0 == 0;
+    assert two.1 == false;
+
+    let three: [i32, bool, i32] = ids::<i32, bool, i32>();
+    assert three.2 == 0;
+
+    let one: [i32] = ids::<i32>();
+    assert one.0 == 0;
+}
+
+test "leading non-pack param, then the pack absorbs the rest" {
+    let f: i32 = first::<i32, bool, String>();
+    assert f == 0;
+}
+
+test "turbofish pack arity is the number of args" {
+    assert arity::<i32, bool, bool>() == 3;
+    assert arity::<i32>() == 1;
+}
+
+__DATA__
+{"test": {}}

@@ -140,6 +140,19 @@ pub fn shallow_copy_helper_name(deep_name: &str) -> String {
     format!("{deep_name}$shallow")
 }
 
+/// The name of the synthesized `Case::<V, P>::extract` helper for a variant
+/// and one of its payload types, both identified by their structural mangles
+/// (same identity discipline as [`value_copy_helper_name`]). Lowering rewrites
+/// `builtin::variant_case_extract::<V, P>` calls to it (WEP 2026-06-13 §3e).
+pub fn case_extract_helper_name(mangled_variant: &str, mangled_payload: &str) -> String {
+    format!("$case_extract${mangled_variant}${mangled_payload}")
+}
+
+/// The `Case::<V, P>::construct` sibling of [`case_extract_helper_name`].
+pub fn case_construct_helper_name(mangled_variant: &str, mangled_payload: &str) -> String {
+    format!("$case_construct${mangled_variant}${mangled_payload}")
+}
+
 /// Field name of the discriminant slot on a variant's base struct (the tag
 /// every case subtype inherits). Single source of truth for the WIR variant
 /// GC representation: the builder (`wir_build/types.rs`, `pattern_match.rs`,

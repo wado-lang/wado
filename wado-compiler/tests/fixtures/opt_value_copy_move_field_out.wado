@@ -1,0 +1,36 @@
+// Distinct field projections of a dead aggregate move each field's storage out instead of deep-copying (all -O levels).
+
+use { println, Stdout } from "core:cli";
+
+struct Cols { a: List<i32>, b: List<i32> }
+struct Out { x: List<i32>, y: List<i32> }
+
+fn split(c: Cols) -> Out {
+    return Out { x: c.a, y: c.b };
+}
+
+fn make(n: i32) -> Cols {
+    let mut a: List<i32> = [];
+    let mut b: List<i32> = [];
+    let mut i = 0;
+    loop {
+        if i >= n { break; }
+        a.push(i);
+        b.push(i * 2);
+        i = i + 1;
+    }
+    return Cols { a, b };
+}
+
+export fn run() with Stdout {
+    let mut o = split(make(4));
+    o.x.push(99);
+    println(`${o.x.len()} ${o.y.len()} ${o.y[3]}`);
+}
+
+__DATA__
+{
+    "stdout": "5 4 6\n",
+    "wir_not_expect:O0": ["$value_copy$core:prelude/list.wado/List<i32>"],
+    "wir_not_expect:O2": ["$value_copy$core:prelude/list.wado/List<i32>"]
+}

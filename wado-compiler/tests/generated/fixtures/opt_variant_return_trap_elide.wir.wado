@@ -696,6 +696,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let s_38: ref "core:prelude/string.wado//String";
     let s_52: ref "core:prelude/string.wado//String";
     let _licm_arith_53: bool;
+    let _licm_buf_54: ref "core:prelude/string.wado//String";
     limit = __inline_Formatter__resolved_seq_limit_0: block -> i32 {
         if f.precision == -2 {
             break __inline_Formatter__resolved_seq_limit_0: 256;
@@ -708,6 +709,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 };
     __iter_5 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self_15.repr, used: self_15.used, byte_index: 0 };
     _licm_arith_53 = limit >= 0;
+    _licm_buf_54 = f.buf;
     b64: block {
         l65: loop {
             let __sroa___match_10_discriminant: i32;
@@ -723,34 +725,35 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
                     break b64;
                 }
                 if __sroa___match_10_payload_0 == 34 {
-                    "core:prelude/string.wado/String::push"(f.buf, 92);
-                    "core:prelude/string.wado/String::push"(f.buf, 34);
+                    "core:prelude/string.wado/String::push"(_licm_buf_54, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_54, 34);
                 } else if __sroa___match_10_payload_0 == 92 {
-                    "core:prelude/string.wado/String::push"(f.buf, 92);
-                    "core:prelude/string.wado/String::push"(f.buf, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_54, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_54, 92);
                 } else if __sroa___match_10_payload_0 == 10 {
-                    "core:prelude/string.wado/String::push"(f.buf, 92);
-                    "core:prelude/string.wado/String::push"(f.buf, 110);
+                    "core:prelude/string.wado/String::push"(_licm_buf_54, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_54, 110);
                 } else if __sroa___match_10_payload_0 == 13 {
-                    "core:prelude/string.wado/String::push"(f.buf, 92);
-                    "core:prelude/string.wado/String::push"(f.buf, 114);
+                    "core:prelude/string.wado/String::push"(_licm_buf_54, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_54, 114);
                 } else if __sroa___match_10_payload_0 == 9 {
-                    "core:prelude/string.wado/String::push"(f.buf, 92);
-                    "core:prelude/string.wado/String::push"(f.buf, 116);
+                    "core:prelude/string.wado/String::push"(_licm_buf_54, 92);
+                    "core:prelude/string.wado/String::push"(_licm_buf_54, 116);
                 } else if (if __sroa___match_10_payload_0 < 32 -> i32 {
                     1;
                 } else {
                     __sroa___match_10_payload_0 == 127;
                 }) {
                     s_38 = global:core:prelude/format.wado::__const_obj_5;
-                    "core:prelude/string.wado/String::push_str"(f.buf, s_38);
+                    "core:prelude/string.wado/String::push_str"(_licm_buf_54, s_38);
                     __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
                     __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 };
                     "core:prelude/primitive.wado/u64::fmt_base"(builtin::i64_extend_i32_u(__sroa___match_10_payload_0), __local_9, 16, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 });
-                    "core:prelude/string.wado/String::push_str"(f.buf, __local_8);
-                    "core:prelude/string.wado/String::push"(f.buf, 125);
+                    _licm_buf_54 = f.buf;
+                    "core:prelude/string.wado/String::push_str"(_licm_buf_54, __local_8);
+                    "core:prelude/string.wado/String::push"(_licm_buf_54, 125);
                 } else {
-                    "core:prelude/string.wado/String::push"(f.buf, __sroa___match_10_payload_0);
+                    "core:prelude/string.wado/String::push"(_licm_buf_54, __sroa___match_10_payload_0);
                 }
                 count = count + 1;
             } else {

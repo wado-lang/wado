@@ -247,6 +247,10 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// an enclosing type param (`v.serialize::<S>(s)` inside a generic
     /// method) resolves to its `TypeParam` slot instead of `unknown`.
     pub(crate) current_type_param_names: Vec<String>,
+    /// Subset of `current_type_param_names` that are type packs (`..F`).
+    /// `resolve_type` loses pack-ness (a name resolves to a `TypeParam`), so
+    /// `call_pack_subject` consults this to recognize `..F::method()`.
+    pub(crate) current_pack_param_names: Vec<String>,
     /// Names of the effect parameters (`<effect E>`) in scope for the
     /// function / method currently being reified. `reify_effects` and
     /// `apply_function_type_effects` consult this so an effect name that is a
@@ -375,6 +379,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             current_module_items: &[],
             interner,
             current_type_param_names: Vec::new(),
+            current_pack_param_names: Vec::new(),
             current_effect_param_names: Vec::new(),
             tuple_overlay_stack: Vec::new(),
             tuple_overlay_visits: IndexMap::default(),
@@ -1016,6 +1021,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
                 default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
                 index: i as u32,
+                projected_from: None,
             })
             .collect();
         self.pending_local_structs.push(TirStruct {
@@ -1193,9 +1199,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let saved_effect_param_names =
             std::mem::replace(&mut self.current_effect_param_names, effect_param_names);
 
+        let pack_param_names: Vec<String> = func
+            .type_params
+            .iter()
+            .filter(|p| p.is_pack && p.is_real_type_param())
+            .map(|p| p.name.clone())
+            .collect();
+
         // Publish the body's type-param scope (see `reify_method`).
         let saved_type_param_names =
             std::mem::replace(&mut self.current_type_param_names, type_param_names);
+        let saved_pack_param_names =
+            std::mem::replace(&mut self.current_pack_param_names, pack_param_names);
 
         // Single source of truth: read the resolved param types
         // `resolve_function` recorded (in `func.params` order, with `<F: fn>`
@@ -1231,6 +1246,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .map(|b| self.reify_block(b, &mut ctx, None));
 
         self.current_type_param_names = saved_type_param_names;
+        self.current_pack_param_names = saved_pack_param_names;
         self.current_effect_param_names = saved_effect_param_names;
 
         // Single source of truth: read the TIR type params `resolve_function`
@@ -1538,6 +1554,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             next_idx += 1;
         }
 
+        let pack_param_names: Vec<String> = impl_type_params
+            .iter()
+            .filter(|p| p.is_pack)
+            .map(|p| p.name.clone())
+            .chain(
+                func.type_params
+                    .iter()
+                    .filter(|p| p.is_pack && p.is_real_type_param())
+                    .map(|p| p.name.clone()),
+            )
+            .collect();
+
         // Method-level effect params (`<effect E>`) drive `Param` effect
         // resolution in function-type params; publish them for the method
         // body walk.
@@ -1621,6 +1649,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // returning so decl-level resolution stays scope-free.
         let saved_type_param_names =
             std::mem::replace(&mut self.current_type_param_names, type_param_names.clone());
+        let saved_pack_param_names =
+            std::mem::replace(&mut self.current_pack_param_names, pack_param_names);
 
         // Single source of truth: read the resolved param types
         // `resolve_method` recorded (in `func.params` order, receiver
@@ -1660,6 +1690,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .map(|b| self.reify_block(b, &mut ctx, None));
 
         self.current_type_param_names = saved_type_param_names;
+        self.current_pack_param_names = saved_pack_param_names;
         self.current_effect_param_names = saved_effect_param_names;
 
         // Single source of truth: read the method-level type params
@@ -1955,9 +1986,42 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         tail_value: bool,
     ) -> TirBlock {
         ctx.enter_scope();
-        let len = block.stmts.len();
+        let stmts =
+            self.reify_positioned_stmts(&block.stmts, block.span, ctx, expected_type, tail_value);
+        ctx.exit_scope();
+        TirBlock::new(stmts, block.span)
+    }
+
+    /// Reify a statement slice at block position. `block_span` is the enclosing
+    /// block's span, used for synthetic continuation blocks. A `let ... else`
+    /// consumes the *rest* of the slice as its then-arm (see
+    /// [`Self::reify_let_else`]), so this is recursive.
+    fn reify_positioned_stmts(
+        &mut self,
+        slice: &[ast::Stmt],
+        block_span: crate::token::Span,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+        tail_value: bool,
+    ) -> Vec<TirStmt> {
+        let len = slice.len();
         let mut stmts = Vec::new();
-        for (i, s) in block.stmts.iter().enumerate() {
+        for (i, s) in slice.iter().enumerate() {
+            // `reify_let_else` consumes the rest of the block as its then-arm,
+            // so stop here after emitting it.
+            if let ast::Stmt::Let(l) = s
+                && l.else_block.is_some()
+            {
+                stmts.push(self.reify_let_else(
+                    l,
+                    &slice[i + 1..],
+                    block_span,
+                    ctx,
+                    expected_type,
+                    tail_value,
+                ));
+                break;
+            }
             // Mirror `Elaborator::resolve_block_with_position` (stmt.rs): a
             // trailing `Expr` / `If` / `Match` / `LabeledBlock` keeps its
             // result flowing out as the block's value — when an
@@ -2010,8 +2074,86 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             stmts.extend(self.reify_stmt(s, ctx));
         }
-        ctx.exit_scope();
-        TirBlock::new(stmts, block.span)
+        stmts
+    }
+
+    /// Desugar `let PAT = EXPR else { ELSE };` followed by `rest` into a
+    /// two-arm `Match` on `EXPR`: arm 0 binds `PAT` and runs `rest` (the rest
+    /// of the enclosing block) with the bindings in scope; arm 1 is a wildcard
+    /// running the diverging `ELSE` block. Mirrors `reify_let_chain_stmts`.
+    fn reify_let_else(
+        &mut self,
+        l: &ast::LetStmt,
+        rest: &[ast::Stmt],
+        block_span: crate::token::Span,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+        tail_value: bool,
+    ) -> TirStmt {
+        use crate::tir::{TirBlock, TirExprKind, TirMatchArm, TirPattern, TirStmtKind, TypeTable};
+
+        let span = l.span;
+        let else_ast = l
+            .else_block
+            .as_ref()
+            .expect("reify_let_else requires an else block");
+        let value_ast = l
+            .value
+            .as_ref()
+            .expect("`let ... else` requires an initializer");
+
+        // Mirror `resolve_let`: an annotation flows into the scrutinee as its
+        // expected type (published on `let_annotated_types` during resolve).
+        let annotated_type = if l.ty.is_some() {
+            self.ann_let_annotated_type(l.id)
+        } else {
+            None
+        };
+        let scrutinee = self.reify_expr(value_ast, ctx, annotated_type);
+        let scrutinee_type = scrutinee.type_id;
+
+        // Reify the else block before the pattern bindings enter scope: the
+        // else arm must not see them. It diverges, so its result type is Never.
+        let else_block = self.reify_block(else_ast, ctx, None);
+        let else_type = crate::tir::block_result_type(&else_block);
+        let else_span = else_block.span;
+
+        let tir_pattern = self.reify_pattern(&l.pattern, scrutinee_type, ctx);
+
+        let cont_stmts =
+            self.reify_positioned_stmts(rest, block_span, ctx, expected_type, tail_value);
+        let cont_block = TirBlock::new(cont_stmts, block_span);
+        let then_type = crate::tir::block_result_type(&cont_block);
+
+        let match_type =
+            crate::tir::agree_branch_types(then_type, else_type).unwrap_or(TypeTable::UNIT);
+        let then_body = TirExpr::new(TirExprKind::Block(cont_block), then_type, span);
+        let else_body = TirExpr::new(TirExprKind::Block(else_block), else_type, else_span);
+        let arms = vec![
+            TirMatchArm {
+                pattern: tir_pattern,
+                guard: None,
+                body: then_body,
+                span,
+            },
+            TirMatchArm {
+                pattern: TirPattern::Wildcard,
+                guard: None,
+                body: else_body,
+                span: else_span,
+            },
+        ];
+        TirStmt::new(
+            TirStmtKind::Expr(TirExpr::new(
+                TirExprKind::Match {
+                    expr: Box::new(scrutinee),
+                    arms,
+                },
+                match_type,
+                span,
+            )),
+            span,
+        )
     }
 
     /// Reify a statement. Dispatches on `Stmt::*`; `Let` adds a local
@@ -3629,6 +3771,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         .or_else(|| elems.first())
                         .copied()
                         .unwrap_or(TypeTable::UNKNOWN);
+                    // A mapped pack (`[..Case<T, P>]`) binds the loop variable to
+                    // the mapped element, not the pack itself.
+                    let inner = match type_table.get(inner) {
+                        ResolvedType::TypePack {
+                            mapped_elem: Some(elem),
+                            ..
+                        } => *elem,
+                        _ => inner,
+                    };
                     (inner, by_ref)
                 }
                 None => (TypeTable::UNKNOWN, false),
@@ -6012,6 +6163,40 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
+    /// The `(name, index)` of the type pack a spread operand's static call is
+    /// made on: `F::method()` parses as a `Call` with a two-segment path callee
+    /// `F::method`. Mirrors `Elaborator::call_pack_subject` for the reify phase.
+    fn call_pack_subject(&mut self, inner: &ast::Expr) -> Option<(String, u32)> {
+        let ast::Expr::Call(call) = inner else {
+            return None;
+        };
+        let ast::Expr::Ident(id) = &call.callee else {
+            return None;
+        };
+        if id.segments.len() != 2 {
+            return None;
+        }
+        let seg = &id.segments[0];
+        if !self.current_pack_param_names.contains(&seg.name) {
+            return None;
+        }
+        let named = ast::NamedType {
+            id: seg.id,
+            name: seg.name.clone(),
+            span: seg.span,
+            source_interface: None,
+        };
+        // `resolve_type` yields a `TypeParam` (pack-ness is erased), but its
+        // index is the pack's positional slot — the value monomorphization keys
+        // substitution on.
+        let tid = self.resolve_type(&ast::Type::Named(named));
+        match self.tysys.type_table.borrow().get(tid) {
+            crate::tir::ResolvedType::TypeParam { index, .. }
+            | crate::tir::ResolvedType::TypePack { index, .. } => Some((seg.name.clone(), *index)),
+            _ => None,
+        }
+    }
+
     /// Reify a tuple literal, handling spread elements (`[..rest, b]`,
     /// `[a, ..middle, b]`). Mirrors `Elaborator::resolve_tuple_literal`
     /// (expr.rs:3768): the tuple `TypeId` is built bottom-up from the
@@ -6020,6 +6205,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// (avoiding the `nir/sroa` `TypeId`-identity divergence at `-O2`).
     /// Spread elements expand per `type_contains_pack`:
     /// - a direct `TypePack` → `TypePackExpansion`,
+    /// - a mapped pack (`..F::method()`, pack-independent return) → the same,
+    ///   with the plain pack driving the per-element rewrite,
     /// - a tuple containing a pack → `TupleSpread` (monomorphize expands),
     /// - a concrete tuple → inline `FieldAccess` per element (binding
     ///   non-trivial spread operands to a `__spread_N` temporary).
@@ -6074,6 +6261,30 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             elem.span(),
                         ));
                     }
+                } else if let Some((pack_name, pack_index)) = self.call_pack_subject(inner) {
+                    // Pack-map `..F::method()` (pack-independent return): the
+                    // expansion iterates the *plain* pack `F` to rewrite the call
+                    // per field type; the element type is the mapped pack, which
+                    // splices to the return type repeated `|F|` times.
+                    let plain_pack = self
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_type_pack(pack_name.clone(), pack_index);
+                    let mapped = self.tysys.type_table.borrow_mut().make_mapped_type_pack(
+                        pack_name,
+                        pack_index,
+                        spread_expr.type_id,
+                    );
+                    elem_types.push(mapped);
+                    elements.push(TirExpr::new(
+                        TirExprKind::TypePackExpansion {
+                            call_expr: Box::new(spread_expr),
+                            pack_type_id: plain_pack,
+                        },
+                        mapped,
+                        elem.span(),
+                    ));
                 } else if let ResolvedType::GenericInstance {
                     name,
                     type_args: inner_elems,

@@ -1228,6 +1228,7 @@ fn "core:prelude/string.wado/String::replacen"(self, from, to, count) {
     let j: i32;
     let value_21: u8;
     let _licm_arith_27: bool;
+    let _licm_repr_28: ref Array<u8>;
     from_len = from.used;
     if from_len == 0 {
         return self;
@@ -1239,6 +1240,7 @@ fn "core:prelude/string.wado/String::replacen"(self, from, to, count) {
     replacements = 0;
     limit = self.used - from_len;
     _licm_arith_27 = count >= 0;
+    _licm_repr_28 = self.repr;
     b136: block {
         l137: loop {
             break_if b136 pos_8 > limit;
@@ -1262,11 +1264,13 @@ fn "core:prelude/string.wado/String::replacen"(self, from, to, count) {
                 break __inline_bytes_match_at_2: 1;
             } {
                 "core:prelude/string.wado/String::push_str"(result, to);
+                _licm_repr_28 = self.repr;
                 pos_8 = pos_8 + from_len;
                 replacements = replacements + 1;
             } else {
                 dst = "core:prelude/string.wado/String::internal_reserve_uninit"(result, 1);
-                value_21 = builtin::array_get<u8>(self.repr, pos_8);
+                _licm_repr_28 = self.repr;
+                value_21 = builtin::array_get<u8>(_licm_repr_28, pos_8);
                 builtin::array_set_u8(result.repr, dst, value_21);
                 pos_8 = pos_8 + 1;
             }

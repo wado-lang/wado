@@ -1,0 +1,23 @@
+// A closure coerced to a `fn(&Node)` slot may not stash its reference parameter into an aggregate.
+
+struct Node {
+    n: i32,
+}
+
+struct Holder {
+    node: &Node,
+}
+
+fn run_with(n: &Node, f: fn(&Node)) {
+    f(n);
+}
+
+export fn run() {
+    let x = Node { n: 1 };
+    run_with(&x, |p: &Node| {
+        let _h = Holder { node: p };
+    });
+}
+
+__DATA__
+{"compile_error": "closure may not store reference parameter 'p'"}

@@ -1,0 +1,37 @@
+// Test: `let ... else` with variant, struct, and or-patterns; divergence
+// via `panic`.
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+variant Msg {
+    Move(Point),
+    Stop,
+}
+
+fn move_x(m: Msg) -> i32 {
+    let Move(p) = m else {
+        panic("expected Move");
+    };
+    let Point { x, y } = p;
+    return x + y;
+}
+
+fn first_of(opt: Option<i32>) -> i32 {
+    let Some(n) = opt else {
+        return 0;
+    };
+    return n;
+}
+
+export fn run() with Stdout {
+    println(`${move_x(Msg::Move(Point { x: 3, y: 4 }))}`);
+    println(`${first_of(Option::Some(9))}`);
+    println(`${first_of(null)}`);
+}
+
+__DATA__
+{"stdout": "7\n9\n0\n"}

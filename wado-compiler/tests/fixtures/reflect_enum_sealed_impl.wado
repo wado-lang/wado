@@ -1,0 +1,32 @@
+// `ReflectEnum` is sealed: a user `impl ReflectEnum for E` is a compile error
+// (the compiler synthesizes the impl for every enum).
+
+enum Color {
+    Red,
+    Green,
+}
+
+impl ReflectEnum for Color {
+    fn type_name() -> String {
+        return "forged";
+    }
+    fn case_meta() -> List<EnumCaseMeta> {
+        return [];
+    }
+    fn discriminant(&self) -> i32 {
+        return 0;
+    }
+    fn from_discriminant(disc: i32) -> Option<Color> {
+        return Option::None;
+    }
+}
+
+test "unreachable" {
+    assert true;
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "cannot implement `ReflectEnum`: it is a sealed"
+}

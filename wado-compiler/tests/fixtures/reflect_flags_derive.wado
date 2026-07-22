@@ -1,0 +1,51 @@
+// Blanket derivation over ReflectFlags (WEP 2026-06-13 §3c): the u64 bridge
+// makes one derivation cover every flags type — serialization walks the set
+// bits by name, deserialization goes through from_bits via the bound.
+
+trait BitNames {
+    fn bit_names(&self) -> String;
+    fn from_raw(raw: u64) -> Option<Self>;
+}
+
+impl<T: ReflectFlags> BitNames for T {
+    fn bit_names(&self) -> String {
+        let bits = ReflectFlags::<T>::bits(self);
+        let mut out = "";
+        for let m of ReflectFlags::<T>::bit_meta() {
+            if (bits & m.bit) != 0 {
+                if out != "" {
+                    out = `${out}|`;
+                }
+                out = `${out}${m.name}`;
+            }
+        }
+        return out;
+    }
+
+    fn from_raw(raw: u64) -> Option<T> {
+        return ReflectFlags::<T>::from_bits(raw);
+    }
+}
+
+fn parse_flags<T: BitNames>(raw: u64) -> Option<T> {
+    return T::from_raw(raw);
+}
+
+flags Perms {
+    Read,
+    Write,
+    Execute,
+}
+
+test "bit_names walks the set bits" {
+    let rx = Perms::Read | Perms::Execute;
+    assert rx.bit_names() == "Read|Execute";
+}
+
+test "from_raw derives through the bound" {
+    assert parse_flags::<Perms>(3) matches { Some(p) && p as u32 == 3 };
+    assert parse_flags::<Perms>(9) matches { None };
+}
+
+__DATA__
+{"test": {}}

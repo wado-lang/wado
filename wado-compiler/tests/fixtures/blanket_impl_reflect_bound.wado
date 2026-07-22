@@ -1,0 +1,35 @@
+// A blanket impl bound by a synthesized trait — `impl<T: Reflect> Trait for T`
+// — must be selectable for a struct. `Reflect` is compiler-synthesized for
+// every struct and has no explicit `impl`, so the blanket-candidate bound check
+// (which previously consulted only real impls) skipped it and the method was
+// never found. The check now recognizes synthesized bounds via the receiver
+// type, matching the authoritative gate. Foundation for WEP 2026-06-13
+// (library-defined derivation over `Reflect`).
+
+trait Tagged {
+    fn tag(&self) -> String;
+}
+
+impl<T: Reflect> Tagged for T {
+    fn tag(&self) -> String {
+        return "struct";
+    }
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Empty {}
+
+test "blanket impl over a Reflect bound is selected for a struct" {
+    let p = Point { x: 1, y: 2 };
+    assert p.tag() == "struct";
+
+    let e = Empty {};
+    assert e.tag() == "struct";
+}
+
+__DATA__
+{"test": {}}

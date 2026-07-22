@@ -1,0 +1,69 @@
+// Blanket derivation over ReflectEnum (WEP 2026-06-13 §3b): serialization is
+// case_meta()[discriminant()].name; deserialization is the reverse lookup
+// plus from_discriminant().
+
+trait CaseName {
+    fn case_name(&self) -> String;
+    fn by_name(name: String) -> Option<Self>;
+    fn from_tag(disc: i32) -> Option<Self>;
+}
+
+impl<T: ReflectEnum> CaseName for T {
+    fn case_name(&self) -> String {
+        let metas = ReflectEnum::<T>::case_meta();
+        return metas[ReflectEnum::<T>::discriminant(self)].name;
+    }
+
+    fn by_name(name: String) -> Option<T> {
+        for let m of ReflectEnum::<T>::case_meta() {
+            if m.name == name {
+                return ReflectEnum::<T>::from_discriminant(m.discriminant);
+            }
+        }
+        return Option::None;
+    }
+
+    fn from_tag(disc: i32) -> Option<T> {
+        return ReflectEnum::<T>::from_discriminant(disc);
+    }
+}
+
+fn parse<T: CaseName>(name: String) -> Option<T> {
+    return T::by_name(name);
+}
+
+fn parse_tag<T: CaseName>(disc: i32) -> Option<T> {
+    return T::from_tag(disc);
+}
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+enum Size {
+    Small,
+    Large,
+}
+
+test "case_name derives the live case's name" {
+    assert Color::Green.case_name() == "Green";
+    assert Size::Large.case_name() == "Large";
+}
+
+test "by_name derives the reverse lookup through the bound" {
+    assert parse::<Color>("Blue") matches { Some(c) && c == Color::Blue };
+    assert parse::<Size>("Small") matches { Some(s) && s == Size::Small };
+    assert parse::<Color>("Chartreuse") matches { None };
+}
+
+test "from_discriminant round-trips and rejects unknown tags through the bound" {
+    assert parse_tag::<Color>(2) matches { Some(c) && c == Color::Blue };
+    assert parse_tag::<Color>(7) matches { None };
+    assert parse_tag::<Size>(0) matches { Some(s) && s == Size::Small };
+    assert parse_tag::<Size>(5) matches { None };
+}
+
+__DATA__
+{"test": {}}

@@ -1,0 +1,23 @@
+// Forwarding a reference parameter to an externally-storing callee needs `stores`, even with the result discarded.
+
+struct Data {
+    v: i32,
+}
+
+global mut SAVED: &Data = &Data { v: 0 };
+
+fn keep(d: &Data) with stores[d] {
+    SAVED = d;
+}
+
+fn forward(d: &Data) {
+    keep(d);
+}
+
+export fn run() {
+    let x = Data { v: 1 };
+    forward(&x);
+}
+
+__DATA__
+{"compile_error": "stores[d]"}

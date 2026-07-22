@@ -31,6 +31,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::ast::{self, Item, Module, Type};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_host::CompilerHost;
+use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::logger::{Bail, Logger, ModuleDiag};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
@@ -874,9 +875,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
 
         for sealed_item in [
-            crate::compiler_item::CompilerItem::Reflect,
-            crate::compiler_item::CompilerItem::Ref,
-            crate::compiler_item::CompilerItem::RefMut,
+            CompilerItem::Reflect,
+            CompilerItem::ReflectVariant,
+            CompilerItem::ReflectEnum,
+            CompilerItem::ReflectFlags,
+            CompilerItem::Ref,
+            CompilerItem::RefMut,
         ] {
             let Some(sealed_name) = type_table
                 .borrow()
@@ -2244,6 +2248,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 if let Some(value) = &let_stmt.value {
                     Self::validate_expr_type_names(
                         value,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                if let Some(else_block) = &let_stmt.else_block {
+                    Self::validate_block_type_names(
+                        else_block,
                         known_type_names,
                         resource_type_names,
                         type_params,

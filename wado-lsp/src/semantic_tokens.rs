@@ -400,6 +400,9 @@ fn visit_stmt(spans: &mut TypeSpans, stmt: &Stmt) {
             if let Some(val) = &l.value {
                 visit_expr(spans, val);
             }
+            if let Some(else_block) = &l.else_block {
+                visit_block(spans, else_block);
+            }
         }
         Stmt::Expr(e) => visit_expr(spans, &e.expr),
         Stmt::Return(r) => {

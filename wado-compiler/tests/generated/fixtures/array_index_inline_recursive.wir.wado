@@ -492,14 +492,17 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 fn "array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>::traverse"(self, depth) with Stdout {
     let i: i32;
     let _licm_arith_11: i32;
+    let _licm_children_12: ref "core:prelude//List<&mut array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>>";
     "array_index_inline_recursive.wado/print_depth"(depth);
     if self.is_leaf == 0 {
         i = 0;
         _licm_arith_11 = depth + 1;
+        _licm_children_12 = self.children;
         b40: block {
             l41: loop {
-                break_if b40 i >= self.children.used;
-                "array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>::traverse"(builtin::array_get<ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>">(self.children.repr, i), _licm_arith_11);
+                break_if b40 i >= _licm_children_12.used;
+                "array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>::traverse"(builtin::array_get<ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>">(_licm_children_12.repr, i), _licm_arith_11);
+                _licm_children_12 = self.children;
                 i = i + 1;
                 continue l41;
             };

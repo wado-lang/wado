@@ -1,0 +1,32 @@
+// A persisting borrow of one field must not block moving a disjoint field out of a dead aggregate.
+
+use { println, Stdout } from "core:cli";
+
+struct P { a: List<i32>, b: Option<i32> }
+struct R { x: List<i32> }
+
+fn split(p: P) -> R {
+    if let Some(v) = &p.b {
+        if *v < 0 { panic("neg"); }
+    }
+    return R { x: p.a };
+}
+
+fn make(n: i32) -> P {
+    let mut a: List<i32> = [];
+    let mut i = 0;
+    loop { if i >= n { break; } a.push(i); i = i + 1; }
+    return P { a, b: Option::Some(7) };
+}
+
+export fn run() with Stdout {
+    let mut r = split(make(3));
+    r.x.push(99);
+    println(`${r.x.len()} ${r.x[3]}`);
+}
+
+__DATA__
+{
+    "stdout": "4 99\n",
+    "wir_not_expect:O0": ["$value_copy$core:prelude/list.wado/List<i32>"]
+}

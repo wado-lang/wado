@@ -1,0 +1,25 @@
+// A closure wrapping its reference parameter into a multi-field variant case (tuple payload at position 1) stored in a global is flagged.
+
+struct Node {
+    v: i32,
+}
+
+variant Holder {
+    Pair([i32, &Node]),
+}
+
+global mut STASH: Option<Holder> = Option::None;
+
+fn apply(f: fn(&Node), n: &Node) {
+    f(n);
+}
+
+export fn run() {
+    let node = Node { v: 1 };
+    apply(|q: &Node| {
+        STASH = Option::Some(Holder::Pair([1, q]));
+    }, &node);
+}
+
+__DATA__
+{"compile_error": "closure may not store reference parameter 'q'"}
