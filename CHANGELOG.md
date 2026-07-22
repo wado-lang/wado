@@ -1,5 +1,39 @@
 # Changelog
 
+## [v0.0.20](https://github.com/wado-lang/wado/compare/v0.0.19...v0.0.20) - 2026-07-22
+
+- refactor(jade): spell the `type` field directly and split tests out by @gfx in https://github.com/wado-lang/wado/pull/1622
+- feat(compiler)!: first-class byte types (ByteList / ByteArray / ByteSlice) by @gfx in https://github.com/wado-lang/wado/pull/1625
+- perf(build): opt-level 2 for all deps in the dev profile by @gfx in https://github.com/wado-lang/wado/pull/1627
+- fix(monomorphize): newtype inherent methods in generic contexts by @gfx in https://github.com/wado-lang/wado/pull/1629
+- fix(elaborator): once-eval compound assignment (#1179) and non-primitive index-key coercion (#1628) by @gfx in https://github.com/wado-lang/wado/pull/1630
+- chore: share the cargo registry cache across environments via GCS by @gfx in https://github.com/wado-lang/wado/pull/1631
+- docs: cleanup skills and docs by @gfx in https://github.com/wado-lang/wado/pull/1632
+- chore: rust 1.97, applying clippy-fix with it by @gfx in https://github.com/wado-lang/wado/pull/1633
+- refactor(lsp): source the unused-lint tag from Code::is_unused_lint by @gfx in https://github.com/wado-lang/wado/pull/1634
+- chore: cache compiled dependencies via sccache for the web container by @gfx in https://github.com/wado-lang/wado/pull/1635
+- feat(gale): @lexer::members over a unified Lexer context by @gfx in https://github.com/wado-lang/wado/pull/1636
+- fix(cargo-cache): make the web container reuse CI's sccache compile cache by @gfx in https://github.com/wado-lang/wado/pull/1638
+- refactor(optimizer): unify variant-return SROA on one recursive layout engine by @gfx in https://github.com/wado-lang/wado/pull/1639
+- feat!: byte literals (`b'x'`) by @gfx in https://github.com/wado-lang/wado/pull/1637
+- chore(cargo-cache): warm target/ automatically in the background at session start by @gfx in https://github.com/wado-lang/wado/pull/1640
+- feat(compiler): collect() can target a newtype over List (#1623) by @gfx in https://github.com/wado-lang/wado/pull/1641
+- feat(reflect): synthesize fields(&self) and the Fields associated tuple by @gfx in https://github.com/wado-lang/wado/pull/1642
+- perf(optimizer): nullability-driven WIR rewrites on a declared-locals SSoT by @gfx in https://github.com/wado-lang/wado/pull/1643
+- feat(gale): model lexer superClass as a Wado effect interface by @gfx in https://github.com/wado-lang/wado/pull/1645
+- feat(highlight): package the Wado highlighter as gale-highlight-wado by @gfx in https://github.com/wado-lang/wado/pull/1644
+- refactor(stdlib)!: streamline String module; json to_bytes returns ByteSlice by @gfx in https://github.com/wado-lang/wado/pull/1647
+- feat(compiler): Ref/RefMut markers and reference-based indexing traits by @gfx in https://github.com/wado-lang/wado/pull/1649
+- chore: upgrade wasmtime to 47.0.1 by @gfx in https://github.com/wado-lang/wado/pull/1652
+- fix(compiler): remove superlinear value-graph invalidation churn (Gale O3 OOM) by @gfx in https://github.com/wado-lang/wado/pull/1651
+- feat(gale): highlight incomplete Wado programs via resilient fragment recovery by @gfx in https://github.com/wado-lang/wado/pull/1653
+- fix(cli): embed WIT component-type for kiln generator consumers by @gfx in https://github.com/wado-lang/wado/pull/1655
+- feat(optimizer): elide value-copies through functor stores and dead aggregates by @gfx in https://github.com/wado-lang/wado/pull/1656
+- feat(reflect): compile-time reflection and library-defined derivation (WEP 2026-06-13) by @gfx in https://github.com/wado-lang/wado/pull/1657
+- chore: update deps for wado-vscode by @gfx in https://github.com/wado-lang/wado/pull/1658
+- feat(lang): add `let ... else` statements by @gfx in https://github.com/wado-lang/wado/pull/1659
+- perf(optimizer): hoist opaque-clobber field loads in LICM by @gfx in https://github.com/wado-lang/wado/pull/1660
+
 ## [v0.0.19](https://github.com/wado-lang/wado/compare/v0.0.18...v0.0.19) - 2026-07-18
 
 - chore: cargo update by @gfx in https://github.com/wado-lang/wado/pull/1608
