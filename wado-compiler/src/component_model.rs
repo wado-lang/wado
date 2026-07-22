@@ -1682,6 +1682,58 @@ impl CmInterfaceRegistry {
         }
     }
 
+    /// Register a `--lib` package's locally-defined guest effect interfaces as
+    /// CM imports, so an effect left unhandled at the library boundary lowers to
+    /// a component import the consumer satisfies (rather than an unresolved-call
+    /// ICE). Unlike [`Self::register_module_decls`] — which registers only
+    /// `#[cm(...)]`-tagged stdlib interfaces — this mints a CM identity for a
+    /// user `interface X { ... }`: the interface FQ is the package coordinate
+    /// with the effect's kebab name (`ns:pkg/<effect>@ver`) and each operation's
+    /// CM name is the kebab of its Wado name. An interface already carrying a
+    /// `#[cm]` attribute is a real binding, not a guest effect, and is skipped.
+    pub fn register_lib_guest_effect_imports(&mut self, module: &crate::ast::Module, lib_fq: &str) {
+        use crate::ast::Item;
+        let Some(base) = CmImport::parse(lib_fq) else {
+            return;
+        };
+        for item in &module.items {
+            let Item::Interface(effect) = item else {
+                continue;
+            };
+            if effect
+                .methods
+                .iter()
+                .any(|m| m.attrs.iter().any(|a| a.as_cm_import().is_some()))
+            {
+                continue;
+            }
+            let interface = to_kebab(&effect.name);
+            for method in &effect.methods {
+                let cm_import = CmImport {
+                    namespace: base.namespace.clone(),
+                    package: base.package.clone(),
+                    interface: interface.clone(),
+                    version: base.version.clone(),
+                    function: Some(to_kebab(&method.name)),
+                };
+                let params: Vec<(String, String, Type)> = method
+                    .params
+                    .iter()
+                    .map(|p| (p.name.clone(), to_kebab(&p.name), resolve_type(&p.ty, &self.newtypes)))
+                    .collect();
+                let return_type = unwrap_async_call_if_async(method.is_async, &method.return_type);
+                self.register(
+                    &effect.name,
+                    &method.name,
+                    &cm_import,
+                    method.is_async,
+                    params,
+                    return_type,
+                );
+            }
+        }
+    }
+
     /// Register named type decls that reach the library's public surface from a
     /// non-entry local module (a facade re-exports them, and an `export fn`
     /// signature names them). Registered under the same lib-local interface FQ

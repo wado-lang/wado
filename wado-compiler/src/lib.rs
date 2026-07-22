@@ -1067,6 +1067,9 @@ fn compile_after_load<H: CompilerHost>(
         registry.register_lib_local_decls(entry, fq, entry_module_source.clone());
         // Submodule-defined types reachable through the facade's exports.
         registry.register_lib_local_items(&lib_surface.submodule_type_decls, fq);
+        // Guest effect interfaces left unhandled at the boundary become CM
+        // imports the consumer satisfies.
+        registry.register_lib_guest_effect_imports(entry, fq);
     }
 
     debug_assert_eq!(
