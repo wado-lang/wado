@@ -11484,14 +11484,14 @@ fn memory_to_gc_string(ptr: i32, len: i32) -> String {
     return "core::prelude/string.wado::String::internal_from_utf8_raw"(arr, len);
 }
 
-fn gc_array_to_memory(arr: &Array<u8>, ptr: i32, len: i32) {
+fn gc_array_to_memory(arr: &Array<u8>, src_start: i32, ptr: i32, len: i32) {
     let mut i: i32 = 0;
     loop {
         if !(i < len) {
             break;
         }
         __for_0_body: {
-            core::builtin::i32_store8((ptr + i), core::builtin::array_get_u8(arr, i));
+            core::builtin::i32_store8((ptr + i), core::builtin::array_get_u8(arr, (src_start + i)));
         }
         i = (i + 1);
     }
@@ -11503,9 +11503,9 @@ fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newline: 
         let mut new_repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"((len + 1));
         "core::builtin::core/builtin/array_copy<u8>"(&mut new_repr, 0, message.String::internal_raw_bytes(), 0, len);
         core::builtin::array_set_u8(&mut new_repr, len, 10);
-        core::rt::cm_stream_write_raw_u8(&tx as i32, &new_repr, (len + 1));
+        core::rt::cm_stream_write_raw_u8(&tx as i32, &new_repr, 0, (len + 1));
     } else {
-        core::rt::cm_stream_write_raw_u8(&tx as i32, message.String::internal_raw_bytes(), len);
+        core::rt::cm_stream_write_raw_u8(&tx as i32, message.String::internal_raw_bytes(), 0, len);
     }
     cm_raw_call stream-drop-writable(tx as i32);
 }
@@ -11566,19 +11566,19 @@ fn cm_lower_string(s: String) -> i64 {
     let len: i32 = s.String::len();
     let bytes: &Array<u8> = s.String::internal_raw_bytes();
     let ptr: i32 = core::builtin::realloc(0, 0, 1, len);
-    core::rt::gc_array_to_memory(bytes, ptr, len);
+    core::rt::gc_array_to_memory(bytes, 0, ptr, len);
     return (ptr as i64 | (len as i64 << 32));
 }
 
-fn cm_lower_list_u8(data: &Array<u8>, len: i32) -> i64 {
+fn cm_lower_list_u8(data: &Array<u8>, start: i32, len: i32) -> i64 {
     let ptr: i32 = core::builtin::realloc(0, 0, 1, len);
-    core::rt::gc_array_to_memory(data, ptr, len);
+    core::rt::gc_array_to_memory(data, start, ptr, len);
     return (ptr as i64 | (len as i64 << 32));
 }
 
 fn cm_lower_array_u8(arr: List<u8>) -> i64 {
     let len: i32 = arr."List<u8>::len"();
-    return core::rt::cm_lower_list_u8(arr."List<u8>::internal_raw_data_ref"(), len);
+    return core::rt::cm_lower_list_u8(arr."List<u8>::internal_raw_data_ref"(), 0, len);
 }
 
 fn write_escaped_string(s: String, f: &mut Formatter) {
@@ -11687,8 +11687,8 @@ fn cm_stream_write_drain(handle: i32, ptr: i32, count: i32, elem_size: i32) {
     }
 }
 
-fn cm_stream_write_raw_u8(handle: i32, data: &Array<u8>, len: i32) {
-    let packed: i64 = core::rt::cm_lower_list_u8(data, len);
+fn cm_stream_write_raw_u8(handle: i32, data: &Array<u8>, start: i32, len: i32) {
+    let packed: i64 = core::rt::cm_lower_list_u8(data, start, len);
     let ptr: i32 = packed as i32;
     let raw_len: i32 = (packed >> 32) as i32;
     core::rt::cm_stream_write_drain(handle, ptr, raw_len, 1);

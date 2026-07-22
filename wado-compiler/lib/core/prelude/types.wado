@@ -216,10 +216,12 @@ internal resource StreamWritable<T> {
     #[cm("stream-write")]
     fn write(&self, data: List<T>);
 
-    /// Write raw GC array directly to the stream.
-    /// `len` is the number of valid elements (may be less than array capacity).
+    /// Write `data[start..start + len]` directly to the stream, without an
+    /// intermediate copy. The package-internal fast path behind the
+    /// value-semantics `write` (the enclosing resource is `internal`); the
+    /// caller guarantees `0 <= start` and `start + len <= data.len()`.
     #[cm("stream-write-raw")]
-    fn write_raw(&self, data: &Array<T>, len: i32);
+    fn write_raw(&self, data: &Array<T>, start: i32, len: i32);
 
     /// Cancel an in-progress write. Blocks until cancellation completes.
     #[cm("stream-cancel-write")]

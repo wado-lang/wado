@@ -1,0 +1,22 @@
+// Test: StreamWritable::write_raw writes data[start..start + len].
+// A larger buffer "XXerr msg\nYY" is written as its middle 8 bytes only, so
+// verifying stderr receives exactly "err msg\n" exercises the start offset.
+//
+// Consumer is started before the write: CM streams are zero-buffered
+// rendezvous channels, so the reader must exist before stream.write.
+use { Stderr } from "core:cli";
+
+export fn run() with Stderr {
+    let [rx, tx] = Stream::<u8>::new();
+    let subtask = Stderr::write_via_stream(rx);
+
+    let list: List<u8> = [88, 88, 101, 114, 114, 32, 109, 115, 103, 10, 89, 89];
+    let buf = list.to_array();
+    tx.write_raw(&buf, 2, 8);
+
+    tx.drop();
+    subtask.read();
+}
+
+__DATA__
+{"stderr": "err msg\n"}
