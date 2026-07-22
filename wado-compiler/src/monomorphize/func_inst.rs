@@ -1765,12 +1765,10 @@ impl Monomorphizer {
                             // below).
                             let blanket_generic_name = blanket_module
                                 .as_ref()
-                                .and_then(|_| trait_name_for_blanket)
+                                .and(trait_name_for_blanket)
                                 .and_then(|tn| {
-                                    let param = self
-                                        .functions
-                                        .trait_env
-                                        .blanket_impl_param_for_trait(
+                                    let param =
+                                        self.functions.trait_env.blanket_impl_param_for_trait(
                                             tn,
                                             blanket_module.as_ref(),
                                         )?;
@@ -1783,8 +1781,7 @@ impl Monomorphizer {
                                         .to_mangled_name(),
                                     )
                                 });
-                            let new_monomorph = if let Some(generic_name) = blanket_generic_name
-                            {
+                            let new_monomorph = if let Some(generic_name) = blanket_generic_name {
                                 Some(MonomorphInfo {
                                     generic_name,
                                     impl_type_args: vec![concrete_type_id],

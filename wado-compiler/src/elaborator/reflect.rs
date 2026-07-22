@@ -405,8 +405,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             || method
                 == items.method_name(crate::compiler_item::CompilerItem::ReflectVariantCaseMeta)
             || method
-                == items
-                    .method_name(crate::compiler_item::CompilerItem::ReflectVariantDiscriminant)
+                == items.method_name(crate::compiler_item::CompilerItem::ReflectVariantDiscriminant)
             || method == items.method_name(crate::compiler_item::CompilerItem::ReflectVariantCases)
     }
 
@@ -610,11 +609,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        let mut method_info = LocalMethodName::new(
-            type_param_name.to_string(),
-            Some(trait_name),
-            method,
-        );
+        let mut method_info =
+            LocalMethodName::new(type_param_name.to_string(), Some(trait_name), method);
         method_info.is_type_param_receiver = true;
         let mangled_name = method_info.to_mangled_name();
 
@@ -688,7 +684,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         prefix: &str,
         method: &str,
     ) -> bool {
-        if self.tysys.classify_on_bound_trait(&self.type_lookup(), prefix) != Some(spec.on_bound) {
+        if self
+            .tysys
+            .classify_on_bound_trait(&self.type_lookup(), prefix)
+            != Some(spec.on_bound)
+        {
             return false;
         }
         let tt = self.tysys.type_table.borrow();
@@ -719,8 +719,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let subject = self.tysys.type_table.borrow().get(self_ty).clone();
         if let ResolvedType::TypeParam { name, .. } = subject {
-            return self
-                .resolve_generic_reflect_scalar_static_call(spec, self_ty, &name, static_call, ctx);
+            return self.resolve_generic_reflect_scalar_static_call(
+                spec,
+                self_ty,
+                &name,
+                static_call,
+                ctx,
+            );
         }
 
         let (trait_name, self_name) = {
@@ -795,9 +800,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_name(spec.trait_item)
             .to_string();
 
-        let Some(return_type) =
-            self.check_reflect_scalar_args(spec, self_ty, type_param_name, &method, static_call, ctx)
-        else {
+        let Some(return_type) = self.check_reflect_scalar_args(
+            spec,
+            self_ty,
+            type_param_name,
+            &method,
+            static_call,
+            ctx,
+        ) else {
             return TypeTable::ERROR;
         };
 
@@ -853,18 +863,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         if *method == type_name_method {
-            self.reject_reflect_metadata_args(static_call, ctx).then(|| {
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_compiler_struct(CompilerItem::String)
-            })
+            self.reject_reflect_metadata_args(static_call, ctx)
+                .then(|| {
+                    self.tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_compiler_struct(CompilerItem::String)
+                })
         } else if *method == meta_method {
-            self.reject_reflect_metadata_args(static_call, ctx).then(|| {
-                let mut tt = self.tysys.type_table.borrow_mut();
-                let meta_type = tt.make_compiler_struct(spec.meta_item);
-                tt.make_list(meta_type)
-            })
+            self.reject_reflect_metadata_args(static_call, ctx)
+                .then(|| {
+                    let mut tt = self.tysys.type_table.borrow_mut();
+                    let meta_type = tt.make_compiler_struct(spec.meta_item);
+                    tt.make_list(meta_type)
+                })
         } else if *method == value_method {
             self.check_reflect_fields_receiver(self_ty, self_name, static_call, ctx)
                 .then_some(spec.value_type)

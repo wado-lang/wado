@@ -1307,11 +1307,9 @@ impl TypeSystem {
         let Some(module_source) = subject else {
             return false;
         };
-        self.type_table.borrow_mut().record_bound_driven_synth_request(
-            type_name,
-            &module_source,
-            bound_name,
-        );
+        self.type_table
+            .borrow_mut()
+            .record_bound_driven_synth_request(type_name, &module_source, bound_name);
         true
     }
 }

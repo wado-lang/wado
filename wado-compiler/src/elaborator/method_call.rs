@@ -16,7 +16,6 @@ use super::method_lookup::MethodInferenceInput;
 use super::reflect::ScalarReflectSpec;
 use super::types::{FunctionContext, MethodInfo, TypeError};
 
-
 /// Inputs to [`Elaborator::resolve_method_call_with`], the TIR-level method-call
 /// dispatcher. The AST-driven [`Elaborator::resolve_method_call`] is a thin
 /// wrapper that resolves the receiver / type args / args from the
@@ -1105,7 +1104,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && let Some(self_ty_ast) = g.args.first()
                 {
                     let self_ty = self.resolve_type(self_ty_ast);
-                    return self.resolve_reflect_scalar_static_call(spec, self_ty, static_call, ctx);
+                    return self.resolve_reflect_scalar_static_call(
+                        spec,
+                        self_ty,
+                        static_call,
+                        ctx,
+                    );
                 }
             }
         }
@@ -3036,7 +3040,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         None
     }
-
 
     /// Get the operator trait and method name for a binary operator.
     pub(super) fn is_static_method(&self, struct_name: &str, method_name: &str) -> bool {

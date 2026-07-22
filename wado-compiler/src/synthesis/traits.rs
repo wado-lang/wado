@@ -775,10 +775,7 @@ fn generate_reflect_meta_list_fn(
                 module_source: parts.from_tuple.module_source.clone(),
                 name: from_tuple.to_mangled_name(),
                 monomorph_info: Some(MonomorphInfo {
-                    generic_name: format!(
-                        "{}::{}",
-                        parts.from_tuple.owner, parts.from_tuple.name
-                    ),
+                    generic_name: format!("{}::{}", parts.from_tuple.owner, parts.from_tuple.name),
                     impl_type_args: vec![parts.meta_type],
                     method_type_args: vec![metas_tuple_type],
                     is_blanket: false,
@@ -811,7 +808,13 @@ fn generate_reflect_meta_list_fn(
 }
 
 /// A metadata-struct field holding an integer literal of type `ty`.
-fn reflect_meta_int_field(name: &str, value: u64, ty: TypeId, index: u32, span: Span) -> TirStructField {
+fn reflect_meta_int_field(
+    name: &str,
+    value: u64,
+    ty: TypeId,
+    index: u32,
+    span: Span,
+) -> TirStructField {
     TirStructField {
         name: name.to_string(),
         value: TirExpr::new(
@@ -830,7 +833,11 @@ fn reflect_meta_int_field(name: &str, value: u64, ty: TypeId, index: u32, span: 
 fn reflect_meta_name_field(name: &str, string_type: TypeId, span: Span) -> TirStructField {
     TirStructField {
         name: "name".to_string(),
-        value: TirExpr::new(TirExprKind::StringLiteral(name.to_string()), string_type, span),
+        value: TirExpr::new(
+            TirExprKind::StringLiteral(name.to_string()),
+            string_type,
+            span,
+        ),
         field_index: 0,
     }
 }
@@ -1182,8 +1189,7 @@ fn generate_variant_reflect_methods(
             })
             .collect();
         let token_tuple_type = tt.make_tuple(token_types.clone());
-        let payloads_tuple_type =
-            tt.make_tuple(target.cases.iter().map(|(_, _, p)| *p).collect());
+        let payloads_tuple_type = tt.make_tuple(target.cases.iter().map(|(_, _, p)| *p).collect());
         tt.register_assoc_type_resolution(
             variant_type,
             REFLECT_CASES_ASSOC.to_string(),
@@ -1612,7 +1618,13 @@ fn generate_variant_case_meta_fn(
             ]
         })
         .collect();
-    generate_reflect_meta_list_fn(method_info, env.meta_list_parts(), metas_tuple_type, rows, span)
+    generate_reflect_meta_list_fn(
+        method_info,
+        env.meta_list_parts(),
+        metas_tuple_type,
+        rows,
+        span,
+    )
 }
 
 /// Build `Variant^ReflectVariant::discriminant(&self) -> i32` as
@@ -1630,13 +1642,7 @@ fn generate_variant_discriminant_fn(
 
     let tag = TirExpr::new(
         TirExprKind::VariantTag {
-            expr: Box::new(deref_local(
-                0,
-                "self",
-                ref_variant_type,
-                variant_type,
-                span,
-            )),
+            expr: Box::new(deref_local(0, "self", ref_variant_type, variant_type, span)),
         },
         TypeTable::I32,
         span,
@@ -1807,15 +1813,10 @@ fn generate_enum_reflect_methods(
         (metas_tuple_type, enum_type, ref_enum_type, option_enum_type)
     };
 
-    let case_meta_fn = generate_enum_case_meta_fn(env, enum_trait_name, target, metas_tuple_type, span);
-    let discriminant_fn = generate_enum_discriminant_fn(
-        env,
-        enum_trait_name,
-        target,
-        enum_type,
-        ref_enum_type,
-        span,
-    );
+    let case_meta_fn =
+        generate_enum_case_meta_fn(env, enum_trait_name, target, metas_tuple_type, span);
+    let discriminant_fn =
+        generate_enum_discriminant_fn(env, enum_trait_name, target, enum_type, ref_enum_type, span);
     let from_discriminant_fn = generate_enum_from_discriminant_fn(
         type_table,
         env,
@@ -1826,7 +1827,12 @@ fn generate_enum_reflect_methods(
         span,
     );
 
-    vec![type_name_fn, case_meta_fn, discriminant_fn, from_discriminant_fn]
+    vec![
+        type_name_fn,
+        case_meta_fn,
+        discriminant_fn,
+        from_discriminant_fn,
+    ]
 }
 
 /// Build `Enum^ReflectEnum::case_meta() -> List<EnumCaseMeta>` as
@@ -1849,7 +1855,13 @@ fn generate_enum_case_meta_fn(
             ]
         })
         .collect();
-    generate_reflect_meta_list_fn(method_info, env.meta_list_parts(), metas_tuple_type, rows, span)
+    generate_reflect_meta_list_fn(
+        method_info,
+        env.meta_list_parts(),
+        metas_tuple_type,
+        rows,
+        span,
+    )
 }
 
 /// Build `Enum^ReflectEnum::discriminant(&self) -> i32` as `return *self as i32;`
@@ -1941,7 +1953,10 @@ fn generate_enum_from_discriminant_fn(
             TirStmtKind::If {
                 condition: comparison,
                 then_block: TirBlock::new(
-                    vec![TirStmt::new(TirStmtKind::Return { value: Some(some) }, span)],
+                    vec![TirStmt::new(
+                        TirStmtKind::Return { value: Some(some) },
+                        span,
+                    )],
                     span,
                 ),
                 else_block: None,
@@ -2027,7 +2042,8 @@ fn generate_flags_reflect_impls(
 
     let mut generated = Vec::new();
     for target in &targets {
-        let methods = generate_flags_reflect_methods(&module.type_table, &env, flags_trait_name, target);
+        let methods =
+            generate_flags_reflect_methods(&module.type_table, &env, flags_trait_name, target);
         generated.extend(methods.into_iter().map(|f| Rc::new(RefCell::new(f))));
         ctx.record_impl(&target.name, flags_trait_name);
     }
@@ -2083,7 +2099,9 @@ impl ReflectFlagsSynthEnv {
             bit_meta_method: items
                 .method_name(CompilerItem::ReflectFlagsBitMeta)
                 .to_string(),
-            bits_method: items.method_name(CompilerItem::ReflectFlagsBits).to_string(),
+            bits_method: items
+                .method_name(CompilerItem::ReflectFlagsBits)
+                .to_string(),
             from_bits_method: items
                 .method_name(CompilerItem::ReflectFlagsFromBits)
                 .to_string(),
@@ -2128,7 +2146,8 @@ fn generate_flags_reflect_methods(
         (metas_tuple_type, ref_flags_type, option_flags_type)
     };
 
-    let bit_meta_fn = generate_flags_bit_meta_fn(env, flags_trait_name, target, metas_tuple_type, span);
+    let bit_meta_fn =
+        generate_flags_bit_meta_fn(env, flags_trait_name, target, metas_tuple_type, span);
     let bits_fn = generate_flags_bits_fn(env, flags_trait_name, target, ref_flags_type, span);
     let from_bits_fn = generate_flags_from_bits_fn(
         type_table,
@@ -2162,7 +2181,13 @@ fn generate_flags_bit_meta_fn(
             ]
         })
         .collect();
-    generate_reflect_meta_list_fn(method_info, env.meta_list_parts(), metas_tuple_type, rows, span)
+    generate_reflect_meta_list_fn(
+        method_info,
+        env.meta_list_parts(),
+        metas_tuple_type,
+        rows,
+        span,
+    )
 }
 
 /// Build `Flags^ReflectFlags::bits(&self) -> u64` as
@@ -2257,7 +2282,10 @@ fn generate_flags_from_bits_fn(
         TirStmtKind::If {
             condition: has_unknown_bits,
             then_block: TirBlock::new(
-                vec![TirStmt::new(TirStmtKind::Return { value: Some(none) }, span)],
+                vec![TirStmt::new(
+                    TirStmtKind::Return { value: Some(none) },
+                    span,
+                )],
                 span,
             ),
             else_block: None,
@@ -2265,10 +2293,8 @@ fn generate_flags_from_bits_fn(
         span,
     );
 
-    let as_u32 = crate::synthesis::common::cast(
-        local_expr(0, "raw", TypeTable::U64, span),
-        TypeTable::U32,
-    );
+    let as_u32 =
+        crate::synthesis::common::cast(local_expr(0, "raw", TypeTable::U64, span), TypeTable::U32);
     let as_flags = crate::synthesis::common::cast(as_u32, target.flags_type);
     let some = crate::synthesis::common::option_some(
         as_flags,
