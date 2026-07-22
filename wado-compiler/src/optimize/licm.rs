@@ -552,13 +552,7 @@ fn licm_loop(
         );
     }
 
-    // Step 6: reloadable field-load hoisting. A field read `s.f` whose only
-    // obstacle is an opaque `&mut`-call clobber of `s`'s pointee type (a *may*
-    // alias the compiler cannot rule out, e.g. `write_escaped_string(&mut buf,
-    // &s)` where a caller could pass `buf === s`) is loop-invariant on every
-    // clobber-free path. Hoist it to the pre-header and re-load it right after
-    // each clobbering statement, so the common (clobber-free) path reads the
-    // pre-header local while a genuine alias still observes the fresh field.
+    // Step 6: reloadable field-load hoisting.
     hoist_reloadable_field_loads(engine, loop_body, ctx, outer_aliases, &mut all_hoist_stmts);
 
     // Nested loops: recurse. The nested `licm_block` accumulates aliases from
@@ -580,9 +574,12 @@ fn candidate_root_ty(engine: &Engine, local_index: u32, fallback: TypeId) -> Typ
     }
 }
 
-/// Hoist field loads blocked *only* by an opaque `&mut`-call clobber of their
-/// pointee type, reloading them after each clobbering statement. See the call
-/// site in [`licm_loop`] for the rationale.
+/// Hoist a field read `s.f` blocked *only* by an opaque `&mut`-call clobber of
+/// `s`'s pointee type — a may-alias the compiler cannot rule out (e.g.
+/// `write_escaped_string(&mut buf, &s)` where a caller could pass `buf === s`).
+/// Such a read is invariant on every clobber-free path, so it moves to the
+/// pre-header and is reloaded after each clobbering statement: the common path
+/// reads the pre-header local, a genuine alias still observes the fresh field.
 fn hoist_reloadable_field_loads(
     engine: &mut Engine,
     loop_body: BlockId,
@@ -657,11 +654,9 @@ fn hoist_reloadable_field_loads(
         }
     }
 
-    // Soundness gate: no statement both clobbers and reads a hoisted field.
-    // `replace_hoisted` rewrites reads through immutable ref-bindings too
-    // (`r.field` where `r` aliases the source), so the gate must consider those
-    // aliases — a clobbering statement reading `r.field` after the clobber would
-    // otherwise observe a stale hoisted local.
+    // Reads the gate must track: the source fields plus every immutable
+    // ref-binding alias `replace_hoisted` also rewrites (`r.field` where `r`
+    // aliases the source).
     let mut read_specs: Vec<(u32, u32)> = candidates
         .iter()
         .map(|c| (c.local_index, c.field_index))
@@ -806,8 +801,8 @@ fn build_field_access(
     )
 }
 
-/// Append `hoist_local = source.field` reload statements after every
-/// bare-statement clobbering call under `block` (recursing into nested blocks).
+/// Append a `hoist_local = source.field` reload after each statement that
+/// clobbers the field's pointee, recursing into nested blocks first.
 fn insert_reloads(
     engine: &mut Engine,
     block: BlockId,
@@ -815,7 +810,6 @@ fn insert_reloads(
     clobber_types: &IndexSet<TypeId>,
     type_table: &TypeTable,
 ) {
-    // Recurse into nested blocks first.
     let stmts = engine.body.blocks[block].stmts.clone();
     for &s in &stmts {
         let mut child_blocks = Vec::new();
@@ -1044,12 +1038,10 @@ fn expr_type_clobbers(
     mut_ref_pointee(body, e, clobber_types, type_table).is_some()
 }
 
-/// True when the expression tree under `node` — *without crossing into nested
-/// blocks* — contains a clobbering call for a `clobber_type`. Nested blocks are
-/// separate reload units handled by [`insert_reloads`]/[`reload_gate_ok`]
-/// recursion, so stopping at block boundaries keeps the per-statement view
-/// precise (a labeled block grouping a read and a clobber is not treated as one
-/// clobber-and-read statement).
+/// True when `node`'s own expression tree — *without crossing into nested
+/// blocks* — contains a clobbering call. A statement is a direct-clobber
+/// statement (and gets a trailing reload) exactly when this holds; clobbers
+/// inside nested blocks are reloaded within those blocks instead.
 fn node_contains_clobber(
     body: &Body,
     node: NodeRef,
@@ -1070,10 +1062,8 @@ fn node_contains_clobber(
     found
 }
 
-/// True when the tree under `node` reads `source_local.field_index` as a field
-/// access. `cross_blocks` controls whether the walk descends into nested blocks;
 /// True when `e` is directly `source.field` for one of the `(source, field)`
-/// specs (a single node, not a subtree walk).
+/// specs.
 fn expr_is_spec_read(body: &Body, e: ExprId, specs: &[(u32, u32)]) -> bool {
     if let ExprKind::FieldAccess {
         expr: inner,
@@ -1083,7 +1073,9 @@ fn expr_is_spec_read(body: &Body, e: ExprId, specs: &[(u32, u32)]) -> bool {
         && let Some(ie) = inner.as_expr()
         && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
     {
-        specs.iter().any(|&(src, fld)| src == *index && fld == *field_index)
+        specs
+            .iter()
+            .any(|&(src, fld)| src == *index && fld == *field_index)
     } else {
         false
     }
@@ -1190,14 +1182,12 @@ fn count_genuine_field_reads(
     field_index: u32,
     hoist_locals: &IndexSet<u32>,
 ) -> usize {
-    // Skip the value of a reload `Assign { target: Local(hoist), value: … }` —
-    // its field read is bookkeeping, not a use to optimise.
+    // Skip a reload `_licm = source.field`: its read is bookkeeping, not a use.
     if let NodeRef::Expr(e) = node
-        && let ExprKind::Assign { target, value } = &body.exprs[e].kind
+        && let ExprKind::Assign { target, .. } = &body.exprs[e].kind
         && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
         && hoist_locals.contains(index)
     {
-        let _ = value;
         return 0;
     }
     let mut n = 0;
