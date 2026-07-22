@@ -133,6 +133,10 @@ pub struct CompileResult {
     pub wir_package: Option<wir::WirPackage>,
     /// Whether the entry module has `#![TODO]`
     pub is_todo_module: bool,
+    /// WIT-relevant frontend subset, retained when
+    /// [`CompilerOptions::embed_wit_contract`] is set (issue #1654); `None`
+    /// otherwise.
+    pub wit_emit_snapshot: Option<wit_emit::WitEmitSnapshot>,
     /// Structural description of the generator's `pub struct Options`,
     /// populated only when `target_world == "core:kiln/generator"` and
     /// the Options struct extracts cleanly. Consumed by the CLI's kiln
@@ -250,6 +254,11 @@ pub struct CompilerOptions {
     /// Severity policy for the three param-resolution diagnostic classes
     /// (`--param-unknown` / `--param-invalid` / `--param-missing`).
     pub param_policy: param_resolution::ParamPolicy,
+    /// When `Some`, retain a [`wit_emit::WitEmitSnapshot`] (using this contract)
+    /// on [`CompileResult::wit_emit_snapshot`], so the CLI derives the
+    /// `component-type` section / `wado wit` text from this compile rather than
+    /// re-analyzing the frontend (issue #1654). `None` skips the clone.
+    pub embed_wit_contract: Option<wit_emit::WitContract>,
 }
 
 impl Default for CompilerOptions {
@@ -270,6 +279,7 @@ impl Default for CompilerOptions {
             lib_world: None,
             param_overrides: crate::hashmap::IndexMap::default(),
             param_policy: param_resolution::ParamPolicy::default(),
+            embed_wit_contract: None,
         }
     }
 }
@@ -727,13 +737,16 @@ pub async fn compile_with_options<H: CompilerHost>(
     // Wrap all subsequent Bail errors with is_todo_module
     let result = compile_after_load(load_result, options, &logger, filename);
     match result {
-        Ok((wasm, module, wir_package, kiln_options_descriptor)) => Ok(CompileResult {
-            wasm,
-            module,
-            wir_package,
-            is_todo_module,
-            kiln_options_descriptor,
-        }),
+        Ok((wasm, module, wir_package, wit_emit_snapshot, kiln_options_descriptor)) => {
+            Ok(CompileResult {
+                wasm,
+                module,
+                wir_package,
+                is_todo_module,
+                wit_emit_snapshot,
+                kiln_options_descriptor,
+            })
+        }
         Err(Bail) => Err(CompileFailure { is_todo_module }),
     }
 }
@@ -749,6 +762,7 @@ fn compile_after_load<H: CompilerHost>(
         Vec<u8>,
         ast::Module,
         Option<wir::WirPackage>,
+        Option<wit_emit::WitEmitSnapshot>,
         Option<kiln::OptionsDescriptor>,
     ),
     Bail,
@@ -802,6 +816,22 @@ fn compile_after_load<H: CompilerHost>(
     if !sem.is_complete() {
         return Err(Bail);
     }
+
+    // Clone the WIT subset before `sem` is destructured into codegen (issue
+    // #1654), so it survives the move. Captured pre-`--lib`-registration to
+    // match the removed second-analysis path; `is_complete()` guarantees the
+    // registries are built.
+    let wit_emit_snapshot = options.embed_wit_contract.as_ref().map(|contract| {
+        wit_emit::WitEmitSnapshot::new(
+            snapshot_tir_modules(&sem.tir_modules),
+            sem.types.clone(),
+            sem.cm_interface_registry_arc()
+                .expect("cm_interface_registry present when is_complete"),
+            sem.world_registry_arc()
+                .expect("world_registry present when is_complete"),
+            contract.clone(),
+        )
+    });
 
     // Source-level unused diagnostics. Reads the liveness computed during
     // `semantics_with_logger`; gated on the option (CLI `--no-unused`).
@@ -1352,6 +1382,7 @@ fn compile_after_load<H: CompilerHost>(
         } else {
             None
         },
+        wit_emit_snapshot,
         kiln_options_descriptor,
     ))
 }

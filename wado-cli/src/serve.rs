@@ -1197,6 +1197,7 @@ pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
         param_overrides: opts.param_overrides.clone(),
         param_policy: opts.param_policy,
         retain_wir: false,
+        embed_wit_contract: None,
     };
     let cranelift_opt = opts.opt_level.to_wasmtime();
     // `serve` is a driver on the build tier: in a project it builds the
