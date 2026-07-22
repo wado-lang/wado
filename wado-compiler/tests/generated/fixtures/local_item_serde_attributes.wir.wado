@@ -442,6 +442,7 @@ fn "core:prelude/intparse.wado/lenient_int_preprocess"(s) {
     let reason_13: ref "core:prelude/string.wado//String";
     let reason_18: ref "core:prelude/string.wado//String";
     let reason_31: ref "core:prelude/string.wado//String";
+    let _licm_repr_32: ref Array<u8>;
     len = s.used;
     if len == 0 {
         return 1, ref.null none, ref.as_non_null(reason_13 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("empty integer string"), used: 20 }; struct.new "core:prelude/traits.wado//LenientParseError" { reason: reason_13 });
@@ -491,13 +492,15 @@ fn "core:prelude/intparse.wado/lenient_int_preprocess"(s) {
     }
     digit_count = 0;
     j = i;
+    _licm_repr_32 = s.repr;
     b20: block {
         l21: loop {
             break_if b20 j >= len;
             __for_0_body: block {
-                b = builtin::array_get<u8>(s.repr, j);
+                b = builtin::array_get<u8>(_licm_repr_32, j);
                 break_if __for_0_body b == 95;
                 "core:prelude/string.wado/String::push"(cleaned, b);
+                _licm_repr_32 = s.repr;
                 digit_count = digit_count + 1;
             };
             j = j + 1;

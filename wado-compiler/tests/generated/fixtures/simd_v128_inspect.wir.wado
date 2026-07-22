@@ -582,10 +582,12 @@ fn "core:simd/v128^Inspect::inspect"(self, f) {
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let s_8: ref "core:prelude/string.wado//String";
+    let _licm_buf_16: ref "core:prelude/string.wado//String";
     bytes = self.value;
     s_8 = global:core:simd::__const_obj_0;
     "core:prelude/string.wado/String::push_str"(f.buf, s_8);
     i = 0;
+    _licm_buf_16 = f.buf;
     b61: block {
         l62: loop {
             break_if b61 i >= 16;
@@ -593,7 +595,8 @@ fn "core:simd/v128^Inspect::inspect"(self, f) {
             __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
             __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 48, align: 2, sign_plus: 0, zero_pad: 1, width: 2, precision: -2, indent: 0, buf: __local_5 };
             "core:prelude/primitive.wado/u64::fmt_base"(builtin::i64_extend_i32_u(byte), __local_6, 16, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 });
-            "core:prelude/string.wado/String::push_str"(f.buf, __local_5);
+            _licm_buf_16 = f.buf;
+            "core:prelude/string.wado/String::push_str"(_licm_buf_16, __local_5);
             i = i + 1;
             continue l62;
         };

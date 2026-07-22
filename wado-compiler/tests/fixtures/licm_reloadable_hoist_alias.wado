@@ -1,0 +1,45 @@
+// Reloadable field-load hoisting — aliasing soundness. `probe` takes `sink:
+// &mut Holder` and `h: &Holder`; `run` passes the *same* object as both (Wado
+// has no borrow checker, so this is legal). The loop reads `h.data[i]` each
+// iteration and, at `i == 0`, calls a `&mut Holder` method that REPLACES `data`
+// with a different-length, different-content list. LICM hoists `h.data` but
+// must reload it after the clobber, so the aliased replacement is observed:
+// the result must match the unoptimized (O0) run — `1 9 9`, never `1 2 3`.
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    data: List<i32>,
+}
+
+impl Holder {
+    fn reset(&mut self) {
+        self.data = [9, 9, 9];
+    }
+}
+
+fn probe(sink: &mut Holder, h: &Holder, out: &mut List<i32>) {
+    let n = h.data.len();
+    for let mut i = 0; i < n; i += 1 {
+        out.push(h.data[i]);
+        if i == 0 {
+            sink.reset();
+        }
+    }
+}
+
+export fn run() with Stdout {
+    let mut hh = Holder { data: [1, 2, 3] };
+    let mut out: List<i32> = [];
+    probe(&mut hh, &hh, &mut out);
+    let mut s: String = "";
+    for let x of &out {
+        s.push_str(&`${x} `);
+    }
+    println(`${s}`);
+}
+
+__DATA__
+{
+    "stdout": "1 9 9 \n",
+    "wir_expect:O2": ["_licm_data", "= h.data", "array_get<i32>(_licm_data"]
+}
