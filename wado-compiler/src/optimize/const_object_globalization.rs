@@ -948,19 +948,16 @@ fn inline_sibling_lets(
     if sibling_lets.is_empty() {
         return;
     }
-    // Detach the sibling stmts from their blocks, stopping once every sibling
-    // has been relocated so a body with the siblings up front is not scanned to
-    // its end.
+    // Detach the sibling stmts from every block they appear in. A full scan is
+    // load-bearing: an early exit that stops after N removals can leave a
+    // sibling behind in a later block, which then double-lists once the new
+    // initializer block also claims it.
     let sibling_set: IndexSet<StmtId> = sibling_lets.iter().copied().collect();
-    let mut remaining = sibling_set.len();
     for bid in body.blocks.keys().collect::<Vec<_>>() {
-        if remaining == 0 {
-            break;
-        }
         let stmts = &mut body.blocks[bid].stmts;
-        let before = stmts.len();
-        stmts.retain(|s| !sibling_set.contains(s));
-        remaining -= before - stmts.len();
+        if stmts.iter().any(|s| sibling_set.contains(s)) {
+            stmts.retain(|s| !sibling_set.contains(s));
+        }
     }
     // Find the freshly planted `GlobalVarSet` and wrap its value.
     let mut stack = vec![NodeRef::Block(body.root)];
