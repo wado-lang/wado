@@ -49,7 +49,7 @@ fn select<T>(cond: bool, if_true: T, if_false: T) -> T;
 fn copy_value<T>(value: T) -> T;
 
 /// Returns the discriminant (tag) of a variant value.
-/// Used by `Case::holds` (WEP 2026-06-13 §3e); lowered to a direct tag read.
+/// Used by `VariantCase::holds` (WEP 2026-06-13 §3e); lowered to a direct tag read.
 fn variant_tag<T>(v: &T) -> i32;
 
 /// Extracts the payload of variant case `index` from `v` as `P`.
@@ -61,6 +61,10 @@ fn variant_case_extract<T, P>(v: &T, index: i32) -> P;
 /// Builds variant case `index` of `T` around `payload`.
 /// Rewritten by lowering like `variant_case_extract`.
 fn variant_case_construct<T, P>(payload: P, index: i32) -> T;
+
+/// Reads field `index` of struct `v`. Rewritten by lowering to a direct
+/// field access (WEP 2026-06-13 §2). Used by `Field::get`.
+fn struct_field_get<T, F>(v: &T, index: i32) -> F;
 /// Returns the length of a GC array.
 fn array_len(arr: &Array<u8>) -> i32;
 

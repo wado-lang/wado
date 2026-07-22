@@ -21,7 +21,7 @@ use wasm_encoder::{Encode, Section};
 use wit_component::StringEncoding;
 
 use crate::semantics::Semantics;
-use crate::wit_emit::{self, WitEmitError, WitEmitOptions, WitScope};
+use crate::wit_emit::{self, WitEmitError, WitEmitInput, WitEmitOptions, WitScope};
 
 /// Append a `component-type` custom section to `component_bytes`, derived from
 /// the WIT text [`wit_emit::emit_wit_text`] renders for `sem` under `opts`.
@@ -41,16 +41,33 @@ pub fn embed_component_type(
     world_imports: &[String],
 ) -> Result<Vec<u8>, WitEmitError> {
     let payload = encode_component_type(sem, world_imports)?;
+    Ok(append_component_type_section(component_bytes, &payload))
+}
 
+/// Like [`embed_component_type`], but from a detached [`WitEmitInput`] view
+/// (issue #1654).
+pub fn embed_component_type_from(
+    component_bytes: &[u8],
+    input: WitEmitInput<'_>,
+    world_imports: &[String],
+) -> Result<Vec<u8>, WitEmitError> {
+    let payload = encode_component_type_from(input, world_imports)?;
+    Ok(append_component_type_section(component_bytes, &payload))
+}
+
+/// Append an already-encoded `component-type` payload to a component as a custom
+/// section, leaving the component's own type structure untouched.
+#[must_use]
+pub fn append_component_type_section(component_bytes: &[u8], payload: &[u8]) -> Vec<u8> {
     let section = wasm_encoder::CustomSection {
         name: "component-type".into(),
-        data: Cow::Borrowed(&payload),
+        data: Cow::Borrowed(payload),
     };
     let mut out = Vec::with_capacity(component_bytes.len() + payload.len() + 16);
     out.extend_from_slice(component_bytes);
     out.push(section.id());
     section.encode(&mut out);
-    Ok(out)
+    out
 }
 
 /// Render the WIT for `sem`/`opts` and encode it as a `component-type` section
@@ -61,12 +78,20 @@ pub fn encode_component_type(
     sem: &Semantics,
     world_imports: &[String],
 ) -> Result<Vec<u8>, WitEmitError> {
+    encode_component_type_from(sem.wit_emit_input(), world_imports)
+}
+
+/// Like [`encode_component_type`], but from a detached [`WitEmitInput`] view (issue #1654).
+pub fn encode_component_type_from(
+    input: WitEmitInput<'_>,
+    world_imports: &[String],
+) -> Result<Vec<u8>, WitEmitError> {
     // Force full scope: the section must be a self-contained WIT package so
     // `metadata::encode` can type the world without an external registry.
     let opts = WitEmitOptions {
         scope: WitScope::Full,
     };
-    let text = wit_emit::emit_wit_text(sem, &opts, world_imports)?;
+    let text = wit_emit::emit_wit_text_from(input, &opts, world_imports)?;
 
     let mut resolve = wit_parser::Resolve::new();
     let pkg = resolve
@@ -75,7 +100,7 @@ pub fn encode_component_type(
             description: format!("re-parsing emitted WIT failed: {e}"),
         })?;
 
-    let world_name = wit_emit::world_name(sem);
+    let world_name = wit_emit::world_name_from(input);
     let world = resolve
         .select_world(&[pkg], Some(world_name.as_str()))
         .map_err(|e| WitEmitError::Embed {

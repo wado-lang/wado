@@ -61,24 +61,24 @@ struct core:serde//SerializeError {  // TypeId(9)
     mut message: ref "core:prelude/string.wado//String",
 }
 
-array Array<i32> (mut i32);  // TypeId(10)
+array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(10)
 
-array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(11)
+array Array<i32> (mut i32);  // TypeId(11)
 
-struct core:prelude/slice.wado//ArraySlice<u8> {  // TypeId(12)
+struct core:prelude/slice.wado//ArrayRefIter<core:prelude/string.wado/String> {  // TypeId(12)
+    mut repr: ref "Array<core:prelude/string.wado/String>",
+    mut index: i32,
+    mut end: i32,
+}
+
+struct core:prelude/slice.wado//ArraySlice<u8> {  // TypeId(13)
     mut repr: ref Array<u8>,
     mut start: i32,
     mut end: i32,
 }
 
-struct core:prelude/slice.wado//ArrayRefIter<i32> {  // TypeId(13)
+struct core:prelude/slice.wado//ArrayRefIter<i32> {  // TypeId(14)
     mut repr: ref Array<i32>,
-    mut index: i32,
-    mut end: i32,
-}
-
-struct core:prelude/slice.wado//ArrayRefIter<core:prelude/string.wado/String> {  // TypeId(14)
-    mut repr: ref "Array<core:prelude/string.wado/String>",
     mut index: i32,
     mut end: i32,
 }
@@ -113,13 +113,13 @@ struct core:prelude//List<u8> {  // TypeId(20)
     mut used: i32,
 }
 
-struct core:prelude//List<i32> {  // TypeId(21)
-    mut repr: ref Array<i32>,
+struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(21)
+    mut repr: ref "Array<core:prelude/string.wado/String>",
     mut used: i32,
 }
 
-struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(22)
-    mut repr: ref "Array<core:prelude/string.wado/String>",
+struct core:prelude//List<i32> {  // TypeId(22)
+    mut repr: ref Array<i32>,
     mut used: i32,
 }
 

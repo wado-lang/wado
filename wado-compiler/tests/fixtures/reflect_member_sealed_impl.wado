@@ -1,0 +1,26 @@
+// `Member` is sealed: a user `impl Member for T` is a compile error (the
+// compiler implements it only for the `Field` token it synthesizes).
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Member for Point {
+    fn name(&self) -> String {
+        return "forged";
+    }
+    fn wire_name_override(&self) -> Option<String> {
+        return Option::None;
+    }
+}
+
+test "unreachable" {
+    assert true;
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "cannot implement `Member`: it is a sealed"
+}

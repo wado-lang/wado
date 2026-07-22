@@ -514,6 +514,14 @@ pub struct "Box<core:prelude/traits.wado/Ordering>" {
     value: Ordering,
 }
 
+pub struct "Box<core:prelude/traits.wado/CaseStyle>" {
+    value: CaseStyle,
+}
+
+pub struct "Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" {
+    value: Option<String>,
+}
+
 pub struct "Box<Fn<1,U>>" {
     value: fn mut(I::Item) -> U,
 }
@@ -566,6 +574,16 @@ enum Ordering {
     Less,
     Equal,
     Greater,
+}
+
+pub enum CaseStyle {
+    Identity,
+    Camel,
+    Snake,
+    ScreamingSnake,
+    Pascal,
+    Kebab,
+    ScreamingKebab,
 }
 
 flags Access {
@@ -2156,7 +2174,7 @@ fn __test_0() {
                 __r.String::push_str(&String { repr: packed"core:prelude", used: 12 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 77 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 78 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed"\ncondition: greeting == \"Hello, Wado!\"\n", used: 39 });
                 __r.String::push_str(&String { repr: packed"greeting: ", used: 10 });
                 __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
@@ -2187,7 +2205,7 @@ fn __test_0() {
                 __r.String::push_str(&String { repr: packed"core:prelude", used: 12 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 80 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 81 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed"\ncondition: primes.len() == 4\n", used: 30 });
                 __r.String::push_str(&String { repr: packed"primes.len(): ", used: 14 });
                 __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
@@ -2212,7 +2230,7 @@ fn __test_0() {
                 __r.String::push_str(&String { repr: packed"core:prelude", used: 12 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 81 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 82 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed"\ncondition: primes.get(1) matches { Some(v) && v == 3 }\n", used: 56 });
                 break __tmpl: __r;
             });
@@ -2233,7 +2251,7 @@ fn __test_0() {
                 __r.String::push_str(&String { repr: packed"core:prelude", used: 12 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 82 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 83 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed"\ncondition: primes.get(9) matches { None }\n", used: 43 });
                 break __tmpl: __r;
             });
@@ -2262,7 +2280,7 @@ fn __test_0() {
                 __r.String::push_str(&String { repr: packed"core:prelude", used: 12 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 85 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 86 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed"\ncondition: decoded matches { Ok(s) && s == \"Wado\" }\n", used: 53 });
                 break __tmpl: __r;
             });
@@ -14839,6 +14857,36 @@ pub fn "Ordering^Inspect::inspect"(self: Box<core:prelude/traits.wado/Ordering>,
     };
 }
 
+pub fn "CaseStyle^Inspect::inspect"(self: Box<core:prelude/traits.wado/CaseStyle>, f: &mut Formatter) {
+    if (self.value == %0) {
+        f.Formatter::write_str(&String { repr: packed"CaseStyle::Identity", used: 19 });
+    } else {
+        if (self.value == %3) {
+            f.Formatter::write_str(&String { repr: packed"CaseStyle::Camel", used: 16 });
+        } else {
+            if (self.value == %6) {
+                f.Formatter::write_str(&String { repr: packed"CaseStyle::Snake", used: 16 });
+            } else {
+                if (self.value == %9) {
+                    f.Formatter::write_str(&String { repr: packed"CaseStyle::ScreamingSnake", used: 25 });
+                } else {
+                    if (self.value == %12) {
+                        f.Formatter::write_str(&String { repr: packed"CaseStyle::Pascal", used: 17 });
+                    } else {
+                        if (self.value == %15) {
+                            f.Formatter::write_str(&String { repr: packed"CaseStyle::Kebab", used: 16 });
+                        } else {
+                            if (self.value == %18) {
+                                f.Formatter::write_str(&String { repr: packed"CaseStyle::ScreamingKebab", used: 25 });
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    };
+}
+
 pub fn "VariantCaseMeta^Inspect::inspect"(self: &VariantCaseMeta, f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"VariantCaseMeta { ", used: 18 });
     f.Formatter::write_str(&String { repr: packed"name: ", used: 6 });
@@ -14951,6 +14999,10 @@ pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Ite
 
 pub fn "Ordering^InspectAlt::inspect_alt"(self: Box<core:prelude/traits.wado/Ordering>, f: &mut Formatter) {
     self."Ordering^Inspect::inspect"(f);
+}
+
+pub fn "CaseStyle^InspectAlt::inspect_alt"(self: Box<core:prelude/traits.wado/CaseStyle>, f: &mut Formatter) {
+    self."CaseStyle^Inspect::inspect"(f);
 }
 
 pub fn "VariantCaseMeta^InspectAlt::inspect_alt"(self: &VariantCaseMeta, f: &mut Formatter) {
@@ -15084,8 +15136,42 @@ pub fn "Ordering^Display::fmt"(self: Box<core:prelude/traits.wado/Ordering>, f: 
     };
 }
 
+pub fn "CaseStyle^Display::fmt"(self: Box<core:prelude/traits.wado/CaseStyle>, f: &mut Formatter) {
+    if (self.value == %0) {
+        f.Formatter::write_str(&String { repr: packed"Identity", used: 8 });
+    } else {
+        if (self.value == %3) {
+            f.Formatter::write_str(&String { repr: packed"Camel", used: 5 });
+        } else {
+            if (self.value == %6) {
+                f.Formatter::write_str(&String { repr: packed"Snake", used: 5 });
+            } else {
+                if (self.value == %9) {
+                    f.Formatter::write_str(&String { repr: packed"ScreamingSnake", used: 14 });
+                } else {
+                    if (self.value == %12) {
+                        f.Formatter::write_str(&String { repr: packed"Pascal", used: 6 });
+                    } else {
+                        if (self.value == %15) {
+                            f.Formatter::write_str(&String { repr: packed"Kebab", used: 5 });
+                        } else {
+                            if (self.value == %18) {
+                                f.Formatter::write_str(&String { repr: packed"ScreamingKebab", used: 14 });
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    };
+}
+
 pub fn "Ordering^DisplayAlt::fmt_alt"(self: Box<core:prelude/traits.wado/Ordering>, f: &mut Formatter) {
     self."Ordering^Display::fmt"(f);
+}
+
+pub fn "CaseStyle^DisplayAlt::fmt_alt"(self: Box<core:prelude/traits.wado/CaseStyle>, f: &mut Formatter) {
+    self."CaseStyle^Display::fmt"(f);
 }
 
 fn "List<u64>^SequenceLiteralBuilder::build"(self: &List<u64>) -> List<u64> {
