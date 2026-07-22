@@ -136,9 +136,14 @@ are identical logic whether the member is a struct field, a variant case, an
 enum case, or a flag bit. A value tuple plus a parallel meta list forces a
 derivation to zip the two by a hand-maintained index — a real footgun for the
 struct field walk, and one already avoided for variants by the `VariantCase`
-token (§3e). Reusing the token shape for every kind removes the zip and gives one
-attr-reading contract that serde, Jade, and user-written derivations all
-consume.
+token (§3e). Reusing the token shape for every kind removes _this_ zip — the one
+between a value walk and its metadata (serialize, inspect) — and gives one
+attr-reading contract that serde, Jade, and user-written derivations all consume.
+It does not remove the other zip: a value-free type-directed derivation (schema,
+deserialize) still pairs the positional `[..F::method()]` expansion with
+per-member metadata by index, because `[..F::method()]` is a type-level call with
+no value for a token to carry. Tokens serve the value walk; the type packs
+(`Fields` / `Cases`) serve the type-directed expansion — two distinct channels.
 
 The compiler exposes facts, not policy. A resolved wire name (serde `rename` /
 `rename_all` casing applied) is policy, and casing is serialization vocabulary,
@@ -250,9 +255,17 @@ adding them later is purely additive — no user impls to break, and existing
 `name` / `wire_name_override` / `wire_name_policy` / `validate` / the value
 bridges / `construct`; `doc` follows with the trivia wiring.
 
-Like the original, `Member`, the tokens, and the `Reflect*` traits are
-compiler-synthesized, cannot be user-implemented, and are callable only in
-monomorphized contexts.
+The token types (`Field<T, F>` and its siblings) and their `impl Member` are
+hand-written `internal` stdlib generics, like `VariantCase` today; the compiler
+synthesizes only the per-type minting functions (`field_tokens()` / `cases()` /
+…) and `wire_name_policy()`. A token is _fat_: `field_tokens()` bakes each
+field's metadata into the token as literals (the `case_meta()` literal-building
+pattern, now bundled with the type-carrying token), so `name()` is a field read
+and the walk stays O(fields) without relying on constant globalization — a thin
+token that re-reads type-level lists per access is a future memory optimization
+only if the literal duplication ever measures. `Member` is sealed — the four
+stdlib token impls are the only ones, a user `impl Member` is rejected — and,
+like the `Reflect*` traits, callable only in monomorphized contexts.
 
 ### 3. Variant / enum / flags reflection
 
