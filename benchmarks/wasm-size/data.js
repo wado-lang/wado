@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784682649672,
+  "lastUpdate": 1784707254569,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -42913,6 +42913,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/225e491bcd75deeeb2962e10c44f304b315afb24"
         },
         "date": 1784682649269,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8143,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16466,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271548,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b9226418aea9207372226a77c211f69ba3b32c84",
+          "message": "Merge pull request #1659 from wado-lang/claude/wado-rust-let-else-z1mpli\n\nfeat(lang): add `let ... else` statements",
+          "timestamp": "2026-07-22T16:52:36+09:00",
+          "tree_id": "9cfe3b035f51f8bbda2630e64306c49b53f9b301",
+          "url": "https://github.com/wado-lang/wado/commit/b9226418aea9207372226a77c211f69ba3b32c84"
+        },
+        "date": 1784707254227,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
