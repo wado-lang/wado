@@ -1,0 +1,51 @@
+// Blanket derivation over `Reflect` (WEP 2026-06-13 §2): the bound
+// `Fields = [..F]` projects the field-type pack, and `field_tokens()` has the
+// constructor-mapped pack type `[..Field<T, F>]`. One generic walk reads each
+// field's name / wire-name override (via the sealed `Member` face) and its
+// value (via `Field::get`, per-field-type dispatch) — the serialize shape.
+// This exercises the generic `field_tokens()` resolution, not just the concrete
+// `Reflect::<Struct>::field_tokens()` call.
+
+trait Row {
+    fn row(&self) -> String;
+}
+
+impl Row for i32 {
+    fn row(&self) -> String {
+        return `${*self}`;
+    }
+}
+
+impl Row for String {
+    fn row(&self) -> String {
+        return *self;
+    }
+}
+
+impl<T: Reflect<Fields = [..F]>, ..F: Row> Row for T {
+    fn row(&self) -> String {
+        let mut out = "";
+        for let f of Reflect::<T>::field_tokens() {
+            let wire = match f.wire_name_override() {
+                Option::Some(w) => w,
+                Option::None => f.name(),
+            };
+            out = `${out}${wire}=${f.get(self).row()};`;
+        }
+        return out;
+    }
+}
+
+struct User {
+    #[serde(rename = "user_id")]
+    id: i32,
+    name: String,
+}
+
+test "blanket derivation walks field_tokens() with metadata and values" {
+    let u = User { id: 7, name: "ada" };
+    assert u.row() == "user_id=7;name=ada;";
+}
+
+__DATA__
+{"test": {}}
