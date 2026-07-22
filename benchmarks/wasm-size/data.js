@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784724945568,
+  "lastUpdate": 1784752745765,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -43045,6 +43045,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a9be5a0161292dd33d21475f2be0d68faffc5557"
         },
         "date": 1784724944805,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8143,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16466,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271548,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "831bfa638db37fdd9a1feb7d157c52cfe724bfd2",
+          "message": "Merge pull request #1661 from wado-lang/dependabot/npm_and_yarn/benchmark/http_routing/npm_and_yarn-1076ba1521\n\nchore(deps): bump @hono/node-server from 1.19.14 to 2.0.11 in /benchmark/http_routing in the npm_and_yarn group across 1 directory",
+          "timestamp": "2026-07-23T05:26:42+09:00",
+          "tree_id": "99efbc585416a6aa4cfbe5ba52d5f5a6f17307d8",
+          "url": "https://github.com/wado-lang/wado/commit/831bfa638db37fdd9a1feb7d157c52cfe724bfd2"
+        },
+        "date": 1784752745360,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
