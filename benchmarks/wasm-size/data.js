@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784754713521,
+  "lastUpdate": 1784757205379,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -43133,6 +43133,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ac0dd0130566c077db8530bcbf9d5820201b2c8e"
         },
         "date": 1784754712921,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8143,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16466,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271548,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b41680e85f522d08220957118d96383a3dd69040",
+          "message": "Merge pull request #1662 from wado-lang/claude/serde-attrs-api-design-ne2voe\n\nfeat(reflect): struct-field reading API over Reflect (Member tokens + wire naming)",
+          "timestamp": "2026-07-23T06:38:27+09:00",
+          "tree_id": "14fcc4c907c3791d0e34a442a6b07ddc6dcb7627",
+          "url": "https://github.com/wado-lang/wado/commit/b41680e85f522d08220957118d96383a3dd69040"
+        },
+        "date": 1784757204656,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
