@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784681641818,
+  "lastUpdate": 1784682649672,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -42869,6 +42869,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b5c73547e8e0cf89bf091e40f6f15669a827c757"
         },
         "date": 1784681641058,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8143,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16466,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271548,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "225e491bcd75deeeb2962e10c44f304b315afb24",
+          "message": "Merge pull request #1658 from wado-lang/gfx/update_wado_vscode_deps\n\nchore: update deps for wado-vscode",
+          "timestamp": "2026-07-22T09:59:15+09:00",
+          "tree_id": "cfabba0a8f140a2e6d55799ee2b584aeb544fdd7",
+          "url": "https://github.com/wado-lang/wado/commit/225e491bcd75deeeb2962e10c44f304b315afb24"
+        },
+        "date": 1784682649269,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
