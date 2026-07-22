@@ -569,6 +569,17 @@ fn licm_loop(
     all_hoist_stmts
 }
 
+/// Type of the source local a candidate reads, falling back to the field type
+/// for a synthetic (not-yet-allocated) local index.
+fn candidate_root_ty(engine: &Engine, local_index: u32, fallback: TypeId) -> TypeId {
+    let locals = engine.locals();
+    if (local_index as usize) < locals.len() {
+        locals[local_index as usize].type_id
+    } else {
+        fallback
+    }
+}
+
 /// Hoist field loads blocked *only* by an opaque `&mut`-call clobber of their
 /// pointee type, reloading them after each clobbering statement. See the call
 /// site in [`licm_loop`] for the rationale.
@@ -584,6 +595,13 @@ fn hoist_reloadable_field_loads(
         modified_vars.add_alias(a, b);
     }
     collect_modified_vars_in_block(engine.body, loop_body, &mut modified_vars, ctx.type_table);
+
+    // No opaque `&mut`-call clobber of any struct pointee means no reloadable
+    // candidate can exist — skip the ref-binding and candidate walks entirely
+    // (the common case for loops without a same-typed mutating call).
+    if modified_vars.clobbered_pointee_types.is_empty() {
+        return;
+    }
 
     let mut ref_bindings = collect_immutable_ref_bindings(engine.body, loop_body, ctx.type_table);
     ref_bindings
@@ -604,14 +622,7 @@ fn hoist_reloadable_field_loads(
     // of a struct pointee: not directly field-written, and with a genuine
     // (non-reload) read still present in the loop.
     candidates.retain(|c| {
-        let root_ty = {
-            let locals = engine.locals();
-            if (c.local_index as usize) < locals.len() {
-                locals[c.local_index as usize].type_id
-            } else {
-                c.type_id
-            }
-        };
+        let root_ty = candidate_root_ty(engine, c.local_index, c.type_id);
         let Some(pointee) = reloadable_pointee(root_ty, ctx.type_table) else {
             return false;
         };
@@ -640,14 +651,7 @@ fn hoist_reloadable_field_loads(
     // The pointee types whose clobbers force a reload.
     let mut clobber_types: IndexSet<TypeId> = IndexSet::default();
     for c in &candidates {
-        let root_ty = {
-            let locals = engine.locals();
-            if (c.local_index as usize) < locals.len() {
-                locals[c.local_index as usize].type_id
-            } else {
-                c.type_id
-            }
-        };
+        let root_ty = candidate_root_ty(engine, c.local_index, c.type_id);
         if let Some(p) = reloadable_pointee(root_ty, ctx.type_table) {
             clobber_types.insert(p);
         }
@@ -678,7 +682,9 @@ fn hoist_reloadable_field_loads(
     ) {
         return;
     }
-    if !all_clobber_calls_return_unit(
+    // A clobbering call that is the value-producing tail of a value-block would
+    // have its (non-unit) value dropped by an appended reload — bail on those.
+    if has_nonunit_clobber_value_tail(
         engine.body,
         NodeRef::Block(loop_body),
         &clobber_types,
@@ -690,14 +696,9 @@ fn hoist_reloadable_field_loads(
     // Materialise the hoists (mutable, so reloads can rebind them).
     let mut specs = Vec::with_capacity(candidates.len());
     for candidate in &candidates {
-        let local_type_id = {
-            let locals = engine.locals();
-            if (candidate.local_index as usize) < locals.len() {
-                locals[candidate.local_index as usize].type_id
-            } else {
-                candidate.type_id
-            }
-        };
+        let local_type_id = candidate_root_ty(engine, candidate.local_index, candidate.type_id);
+        let pointee = reloadable_pointee(local_type_id, ctx.type_table)
+            .expect("retained candidate has a reloadable struct pointee");
         let hoist_name = format!(
             "{LICM_HOIST_PREFIX}{}_{}",
             candidate.field_name,
@@ -739,6 +740,7 @@ fn hoist_reloadable_field_loads(
             field_index: candidate.field_index,
             field_name: candidate.field_name.clone(),
             field_type: candidate.type_id,
+            pointee,
             hoist_local: new_local_index,
             hoist_name,
         });
@@ -769,6 +771,8 @@ struct ReloadSpec {
     field_index: u32,
     field_name: String,
     field_type: TypeId,
+    /// The struct pointee type whose clobbers require this field to be reloaded.
+    pointee: TypeId,
     hoist_local: u32,
     hoist_name: String,
 }
@@ -825,8 +829,11 @@ fn insert_reloads(
     let mut changed = false;
     for s in stmts {
         new_stmts.push(s);
-        if node_contains_clobber(engine.body, NodeRef::Stmt(s), clobber_types, type_table) {
-            for spec in specs {
+        // The pointee types this statement actually clobbers; only fields of
+        // those types can have gone stale, so reload just their specs.
+        let hit = node_clobbered_types(engine.body, NodeRef::Stmt(s), clobber_types, type_table);
+        if !hit.is_empty() {
+            for spec in specs.iter().filter(|sp| hit.contains(&sp.pointee)) {
                 let value = build_field_access(
                     engine,
                     spec.source_local,
@@ -915,38 +922,104 @@ fn expr_clobbers_types(
     })
 }
 
-/// A clobbering call whose result is used as a value-block tail would have its
-/// value replaced by an appended reload (which yields unit). Non-unit-returning
-/// clobbers are therefore rejected wholesale — the loop is left unhoisted.
-/// Unit-returning mutators (`push`, `push_str`, …) are the common case and stay
-/// eligible, since a reload appended after them cannot change any observed value.
-fn all_clobber_calls_return_unit(
+/// True when some value-producing block under `node` has a last statement that
+/// is a non-unit clobbering call. `insert_reloads` appends a reload (which
+/// yields unit) after such a tail, replacing the block's observed value — so a
+/// non-unit value-tail clobber makes the loop ineligible. A `Block` child of an
+/// *expression* is value-producing (its tail is the value); a `Block` child of
+/// a *statement* (loop body, `if`-statement arm) discards its tail, so appending
+/// there is harmless and stays eligible.
+fn has_nonunit_clobber_value_tail(
     body: &Body,
     node: NodeRef,
     clobber_types: &IndexSet<TypeId>,
     type_table: &TypeTable,
 ) -> bool {
-    if let NodeRef::Expr(e) = node
-        && expr_clobbers_types(body, e, clobber_types, type_table)
-        && body.exprs[e].type_id != TypeTable::UNIT
-    {
-        return false;
+    if let NodeRef::Expr(_) = node {
+        let mut hit = false;
+        body.for_each_child(node, |c| {
+            if hit {
+                return;
+            }
+            if let NodeRef::Block(b) = c
+                && let Some(&last) = body.blocks[b].stmts.last()
+                && let StmtKind::Expr(Operand::Expr(e)) = &body.stmts[last].kind
+                && expr_clobbers_types(body, *e, clobber_types, type_table)
+                && body.exprs[*e].type_id != TypeTable::UNIT
+            {
+                hit = true;
+            }
+        });
+        if hit {
+            return true;
+        }
     }
-    let mut ok = true;
+    let mut found = false;
     body.for_each_child(node, |c| {
-        if ok && !matches!(c, NodeRef::Pat(_)) {
-            ok = all_clobber_calls_return_unit(body, c, clobber_types, type_table);
+        if !found && !matches!(c, NodeRef::Pat(_)) {
+            found = has_nonunit_clobber_value_tail(body, c, clobber_types, type_table);
         }
     });
-    ok
+    found
 }
 
-fn expr_type_clobbers(
+/// The subset of `clobber_types` a statement clobbers, viewing only its own
+/// expression tree (block-stopping, mirroring [`node_contains_clobber`]) so a
+/// reload placed after this statement targets exactly the fields that may have
+/// gone stale.
+fn node_clobbered_types(
+    body: &Body,
+    node: NodeRef,
+    clobber_types: &IndexSet<TypeId>,
+    type_table: &TypeTable,
+) -> IndexSet<TypeId> {
+    let mut hit = IndexSet::default();
+    collect_clobbered_types(body, node, clobber_types, type_table, &mut hit);
+    hit
+}
+
+fn collect_clobbered_types(
+    body: &Body,
+    node: NodeRef,
+    clobber_types: &IndexSet<TypeId>,
+    type_table: &TypeTable,
+    hit: &mut IndexSet<TypeId>,
+) {
+    if let NodeRef::Expr(e) = node {
+        let operands: &[ArenaCallArg] = match &body.exprs[e].kind {
+            ExprKind::Call { args, .. } => args,
+            ExprKind::MethodCall { receiver, args, .. } => {
+                if let Some(re) = receiver.as_expr()
+                    && let Some(t) = mut_ref_pointee(body, re, clobber_types, type_table)
+                {
+                    hit.insert(t);
+                }
+                args
+            }
+            _ => &[],
+        };
+        for a in operands {
+            if let Some(ae) = a.expr.as_expr()
+                && let Some(t) = mut_ref_pointee(body, ae, clobber_types, type_table)
+            {
+                hit.insert(t);
+            }
+        }
+    }
+    body.for_each_child(node, |c| {
+        if !matches!(c, NodeRef::Pat(_) | NodeRef::Block(_)) {
+            collect_clobbered_types(body, c, clobber_types, type_table, hit);
+        }
+    });
+}
+
+/// The pointee `T` of `e` when `e` has type `&mut T` and `T ∈ clobber_types`.
+fn mut_ref_pointee(
     body: &Body,
     e: ExprId,
     clobber_types: &IndexSet<TypeId>,
     type_table: &TypeTable,
-) -> bool {
+) -> Option<TypeId> {
     let mut ty = body.exprs[e].type_id;
     let mut saw_mut = false;
     loop {
@@ -959,7 +1032,16 @@ fn expr_type_clobbers(
             _ => break,
         }
     }
-    saw_mut && clobber_types.contains(&ty)
+    (saw_mut && clobber_types.contains(&ty)).then_some(ty)
+}
+
+fn expr_type_clobbers(
+    body: &Body,
+    e: ExprId,
+    clobber_types: &IndexSet<TypeId>,
+    type_table: &TypeTable,
+) -> bool {
+    mut_ref_pointee(body, e, clobber_types, type_table).is_some()
 }
 
 /// True when the expression tree under `node` — *without crossing into nested
@@ -988,36 +1070,34 @@ fn node_contains_clobber(
     found
 }
 
-/// True when the expression tree under `node` — *without crossing into nested
-/// blocks* — reads `source_local.field_index` as a field access.
-fn node_reads_field(body: &Body, node: NodeRef, source_local: u32, field_index: u32) -> bool {
-    if let NodeRef::Expr(e) = node
-        && let ExprKind::FieldAccess {
-            expr: inner,
-            field_index: fi,
-            ..
-        } = &body.exprs[e].kind
-        && *fi == field_index
+/// True when the tree under `node` reads `source_local.field_index` as a field
+/// access. `cross_blocks` controls whether the walk descends into nested blocks;
+/// True when `e` is directly `source.field` for one of the `(source, field)`
+/// specs (a single node, not a subtree walk).
+fn expr_is_spec_read(body: &Body, e: ExprId, specs: &[(u32, u32)]) -> bool {
+    if let ExprKind::FieldAccess {
+        expr: inner,
+        field_index,
+        ..
+    } = &body.exprs[e].kind
         && let Some(ie) = inner.as_expr()
         && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
-        && *index == source_local
     {
-        return true;
+        specs.iter().any(|&(src, fld)| src == *index && fld == *field_index)
+    } else {
+        false
     }
-    let mut found = false;
-    body.for_each_child(node, |c| {
-        if !found && !matches!(c, NodeRef::Pat(_) | NodeRef::Block(_)) {
-            found = node_reads_field(body, c, source_local, field_index);
-        }
-    });
-    found
 }
 
-/// Soundness gate: no statement anywhere under `block` may both clobber a
-/// pointee type *and* read one of the hoisted source fields. When a statement
-/// only clobbers, a reload appended after it refreshes the field before any
-/// later read; a statement that also reads the field could observe the stale
-/// hoisted value mid-evaluation, so such a loop is left unhoisted.
+/// Soundness gate. A hoisted local goes stale the moment a clobber runs and
+/// stays stale until the next reload, which `insert_reloads` emits *after* each
+/// statement carrying a direct clobber. So the only unsound read is one
+/// evaluated after a clobber but before that statement ends. This walks the
+/// loop in evaluation order threading a `poison` flag (set at a clobbering call,
+/// which happens after its own arguments; cleared after a direct-clobber
+/// statement's reload) and rejects if a field read is reached while poisoned. A
+/// read inside a clobbering call's arguments stays safe (evaluated first), so
+/// e.g. `traverse(node.children[i], …)` remains hoistable.
 fn reload_gate_ok(
     body: &Body,
     block: BlockId,
@@ -1025,23 +1105,77 @@ fn reload_gate_ok(
     clobber_types: &IndexSet<TypeId>,
     type_table: &TypeTable,
 ) -> bool {
+    !gate_eval_block(body, block, false, specs, clobber_types, type_table).0
+}
+
+/// Sequence `block`'s statements, threading poison; a direct-clobber statement's
+/// trailing reload clears poison for the rest. Returns
+/// `(found_stale_read, poison_after_block)`.
+fn gate_eval_block(
+    body: &Body,
+    block: BlockId,
+    mut poison: bool,
+    specs: &[(u32, u32)],
+    clobber_types: &IndexSet<TypeId>,
+    type_table: &TypeTable,
+) -> (bool, bool) {
     for &s in &body.blocks[block].stmts {
-        if node_contains_clobber(body, NodeRef::Stmt(s), clobber_types, type_table)
-            && specs
-                .iter()
-                .any(|&(src, fld)| node_reads_field(body, NodeRef::Stmt(s), src, fld))
-        {
-            return false;
+        let (bad, p) = gate_eval_node(
+            body,
+            NodeRef::Stmt(s),
+            poison,
+            specs,
+            clobber_types,
+            type_table,
+        );
+        if bad {
+            return (true, poison);
         }
-        let mut child_blocks = Vec::new();
-        collect_child_blocks(body, NodeRef::Stmt(s), &mut child_blocks);
-        for b in child_blocks {
-            if !reload_gate_ok(body, b, specs, clobber_types, type_table) {
-                return false;
-            }
+        poison = if node_contains_clobber(body, NodeRef::Stmt(s), clobber_types, type_table) {
+            false
+        } else {
+            p
+        };
+    }
+    (false, poison)
+}
+
+/// Evaluate a node's subtree in evaluation order (operand children before the
+/// node's own operation; nested blocks via [`gate_eval_block`] so their trailing
+/// reloads are modelled). Returns `(found_stale_read, poison_after)`.
+fn gate_eval_node(
+    body: &Body,
+    node: NodeRef,
+    mut poison: bool,
+    specs: &[(u32, u32)],
+    clobber_types: &IndexSet<TypeId>,
+    type_table: &TypeTable,
+) -> (bool, bool) {
+    if let NodeRef::Block(b) = node {
+        return gate_eval_block(body, b, poison, specs, clobber_types, type_table);
+    }
+    let mut children = Vec::new();
+    body.for_each_child(node, |c| {
+        if !matches!(c, NodeRef::Pat(_)) {
+            children.push(c);
+        }
+    });
+    for c in children {
+        let (bad, p) = gate_eval_node(body, c, poison, specs, clobber_types, type_table);
+        if bad {
+            return (true, poison);
+        }
+        poison = p;
+    }
+    if let NodeRef::Expr(e) = node {
+        if poison && expr_is_spec_read(body, e, specs) {
+            return (true, poison);
+        }
+        if expr_clobbers_types(body, e, clobber_types, type_table) {
+            poison = true;
         }
     }
-    true
+    (false, poison)
 }
 
 /// Count field reads `source.field` under `node` that are *genuine* uses, i.e.
