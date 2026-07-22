@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784673193663,
+  "lastUpdate": 1784681641818,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -42825,6 +42825,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3f51ca2c626827b4d1af9eb88006b8c921128b96"
         },
         "date": 1784673193271,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8143,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16466,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271548,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b5c73547e8e0cf89bf091e40f6f15669a827c757",
+          "message": "Merge pull request #1657 from wado-lang/claude/reflection-wep-where-placement-laauvr\n\nfeat(reflect): compile-time reflection and library-defined derivation (WEP 2026-06-13)",
+          "timestamp": "2026-07-22T09:44:10+09:00",
+          "tree_id": "29411711c7819e8e72595815dc412f0272286558",
+          "url": "https://github.com/wado-lang/wado/commit/b5c73547e8e0cf89bf091e40f6f15669a827c757"
+        },
+        "date": 1784681641058,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
