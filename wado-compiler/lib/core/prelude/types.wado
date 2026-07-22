@@ -219,7 +219,7 @@ internal resource StreamWritable<T> {
 
     /// Write a byte view directly to the stream, without the deep copy that
     /// value-semantics `write` makes. The slice is a zero-copy window over a
-    /// backing array (`list.as_slice()`, `array.slice(..)`, `string.as_bytes()`),
+    /// backing array (`list.as_slice()`, `array.slice(start, end)`, `string.as_bytes()`),
     /// so only the CM lowering copy remains.
     #[cm("stream-write-raw")]
     fn write_raw(&self, data: ArraySlice<T>);

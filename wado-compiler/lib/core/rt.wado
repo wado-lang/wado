@@ -73,7 +73,7 @@ internal fn memory_to_gc_string(ptr: i32, len: i32) -> String {
     return String::internal_from_utf8_raw(arr, len);
 }
 
-/// Copies `arr[src_start..src_start + len]` from a GC array to linear memory.
+/// Copies `arr[src_start..<src_start + len]` from a GC array to linear memory.
 internal fn gc_array_to_memory(arr: &Array<u8>, src_start: i32, ptr: i32, len: i32) {
     for let mut i = 0; i < len; i += 1 {
         builtin::i32_store8(ptr + i, builtin::array_get_u8(arr, src_start + i));
@@ -185,7 +185,7 @@ internal fn cm_lower_string(s: String) -> i64 {
     return ptr as i64 | len as i64 << 32;
 }
 
-/// Lowers `data[start..start + len]` of a GC array to CM linear memory.
+/// Lowers `data[start..<start + len]` of a GC array to CM linear memory.
 /// Returns (ptr | (len << 32)) as i64.
 /// The caller must free the allocated memory after the CM call.
 internal fn cm_lower_list_u8(data: &Array<u8>, start: i32, len: i32) -> i64 {
