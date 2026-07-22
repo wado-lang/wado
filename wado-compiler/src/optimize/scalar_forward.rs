@@ -55,13 +55,33 @@ pub fn forward_scalar_temps(project: &mut NirPackage, gate: &mut FunctionGate) -
     })
 }
 
-struct ScalarForwardRule<'a> {
+pub(super) struct ScalarForwardRule<'a> {
     type_table: &'a TypeTable,
+    /// When set, forward only into a struct/tuple-literal use. This is the
+    /// SROA-enabling subset that is safe to run *inside* the loop, before
+    /// `sroa`: collapsing `let t = e; Struct { …, t }` to `Struct { …, e }`
+    /// removes the block wrapper that would otherwise hide the literal from
+    /// SROA's candidate matcher. The unrestricted fold stays post-loop (see the
+    /// pass doc) because forwarding a `let f = agg.n` destructure early strips
+    /// the shape SROA needs to scalarize `agg`.
+    into_aggregate_only: bool,
 }
 
 impl<'a> ScalarForwardRule<'a> {
     fn new(type_table: &'a TypeTable) -> Self {
-        Self { type_table }
+        Self {
+            type_table,
+            into_aggregate_only: false,
+        }
+    }
+
+    /// A rule that forwards a single-use pure scalar only when its use sits
+    /// inside a struct/tuple literal. Safe to run pre-`sroa` in the loop.
+    pub(super) fn new_aggregate_only(type_table: &'a TypeTable) -> Self {
+        Self {
+            type_table,
+            into_aggregate_only: true,
+        }
     }
 }
 
@@ -109,6 +129,9 @@ impl ScalarForwardRule<'_> {
         let Some(use_id) = sole_value_use(engine, local) else {
             return false;
         };
+        if self.into_aggregate_only && !use_in_aggregate_literal(engine, use_id) {
+            return false;
+        }
         // The use's top-level statement (the direct child of `block` on the path to
         // it) must be the binding's immediate successor. A use nested in a sub-block
         // of `use_stmt` — `let t = a + b; if c { use(t) }` — is admitted only for a
@@ -144,6 +167,23 @@ impl ScalarForwardRule<'_> {
         engine.replace_expr_kind(use_id, kind);
         true
     }
+}
+
+/// Whether `use_id` sits inside a struct/tuple-literal operand — the
+/// construction shape whose block wrapper hides the literal from SROA. Walks up
+/// the expression parents from `use_id`; stops at the enclosing statement.
+fn use_in_aggregate_literal(engine: &Engine, use_id: ExprId) -> bool {
+    let mut node = NodeRef::Expr(use_id);
+    while let Some(NodeRef::Expr(pe)) = engine.parent_of(node) {
+        if matches!(
+            engine.body.exprs[pe].kind,
+            ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
+        ) {
+            return true;
+        }
+        node = NodeRef::Expr(pe);
+    }
+    false
 }
 
 /// Whether any effect evaluated strictly before `use_id` — within the top-level

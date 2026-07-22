@@ -152,20 +152,20 @@ fn "stream_write_raw_offset.wado/run"() with Stderr {
     let subtask: i32;
     let buf: ref Array<u8>;
     let packed_7: i64;
-    let rx_8: i32;
-    let tx_9: i32;
     let packed_39: i64;
     let ptr: i32;
     let raw_len: i32;
+    let __sroa___pattern_temp_0_0: i32;
+    let __sroa___pattern_temp_0_1: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:stream_write_raw_offset.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:stream_write_raw_offset.wado::__modules_initialized = 1;
     };
-    rx_8 = builtin::i32_wrap_i64(local.tee packed_7("wasi/stream-new"()));
-    tx_9 = builtin::i32_wrap_i64(packed_7 >> 32_i64);
-    subtask = "stream_write_raw_offset.wado/__cm_binding__Stderr_write_via_stream"(rx_8);
+    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed_7("wasi/stream-new"()));
+    __sroa___pattern_temp_0_1 = builtin::i32_wrap_i64(packed_7 >> 32_i64);
+    subtask = "stream_write_raw_offset.wado/__cm_binding__Stderr_write_via_stream"(__sroa___pattern_temp_0_0);
     buf = "core:prelude/list.wado/List<u8>::to_array"(global:stream_write_raw_offset.wado::__const_obj_4);
     let data_mv_repr: ref Array<u8>;
     let data_mv_start: i32;
@@ -173,9 +173,9 @@ fn "stream_write_raw_offset.wado/run"() with Stderr {
     multivalue_bind [data_mv_repr, data_mv_start, data_mv_end] = "core:prelude/array.wado/Array<u8>::slice"(buf, 2, 10);
     ptr = builtin::i32_wrap_i64(local.tee packed_39("core:rt/cm_lower_list_u8"(data_mv_repr, data_mv_start, data_mv_end - data_mv_start)));
     raw_len = builtin::i32_wrap_i64(packed_39 >> 32_i64);
-    "core:rt/cm_stream_write_drain"(tx_9, ptr, raw_len, 1);
+    "core:rt/cm_stream_write_drain"(__sroa___pattern_temp_0_1, ptr, raw_len, 1);
     drop("mem/realloc"(ptr, raw_len, 1, 0));
-    "wasi/stream-drop-writable"(tx_9);
+    "wasi/stream-drop-writable"(__sroa___pattern_temp_0_1);
     drop("stream_write_raw_offset.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"(subtask));
 }
 
@@ -338,12 +338,12 @@ fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
 fn "core:rt/log_stderr"(message) {
     let future_handle: i32;
     let packed: i64;
-    let rx_6: i32;
-    let tx_7: i32;
-    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_6);
-    "core:rt/write_string_to_stream"(tx_7, message, 1);
+    let __sroa___pattern_temp_0_0: i32;
+    let __sroa___pattern_temp_0_1: i32;
+    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    __sroa___pattern_temp_0_1 = builtin::i32_wrap_i64(packed >> 32_i64);
+    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(__sroa___pattern_temp_0_0);
+    "core:rt/write_string_to_stream"(__sroa___pattern_temp_0_1, message, 1);
     "wasi/future-drop-readable:transmission-cli"(future_handle);
 }
 

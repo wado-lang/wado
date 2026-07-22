@@ -424,11 +424,11 @@ fn "resource_struct_destructor.wado/handle"(request) {
     let __local_157: i32;
     let __pattern_temp_1: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let packed: i64;
-    let rx: i32;
-    let tx: i32;
     let v_163: ref "wasi:http/types.wado//FieldSizePayload";
     let v_164: ref null "core:prelude/string.wado//String";
     let __vc_payload_0: ref "core:prelude/string.wado//String";
+    let __sroa___pattern_temp_0_0: i32;
+    let __sroa___pattern_temp_0_1: i32;
     let __sroa_h_headers: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:resource_struct_destructor.wado::__modules_initialized);
@@ -437,9 +437,9 @@ fn "resource_struct_destructor.wado/handle"(request) {
         global:resource_struct_destructor.wado::__modules_initialized = 1;
     };
     __sroa_h_headers = "resource_struct_destructor.wado/__cm_binding__Fields_new"();
-    rx = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
-    tx = builtin::i32_wrap_i64(packed >> 32_i64);
-    __pattern_temp_1 = "resource_struct_destructor.wado/__cm_binding__Response_new"(local.tee headers("resource_struct_destructor.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, rx);
+    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
+    __sroa___pattern_temp_0_1 = builtin::i32_wrap_i64(packed >> 32_i64);
+    __pattern_temp_1 = "resource_struct_destructor.wado/__cm_binding__Response_new"(local.tee headers("resource_struct_destructor.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, __sroa___pattern_temp_0_0);
     response = __pattern_temp_1.0;
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;
@@ -738,7 +738,7 @@ fn "resource_struct_destructor.wado/handle"(request) {
         }
         "wasi/task-return:handle"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
-    "resource_struct_destructor.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } });
+    "resource_struct_destructor.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(__sroa___pattern_temp_0_1, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } });
     "wasi/resource-drop:fields"(__sroa_h_headers);
     "wasi/resource-drop:request"(request);
 }

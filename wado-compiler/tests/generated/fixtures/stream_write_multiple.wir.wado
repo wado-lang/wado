@@ -79,20 +79,20 @@ global mut global:stream_write_multiple.wado::__modules_initialized: bool = 0;
 fn "stream_write_multiple.wado/run"() with Stdout {
     let __b: ref "core:prelude//List<u8>";
     let packed: i64;
-    let rx_6: i32;
-    let tx_7: i32;
+    let __sroa___pattern_temp_0_0: i32;
+    let __sroa___pattern_temp_0_1: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:stream_write_multiple.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:stream_write_multiple.wado::__modules_initialized = 1;
     };
-    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    "wasi/stream-drop-readable"(rx_6);
+    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    __sroa___pattern_temp_0_1 = builtin::i32_wrap_i64(packed >> 32_i64);
+    "wasi/stream-drop-readable"(__sroa___pattern_temp_0_0);
     __b = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(65, 66, 67, 10), used: 4 };
-    "core:rt/cm_stream_write_u8"(tx_7, __b);
-    "wasi/stream-drop-writable"(tx_7);
+    "core:rt/cm_stream_write_u8"(__sroa___pattern_temp_0_1, __b);
+    "wasi/stream-drop-writable"(__sroa___pattern_temp_0_1);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("multi write ok"), used: 14 });
 }
 
@@ -143,12 +143,12 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 fn "core:cli/println"(message) with Stdout {
     let handle: i32;
     let packed: i64;
-    let rx_6: i32;
-    let tx_7: i32;
-    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "stream_write_multiple.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
-    "core:cli/write_to_stream"(tx_7, message, 1);
+    let __sroa___pattern_temp_0_0: i32;
+    let __sroa___pattern_temp_0_1: i32;
+    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    __sroa___pattern_temp_0_1 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "stream_write_multiple.wado/__cm_binding__Stdout_write_via_stream"(__sroa___pattern_temp_0_0);
+    "core:cli/write_to_stream"(__sroa___pattern_temp_0_1, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 

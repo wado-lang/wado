@@ -199,12 +199,12 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 fn "core:cli/println"(message) with Stdout {
     let handle: i32;
     let packed: i64;
-    let rx_6: i32;
-    let tx_7: i32;
-    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "array_bounds_elim_oob_preserved_wir.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
-    "core:cli/write_to_stream"(tx_7, message, 1);
+    let __sroa___pattern_temp_0_0: i32;
+    let __sroa___pattern_temp_0_1: i32;
+    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    __sroa___pattern_temp_0_1 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "array_bounds_elim_oob_preserved_wir.wado/__cm_binding__Stdout_write_via_stream"(__sroa___pattern_temp_0_0);
+    "core:cli/write_to_stream"(__sroa___pattern_temp_0_1, message, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
@@ -315,12 +315,12 @@ fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
 fn "core:rt/log_stderr"(message) {
     let future_handle: i32;
     let packed: i64;
-    let rx_6: i32;
-    let tx_7: i32;
-    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_6);
-    "core:rt/write_string_to_stream"(tx_7, message, 1);
+    let __sroa___pattern_temp_0_0: i32;
+    let __sroa___pattern_temp_0_1: i32;
+    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    __sroa___pattern_temp_0_1 = builtin::i32_wrap_i64(packed >> 32_i64);
+    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(__sroa___pattern_temp_0_0);
+    "core:rt/write_string_to_stream"(__sroa___pattern_temp_0_1, message, 1);
     "wasi/future-drop-readable:transmission-cli"(future_handle);
 }
 

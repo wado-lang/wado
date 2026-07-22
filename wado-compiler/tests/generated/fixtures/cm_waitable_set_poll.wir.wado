@@ -559,17 +559,17 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
     let __local_316: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let __pattern_temp_3: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let packed_319: i64;
-    let rx_320: i32;
-    let tx_321: i32;
     let v_322: ref "wasi:http/types.wado//FieldSizePayload";
     let v_323: ref null "core:prelude/string.wado//String";
     let __vc_payload_0_324: ref "core:prelude/string.wado//String";
     let packed_325: i64;
-    let rx_326: i32;
-    let tx_327: i32;
     let v_328: ref "wasi:http/types.wado//FieldSizePayload";
     let v_329: ref null "core:prelude/string.wado//String";
     let __vc_payload_0_330: ref "core:prelude/string.wado//String";
+    let __sroa___pattern_temp_2_0: i32;
+    let __sroa___pattern_temp_2_1: i32;
+    let __sroa___pattern_temp_0_0: i32;
+    let __sroa___pattern_temp_0_1: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:cm_waitable_set_poll.wado::__modules_initialized);
         cold_path;
@@ -578,9 +578,9 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
     };
     event = "core:rt/cm_waitable_set_poll"(local.tee ws("wasi/waitable-set-new"()));
     if ref.is_null(event) == 0 {
-        rx_320 = builtin::i32_wrap_i64(local.tee packed_319("wasi/future-new"()));
-        tx_321 = builtin::i32_wrap_i64(packed_319 >> 32_i64);
-        __local_316 = "cm_waitable_set_poll.wado/__cm_binding__Response_new"(local.tee headers_5("cm_waitable_set_poll.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, rx_320);
+        __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed_319("wasi/future-new"()));
+        __sroa___pattern_temp_0_1 = builtin::i32_wrap_i64(packed_319 >> 32_i64);
+        __local_316 = "cm_waitable_set_poll.wado/__cm_binding__Response_new"(local.tee headers_5("cm_waitable_set_poll.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, __sroa___pattern_temp_0_0);
         response_6 = __local_316.0;
         __local_164 = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response_6 };
         __local_166 = 0;
@@ -879,13 +879,13 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
             }
             "wasi/task-return:handle"(1, __local_166, __local_167, __local_168, __local_169, __local_170, __local_171, __local_172);
         }
-        "cm_waitable_set_poll.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_321, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } });
+        "cm_waitable_set_poll.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(__sroa___pattern_temp_0_1, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } });
     } else {
     }
     "wasi/waitable-set-drop"(ws);
-    rx_326 = builtin::i32_wrap_i64(local.tee packed_325("wasi/future-new"()));
-    tx_327 = builtin::i32_wrap_i64(packed_325 >> 32_i64);
-    __pattern_temp_3 = "cm_waitable_set_poll.wado/__cm_binding__Response_new"(local.tee headers_10("cm_waitable_set_poll.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, rx_326);
+    __sroa___pattern_temp_2_0 = builtin::i32_wrap_i64(local.tee packed_325("wasi/future-new"()));
+    __sroa___pattern_temp_2_1 = builtin::i32_wrap_i64(packed_325 >> 32_i64);
+    __pattern_temp_3 = "cm_waitable_set_poll.wado/__cm_binding__Response_new"(local.tee headers_10("cm_waitable_set_poll.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, __sroa___pattern_temp_2_0);
     response_11 = __pattern_temp_3.0;
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response_11 };
     __tv_1 = 0;
@@ -1184,7 +1184,7 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
         }
         "wasi/task-return:handle"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
-    "cm_waitable_set_poll.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_327, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } });
+    "cm_waitable_set_poll.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(__sroa___pattern_temp_2_1, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } });
     "wasi/resource-drop:request"(request);
 }
 

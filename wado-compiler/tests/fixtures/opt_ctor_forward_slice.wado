@@ -1,0 +1,23 @@
+// Regression: `list.as_slice()` inlines to a block-tailed struct-literal
+// binding — `let x = { let end = list.used; ArraySlice { repr, start, end } }`.
+// The in-loop construction-forward (scalar_forward's aggregate-only subset)
+// folds `end` into the field, so `const_branch_prune` collapses the block and
+// `sroa` sees a direct literal and scalarizes it: the write lowers straight to
+// `cm_lower_list_u8(repr, …)` with no intermediate slice `struct.new`.
+use { Stderr } from "core:cli";
+
+export fn run() with Stderr {
+    let [rx, tx] = Stream::<u8>::new();
+    let subtask = Stderr::write_via_stream(rx);
+    let body: List<u8> = [72, 101, 108, 108, 111];
+    tx.write_raw(body.as_slice());
+    tx.drop();
+    subtask.read();
+}
+
+__DATA__
+{
+    "stderr": "Hello",
+    "wir_expect:O2": ["core:rt/cm_lower_list_u8"],
+    "wir_not_expect:O2": ["struct.new \"core:prelude/slice.wado//ArraySlice<u8>\""]
+}

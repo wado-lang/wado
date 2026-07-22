@@ -483,25 +483,25 @@ fn "stream_http_response_body_string.wado/handle"(request) {
     let __local_159: i32;
     let __pattern_temp_2: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let packed_163: i64;
-    let rx_164: i32;
-    let tx_165: i32;
     let packed_166: i64;
-    let rx_167: i32;
-    let tx_168: i32;
     let v_169: ref "wasi:http/types.wado//FieldSizePayload";
     let v_170: ref null "core:prelude/string.wado//String";
     let __vc_payload_0: ref "core:prelude/string.wado//String";
+    let __sroa___pattern_temp_1_0: i32;
+    let __sroa___pattern_temp_1_1: i32;
+    let __sroa___pattern_temp_0_0: i32;
+    let __sroa___pattern_temp_0_1: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:stream_http_response_body_string.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:stream_http_response_body_string.wado::__modules_initialized = 1;
     };
-    rx_164 = builtin::i32_wrap_i64(local.tee packed_163("wasi/future-new"()));
-    tx_165 = builtin::i32_wrap_i64(packed_163 >> 32_i64);
-    rx_167 = builtin::i32_wrap_i64(local.tee packed_166("wasi/stream-new"()));
-    tx_168 = builtin::i32_wrap_i64(packed_166 >> 32_i64);
-    __pattern_temp_2 = "stream_http_response_body_string.wado/__cm_binding__Response_new"(local.tee headers("stream_http_response_body_string.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: rx_167 }, rx_164);
+    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed_163("wasi/future-new"()));
+    __sroa___pattern_temp_0_1 = builtin::i32_wrap_i64(packed_163 >> 32_i64);
+    __sroa___pattern_temp_1_0 = builtin::i32_wrap_i64(local.tee packed_166("wasi/stream-new"()));
+    __sroa___pattern_temp_1_1 = builtin::i32_wrap_i64(packed_166 >> 32_i64);
+    __pattern_temp_2 = "stream_http_response_body_string.wado/__cm_binding__Response_new"(local.tee headers("stream_http_response_body_string.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: __sroa___pattern_temp_1_0 }, __sroa___pattern_temp_0_0);
     response = __pattern_temp_2.0;
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;
@@ -801,9 +801,9 @@ fn "stream_http_response_body_string.wado/handle"(request) {
         "wasi/task-return:handle"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
     body = "stream_http_response_body_string.wado/string_to_bytes"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(79, 75), used: 2 });
-    "core:rt/cm_stream_write_u8"(tx_168, body);
-    "wasi/stream-drop-writable"(tx_168);
-    "stream_http_response_body_string.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_165, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } });
+    "core:rt/cm_stream_write_u8"(__sroa___pattern_temp_1_1, body);
+    "wasi/stream-drop-writable"(__sroa___pattern_temp_1_1);
+    "stream_http_response_body_string.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(__sroa___pattern_temp_0_1, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } });
     "wasi/resource-drop:request"(request);
 }
 

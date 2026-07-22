@@ -716,15 +716,15 @@ fn "http_method_and_scheme_variants.wado/handle"(request) {
     let __vc_payload_2_228: ref "core:prelude/string.wado//String";
     let s_231: ref "core:prelude/string.wado//String";
     let packed_232: i64;
-    let rx_233: i32;
-    let tx_234: i32;
     let packed_235: i64;
-    let rx_236: i32;
-    let tx_237: i32;
     let v_238: ref "wasi:http/types.wado//FieldSizePayload";
     let v_239: ref null "core:prelude/string.wado//String";
     let __vc_payload_0: ref "core:prelude/string.wado//String";
     let self_242: ref "core:prelude/string.wado//StrUtf8ByteIter";
+    let __sroa___pattern_temp_1_0: i32;
+    let __sroa___pattern_temp_1_1: i32;
+    let __sroa___pattern_temp_0_0: i32;
+    let __sroa___pattern_temp_0_1: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:http_method_and_scheme_variants.wado::__modules_initialized);
         cold_path;
@@ -871,11 +871,11 @@ fn "http_method_and_scheme_variants.wado/handle"(request) {
         }
     } else {
     }
-    rx_233 = builtin::i32_wrap_i64(local.tee packed_232("wasi/future-new"()));
-    tx_234 = builtin::i32_wrap_i64(packed_232 >> 32_i64);
-    rx_236 = builtin::i32_wrap_i64(local.tee packed_235("wasi/stream-new"()));
-    tx_237 = builtin::i32_wrap_i64(packed_235 >> 32_i64);
-    __pattern_temp_2 = "http_method_and_scheme_variants.wado/__cm_binding__Response_new"(local.tee resp_headers("http_method_and_scheme_variants.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: rx_236 }, rx_233);
+    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed_232("wasi/future-new"()));
+    __sroa___pattern_temp_0_1 = builtin::i32_wrap_i64(packed_232 >> 32_i64);
+    __sroa___pattern_temp_1_0 = builtin::i32_wrap_i64(local.tee packed_235("wasi/stream-new"()));
+    __sroa___pattern_temp_1_1 = builtin::i32_wrap_i64(packed_235 >> 32_i64);
+    __pattern_temp_2 = "http_method_and_scheme_variants.wado/__cm_binding__Response_new"(local.tee resp_headers("http_method_and_scheme_variants.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: __sroa___pattern_temp_1_0 }, __sroa___pattern_temp_0_0);
     response = __pattern_temp_2.0;
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;
@@ -1174,9 +1174,9 @@ fn "http_method_and_scheme_variants.wado/handle"(request) {
         }
         "wasi/task-return:handle"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
-    "core:rt/cm_stream_write_u8"(tx_237, self_242 = struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_fixed<u8>(111, 107), used: 2, index: 0 }; "core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(self_242));
-    "wasi/stream-drop-writable"(tx_237);
-    "http_method_and_scheme_variants.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_234, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } });
+    "core:rt/cm_stream_write_u8"(__sroa___pattern_temp_1_1, self_242 = struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_fixed<u8>(111, 107), used: 2, index: 0 }; "core:prelude/list.wado/List<u8>^FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(self_242));
+    "wasi/stream-drop-writable"(__sroa___pattern_temp_1_1);
+    "http_method_and_scheme_variants.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(__sroa___pattern_temp_0_1, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } });
     "wasi/resource-drop:request"(request);
 }
 
@@ -1796,12 +1796,12 @@ fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
 fn "core:rt/log_stderr"(message) {
     let future_handle: i32;
     let packed: i64;
-    let rx_6: i32;
-    let tx_7: i32;
-    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_6);
-    "core:rt/write_string_to_stream"(tx_7, message, 1);
+    let __sroa___pattern_temp_0_0: i32;
+    let __sroa___pattern_temp_0_1: i32;
+    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    __sroa___pattern_temp_0_1 = builtin::i32_wrap_i64(packed >> 32_i64);
+    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(__sroa___pattern_temp_0_0);
+    "core:rt/write_string_to_stream"(__sroa___pattern_temp_0_1, message, 1);
     "wasi/future-drop-readable:transmission-cli"(future_handle);
 }
 

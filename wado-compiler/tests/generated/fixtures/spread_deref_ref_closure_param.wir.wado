@@ -217,7 +217,6 @@ fn "spread_deref_ref_closure_param.wado/__test_0_spread_over_a_dereferenced__s_c
     let __local_25: ref "core:prelude/string.wado//String";
     let __local_26: ref "core:prelude/format.wado//Formatter";
     let self_34: ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/ArrayRefIter<spread_deref_ref_closure_param.wado/S>,spread_deref_ref_closure_param.wado/S>";
-    let self_36: ref "core:prelude/slice.wado//ArrayRefIter<spread_deref_ref_closure_param.wado/S>";
     let f: ref struct;
     let __v1_42: i32;
     let __local_5_44: ref "core:prelude/string.wado//String";
@@ -237,10 +236,10 @@ fn "spread_deref_ref_closure_param.wado/__test_0_spread_over_a_dereferenced__s_c
     let __v1_77: i32;
     let __local_5_79: ref "core:prelude/string.wado//String";
     let __local_6_80: ref "core:prelude/format.wado//Formatter";
+    let __sroa_v_repr: ref "Array<spread_deref_ref_closure_param.wado/S>";
     __b = struct.new "core:prelude//List<spread_deref_ref_closure_param.wado/S>" { repr: array.new_fixed<ref "spread_deref_ref_closure_param.wado//S">(struct.new "spread_deref_ref_closure_param.wado//S" { a: 1, b: 2, c: 3 }, struct.new "spread_deref_ref_closure_param.wado//S" { a: 4, b: 5, c: 6 }), used: 2 };
-    self_36 = struct.new "core:prelude/slice.wado//ArrayRefIter<spread_deref_ref_closure_param.wado/S>" { repr: __b.repr, index: 0, end: 2 };
     f = struct.new "canonical//CanonicalClosure_0" { env: struct.new "spread_deref_ref_closure_param.wado//__Closure_2" {  }, func: ref.func "closure/spread_deref_ref_closure_param.wado/__closure_wrapper_0" };
-    self_34 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/ArrayRefIter<spread_deref_ref_closure_param.wado/S>,spread_deref_ref_closure_param.wado/S>" { inner: ref.as_non_null(struct.new "core:prelude/slice.wado//ArrayRefIter<spread_deref_ref_closure_param.wado/S>" { repr: self_36.repr, index: 0, end: 2 }), f: f };
+    self_34 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/ArrayRefIter<spread_deref_ref_closure_param.wado/S>,spread_deref_ref_closure_param.wado/S>" { inner: ref.as_non_null(__sroa_v_repr = __b.repr; struct.new "core:prelude/slice.wado//ArrayRefIter<spread_deref_ref_closure_param.wado/S>" { repr: __sroa_v_repr, index: 0, end: 2 }), f: f };
     ys = "core:prelude/list.wado/List<spread_deref_ref_closure_param.wado/S>^FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/slice.wado/ArrayRefIter<spread_deref_ref_closure_param.wado/S>,spread_deref_ref_closure_param.wado/S>>"(self_34);
     __v0_3 = ys.used;
     if @unlikely(__v0_3 != 2) {
@@ -426,12 +425,12 @@ fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
 fn "core:rt/log_stderr"(message) {
     let future_handle: i32;
     let packed: i64;
-    let rx_6: i32;
-    let tx_7: i32;
-    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_6);
-    "core:rt/write_string_to_stream"(tx_7, message, 1);
+    let __sroa___pattern_temp_0_0: i32;
+    let __sroa___pattern_temp_0_1: i32;
+    __sroa___pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    __sroa___pattern_temp_0_1 = builtin::i32_wrap_i64(packed >> 32_i64);
+    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(__sroa___pattern_temp_0_0);
+    "core:rt/write_string_to_stream"(__sroa___pattern_temp_0_1, message, 1);
     "wasi/future-drop-readable:transmission-cli"(future_handle);
 }
 
