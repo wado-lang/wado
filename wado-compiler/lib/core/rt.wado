@@ -8,6 +8,7 @@
 
 use { String } from "core:prelude/string.wado";
 use { Array } from "core:prelude/array.wado";
+use { ArraySlice } from "core:prelude/slice.wado";
 use { List } from "core:prelude/list.wado";
 use { Formatter } from "core:prelude/format.wado";
 use {
@@ -90,9 +91,9 @@ internal fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_
         let mut new_repr: Array<u8> = builtin::array_new(len + 1);
         builtin::array_copy(&mut new_repr, 0, message.internal_raw_bytes(), 0, len);
         builtin::array_set_u8(&mut new_repr, len, 10);
-        tx.write_raw(&new_repr, 0, len + 1);
+        tx.write_raw(ArraySlice::internal_new(&new_repr, 0, len + 1));
     } else {
-        tx.write_raw(message.internal_raw_bytes(), 0, len);
+        tx.write_raw(ArraySlice::internal_new(message.internal_raw_bytes(), 0, len));
     }
     tx.drop();
 }
@@ -325,10 +326,10 @@ internal fn cm_stream_write_drain(handle: i32, ptr: i32, count: i32, elem_size: 
     }
 }
 
-/// CM adapter for stream.write_raw(data, start, len) on Stream<u8>.
-/// Lowers data[start..start + len] to linear memory, calls stream-write, handles BLOCKED.
-internal fn cm_stream_write_raw_u8(handle: i32, data: &Array<u8>, start: i32, len: i32) {
-    let packed = cm_lower_list_u8(data, start, len);
+/// CM adapter for stream.write_raw(slice) on Stream<u8>.
+/// Lowers the slice's byte window to linear memory, calls stream-write, handles BLOCKED.
+internal fn cm_stream_write_raw_u8(handle: i32, data: ArraySlice<u8>) {
+    let packed = cm_lower_list_u8(data.internal_repr(), data.internal_start(), data.len());
     let ptr = packed as i32;
     let raw_len = (packed >> 32) as i32;
     cm_stream_write_drain(handle, ptr, raw_len, 1);

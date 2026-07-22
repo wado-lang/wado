@@ -33,9 +33,9 @@ pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: boo
         let mut new_repr: Array<u8> = builtin::array_new(len + 1);
         builtin::array_copy(&mut new_repr, 0, message.internal_raw_bytes(), 0, len);
         builtin::array_set_u8(&mut new_repr, len, 10);
-        tx.write_raw(&new_repr, 0, len + 1);
+        tx.write_raw(ArraySlice::internal_new(&new_repr, 0, len + 1));
     } else {
-        tx.write_raw(message.internal_raw_bytes(), 0, len);
+        tx.write_raw(ArraySlice::internal_new(message.internal_raw_bytes(), 0, len));
     }
     tx.drop();
 }

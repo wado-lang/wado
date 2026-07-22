@@ -11445,7 +11445,7 @@ fn i32_clamp(value: i32, lo: i32, hi: i32) -> i32 {
                 __r.String::push_str(&String { repr: packed"core:rt", used: 7 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 56 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 57 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"i32_clamp: lo must be <= hi", used: 27 });
                 __r.String::push_str(&String { repr: packed"\ncondition: lo <= hi\n", used: 21 });
@@ -11503,9 +11503,9 @@ fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newline: 
         let mut new_repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"((len + 1));
         "core::builtin::core/builtin/array_copy<u8>"(&mut new_repr, 0, message.String::internal_raw_bytes(), 0, len);
         core::builtin::array_set_u8(&mut new_repr, len, 10);
-        core::rt::cm_stream_write_raw_u8(&tx as i32, &new_repr, 0, (len + 1));
+        core::rt::cm_stream_write_raw_u8(&tx as i32, "core::prelude/slice.wado::ArraySlice<u8>::internal_new"(&new_repr, 0, (len + 1)));
     } else {
-        core::rt::cm_stream_write_raw_u8(&tx as i32, message.String::internal_raw_bytes(), 0, len);
+        core::rt::cm_stream_write_raw_u8(&tx as i32, "core::prelude/slice.wado::ArraySlice<u8>::internal_new"(message.String::internal_raw_bytes(), 0, len));
     }
     cm_raw_call stream-drop-writable(tx as i32);
 }
@@ -11687,8 +11687,8 @@ fn cm_stream_write_drain(handle: i32, ptr: i32, count: i32, elem_size: i32) {
     }
 }
 
-fn cm_stream_write_raw_u8(handle: i32, data: &Array<u8>, start: i32, len: i32) {
-    let packed: i64 = core::rt::cm_lower_list_u8(data, start, len);
+fn cm_stream_write_raw_u8(handle: i32, data: ArraySlice<u8>) {
+    let packed: i64 = core::rt::cm_lower_list_u8(data."ArraySlice<u8>::internal_repr"(), data."ArraySlice<u8>::internal_start"(), data."ArraySlice<u8>::len"());
     let ptr: i32 = packed as i32;
     let raw_len: i32 = (packed >> 32) as i32;
     core::rt::cm_stream_write_drain(handle, ptr, raw_len, 1);
@@ -13603,6 +13603,14 @@ fn "List<u64>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> List<u64> {
     return "core::prelude/list.wado::List<u64>::with_capacity"(capacity);
 }
 
+fn "ArraySlice<u8>::internal_start"(self: &ArraySlice<u8>) -> i32 {
+    return self.start;
+}
+
+fn "ArraySlice<u8>::internal_repr"(self: &ArraySlice<u8>) -> &Array<u8> with stores[self] {
+    return self.repr;
+}
+
 fn "List<u8>::internal_from_raw"(repr: Array<u8>, used: i32) -> List<u8> {
     return List<u8> { repr: repr, used: used };
 }
@@ -14167,16 +14175,16 @@ fn "$value_copy$core:prelude/list.wado/List<u64>"(v: List<u64>) -> List<u64> {
     return List<u64> { repr: core::builtin::array_clone::<u64>(&v.repr), used: v.used };
 }
 
-fn "$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(v: ArraySlice<u8>) -> ArraySlice<u8> {
-    return ArraySlice<u8> { repr: v.repr, start: v.start, end: v.end };
-}
-
 fn "$value_copy$[Stream<u8>,StreamWritable<u8>]"(v: [Stream<u8>, StreamWritable<u8>]) -> [Stream<u8>, StreamWritable<u8>] {
     return [Stream<u8>,StreamWritable<u8>] { 0: v.0, 1: v.1 };
 }
 
 fn "$value_copy$core:prelude/types.wado/WaitEvent"(v: WaitEvent) -> WaitEvent {
     return WaitEvent { code: v.code, handle: v.handle, payload: v.payload };
+}
+
+fn "$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(v: ArraySlice<u8>) -> ArraySlice<u8> {
+    return ArraySlice<u8> { repr: v.repr, start: v.start, end: v.end };
 }
 
 fn "$value_copy$Array<u8>"(v: Array<u8>) -> Array<u8> {
