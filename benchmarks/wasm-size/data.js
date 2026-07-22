@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784707254569,
+  "lastUpdate": 1784712463718,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -42957,6 +42957,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b9226418aea9207372226a77c211f69ba3b32c84"
         },
         "date": 1784707254227,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8143,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16466,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271548,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c485e899f826820d83deb8fc8187c4911392c6b9",
+          "message": "Merge pull request #1660 from wado-lang/claude/json-twitter-ser-optimization-94k2yl\n\nperf(optimizer): hoist opaque-clobber field loads in LICM",
+          "timestamp": "2026-07-22T18:17:35+09:00",
+          "tree_id": "fe9985b1da9116e207c5e6de57e549599964885a",
+          "url": "https://github.com/wado-lang/wado/commit/c485e899f826820d83deb8fc8187c4911392c6b9"
+        },
+        "date": 1784712463290,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
