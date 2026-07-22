@@ -460,10 +460,7 @@ fn mutated_locals(body: &Body, gate: &Gate<'_>) -> IndexSet<u32> {
                 ExprKind::FieldAccess { expr: inner, .. }
                 | ExprKind::Index { expr: inner, .. }
                 | ExprKind::Unary { expr: inner, .. }
-                | ExprKind::Cast { expr: inner, .. } => match inner.as_expr() {
-                    Some(ie) => cur = ie,
-                    None => return None,
-                },
+                | ExprKind::Cast { expr: inner, .. } => cur = inner.as_expr()?,
                 _ => return None,
             }
         }
@@ -498,14 +495,18 @@ fn mutated_locals(body: &Body, gate: &Gate<'_>) -> IndexSet<u32> {
                         out.insert(r);
                     }
                     for a in args {
-                        if a.is_mut && let Some(r) = a.expr.as_expr().and_then(root_of) {
+                        if a.is_mut
+                            && let Some(r) = a.expr.as_expr().and_then(root_of)
+                        {
                             out.insert(r);
                         }
                     }
                 }
                 ExprKind::Call { args, .. } => {
                     for a in args {
-                        if a.is_mut && let Some(r) = a.expr.as_expr().and_then(root_of) {
+                        if a.is_mut
+                            && let Some(r) = a.expr.as_expr().and_then(root_of)
+                        {
                             out.insert(r);
                         }
                     }
