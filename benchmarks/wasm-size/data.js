@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784757205379,
+  "lastUpdate": 1784759844873,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -43197,6 +43197,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 271548,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f0cafa1d0e63e4b19c6e1a621d27e637be9dc478",
+          "message": "Merge pull request #1664 from wado-lang/claude/stream-write-cm-interface-visc75\n\nperf(optimizer): value-block normal form for SROA + zero-copy write_raw",
+          "timestamp": "2026-07-23T07:27:30+09:00",
+          "tree_id": "f11f5a0abe3520a33d6e4115d9f647ebad2b6a1b",
+          "url": "https://github.com/wado-lang/wado/commit/f0cafa1d0e63e4b19c6e1a621d27e637be9dc478"
+        },
+        "date": 1784759844386,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1970,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8164,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16487,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271579,
             "unit": "bytes"
           }
         ]
