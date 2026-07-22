@@ -1,0 +1,13 @@
+// Test: the else block of a `let ... else` must diverge.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let opt: Option<i32> = Option::Some(1);
+    let Some(x) = opt else {
+        println("no value");
+    };
+    println(`${x}`);
+}
+
+__DATA__
+{"compile_error": "must diverge"}

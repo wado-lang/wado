@@ -311,6 +311,9 @@ impl BorrowChecker<'_> {
                     }
                     self.walk_nested(value);
                 }
+                if let Some(eb) = &l.else_block {
+                    self.walk_block(eb);
+                }
             }
             Stmt::Return(r) => {
                 if let Some(value) = &r.value {
@@ -591,6 +594,14 @@ impl MoveWalker<'_> {
             Stmt::Let(l) => {
                 if let Some(value) = &l.value {
                     self.visit_value(value);
+                }
+                // A `let ... else` else block diverges: visit it for move
+                // violations, then discard its move-state so the matching
+                // continuation keeps the pre-else state.
+                if let Some(eb) = &l.else_block {
+                    let base = self.moved.clone();
+                    self.visit_block(eb);
+                    self.moved = base;
                 }
                 self.clear_pattern(&l.pattern);
                 false

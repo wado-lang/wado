@@ -333,6 +333,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// The else block of a `let ... else` does not diverge. It must exit the
+    /// enclosing control flow (`return`, `break`, `continue`, `panic`, …) on
+    /// every path, since it only runs when the refutable pattern fails to bind.
+    LetElseMustDiverge {
+        span: Span,
+    },
+
     /// Orphan rule violation: impl of a foreign trait for a foreign type
     OrphanViolation {
         trait_name: String,
@@ -792,6 +799,13 @@ impl TypeError {
             TypeError::MissingReturn { return_type, span } => (
                 Code::TypeMismatch,
                 format!("function with return type '{return_type}' must use explicit `return`"),
+                *span,
+            ),
+            TypeError::LetElseMustDiverge { span } => (
+                Code::TypeMismatch,
+                "the `else` block of a `let ... else` must diverge (`return`, `break`, \
+                 `continue`, `panic`, …)"
+                    .to_string(),
                 *span,
             ),
             TypeError::OrphanViolation {

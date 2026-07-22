@@ -2737,3 +2737,18 @@ fn run() {
         "deref scrutinee should not be parenthesized:\n{formatted}"
     );
 }
+
+/// A `let ... else` statement round-trips through the formatter with its
+/// diverging else block intact and stays idempotent.
+#[test]
+fn test_format_let_else_roundtrips() {
+    let source = "fn run() {\n    let Some(x) = opt else {\n        return;\n    };\n    let Ok(y) = res else {\n        panic(\"bad\");\n    };\n}\n";
+    assert_format_preserves_ast(source);
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("let Some(x) = opt else {"),
+        "let ... else lost its shape:\n{formatted}"
+    );
+    let reformatted = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, reformatted, "format should be idempotent");
+}

@@ -1331,6 +1331,14 @@ impl<'a> Unparser<'a> {
             self.output.push_str(" = ");
             self.unparse_expr(v);
         }
+        if let Some(else_block) = &l.else_block {
+            self.output.push_str(" else {\n");
+            self.indent_level += 1;
+            self.unparse_block(else_block);
+            self.indent_level -= 1;
+            self.write_indent();
+            self.output.push('}');
+        }
         self.output.push_str(";\n");
     }
 
@@ -3419,6 +3427,14 @@ fn unparse_stmt_into(stmt: &Stmt, output: &mut String) {
             if let Some(ref v) = l.value {
                 output.push_str(" = ");
                 unparse_expr_into(v, output);
+            }
+            if let Some(else_block) = &l.else_block {
+                output.push_str(" else {");
+                for stmt in &else_block.stmts {
+                    output.push(' ');
+                    unparse_stmt_into(stmt, output);
+                }
+                output.push_str(" }");
             }
             output.push(';');
         }

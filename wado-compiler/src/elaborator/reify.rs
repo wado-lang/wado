@@ -1986,9 +1986,42 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         tail_value: bool,
     ) -> TirBlock {
         ctx.enter_scope();
-        let len = block.stmts.len();
+        let stmts =
+            self.reify_positioned_stmts(&block.stmts, block.span, ctx, expected_type, tail_value);
+        ctx.exit_scope();
+        TirBlock::new(stmts, block.span)
+    }
+
+    /// Reify a statement slice at block position. `block_span` is the enclosing
+    /// block's span, used for synthetic continuation blocks. A `let ... else`
+    /// consumes the *rest* of the slice as its then-arm (see
+    /// [`Self::reify_let_else`]), so this is recursive.
+    fn reify_positioned_stmts(
+        &mut self,
+        slice: &[ast::Stmt],
+        block_span: crate::token::Span,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+        tail_value: bool,
+    ) -> Vec<TirStmt> {
+        let len = slice.len();
         let mut stmts = Vec::new();
-        for (i, s) in block.stmts.iter().enumerate() {
+        for (i, s) in slice.iter().enumerate() {
+            // `reify_let_else` consumes the rest of the block as its then-arm,
+            // so stop here after emitting it.
+            if let ast::Stmt::Let(l) = s
+                && l.else_block.is_some()
+            {
+                stmts.push(self.reify_let_else(
+                    l,
+                    &slice[i + 1..],
+                    block_span,
+                    ctx,
+                    expected_type,
+                    tail_value,
+                ));
+                break;
+            }
             // Mirror `Elaborator::resolve_block_with_position` (stmt.rs): a
             // trailing `Expr` / `If` / `Match` / `LabeledBlock` keeps its
             // result flowing out as the block's value — when an
@@ -2041,8 +2074,86 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             stmts.extend(self.reify_stmt(s, ctx));
         }
-        ctx.exit_scope();
-        TirBlock::new(stmts, block.span)
+        stmts
+    }
+
+    /// Desugar `let PAT = EXPR else { ELSE };` followed by `rest` into a
+    /// two-arm `Match` on `EXPR`: arm 0 binds `PAT` and runs `rest` (the rest
+    /// of the enclosing block) with the bindings in scope; arm 1 is a wildcard
+    /// running the diverging `ELSE` block. Mirrors `reify_let_chain_stmts`.
+    fn reify_let_else(
+        &mut self,
+        l: &ast::LetStmt,
+        rest: &[ast::Stmt],
+        block_span: crate::token::Span,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+        tail_value: bool,
+    ) -> TirStmt {
+        use crate::tir::{TirBlock, TirExprKind, TirMatchArm, TirPattern, TirStmtKind, TypeTable};
+
+        let span = l.span;
+        let else_ast = l
+            .else_block
+            .as_ref()
+            .expect("reify_let_else requires an else block");
+        let value_ast = l
+            .value
+            .as_ref()
+            .expect("`let ... else` requires an initializer");
+
+        // Mirror `resolve_let`: an annotation flows into the scrutinee as its
+        // expected type (published on `let_annotated_types` during resolve).
+        let annotated_type = if l.ty.is_some() {
+            self.ann_let_annotated_type(l.id)
+        } else {
+            None
+        };
+        let scrutinee = self.reify_expr(value_ast, ctx, annotated_type);
+        let scrutinee_type = scrutinee.type_id;
+
+        // Reify the else block before the pattern bindings enter scope: the
+        // else arm must not see them. It diverges, so its result type is Never.
+        let else_block = self.reify_block(else_ast, ctx, None);
+        let else_type = crate::tir::block_result_type(&else_block);
+        let else_span = else_block.span;
+
+        let tir_pattern = self.reify_pattern(&l.pattern, scrutinee_type, ctx);
+
+        let cont_stmts =
+            self.reify_positioned_stmts(rest, block_span, ctx, expected_type, tail_value);
+        let cont_block = TirBlock::new(cont_stmts, block_span);
+        let then_type = crate::tir::block_result_type(&cont_block);
+
+        let match_type =
+            crate::tir::agree_branch_types(then_type, else_type).unwrap_or(TypeTable::UNIT);
+        let then_body = TirExpr::new(TirExprKind::Block(cont_block), then_type, span);
+        let else_body = TirExpr::new(TirExprKind::Block(else_block), else_type, else_span);
+        let arms = vec![
+            TirMatchArm {
+                pattern: tir_pattern,
+                guard: None,
+                body: then_body,
+                span,
+            },
+            TirMatchArm {
+                pattern: TirPattern::Wildcard,
+                guard: None,
+                body: else_body,
+                span: else_span,
+            },
+        ];
+        TirStmt::new(
+            TirStmtKind::Expr(TirExpr::new(
+                TirExprKind::Match {
+                    expr: Box::new(scrutinee),
+                    arms,
+                },
+                match_type,
+                span,
+            )),
+            span,
+        )
     }
 
     /// Reify a statement. Dispatches on `Stmt::*`; `Let` adds a local

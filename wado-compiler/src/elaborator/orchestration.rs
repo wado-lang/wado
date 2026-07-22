@@ -2254,6 +2254,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         logger,
                     )?;
                 }
+                if let Some(else_block) = &let_stmt.else_block {
+                    Self::validate_block_type_names(
+                        else_block,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
             }
             ast::Stmt::Expr(expr_stmt) => {
                 Self::validate_expr_type_names(

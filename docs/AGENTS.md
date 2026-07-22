@@ -144,3 +144,4 @@ It may include TODOs on WIP.
 - [Gale Highlight Query — Customizable Syntax Highlighting](./wep-2026-07-12-gale-highlight-query.md)
 - [Effect Reconstruction from CM Component Imports](./wep-2026-07-15-cm-import-effect-reconstruction.md)
 - [Byte Literals (`b'x'` and `b"..."`)](./wep-2026-07-19-byte-literal.md)
+- [`let ... else` Statements](./wep-2026-07-22-let-else.md)

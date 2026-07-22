@@ -1942,17 +1942,13 @@ impl Deserializer for JsonDeserializer {
 
     fn deserialize_bytes(&mut self) -> Result<ByteList, DeserializeError> {
         let s = self.read_json_string()?;
-        match base64_decode(&s) {
-            Some(bytes) => {
-                return Result::Ok(bytes);
-            },
-            None => {
-                return Result::Err(DeserializeError::invalid_value(
-                    "invalid base64 byte string",
-                    self.pos as i64,
-                ));
-            },
-        }
+        let Some(bytes) = base64_decode(&s) else {
+            return Result::Err(DeserializeError::invalid_value(
+                "invalid base64 byte string",
+                self.pos as i64,
+            ));
+        };
+        return Result::Ok(bytes);
     }
 
     fn is_null(&mut self) -> Result<bool, DeserializeError> {

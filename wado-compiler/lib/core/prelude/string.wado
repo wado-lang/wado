@@ -1089,9 +1089,15 @@ impl String {
 
     /// Validate a contiguous byte slice as UTF-8 and wrap it as a `String`.
     pub fn from_utf8_slice(bytes: ByteSlice) -> Result<String, String> {
-        if !String::is_valid_utf8(bytes) {
-            builtin::cold_path();
-            return Result::Err("invalid UTF-8");
+        let len = bytes.len();
+        let mut i = 0;
+        while i < len {
+            let scalar = decode_utf8_scalar(bytes, i, len);
+            if !scalar.valid {
+                builtin::cold_path();
+                return Result::Err(`invalid UTF-8 at byte ${i}`);
+            }
+            i += scalar.advance;
         }
         return Result::Ok(String {
             repr: bytes.to_array() as ByteArray,

@@ -597,6 +597,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
+        if let Some(else_block) = &let_stmt.else_block {
+            self.resolve_let_else(let_stmt, value_type, else_block, ctx);
+            return;
+        }
+
         // Stage 7-B: records-only. reify rebuilds the `Let` / `LetDestructure`
         // stmt from the AST + recorded facts (`let_annotated_types`,
         // `local_types`, the binding symbols). This walk binds the pattern into
@@ -651,6 +656,61 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => {
                 self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span);
             }
+        }
+    }
+
+    /// Resolve a `let PAT = EXPR else { ... }` statement. The else block is
+    /// resolved in its own scope (it must not see the pattern bindings) and
+    /// must diverge; the refutable pattern's bindings then enter `ctx` so the
+    /// rest of the enclosing block can use them.
+    fn resolve_let_else(
+        &mut self,
+        let_stmt: &LetStmt,
+        scrutinee_type: TypeId,
+        else_block: &Block,
+        ctx: &mut FunctionContext,
+    ) {
+        self.resolve_block(else_block, ctx, None);
+        if !self.ast_block_always_exits(else_block) {
+            let _ = self.emit(TypeError::LetElseMustDiverge {
+                span: else_block.span,
+            });
+        }
+        if self.let_else_pattern_is_irrefutable(&let_stmt.pattern, scrutinee_type) {
+            let _ = self.emit(TypeError::InvalidPattern {
+                message: "irrefutable pattern in `let ... else`: the else block can never run; \
+                          use a plain `let` instead"
+                    .to_string(),
+                span: let_stmt.name_span,
+            });
+        }
+        self.resolve_if_pattern(&let_stmt.pattern, scrutinee_type, ctx, let_stmt.span);
+    }
+
+    /// Whether a `let ... else` pattern is definitely irrefutable (always
+    /// binds), which would make its else block unreachable. Conservative: only
+    /// the unambiguous top-level binding forms are flagged, so a refutable
+    /// pattern is never wrongly rejected.
+    fn let_else_pattern_is_irrefutable(
+        &mut self,
+        pattern: &Pattern,
+        scrutinee_type: TypeId,
+    ) -> bool {
+        match pattern {
+            Pattern::Wildcard | Pattern::MutIdent { .. } => true,
+            Pattern::Ident { name, .. } => {
+                !self.is_known_case_of_type(scrutinee_type, name, None)
+                    && !self.is_immutable_global(name)
+            }
+            // Destructuring may hold refutable sub-patterns; the rest are
+            // refutable outright (or a parser-recovery placeholder). Never flag.
+            Pattern::Tuple(..)
+            | Pattern::Struct { .. }
+            | Pattern::Literal(_)
+            | Pattern::Variant { .. }
+            | Pattern::Or(_)
+            | Pattern::Range { .. }
+            | Pattern::Error(_) => false,
         }
     }
 
@@ -1273,6 +1333,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Whether `name` refers to an immutable global (defined here or imported),
+    /// which in pattern position is a constant-value (refutable) match rather
+    /// than a fresh binding.
+    fn is_immutable_global(&self, name: &str) -> bool {
+        self.sem
+            .decls
+            .current_module_globals
+            .get(name)
+            .is_some_and(|&(_ty, mutable)| !mutable)
+            || self
+                .sem
+                .decls
+                .imported_globals
+                .get(name)
+                .is_some_and(|(_m, _n, _ty, mutable)| !*mutable)
+    }
+
     /// Resolve a pattern in an if-pattern context with type information from the scrutinee.
     /// Match ergonomics: if the scrutinee is `&T`, peels the reference and propagates
     /// `ref_binding` so that identifier bindings get `&InnerType` instead of `InnerType`.
@@ -1332,13 +1409,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 span: name_span,
             } => {
+                let is_mut = matches!(pattern, Pattern::MutIdent { .. });
                 // A bare identifier in a pattern context could be a variant/enum case
                 // (e.g., `None`, `Red`) or a variable binding (e.g., `x`, `val`).
                 // The parser does not use case to disambiguate; instead, we check
                 // whether the name is a known case of the scrutinee type.
-                if !matches!(pattern, Pattern::MutIdent { .. })
-                    && self.is_known_case_of_type(scrutinee_type, name, None)
-                {
+                if !is_mut && self.is_known_case_of_type(scrutinee_type, name, None) {
                     // Delegate to the Variant branch with empty bindings.
                     // Preserve the identifier's AstId/span as name_id/name_span so
                     // LSP jump-to-def on `None`/`Red` still resolves to the case decl.
@@ -1357,27 +1433,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         ref_binding,
                     );
                 }
-                // Check if the identifier refers to an immutable global constant
-                if !matches!(pattern, Pattern::MutIdent { .. }) {
-                    if let Some(&(_ty, mutable)) = self.sem.decls.current_module_globals.get(name)
-                        && !mutable
-                    {
-                        // Constant-value pattern: introduces no binding, but the
-                        // global is read here — record the use→def edge so it is
-                        // not flagged as dead code (mirrors the expression path).
-                        self.record_item_reference_by_name(*id, name);
-                        return Vec::new();
-                    }
-                    if let Some((_source_module, _original_name, _ty, mutable)) =
-                        self.sem.decls.imported_globals.get(name)
-                        && !*mutable
-                    {
-                        // Constant-value pattern: introduces no binding.
-                        self.record_item_reference_by_name(*id, name);
-                        return Vec::new();
-                    }
+                // Immutable global constant: a constant-value pattern that
+                // introduces no binding but reads the global — record the
+                // use→def edge so it is not flagged dead (mirrors the expr path).
+                if !is_mut && self.is_immutable_global(name) {
+                    self.record_item_reference_by_name(*id, name);
+                    return Vec::new();
                 }
-                let is_mut = matches!(pattern, Pattern::MutIdent { .. });
                 let binding_type = match ref_binding {
                     RefBinding::Ref => self
                         .tysys
