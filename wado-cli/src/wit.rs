@@ -277,10 +277,14 @@ async fn compile_wit_snapshot(
 ) -> Result<(WitEmitSnapshot, Vec<String>), CliExit> {
     let result = wado_compiler::compile_with_options(source, host, Some(input), options)
         .await
+        // Compile diagnostics are already on the loud host; exit quietly.
         .map_err(|_| CliExit::silent_failure(1))?;
-    let snapshot = result
-        .wit_emit_snapshot
-        .ok_or_else(|| CliExit::silent_failure(1))?;
+    // A successful compile with `embed_wit_contract` set always retains the
+    // subset, so this is unreachable; surface it loudly rather than as a silent
+    // exit-1 should a future change ever break that invariant.
+    let snapshot = result.wit_emit_snapshot.ok_or_else(|| {
+        CliExit::error("wado wit: compiler did not retain the WIT subset (internal error)".to_string())
+    })?;
     Ok((snapshot, wir_imports(result.wir_package)))
 }
 
