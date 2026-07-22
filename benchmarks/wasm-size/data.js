@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784752745765,
+  "lastUpdate": 1784754713521,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -43089,6 +43089,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/831bfa638db37fdd9a1feb7d157c52cfe724bfd2"
         },
         "date": 1784752745360,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1919,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8143,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16466,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271548,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ac0dd0130566c077db8530bcbf9d5820201b2c8e",
+          "message": "Merge pull request #1663 from wado-lang/claude/wit-component-type-refactor-e7bloa\n\nrefactor(wit): compute the component-type section during the main compile",
+          "timestamp": "2026-07-23T06:03:14+09:00",
+          "tree_id": "081cf3166f818e75e192a85e6a0592ef54ecaddd",
+          "url": "https://github.com/wado-lang/wado/commit/ac0dd0130566c077db8530bcbf9d5820201b2c8e"
+        },
+        "date": 1784754712921,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
