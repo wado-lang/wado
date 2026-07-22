@@ -162,20 +162,10 @@ fn analyze_copy_binding(
     let value_type = body.exprs[value].type_id;
 
     let source = match &body.exprs[value].kind {
-        ExprKind::Local { index, name } => {
-            crate::compiler_trace!(
-                "copy_prop",
-                "analyze: let #{local_index} = Local #{index} (value expr {value:?}, stmt {stmt:?})"
-            );
-            crate::compiler_trace!(
-                "copy_prop",
-                "  (expr parent per map: n/a in analyze — see subst traces)"
-            );
-            CopySource::Local {
-                index: *index,
-                name: name.clone(),
-            }
-        }
+        ExprKind::Local { index, name } => CopySource::Local {
+            index: *index,
+            name: name.clone(),
+        },
         ExprKind::Unary { op, expr: inner }
             if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef) =>
         {
@@ -653,13 +643,7 @@ fn apply_in_block(
         .iter()
         .copied()
         .filter(|s| match &engine.body.stmts[*s].kind {
-            StmtKind::Let { local_index, .. } => {
-                let drop = dead_locals.contains(local_index);
-                if drop {
-                    crate::compiler_trace!("copy_prop", "drop binding #{local_index}");
-                }
-                !drop
-            }
+            StmtKind::Let { local_index, .. } => !dead_locals.contains(local_index),
             _ => true,
         })
         .collect();
@@ -726,7 +710,6 @@ fn apply_in_expr(
         }
         match source {
             CopySource::Local { index, name } => {
-                crate::compiler_trace!("copy_prop", "subst use {id:?} -> Local #{index}");
                 engine.replace_expr_kind(id, ExprKind::Local { index, name });
             }
             CopySource::Ref {
@@ -750,13 +733,7 @@ fn apply_in_expr(
                 );
             }
             CopySource::Promoted(v) => {
-                let parent = engine.parent_of(NodeRef::Expr(id));
-                let grandparent = parent.and_then(|p| engine.parent_of(p));
-                let ok = engine.redirect_expr(id, Operand::Value(v));
-                crate::compiler_trace!(
-                    "copy_prop",
-                    "subst use {id:?} -> Promoted (ok={ok}, parent={parent:?}, gp={grandparent:?})"
-                );
+                engine.redirect_expr(id, Operand::Value(v));
             }
         }
         return;
@@ -848,14 +825,6 @@ fn propagate_at_root(
             break;
         }
         let dead_locals: IndexSet<u32> = substitutions.keys().copied().collect();
-        crate::compiler_trace!(
-            "copy_prop",
-            "round: subs={:?} deferred={has_deferred}",
-            substitutions
-                .iter()
-                .map(|(k, v)| format!("#{k}<-{v:?}"))
-                .collect::<Vec<_>>()
-        );
         let root = engine.body.root;
         apply_in_block(engine, root, &substitutions, &dead_locals);
         ever_changed = true;
@@ -907,7 +876,6 @@ pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bo
         if func.body.is_none() {
             return false;
         }
-        crate::compiler_trace!("copy_prop", "== fn {}", func.name);
         let rule = CopyPropRule {
             type_table: &type_table,
             oracle: MutationOracle::new(&param_mut),

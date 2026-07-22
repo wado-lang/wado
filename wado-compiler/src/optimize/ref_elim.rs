@@ -122,9 +122,6 @@ impl Rule for RefElimRule {
                 StmtKind::Let { local_index, .. } => {
                     let drop = self.refs.get(local_index).is_some_and(|i| i.eliminable)
                         || self.deref_sources.contains_key(local_index);
-                    if drop {
-                        crate::compiler_trace!("ref_elim", "drop binding of local #{local_index}");
-                    }
                     !drop
                 }
                 _ => true,
@@ -153,7 +150,6 @@ impl Rule for RefElimRule {
                     return false;
                 }
                 let referent_e = self.refs[&index].referent_e;
-                crate::compiler_trace!("ref_elim", "substitute field use of local #{index}");
                 let resolved = resolve_via_engine(engine, referent_e, &self.refs);
                 // Replace `r` (the inner Local) with the resolved referent,
                 // keeping `inner`'s type_id / span — the surrounding code was

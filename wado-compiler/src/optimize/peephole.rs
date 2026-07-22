@@ -54,7 +54,6 @@ use super::gate::{FunctionGate, GatedPass};
 use super::labeled_block_fusion::build_labeled_block_fusion;
 use super::match_to_switch::MatchToSwitchRule;
 use super::ref_elim::build_ref_elim;
-use super::scalar_forward::ScalarForwardRule;
 use super::string_push::{ShortPushStrRule, resolve_ctx};
 
 /// Run the unified peephole rule set over every function body. Returns whether
@@ -87,12 +86,6 @@ pub(super) fn run_peephole(
     let const_fold_rule = ConstFoldRule::new(&type_table, &callees);
     let branch_prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
     let match_rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
-    // Post-inline only: forward a single-use pure scalar into a struct/tuple
-    // literal, collapsing the `let t = e; Struct { …, t }` block an inlined
-    // constructor leaves so `sroa` sees a direct literal. The unrestricted
-    // `forward_scalar_temps` stays post-loop (destructure hazard); this subset is
-    // loop-safe because it only forwards *into* a literal.
-    let scalar_ctor_forward_rule = ScalarForwardRule::new_aggregate_only(&type_table);
 
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
@@ -158,9 +151,6 @@ pub(super) fn run_peephole(
         }
         if let Some(labeled_block_fusion_rule) = labeled_block_fusion_rule.as_ref() {
             rules.push(labeled_block_fusion_rule);
-        }
-        if !pre_inline {
-            rules.push(&scalar_ctor_forward_rule);
         }
         rules.extend([
             &array_rule as &dyn Rule,
