@@ -81,9 +81,7 @@ pub fn encode_component_type(
     encode_component_type_from(sem.wit_emit_input(), world_imports)
 }
 
-/// Like [`encode_component_type`], but from a detached [`WitEmitInput`] view, so
-/// the `wado compile` embed path encodes the section from the main compile's
-/// retained subset without a second frontend analysis (issue #1654).
+/// Like [`encode_component_type`], but from a detached [`WitEmitInput`] view (issue #1654).
 pub fn encode_component_type_from(
     input: WitEmitInput<'_>,
     world_imports: &[String],

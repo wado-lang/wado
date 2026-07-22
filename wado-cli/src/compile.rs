@@ -233,10 +233,9 @@ pub struct CompileFlags {
     /// embedding WIT, to read the faithful import plan
     /// (`imported_cm_interfaces`) without a second compile.
     pub retain_wir: bool,
-    /// When `Some`, the main compile retains the WIT-relevant subset
-    /// (`CompileResult::wit_emit_snapshot`) so the `component-type` section is
-    /// encoded from that single analysis instead of a second frontend run
-    /// (issue #1654). Set by `wado compile` when embedding is requested.
+    /// When `Some`, the compile retains the WIT subset
+    /// (`CompileResult::wit_emit_snapshot`) for encoding the `component-type`
+    /// section (issue #1654). Set by `wado compile` when embedding.
     pub embed_wit_contract: Option<wado_compiler::wit_emit::WitContract>,
 }
 
@@ -1161,13 +1160,10 @@ fn skip_embed(explicit: bool, wasm: Vec<u8>, msg: &str) -> Result<Vec<u8>, CliEx
     Ok(wasm)
 }
 
-/// Append the WIT `component-type` section to `wasm`, encoded from the WIT
-/// subset the main compile retained (`CompileResult::wit_emit_snapshot`) and
-/// `world_imports` (the faithful plan read from the main compile's retained
-/// WIR). The section is derived from the single analysis codegen ran — no
-/// second frontend pass to drift from it (issue #1654). `explicit` is true for
-/// `--embed-wit`: it makes a failure fatal, where the default-on path only
-/// warns and yields the un-embedded (still valid, self-describing) component.
+/// Append the WIT `component-type` section to `wasm`, encoded from the retained
+/// WIT `snapshot` and `world_imports` (the faithful plan from the retained WIR).
+/// `explicit` is true for `--embed-wit`: it makes a failure fatal, where the
+/// default-on path only warns and yields the un-embedded component.
 fn embed_wit_section(
     snapshot: Option<wado_compiler::wit_emit::WitEmitSnapshot>,
     wasm: Vec<u8>,
@@ -1175,9 +1171,6 @@ fn embed_wit_section(
     explicit: bool,
 ) -> Result<Vec<u8>, CliExit> {
     let Some(snapshot) = snapshot else {
-        // The main compile completed (`is_complete()`), so the subset is always
-        // retained when embedding was requested; a missing snapshot here is
-        // unexpected rather than a normal skip.
         return skip_embed(explicit, wasm, "WIT analysis subset was not retained");
     };
     match wit_bundle::embed_component_type_from(&wasm, snapshot.input(), &world_imports) {
@@ -1272,8 +1265,8 @@ pub async fn run_returning_bytes(opts: CompileOptions) -> Result<Vec<u8>, CliExi
 
     let mut flags = opts.flags();
     flags.retain_wir = embed.is_some();
-    // When embedding, have the main compile retain the WIT subset so the section
-    // is derived from that single analysis, not a second frontend run (#1654).
+    // When embedding, retain the WIT subset so the section is encoded from this
+    // compile, not a second frontend run (#1654).
     if embed.is_some() {
         flags.embed_wit_contract = Some(wado_compiler::wit_emit::wit_contract(
             opts.target_world.as_deref(),

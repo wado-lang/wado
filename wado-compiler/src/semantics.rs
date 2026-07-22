@@ -200,7 +200,7 @@ impl Semantics {
     }
 
     /// A borrowed [`crate::wit_emit::WitEmitInput`] view over the WIT-relevant
-    /// subset, so the WIT emitter reads from this analysis directly.
+    /// subset.
     #[must_use]
     pub fn wit_emit_input(&self) -> crate::wit_emit::WitEmitInput<'_> {
         crate::wit_emit::WitEmitInput {
@@ -213,9 +213,8 @@ impl Semantics {
         }
     }
 
-    /// A cloned handle to the CM interface registry `Arc`, or `None` when
-    /// analysis bailed before building it. Used by the main compile to take a
-    /// [`crate::wit_emit::WitEmitSnapshot`] before `Semantics` is destructured.
+    /// A cloned handle to the CM interface registry `Arc` (`None` before it is
+    /// built), for taking a [`crate::wit_emit::WitEmitSnapshot`].
     #[must_use]
     pub fn cm_interface_registry_arc(&self) -> Option<std::sync::Arc<CmInterfaceRegistry>> {
         self.state
@@ -224,7 +223,7 @@ impl Semantics {
     }
 
     /// A cloned handle to the world registry `Arc`, paired with
-    /// [`Self::cm_interface_registry_arc`] for the WIT snapshot.
+    /// [`Self::cm_interface_registry_arc`].
     #[must_use]
     pub fn world_registry_arc(&self) -> Option<std::sync::Arc<WorldRegistry>> {
         self.state

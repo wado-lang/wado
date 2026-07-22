@@ -134,9 +134,8 @@ pub struct CompileResult {
     /// Whether the entry module has `#![TODO]`
     pub is_todo_module: bool,
     /// WIT-relevant frontend subset, retained when
-    /// [`CompilerOptions::embed_wit_contract`] is set. The CLI derives the
-    /// `component-type` section / `wado wit` text from this single analysis
-    /// (issue #1654). `None` otherwise.
+    /// [`CompilerOptions::embed_wit_contract`] is set (issue #1654); `None`
+    /// otherwise.
     pub wit_emit_snapshot: Option<wit_emit::WitEmitSnapshot>,
     /// Structural description of the generator's `pub struct Options`,
     /// populated only when `target_world == "core:kiln/generator"` and
@@ -255,14 +254,10 @@ pub struct CompilerOptions {
     /// Severity policy for the three param-resolution diagnostic classes
     /// (`--param-unknown` / `--param-invalid` / `--param-missing`).
     pub param_policy: param_resolution::ParamPolicy,
-    /// When `Some`, the main compile takes a [`wit_emit::WitEmitSnapshot`] of
-    /// the WIT-relevant frontend subset (using this contract) before `Semantics`
-    /// is destructured into codegen, and returns it on
-    /// [`CompileResult::wit_emit_snapshot`]. The CLI then encodes the
-    /// `component-type` section (`wado compile`) or renders WIT text
-    /// (`wado wit`) from that single analysis instead of re-analyzing the
-    /// frontend a second time (issue #1654). `None` skips the clone entirely, so
-    /// a build that does not embed WIT pays nothing.
+    /// When `Some`, retain a [`wit_emit::WitEmitSnapshot`] (using this contract)
+    /// on [`CompileResult::wit_emit_snapshot`], so the CLI derives the
+    /// `component-type` section / `wado wit` text from this compile rather than
+    /// re-analyzing the frontend (issue #1654). `None` skips the clone.
     pub embed_wit_contract: Option<wit_emit::WitContract>,
 }
 
@@ -822,13 +817,10 @@ fn compile_after_load<H: CompilerHost>(
         return Err(Bail);
     }
 
-    // Take the WIT-relevant subset now, before `sem` is destructured into
-    // codegen below, so the `component-type` section / `wado wit` text derive
-    // from this single analysis instead of a second frontend run (issue #1654).
-    // Only when embedding is requested — a normal compile pays nothing. The
-    // `is_complete()` check above guarantees the registries are built; this is
-    // the pre-`--lib`-registration subset, matching what the deleted
-    // second-analysis path (`semantics_for_world`) produced.
+    // Clone the WIT subset before `sem` is destructured into codegen (issue
+    // #1654), so it survives the move. Captured pre-`--lib`-registration to
+    // match the removed second-analysis path; `is_complete()` guarantees the
+    // registries are built.
     let wit_emit_snapshot = options.embed_wit_contract.as_ref().map(|contract| {
         wit_emit::WitEmitSnapshot::new(
             snapshot_tir_modules(&sem.tir_modules),

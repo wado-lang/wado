@@ -5,11 +5,11 @@
 //! output — declared interfaces, exported items, the active world, and the
 //! type table — and renders a WIT document with [`wit_encoder`].
 //!
-//! `wado wit` prints the text. A planned Phase 2 (`wado compile` embedding, not
-//! yet implemented) will reuse the same text to derive the embedded
-//! `component-type` custom section. WIT is fully determined by name and type
-//! resolution, so emission reads [`Semantics`] and never touches monomorphize /
-//! lower / codegen.
+//! `wado wit` prints the text; `wado compile` embeds it as a `component-type`
+//! custom section (see [`crate::wit_bundle`]). WIT is fully determined by name
+//! and type resolution, so emission reads a [`WitEmitInput`] view — over a live
+//! [`Semantics`] or a detached [`WitEmitSnapshot`] — and never touches
+//! monomorphize / lower / codegen.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -99,13 +99,10 @@ pub fn wit_contract(
     }
 }
 
-/// The frontend subset the WIT emitter reads, as borrows.
-///
-/// Both a live [`Semantics`] (via [`Semantics::wit_emit_input`]) and a detached
-/// [`WitEmitSnapshot`] taken by the main compile feed the emitter through this
-/// view, so the `component-type` section and `wado wit` text are derived from
-/// the *same* analysis the codegen ran — no second frontend pass, no replay to
-/// drift (issue #1654).
+/// The frontend subset the WIT emitter reads, as borrows. A live [`Semantics`]
+/// and a detached [`WitEmitSnapshot`] both feed the emitter through this view,
+/// so `wado compile` and `wado wit` derive WIT from the same analysis codegen
+/// ran (issue #1654).
 #[derive(Clone, Copy)]
 pub struct WitEmitInput<'a> {
     /// Whether the analysis ran to completion; emission refuses partial state.
@@ -123,14 +120,10 @@ pub struct WitEmitInput<'a> {
     pub wit_contract: Option<&'a WitContract>,
 }
 
-/// A detached, owned copy of the WIT-relevant frontend subset, cloned by the
-/// main compile before `Semantics` is destructured into codegen (issue #1654).
-///
-/// Carried on [`crate::CompileResult`] so the CLI can encode the
-/// `component-type` section (`wado compile`) or render WIT text (`wado wit`)
-/// from the single analysis the codegen used, instead of re-running the
-/// frontend. Only cloned when embedding is requested, so a normal compile pays
-/// nothing.
+/// A detached, owned copy of the WIT-relevant frontend subset, cloned before
+/// `Semantics` is destructured into codegen and carried on
+/// [`crate::CompileResult`], so the CLI encodes the `component-type` section or
+/// renders `wado wit` text without re-running the frontend (issue #1654).
 pub struct WitEmitSnapshot {
     tir_modules: IndexMap<ModuleSource, TirModule>,
     types: TypeTable,
@@ -227,9 +220,7 @@ pub fn emit_wit_text(
     emit_wit_text_from(sem.wit_emit_input(), opts, world_imports)
 }
 
-/// Like [`emit_wit_text`], but from a detached [`WitEmitInput`] view, so the
-/// `wado compile` embed path and `wado wit` render from the main compile's
-/// retained subset without a second frontend analysis (issue #1654).
+/// Like [`emit_wit_text`], but from a detached [`WitEmitInput`] view (issue #1654).
 pub fn emit_wit_text_from(
     input: WitEmitInput<'_>,
     opts: &WitEmitOptions,

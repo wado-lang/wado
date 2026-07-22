@@ -1,7 +1,8 @@
 //! `wado wit` — emit the WIT text for a Wado program's component contract.
 //!
-//! Runs the frontend (`wado_compiler::semantics`) and stops; WIT is a
-//! pre-codegen fact, so there is no optimization level. See WEP
+//! Renders WIT from the subset one compile retains
+//! (`CompileResult::wit_emit_snapshot`) plus its import plan, so the text
+//! matches what `wado compile` embeds (issue #1654). See WEP
 //! `wep-2026-05-02-wit-interoperability.md`.
 
 use std::fs;
@@ -165,10 +166,8 @@ pub async fn run(opts: WitOptions) -> Result<(), CliExit> {
     Ok(())
 }
 
-/// Compile `input` against a fixed WASI world (or the default) once, and return
-/// the WIT-relevant subset plus the faithful import set — both from that single
-/// analysis, so `wado wit` derives its text exactly like `wado compile` embeds
-/// its section, with no second frontend run (issue #1654).
+/// Compile `input` against a fixed WASI world (or the default), returning its
+/// WIT subset and import plan.
 async fn world_snapshot_and_imports(
     input: Option<String>,
     world: Option<String>,
@@ -199,9 +198,8 @@ async fn world_snapshot_and_imports(
     compile_wit_snapshot(&source, &host, &input, options).await
 }
 
-/// A single analysis host seeded with the dependency index the main compile
-/// uses. `wado wit` runs one compile on it and reads both the WIT subset and
-/// the import plan from that result — no silent twin, no second host.
+/// The analysis host seeded with the same dependency index the main compile
+/// uses.
 async fn analysis_host(
     base_path: &Path,
     project: Option<&manifest::ProjectManifest>,
@@ -229,9 +227,8 @@ async fn run_generators(
         .map_err(|e| CliExit::error(format!("wado wit: running kiln generators: {e}")))
 }
 
-/// Compile the `[package].lib` entry once for the library world — emitted as the
-/// anonymous `root`, exporting the default interface `namespace:name/name` (see
-/// `manifest::LIB_WORLD_NAME`) — returning its WIT subset and import plan.
+/// Compile the `[package].lib` entry for the synthesized library world (the
+/// anonymous `root`), returning its WIT subset and import plan.
 async fn lib_snapshot_and_imports(
     input: Option<String>,
     usage: &str,
@@ -266,10 +263,7 @@ async fn lib_snapshot_and_imports(
     compile_wit_snapshot(&source, &host, &entry_str, options).await
 }
 
-/// Run the single compile and pull out the retained WIT subset + import plan.
-/// A failed compile (or a subset the compile did not retain, unreachable when
-/// `embed_wit_contract` is set and the compile succeeded) is a hard error —
-/// diagnostics are already on the host.
+/// Run the compile and pull out the retained WIT subset + import plan.
 async fn compile_wit_snapshot(
     source: &str,
     host: &FilesystemCompilerHost,
@@ -278,11 +272,10 @@ async fn compile_wit_snapshot(
 ) -> Result<(WitEmitSnapshot, Vec<String>), CliExit> {
     let result = wado_compiler::compile_with_options(source, host, Some(input), options)
         .await
-        // Compile diagnostics are already on the loud host; exit quietly.
+        // Diagnostics are already on the loud host; exit quietly.
         .map_err(|_| CliExit::silent_failure(1))?;
-    // A successful compile with `embed_wit_contract` set always retains the
-    // subset, so this is unreachable; surface it loudly rather than as a silent
-    // exit-1 should a future change ever break that invariant.
+    // Unreachable while `embed_wit_contract` is set; surface it loudly rather
+    // than a silent exit-1 if that invariant ever breaks.
     let snapshot = result.wit_emit_snapshot.ok_or_else(|| {
         CliExit::error(
             "wado wit: compiler did not retain the WIT subset (internal error)".to_string(),
