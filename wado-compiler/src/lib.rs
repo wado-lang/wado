@@ -750,11 +750,14 @@ pub async fn compile_with_options<H: CompilerHost>(
     // Provider pre-pass: an `import with { provider: "./p.wado" }` compiles `p`
     // on-demand into a component satisfying the dependency's guest-effect
     // imports, before effect-check (which discharges the requirement) and
-    // codegen (which composes it). Skipped when this compile is itself building
-    // a provider (`providers` is only set on the top-level consumer compile).
-    match resolve_inline_providers(&mut load_result, host, &logger).await {
-        Ok(mut extra) => options.providers.append(&mut extra),
-        Err(Bail) => return Err(CompileFailure { is_todo_module }),
+    // codegen (which composes it). A provider build (`lib_interface_export`) is
+    // a leaf: skipping it there bounds the reentrant compile so a
+    // provider-references-provider chain cannot recurse without limit.
+    if !options.lib_interface_export {
+        match resolve_inline_providers(&mut load_result, host, &options, &logger).await {
+            Ok(mut extra) => options.providers.append(&mut extra),
+            Err(Bail) => return Err(CompileFailure { is_todo_module }),
+        }
     }
 
     // Wrap all subsequent Bail errors with is_todo_module
@@ -780,6 +783,7 @@ pub async fn compile_with_options<H: CompilerHost>(
 async fn resolve_inline_providers<H: CompilerHost>(
     load_result: &mut loader::LoadResult,
     host: &H,
+    parent: &CompilerOptions,
     logger: &Logger<'_, H>,
 ) -> Result<Vec<ProviderComponent>, Bail> {
     use crate::ast::Item;
@@ -857,9 +861,18 @@ async fn resolve_inline_providers<H: CompilerHost>(
             .await
             .map_err(|e| bail(format!("cannot read provider `{prov_path}`: {e}")))?;
         let provider_src = String::from_utf8_lossy(&bytes).into_owned();
+        // Inherit the parent's compilation options so the provider is built the
+        // same way (optimization, `-D` params, codegen flags, log level); only
+        // the world/grouping is overridden, and `providers` stays empty (the
+        // provider is a leaf — see the `lib_interface_export` guard above).
         let opts = CompilerOptions {
             lib_world: Some(fq.clone()),
             lib_interface_export: true,
+            opt_level: parent.opt_level,
+            log_level: parent.log_level,
+            codegen_flags: parent.codegen_flags.clone(),
+            param_overrides: parent.param_overrides.clone(),
+            param_policy: parent.param_policy,
             ..Default::default()
         };
         let result = Box::pin(compile_with_options(
@@ -1220,7 +1233,15 @@ fn compile_after_load<H: CompilerHost>(
         registry.register_lib_local_items(&lib_surface.submodule_type_decls, fq);
         // Guest effect interfaces left unhandled at the boundary become CM
         // imports the consumer satisfies.
-        registry.register_lib_guest_effect_imports(entry, fq);
+        if let Err(msg) = registry.register_lib_guest_effect_imports(entry, fq) {
+            let _ = logger.error(compiler_host::Diagnostic {
+                severity: compiler_host::Severity::Error,
+                code: compiler_host::Code::DuplicateDefinition,
+                message: msg,
+                span: None,
+            });
+            return Err(Bail);
+        }
     }
 
     debug_assert_eq!(

@@ -1701,20 +1701,51 @@ impl CmInterfaceRegistry {
     /// with the effect's kebab name (`ns:pkg/<effect>@ver`) and each operation's
     /// CM name is the kebab of its Wado name. An interface already carrying a
     /// `#[cm]` attribute is a real binding, not a guest effect, and is skipped.
-    pub fn register_lib_guest_effect_imports(&mut self, module: &crate::ast::Module, lib_fq: &str) {
+    ///
+    /// # Errors
+    /// A guest effect whose kebab name equals the library's own interface name
+    /// would mint the library's default-interface FQ, colliding an import with
+    /// the export interface; reported so the user renames the effect.
+    pub fn register_lib_guest_effect_imports(
+        &mut self,
+        module: &crate::ast::Module,
+        lib_fq: &str,
+    ) -> Result<(), String> {
         use crate::ast::Item;
         let Some(base) = CmImport::parse(lib_fq) else {
-            return;
+            return Ok(());
         };
+        let is_guest_effect = |effect: &crate::ast::InterfaceDecl| {
+            !effect
+                .methods
+                .iter()
+                .any(|m| m.attrs.iter().any(|a| a.as_cm_import().is_some()))
+        };
+        let collisions: Vec<&str> = module
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                Item::Interface(effect)
+                    if is_guest_effect(effect) && to_kebab(&effect.name) == base.interface =>
+                {
+                    Some(effect.name.as_str())
+                }
+                _ => None,
+            })
+            .collect();
+        if !collisions.is_empty() {
+            return Err(format!(
+                "guest effect interface `{}` collides with the library's own interface name \
+                 `{}`; rename the effect",
+                collisions.join("`, `"),
+                base.interface
+            ));
+        }
         for item in &module.items {
             let Item::Interface(effect) = item else {
                 continue;
             };
-            if effect
-                .methods
-                .iter()
-                .any(|m| m.attrs.iter().any(|a| a.as_cm_import().is_some()))
-            {
+            if !is_guest_effect(effect) {
                 continue;
             }
             let interface = to_kebab(&effect.name);
@@ -1748,6 +1779,7 @@ impl CmInterfaceRegistry {
                 );
             }
         }
+        Ok(())
     }
 
     /// Register named type decls that reach the library's public surface from a
@@ -2150,14 +2182,28 @@ impl CmInterfaceRegistry {
     /// The owning interface FQ of a component-imported named type, when exactly
     /// one composed dependency interface declares `name`. Mirrors the
     /// `find_wasi_*` fallbacks for a type re-exported from a CM component
-    /// dependency (whose FQ carries no `wasi:` / `core:kiln/` prefix).
+    /// dependency (whose FQ carries no `wasi:` / `core:kiln/` prefix). `None` if
+    /// no or more than one dependency interface declares `name`, across all type
+    /// kinds — so a struct in one dependency and an enum in another are
+    /// ambiguous, not silently resolved to the first kind.
     pub fn find_component_type_source(&self, name: &str) -> Option<&str> {
         let member = |s: &str| self.component_interfaces.contains(s);
-        find_unique_source_in_set(&self.structs, name, &member)
-            .or_else(|| find_unique_source_in_set(&self.variants, name, &member))
-            .or_else(|| find_unique_source_in_set(&self.enums, name, &member))
-            .or_else(|| find_unique_source_in_set(&self.flags, name, &member))
-            .or_else(|| find_unique_source_in_set(&self.newtypes, name, &member))
+        let candidates = [
+            find_unique_source_in_set(&self.structs, name, &member),
+            find_unique_source_in_set(&self.variants, name, &member),
+            find_unique_source_in_set(&self.enums, name, &member),
+            find_unique_source_in_set(&self.flags, name, &member),
+            find_unique_source_in_set(&self.newtypes, name, &member),
+        ];
+        let mut found: Option<&str> = None;
+        for src in candidates.into_iter().flatten() {
+            match found {
+                None => found = Some(src),
+                Some(prev) if prev != src => return None,
+                Some(_) => {}
+            }
+        }
+        found
     }
 
     /// Given a source-interface prefix (e.g. `"wasi:filesystem/types@"`) and

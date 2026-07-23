@@ -84,6 +84,34 @@ test "shape compiles" {}
 }
 
 #[test]
+fn guest_effect_named_like_the_package_is_rejected() {
+    // `Hltest` kebabs to `hltest`, the package's own interface segment, so the
+    // minted import FQ would equal the library's export interface FQ. Rejected
+    // with a rename hint rather than silently minting a colliding interface.
+    let source = r#"
+interface Hltest {
+    fn op(code: String) -> String;
+}
+export fn wrap(code: String) -> String with Hltest {
+    return Hltest::op(code);
+}
+test "shape" {}
+"#;
+    let options = CompilerOptions {
+        opt_level: OptLevel::O2,
+        lib_world: Some(LIB_WORLD_FQ.to_string()),
+        ..Default::default()
+    };
+    let err =
+        common::compile_source_with_compiler_options(Path::new("hltest.wado"), source, options)
+            .expect_err("a guest effect colliding with the package interface name is rejected");
+    assert!(
+        format!("{err}").contains("collides"),
+        "expected a collision diagnostic, got: {err}"
+    );
+}
+
+#[test]
 fn internally_handled_effect_imports_nothing() {
     let source = r#"
 interface Highlight {
