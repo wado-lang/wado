@@ -380,7 +380,7 @@ impl Monomorphizer {
         let is_ref_blanket_call = method_func.monomorph_info.as_ref().is_some_and(|m| m.is_blanket)
             && method_func.method_info.as_ref().is_some_and(|i| {
                 i.ref_receiver().is_some_and(|ref_kind| {
-                    let is_mut = ref_kind == crate::name::RefReceiver::Mut;
+                    let is_mut = ref_kind == crate::name::RefKind::Mut;
                     i.base_trait_name
                         .as_deref()
                         .or(i.trait_name.as_deref())

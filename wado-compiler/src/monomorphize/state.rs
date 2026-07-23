@@ -249,7 +249,7 @@ impl Monomorphizer {
                         .is_some_and(|tn| {
                             self.functions.trait_env.has_universal_ref_blanket(
                                 tn,
-                                ref_kind == crate::name::RefReceiver::Mut,
+                                ref_kind == crate::name::RefKind::Mut,
                             )
                         })
                 })

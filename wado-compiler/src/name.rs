@@ -604,10 +604,95 @@ pub fn is_local_trait_method_name(name: &str) -> bool {
 }
 
 /// The reference kind of a `&` / `&mut` method receiver.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum RefReceiver {
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum RefKind {
     Shared,
     Mut,
+}
+
+impl RefKind {
+    /// The mangle prefix — the sole spelling of `&` / `&mut` from a `RefKind`.
+    fn prefix(self) -> &'static str {
+        match self {
+            RefKind::Shared => "&",
+            RefKind::Mut => "&mut",
+        }
+    }
+}
+
+/// The shape of a method receiver, typed so nothing inspects a mangled name to
+/// recover it. The `&` / `&mut` / `::` spellings appear only in this type's
+/// `mangle` / `head_key`. `classify` is the single (transitional) string→shape
+/// boundary; once producers construct `Receiver` directly it can be removed.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum Receiver {
+    /// A concrete named type: `Point`, `List`.
+    Type(String),
+    /// A generic type parameter, substituted at monomorphization (`T^Ord::cmp`).
+    TypeParam(String),
+    /// A universal reference receiver `&T` / `&mut T`; the pointee rides in the
+    /// receiver's type-arg list, not here.
+    Ref(RefKind),
+    /// An associated-type projection `Base::Assoc` (`S::SeqSerializer`).
+    Projection { base: String, assoc: String },
+}
+
+impl Receiver {
+    /// Classify a base receiver name into its typed shape. The single place a
+    /// receiver string is inspected; every consumer reads the resulting enum.
+    #[must_use]
+    pub fn classify(base: &str, is_type_param: bool) -> Self {
+        match base {
+            "&" => Receiver::Ref(RefKind::Shared),
+            "&mut" => Receiver::Ref(RefKind::Mut),
+            _ => match base.split_once("::") {
+                Some((b, a)) => Receiver::Projection {
+                    base: b.to_string(),
+                    assoc: a.to_string(),
+                },
+                None if is_type_param => Receiver::TypeParam(base.to_string()),
+                None => Receiver::Type(base.to_string()),
+            },
+        }
+    }
+
+    /// The canonical head string — identity key and mangle base. Round-trips
+    /// `classify` (`Receiver::classify(s, _).head_key() == s`).
+    #[must_use]
+    pub fn head_key(&self) -> String {
+        match self {
+            Receiver::Type(n) | Receiver::TypeParam(n) => n.clone(),
+            Receiver::Ref(k) => k.prefix().to_string(),
+            Receiver::Projection { base, assoc } => format!("{base}::{assoc}"),
+        }
+    }
+
+    /// Mangle the receiver with its type args (`Point<i32>`, `&List<i32>`,
+    /// `S::SeqSerializer`). The only place a `Receiver` becomes a `&`-prefixed
+    /// string.
+    #[must_use]
+    pub fn mangle(&self, type_args: &[String]) -> String {
+        match self {
+            Receiver::Ref(RefKind::Shared) if type_args.len() == 1 => format!("&{}", type_args[0]),
+            Receiver::Ref(RefKind::Mut) if type_args.len() == 1 => format!("&mut {}", type_args[0]),
+            _ => mangle_generic_name(&self.head_key(), type_args),
+        }
+    }
+
+    /// The receiver's reference kind, or `None` for a value receiver.
+    #[must_use]
+    pub fn ref_kind(&self) -> Option<RefKind> {
+        match self {
+            Receiver::Ref(k) => Some(*k),
+            _ => None,
+        }
+    }
+
+    /// Whether the receiver is an associated-type projection (`S::SeqSerializer`).
+    #[must_use]
+    pub fn is_assoc_projection(&self) -> bool {
+        matches!(self, Receiver::Projection { .. })
+    }
 }
 
 /// Decompose `Type^Trait::method` into its `(type, trait)` parts, or `None` when
@@ -655,24 +740,24 @@ pub fn rebase_monomorph_method(mangled: &str, base: &str) -> String {
 }
 
 impl LocalMethodName {
-    /// The receiver's reference kind, read from the structured
-    /// `base_struct_name` (`&` / `&mut`), not the composed mangled identity.
-    /// `None` for a value receiver. The universal-vs-shape ref distinction is a
-    /// separate `TraitEnv` query — this only reports the receiver's mutability.
+    /// The typed receiver shape, classified from the structured base fields (not
+    /// the composed mangled identity). The single query consumers use to reason
+    /// about the receiver; transitional until producers store it directly.
     #[must_use]
-    pub fn ref_receiver(&self) -> Option<RefReceiver> {
-        match self.base_struct_name.as_str() {
-            "&mut" => Some(RefReceiver::Mut),
-            "&" => Some(RefReceiver::Shared),
-            _ => None,
-        }
+    pub fn receiver(&self) -> Receiver {
+        Receiver::classify(&self.base_struct_name, self.is_type_param_receiver)
     }
 
-    /// Whether the receiver is an associated-type projection (`S::SeqSerializer`)
-    /// rather than a plain type — read from the structured `base_struct_name`.
+    /// The receiver's reference kind, or `None` for a value receiver.
+    #[must_use]
+    pub fn ref_receiver(&self) -> Option<RefKind> {
+        self.receiver().ref_kind()
+    }
+
+    /// Whether the receiver is an associated-type projection (`S::SeqSerializer`).
     #[must_use]
     pub fn receiver_is_assoc_projection(&self) -> bool {
-        self.base_struct_name.contains("::")
+        self.receiver().is_assoc_projection()
     }
 
     /// Create a new `LocalMethodName` directly from components.
@@ -1430,15 +1515,7 @@ pub fn format_type_name(info: TypeNameInfo) -> String {
 /// For `&` and `&mut` base names, formats as prefix: `&List<i32>`, `&mut List<i32>`.
 /// For other base names, formats as generic: `List<i32>`, `Map<String,i32>`.
 fn mangle_ref_aware(base_name: &str, type_args: &[String]) -> String {
-    if (base_name == "&" || base_name == "&mut") && type_args.len() == 1 {
-        if base_name == "&mut" {
-            format!("&mut {}", type_args[0])
-        } else {
-            format!("&{}", type_args[0])
-        }
-    } else {
-        mangle_generic_name(base_name, type_args)
-    }
+    Receiver::classify(base_name, false).mangle(type_args)
 }
 
 /// Build a monomorphized type name from base name and type arguments.
