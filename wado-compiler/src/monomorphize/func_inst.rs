@@ -1081,6 +1081,60 @@ impl Monomorphizer {
                 ) = (blanket_lookup, method_func)
                 {
                     let generic_func = generic_func_rc.borrow();
+                    // The direct-name blanket lookup finds the bare-`T` struct
+                    // blanket (`T^Inspect`) even when the receiver arg does not
+                    // satisfy its `Reflect` bound — a non-`Reflect` generic struct
+                    // (a token like `EnumCase<Color>`) or a ref. Instantiating it
+                    // would call `Reflect::<T>::…` on a non-`Reflect` `T` and trap.
+                    // Skip so the type-specific dispatch (bespoke, or the ref
+                    // blanket) is used instead. Only the bare-`T` blanket is gated;
+                    // the ref/mutref blankets (`&^Inspect`) carry an `Inspect`
+                    // bound and are keyed by shape, not this index.
+                    let blanket_bound_ok = {
+                        let info = method_func.method_info.as_ref();
+                        let trait_name =
+                            info.and_then(|i| i.base_trait_name.as_deref().or(i.trait_name.as_deref()));
+                        let recv = mono.impl_type_args.first().copied();
+                        match (trait_name, info, recv) {
+                            (Some(tn), Some(info), Some(rt)) => {
+                                let bare_param = self
+                                    .functions
+                                    .trait_env
+                                    .blanket_impl_param_for_trait(
+                                        tn,
+                                        Some(&generic_func.module_source),
+                                    );
+                                let is_bare_blanket = bare_param.as_deref().is_some_and(|p| {
+                                    mono.generic_name
+                                        == MethodName::format_local(
+                                            p,
+                                            Some(tn),
+                                            &info.method_name,
+                                        )
+                                });
+                                if is_bare_blanket {
+                                    let bounds = self
+                                        .functions
+                                        .trait_env
+                                        .blanket_impl_bounds_for_trait(
+                                            tn,
+                                            Some(&generic_func.module_source),
+                                        )
+                                        .unwrap_or_default();
+                                    crate::synthesis::template::receiver_satisfies_blanket_bounds(
+                                        rt, bounds, type_table,
+                                    )
+                                } else {
+                                    true
+                                }
+                            }
+                            _ => true,
+                        }
+                    };
+                    if !blanket_bound_ok {
+                        drop(generic_func);
+                        return;
+                    }
                     let method_info = generic_func.method_info.clone();
                     // impl_type_args and method_type_args are now separate in MonomorphInfo.
                     // For blanket impls, impl_type_args contains the concrete receiver type.
