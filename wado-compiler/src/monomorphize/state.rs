@@ -241,8 +241,8 @@ impl Monomorphizer {
         // `&`) has no universal blanket and must NOT be deduped — dropping it
         // would leave the for-of loop's iterator unresolved.
         let is_ref_universal_blanket = key.impl_type_args.len() == 1
-            && crate::name::ref_template_receiver(&key.name).is_some_and(|ref_kind| {
-                key.method_info.as_ref().is_some_and(|i| {
+            && key.method_info.as_ref().is_some_and(|i| {
+                i.ref_receiver().is_some_and(|ref_kind| {
                     i.base_trait_name
                         .as_deref()
                         .or(i.trait_name.as_deref())

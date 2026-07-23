@@ -377,20 +377,18 @@ impl Monomorphizer {
         // leading `&`. A bare-`T` blanket (serde `Serialize`) and a shape ref impl
         // (`&List^IntoIterator`) both still resolve here — the former has no `&`
         // head, the latter has no universal `&T` blanket.
-        let is_ref_blanket_call = method_func.monomorph_info.as_ref().is_some_and(|m| {
-            m.is_blanket
-                && crate::name::ref_template_receiver(&m.generic_name).is_some_and(|ref_kind| {
+        let is_ref_blanket_call = method_func.monomorph_info.as_ref().is_some_and(|m| m.is_blanket)
+            && method_func.method_info.as_ref().is_some_and(|i| {
+                i.ref_receiver().is_some_and(|ref_kind| {
                     let is_mut = ref_kind == crate::name::RefReceiver::Mut;
-                    method_func.method_info.as_ref().is_some_and(|i| {
-                        i.base_trait_name
-                            .as_deref()
-                            .or(i.trait_name.as_deref())
-                            .is_some_and(|tn| {
-                                self.functions.trait_env.has_universal_ref_blanket(tn, is_mut)
-                            })
-                    })
+                    i.base_trait_name
+                        .as_deref()
+                        .or(i.trait_name.as_deref())
+                        .is_some_and(|tn| {
+                            self.functions.trait_env.has_universal_ref_blanket(tn, is_mut)
+                        })
                 })
-        });
+            });
         if !type_args.is_empty()
             && !is_ref_blanket_call
             && let Some(struct_name) = self.get_struct_name_from_type(receiver.type_id, type_table)

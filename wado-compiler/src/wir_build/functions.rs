@@ -262,8 +262,9 @@ fn register_entry_functions(ctx: &mut WirContext<'_>) {
             continue;
         }
 
-        // Skip methods (handled in register_methods)
-        if crate::name::is_method_name(&tir_func.name) {
+        // Skip methods (handled in register_methods, which selects on the same
+        // `method_info` field — so the two registrars partition functions).
+        if tir_func.method_info.is_some() {
             continue;
         }
 
@@ -303,10 +304,9 @@ fn register_loaded_functions(ctx: &mut WirContext<'_>) {
             continue;
         }
 
-        if tir_func.name == "run"
-            || tir_func.body.is_none()
-            || crate::name::is_method_name(&tir_func.name)
-        {
+        // Methods are registered by `register_methods` (same `method_info`
+        // selector), so they partition cleanly against the free functions here.
+        if tir_func.name == "run" || tir_func.body.is_none() || tir_func.method_info.is_some() {
             continue;
         }
 

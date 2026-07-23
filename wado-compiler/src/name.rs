@@ -603,40 +603,11 @@ pub fn is_local_trait_method_name(name: &str) -> bool {
     name.contains('^')
 }
 
-/// Whether `name` is a method mangle — it carries the `::` method separator
-/// (`Type::method` or `Type^Trait::method`) — as opposed to a bare free function
-/// (`run`, `$field_get$…`). Centralizes the separator knowledge so callers
-/// distinguishing methods from free functions don't scan the string themselves.
-pub fn is_method_name(name: &str) -> bool {
-    name.contains("::")
-}
-
-/// The reference kind of a `&` / `&mut` method receiver head.
+/// The reference kind of a `&` / `&mut` method receiver.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum RefReceiver {
     Shared,
     Mut,
-}
-
-/// If `name`'s receiver head is the *universal* ref-blanket marker — `&` or
-/// `&mut` (`&^Trait::method`, `&mut^Trait::method`) — return its ref kind. A
-/// shape ref impl (`&List<T>^IntoIterator::…`) has a `&List<T>` head, not `&`,
-/// so it returns `None`. Owns the `&` / `&mut` head sentinel so callers don't
-/// pattern-match the mangled string.
-pub fn ref_template_receiver(name: &str) -> Option<RefReceiver> {
-    match split_trait_method_receiver(name)?.0 {
-        "&mut" => Some(RefReceiver::Mut),
-        "&" => Some(RefReceiver::Shared),
-        _ => None,
-    }
-}
-
-/// Whether a method mangle's receiver head is an associated-type projection
-/// (`S::SeqSerializer^Trait::method`) rather than a plain type name — its head
-/// (the part before `^`) itself carries a `::`.
-pub fn receiver_is_assoc_projection(name: &str) -> bool {
-    let head = name.split_once('^').map_or(name, |(h, _)| h);
-    head.contains("::")
 }
 
 /// Decompose `Type^Trait::method` into its `(type, trait)` parts, or `None` when
@@ -684,6 +655,26 @@ pub fn rebase_monomorph_method(mangled: &str, base: &str) -> String {
 }
 
 impl LocalMethodName {
+    /// The receiver's reference kind, read from the structured
+    /// `base_struct_name` (`&` / `&mut`), not the composed mangled identity.
+    /// `None` for a value receiver. The universal-vs-shape ref distinction is a
+    /// separate `TraitEnv` query — this only reports the receiver's mutability.
+    #[must_use]
+    pub fn ref_receiver(&self) -> Option<RefReceiver> {
+        match self.base_struct_name.as_str() {
+            "&mut" => Some(RefReceiver::Mut),
+            "&" => Some(RefReceiver::Shared),
+            _ => None,
+        }
+    }
+
+    /// Whether the receiver is an associated-type projection (`S::SeqSerializer`)
+    /// rather than a plain type — read from the structured `base_struct_name`.
+    #[must_use]
+    pub fn receiver_is_assoc_projection(&self) -> bool {
+        self.base_struct_name.contains("::")
+    }
+
     /// Create a new `LocalMethodName` directly from components.
     ///
     /// IMPORTANT: `struct_name` must be the base struct name WITHOUT type parameters.

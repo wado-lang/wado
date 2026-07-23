@@ -99,6 +99,10 @@ struct SubstitutedCall {
     /// The pre-substitution mangled name, still the blanket-template key for a
     /// bare-`T` blanket dispatch.
     original_name: String,
+    /// Whether the *pre-substitution* receiver was an associated-type projection
+    /// (`S::SeqSerializer`) — read from the original method info's metadata, since
+    /// substitution rewrites the receiver into a plain concrete name.
+    receiver_is_assoc_projection: bool,
     /// Substituted impl type args, in param-index order.
     type_args: Vec<TypeId>,
     /// The call's current module source, used as the fallback home.
@@ -2944,6 +2948,7 @@ impl Monomorphizer {
             info: new_info,
             mangled: new_func_name,
             original_name: old_func_name,
+            receiver_is_assoc_projection: info.receiver_is_assoc_projection(),
             type_args,
             module_source,
         };
@@ -2976,6 +2981,7 @@ impl Monomorphizer {
             info: new_info,
             mangled: new_func_name,
             original_name: old_func_name,
+            receiver_is_assoc_projection,
             type_args,
             module_source,
         } = call;
@@ -3103,7 +3109,7 @@ impl Monomorphizer {
                     )
                 })
                 .flatten();
-            let blanket_name = if crate::name::receiver_is_assoc_projection(&old_func_name) {
+            let blanket_name = if receiver_is_assoc_projection {
                 new_func_name.clone()
             } else if let (Some(_), Some(param)) = (reflect_fields, blanket_param) {
                 LocalMethodName::new(
@@ -3151,6 +3157,7 @@ impl Monomorphizer {
             info: new_info,
             mangled: new_func_name,
             original_name: old_func_name,
+            receiver_is_assoc_projection: _,
             type_args,
             module_source,
         } = call;
