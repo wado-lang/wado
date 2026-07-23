@@ -1,0 +1,10 @@
+// A single `provider` file cannot yet satisfy a dependency that imports several
+// guest effects; that is a clear error, not a silent partial wiring.
+use { Hl2 } from "./sub/hl2.wasm" with { type: "wasm", provider: "./sub/hl_ext.wado" };
+
+test "unreachable — compile fails" {
+    let _ = Hl2::run("x");
+}
+
+__DATA__
+{"compile_error": "imports multiple guest effects"}

@@ -196,6 +196,17 @@ pub struct DumpResult {
     pub trivia: comment::TriviaMap,
 }
 
+/// A provider component supplied to satisfy a dependency's guest-effect import.
+/// Built with `--implement <import_fq>`, so it exports that interface; codegen
+/// wires `provider.export[import_fq] -> dependency.import[import_fq]`.
+#[derive(Debug, Clone)]
+pub struct ProviderComponent {
+    /// The interface FQ the provider exports and the dependency imports.
+    pub import_fq: String,
+    /// The provider component bytes.
+    pub bytes: Vec<u8>,
+}
+
 /// Compilation options for the compiler
 #[derive(Debug, Clone)]
 pub struct CompilerOptions {
@@ -247,6 +258,15 @@ pub struct CompilerOptions {
     /// instead of conforming to a fixed WASI world. Sets `target_world` to this
     /// FQ and bypasses the static world-registry lookup.
     pub lib_world: Option<String>,
+    /// Force the library's exports into the default interface (the A-grouping)
+    /// even when no signature references a named type. Set when the library
+    /// implements a foreign interface (a provider component), whose consumers
+    /// connect by interface FQ.
+    pub lib_interface_export: bool,
+    /// Provider components that satisfy a dependency's guest-effect imports.
+    /// Each is composed as a sibling and wired `provider.export[fq] ->
+    /// dependency.import[fq]` (research-cm-boundary-callbacks.md).
+    pub providers: Vec<ProviderComponent>,
     /// Compile-time parameter overrides from the CLI's `-D NAME=value` flags.
     /// Consumed by the param-resolution pass against `#[param]` globals; an
     /// entry matching no declaration is reported per `param_policy.unknown`.
@@ -277,6 +297,8 @@ impl Default for CompilerOptions {
             codegen_flags: Vec::new(),
             unused_diagnostics: true,
             lib_world: None,
+            lib_interface_export: false,
+            providers: Vec::new(),
             param_overrides: crate::hashmap::IndexMap::default(),
             param_policy: param_resolution::ParamPolicy::default(),
             embed_wit_contract: None,
@@ -476,6 +498,7 @@ fn synthesize_lib_world_info(
     entry_module: Option<&ast::Module>,
     reexports: &[world_registry::WorldExportInfo],
     submodule_type_names: &crate::hashmap::IndexSet<String>,
+    force_interface_export: bool,
 ) -> world_registry::WorldInfo {
     use crate::ast::Item;
     use crate::world_registry::{WorldExportInfo, WorldInfo};
@@ -515,7 +538,7 @@ fn synthesize_lib_world_info(
         e.params.iter().any(|(_, ty)| lib_sig_uses_named_type(ty))
             || e.return_type.as_ref().is_some_and(lib_sig_uses_named_type)
     });
-    if references_named_type {
+    if references_named_type || force_interface_export {
         for export in &mut exports {
             export.from_interface_fq = Some(fq.to_string());
         }
@@ -707,7 +730,7 @@ pub async fn compile_with_options<H: CompilerHost>(
     source: &str,
     host: &H,
     filename: Option<&str>,
-    options: CompilerOptions,
+    mut options: CompilerOptions,
 ) -> Result<CompileResult, CompileFailure> {
     let log_level = options.log_level.unwrap_or_default();
     let logger = Logger::new(host, log_level);
@@ -716,7 +739,7 @@ pub async fn compile_with_options<H: CompilerHost>(
     // === Phase 1: Load all modules ===
     // Loader performs: lex → parse → bind for each module, and preserves
     // the entry AST for tooling that takes it by value.
-    let load_result = {
+    let mut load_result = {
         let module_loader = loader::ModuleLoader::new(host, log_level)
             .with_invocations(options.invocations.clone());
         module_loader
@@ -734,6 +757,19 @@ pub async fn compile_with_options<H: CompilerHost>(
     // Detect #![TODO] from the entry module AST (available after Phase 1)
     let is_todo_module = load_result.entry_ast.has_todo();
 
+    // Provider pre-pass: an `import with { provider: "./p.wado" }` compiles `p`
+    // on-demand into a component satisfying the dependency's guest-effect
+    // imports, before effect-check (which discharges the requirement) and
+    // codegen (which composes it). A provider build (`lib_interface_export`) is
+    // a leaf: skipping it there bounds the reentrant compile so a
+    // provider-references-provider chain cannot recurse without limit.
+    if !options.lib_interface_export {
+        match resolve_inline_providers(&mut load_result, host, &options, &logger).await {
+            Ok(mut extra) => options.providers.append(&mut extra),
+            Err(Bail) => return Err(CompileFailure { is_todo_module }),
+        }
+    }
+
     // Wrap all subsequent Bail errors with is_todo_module
     let result = compile_after_load(load_result, options, &logger, filename);
     match result {
@@ -749,6 +785,123 @@ pub async fn compile_with_options<H: CompilerHost>(
         }
         Err(Bail) => Err(CompileFailure { is_todo_module }),
     }
+}
+
+/// Compile each `with { provider: "./p.wado" }` directive into a provider
+/// component satisfying its dependency's guest-effect imports. The provider's
+/// `export fn`s are lowered into the imported interface (`lib_interface_export`
+/// forces the interface grouping), and the result is wired
+/// `provider.export -> dependency.import` at codegen; a supplied provider also
+/// discharges the reconstructed effect at effect-check.
+async fn resolve_inline_providers<H: CompilerHost>(
+    load_result: &mut loader::LoadResult,
+    host: &H,
+    parent: &CompilerOptions,
+    logger: &Logger<'_, H>,
+) -> Result<Vec<ProviderComponent>, Bail> {
+    use crate::ast::Item;
+
+    let entry_source = load_result.entry_module_source.clone();
+    let entry_dir = crate::name::entry_dir_of(Some(&entry_source));
+
+    // (importing module source, use decl, provider path) for every provider
+    // directive, collected before the on-demand compiles below.
+    let mut jobs: Vec<(ModuleSource, crate::ast::UseDecl, String)> = Vec::new();
+    for (src, module) in &load_result.modules {
+        for item in &module.items {
+            if let Item::Use(use_decl) = item
+                && let Some(path) = use_decl.attributes.as_ref().and_then(|a| a.provider_path())
+            {
+                jobs.push((src.clone(), use_decl.clone(), path.to_string()));
+            }
+        }
+    }
+
+    let bail = |msg: String| -> Bail {
+        let _ = logger.error(compiler_host::Diagnostic {
+            severity: compiler_host::Severity::Error,
+            code: compiler_host::Code::ModuleNotFound,
+            message: msg,
+            span: None,
+        });
+        Bail
+    };
+
+    let mut providers = Vec::new();
+    for (src, use_decl, prov_path) in jobs {
+        // Resolve against the loader's own interner so the `ModuleSource`'s
+        // interned strings match the loaded binding module's key (identity, not
+        // string, equality).
+        let dep_source = loader::resolve_use_decl_source(
+            &mut load_result.interner,
+            &src,
+            &use_decl,
+            Some(&entry_source),
+            &load_result.invocations,
+        );
+        let Some(dep_module) = load_result.modules.get(&dep_source) else {
+            return Err(bail(format!(
+                "`provider` on `{}` names an import that is not a component",
+                use_decl.source
+            )));
+        };
+        let guest_fqs: Vec<String> = crate::wit_consume::module_host_leaf_imports(dep_module)
+            .into_iter()
+            .filter(|fq| !fq.starts_with("wasi:"))
+            .collect();
+        let fq = match guest_fqs.as_slice() {
+            [fq] => fq.clone(),
+            [] => {
+                return Err(bail(format!(
+                    "`provider` on `{}`, which imports no guest effect to satisfy",
+                    use_decl.source
+                )));
+            }
+            _ => {
+                return Err(bail(format!(
+                    "`provider` on `{}` imports multiple guest effects ({}); a single \
+                     provider file for several interfaces is not yet supported",
+                    use_decl.source,
+                    guest_fqs.join(", ")
+                )));
+            }
+        };
+
+        let resolved = loader::resolve_wasm_asset_path(&src, &prov_path, &entry_dir)
+            .map_err(|_| bail(format!("cannot resolve provider path `{prov_path}`")))?;
+        let bytes = host
+            .load_source(&resolved)
+            .await
+            .map_err(|e| bail(format!("cannot read provider `{prov_path}`: {e}")))?;
+        let provider_src = String::from_utf8_lossy(&bytes).into_owned();
+        // Inherit the parent's compilation options so the provider is built the
+        // same way (optimization, `-D` params, codegen flags, log level); only
+        // the world/grouping is overridden, and `providers` stays empty (the
+        // provider is a leaf — see the `lib_interface_export` guard above).
+        let opts = CompilerOptions {
+            lib_world: Some(fq.clone()),
+            lib_interface_export: true,
+            opt_level: parent.opt_level,
+            log_level: parent.log_level,
+            codegen_flags: parent.codegen_flags.clone(),
+            param_overrides: parent.param_overrides.clone(),
+            param_policy: parent.param_policy,
+            ..Default::default()
+        };
+        let result = Box::pin(compile_with_options(
+            &provider_src,
+            host,
+            Some(&resolved),
+            opts,
+        ))
+        .await
+        .map_err(|e| bail(format!("provider `{prov_path}` failed to compile: {e}")))?;
+        providers.push(ProviderComponent {
+            import_fq: fq,
+            bytes: result.wasm,
+        });
+    }
+    Ok(providers)
 }
 
 /// Internal: run compilation phases after module loading.
@@ -851,7 +1004,12 @@ fn compile_after_load<H: CompilerHost>(
     // emits and share their logic with the LSP.
     {
         let _span = logger.span("effect-check");
-        let diags = effect_check::check_semantics(&sem);
+        let provided_import_fqs: crate::hashmap::IndexSet<String> = options
+            .providers
+            .iter()
+            .map(|p| p.import_fq.clone())
+            .collect();
+        let diags = effect_check::check_semantics(&sem, provided_import_fqs);
         let move_errors = resource_move_check::check_resource_moves_semantic(&sem);
         let had_error = !diags.is_empty() || !move_errors.is_empty();
         for error in diags.effects {
@@ -981,7 +1139,13 @@ fn compile_after_load<H: CompilerHost>(
 
     let mut lib_world_info = synth_world_fq.as_ref().map(|fq| {
         let entry = sem.modules.get(&sem.entry_module_source);
-        synthesize_lib_world_info(fq, entry, &lib_surface.submodule_exports, &lib_type_names)
+        synthesize_lib_world_info(
+            fq,
+            entry,
+            &lib_surface.submodule_exports,
+            &lib_type_names,
+            options.lib_interface_export,
+        )
     });
 
     if options.lib_world.is_some()
@@ -1097,6 +1261,17 @@ fn compile_after_load<H: CompilerHost>(
         registry.register_lib_local_decls(entry, fq, entry_module_source.clone());
         // Submodule-defined types reachable through the facade's exports.
         registry.register_lib_local_items(&lib_surface.submodule_type_decls, fq);
+        // Guest effect interfaces left unhandled at the boundary become CM
+        // imports the consumer satisfies.
+        if let Err(msg) = registry.register_lib_guest_effect_imports(entry, fq) {
+            let _ = logger.error(compiler_host::Diagnostic {
+                severity: compiler_host::Severity::Error,
+                code: compiler_host::Code::DuplicateDefinition,
+                message: msg,
+                span: None,
+            });
+            return Err(Bail);
+        }
     }
 
     debug_assert_eq!(
@@ -1370,7 +1545,7 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 14: Emit Wasm (WirPackage → Wasm component bytes) ===
     let wasm = {
         let _span = logger.span("codegen");
-        codegen::emit_wasm(&nir, &wir_package)
+        codegen::emit_wasm(&nir, &wir_package, &options.providers)
     };
 
     // Return the entry AST for tooling
@@ -2085,6 +2260,7 @@ export fn id_bool(v: bool) -> bool { return v; }
             Some(&module),
             &[],
             &crate::hashmap::IndexSet::default(),
+            false,
         );
 
         assert_eq!(world.fq_name, "wado:mylib/mylib@0.1.0");
@@ -2108,6 +2284,7 @@ export fn id_bool(v: bool) -> bool { return v; }
             None,
             &[],
             &crate::hashmap::IndexSet::default(),
+            false,
         );
         assert!(world.exports.is_empty());
     }
@@ -2128,6 +2305,7 @@ export fn id_points(v: List<Point>) -> List<Point> { return v; }
             Some(&module),
             &[],
             &crate::hashmap::IndexSet::default(),
+            false,
         );
         assert!(
             world
@@ -2152,6 +2330,7 @@ export fn id_opt(v: Option<String>) -> Option<String> { return v; }
             Some(&module),
             &[],
             &crate::hashmap::IndexSet::default(),
+            false,
         );
         assert!(
             world.exports.iter().all(|e| e.from_interface_fq.is_none()),

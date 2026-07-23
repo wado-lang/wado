@@ -429,6 +429,15 @@ fn generate_import_adapters(project: &mut Package) {
                 &owner_module,
                 &entry_source,
             );
+            // A world function (Phase 9) has no interface, so it needs no
+            // capability effect. The shared synthesizer pushed its empty
+            // interface name as one; drop it so the import stays pure.
+            if project
+                .cm_interface_registry
+                .is_world_import_function(qualified_name)
+            {
+                produced.adapter.borrow_mut().effects.clear();
+            }
             auxiliary_functions.extend(produced.auxiliary);
             adapters.insert(qualified_name.clone(), produced.adapter);
         }

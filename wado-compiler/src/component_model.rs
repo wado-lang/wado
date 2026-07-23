@@ -371,7 +371,10 @@ fn cm_attr_cm_name(attrs: &[crate::ast::Attribute], wado_name: &str) -> String {
             // Case-level CM names (variant cases, fields, ...) carry just
             // the CM-side identifier.
             Some(crate::ast::CmBoundary::Name(s)) => Some(s.clone()),
-            Some(crate::ast::CmBoundary::Canonical { .. }) | None => None,
+            Some(
+                crate::ast::CmBoundary::Canonical { .. } | crate::ast::CmBoundary::WorldImport(_),
+            )
+            | None => None,
         })
         .unwrap_or_else(|| panic!("missing #[cm] attribute for CM name: {wado_name}"))
 }
@@ -666,6 +669,16 @@ pub struct CmInterfaceRegistry {
     /// interface of one component shares the same set (v1 component-level union).
     component_host_leaf_imports: IndexMap<String, Vec<String>>,
 
+    /// World-level function imports (Phase 9), by bare name. Marks which
+    /// `effect_to_func` entries are world-level (their `CmFunctionInfo` lives
+    /// there under the bare name).
+    world_import_functions: IndexSet<String>,
+
+    /// World-level function import name → the dependency `ModuleSource` that
+    /// exports it (the composition target, and the identity that distinguishes
+    /// it from a same-named local function).
+    world_import_sources: IndexMap<String, ModuleSource>,
+
     /// Reverse index for the `_by_module` accessors (see [`ModuleSourceIndex`]).
     module_index: std::sync::OnceLock<ModuleSourceIndex>,
 }
@@ -738,9 +751,19 @@ fn find_unique_source_with_prefix<'a, V>(
     prefix: &str,
     name: &str,
 ) -> Option<&'a str> {
+    find_unique_source_in_set(map, name, &|src| src.starts_with(prefix))
+}
+
+/// The unique source interface registering `name` among sources for which
+/// `is_member` holds, or `None` when there is no or more than one match.
+fn find_unique_source_in_set<'a, V>(
+    map: &'a IndexMap<(String, String), V>,
+    name: &str,
+    is_member: &dyn Fn(&str) -> bool,
+) -> Option<&'a str> {
     let mut found: Option<&str> = None;
     for ((src, n), _) in map {
-        if n != name || !src.starts_with(prefix) {
+        if n != name || !is_member(src) {
             continue;
         }
         if found.is_some() {
@@ -1563,6 +1586,42 @@ impl CmInterfaceRegistry {
             }
         }
 
+        // World-level function imports (Phase 9): a bodyless free function
+        // carrying a `#[cm]` world-import boundary.
+        for item in &module.items {
+            if let Item::Function(func) = item
+                && let Some(cm_func_name) = func
+                    .attrs
+                    .iter()
+                    .find_map(|a| a.cm_boundary.as_ref().and_then(|b| b.as_world_import()))
+            {
+                let cm_param_names = extract_cm_params_attr(&func.attrs);
+                let params: Vec<(String, String, Type)> = func
+                    .params
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| {
+                        let cm_name = cm_param_names
+                            .get(i)
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "missing #[cm_params] for param '{}' in world import {}",
+                                    p.name, func.name
+                                )
+                            })
+                            .clone();
+                        (p.name.clone(), cm_name, resolve_type(&p.ty, &self.newtypes))
+                    })
+                    .collect();
+                self.register_world_import(
+                    &func.name,
+                    cm_func_name,
+                    params,
+                    func.return_type.clone(),
+                );
+            }
+        }
+
         // Register resource methods with resolved types for params but NOT for return type
         for item in &module.items {
             if let Item::Resource(resource) = item {
@@ -1622,6 +1681,7 @@ impl CmInterfaceRegistry {
         &mut self,
         module: &crate::ast::Module,
         interface_fqs: &[String],
+        world_func_names: &[String],
         host_leaf_imports: &[String],
         module_source: &ModuleSource,
     ) {
@@ -1634,6 +1694,10 @@ impl CmInterfaceRegistry {
                 self.component_host_leaf_imports
                     .insert(fq.clone(), host_leaf_imports.to_vec());
             }
+        }
+        for name in world_func_names {
+            self.world_import_sources
+                .insert(name.clone(), module_source.clone());
         }
     }
 
@@ -1680,6 +1744,96 @@ impl CmInterfaceRegistry {
         for item in &module.items {
             self.register_lib_local_item(item, iface_fq, &entry_source, &local_names);
         }
+    }
+
+    /// Register a `--lib` package's locally-defined guest effect interfaces as
+    /// CM imports, so an effect left unhandled at the library boundary lowers to
+    /// a component import the consumer satisfies (rather than an unresolved-call
+    /// ICE). Unlike [`Self::register_module_decls`] — which registers only
+    /// `#[cm(...)]`-tagged stdlib interfaces — this mints a CM identity for a
+    /// user `interface X { ... }`: the interface FQ is the package coordinate
+    /// with the effect's kebab name (`ns:pkg/<effect>@ver`) and each operation's
+    /// CM name is the kebab of its Wado name. An interface already carrying a
+    /// `#[cm]` attribute is a real binding, not a guest effect, and is skipped.
+    ///
+    /// # Errors
+    /// A guest effect whose kebab name equals the library's own interface name
+    /// would mint the library's default-interface FQ, colliding an import with
+    /// the export interface; reported so the user renames the effect.
+    pub fn register_lib_guest_effect_imports(
+        &mut self,
+        module: &crate::ast::Module,
+        lib_fq: &str,
+    ) -> Result<(), String> {
+        use crate::ast::Item;
+        let Some(base) = CmImport::parse(lib_fq) else {
+            return Ok(());
+        };
+        let is_guest_effect = |effect: &crate::ast::InterfaceDecl| {
+            !effect
+                .methods
+                .iter()
+                .any(|m| m.attrs.iter().any(|a| a.as_cm_import().is_some()))
+        };
+        let collisions: Vec<&str> = module
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                Item::Interface(effect)
+                    if is_guest_effect(effect) && to_kebab(&effect.name) == base.interface =>
+                {
+                    Some(effect.name.as_str())
+                }
+                _ => None,
+            })
+            .collect();
+        if !collisions.is_empty() {
+            return Err(format!(
+                "guest effect interface `{}` collides with the library's own interface name \
+                 `{}`; rename the effect",
+                collisions.join("`, `"),
+                base.interface
+            ));
+        }
+        for item in &module.items {
+            let Item::Interface(effect) = item else {
+                continue;
+            };
+            if !is_guest_effect(effect) {
+                continue;
+            }
+            let interface = to_kebab(&effect.name);
+            for method in &effect.methods {
+                let cm_import = CmImport {
+                    namespace: base.namespace.clone(),
+                    package: base.package.clone(),
+                    interface: interface.clone(),
+                    version: base.version.clone(),
+                    function: Some(to_kebab(&method.name)),
+                };
+                let params: Vec<(String, String, Type)> = method
+                    .params
+                    .iter()
+                    .map(|p| {
+                        (
+                            p.name.clone(),
+                            to_kebab(&p.name),
+                            resolve_type(&p.ty, &self.newtypes),
+                        )
+                    })
+                    .collect();
+                let return_type = unwrap_async_call_if_async(method.is_async, &method.return_type);
+                self.register(
+                    &effect.name,
+                    &method.name,
+                    &cm_import,
+                    method.is_async,
+                    params,
+                    return_type,
+                );
+            }
+        }
+        Ok(())
     }
 
     /// Register named type decls that reach the library's public surface from a
@@ -2077,6 +2231,33 @@ impl CmInterfaceRegistry {
     /// Wado name, when exactly one wasi interface registers the name.
     pub fn find_wasi_flags_source(&self, name: &str) -> Option<&str> {
         find_unique_source_with_prefix(&self.flags, "wasi:", name)
+    }
+
+    /// The owning interface FQ of a component-imported named type, when exactly
+    /// one composed dependency interface declares `name`. Mirrors the
+    /// `find_wasi_*` fallbacks for a type re-exported from a CM component
+    /// dependency (whose FQ carries no `wasi:` / `core:kiln/` prefix). `None` if
+    /// no or more than one dependency interface declares `name`, across all type
+    /// kinds — so a struct in one dependency and an enum in another are
+    /// ambiguous, not silently resolved to the first kind.
+    pub fn find_component_type_source(&self, name: &str) -> Option<&str> {
+        let member = |s: &str| self.component_interfaces.contains(s);
+        let candidates = [
+            find_unique_source_in_set(&self.structs, name, &member),
+            find_unique_source_in_set(&self.variants, name, &member),
+            find_unique_source_in_set(&self.enums, name, &member),
+            find_unique_source_in_set(&self.flags, name, &member),
+            find_unique_source_in_set(&self.newtypes, name, &member),
+        ];
+        let mut found: Option<&str> = None;
+        for src in candidates.into_iter().flatten() {
+            match found {
+                None => found = Some(src),
+                Some(prev) if prev != src => return None,
+                Some(_) => {}
+            }
+        }
+        found
     }
 
     /// Given a source-interface prefix (e.g. `"wasi:filesystem/types@"`) and
@@ -2581,6 +2762,57 @@ impl CmInterfaceRegistry {
         // Register local alias: local_name -> (interface_path, wasi_func_name)
         self.local_aliases
             .insert(local_name, (interface_path, wasi_func_name));
+    }
+
+    /// Register a world-level function import (Phase 9), keyed by its bare name
+    /// (empty interface). Stored like an interface method so the adapter
+    /// pipeline reuses the interface-method path.
+    pub fn register_world_import(
+        &mut self,
+        func_name: &str,
+        cm_func_name: &str,
+        params: Vec<(String, String, Type)>,
+        return_type: Option<Type>,
+    ) {
+        let resolved_params: Vec<(String, String, Type)> = params
+            .into_iter()
+            .map(|(name, cm_name, ty)| (name, cm_name, self.resolve_type(&ty)))
+            .collect();
+        let func_info = CmFunctionInfo {
+            interface_name: String::new(),
+            method_name: func_name.to_string(),
+            wasi_func_name: cm_func_name.to_string(),
+            interface_path: String::new(),
+            package: String::new(),
+            is_async: false,
+            params: resolved_params,
+            return_type,
+        };
+        let local_name = func_info.local_alias_name();
+        self.used_names.insert(local_name.clone());
+        self.local_aliases
+            .insert(local_name, (String::new(), cm_func_name.to_string()));
+        self.effect_to_func.insert(func_name.to_string(), func_info);
+        self.world_import_functions.insert(func_name.to_string());
+    }
+
+    /// Whether `name` is a world-level function import (Phase 9).
+    #[must_use]
+    pub fn is_world_import_function(&self, name: &str) -> bool {
+        self.world_import_functions.contains(name)
+    }
+
+    /// Every world-level function import, as `(bare_name, info)`.
+    pub fn world_import_functions(&self) -> impl Iterator<Item = (&str, &CmFunctionInfo)> + '_ {
+        self.world_import_functions
+            .iter()
+            .filter_map(|name| Some((name.as_str(), self.effect_to_func.get(name)?)))
+    }
+
+    /// The dependency `ModuleSource` exporting world-level function `name`.
+    #[must_use]
+    pub fn world_import_source(&self, name: &str) -> Option<&ModuleSource> {
+        self.world_import_sources.get(name)
     }
 
     /// Resolve an effect function call to its component-level local alias name
@@ -3408,6 +3640,13 @@ impl CmTypeGen {
                                 .or_else(|| cm_interface_registry.find_wasi_struct_source(name))
                                 .or_else(|| cm_interface_registry.find_wasi_enum_source(name))
                                 .or_else(|| cm_interface_registry.find_wasi_flags_source(name))
+                                .map(str::to_string)
+                        })
+                        .or_else(|| {
+                            // A type re-exported from a CM component dependency,
+                            // owned by that component's interface.
+                            cm_interface_registry
+                                .find_component_type_source(name)
                                 .map(str::to_string)
                         })
                         .unwrap_or_else(|| {

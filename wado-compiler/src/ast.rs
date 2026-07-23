@@ -1276,8 +1276,16 @@ impl Attribute {
 ///   for naming a field, variant case, or method (no interface attached).
 #[derive(Debug, Clone)]
 pub enum CmBoundary {
-    Canonical { namespace: String, name: String },
+    Canonical {
+        namespace: String,
+        name: String,
+    },
     Import(CmImport),
+    /// A world-level function import: the dependency component exports the
+    /// function directly in its world (not under an interface), so its only
+    /// CM-side identity is the bare function name. See Phase 9 in
+    /// `docs/wep-2026-06-26-wasm-cm-component-import.md`.
+    WorldImport(String),
     Name(String),
 }
 
@@ -1286,7 +1294,16 @@ impl CmBoundary {
     pub fn as_import(&self) -> Option<&CmImport> {
         match self {
             CmBoundary::Import(cm) => Some(cm),
-            CmBoundary::Canonical { .. } | CmBoundary::Name(_) => None,
+            CmBoundary::Canonical { .. } | CmBoundary::WorldImport(_) | CmBoundary::Name(_) => None,
+        }
+    }
+
+    /// Returns the bare function name if this boundary is a world-level
+    /// function import (Phase 9).
+    pub fn as_world_import(&self) -> Option<&str> {
+        match self {
+            CmBoundary::WorldImport(func) => Some(func),
+            CmBoundary::Canonical { .. } | CmBoundary::Import(_) | CmBoundary::Name(_) => None,
         }
     }
 
@@ -1302,6 +1319,7 @@ impl CmBoundary {
         match self {
             CmBoundary::Canonical { .. } => None,
             CmBoundary::Import(cm) => Some(cm.full_path()),
+            CmBoundary::WorldImport(func) => Some(func.clone()),
             CmBoundary::Name(s) => Some(s.clone()),
         }
     }
@@ -1631,6 +1649,14 @@ impl ImportAttributes {
     #[must_use]
     pub fn generator(&self) -> Option<&IndexMap<String, AttrValue>> {
         self.entries.get("generator").and_then(AttrValue::as_object)
+    }
+
+    /// Inline provider source (`with { provider: "./ext.wado" }`): a Wado file
+    /// compiled on-demand into a component that satisfies the imported
+    /// dependency's guest-effect imports (research-cm-boundary-callbacks.md).
+    #[must_use]
+    pub fn provider_path(&self) -> Option<&str> {
+        self.entries.get("provider").and_then(AttrValue::as_str)
     }
 
     /// Raw lookup for any top-level attribute.

@@ -1,0 +1,10 @@
+// A `provider` on a dependency that imports no guest effect is a clear error:
+// there is nothing to satisfy. `cm-catalog.wasm` is a pure component.
+use { CmCatalog } from "./sub/cm-catalog.wasm" with { type: "wasm", provider: "./sub/hl_ext.wado" };
+
+test "unreachable — compile fails" {
+    let _ = CmCatalog::id_u32(1);
+}
+
+__DATA__
+{"compile_error": "imports no guest effect to satisfy"}

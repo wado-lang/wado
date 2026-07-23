@@ -282,7 +282,8 @@ impl Engine {
         // only place they surface in the editor. `check_semantics` builds the
         // shared effect index once and runs all three.
         let mut diagnostics = collecting_host.take_diagnostics();
-        let semantic = wado_compiler::check_semantics(&sem);
+        let semantic =
+            wado_compiler::check_semantics(&sem, wado_compiler::hashmap::IndexSet::default());
         for error in semantic.effects {
             diagnostics.push(error.into());
         }

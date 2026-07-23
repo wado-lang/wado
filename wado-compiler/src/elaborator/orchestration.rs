@@ -3486,11 +3486,13 @@ pub(crate) fn fold_component_interfaces(
             continue;
         }
         let interface_fqs = component_interface_fqs(module);
-        if !interface_fqs.is_empty() {
+        let world_func_names = component_world_func_names(module);
+        if !interface_fqs.is_empty() || !world_func_names.is_empty() {
             let host_leaf_imports = crate::wit_consume::module_host_leaf_imports(module);
             Arc::make_mut(registry).register_component_decls(
                 module,
                 &interface_fqs,
+                &world_func_names,
                 &host_leaf_imports,
                 ms,
             );
@@ -3498,9 +3500,39 @@ pub(crate) fn fold_component_interfaces(
     }
 }
 
+/// Bare names of the world-level function imports (Phase 9) a component-binding
+/// module declares.
+fn component_world_func_names(module: &Module) -> Vec<String> {
+    module
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Function(func) => {
+                if func.attrs.iter().any(|a| {
+                    a.cm_boundary
+                        .as_ref()
+                        .is_some_and(|b| b.as_world_import().is_some())
+                }) {
+                    Some(func.name.clone())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 /// Exported interface FQs of a component-binding module. Empty for a core-wasm
 /// asset (whose decls carry `#[canonical(...)]`, not `#[cm(...)]` interfaces).
+///
+/// A reconstructed *import* interface (a guest effect the consumer provides) is
+/// synthesized into the same module but is not composed from the dependency's
+/// exports, so it is excluded via the module's host-leaf import list.
 fn component_interface_fqs(module: &Module) -> Vec<String> {
+    let imports: IndexSet<String> = crate::wit_consume::module_host_leaf_imports(module)
+        .into_iter()
+        .collect();
     module
         .items
         .iter()
@@ -3511,5 +3543,6 @@ fn component_interface_fqs(module: &Module) -> Vec<String> {
                 .find_map(|a| a.as_cm_import().map(crate::ast::CmImport::interface_path)),
             _ => None,
         })
+        .filter(|fq| !imports.contains(fq))
         .collect()
 }

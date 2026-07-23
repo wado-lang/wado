@@ -275,6 +275,9 @@ pub struct WasmAsset {
     pub function_exports: Vec<WasmExportSig>,
     /// Exported interface FQs; non-empty marks this as a CM component to compose in.
     pub component_interface_fqs: Vec<String>,
+    /// Bare names of world-level function exports (Phase 9), wired by name at
+    /// composition.
+    pub component_world_func_names: Vec<String>,
 }
 
 /// Resolve a `use` declaration's import source to its `ModuleSource`, mapping
@@ -1430,6 +1433,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 bytes: core_wasm_bytes,
                 function_exports,
                 component_interface_fqs: Vec::new(),
+                component_world_func_names: Vec::new(),
             },
         );
         Ok(())
@@ -1470,6 +1474,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 bytes,
                 function_exports: Vec::new(),
                 component_interface_fqs: bindings.interface_fqs,
+                component_world_func_names: bindings.world_func_names,
             },
         );
         Ok(())

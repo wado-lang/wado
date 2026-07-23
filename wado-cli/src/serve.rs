@@ -1194,6 +1194,7 @@ pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
         test_name_filters: Vec::new(),
         codegen_flags: opts.codegen_flags.clone(),
         lib_world: None,
+        lib_interface_export: false,
         param_overrides: opts.param_overrides.clone(),
         param_policy: opts.param_policy,
         retain_wir: false,

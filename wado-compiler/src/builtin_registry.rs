@@ -137,7 +137,8 @@ impl BuiltinRegistry {
                 Some(CmBoundary::Canonical { namespace, name }) => {
                     Some((namespace.clone(), Some(name.clone())))
                 }
-                Some(CmBoundary::Import(_) | CmBoundary::Name(_)) | None => None,
+                Some(CmBoundary::Import(_) | CmBoundary::WorldImport(_) | CmBoundary::Name(_))
+                | None => None,
             })
             .unwrap_or_else(|| ("wasi".to_string(), None));
 
