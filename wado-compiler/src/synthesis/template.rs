@@ -1296,7 +1296,7 @@ fn blanket_method_call_info(
     let (monomorph_info, blanket_module) = blanket_dispatch_for(
         ctx.trait_env,
         type_id,
-        &local_name.base_struct_name,
+        &local_name.base_struct_name(),
         trait_name,
         method_name,
         &ctx.tt.borrow(),
@@ -1402,7 +1402,7 @@ fn trait_impl_module(
         .as_deref()
         .or(local_name.trait_name.as_deref())
         && let Some(loc) = ctx.trait_env.impl_module_for(
-            &local_name.base_struct_name,
+            &local_name.base_struct_name(),
             trait_name,
             type_module.as_ref(),
         )

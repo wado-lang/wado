@@ -75,7 +75,7 @@ fn collect_existing_from_methods(
                     if trait_name == from_trait_name || trait_name.starts_with(from_prefix.as_str())
                     {
                         Some(MethodName::format_local(
-                            &info.base_struct_name,
+                            &info.base_struct_name(),
                             Some(trait_name),
                             &info.method_name,
                         ))

@@ -6823,8 +6823,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     name: facts.mangled_name,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName {
-                        struct_name: facts.target_name.clone(),
-                        base_struct_name: facts.target_name,
+                        receiver: crate::name::Receiver::classify(&facts.target_name),
+                        struct_name: facts.target_name,
                         trait_name: Some(from_trait),
                         base_trait_name: Some(facts.from_trait_name),
                         base_trait_module: None,

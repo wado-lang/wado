@@ -33,6 +33,7 @@
 //! - For standalone scripts: relative to the entry point's directory
 
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use std::borrow::Cow;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
@@ -523,9 +524,10 @@ pub fn extract_local_name(name: &str) -> &str {
 pub struct LocalMethodName {
     /// The struct name, possibly with type args (e.g., "Point" or "Point<i32>")
     pub struct_name: String,
-    /// The base struct name without type args (e.g., "Point")
-    /// This is preserved during monomorphization for lookup purposes.
-    pub base_struct_name: String,
+    /// The typed receiver shape (`Point`, `&T`, `S::SeqSerializer`). Its
+    /// `head_key()` is the base identity string preserved across monomorphization
+    /// (formerly the `base_struct_name` field).
+    pub receiver: Receiver,
     /// The trait/effect/resource name, possibly with type args
     /// (e.g., `"Display"`, `"Stream<u8>"`).
     pub trait_name: Option<String>,
@@ -570,9 +572,9 @@ pub struct LocalMethodName {
     /// Whether the struct name is a type parameter that should be substituted directly
     /// during monomorphization (e.g., `T^Ord::cmp` where T should become i32).
     pub is_type_param_receiver: bool,
-    /// Whether this method is from an `impl Trait for &T` or `impl Trait for &mut T`.
-    /// When true, the function name uses the inner type name (e.g., "List") but the
-    /// actual impl is on the reference type (e.g., &List<T>).
+    /// Whether this method came from an `impl Trait for &T` / `&mut T` block —
+    /// a semantic flag (self-adjustment, codegen), distinct from the receiver's
+    /// head being `&` (which `receiver` records).
     pub is_ref_impl: bool,
     /// CM canonical name from `#[cm("...")]` attribute on resource methods.
     /// When set, synthesis generates a CM binding function and rewrites
@@ -624,12 +626,14 @@ impl RefKind {
 /// recover it. The `&` / `&mut` / `::` spellings appear only in this type's
 /// `mangle` / `head_key`. `classify` is the single (transitional) string→shape
 /// boundary; once producers construct `Receiver` directly it can be removed.
+///
+/// Whether the receiver is a generic type parameter to substitute is an
+/// orthogonal concern (a `Projection` head can be a param too), kept as
+/// `LocalMethodName::is_type_param_receiver` rather than a variant here.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Receiver {
-    /// A concrete named type: `Point`, `List`.
+    /// A named type or type parameter: `Point`, `List`, `T`.
     Type(String),
-    /// A generic type parameter, substituted at monomorphization (`T^Ord::cmp`).
-    TypeParam(String),
     /// A universal reference receiver `&T` / `&mut T`; the pointee rides in the
     /// receiver's type-arg list, not here.
     Ref(RefKind),
@@ -641,7 +645,7 @@ impl Receiver {
     /// Classify a base receiver name into its typed shape. The single place a
     /// receiver string is inspected; every consumer reads the resulting enum.
     #[must_use]
-    pub fn classify(base: &str, is_type_param: bool) -> Self {
+    pub fn classify(base: &str) -> Self {
         match base {
             "&" => Receiver::Ref(RefKind::Shared),
             "&mut" => Receiver::Ref(RefKind::Mut),
@@ -650,20 +654,19 @@ impl Receiver {
                     base: b.to_string(),
                     assoc: a.to_string(),
                 },
-                None if is_type_param => Receiver::TypeParam(base.to_string()),
                 None => Receiver::Type(base.to_string()),
             },
         }
     }
 
     /// The canonical head string — identity key and mangle base. Round-trips
-    /// `classify` (`Receiver::classify(s, _).head_key() == s`).
+    /// `classify` (`Receiver::classify(s).head_key() == s`).
     #[must_use]
-    pub fn head_key(&self) -> String {
+    pub fn head_key(&self) -> Cow<'_, str> {
         match self {
-            Receiver::Type(n) | Receiver::TypeParam(n) => n.clone(),
-            Receiver::Ref(k) => k.prefix().to_string(),
-            Receiver::Projection { base, assoc } => format!("{base}::{assoc}"),
+            Receiver::Type(n) => Cow::Borrowed(n),
+            Receiver::Ref(k) => Cow::Borrowed(k.prefix()),
+            Receiver::Projection { base, assoc } => Cow::Owned(format!("{base}::{assoc}")),
         }
     }
 
@@ -677,6 +680,13 @@ impl Receiver {
             Receiver::Ref(RefKind::Mut) if type_args.len() == 1 => format!("&mut {}", type_args[0]),
             _ => mangle_generic_name(&self.head_key(), type_args),
         }
+    }
+
+    /// Mangle from a base-name string (transitional bridge for callers that
+    /// still hold `base_struct_name` rather than a `Receiver`).
+    #[must_use]
+    pub fn mangle_base(base: &str, type_args: &[String]) -> String {
+        Receiver::classify(base).mangle(type_args)
     }
 
     /// The receiver's reference kind, or `None` for a value receiver.
@@ -744,20 +754,27 @@ impl LocalMethodName {
     /// the composed mangled identity). The single query consumers use to reason
     /// about the receiver; transitional until producers store it directly.
     #[must_use]
-    pub fn receiver(&self) -> Receiver {
-        Receiver::classify(&self.base_struct_name, self.is_type_param_receiver)
+    pub fn receiver(&self) -> &Receiver {
+        &self.receiver
+    }
+
+    /// The base receiver identity string (formerly the `base_struct_name` field):
+    /// `Point`, `&`, `&mut`, `S::SeqSerializer`.
+    #[must_use]
+    pub fn base_struct_name(&self) -> String {
+        self.receiver.head_key().into_owned()
     }
 
     /// The receiver's reference kind, or `None` for a value receiver.
     #[must_use]
     pub fn ref_receiver(&self) -> Option<RefKind> {
-        self.receiver().ref_kind()
+        self.receiver.ref_kind()
     }
 
     /// Whether the receiver is an associated-type projection (`S::SeqSerializer`).
     #[must_use]
     pub fn receiver_is_assoc_projection(&self) -> bool {
-        self.receiver().is_assoc_projection()
+        self.receiver.is_assoc_projection()
     }
 
     /// Create a new `LocalMethodName` directly from components.
@@ -782,7 +799,7 @@ impl LocalMethodName {
             .as_deref()
             .map(|n| split_base_name(n).to_string());
         Self {
-            base_struct_name: struct_name.clone(),
+            receiver: Receiver::classify(&struct_name),
             struct_name,
             base_trait_name,
             base_trait_module: None,
@@ -816,7 +833,7 @@ impl LocalMethodName {
             .as_deref()
             .map(|n| split_base_name(n).to_string());
         Self {
-            base_struct_name: struct_name.clone(),
+            receiver: Receiver::classify(&struct_name),
             struct_name,
             base_trait_name,
             base_trait_module: None,
@@ -853,11 +870,11 @@ impl LocalMethodName {
         let mangled_struct = if impl_type_args.is_empty() {
             self.struct_name.clone()
         } else {
-            mangle_ref_aware(&self.base_struct_name, impl_type_args)
+            self.receiver.mangle(impl_type_args)
         };
         Self {
             struct_name: mangled_struct,
-            base_struct_name: self.base_struct_name.clone(),
+            receiver: self.receiver.clone(),
             trait_name: self.trait_name.clone(),
             base_trait_name: self.base_trait_name.clone(),
             base_trait_module: self.base_trait_module.clone(),
@@ -914,7 +931,7 @@ impl LocalMethodName {
     pub fn with_substituted_struct_name(&self, new_name: &str, base_name: &str) -> Self {
         Self {
             struct_name: new_name.to_string(),
-            base_struct_name: base_name.to_string(),
+            receiver: Receiver::classify(base_name),
             trait_name: self.trait_name.clone(),
             base_trait_name: self.base_trait_name.clone(),
             base_trait_module: self.base_trait_module.clone(),
@@ -966,10 +983,10 @@ impl LocalMethodName {
             Some(trait_name) => {
                 format!(
                     "{}^{}::{}",
-                    self.base_struct_name, trait_name, self.method_name
+                    self.base_struct_name(), trait_name, self.method_name
                 )
             }
-            None => format!("{}::{}", self.base_struct_name, self.method_name),
+            None => format!("{}::{}", self.base_struct_name(), self.method_name),
         }
     }
 
@@ -1515,7 +1532,7 @@ pub fn format_type_name(info: TypeNameInfo) -> String {
 /// For `&` and `&mut` base names, formats as prefix: `&List<i32>`, `&mut List<i32>`.
 /// For other base names, formats as generic: `List<i32>`, `Map<String,i32>`.
 fn mangle_ref_aware(base_name: &str, type_args: &[String]) -> String {
-    Receiver::classify(base_name, false).mangle(type_args)
+    Receiver::mangle_base(base_name, type_args)
 }
 
 /// Build a monomorphized type name from base name and type arguments.

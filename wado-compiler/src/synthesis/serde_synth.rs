@@ -562,7 +562,7 @@ fn collect_existing_trait_methods(module: &TirModule) -> IndexSet<String> {
             let func = f.borrow();
             func.method_info.as_ref().and_then(|info| {
                 info.trait_name.as_ref().map(|trait_name| {
-                    mangle_local_trait_method(&info.base_struct_name, trait_name, &info.method_name)
+                    mangle_local_trait_method(&info.base_struct_name(), trait_name, &info.method_name)
                 })
             })
         })
@@ -990,7 +990,7 @@ fn default_value_for_type(
         None
     } else {
         Some(crate::tir::MonomorphInfo {
-            generic_name: method_info.base_struct_name.clone(),
+            generic_name: method_info.base_struct_name(),
             impl_type_args: type_args,
             method_type_args: vec![],
             is_blanket: false,
@@ -1975,7 +1975,7 @@ fn byte_slice_method_call(
     let method_info = LocalMethodName::new(owner.to_string(), None, name.to_string())
         .with_struct_type_args(&["u8".to_string()]);
     let monomorph_info = crate::tir::MonomorphInfo {
-        generic_name: method_info.base_struct_name.clone(),
+        generic_name: method_info.base_struct_name(),
         impl_type_args: vec![TypeTable::U8],
         method_type_args: vec![],
         is_blanket: false,

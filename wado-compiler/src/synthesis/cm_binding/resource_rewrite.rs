@@ -1318,7 +1318,7 @@ fn synthesize_stream_read_func(
                 }),
                 method_info: Some(LocalMethodName {
                     struct_name: format!("{list_struct_name}<{elem_inst_name}>"),
-                    base_struct_name: list_struct_name.clone(),
+                    receiver: crate::name::Receiver::classify(&list_struct_name),
                     trait_name: None,
                     base_trait_name: None,
                     base_trait_module: None,
@@ -1427,7 +1427,7 @@ fn synthesize_stream_read_func(
                 }),
                 method_info: Some(LocalMethodName {
                     struct_name: format!("{list_struct_name}<{elem_inst_name}>"),
-                    base_struct_name: list_struct_name,
+                    receiver: crate::name::Receiver::classify(&list_struct_name),
                     trait_name: None,
                     base_trait_name: None,
                     base_trait_module: None,

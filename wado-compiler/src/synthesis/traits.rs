@@ -6484,7 +6484,7 @@ fn trait_call_on_type(
         crate::synthesis::template::blanket_dispatch_for(
             trait_env,
             value_type,
-            &info.base_struct_name,
+            &info.base_struct_name(),
             trait_name,
             method_name,
             tt,
@@ -6504,7 +6504,7 @@ fn trait_call_on_type(
             match &resolved {
                 ResolvedType::Ref(inner_id) | ResolvedType::MutRef(inner_id) => {
                     let base_info =
-                        trait_method_info(&info.base_struct_name, trait_name, method_name);
+                        trait_method_info(&info.base_struct_name(), trait_name, method_name);
                     Some(MonomorphInfo {
                         generic_name: base_info.to_mangled_name(),
                         impl_type_args: vec![*inner_id],

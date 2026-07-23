@@ -944,7 +944,7 @@ fn scan_inspect_signatures_block(
                 receiver, func_id, ..
             } = &body.exprs[e].kind
             && let Some(info) = &callee_descriptor(descriptors, *func_id).method_info
-            && info.base_struct_name == "Fn"
+            && info.base_struct_name() == "Fn"
             && let Some(trait_name) = info.base_trait_name.as_deref()
         {
             // Receiver is `&Fn(...)` (possibly wrapped in `Box<fn(...)>` by the

@@ -854,11 +854,11 @@ impl EffectIndex<'_> {
         {
             let resource_key = (
                 func_ref.module_source.clone(),
-                method_info.base_struct_name.clone(),
+                method_info.base_struct_name(),
             );
             if self.resource_names.contains(&resource_key) {
                 let resource_effect = EffectRef::Concrete {
-                    name: method_info.base_struct_name.clone(),
+                    name: method_info.base_struct_name(),
                     module_source: func_ref.module_source.clone(),
                 };
                 if !effects.contains(&resource_effect) {

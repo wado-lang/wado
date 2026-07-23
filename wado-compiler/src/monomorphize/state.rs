@@ -54,7 +54,7 @@ impl FuncInstState {
     /// instantiation rather than collapsing it to `List<i32>::inspect`.
     ///
     /// The lookup uses `info.struct_name` (the post-substitution type
-    /// name) rather than `info.base_struct_name`, which mirrors the
+    /// name) rather than `info.base_struct_name()`, which mirrors the
     /// legacy `trait_method_locations.contains_key(<full mangled name>)`
     /// semantics: a concrete impl's key is the full type name (e.g. the
     /// `impl Ord for i32` block keys ("i32", "Ord")), and post-mono
@@ -79,9 +79,9 @@ impl FuncInstState {
         }
         // Fall back to the head name for argument shapes the qualified
         // instantiated index above cannot spell (tuples, function types).
-        if info.base_struct_name != info.struct_name
+        if info.base_struct_name() != info.struct_name
             && let Some(m) = self.trait_env.concrete_impl_module_for(
-                &info.base_struct_name,
+                &info.base_struct_name(),
                 trait_name,
                 type_module,
             )
@@ -124,10 +124,10 @@ impl FuncInstState {
         {
             return Some(m.clone());
         }
-        if info.base_struct_name != info.struct_name
+        if info.base_struct_name() != info.struct_name
             && let Some(m) =
                 self.trait_env
-                    .impl_module_for(&info.base_struct_name, trait_name, type_module)
+                    .impl_module_for(&info.base_struct_name(), trait_name, type_module)
         {
             return Some(m.clone());
         }
@@ -353,7 +353,7 @@ impl Monomorphizer {
         // Detected by checking if base_struct_name matches an impl type param name.
         let is_blanket = impl_type_params
             .iter()
-            .any(|p| p.name == method_info.base_struct_name);
+            .any(|p| p.name == method_info.base_struct_name());
 
         let mangled_struct = if is_blanket && !impl_arg_names.is_empty() {
             // Replace struct name entirely: "I" → "StrCharIter"
@@ -545,16 +545,17 @@ impl Monomorphizer {
         own_name: Option<&'a str>,
         info: Option<&'a LocalMethodName>,
         struct_name: &'a str,
-    ) -> Vec<&'a str> {
-        let mut c: Vec<&'a str> = Vec::new();
+    ) -> Vec<std::borrow::Cow<'a, str>> {
+        use std::borrow::Cow;
+        let mut c: Vec<Cow<'a, str>> = Vec::new();
         if let Some(own) = own_name {
-            c.push(own);
+            c.push(Cow::Borrowed(own));
         }
         if let Some(info) = info {
-            c.push(info.base_struct_name.as_str());
-            c.push(info.struct_name.as_str());
+            c.push(info.receiver.head_key());
+            c.push(Cow::Borrowed(info.struct_name.as_str()));
         }
-        c.push(struct_name);
+        c.push(Cow::Borrowed(struct_name));
         c
     }
 

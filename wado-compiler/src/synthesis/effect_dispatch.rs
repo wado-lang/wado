@@ -2634,7 +2634,7 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                 let base_name = method_info
                     .base_trait_name
                     .clone()
-                    .unwrap_or_else(|| method_info.base_struct_name.clone());
+                    .unwrap_or_else(|| method_info.base_struct_name());
                 let decl_module = func.module_source.clone();
                 // Static resource call: receiver type isn't directly
                 // available, fall back to single-instantiation routing.

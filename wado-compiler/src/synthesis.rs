@@ -168,7 +168,7 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
                 }
                 let is_concrete = func.impl_type_params.is_empty();
                 record(
-                    info.base_struct_name.clone(),
+                    info.base_struct_name(),
                     trait_name.clone(),
                     module_source,
                     is_concrete,
@@ -186,7 +186,7 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
                     && info.trait_name.is_some()
                 {
                     record(
-                        info.base_struct_name.clone(),
+                        info.base_struct_name(),
                         trait_name.clone(),
                         module_source,
                         is_concrete,
@@ -201,7 +201,7 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
 
 /// Index a concrete impl on a generic head (`impl Tag for List<Token>`) under
 /// its resolved instantiated receiver (`info.struct_name`, e.g.
-/// `List<.../Token>`), distinct from the bare head (`info.base_struct_name`),
+/// `List<.../Token>`), distinct from the bare head (`info.base_struct_name()`),
 /// so the monomorphizer routes it to this module instead of colliding with
 /// another module's `impl Tag for List<OtherToken>` on the shared head key
 /// (issue #1348). The resolved spelling covers every argument shape (tuples,
@@ -212,7 +212,7 @@ fn record_concrete_instantiation(
     trait_name: &str,
     module_source: &ModuleSource,
 ) {
-    if info.struct_name != info.base_struct_name {
+    if info.struct_name != info.base_struct_name() {
         record(
             info.struct_name.clone(),
             trait_name.to_string(),
