@@ -858,6 +858,55 @@ fn rewrite_calls_in_expr(
     applied_returns: &mut IndexMap<usize, TypeId>,
     names: &CmStdlibNames,
 ) {
+    // World-level function import (Phase 9): retarget a bare free-function
+    // call to its synthesized adapter, keyed by the bare name.
+    if let TirExprKind::Call { func, args, type_args, .. } = &mut expr.kind
+        && cm_interface_registry.is_world_import_function(&func.name)
+        && let Some(adapter_rc) = adapters.get(&func.name)
+    {
+        {
+            let adapter_key = Rc::as_ptr(adapter_rc) as usize;
+            let mut adapter = adapter_rc.borrow_mut();
+            fixup_adapter_return_from_call_site(
+                &mut adapter,
+                adapter_key,
+                expr.type_id,
+                false,
+                type_table,
+                applied_returns,
+            );
+            let wasi_func = cm_interface_registry.get_function(&func.name);
+            for (i, arg) in args.iter().enumerate() {
+                let is_gc_passthrough = wasi_func.is_some_and(|f| {
+                    i < f.params.len()
+                        && is_gc_passthrough_param(&f.params[i].2, cm_interface_registry, names)
+                });
+                fixup_adapter_param_from_call_site(
+                    &mut adapter,
+                    i,
+                    arg.expr.type_id,
+                    is_gc_passthrough,
+                    false,
+                );
+            }
+        }
+        cast_args_to_adapter_params(&adapter_rc.borrow(), args, 0);
+        *func = FunctionRef::from_resolved(&adapter_rc.borrow(), entry_source.clone());
+        *type_args = vec![];
+        for arg in args {
+            rewrite_calls_in_expr(
+                &mut arg.expr,
+                adapters,
+                entry_source,
+                cm_interface_registry,
+                type_table,
+                applied_returns,
+                names,
+            );
+        }
+        return;
+    }
+
     // Check if this is an effect-like Call that should be rewritten
     let is_effect_call = matches!(&expr.kind, TirExprKind::Call { func, .. }
         if func.module_source.clone().is_effect_like() && func.module_source.clone().interface_name().is_some());
@@ -1298,6 +1347,14 @@ impl TirRefVisitor for EffectCallCollector<'_> {
                         .cm_interface_registry
                         .get_function(&func.name)
                         .is_some()
+                {
+                    self.effects.insert(func.name.clone());
+                }
+                // World-level function imports (Phase 9): a bare free-function
+                // call whose name is a registered world import.
+                if self
+                    .cm_interface_registry
+                    .is_world_import_function(&func.name)
                 {
                     self.effects.insert(func.name.clone());
                 }

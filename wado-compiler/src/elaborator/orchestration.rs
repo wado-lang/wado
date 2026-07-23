@@ -3485,16 +3485,42 @@ pub(crate) fn fold_component_interfaces(
             continue;
         }
         let interface_fqs = component_interface_fqs(module);
-        if !interface_fqs.is_empty() {
+        let world_func_names = component_world_func_names(module);
+        if !interface_fqs.is_empty() || !world_func_names.is_empty() {
             let host_leaf_imports = crate::wit_consume::module_host_leaf_imports(module);
             Arc::make_mut(registry).register_component_decls(
                 module,
                 &interface_fqs,
+                &world_func_names,
                 &host_leaf_imports,
                 ms,
             );
         }
     }
+}
+
+/// Bare names of world-level function imports (Phase 9) a component-binding
+/// module declares — a bodyless free `Item::Function` carrying a `#[cm]`
+/// world-import boundary.
+fn component_world_func_names(module: &Module) -> Vec<String> {
+    module
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Function(func) => {
+                if func
+                    .attrs
+                    .iter()
+                    .any(|a| a.cm_boundary.as_ref().is_some_and(|b| b.as_world_import().is_some()))
+                {
+                    Some(func.name.clone())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 /// Exported interface FQs of a component-binding module. Empty for a core-wasm

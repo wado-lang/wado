@@ -230,6 +230,54 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
             ctx.available_wasi_funcs.insert(local_name);
         }
     }
+
+    // World-level function imports (Phase 9): synchronous, no interface. Their
+    // raw core import is registered exactly like a sync interface method so the
+    // synthesized adapter's `CmRawCall` resolves.
+    let world_funcs: Vec<crate::component_model::CmFunctionInfo> = cm_interface_registry
+        .world_import_functions()
+        .map(|(_, f)| f.clone())
+        .collect();
+    for func in &world_funcs {
+        let local_name = func.local_alias_name();
+
+        let mut param_vts: Vec<wasm_encoder::ValType> = Vec::new();
+        for (_, _, ty) in &func.params {
+            let resolved_ty = cm_interface_registry.resolve_type(ty);
+            crate::component_model::flatten_cm_param_type(
+                &resolved_ty,
+                &mut param_vts,
+                cm_interface_registry,
+            );
+        }
+        let results: Vec<WirType> = if let Some(ret_ty) = &func.return_type {
+            let resolved_ret_ty = cm_interface_registry.resolve_type(ret_ty);
+            if crate::component_model::cm_return_needs_outptr(&resolved_ret_ty, cm_interface_registry)
+            {
+                param_vts.push(wasm_encoder::ValType::I32);
+                Vec::new()
+            } else {
+                let mut out = Vec::new();
+                crate::component_model::flatten_cm_param_type(
+                    &resolved_ret_ty,
+                    &mut out,
+                    cm_interface_registry,
+                );
+                out.into_iter().map(valtype_to_wir_type).collect()
+            }
+        } else {
+            Vec::new()
+        };
+
+        let params: Vec<WirType> = param_vts.into_iter().map(valtype_to_wir_type).collect();
+        let type_fq = format!("functype//wasi/{local_name}");
+        let type_id = ctx.register_func_type(type_fq, params, results);
+        let name = WirName {
+            fq: format!("wasi/{local_name}"),
+        };
+        ctx.register_import_func("wasi".to_string(), local_name.clone(), type_id, name);
+        ctx.available_wasi_funcs.insert(local_name);
+    }
 }
 
 /// Register memory import from "mem" module.

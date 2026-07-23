@@ -429,6 +429,16 @@ fn generate_import_adapters(project: &mut Package) {
                 &owner_module,
                 &entry_source,
             );
+            // A world-level function import (Phase 9) has no interface, so the
+            // adapter carries no capability effect: its `CmFunctionInfo` has an
+            // empty interface name, and the shared synthesizer pushed that empty
+            // name as an effect. Drop it so calling the import stays pure.
+            if project
+                .cm_interface_registry
+                .is_world_import_function(qualified_name)
+            {
+                produced.adapter.borrow_mut().effects.clear();
+            }
             auxiliary_functions.extend(produced.auxiliary);
             adapters.insert(qualified_name.clone(), produced.adapter);
         }

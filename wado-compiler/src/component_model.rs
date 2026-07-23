@@ -667,6 +667,17 @@ pub struct CmInterfaceRegistry {
     /// interface of one component shares the same set (v1 component-level union).
     component_host_leaf_imports: IndexMap<String, Vec<String>>,
 
+    /// Bare names of world-level function imports (Phase 9) — a dependency
+    /// component's function exported directly in its world, not under an
+    /// interface. Their `CmFunctionInfo` lives in `effect_to_func` keyed by the
+    /// bare name; this set marks which entries are world-level so codegen emits
+    /// a top-level `func` import (not an instance) and composition wires by name.
+    world_import_functions: IndexSet<String>,
+
+    /// Per world-level function import, the dependency `ModuleSource` that
+    /// exports it — the composition target.
+    world_import_sources: IndexMap<String, ModuleSource>,
+
     /// Reverse index for the `_by_module` accessors (see [`ModuleSourceIndex`]).
     module_index: std::sync::OnceLock<ModuleSourceIndex>,
 }
@@ -1574,6 +1585,42 @@ impl CmInterfaceRegistry {
             }
         }
 
+        // Register world-level function imports (Phase 9): a bodyless free
+        // function carrying a `#[cm]` world-import boundary.
+        for item in &module.items {
+            if let Item::Function(func) = item
+                && let Some(cm_func_name) = func
+                    .attrs
+                    .iter()
+                    .find_map(|a| a.cm_boundary.as_ref().and_then(|b| b.as_world_import()))
+            {
+                let cm_param_names = extract_cm_params_attr(&func.attrs);
+                let params: Vec<(String, String, Type)> = func
+                    .params
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| {
+                        let cm_name = cm_param_names
+                            .get(i)
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "missing #[cm_params] for param '{}' in world import {}",
+                                    p.name, func.name
+                                )
+                            })
+                            .clone();
+                        (p.name.clone(), cm_name, resolve_type(&p.ty, &self.newtypes))
+                    })
+                    .collect();
+                self.register_world_import(
+                    &func.name,
+                    cm_func_name,
+                    params,
+                    func.return_type.clone(),
+                );
+            }
+        }
+
         // Register resource methods with resolved types for params but NOT for return type
         for item in &module.items {
             if let Item::Resource(resource) = item {
@@ -1633,6 +1680,7 @@ impl CmInterfaceRegistry {
         &mut self,
         module: &crate::ast::Module,
         interface_fqs: &[String],
+        world_func_names: &[String],
         host_leaf_imports: &[String],
         module_source: &ModuleSource,
     ) {
@@ -1645,6 +1693,10 @@ impl CmInterfaceRegistry {
                 self.component_host_leaf_imports
                     .insert(fq.clone(), host_leaf_imports.to_vec());
             }
+        }
+        for name in world_func_names {
+            self.world_import_sources
+                .insert(name.clone(), module_source.clone());
         }
     }
 
@@ -2709,6 +2761,61 @@ impl CmInterfaceRegistry {
         // Register local alias: local_name -> (interface_path, wasi_func_name)
         self.local_aliases
             .insert(local_name, (interface_path, wasi_func_name));
+    }
+
+    /// Register a world-level function import (Phase 9): a dependency function
+    /// exported directly in its world, addressed by its bare name. Its
+    /// `CmFunctionInfo` is stored in `effect_to_func` under the bare name (no
+    /// `Interface::` qualifier) and marked world-level, so the adapter pipeline
+    /// synthesizes a binding for it exactly like an interface method while
+    /// codegen emits a top-level `func` import instead of an instance.
+    pub fn register_world_import(
+        &mut self,
+        func_name: &str,
+        cm_func_name: &str,
+        params: Vec<(String, String, Type)>,
+        return_type: Option<Type>,
+    ) {
+        let resolved_params: Vec<(String, String, Type)> = params
+            .into_iter()
+            .map(|(name, cm_name, ty)| (name, cm_name, self.resolve_type(&ty)))
+            .collect();
+        let func_info = CmFunctionInfo {
+            interface_name: String::new(),
+            method_name: func_name.to_string(),
+            wasi_func_name: cm_func_name.to_string(),
+            interface_path: String::new(),
+            package: String::new(),
+            is_async: false,
+            params: resolved_params,
+            return_type,
+        };
+        let local_name = func_info.local_alias_name();
+        self.used_names.insert(local_name.clone());
+        self.local_aliases
+            .insert(local_name, (String::new(), cm_func_name.to_string()));
+        self.effect_to_func
+            .insert(func_name.to_string(), func_info);
+        self.world_import_functions.insert(func_name.to_string());
+    }
+
+    /// Whether `name` is a world-level function import (Phase 9).
+    #[must_use]
+    pub fn is_world_import_function(&self, name: &str) -> bool {
+        self.world_import_functions.contains(name)
+    }
+
+    /// Every world-level function import, as `(bare_name, info)`.
+    pub fn world_import_functions(&self) -> impl Iterator<Item = (&str, &CmFunctionInfo)> + '_ {
+        self.world_import_functions
+            .iter()
+            .filter_map(|name| Some((name.as_str(), self.effect_to_func.get(name)?)))
+    }
+
+    /// The dependency `ModuleSource` exporting world-level function `name`.
+    #[must_use]
+    pub fn world_import_source(&self, name: &str) -> Option<&ModuleSource> {
+        self.world_import_sources.get(name)
     }
 
     /// Resolve an effect function call to its component-level local alias name

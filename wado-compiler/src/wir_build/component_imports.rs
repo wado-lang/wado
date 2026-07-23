@@ -215,6 +215,13 @@ pub fn resolve_import_plan(
         }
     }
 
+    // Phase 4: world-level function imports (Phase 9) — a dependency function
+    // exported directly in its world. Composed away by `wasm-compose`, so it
+    // contributes nothing to the faithfulness list (`imported_cm_interface_fqs`).
+    for (name, _) in registry.world_import_functions() {
+        push(&mut entries, name.to_string(), ImportKind::WorldFunction);
+    }
+
     entries
 }
 
@@ -251,12 +258,18 @@ pub fn imported_cm_interface_fqs(project: &NirPackage, plan: &[ImportEntry]) -> 
     let registry = &project.cm_interface_registry;
     let mut out: IndexSet<String> = IndexSet::default();
     for entry in plan {
-        if entry.kind == ImportKind::Component {
-            for fq in registry.host_leaf_imports_for(&entry.fq) {
-                out.insert(fq.clone());
+        match entry.kind {
+            ImportKind::Component => {
+                for fq in registry.host_leaf_imports_for(&entry.fq) {
+                    out.insert(fq.clone());
+                }
             }
-        } else {
-            out.insert(entry.fq.clone());
+            // Composed away by `wasm-compose`; a pure dependency function
+            // contributes no surviving import.
+            ImportKind::WorldFunction => {}
+            _ => {
+                out.insert(entry.fq.clone());
+            }
         }
     }
     let mut list: Vec<String> = out.into_iter().collect();
