@@ -862,9 +862,14 @@ async fn resolve_inline_providers<H: CompilerHost>(
             lib_interface_export: true,
             ..Default::default()
         };
-        let result = Box::pin(compile_with_options(&provider_src, host, Some(&resolved), opts))
-            .await
-            .map_err(|_| bail(format!("provider `{prov_path}` failed to compile")))?;
+        let result = Box::pin(compile_with_options(
+            &provider_src,
+            host,
+            Some(&resolved),
+            opts,
+        ))
+        .await
+        .map_err(|_| bail(format!("provider `{prov_path}` failed to compile")))?;
         providers.push(ProviderComponent {
             import_fq: fq,
             bytes: result.wasm,

@@ -413,7 +413,12 @@ pub fn build_component(
     append_interface_instance_exports(&mut component_bytes, &ctx, component_plan);
 
     // Compose in imported CM component dependencies so the result is standalone.
-    compose_dependency_components(component_bytes, project, &wir_package.import_plan, providers)
+    compose_dependency_components(
+        component_bytes,
+        project,
+        &wir_package.import_plan,
+        providers,
+    )
 }
 
 fn wado_type_to_cm_primitive(ty: &Type) -> ComponentValType {
@@ -4018,7 +4023,9 @@ fn compose_dependency_components(
     providers: &[crate::ProviderComponent],
 ) -> Vec<u8> {
     use crate::wir::ImportKind;
-    use wasm_compose::graph::{Component, ComponentId, CompositionGraph, EncodeOptions, InstanceId};
+    use wasm_compose::graph::{
+        Component, ComponentId, CompositionGraph, EncodeOptions, InstanceId,
+    };
     use wasmparser::Validator;
 
     let dependency_fqs: IndexSet<&str> = import_plan
@@ -4087,8 +4094,9 @@ fn compose_dependency_components(
 
             let mut wired = false;
             for &(dep_id, dep_inst) in &dep_instances {
-                if let Some((import_idx, _)) =
-                    graph.get_component(dep_id).and_then(|c| c.import_by_name(fq))
+                if let Some((import_idx, _)) = graph
+                    .get_component(dep_id)
+                    .and_then(|c| c.import_by_name(fq))
                 {
                     graph.connect(prov_inst, Some(prov_export), dep_inst, import_idx)?;
                     wired = true;

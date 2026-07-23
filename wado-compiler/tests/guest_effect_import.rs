@@ -44,14 +44,15 @@ fn imported_interface(wasm: &[u8], fq: &str) -> Option<(Resolve, InterfaceId)> {
         wit_component::DecodedWasm::Component(resolve, world) => (resolve, world),
         wit_component::DecodedWasm::WitPackage(..) => panic!("expected a component"),
     };
-    let id = resolve.worlds[world].imports.iter().find_map(|(_, item)| {
-        match item {
+    let id = resolve.worlds[world]
+        .imports
+        .iter()
+        .find_map(|(_, item)| match item {
             WorldItem::Interface { id, .. } if iface_fq(&resolve, *id).as_deref() == Some(fq) => {
                 Some(*id)
             }
             _ => None,
-        }
-    })?;
+        })?;
     Some((resolve, id))
 }
 

@@ -1729,7 +1729,13 @@ impl CmInterfaceRegistry {
                 let params: Vec<(String, String, Type)> = method
                     .params
                     .iter()
-                    .map(|p| (p.name.clone(), to_kebab(&p.name), resolve_type(&p.ty, &self.newtypes)))
+                    .map(|p| {
+                        (
+                            p.name.clone(),
+                            to_kebab(&p.name),
+                            resolve_type(&p.ty, &self.newtypes),
+                        )
+                    })
                     .collect();
                 let return_type = unwrap_async_call_if_async(method.is_async, &method.return_type);
                 self.register(
