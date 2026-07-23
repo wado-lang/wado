@@ -1255,10 +1255,16 @@ fn generate_field_bridge_helpers(
 ) -> Vec<TirFunction> {
     let mangled_struct = type_table.borrow().mangle_type_arg_for_generic(struct_type);
 
+    // Key each helper by the field type's *erased* mangle. `erase_newtypes_and_flags`
+    // (after monomorphize, before lower) collapses `Newtype`/`Flags` to their base,
+    // and the `struct_field_get` call site mangles its `field_ty` through that
+    // erasure — so a helper minted here under the pre-erasure newtype name would
+    // never be found. Fields sharing an erased type share one index-dispatched
+    // helper.
     let mut by_field_type: crate::hashmap::IndexMap<String, (TypeId, Vec<(String, u32)>)> =
         crate::hashmap::IndexMap::default();
     for (field_name, field_type, index) in fields {
-        let mangled = type_table.borrow().mangle_type_arg_for_generic(*field_type);
+        let mangled = type_table.borrow().mangle_type_arg_erased(*field_type);
         by_field_type
             .entry(mangled)
             .or_insert_with(|| (*field_type, Vec::new()))
