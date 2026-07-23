@@ -1,6 +1,6 @@
 //! Provider composition: satisfy a dependency component's guest-effect import
 //! with a sibling provider component, via `wasm-compose` (the acyclic shape the
-//! Component Model sanctions — UseCases #8 dependency injection). See
+//! Component Model sanctions — `UseCases` #8 dependency injection). See
 //! `docs/research-cm-boundary-callbacks.md`.
 //!
 //! `sub/hlc.wasm` imports `test:hlc/highlight@0.1.0` and exports
@@ -101,7 +101,7 @@ fn provider_satisfies_dep_import_and_roundtrips() {
     let (_, wrap_idx) = instance
         .get_export(&mut store, Some(&iface), "wrap")
         .expect("wrap export");
-    let wrap = instance.get_func(&mut store, &wrap_idx).expect("wrap func");
+    let wrap = instance.get_func(&mut store, wrap_idx).expect("wrap func");
 
     let mut results = [Val::Bool(false)];
     wrap.call(
