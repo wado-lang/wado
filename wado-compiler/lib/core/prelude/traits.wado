@@ -226,12 +226,20 @@ internal trait ReflectFlags {
 #[compiler_item("reflect_variant_case")]
 pub struct VariantCase<T, P> {
     index: i32,
+    case_name: String,
+    wire_override: Option<String>,
+    is_unit: bool,
 }
 
 impl<T, P> VariantCase<T, P> {
     /// The case's declaration index (== its discriminant).
     pub fn index(&self) -> i32 {
         return self.index;
+    }
+
+    /// Whether the case carries no payload.
+    pub fn is_unit(&self) -> bool {
+        return self.is_unit;
     }
 
     /// Whether `v`'s live case is this case.
@@ -247,6 +255,16 @@ impl<T, P> VariantCase<T, P> {
     /// Builds this case around `payload`.
     pub fn construct(&self, payload: P) -> T {
         return builtin::variant_case_construct(payload, self.index);
+    }
+}
+
+impl<T, P> Member for VariantCase<T, P> {
+    fn name(&self) -> String {
+        return self.case_name;
+    }
+
+    fn wire_name_override(&self) -> Option<String> {
+        return self.wire_override;
     }
 }
 

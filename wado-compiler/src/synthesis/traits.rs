@@ -1422,8 +1422,9 @@ fn generate_variant_reflect_impls(
 /// A variant selected for `ReflectVariant` synthesis.
 struct ReflectVariantTarget {
     name: String,
-    /// Per-case `(name, index, payload type)`; unit cases carry `()`.
-    cases: Vec<(String, u32, TypeId)>,
+    /// Per-case `(name, index, payload type, #[serde(rename)])`; unit cases
+    /// carry `()` as their payload.
+    cases: Vec<(String, u32, TypeId, Option<String>)>,
     span: Span,
 }
 
@@ -1444,7 +1445,7 @@ fn collect_reflect_variant_targets(
             cases: v
                 .cases
                 .iter()
-                .map(|c| (c.name.clone(), c.index, c.payload))
+                .map(|c| (c.name.clone(), c.index, c.payload, c.serde_rename.clone()))
                 .collect(),
             span: v.span,
         })
@@ -1552,7 +1553,7 @@ fn generate_variant_reflect_methods(
         let token_types: Vec<TypeId> = target
             .cases
             .iter()
-            .map(|(_, _, payload)| {
+            .map(|(_, _, payload, _)| {
                 tt.make_generic_instance(
                     env.case_struct_name.clone(),
                     env.case_struct_module.clone(),
@@ -1561,7 +1562,8 @@ fn generate_variant_reflect_methods(
             })
             .collect();
         let token_tuple_type = tt.make_tuple(token_types.clone());
-        let payloads_tuple_type = tt.make_tuple(target.cases.iter().map(|(_, _, p)| *p).collect());
+        let payloads_tuple_type =
+            tt.make_tuple(target.cases.iter().map(|(_, _, p, _)| *p).collect());
         tt.register_assoc_type_resolution(
             variant_type,
             REFLECT_CASES_ASSOC.to_string(),
@@ -1592,6 +1594,7 @@ fn generate_variant_reflect_methods(
         span,
     );
     let cases_fn = generate_variant_cases_fn(
+        type_table,
         env,
         variant_trait_name,
         target,
@@ -1612,9 +1615,11 @@ fn generate_variant_reflect_methods(
 }
 
 /// Build `Variant^ReflectVariant::cases()` as
-/// `return [Case { index: 0 }, Case { index: 1 }, …];` — one token per case,
-/// each typed `Case<Variant, P_k>`.
+/// `return [Case { index: 0, case_name: "…", wire_override: …, is_unit: … }, …];`
+/// — one fat token per case, each typed `Case<Variant, P_k>` and carrying the
+/// `Member` metadata alongside the payload bridge.
 fn generate_variant_cases_fn(
+    type_table: &RefCell<TypeTable>,
     env: &ReflectVariantSynthEnv,
     variant_trait_name: &str,
     target: &ReflectVariantTarget,
@@ -1625,27 +1630,60 @@ fn generate_variant_cases_fn(
     let method_info = trait_method_info(&target.name, variant_trait_name, &env.cases_method);
     let qualified_name = method_info.to_mangled_name();
 
+    let option_string_type = type_table.borrow_mut().make_option(env.string_type);
+
     let elements = target
         .cases
         .iter()
         .zip(token_types)
-        .map(|((_, index, _), token_type)| {
+        .map(|((case_name, index, payload, serde_rename), token_type)| {
+            let wire_override = {
+                let tt = type_table.borrow();
+                let items = tt.compiler_items();
+                match serde_rename {
+                    Some(rename) => crate::synthesis::common::option_some(
+                        TirExpr::new(
+                            TirExprKind::StringLiteral(rename.clone()),
+                            env.string_type,
+                            span,
+                        ),
+                        option_string_type,
+                        items,
+                    ),
+                    None => crate::synthesis::common::option_none(option_string_type, items),
+                }
+            };
+            let case_fields = vec![
+                reflect_meta_int_field("index", u64::from(*index), TypeTable::I32, 0, span),
+                TirStructField {
+                    name: "case_name".to_string(),
+                    value: TirExpr::new(
+                        TirExprKind::StringLiteral(case_name.clone()),
+                        env.string_type,
+                        span,
+                    ),
+                    field_index: 1,
+                },
+                TirStructField {
+                    name: "wire_override".to_string(),
+                    value: wire_override,
+                    field_index: 2,
+                },
+                TirStructField {
+                    name: "is_unit".to_string(),
+                    value: TirExpr::new(
+                        TirExprKind::BoolLiteral(*payload == TypeTable::UNIT),
+                        TypeTable::BOOL,
+                        span,
+                    ),
+                    field_index: 3,
+                },
+            ];
             TirExpr::new(
                 TirExprKind::StructLiteral {
                     struct_type: *token_type,
                     struct_name: env.case_struct_name.clone(),
-                    fields: vec![TirStructField {
-                        name: "index".to_string(),
-                        value: TirExpr::new(
-                            TirExprKind::IntLiteral {
-                                value: u64::from(*index),
-                                repr: index.to_string(),
-                            },
-                            TypeTable::I32,
-                            span,
-                        ),
-                        field_index: 0,
-                    }],
+                    fields: case_fields,
                 },
                 *token_type,
                 span,
@@ -1693,7 +1731,7 @@ fn generate_case_bridge_helpers(
 
     let mut by_payload: crate::hashmap::IndexMap<String, (TypeId, Vec<(String, u32)>)> =
         crate::hashmap::IndexMap::default();
-    for (case_name, index, payload) in &target.cases {
+    for (case_name, index, payload, _) in &target.cases {
         let mangled = type_table.borrow().mangle_type_arg_for_generic(*payload);
         by_payload
             .entry(mangled)
@@ -1968,7 +2006,7 @@ fn generate_variant_case_meta_fn(
     let rows = target
         .cases
         .iter()
-        .map(|(case_name, index, payload)| {
+        .map(|(case_name, index, payload, _)| {
             vec![
                 reflect_meta_name_field(case_name, env.string_type, span),
                 reflect_meta_int_field("discriminant", u64::from(*index), TypeTable::I32, 1, span),
