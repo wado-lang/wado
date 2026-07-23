@@ -131,61 +131,79 @@ This is UseCases #8 exactly, and it completes the
 own rule — "if [an interface] is satisfied by a fused sibling component, it
 is a transparent namespace": a declared provider makes the reconstructed
 effect disappear from the consumer's obligations; with no provider, the
-effect remains required (and, today, must be reachable from the host or a
-handler — see Host effect pump).
+effect remains required (reachable from the host or an outer component that
+ultimately satisfies it).
 
 Trade-off: binding is static. No `with h do` dynamic extent across the
 boundary; the provider cannot close over the consuming program's state (it is
 its own component). For self-contained parameterizations — a syntax
 highlighter, a codec, a policy function — this is a fit, not a limitation.
 
-### Host effect pump — dynamic handlers via the host
-
-Leave the dependency's guest-effect import unsatisfied in the composed
-artifact; the wado runtime harness (wasmtime embedding, jco shim) provides it
-with a host function that schedules a call to the consumer's async-lifted
-effect-dispatch shim export as a **detached task**, then resolves the
-dependency's pending import call. The consumer's installed handler
-(`with h do`, dispatch global) receives the call mid-flight — true dynamic
-extent across the boundary.
-
-Legal under the task-chain rule above (detached task + async-lifted export),
-but requires a wado-aware host: the artifact is not self-satisfying, and a
-generic host would need to replicate the pump. Candidate follow-up once
-provider composition ships; the two share the same library-side contract
-(the synthesized import), so they compose rather than compete.
-
-### Effect channels — stream-encoded callbacks
+### Effect channels — stream-encoded callbacks (the dynamic direction)
 
 Encode the effect protocol in values: the library's export takes/returns
-`stream<request>` / `stream<response>` handles; the consumer pumps requests
-through its local handler concurrently with the call. Pure guest-to-guest,
-portable to any P3 host, real dynamic extent.
+`stream<request>` / `stream<response>` handles; the consumer runs a pump —
+`loop { read request; handle; write response }` — as a task concurrent with
+the call. Pure guest-to-guest, portable to any P3 host, and real dynamic
+extent (the handler closes over the consuming program's state). This is the
+principled way to reach the dynamic quadrant provider composition and the
+host pump cannot both cover; it is the reification of an effect as an async
+channel, and an effect signature is a (degenerate) session type over it.
 
-Cost: the library's published WIT shape becomes a channel protocol rather
-than a clean interface import; both sides must be async; the compiler would
-need to lower effect ops to channel operations (or the library hand-writes
-the protocol). Considered a fallback shape, not the default contract.
+Buffering is not a problem for the base case. CM streams are rendezvous
+(buffer 0): a `write` with no pending `read` **parks** and completes when a
+reader arrives — it is not an instant deadlock, and a reader never arriving is
+the only failure. A synchronous effect op — call, block for the result — is
+itself a rendezvous, so buffer 0 is the natural fit: `write req; read res` on
+the library side interlocks with `read req; handle; write res` on the pump,
+one-in-one-out, no buffering or reordering.
 
-### Donut wrapping — blocked on engines
+The real requirement is liveness: the pump must run concurrently with the
+call. That is the compiler-generated driver's responsibility (spawn the pump,
+then call; close the request stream on return so the pump terminates) — a
+footgun only if hand-written. Buffer 0 bites just once: a library firing
+several effect ops without awaiting each (concurrent / multi-shot), where
+send-send with no ready reader needs a small buffer or a correlation-id
+protocol with an eager multi-read pump. The synchronous, one-op-at-a-time base
+model needs neither.
+
+Cost: the library's published WIT becomes a channel protocol rather than a
+clean interface import; both sides are async; and the compiler must lower
+effect ops to stream operations (or the library hand-writes the protocol) —
+WEP-scale. Worth doing on its own motivation — interactive / streaming effects
+across the boundary (a logger/tracer subscriber, a mid-computation policy or
+permission ask, progress / cancellation), not as a highlighting mechanism.
+
+### Rejected: host effect pump
+
+Leave the import unsatisfied and have the wado runtime harness provide it as a
+host function that pumps calls to the consumer's handler (a detached task
+against an async-lifted shim export — legal under the task-chain rule above).
+It offers dynamic extent, but the artifact is no longer self-satisfying: it
+runs only on a wado-aware host, forfeiting the portability that is the point of
+targeting Wasm. Rejected on that ground; effect channels reach the same
+dynamic quadrant portably.
+
+### Blocked on engines: donut wrapping
 
 The spec-sanctioned mechanism (above). Requires wasmtime's FACT to implement
-the spec's recursive-reentry-only guard instead of the unconditional
-ancestor trap. Worth pursuing upstream; `cm_donut_canary.rs` documents the
-current behavior and will flag when the engine changes.
+the spec's recursive-reentry-only guard instead of the unconditional ancestor
+trap. Worth pursuing upstream; `cm_donut_canary.rs` documents the current
+behavior and will flag when the engine changes.
 
-### First-class function values — future spec
+### Future spec: first-class function values
 
-The eventual loosening. When function closures become passable values, a
-guest effect could be satisfied per-call with an actual closure. Tracked in
+The eventual loosening. When function closures become passable values, a guest
+effect could be satisfied per-call with an actual closure. Tracked in
 Concurrency.md's future extensions; nothing to build against today.
 
 ## Decision
 
-Adopt **provider composition** now; keep the library-side contract (guest
-effect → synthesized CM import) unchanged so **host effect pump** can be
-layered on later for dynamic handlers, and so a future donut/first-class
-world needs no contract change.
+Adopt **provider composition** now for static parameterization. Keep the
+library-side contract (guest effect → synthesized CM import) unchanged so
+**effect channels** can be added later for dynamic, portable cross-boundary
+effects, and so a future donut / first-class-function world needs no contract
+change. The **host effect pump** is rejected (non-portable).
 
 ## Status
 
@@ -203,4 +221,5 @@ world needs no contract change.
   `cm_provider_compose.rs`). One guest interface per dependency for now; a single
   provider file spanning several imported interfaces (bind by op name across all)
   is the next increment.
-- Host effect pump, donut upstream: not started.
+- Effect channels (dynamic direction): not started; own WEP when motivated.
+- Host effect pump: rejected (non-portable). Donut upstream: blocked on engines.
