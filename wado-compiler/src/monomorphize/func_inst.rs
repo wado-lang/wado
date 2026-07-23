@@ -2750,6 +2750,63 @@ impl Monomorphizer {
             return;
         };
 
+        // A type-param receiver whose param resolves to a *reference*
+        // (`..F::inspect()` on a `&List<i32>` struct field) dispatches through the
+        // ref/mutref blanket (`impl<T: Inspect> Inspect for &T`), keyed by shape.
+        // The general path below peels every ref off the auto-`&self`'d receiver,
+        // which would collapse `&List<i32>^Inspect` to `List<i32>::inspect` and
+        // drop the leading `&`. Resolve the param's own value (ref intact) and, if
+        // it is a reference, route to the ref blanket in its own module.
+        if info.is_type_param_receiver
+            && let Some(self_tid) = self.receiver_substitution_tid(&info, substitution)
+        {
+            let ref_shape = match type_table.get(self_tid) {
+                ResolvedType::Ref(inner) => Some(("&", *inner)),
+                ResolvedType::MutRef(inner) => Some(("&mut", *inner)),
+                _ => None,
+            };
+            if let Some((ref_base, inner)) = ref_shape
+                && let Some(trait_name) = info
+                    .base_trait_name
+                    .as_deref()
+                    .or(info.trait_name.as_deref())
+                && let Some(ref_module) =
+                    self.functions
+                        .trait_env
+                        .impl_module_for(ref_base, trait_name, None)
+            {
+                // Mirror the template ref arm (`method_call_info_for_type`): the
+                // call name carries the shape + inner type; `call_rewrite` resolves
+                // it to the queued `&<inner>^Trait::method` instance via the blanket
+                // `monomorph_info`.
+                let inner_name = type_table.mangle_type_name(inner);
+                let ref_info = LocalMethodName::new(
+                    ref_base.to_string(),
+                    Some(trait_name.to_string()),
+                    info.method_name.clone(),
+                )
+                .with_struct_type_args(&[inner_name]);
+                let generic_name = LocalMethodName::new(
+                    ref_base.to_string(),
+                    Some(trait_name.to_string()),
+                    info.method_name.clone(),
+                )
+                .to_mangled_name();
+                *method_func = FunctionRef {
+                    module_source: ref_module.clone(),
+                    name: ref_info.to_mangled_name(),
+                    monomorph_info: Some(MonomorphInfo {
+                        generic_name,
+                        impl_type_args: vec![inner],
+                        method_type_args: vec![],
+                        is_blanket: true,
+                    }),
+                    method_info: Some(ref_info),
+                };
+                return;
+            }
+        }
+
         // Check if the struct actually needs type arg substitution.
         // Skip for non-generic structs (e.g., String::push_str from template strings)
         // that happen to appear inside a generic impl block.

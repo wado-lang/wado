@@ -368,8 +368,17 @@ impl Monomorphizer {
             return;
         }
 
-        // If this is a generic method call, rewrite to monomorphized name
+        // If this is a generic method call, rewrite to monomorphized name.
+        // Skip a blanket-carrying call (a synthesized ref dispatch like
+        // `..F::inspect::<Formatter>()` on a `&List<i32>` field): resolving by
+        // the receiver's peeled struct name would retarget the inner type's impl
+        // (`List<i32>^Inspect`) and drop the leading `&`. The blanket-fallback
+        // branch below keys off `mono` and keeps the ref blanket.
         if !type_args.is_empty()
+            && !method_func
+                .monomorph_info
+                .as_ref()
+                .is_some_and(|m| m.is_blanket)
             && let Some(struct_name) = self.get_struct_name_from_type(receiver.type_id, type_table)
         {
             // Try both inherent and trait method formats. A newtype's OWN impl
