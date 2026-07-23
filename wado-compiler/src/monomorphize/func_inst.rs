@@ -151,19 +151,10 @@ pub(super) fn is_struct_blanket_dispatch(
     if generic_name != MethodName::format_local(&param, Some(trait_name), method_name) {
         return false;
     }
-    // The field-walk struct blanket carries a second derived pack param
-    // (`..F = T::Fields`); a plain `impl<T: Reflect> Trait for T` does not.
-    if trait_env.blanket_impl_arity_for_trait(trait_name, Some(blanket_module)) != Some(2) {
-        return false;
-    }
     let reflect = type_table
         .compiler_items()
         .trait_name(crate::compiler_item::CompilerItem::Reflect);
-    trait_env
-        .blanket_impl_bounds_for_trait(trait_name, Some(blanket_module))
-        .unwrap_or_default()
-        .iter()
-        .any(|b| b == reflect)
+    trait_env.is_reflect_struct_blanket(trait_name, Some(blanket_module), reflect)
 }
 
 /// Whether a blanket impl `impl<T: Bound> Trait for T` may claim the receiver.
@@ -3015,33 +3006,24 @@ impl Monomorphizer {
                 let recv_inner = type_table.peel_refs(receiver_type_id);
                 // The `[T, Fields]` keying is exclusive to the `Reflect`-derived
                 // struct blanket (`impl<T: Reflect<Fields = [..F]>, ..F> Trait for
-                // T`, arity 2, `Reflect`-bound). Every `struct` is `Reflect`, so a
-                // bare receiver-`Fields` probe would also fire for a one-arg blanket
-                // like `impl<I: Iterator> IntoIterator for I` — appending `Fields`
-                // to it mints a two-arg instance name the call site never asks for,
-                // so its `into_iter` is never materialized. Only consult `Fields`
-                // when the target blanket is genuinely the struct blanket.
-                let is_reflect_struct_blanket =
-                    match (blanket_module.as_ref(), trait_name_for_blanket) {
-                        (Some(bm), Some(tn)) => {
-                            self.functions
-                                .trait_env
-                                .blanket_impl_arity_for_trait(tn, Some(bm))
-                                == Some(2)
-                                && {
-                                    let reflect = type_table
-                                        .compiler_items()
-                                        .trait_name(crate::compiler_item::CompilerItem::Reflect);
-                                    self.functions
-                                        .trait_env
-                                        .blanket_impl_bounds_for_trait(tn, Some(bm))
-                                        .unwrap_or_default()
-                                        .iter()
-                                        .any(|b| b == reflect)
-                                }
-                        }
-                        _ => false,
-                    };
+                // T`). Every `struct` is `Reflect`, so a bare receiver-`Fields`
+                // probe would also fire for a one-arg blanket like `impl<I:
+                // Iterator> IntoIterator for I` — appending `Fields` to it mints a
+                // two-arg instance name the call site never asks for, so its
+                // `into_iter` is never materialized. Only consult `Fields` when the
+                // target blanket is genuinely the struct blanket.
+                let is_reflect_struct_blanket = match (blanket_module.as_ref(), trait_name_for_blanket)
+                {
+                    (Some(bm), Some(tn)) => {
+                        let reflect = type_table
+                            .compiler_items()
+                            .trait_name(crate::compiler_item::CompilerItem::Reflect);
+                        self.functions
+                            .trait_env
+                            .is_reflect_struct_blanket(tn, Some(bm), reflect)
+                    }
+                    _ => false,
+                };
                 let reflect_fields = is_reflect_struct_blanket
                     .then(|| {
                         type_table.resolve_assoc_type(
