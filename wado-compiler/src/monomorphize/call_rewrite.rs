@@ -617,10 +617,32 @@ impl Monomorphizer {
             } = &*method_func
                 && mono.is_blanket
             {
+                let is_struct_blanket = match (
+                    method_func
+                        .method_info
+                        .as_ref()
+                        .and_then(|i| i.base_trait_name.as_deref().or(i.trait_name.as_deref())),
+                    method_func.method_info.as_ref(),
+                ) {
+                    (Some(tn), Some(info)) => super::func_inst::is_struct_blanket_dispatch(
+                        &self.functions.trait_env,
+                        tn,
+                        &info.method_name,
+                        &method_func.module_source,
+                        &mono.generic_name,
+                        type_table,
+                    ),
+                    _ => false,
+                };
+                let impl_ta = super::func_inst::normalize_reflect_blanket_args(
+                    &mono.impl_type_args,
+                    type_table,
+                    is_struct_blanket,
+                );
                 let key = InstantiationKey {
                     name: mono.generic_name.clone(),
                     module_source: method_func.module_source.clone(),
-                    impl_type_args: mono.impl_type_args.clone(),
+                    impl_type_args: impl_ta.clone(),
                     method_type_args: mono.method_type_args.clone(),
                     method_info: method_func.method_info.clone(),
                 };
@@ -639,7 +661,7 @@ impl Monomorphizer {
                     (
                         mangled,
                         mono.generic_name.clone(),
-                        mono.impl_type_args.clone(),
+                        impl_ta.clone(),
                         mono.method_type_args.clone(),
                         k.module_source,
                     )

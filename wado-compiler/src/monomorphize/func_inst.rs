@@ -109,6 +109,63 @@ fn receiver_module_hint(tt: &TypeTable, tid: TypeId) -> Option<ModuleSource> {
 /// instantiation location is what lets the variadic-tuple guard and the
 /// ref-blanket dispatch both keep working under the
 /// `(ModuleSource, String)` template keying.
+/// Normalize a `Reflect`-derived struct blanket's impl args to the canonical
+/// `[T, T::Fields]` pair. Auto-derive bodies emit the call before
+/// `synthesize_reflect` registers `Fields`, so they supply `[T]` only; the
+/// template path supplies `[T, Fields]`. Appending the registered pack (present
+/// by monomorphize time) makes both keys identical so the shared blanket
+/// instance is queued and looked up under one key, not split across two.
+pub(super) fn normalize_reflect_blanket_args(
+    args: &[TypeId],
+    type_table: &TypeTable,
+    is_struct_blanket: bool,
+) -> Vec<TypeId> {
+    let mut out = args.to_vec();
+    if is_struct_blanket
+        && out.len() == 1
+        && let Some(fields) = type_table
+            .resolve_assoc_type(out[0], crate::synthesis::traits::REFLECT_FIELDS_ASSOC)
+    {
+        out.push(fields);
+    }
+    out
+}
+
+/// Whether `generic_name` is the `Reflect`-derived bare-`T` struct blanket for
+/// `trait_name` — `impl<T: Reflect<Fields = [..F]>, ..F> Trait for T`, keyed by
+/// the `[T, T::Fields]` pair. Distinguished from other bare-param blankets
+/// (`impl<I: Iterator> IntoIterator for I`, keyed by `[I]` alone) by its
+/// `Reflect` receiver bound, and from shape blankets (`&^Trait`) by the name.
+pub(super) fn is_struct_blanket_dispatch(
+    trait_env: &TraitEnv,
+    trait_name: &str,
+    method_name: &str,
+    blanket_module: &ModuleSource,
+    generic_name: &str,
+    type_table: &TypeTable,
+) -> bool {
+    let Some(param) = trait_env.blanket_impl_param_for_trait(trait_name, Some(blanket_module))
+    else {
+        return false;
+    };
+    if generic_name != MethodName::format_local(&param, Some(trait_name), method_name) {
+        return false;
+    }
+    // The field-walk struct blanket carries a second derived pack param
+    // (`..F = T::Fields`); a plain `impl<T: Reflect> Trait for T` does not.
+    if trait_env.blanket_impl_arity_for_trait(trait_name, Some(blanket_module)) != Some(2) {
+        return false;
+    }
+    let reflect = type_table
+        .compiler_items()
+        .trait_name(crate::compiler_item::CompilerItem::Reflect);
+    trait_env
+        .blanket_impl_bounds_for_trait(trait_name, Some(blanket_module))
+        .unwrap_or_default()
+        .iter()
+        .any(|b| b == reflect)
+}
+
 /// Whether a blanket impl `impl<T: Bound> Trait for T` may claim the receiver.
 /// The blanket applies only when the receiver satisfies the param's bound
 /// (e.g. a `Reflect`-bound `Inspect` derive must not swallow a token type that
@@ -1081,38 +1138,35 @@ impl Monomorphizer {
                 ) = (blanket_lookup, method_func)
                 {
                     let generic_func = generic_func_rc.borrow();
+                    let info = method_func.method_info.as_ref();
+                    let trait_name =
+                        info.and_then(|i| i.base_trait_name.as_deref().or(i.trait_name.as_deref()));
+                    // Is this the bare-`T` struct blanket (`impl<T: Reflect> Trait
+                    // for T`), keyed by `[T, T::Fields]`? The ref/mutref blankets
+                    // (`&^Trait`) are keyed by shape and take the pointee alone.
+                    let is_struct_blanket = match (trait_name, info) {
+                        (Some(tn), Some(info)) => is_struct_blanket_dispatch(
+                            &self.functions.trait_env,
+                            tn,
+                            &info.method_name,
+                            &generic_func.module_source,
+                            &mono.generic_name,
+                            type_table,
+                        ),
+                        _ => false,
+                    };
                     // The direct-name blanket lookup finds the bare-`T` struct
-                    // blanket (`T^Inspect`) even when the receiver arg does not
-                    // satisfy its `Reflect` bound — a non-`Reflect` generic struct
-                    // (a token like `EnumCase<Color>`) or a ref. Instantiating it
-                    // would call `Reflect::<T>::…` on a non-`Reflect` `T` and trap.
-                    // Skip so the type-specific dispatch (bespoke, or the ref
-                    // blanket) is used instead. Only the bare-`T` blanket is gated;
-                    // the ref/mutref blankets (`&^Inspect`) carry an `Inspect`
-                    // bound and are keyed by shape, not this index.
+                    // blanket even when the receiver arg does not satisfy its
+                    // `Reflect` bound — a non-`Reflect` generic struct (a token like
+                    // `EnumCase<Color>`) or a ref. Instantiating it would call
+                    // `Reflect::<T>::…` on a non-`Reflect` `T` and trap. Skip so the
+                    // type-specific dispatch (bespoke, or the ref blanket) is used
+                    // instead.
                     let blanket_bound_ok = {
-                        let info = method_func.method_info.as_ref();
-                        let trait_name =
-                            info.and_then(|i| i.base_trait_name.as_deref().or(i.trait_name.as_deref()));
                         let recv = mono.impl_type_args.first().copied();
-                        match (trait_name, info, recv) {
-                            (Some(tn), Some(info), Some(rt)) => {
-                                let bare_param = self
-                                    .functions
-                                    .trait_env
-                                    .blanket_impl_param_for_trait(
-                                        tn,
-                                        Some(&generic_func.module_source),
-                                    );
-                                let is_bare_blanket = bare_param.as_deref().is_some_and(|p| {
-                                    mono.generic_name
-                                        == MethodName::format_local(
-                                            p,
-                                            Some(tn),
-                                            &info.method_name,
-                                        )
-                                });
-                                if is_bare_blanket {
+                        match (trait_name, recv) {
+                            (Some(tn), Some(rt)) => {
+                                if is_struct_blanket {
                                     let bounds = self
                                         .functions
                                         .trait_env
@@ -1140,7 +1194,11 @@ impl Monomorphizer {
                     // For blanket impls, impl_type_args contains the concrete receiver type.
                     // method_type_args comes from the MethodCall's type_args field.
                     // If method_type_args is empty but the callee has type params, infer from args.
-                    let impl_ta = mono.impl_type_args.clone();
+                    let impl_ta = normalize_reflect_blanket_args(
+                        &mono.impl_type_args,
+                        type_table,
+                        is_struct_blanket,
+                    );
                     let method_ta = if !type_args.is_empty() {
                         type_args.clone()
                     } else if mono.method_type_args.is_empty()

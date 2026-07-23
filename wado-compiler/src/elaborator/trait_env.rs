@@ -1085,6 +1085,34 @@ impl TraitEnv {
         fallback
     }
 
+    /// The number of impl-level type params on the bare-`T` blanket for
+    /// `trait_name` (`2` for `impl<T: Reflect<Fields = [..F]>, ..F> Trait for
+    /// T` — the receiver plus its derived field pack; `1` for a plain
+    /// `impl<T: Reflect> Trait for T`). Lets a caller tell the field-walk
+    /// struct blanket, keyed by `[T, Fields]`, apart from a user blanket over
+    /// `Reflect` keyed by `[T]` alone.
+    pub(crate) fn blanket_impl_arity_for_trait(
+        &self,
+        trait_name: &str,
+        type_module: Option<&ModuleSource>,
+    ) -> Option<usize> {
+        let mut fallback = None;
+        for entry in &self.blanket_impl_index {
+            let Some(header) = self.impl_headers.get(entry) else {
+                continue;
+            };
+            if header.trait_name.as_deref() != Some(trait_name) {
+                continue;
+            }
+            let arity = header.type_params.len();
+            if type_module == Some(&entry.0) {
+                return Some(arity);
+            }
+            fallback.get_or_insert(arity);
+        }
+        fallback
+    }
+
     /// Like [`impl_module_for`] but only returns a hit when the impl block
     /// is **fully concrete** (no `impl<T, …>` type parameters). Used by
     /// the monomorphizer when redirecting a substituted trait-method call
