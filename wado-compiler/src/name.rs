@@ -603,6 +603,42 @@ pub fn is_local_trait_method_name(name: &str) -> bool {
     name.contains('^')
 }
 
+/// Whether `name` is a method mangle — it carries the `::` method separator
+/// (`Type::method` or `Type^Trait::method`) — as opposed to a bare free function
+/// (`run`, `$field_get$…`). Centralizes the separator knowledge so callers
+/// distinguishing methods from free functions don't scan the string themselves.
+pub fn is_method_name(name: &str) -> bool {
+    name.contains("::")
+}
+
+/// The reference kind of a `&` / `&mut` method receiver head.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum RefReceiver {
+    Shared,
+    Mut,
+}
+
+/// If `name`'s receiver head is the *universal* ref-blanket marker — `&` or
+/// `&mut` (`&^Trait::method`, `&mut^Trait::method`) — return its ref kind. A
+/// shape ref impl (`&List<T>^IntoIterator::…`) has a `&List<T>` head, not `&`,
+/// so it returns `None`. Owns the `&` / `&mut` head sentinel so callers don't
+/// pattern-match the mangled string.
+pub fn ref_template_receiver(name: &str) -> Option<RefReceiver> {
+    match split_trait_method_receiver(name)?.0 {
+        "&mut" => Some(RefReceiver::Mut),
+        "&" => Some(RefReceiver::Shared),
+        _ => None,
+    }
+}
+
+/// Whether a method mangle's receiver head is an associated-type projection
+/// (`S::SeqSerializer^Trait::method`) rather than a plain type name — its head
+/// (the part before `^`) itself carries a `::`.
+pub fn receiver_is_assoc_projection(name: &str) -> bool {
+    let head = name.split_once('^').map_or(name, |(h, _)| h);
+    head.contains("::")
+}
+
 /// Decompose `Type^Trait::method` into its `(type, trait)` parts, or `None` when
 /// the name has no `^` trait segment.
 pub fn split_trait_method_receiver(name: &str) -> Option<(&str, &str)> {

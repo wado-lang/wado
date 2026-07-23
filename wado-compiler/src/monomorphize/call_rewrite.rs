@@ -378,14 +378,17 @@ impl Monomorphizer {
         // (`&List^IntoIterator`) both still resolve here — the former has no `&`
         // head, the latter has no universal `&T` blanket.
         let is_ref_blanket_call = method_func.monomorph_info.as_ref().is_some_and(|m| {
-            let is_mut = m.generic_name.starts_with("&mut^");
             m.is_blanket
-                && (m.generic_name.starts_with("&^") || is_mut)
-                && method_func.method_info.as_ref().is_some_and(|i| {
-                    i.base_trait_name
-                        .as_deref()
-                        .or(i.trait_name.as_deref())
-                        .is_some_and(|tn| self.functions.trait_env.has_universal_ref_blanket(tn, is_mut))
+                && crate::name::ref_template_receiver(&m.generic_name).is_some_and(|ref_kind| {
+                    let is_mut = ref_kind == crate::name::RefReceiver::Mut;
+                    method_func.method_info.as_ref().is_some_and(|i| {
+                        i.base_trait_name
+                            .as_deref()
+                            .or(i.trait_name.as_deref())
+                            .is_some_and(|tn| {
+                                self.functions.trait_env.has_universal_ref_blanket(tn, is_mut)
+                            })
+                    })
                 })
         });
         if !type_args.is_empty()

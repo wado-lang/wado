@@ -241,16 +241,18 @@ impl Monomorphizer {
         // `&`) has no universal blanket and must NOT be deduped — dropping it
         // would leave the for-of loop's iterator unresolved.
         let is_ref_universal_blanket = key.impl_type_args.len() == 1
-            && (key.name.starts_with("&^") || key.name.starts_with("&mut^"))
-            && key.method_info.as_ref().is_some_and(|i| {
-                i.base_trait_name
-                    .as_deref()
-                    .or(i.trait_name.as_deref())
-                    .is_some_and(|tn| {
-                        self.functions
-                            .trait_env
-                            .has_universal_ref_blanket(tn, key.name.starts_with("&mut^"))
-                    })
+            && crate::name::ref_template_receiver(&key.name).is_some_and(|ref_kind| {
+                key.method_info.as_ref().is_some_and(|i| {
+                    i.base_trait_name
+                        .as_deref()
+                        .or(i.trait_name.as_deref())
+                        .is_some_and(|tn| {
+                            self.functions.trait_env.has_universal_ref_blanket(
+                                tn,
+                                ref_kind == crate::name::RefReceiver::Mut,
+                            )
+                        })
+                })
             });
         let is_blanket_key = key.impl_type_args.len() == 2 || is_ref_universal_blanket;
         // A deduped blanket key is intentionally dropped without an

@@ -1239,28 +1239,19 @@ impl TypeSystem {
         trait_name: &str,
     ) -> bool {
         let trait_env = self.trait_env.clone();
-        for entry in &trait_env.blanket_impl_index {
-            let Some(header) = trait_env.impl_headers.get(entry) else {
-                continue;
-            };
-            let Some(impl_trait_name) = &header.trait_name else {
-                continue;
-            };
-            if impl_trait_name == trait_name {
-                let impl_type_name = super::trait_env::get_type_name_static(&header.ty);
-                let matching_param = header
-                    .type_params
-                    .iter()
-                    .find(|tp| tp.name == impl_type_name);
-                if let Some(param) = matching_param {
-                    let bounds_satisfied = param.bounds.iter().all(|bound| {
-                        self.synthesized_reflect_bound_holds(scope, type_name, &bound.name)
-                            || self.find_trait_impl_for_type(ctx, scope, type_name, &bound.name)
-                    });
-                    if bounds_satisfied {
-                        return true;
-                    }
-                }
+        for blanket in trait_env
+            .blanket_impls
+            .get(trait_name)
+            .into_iter()
+            .flatten()
+            .filter(|b| b.receiver == super::trait_env::BlanketReceiver::Value)
+        {
+            let bounds_satisfied = blanket.bounds.iter().all(|bound| {
+                self.synthesized_reflect_bound_holds(scope, type_name, bound)
+                    || self.find_trait_impl_for_type(ctx, scope, type_name, bound)
+            });
+            if bounds_satisfied {
+                return true;
             }
         }
 
@@ -1911,36 +1902,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let blanket_infos: Vec<BlanketImplInfo> = {
             let mut result = vec![];
-            for entry in &trait_env.blanket_impl_index {
-                let Some(header) = trait_env.impl_headers.get(entry) else {
+            for blanket in trait_env.blanket_impls.get(trait_name).into_iter().flatten() {
+                let Some(header) = trait_env
+                    .impl_headers
+                    .get(&(blanket.module.clone(), blanket.ast_id))
+                else {
                     continue;
                 };
-                if header.trait_name.as_deref() == Some(trait_name)
-                    && !header.associated_types.is_empty()
-                {
-                    let impl_type_name = Self::get_type_name_static(&header.ty);
-                    if let Some(blanket_param) = header
-                        .type_params
-                        .iter()
-                        .find(|tp| tp.name == impl_type_name && !tp.bounds.is_empty())
-                    {
-                        // Check if the concrete type satisfies the blanket param's bounds
-                        let bounds_ok = blanket_param.bounds.iter().all(|bound| {
-                            self.tysys.type_implements_trait(
-                                &self.annotate_ctx,
-                                &self.type_lookup(),
-                                concrete_type_id,
-                                &bound.name,
-                            )
-                        });
-                        if bounds_ok {
-                            result.push(BlanketImplInfo {
-                                blanket_param_name: blanket_param.name.clone(),
-                                blanket_param_bounds: blanket_param.bounds.clone(),
-                                assoc_types: header.associated_types.clone(),
-                            });
-                        }
-                    }
+                if header.associated_types.is_empty() {
+                    continue;
+                }
+                let impl_type_name = Self::get_type_name_static(&header.ty);
+                let Some(blanket_param) = header
+                    .type_params
+                    .iter()
+                    .find(|tp| tp.name == impl_type_name && !tp.bounds.is_empty())
+                else {
+                    continue;
+                };
+                // Check if the concrete type satisfies the blanket param's bounds
+                let bounds_ok = blanket_param.bounds.iter().all(|bound| {
+                    self.tysys.type_implements_trait(
+                        &self.annotate_ctx,
+                        &self.type_lookup(),
+                        concrete_type_id,
+                        &bound.name,
+                    )
+                });
+                if bounds_ok {
+                    result.push(BlanketImplInfo {
+                        blanket_param_name: blanket_param.name.clone(),
+                        blanket_param_bounds: blanket_param.bounds.clone(),
+                        assoc_types: header.associated_types.clone(),
+                    });
                 }
             }
             result

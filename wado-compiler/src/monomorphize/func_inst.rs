@@ -89,6 +89,22 @@ fn receiver_module_hint(tt: &TypeTable, tid: TypeId) -> Option<ModuleSource> {
     }
 }
 
+/// The post-substitution values `resolve_method_call_substitution` computes
+/// before it branches on the receiver kind, handed to the per-kind resolver.
+struct SubstitutedCall {
+    /// The post-substitution method info (concrete receiver name).
+    info: LocalMethodName,
+    /// Its mangled name.
+    mangled: String,
+    /// The pre-substitution mangled name, still the blanket-template key for a
+    /// bare-`T` blanket dispatch.
+    original_name: String,
+    /// Substituted impl type args, in param-index order.
+    type_args: Vec<TypeId>,
+    /// The call's current module source, used as the fallback home.
+    module_source: ModuleSource,
+}
+
 /// Look up a generic function template in the global map.
 ///
 /// `module_hint` is the most-specific guess for the template's home —
@@ -2719,14 +2735,91 @@ impl Monomorphizer {
         }
     }
 
+    /// A type-param receiver whose param resolves to a *reference*
+    /// (`..F::inspect()` on a `&List<i32>` struct field) dispatches through the
+    /// ref/mutref blanket (`impl<T: Inspect> Inspect for &T`), keyed by shape.
+    /// The general path peels every ref off the auto-`&self`'d receiver, which
+    /// would collapse `&List<i32>^Inspect` to `List<i32>::inspect` and drop the
+    /// leading `&`. Resolve the param's own value (ref intact) and, if it is a
+    /// reference to a universal-ref-blanket trait, route to that blanket in its
+    /// own module and report `true`. Otherwise leave `method_func` untouched.
+    fn try_ref_blanket_shortcut(
+        &self,
+        method_func: &mut FunctionRef,
+        info: &LocalMethodName,
+        substitution: &IndexMap<u32, TypeId>,
+        type_table: &mut TypeTable,
+    ) -> bool {
+        if !info.is_type_param_receiver {
+            return false;
+        }
+        let Some(self_tid) = self.receiver_substitution_tid(info, substitution) else {
+            return false;
+        };
+        let (is_mut, inner) = match type_table.get(self_tid) {
+            ResolvedType::Ref(inner) => (false, *inner),
+            ResolvedType::MutRef(inner) => (true, *inner),
+            _ => return false,
+        };
+        let Some(trait_name) = info.base_trait_name.as_deref().or(info.trait_name.as_deref())
+        else {
+            return false;
+        };
+        if !self
+            .functions
+            .trait_env
+            .has_universal_ref_blanket(trait_name, is_mut)
+        {
+            return false;
+        }
+        let ref_base = if is_mut { "&mut" } else { "&" };
+        let Some(ref_module) = self
+            .functions
+            .trait_env
+            .impl_module_for(ref_base, trait_name, None)
+        else {
+            return false;
+        };
+        // Mirror the template ref arm (`method_call_info_for_type`): the call
+        // name carries the shape + inner type; `call_rewrite` resolves it to the
+        // queued `&<inner>^Trait::method` instance via the blanket `monomorph_info`.
+        let inner_name = type_table.mangle_type_name(inner);
+        let ref_info = LocalMethodName::new(
+            ref_base.to_string(),
+            Some(trait_name.to_string()),
+            info.method_name.clone(),
+        )
+        .with_struct_type_args(&[inner_name]);
+        let generic_name = LocalMethodName::new(
+            ref_base.to_string(),
+            Some(trait_name.to_string()),
+            info.method_name.clone(),
+        )
+        .to_mangled_name();
+        *method_func = FunctionRef {
+            module_source: ref_module.clone(),
+            name: ref_info.to_mangled_name(),
+            monomorph_info: Some(MonomorphInfo {
+                generic_name,
+                impl_type_args: vec![inner],
+                method_type_args: vec![],
+                is_blanket: true,
+            }),
+            method_info: Some(ref_info),
+        };
+        true
+    }
+
     /// Resolve method call name substitution during monomorphization.
     ///
     /// When a generic function body contains a method call like `List<T>::len`,
     /// this resolves it to the concrete `List<i32>::len` after type substitution.
-    /// Handles three cases:
-    /// 1. Type-param receiver (e.g., `T^Ord::cmp` → `i32^Ord::cmp`)
-    /// 2. Generic struct receiver (e.g., `List<T>::len` → `List<i32>::len`)
-    /// 3. Non-generic receiver (no change needed)
+    /// Delegates by receiver kind:
+    /// 1. Reference type-param receiver → [`Self::try_ref_blanket_shortcut`]
+    /// 2. Type-param receiver (`T^Ord::cmp` → `i32^Ord::cmp`) →
+    ///    [`Self::resolve_type_param_dispatch`]
+    /// 3. Generic/concrete receiver (`List<T>::len` → `List<i32>::len`) →
+    ///    [`Self::resolve_generic_dispatch`]
     fn resolve_method_call_substitution(
         &self,
         method_func: &mut FunctionRef,
@@ -2741,65 +2834,8 @@ impl Monomorphizer {
             return;
         };
 
-        // A type-param receiver whose param resolves to a *reference*
-        // (`..F::inspect()` on a `&List<i32>` struct field) dispatches through the
-        // ref/mutref blanket (`impl<T: Inspect> Inspect for &T`), keyed by shape.
-        // The general path below peels every ref off the auto-`&self`'d receiver,
-        // which would collapse `&List<i32>^Inspect` to `List<i32>::inspect` and
-        // drop the leading `&`. Resolve the param's own value (ref intact) and, if
-        // it is a reference, route to the ref blanket in its own module.
-        if info.is_type_param_receiver
-            && let Some(self_tid) = self.receiver_substitution_tid(&info, substitution)
-        {
-            let ref_shape = match type_table.get(self_tid) {
-                ResolvedType::Ref(inner) => Some(("&", *inner)),
-                ResolvedType::MutRef(inner) => Some(("&mut", *inner)),
-                _ => None,
-            };
-            if let Some((ref_base, inner)) = ref_shape
-                && let Some(trait_name) = info
-                    .base_trait_name
-                    .as_deref()
-                    .or(info.trait_name.as_deref())
-                && self
-                    .functions
-                    .trait_env
-                    .has_universal_ref_blanket(trait_name, ref_base == "&mut")
-                && let Some(ref_module) =
-                    self.functions
-                        .trait_env
-                        .impl_module_for(ref_base, trait_name, None)
-            {
-                // Mirror the template ref arm (`method_call_info_for_type`): the
-                // call name carries the shape + inner type; `call_rewrite` resolves
-                // it to the queued `&<inner>^Trait::method` instance via the blanket
-                // `monomorph_info`.
-                let inner_name = type_table.mangle_type_name(inner);
-                let ref_info = LocalMethodName::new(
-                    ref_base.to_string(),
-                    Some(trait_name.to_string()),
-                    info.method_name.clone(),
-                )
-                .with_struct_type_args(&[inner_name]);
-                let generic_name = LocalMethodName::new(
-                    ref_base.to_string(),
-                    Some(trait_name.to_string()),
-                    info.method_name.clone(),
-                )
-                .to_mangled_name();
-                *method_func = FunctionRef {
-                    module_source: ref_module.clone(),
-                    name: ref_info.to_mangled_name(),
-                    monomorph_info: Some(MonomorphInfo {
-                        generic_name,
-                        impl_type_args: vec![inner],
-                        method_type_args: vec![],
-                        is_blanket: true,
-                    }),
-                    method_info: Some(ref_info),
-                };
-                return;
-            }
+        if self.try_ref_blanket_shortcut(method_func, &info, substitution, type_table) {
+            return;
         }
 
         // Check if the struct actually needs type arg substitution.
@@ -2904,239 +2940,288 @@ impl Monomorphizer {
             return;
         }
 
+        let call = SubstitutedCall {
+            info: new_info,
+            mangled: new_func_name,
+            original_name: old_func_name,
+            type_args,
+            module_source,
+        };
         if info.is_type_param_receiver {
-            // Type param receiver: redirect to a concrete method (e.g., T^Ord::cmp → i32^Ord::cmp)
-            let receiver_module = {
-                let inner = type_table.peel_refs(receiver_type_id);
-                module_source_for_trait_impl(type_table, inner)
-            };
-            // Per the inspect_ref_array_field.wado contract, this path must
-            // consult `concrete_impl_module_for` only — a broader
-            // `impl_module_for` fallback would route `&List<i32>^Inspect`
-            // to List's generic impl in format.wado instead of the ref
-            // blanket's, and the leading `&` would disappear at codegen.
-            //
-            // If no concrete impl exists, a generic impl on the receiver
-            // type (`impl<T> IntoIterator for List<T>`) still lives in the
-            // receiver type's own module by convention — fall through to
-            // `receiver_module` for that case (covers newtype inheritance:
-            // `FieldValue = List<u8>` reuses List's impl). Only when no
-            // per-type impl exists at all does dispatch run through a
-            // blanket impl (`impl<I: Bound> Trait for I`); the body for
-            // those lives in the blanket's module, keyed by trait name in
-            // `blanket_trait_impl_modules`.
-            let trait_name_for_blanket = new_info
-                .base_trait_name
-                .as_deref()
-                .or(new_info.trait_name.as_deref());
-            let generic_or_concrete = self
-                .functions
-                .generic_or_concrete_impl_module(&new_info, receiver_module.as_ref());
-            let blanket_module = if generic_or_concrete.is_none() {
-                trait_name_for_blanket.and_then(|tn| {
+            self.resolve_type_param_dispatch(method_func, receiver_type_id, type_table, call);
+        } else {
+            self.resolve_generic_dispatch(
+                method_func,
+                receiver_type_id,
+                substitution,
+                type_table,
+                call,
+            );
+        }
+    }
+
+    /// Route a type-param receiver (`T^Trait::method`, resolved to a concrete
+    /// type) to its impl: a concrete/generic per-type impl in the receiver's
+    /// module, or — when the type has none — a blanket impl in the blanket's
+    /// module. Only claims the blanket if the receiver satisfies its param
+    /// bound, and keys the `Reflect` struct blanket by `[T, Fields]`.
+    fn resolve_type_param_dispatch(
+        &self,
+        method_func: &mut FunctionRef,
+        receiver_type_id: TypeId,
+        type_table: &mut TypeTable,
+        call: SubstitutedCall,
+    ) {
+        let SubstitutedCall {
+            info: new_info,
+            mangled: new_func_name,
+            original_name: old_func_name,
+            type_args,
+            module_source,
+        } = call;
+        let receiver_module = {
+            let inner = type_table.peel_refs(receiver_type_id);
+            module_source_for_trait_impl(type_table, inner)
+        };
+        // Per the inspect_ref_array_field.wado contract, this path must
+        // consult `concrete_impl_module_for` only — a broader
+        // `impl_module_for` fallback would route `&List<i32>^Inspect`
+        // to List's generic impl in format.wado instead of the ref
+        // blanket's, and the leading `&` would disappear at codegen.
+        //
+        // If no concrete impl exists, a generic impl on the receiver
+        // type (`impl<T> IntoIterator for List<T>`) still lives in the
+        // receiver type's own module by convention — fall through to
+        // `receiver_module` for that case (covers newtype inheritance:
+        // `FieldValue = List<u8>` reuses List's impl). Only when no
+        // per-type impl exists at all does dispatch run through a
+        // blanket impl (`impl<I: Bound> Trait for I`); the body for
+        // those lives in the blanket's module (`blanket_impls`).
+        let trait_name_for_blanket = new_info
+            .base_trait_name
+            .as_deref()
+            .or(new_info.trait_name.as_deref());
+        let generic_or_concrete = self
+            .functions
+            .generic_or_concrete_impl_module(&new_info, receiver_module.as_ref());
+        let blanket_module = if generic_or_concrete.is_none() {
+            trait_name_for_blanket.and_then(|tn| {
+                self.functions
+                    .trait_env
+                    .blanket_impl_module_for_trait(tn, receiver_module.as_ref())
+                    .cloned()
+            })
+        } else {
+            None
+        };
+        // Only dispatch through the blanket if the receiver satisfies its
+        // param bound — a `Reflect`-bound struct derive must not swallow a
+        // type carrying its own unregistered impl (e.g. `Fn^Inspect`).
+        let blanket_module = blanket_module.filter(|bm| {
+            let recv_inner = type_table.peel_refs(receiver_type_id);
+            let bounds = trait_name_for_blanket
+                .and_then(|tn| {
                     self.functions
                         .trait_env
-                        .blanket_impl_module_for_trait(tn, receiver_module.as_ref())
-                        .cloned()
+                        .blanket_impl_bounds_for_trait(tn, Some(bm))
                 })
-            } else {
-                None
-            };
-            // Only dispatch through the blanket if the receiver satisfies its
-            // param bound — a `Reflect`-bound struct derive must not swallow a
-            // type carrying its own unregistered impl (e.g. `Fn^Inspect`).
-            let blanket_module = blanket_module.filter(|bm| {
-                let recv_inner = type_table.peel_refs(receiver_type_id);
-                let bounds = trait_name_for_blanket
-                    .and_then(|tn| {
-                        self.functions
-                            .trait_env
-                            .blanket_impl_bounds_for_trait(tn, Some(bm))
-                    })
-                    .unwrap_or_default();
-                crate::synthesis::template::receiver_satisfies_blanket_bounds(
-                    recv_inner, bounds, type_table,
-                )
-            });
-            // The blanket's receiver param name (`T` in `impl<T: Bound> Trait
-            // for T`) keys its template. The call-site type-param head of
-            // `old_func_name` only equals it for a direct `T::method` call; a
-            // call on a *different* param (a pack member `F` inside the blanket
-            // body) must still resolve to `T^Trait::method`.
-            let blanket_param = blanket_module.as_ref().and_then(|bm| {
-                trait_name_for_blanket
-                    .and_then(|tn| self.functions.trait_env.blanket_impl_param_for_trait(tn, Some(bm)))
-            });
-            let concrete_impl_module = self
-                .functions
-                .impl_module(&new_info, receiver_module.as_ref());
-            let concrete_module = concrete_impl_module
-                .or_else(|| blanket_module.clone())
-                .or(receiver_module);
+                .unwrap_or_default();
+            crate::synthesis::template::receiver_satisfies_blanket_bounds(
+                recv_inner, bounds, type_table,
+            )
+        });
+        // The blanket's receiver param name (`T` in `impl<T: Bound> Trait
+        // for T`) keys its template. The call-site type-param head of
+        // `old_func_name` only equals it for a direct `T::method` call; a
+        // call on a *different* param (a pack member `F` inside the blanket
+        // body) must still resolve to `T^Trait::method`.
+        let blanket_param = blanket_module.as_ref().and_then(|bm| {
+            trait_name_for_blanket
+                .and_then(|tn| self.functions.trait_env.blanket_impl_param_for_trait(tn, Some(bm)))
+        });
+        let concrete_impl_module = self
+            .functions
+            .impl_module(&new_info, receiver_module.as_ref());
+        let concrete_module = concrete_impl_module
+            .or_else(|| blanket_module.clone())
+            .or(receiver_module);
 
-            // Determine if this is a blanket impl method.
-            // - Direct concrete method: found in trait_method_locations → monomorph_info = None
-            // - Generic impl method: receiver has type_args (peeling newtypes) → handled by receiver scan → None
-            // - Blanket impl method: neither → is_blanket = true
-            let receiver_has_type_args = {
-                let inner = type_table.peel_refs(receiver_type_id);
-                // Peel newtypes: `type FieldValue = List<u8>` inherits
-                // List's generic-impl dispatch, so the call must not be
-                // marked blanket even though FieldValue itself has no impl.
-                let resolved = type_table.resolve_newtype_base(inner);
-                matches!(
-                    type_table.get(resolved),
-                    ResolvedType::GenericInstance {
-                        type_args: args, ..
-                    } if !args.is_empty()
-                ) || matches!(type_table.get(resolved), ResolvedType::BuiltinArray(_))
-            };
-            let monomorph_info = if self.functions.has_impl(&new_info) || receiver_has_type_args {
-                None
-            } else {
-                // Blanket impl: choose the right generic_name for lookup.
-                // For associated type projections (S::SeqSerializer^...), use new_func_name.
-                // Otherwise key by the blanket's own receiver param — the call
-                // site's param head (`old_func_name`) only matches it for a
-                // direct `T::method` call, not a call on another param. This
-                // and the receiver-derived impl args below apply only to a
-                // `Reflect`-derived blanket (identified by the receiver's
-                // `Fields` pack); every other blanket keeps its original
-                // dispatch so serde / iterator blankets are untouched.
-                let recv_inner = type_table.peel_refs(receiver_type_id);
-                // The `[T, Fields]` keying is exclusive to the `Reflect`-derived
-                // struct blanket (`impl<T: Reflect<Fields = [..F]>, ..F> Trait for
-                // T`). Every `struct` is `Reflect`, so a bare receiver-`Fields`
-                // probe would also fire for a one-arg blanket like `impl<I:
-                // Iterator> IntoIterator for I` — appending `Fields` to it mints a
-                // two-arg instance name the call site never asks for, so its
-                // `into_iter` is never materialized. Only consult `Fields` when the
-                // target blanket is genuinely the struct blanket.
-                let is_reflect_struct_blanket = match (blanket_module.as_ref(), trait_name_for_blanket)
-                {
-                    (Some(bm), Some(tn)) => {
-                        let reflect = type_table
-                            .compiler_items()
-                            .trait_name(crate::compiler_item::CompilerItem::Reflect);
-                        self.functions
-                            .trait_env
-                            .is_reflect_struct_blanket(tn, Some(bm), reflect)
-                    }
-                    _ => false,
-                };
-                let reflect_fields = is_reflect_struct_blanket
-                    .then(|| {
-                        type_table.resolve_assoc_type(
-                            recv_inner,
-                            crate::synthesis::traits::REFLECT_FIELDS_ASSOC,
-                        )
-                    })
-                    .flatten();
-                let blanket_name = if old_func_name
-                    .split('^')
-                    .next()
-                    .is_some_and(|struct_part| struct_part.contains("::"))
-                {
-                    new_func_name.clone()
-                } else if let (Some(_), Some(param)) = (reflect_fields, blanket_param) {
-                    LocalMethodName::new(
-                        param,
-                        new_info.trait_name.clone(),
-                        new_info.method_name.clone(),
-                    )
-                    .with_base_trait_module(new_info.base_trait_module.clone())
-                    .to_mangled_name()
-                } else {
-                    old_func_name
-                };
-                let blanket_impl_args = match reflect_fields {
-                    Some(fields) => vec![recv_inner, fields],
-                    None => type_args,
-                };
-                Some(MonomorphInfo {
-                    generic_name: blanket_name,
-                    impl_type_args: blanket_impl_args,
-                    method_type_args: vec![],
-                    is_blanket: true,
-                })
-            };
-            *method_func = FunctionRef {
-                module_source: concrete_module.unwrap_or_else(|| module_source.clone()),
-                name: new_func_name,
-                monomorph_info,
-                method_info: Some(new_info),
-            };
+        // Determine if this is a blanket impl method.
+        // - Direct concrete method: found in trait_method_locations → monomorph_info = None
+        // - Generic impl method: receiver has type_args (peeling newtypes) → handled by receiver scan → None
+        // - Blanket impl method: neither → is_blanket = true
+        let receiver_has_type_args = {
+            let inner = type_table.peel_refs(receiver_type_id);
+            // Peel newtypes: `type FieldValue = List<u8>` inherits
+            // List's generic-impl dispatch, so the call must not be
+            // marked blanket even though FieldValue itself has no impl.
+            let resolved = type_table.resolve_newtype_base(inner);
+            matches!(
+                type_table.get(resolved),
+                ResolvedType::GenericInstance {
+                    type_args: args, ..
+                } if !args.is_empty()
+            ) || matches!(type_table.get(resolved), ResolvedType::BuiltinArray(_))
+        };
+        let monomorph_info = if self.functions.has_impl(&new_info) || receiver_has_type_args {
+            None
         } else {
-            // Normal monomorphization (e.g., List<T>::len → List<i32>::len)
-            let (existing_generic_name, existing_impl_ta, existing_method_ta, existing_is_blanket) =
-                match method_func {
-                    FunctionRef {
-                        monomorph_info: Some(mi),
-                        ..
-                    } => (
-                        Some(mi.generic_name.clone()),
-                        Some(mi.impl_type_args.clone()),
-                        Some(mi.method_type_args.clone()),
-                        mi.is_blanket,
-                    ),
-                    _ => (None, None, None, false),
-                };
-            // For blanket impl calls, substitute the existing type_args rather than
-            // building from the enclosing substitution map.
-            let final_impl_ta = if existing_is_blanket {
-                if let Some(args) = existing_impl_ta {
-                    args.iter()
-                        .map(|&tid| self.substitute_type(tid, substitution, type_table))
-                        .collect()
-                } else {
-                    type_args
+            // Blanket impl: choose the right generic_name for lookup.
+            // For associated type projections (S::SeqSerializer^...), use new_func_name.
+            // Otherwise key by the blanket's own receiver param — the call
+            // site's param head (`old_func_name`) only matches it for a
+            // direct `T::method` call, not a call on another param. This
+            // and the receiver-derived impl args below apply only to a
+            // `Reflect`-derived blanket (identified by the receiver's
+            // `Fields` pack); every other blanket keeps its original
+            // dispatch so serde / iterator blankets are untouched.
+            let recv_inner = type_table.peel_refs(receiver_type_id);
+            // The `[T, Fields]` keying is exclusive to the `Reflect`-derived
+            // struct blanket (`impl<T: Reflect<Fields = [..F]>, ..F> Trait for
+            // T`). Every `struct` is `Reflect`, so a bare receiver-`Fields`
+            // probe would also fire for a one-arg blanket like `impl<I:
+            // Iterator> IntoIterator for I` — appending `Fields` to it mints a
+            // two-arg instance name the call site never asks for, so its
+            // `into_iter` is never materialized. Only consult `Fields` when the
+            // target blanket is genuinely the struct blanket.
+            let is_reflect_struct_blanket = match (blanket_module.as_ref(), trait_name_for_blanket) {
+                (Some(bm), Some(tn)) => {
+                    let reflect = type_table
+                        .compiler_items()
+                        .trait_name(crate::compiler_item::CompilerItem::Reflect);
+                    self.functions
+                        .trait_env
+                        .is_reflect_struct_blanket(tn, Some(bm), reflect)
                 }
+                _ => false,
+            };
+            let reflect_fields = is_reflect_struct_blanket
+                .then(|| {
+                    type_table.resolve_assoc_type(
+                        recv_inner,
+                        crate::synthesis::traits::REFLECT_FIELDS_ASSOC,
+                    )
+                })
+                .flatten();
+            let blanket_name = if crate::name::receiver_is_assoc_projection(&old_func_name) {
+                new_func_name.clone()
+            } else if let (Some(_), Some(param)) = (reflect_fields, blanket_param) {
+                LocalMethodName::new(
+                    param,
+                    new_info.trait_name.clone(),
+                    new_info.method_name.clone(),
+                )
+                .with_base_trait_module(new_info.base_trait_module.clone())
+                .to_mangled_name()
+            } else {
+                old_func_name
+            };
+            let blanket_impl_args = match reflect_fields {
+                Some(fields) => vec![recv_inner, fields],
+                None => type_args,
+            };
+            Some(MonomorphInfo {
+                generic_name: blanket_name,
+                impl_type_args: blanket_impl_args,
+                method_type_args: vec![],
+                is_blanket: true,
+            })
+        };
+        *method_func = FunctionRef {
+            module_source: concrete_module.unwrap_or_else(|| module_source.clone()),
+            name: new_func_name,
+            monomorph_info,
+            method_info: Some(new_info),
+        };
+    }
+
+    /// Normal monomorphization for a concrete/generic receiver (`List<T>::len` →
+    /// `List<i32>::len`): keep any existing blanket `monomorph_info` (substituting
+    /// its impl args), and re-resolve the body's home module through `TraitEnv`
+    /// for the post-substitution name.
+    fn resolve_generic_dispatch(
+        &self,
+        method_func: &mut FunctionRef,
+        receiver_type_id: TypeId,
+        substitution: &IndexMap<u32, TypeId>,
+        type_table: &mut TypeTable,
+        call: SubstitutedCall,
+    ) {
+        let SubstitutedCall {
+            info: new_info,
+            mangled: new_func_name,
+            original_name: old_func_name,
+            type_args,
+            module_source,
+        } = call;
+        let (existing_generic_name, existing_impl_ta, existing_method_ta, existing_is_blanket) =
+            match method_func {
+                FunctionRef {
+                    monomorph_info: Some(mi),
+                    ..
+                } => (
+                    Some(mi.generic_name.clone()),
+                    Some(mi.impl_type_args.clone()),
+                    Some(mi.method_type_args.clone()),
+                    mi.is_blanket,
+                ),
+                _ => (None, None, None, false),
+            };
+        // For blanket impl calls, substitute the existing type_args rather than
+        // building from the enclosing substitution map.
+        let final_impl_ta = if existing_is_blanket {
+            if let Some(args) = existing_impl_ta {
+                args.iter()
+                    .map(|&tid| self.substitute_type(tid, substitution, type_table))
+                    .collect()
             } else {
                 type_args
-            };
-            let final_method_ta = existing_method_ta.unwrap_or_default();
-            let monomorph_info = Some(MonomorphInfo {
-                generic_name: existing_generic_name.unwrap_or(old_func_name),
-                impl_type_args: final_impl_ta,
-                method_type_args: final_method_ta,
-                is_blanket: existing_is_blanket,
-            });
-            // When substitution peels a newtype on the receiver
-            // (`MyBytes^InspectAlt::inspect_alt` → `List<u8>^InspectAlt::inspect_alt`),
-            // the original `module_source` (the newtype's module) no longer
-            // points at the body's home. Re-resolve through `TraitEnv` for
-            // the post-substitution struct name so the queue's lookup key
-            // matches where the template actually lives. Issue #1110 (1).
-            //
-            // `generic_or_concrete_impl_module` covers both `impl<T: Foo> Bar for List<T>`
-            // (registered under bare "List") and fully concrete impls;
-            // the producer in `synthesis::traits::resolve_impl_module_via_env`
-            // uses the same query, so the post-substitution `module_source`
-            // matches what a freshly-produced FunctionRef would have.
-            // Hint the impl-module query with the receiver's own inner-type
-            // module. Without a hint, a post-substitution struct name that
-            // falls back to a shared key — notably ref impls, which all key
-            // under "&" / "&mut" — would resolve to the *first* registered
-            // module. That picks the wrong container when several types share
-            // the key (`impl IntoIterator for &List<T>` in list.wado and
-            // `impl IntoIterator for &Array<T>` in array.wado both register
-            // under "&"), routing a `&List<i32>` call to `&Array`'s template.
-            // The receiver's module disambiguates them.
-            let receiver_hint = {
-                let inner = type_table.peel_refs(receiver_type_id);
-                super::module_source_for_trait_impl(type_table, inner)
-            };
-            let resolved_module = self
-                .functions
-                .generic_or_concrete_impl_module(&new_info, receiver_hint.as_ref())
-                .unwrap_or(module_source);
-            *method_func = FunctionRef {
-                module_source: resolved_module,
-                name: new_func_name,
-                monomorph_info,
-                method_info: Some(new_info),
-            };
-        }
+            }
+        } else {
+            type_args
+        };
+        let final_method_ta = existing_method_ta.unwrap_or_default();
+        let monomorph_info = Some(MonomorphInfo {
+            generic_name: existing_generic_name.unwrap_or(old_func_name),
+            impl_type_args: final_impl_ta,
+            method_type_args: final_method_ta,
+            is_blanket: existing_is_blanket,
+        });
+        // When substitution peels a newtype on the receiver
+        // (`MyBytes^InspectAlt::inspect_alt` → `List<u8>^InspectAlt::inspect_alt`),
+        // the original `module_source` (the newtype's module) no longer
+        // points at the body's home. Re-resolve through `TraitEnv` for
+        // the post-substitution struct name so the queue's lookup key
+        // matches where the template actually lives. Issue #1110 (1).
+        //
+        // `generic_or_concrete_impl_module` covers both `impl<T: Foo> Bar for List<T>`
+        // (registered under bare "List") and fully concrete impls;
+        // the producer in `synthesis::traits::resolve_impl_module_via_env`
+        // uses the same query, so the post-substitution `module_source`
+        // matches what a freshly-produced FunctionRef would have.
+        // Hint the impl-module query with the receiver's own inner-type
+        // module. Without a hint, a post-substitution struct name that
+        // falls back to a shared key — notably ref impls, which all key
+        // under "&" / "&mut" — would resolve to the *first* registered
+        // module. That picks the wrong container when several types share
+        // the key (`impl IntoIterator for &List<T>` in list.wado and
+        // `impl IntoIterator for &Array<T>` in array.wado both register
+        // under "&"), routing a `&List<i32>` call to `&Array`'s template.
+        // The receiver's module disambiguates them.
+        let receiver_hint = {
+            let inner = type_table.peel_refs(receiver_type_id);
+            super::module_source_for_trait_impl(type_table, inner)
+        };
+        let resolved_module = self
+            .functions
+            .generic_or_concrete_impl_module(&new_info, receiver_hint.as_ref())
+            .unwrap_or(module_source);
+        *method_func = FunctionRef {
+            module_source: resolved_module,
+            name: new_func_name,
+            monomorph_info,
+            method_info: Some(new_info),
+        };
     }
 
     /// Expand a `VariadicForOf` TIR node into concrete unrolled blocks.

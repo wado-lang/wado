@@ -281,6 +281,9 @@ pub(crate) enum BlanketReceiver {
 #[derive(Clone, Debug)]
 pub(crate) struct BlanketImpl {
     pub(crate) module: ModuleSource,
+    /// The impl block's AST id; with `module`, the key into `impl_headers` for
+    /// consumers needing the full header (associated types, bound constraints).
+    pub(crate) ast_id: AstId,
     pub(crate) receiver: BlanketReceiver,
     /// Receiver param name (`T` in `impl<T: Bound> Trait for T`).
     pub(crate) param: String,
@@ -367,11 +370,6 @@ pub(super) type EffectDeclIndex = IndexMap<DeclKey, (ModuleSource, AstId)>;
 /// resource on its wrapper's `effects` list (resources are not effects).
 pub(super) type ResourceDeclIndex = IndexMap<DeclKey, (ModuleSource, AstId)>;
 
-/// Pre-built list of blanket trait impls: `impl<T: Trait> OtherTrait for T`.
-/// These are impl blocks where the impl type is a free type parameter with trait bounds.
-/// Stored separately because they can't be indexed by concrete type name.
-pub(super) type BlanketTraitImplIndex = Vec<(ModuleSource, AstId)>;
-
 /// Pre-built index of static methods (no `self` parameter) from impl blocks.
 /// Key: canonical receiver [`DeclKey`] → list of
 /// `(method_name, impl_module_source, item_ast_id, method_index)`.
@@ -405,9 +403,9 @@ pub(super) type ResourceStaticMethodIndex =
 /// through; a follow-up could re-key by canonical pair when the
 /// inhabited-by-multiple-declarations case becomes user-visible.
 ///
-/// Blanket impls (`impl<T: Trait> Trait for T`) are still represented by
-/// [`BlanketTraitImplIndex`]; they are excluded from this map because they
-/// apply structurally and don't have a concrete receiver type name.
+/// Value blanket impls (`impl<T: Trait> Trait for T`) are represented by
+/// [`BlanketImpl`] (in `blanket_impls`); they are excluded from this map because
+/// they apply structurally and don't have a concrete receiver type name.
 pub(crate) type TraitImplModuleIndex = IndexMap<(String, String), Vec<ModuleSource>>;
 
 /// Immutable global knowledge base for trait resolution.
@@ -440,8 +438,6 @@ pub struct TraitEnv {
     /// `effect_decl_index` to recognise handler-installable kinds in `with`
     /// clauses and `impl R for T` blocks.
     pub(super) resource_decl_index: ResourceDeclIndex,
-    /// Blanket impls (`impl<T: Bound> Trait for T`), checked as fallback.
-    pub(super) blanket_impl_index: BlanketTraitImplIndex,
     /// Digested headers for every indexed impl block, keyed by
     /// `(ModuleSource, AstId)`. Trait/method queries read this instead of
     /// re-fetching the impl block AST from `loaded_modules`. See [`ImplHeader`].
@@ -620,7 +616,6 @@ impl TraitEnv {
         let mut assoc_type_bound_index: IndexMap<String, Vec<ast::TraitBound>> =
             IndexMap::default();
         let mut resource_decl_index: ResourceDeclIndex = IndexMap::default();
-        let mut blanket_impl_index: BlanketTraitImplIndex = Vec::new();
         let mut blanket_impls: IndexMap<String, Vec<BlanketImpl>> = IndexMap::default();
         let mut impl_headers: IndexMap<(ModuleSource, AstId), ImplHeader> = IndexMap::default();
         let mut trait_decl_headers: IndexMap<(ModuleSource, AstId), TraitDeclHeader> =
@@ -882,6 +877,7 @@ impl TraitEnv {
                         blanket_impls.entry(trait_name.clone()).or_default().push(
                             BlanketImpl {
                                 module: module_source.clone(),
+                                ast_id: impl_block.id,
                                 receiver,
                                 param,
                                 bounds,
@@ -889,13 +885,14 @@ impl TraitEnv {
                             },
                         );
                     }
-                    let is_blanket = impl_block
-                        .type_params
-                        .iter()
-                        .any(|tp| tp.name == type_name && !tp.bounds.is_empty());
-                    if is_blanket {
-                        blanket_impl_index.push((module_source.clone(), impl_block.id));
-                    } else {
+                    // A value blanket (`impl<T: Bound> Trait for T`) has no
+                    // per-type home to index; every other impl (concrete, shape
+                    // generic, or ref blanket) registers its module below.
+                    let is_value_blanket = matches!(
+                        classify_blanket_receiver(&impl_block.ty, &impl_block.type_params),
+                        Some((BlanketReceiver::Value, _))
+                    );
+                    if !is_value_blanket {
                         let key = (type_name.clone(), trait_name.clone());
                         let modules = trait_impl_modules.entry(key.clone()).or_default();
                         if !modules.contains(module_source) {
@@ -976,7 +973,6 @@ impl TraitEnv {
                 decl_index,
                 effect_decl_index,
                 resource_decl_index,
-                blanket_impl_index,
                 impl_headers,
                 trait_decl_headers,
                 function_type_params,

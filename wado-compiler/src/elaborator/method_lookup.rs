@@ -1937,52 +1937,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Blanket impl fallback: check `impl<T: Bound> Trait for T` where the receiver
         // type satisfies the bound.  e.g., `impl<I: Iterator> IntoIterator for I` matches
-        // any concrete type that implements Iterator.
-        let blanket_entries = self.tysys.trait_env.blanket_impl_index.clone();
+        // any concrete type that implements Iterator. Snapshot the value blankets
+        // (module, ast id, bound names) so the per-bound checks below borrow `self`
+        // without holding a `trait_env` borrow.
+        let value_blankets: Vec<(ModuleSource, AstId, Vec<String>)> = self
+            .tysys
+            .trait_env
+            .blanket_impls
+            .values()
+            .flatten()
+            .filter(|b| b.receiver == super::trait_env::BlanketReceiver::Value)
+            .map(|b| (b.module.clone(), b.ast_id, b.bounds.clone()))
+            .collect();
         let type_lookup = self.type_lookup();
-        for entry in &blanket_entries {
-            let Some(header) = self.tysys.trait_env.impl_headers.get(entry) else {
-                continue;
-            };
-            if header.trait_name.is_none() {
-                continue;
-            }
-            // Find the type param that is the impl target
-            let impl_type_name = Self::get_type_name_static(&header.ty);
-            let matching_param = header
-                .type_params
-                .iter()
-                .find(|tp| tp.name == impl_type_name)
-                .cloned();
-            if let Some(param) = matching_param {
-                // Gate on all bounds. The receiver-`TypeId` check is preferred:
-                // it recognises synthesized bounds (`Reflect`, `Default`) with no
-                // explicit `impl`, which the name-based lookup misses. A viable
-                // blanket must survive to the authoritative `candidate_matches_receiver`.
-                let bounds_satisfied = param.bounds.iter().all(|bound| {
-                    let bound_trait_name = &bound.name;
-                    if let Some(rt) = receiver_type_id
-                        && self.tysys.type_implements_trait(
-                            &self.annotate_ctx,
-                            &type_lookup,
-                            rt,
-                            bound_trait_name,
-                        )
-                    {
-                        return true;
-                    }
-                    names_to_check.iter().any(|name| {
-                        self.tysys.find_trait_impl_for_type(
-                            &self.annotate_ctx,
-                            &type_lookup,
-                            name,
-                            bound_trait_name,
-                        )
-                    })
-                });
-                if bounds_satisfied {
-                    impl_refs.push(ImplBlockRef(entry.0.clone(), entry.1));
+        for (module, ast_id, bounds) in &value_blankets {
+            // Gate on all bounds. The receiver-`TypeId` check is preferred:
+            // it recognises synthesized bounds (`Reflect`, `Default`) with no
+            // explicit `impl`, which the name-based lookup misses. A viable
+            // blanket must survive to the authoritative `candidate_matches_receiver`.
+            let bounds_satisfied = bounds.iter().all(|bound_trait_name| {
+                if let Some(rt) = receiver_type_id
+                    && self.tysys.type_implements_trait(
+                        &self.annotate_ctx,
+                        &type_lookup,
+                        rt,
+                        bound_trait_name,
+                    )
+                {
+                    return true;
                 }
+                names_to_check.iter().any(|name| {
+                    self.tysys.find_trait_impl_for_type(
+                        &self.annotate_ctx,
+                        &type_lookup,
+                        name,
+                        bound_trait_name,
+                    )
+                })
+            });
+            if bounds_satisfied {
+                impl_refs.push(ImplBlockRef(module.clone(), *ast_id));
             }
         }
         impl_refs

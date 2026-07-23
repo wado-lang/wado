@@ -263,7 +263,7 @@ fn register_entry_functions(ctx: &mut WirContext<'_>) {
         }
 
         // Skip methods (handled in register_methods)
-        if tir_func.name.contains("::") {
+        if crate::name::is_method_name(&tir_func.name) {
             continue;
         }
 
@@ -303,7 +303,10 @@ fn register_loaded_functions(ctx: &mut WirContext<'_>) {
             continue;
         }
 
-        if tir_func.name == "run" || tir_func.body.is_none() || tir_func.name.contains("::") {
+        if tir_func.name == "run"
+            || tir_func.body.is_none()
+            || crate::name::is_method_name(&tir_func.name)
+        {
             continue;
         }
 
