@@ -33,6 +33,8 @@ pub(super) struct ScalarReflectSpec {
     meta_method_item: CompilerItem,
     value_method_item: CompilerItem,
     from_method_item: CompilerItem,
+    tokens_method_item: CompilerItem,
+    token_struct_item: CompilerItem,
     /// The scalar bridge type: `i32` (discriminant) or `u64` (bits).
     value_type: TypeId,
 }
@@ -47,6 +49,8 @@ impl ScalarReflectSpec {
         meta_method_item: CompilerItem::ReflectEnumCaseMeta,
         value_method_item: CompilerItem::ReflectEnumDiscriminant,
         from_method_item: CompilerItem::ReflectEnumFromDiscriminant,
+        tokens_method_item: CompilerItem::ReflectEnumCaseTokens,
+        token_struct_item: CompilerItem::ReflectEnumCase,
         value_type: TypeTable::I32,
     };
     pub(super) const FLAGS: Self = Self {
@@ -58,6 +62,8 @@ impl ScalarReflectSpec {
         meta_method_item: CompilerItem::ReflectFlagsBitMeta,
         value_method_item: CompilerItem::ReflectFlagsBits,
         from_method_item: CompilerItem::ReflectFlagsFromBits,
+        tokens_method_item: CompilerItem::ReflectFlagsBitTokens,
+        token_struct_item: CompilerItem::ReflectFlagBit,
         value_type: TypeTable::U64,
     };
 
@@ -808,6 +814,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             spec.meta_method_item,
             spec.value_method_item,
             spec.from_method_item,
+            spec.tokens_method_item,
         ]
         .into_iter()
         .any(|item| method == items.method_name(item))
@@ -961,7 +968,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
-        let (type_name_method, meta_method, value_method, from_method) = {
+        let (type_name_method, meta_method, value_method, from_method, tokens_method) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
@@ -969,6 +976,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 items.method_name(spec.meta_method_item).to_string(),
                 items.method_name(spec.value_method_item).to_string(),
                 items.method_name(spec.from_method_item).to_string(),
+                items.method_name(spec.tokens_method_item).to_string(),
             )
         };
 
@@ -986,6 +994,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let mut tt = self.tysys.type_table.borrow_mut();
                     let meta_type = tt.make_compiler_struct(spec.meta_item);
                     tt.make_list(meta_type)
+                })
+        } else if *method == tokens_method {
+            self.reject_reflect_metadata_args(static_call, ctx)
+                .then(|| {
+                    let mut tt = self.tysys.type_table.borrow_mut();
+                    let (token_module, token_name) = {
+                        let items = tt.compiler_items();
+                        let (m, n) = items.require_struct(spec.token_struct_item);
+                        (m.clone(), n.to_string())
+                    };
+                    let token_type =
+                        tt.make_generic_instance(token_name, token_module, vec![self_ty]);
+                    tt.make_list(token_type)
                 })
         } else if *method == value_method {
             self.check_reflect_fields_receiver(self_ty, self_name, static_call, ctx)
@@ -1018,7 +1039,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Some(self.tysys.type_table.borrow_mut().make_option(self_ty))
         } else {
-            unreachable!("is_reflect_scalar_trait_call admits only the four trait methods")
+            unreachable!("is_reflect_scalar_trait_call admits only the five trait methods")
         }
     }
 
