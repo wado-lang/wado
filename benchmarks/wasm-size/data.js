@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784759844873,
+  "lastUpdate": 1784798756893,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -43221,6 +43221,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f0cafa1d0e63e4b19c6e1a621d27e637be9dc478"
         },
         "date": 1784759844386,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1970,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8164,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16487,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 271579,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "35d46797d486afa9a395851b7844a7986ed04918",
+          "message": "Merge pull request #1667 from wado-lang/claude/wado-gale-highlight-g3i0s8\n\nfeat(compiler): extensible libraries across the Component Model boundary",
+          "timestamp": "2026-07-23T18:15:47+09:00",
+          "tree_id": "82ca71972c14ce220dce7911041e859549963c91",
+          "url": "https://github.com/wado-lang/wado/commit/35d46797d486afa9a395851b7844a7986ed04918"
+        },
+        "date": 1784798756122,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
