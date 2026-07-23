@@ -1013,6 +1013,12 @@ impl TraitEnv {
     /// implement the same trait, the first registered module is returned,
     /// with `type_module` preferred when present (used as a stable
     /// tie-breaker).
+    ///
+    /// Only *bare-param* blankets register here: `blanket_trait_impl_modules`
+    /// keys on a receiver whose type name equals a bounded type param, and
+    /// `get_type_name_static` maps a `&T`/`&mut T` receiver to `"&"`/`"&mut"`,
+    /// never a param name. So a ref blanket (`impl<T: Inspect> Inspect for &T`)
+    /// is absent here and cannot be returned for a value receiver.
     pub(crate) fn blanket_impl_module_for_trait(
         &self,
         trait_name: &str,

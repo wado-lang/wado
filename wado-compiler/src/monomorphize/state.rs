@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use crate::elaborator::trait_env::TraitEnv;
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
 use crate::tir::{InstantiationKey, ResolvedType, TypeId, TypeTable};
@@ -29,6 +29,10 @@ pub(super) struct FuncInstState {
     /// before insert/lookup so that pre-/post-substitution `TypeId`
     /// variants of the same logical type collapse onto a single entry.
     pub instantiated: IndexMap<InstantiationKey, String>,
+    /// The mangled names present in [`Self::instantiated`], for O(1)
+    /// name-membership during blanket dedup (`instantiated` is grow-only, so
+    /// this stays a faithful mirror of its value set).
+    pub instantiated_names: IndexSet<String>,
     /// Work queue of pending function instantiations. Holds canonicalised
     /// keys.
     pub pending: Vec<InstantiationKey>,
@@ -175,6 +179,7 @@ impl Monomorphizer {
             },
             functions: FuncInstState {
                 instantiated: IndexMap::default(),
+                instantiated_names: IndexSet::default(),
                 pending: Vec::new(),
                 trait_env,
             },
@@ -248,15 +253,19 @@ impl Monomorphizer {
                     })
             });
         let is_blanket_key = key.impl_type_args.len() == 2 || is_ref_universal_blanket;
-        if is_blanket_key
-            && self
-                .functions
-                .instantiated
-                .values()
-                .any(|v| v == &mangled_name)
-        {
+        // A deduped blanket key is intentionally dropped without an
+        // `instantiated` entry: a call site that re-derives it misses the
+        // literal lookup and resolves through
+        // `lookup_instantiation_with_trait_fallback`'s blanket-module fallback,
+        // which finds the single queued instance under the blanket's home
+        // module. `instantiated_names` gives this membership test O(1) instead
+        // of scanning every queued name.
+        if is_blanket_key && self.functions.instantiated_names.contains(&mangled_name) {
             return false;
         }
+        self.functions
+            .instantiated_names
+            .insert(mangled_name.clone());
         self.functions
             .instantiated
             .insert(key.clone(), mangled_name);

@@ -469,7 +469,7 @@ fn generate_struct_reflect_impls(
         return;
     }
 
-    let targets = collect_reflect_targets(module, ctx, reflect_trait_name);
+    let targets = collect_reflect_targets(module);
     if targets.is_empty() {
         return;
     }
@@ -509,13 +509,9 @@ struct ReflectFieldInfo {
 type ReflectTarget = (String, Vec<ReflectFieldInfo>, Option<String>, Span);
 
 /// Select the structs in `module` that need a synthesized `Reflect` impl:
-/// non-generic, non-monomorphized, and actually requested by a bound.
-fn collect_reflect_targets(
-    module: &TirModule,
-    _ctx: &SynthesisCtx<'_, '_, '_>,
-    reflect_trait_name: &str,
-) -> Vec<ReflectTarget> {
-    let _ = reflect_trait_name;
+/// every non-generic, non-monomorphized struct (all are unconditionally
+/// `Reflect`-derived).
+fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
     module
         .structs
         .iter()

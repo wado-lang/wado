@@ -3056,8 +3056,7 @@ impl Monomorphizer {
                     .is_some_and(|struct_part| struct_part.contains("::"))
                 {
                     new_func_name.clone()
-                } else if let (Some(fields), Some(param)) = (reflect_fields, blanket_param) {
-                    let _ = fields;
+                } else if let (Some(_), Some(param)) = (reflect_fields, blanket_param) {
                     LocalMethodName::new(
                         param,
                         new_info.trait_name.clone(),
