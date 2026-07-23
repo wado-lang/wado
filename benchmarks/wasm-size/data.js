@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784802633616,
+  "lastUpdate": 1784814367902,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -43353,6 +43353,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ac4b8094ad3871f4f1ac5f7ec050d783dc30cc96"
         },
         "date": 1784802633005,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1970,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8212,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16169,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 272252,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d6858c650332a3acbf71126c6a77ab0809bc0d8f",
+          "message": "Merge pull request #1669 from wado-lang/claude/wado-gale-highlight-g3i0s8\n\nfeat(marl): customizable code-block highlighting via a Highlight effect",
+          "timestamp": "2026-07-23T22:35:36+09:00",
+          "tree_id": "c65c5387d831e15bee1f2c473c0da032f43a81dd",
+          "url": "https://github.com/wado-lang/wado/commit/d6858c650332a3acbf71126c6a77ab0809bc0d8f"
+        },
+        "date": 1784814367112,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
