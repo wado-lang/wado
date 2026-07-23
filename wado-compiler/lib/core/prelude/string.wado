@@ -636,7 +636,7 @@ impl String {
     pub fn push(&mut self, c: char) {
         let code = c as u32;
         if code < 0x80 {
-            self.push_ascii(code as u8);
+            self.push_ascii_unchecked(code as u8);
             return;
         }
         if self.used + 4 > self.repr.len() {
@@ -646,14 +646,15 @@ impl String {
         self.used += encode_char(&mut self.repr as &mut Array<u8>, self.used, code);
     }
 
-    /// Appends a single ASCII byte (a one-byte UTF-8 sequence).
+    /// Appends a single byte, assumed to be a complete one-byte UTF-8 sequence
+    /// (`byte < 0x80`). A larger byte breaks the String's UTF-8 invariant — the
+    /// `_unchecked` contract.
     ///
     /// `push` routes its ASCII fast path here, and the optimizer's
     /// `nir/const_ascii_push` rewrite retargets `push(<const char < 0x80>)`
-    /// here directly, skipping `encode_char`'s width dispatch. The caller must
-    /// pass `byte < 0x80`.
+    /// here directly, skipping `encode_char`'s width dispatch.
     #[compiler_item("string_push_ascii")]
-    pub fn push_ascii(&mut self, byte: u8) {
+    pub fn push_ascii_unchecked(&mut self, byte: u8) {
         let start = self.internal_reserve_uninit(1);
         self.set_byte_unchecked(start, byte);
     }

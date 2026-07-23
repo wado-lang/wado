@@ -92,7 +92,7 @@ type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelud
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(37)
 
-type "functype//core:prelude/string.wado/String::push_ascii" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(38)
+type "functype//core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(38)
 
 type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(39)
 
@@ -142,7 +142,7 @@ fn "generic_trait_static_on_generic_instance.wado/run"() with Stdout {
     __cond_7 = 1;
     if @unlikely(__cond_7 == 0) {
         cold_path;
-        "core:rt/panic"(__local_15 = "core:prelude/string.wado/String::with_capacity"(104); "core:prelude/string.wado/String::push_str"(__local_15, global:generic_trait_static_on_generic_instance.wado::__const_obj_2); "core:prelude/string.wado/String::push_ascii"(__local_15, 114); "core:prelude/string.wado/String::push_ascii"(__local_15, 117); "core:prelude/string.wado/String::push_ascii"(__local_15, 110); "core:prelude/string.wado/String::push_ascii"(__local_15, 32); "core:prelude/string.wado/String::push_ascii"(__local_15, 97); "core:prelude/string.wado/String::push_ascii"(__local_15, 116); "core:prelude/string.wado/String::push_ascii"(__local_15, 32); "core:prelude/string.wado/String::push_str"(__local_15, global:generic_trait_static_on_generic_instance.wado::__const_obj_1); "core:prelude/string.wado/String::push_ascii"(__local_15, 58); __local_16 = "core:prelude/format.wado/Formatter::new"(__local_15); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 19 }, __local_16); "core:prelude/string.wado/String::push_str"(__local_15, global:generic_trait_static_on_generic_instance.wado::__const_obj_0); __local_15);
+        "core:rt/panic"(__local_15 = "core:prelude/string.wado/String::with_capacity"(104); "core:prelude/string.wado/String::push_str"(__local_15, global:generic_trait_static_on_generic_instance.wado::__const_obj_2); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_15, 114); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_15, 117); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_15, 110); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_15, 32); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_15, 97); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_15, 116); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_15, 32); "core:prelude/string.wado/String::push_str"(__local_15, global:generic_trait_static_on_generic_instance.wado::__const_obj_1); "core:prelude/string.wado/String::push_ascii_unchecked"(__local_15, 58); __local_16 = "core:prelude/format.wado/Formatter::new"(__local_15); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 19 }, __local_16); "core:prelude/string.wado/String::push_str"(__local_15, global:generic_trait_static_on_generic_instance.wado::__const_obj_0); __local_15);
         unreachable;
     }
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
@@ -453,7 +453,7 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     self.used = self.used + "core:prelude/string.wado/encode_char"(self.repr, self.used, c);
 }
 
-fn "core:prelude/string.wado/String::push_ascii"(self, byte) {
+fn "core:prelude/string.wado/String::push_ascii_unchecked"(self, byte) {
     let start: i32;
     start = "core:prelude/string.wado/String::internal_reserve_uninit"(self, 1);
     builtin::array_set_u8(self.repr, start, byte);

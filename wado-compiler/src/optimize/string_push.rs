@@ -6,7 +6,7 @@
 //!   lowering.
 //! * [`ConstAsciiPushRule`] then retargets each `buf.push(<const char < 0x80>)`
 //!   — the ones above, plus any direct constant-ASCII `push` — to
-//!   `buf.push_ascii(<byte>)`, skipping `encode_char`'s UTF-8 width dispatch.
+//!   `buf.push_ascii_unchecked(<byte>)`, skipping `encode_char`'s UTF-8 width dispatch.
 //!
 //! Must run *before* `inline`: once the inliner expands `push_str`'s body
 //! the `MethodCall` node is replaced by a labeled block, after which the
@@ -15,7 +15,7 @@
 //! Identifies the methods via their [`crate::compiler_item::CompilerItem`]
 //! markers (`StringPushStr` / `StringPushChar` / `StringPushAscii`) so the pass
 //! does not depend on the canonical paths of `String::push_str` /
-//! `String::push` / `String::push_ascii`.
+//! `String::push` / `String::push_ascii_unchecked`.
 //!
 //! The receiver is duplicated once per output `push` call. We only rewrite
 //! when the receiver is one of the syntactically pure forms accepted by
@@ -65,8 +65,10 @@ pub(super) struct Ctx {
     /// `FuncId` of `push_char`, captured at resolution so the synthesized
     /// per-byte `push(ch)` calls are born resolved.
     push_char_id: crate::nir::FuncId,
-    /// `FuncId` of `push_ascii`, the retarget for a constant-ASCII `push`.
-    push_ascii_id: crate::nir::FuncId,
+    /// `FuncId` of `push_ascii_unchecked`, the retarget for a constant-ASCII
+    /// `push`. Independent of the two above: absent (`None`) it only disables
+    /// [`ConstAsciiPushRule`], leaving [`ShortPushStrRule`] intact.
+    push_ascii_id: Option<crate::nir::FuncId>,
 }
 
 impl Ctx {
@@ -92,7 +94,7 @@ impl Ctx {
         Some(Self {
             push_str_id: push_str_id?,
             push_char_id: push_char_id?,
-            push_ascii_id: push_ascii_id?,
+            push_ascii_id,
         })
     }
 }
@@ -127,11 +129,12 @@ impl Rule for ShortPushStrRule {
     }
 }
 
-/// Retarget `buf.push(<const char < 0x80>)` to `buf.push_ascii(<byte>)`,
-/// skipping `encode_char`'s UTF-8 width dispatch: a constant ASCII scalar is
-/// always a one-byte sequence. Composes with [`ShortPushStrRule`] — the
-/// per-byte `push(ch)` calls it emits for a short constant `push_str` are all
-/// ASCII, so they flow straight into this rule on the shared worklist.
+/// Retarget `buf.push(<const char < 0x80>)` to
+/// `buf.push_ascii_unchecked(<byte>)`, skipping `encode_char`'s UTF-8 width
+/// dispatch: a constant ASCII scalar is always a one-byte sequence. Composes
+/// with [`ShortPushStrRule`] — the per-byte `push(ch)` calls it emits for a
+/// short constant `push_str` are all ASCII, so they flow straight into this
+/// rule on the shared worklist.
 ///
 /// `push` is `&mut self`-returning-unit, so its call is always a statement
 /// expression; the rewrite is an in-place `MethodCall` edit (swap the callee
@@ -142,11 +145,13 @@ pub(super) struct ConstAsciiPushRule {
 }
 
 impl ConstAsciiPushRule {
-    pub(super) fn new(ctx: &Ctx) -> Self {
-        Self {
+    /// `None` when the `push_ascii_unchecked` marker is absent — the rule has no
+    /// retarget to point at, so it is simply not built.
+    pub(super) fn new(ctx: &Ctx) -> Option<Self> {
+        Some(Self {
             push_char_id: ctx.push_char_id,
-            push_ascii_id: ctx.push_ascii_id,
-        }
+            push_ascii_id: ctx.push_ascii_id?,
+        })
     }
 }
 

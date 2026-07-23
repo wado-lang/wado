@@ -77,7 +77,7 @@ pub(super) fn run_peephole(
     let array_new_ids = resolve_array_new_ids(project);
     let array_rule = Collapser::new(&push_ids, &array_new_ids);
     let push_ctx = resolve_ctx(project);
-    let const_ascii_push_rule = push_ctx.as_ref().map(ConstAsciiPushRule::new);
+    let const_ascii_push_rule = push_ctx.as_ref().and_then(ConstAsciiPushRule::new);
     let push_rule = push_ctx.map(ShortPushStrRule::new);
     // Environment-free constant folding shares the session. It needs the
     // program-wide CTFE callee map and the type table; the per-function `env`

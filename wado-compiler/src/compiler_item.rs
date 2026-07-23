@@ -351,7 +351,7 @@ pub enum CompilerItem {
     /// `String::push_char` — recognised by the WIR optimiser for
     /// string-building inlining.
     StringPushChar,
-    /// `String::push_ascii` — the single-byte append the NIR
+    /// `String::push_ascii_unchecked` — the single-byte append the NIR
     /// `const_ascii_push` rewrite retargets constant-ASCII `push` calls to,
     /// skipping `encode_char`'s width dispatch.
     StringPushAscii,

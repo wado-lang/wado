@@ -9,7 +9,7 @@
 //! 2.  `peephole` (pre-inline) — unified engine session: `MatchToSwitchRule`
 //!     (dense `Match` → `Switch`), `string_push` (`buf.push_str("short")` →
 //!     per-byte `push`), `const_ascii_push` (`push(<const char < 0x80>)` →
-//!     `push_ascii`, skipping `encode_char`'s UTF-8 width dispatch),
+//!     `push_ascii_unchecked`, skipping `encode_char`'s UTF-8 width dispatch),
 //!     `elide_local` (write-only local elimination), env-free
 //!     `const_fold` (literal arithmetic + pure CTFE), and `const_branch_prune`
 //!     (trivial-block / dead-statement cleanup). See `optimize/peephole.rs`.
