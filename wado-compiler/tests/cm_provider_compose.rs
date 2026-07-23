@@ -5,7 +5,7 @@
 //!
 //! `sub/hlc.wasm` imports `test:hlc/highlight@0.1.0` and exports
 //! `test:hlc/hlc` (`wrap(code, lang) -> Wrapped`). A provider is compiled from
-//! source with `--implement test:hlc/highlight@0.1.0`. We compose
+//! source as `test:hlc/highlight@0.1.0` (`lib_interface_export`). We compose
 //! provider.export → hlc.import, export hlc's `wrap`, then call it: the host
 //! calls `wrap`, hlc calls its `highlight` import, the provider runs.
 
@@ -88,7 +88,9 @@ fn provider_satisfies_dep_import_and_roundtrips() {
         .expect("composed component validates");
     let linker = wasmtime::component::Linker::new(&engine);
     let mut store = wasmtime::Store::new(&engine, ());
-    let instance = linker.instantiate(&mut store, &component).expect("instantiate");
+    let instance = linker
+        .instantiate(&mut store, &component)
+        .expect("instantiate");
 
     use wasmtime::component::Val;
 
@@ -135,7 +137,10 @@ export fn go(code: String, lang: String) -> String {
     return Hlc::wrap(code, lang).text;
 }
 "#;
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/provider_consumer.wado");
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/provider_consumer.wado"
+    );
     let options = CompilerOptions {
         opt_level: OptLevel::O2,
         lib_world: Some("test:consumer/consumer@0.1.0".to_string()),
@@ -145,9 +150,10 @@ export fn go(code: String, lang: String) -> String {
         }],
         ..Default::default()
     };
-    let composed = common::compile_source_with_compiler_options(Path::new(path), consumer_src, options)
-        .expect("consumer compiles: provider discharges Highlight and composes in")
-        .wasm;
+    let composed =
+        common::compile_source_with_compiler_options(Path::new(path), consumer_src, options)
+            .expect("consumer compiles: provider discharges Highlight and composes in")
+            .wasm;
 
     // The provider satisfies the import, so the composed component no longer
     // imports the highlight interface.
@@ -171,7 +177,9 @@ export fn go(code: String, lang: String) -> String {
         wasmtime::component::Component::new(&engine, &composed).expect("composed validates");
     let linker = wasmtime::component::Linker::new(&engine);
     let mut store = wasmtime::Store::new(&engine, ());
-    let instance = linker.instantiate(&mut store, &component).expect("instantiate");
+    let instance = linker
+        .instantiate(&mut store, &component)
+        .expect("instantiate");
 
     let go = instance
         .get_typed_func::<(&str, &str), (String,)>(&mut store, "go")

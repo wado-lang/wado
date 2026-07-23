@@ -11,7 +11,7 @@ Companion WEPs:
 
 - [Effect Reconstruction from CM Component Imports](./wep-2026-07-15-cm-import-effect-reconstruction.md)
   — the consuming direction (a component's imports become the consumer's
-  effects). This note settles how such an import is *satisfied*.
+  effects). This note settles how such an import is _satisfied_.
 - [Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md) —
   the loader/codegen pipeline (decode, bindings, wasm-compose fusion).
 - [Effect Handler](./wep-2026-04-11-effect-handler.md) — the in-component
@@ -25,7 +25,7 @@ synthesized interface when the library is compiled with `--lib`
 (implemented; see Status below). The question is how the consumer provides
 the implementation. The obvious wish — the consumer's `with h do { ... }`
 handler receiving calls from inside the dependency — requires a call path
-*dependency → consumer* while the consumer is itself mid-call into the
+_dependency → consumer_ while the consumer is itself mid-call into the
 dependency.
 
 Component instantiation is a DAG (imports are satisfied at instantiation, no
@@ -60,7 +60,7 @@ instance.
 Reentrance is explicitly legal: Component Invariant #2
 ([Explainer.md](../vendor/component-model/design/mvp/Explainer.md)) permits a
 component to be reentered when it "call[s] a donut wrapped child component";
-the Canonical ABI's `lift` guard traps only *recursive* reentry of the child.
+the Canonical ABI's `lift` guard traps only _recursive_ reentry of the child.
 
 ### Function values are explicitly future work
 
