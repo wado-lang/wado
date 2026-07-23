@@ -4032,7 +4032,7 @@ fn compose_dependency_components(
 ) -> Vec<u8> {
     use crate::wir::ImportKind;
     use wasm_compose::graph::{
-        Component, ComponentId, CompositionGraph, EncodeOptions, InstanceId,
+        Component, ComponentId, CompositionGraph, EncodeOptions, ImportIndex, InstanceId,
     };
     use wasmparser::Validator;
 
@@ -4110,6 +4110,22 @@ fn compose_dependency_components(
         // imports it — the acyclic `provider -> dependency` shape (UseCases #8).
         for provider in providers {
             let fq = provider.import_fq.as_str();
+            // No target means the dependency was dead-code-eliminated, not that
+            // the name mismatched (`import_fq` comes from the dependency's own
+            // imports): the provider is then unused, so skip it rather than fail.
+            let targets: Vec<(InstanceId, ImportIndex)> = dep_instances
+                .iter()
+                .filter_map(|&(dep_id, dep_inst)| {
+                    graph
+                        .get_component(dep_id)
+                        .and_then(|c| c.import_by_name(fq))
+                        .map(|(import_idx, _)| (dep_inst, import_idx))
+                })
+                .collect();
+            if targets.is_empty() {
+                continue;
+            }
+
             let prov = Component::from_bytes(&mut validator, "provider", provider.bytes.clone())?;
             let prov_id = graph.add_component(prov)?;
             let prov_inst = graph.instantiate(prov_id)?;
@@ -4119,18 +4135,8 @@ fn compose_dependency_components(
                 .map(|(idx, _, _)| idx)
                 .ok_or_else(|| anyhow::anyhow!("provider missing export `{fq}`"))?;
 
-            let mut wired = false;
-            for &(dep_id, dep_inst) in &dep_instances {
-                if let Some((import_idx, _)) = graph
-                    .get_component(dep_id)
-                    .and_then(|c| c.import_by_name(fq))
-                {
-                    graph.connect(prov_inst, Some(prov_export), dep_inst, import_idx)?;
-                    wired = true;
-                }
-            }
-            if !wired {
-                anyhow::bail!("no composed dependency imports provider interface `{fq}`");
+            for (dep_inst, import_idx) in targets {
+                graph.connect(prov_inst, Some(prov_export), dep_inst, import_idx)?;
             }
         }
 
