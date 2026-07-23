@@ -4177,7 +4177,7 @@ fn generate_cm_world_func_imports(
             .iter()
             .map(|(_, cm_name, ty)| (cm_name.clone(), val_type(ty)))
             .collect();
-        let result_val = func.return_type.as_ref().map(|ty| val_type(ty));
+        let result_val = func.return_type.as_ref().map(val_type);
 
         let func_type = ctx.register_type(&func_type_name);
         {
