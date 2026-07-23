@@ -424,6 +424,7 @@ const KILN_GENERATOR_IMPL_FQ: &str = "kiln:generator/generator@0.1.0";
 struct LibSurface {
     submodule_exports: Vec<world_registry::WorldExportInfo>,
     submodule_type_decls: Vec<(ModuleSource, ast::Item)>,
+    submodule_interfaces: Vec<ast::InterfaceDecl>,
 }
 
 fn collect_lib_surface(
@@ -435,12 +436,19 @@ fn collect_lib_surface(
 
     let mut submodule_exports = Vec::new();
     let mut submodule_type_decls = Vec::new();
+    let mut submodule_interfaces = Vec::new();
     for (source, module) in modules {
         if source == entry_source || !source.is_local() {
             continue;
         }
         for item in &module.items {
             match item {
+                // Only public interfaces reach the API: an effect a consumer
+                // satisfies is public (it appears in an exported signature). A
+                // private, internally-handled effect is excluded.
+                Item::Interface(decl) if decl.visibility.is_public() => {
+                    submodule_interfaces.push(decl.clone());
+                }
                 Item::Function(func) if func.is_export => {
                     submodule_exports.push(WorldExportInfo {
                         name: func.name.clone(),
@@ -467,6 +475,7 @@ fn collect_lib_surface(
     LibSurface {
         submodule_exports,
         submodule_type_decls,
+        submodule_interfaces,
     }
 }
 
@@ -1073,6 +1082,7 @@ fn compile_after_load<H: CompilerHost>(
         LibSurface {
             submodule_exports: Vec::new(),
             submodule_type_decls: Vec::new(),
+            submodule_interfaces: Vec::new(),
         }
     };
 
@@ -1262,8 +1272,18 @@ fn compile_after_load<H: CompilerHost>(
         // Submodule-defined types reachable through the facade's exports.
         registry.register_lib_local_items(&lib_surface.submodule_type_decls, fq);
         // Guest effect interfaces left unhandled at the boundary become CM
-        // imports the consumer satisfies.
-        if let Err(msg) = registry.register_lib_guest_effect_imports(entry, fq) {
+        // imports the consumer satisfies — from the entry module and every
+        // submodule, since a library spreads its effects (like its types).
+        let mut guest_interfaces: Vec<&ast::InterfaceDecl> = entry
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                ast::Item::Interface(decl) => Some(decl),
+                _ => None,
+            })
+            .collect();
+        guest_interfaces.extend(lib_surface.submodule_interfaces.iter());
+        if let Err(msg) = registry.register_lib_guest_effect_imports(&guest_interfaces, fq) {
             let _ = logger.error(compiler_host::Diagnostic {
                 severity: compiler_host::Severity::Error,
                 code: compiler_host::Code::DuplicateDefinition,

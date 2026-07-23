@@ -1762,10 +1762,9 @@ impl CmInterfaceRegistry {
     /// the export interface; reported so the user renames the effect.
     pub fn register_lib_guest_effect_imports(
         &mut self,
-        module: &crate::ast::Module,
+        interfaces: &[&crate::ast::InterfaceDecl],
         lib_fq: &str,
     ) -> Result<(), String> {
-        use crate::ast::Item;
         let Some(base) = CmImport::parse(lib_fq) else {
             return Ok(());
         };
@@ -1775,16 +1774,11 @@ impl CmInterfaceRegistry {
                 .iter()
                 .any(|m| m.attrs.iter().any(|a| a.as_cm_import().is_some()))
         };
-        let collisions: Vec<&str> = module
-            .items
+        let collisions: Vec<&str> = interfaces
             .iter()
-            .filter_map(|item| match item {
-                Item::Interface(effect)
-                    if is_guest_effect(effect) && to_kebab(&effect.name) == base.interface =>
-                {
-                    Some(effect.name.as_str())
-                }
-                _ => None,
+            .filter_map(|effect| {
+                (is_guest_effect(effect) && to_kebab(&effect.name) == base.interface)
+                    .then_some(effect.name.as_str())
             })
             .collect();
         if !collisions.is_empty() {
@@ -1795,10 +1789,7 @@ impl CmInterfaceRegistry {
                 base.interface
             ));
         }
-        for item in &module.items {
-            let Item::Interface(effect) = item else {
-                continue;
-            };
+        for effect in interfaces {
             if !is_guest_effect(effect) {
                 continue;
             }
