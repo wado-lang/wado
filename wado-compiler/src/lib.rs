@@ -882,7 +882,7 @@ async fn resolve_inline_providers<H: CompilerHost>(
             opts,
         ))
         .await
-        .map_err(|_| bail(format!("provider `{prov_path}` failed to compile")))?;
+        .map_err(|e| bail(format!("provider `{prov_path}` failed to compile: {e}")))?;
         providers.push(ProviderComponent {
             import_fq: fq,
             bytes: result.wasm,

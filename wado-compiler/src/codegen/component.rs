@@ -4041,13 +4041,23 @@ fn compose_dependency_components(
         .filter(|e| e.kind == ImportKind::Component)
         .map(|e| e.fq.as_str())
         .collect();
-    // World-level function imports (Phase 9): composed by bare name.
-    let world_func_names: IndexSet<&str> = import_plan
+    // World-level function imports (Phase 9): composed by their CM (WIT) export
+    // name. The plan keys entries by the Wado (snake) name; the dependency's
+    // export and the program's import both use the CM name, so translate through
+    // the registry (`wasi_func_name`) — otherwise a multi-word `render-html`
+    // never matches its plan entry `render_html`.
+    let planned_world_funcs: IndexSet<&str> = import_plan
         .iter()
         .filter(|e| e.kind == ImportKind::WorldFunction)
         .map(|e| e.fq.as_str())
         .collect();
-    if dependency_fqs.is_empty() && world_func_names.is_empty() && providers.is_empty() {
+    let world_func_cm_names: IndexSet<String> = project
+        .cm_interface_registry
+        .world_import_functions()
+        .filter(|(name, _)| planned_world_funcs.contains(name))
+        .map(|(_, f)| f.wasi_func_name.clone())
+        .collect();
+    if dependency_fqs.is_empty() && world_func_cm_names.is_empty() && providers.is_empty() {
         return program_bytes;
     }
 
@@ -4073,7 +4083,7 @@ fn compose_dependency_components(
             let provides_funcs: Vec<&String> = asset
                 .component_world_func_names
                 .iter()
-                .filter(|name| world_func_names.contains(name.as_str()))
+                .filter(|name| world_func_cm_names.contains(name.as_str()))
                 .collect();
             if provides.is_empty() && provides_funcs.is_empty() {
                 continue;

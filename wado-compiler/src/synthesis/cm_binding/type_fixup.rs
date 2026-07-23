@@ -861,7 +861,7 @@ fn rewrite_calls_in_expr(
     // World-level function import (Phase 9): retarget a bare free-function
     // call to its synthesized adapter, keyed by the bare name.
     if let TirExprKind::Call { func, args, type_args, .. } = &mut expr.kind
-        && cm_interface_registry.is_world_import_function(&func.name)
+        && cm_interface_registry.world_import_source(&func.name) == Some(&func.module_source)
         && let Some(adapter_rc) = adapters.get(&func.name)
     {
         {
@@ -1351,10 +1351,12 @@ impl TirRefVisitor for EffectCallCollector<'_> {
                     self.effects.insert(func.name.clone());
                 }
                 // World-level function imports (Phase 9): a bare free-function
-                // call whose name is a registered world import.
+                // call whose name is a registered world import *from the same
+                // dependency module* — a same-named local function is not one.
                 if self
                     .cm_interface_registry
-                    .is_world_import_function(&func.name)
+                    .world_import_source(&func.name)
+                    == Some(&func.module_source)
                 {
                     self.effects.insert(func.name.clone());
                 }
