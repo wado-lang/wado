@@ -2770,6 +2770,10 @@ impl Monomorphizer {
                     .base_trait_name
                     .as_deref()
                     .or(info.trait_name.as_deref())
+                && self
+                    .functions
+                    .trait_env
+                    .has_universal_ref_blanket(trait_name, ref_base == "&mut")
                 && let Some(ref_module) =
                     self.functions
                         .trait_env

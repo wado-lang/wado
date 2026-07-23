@@ -1085,6 +1085,26 @@ impl TraitEnv {
         fallback
     }
 
+    /// Whether `trait_name` has a *universal* ref blanket
+    /// `impl<T: Bound> Trait for &T` (`is_mut` selects `&mut T`) — the inner is a
+    /// bare type param, so it applies to every reference. Distinguished from a
+    /// shape ref impl (`impl<T> IntoIterator for &List<T>`), whose inner is a
+    /// concrete/parametric type. Callers route a `&<pointee>` type-param dispatch
+    /// through the universal blanket only when one exists.
+    pub(crate) fn has_universal_ref_blanket(&self, trait_name: &str, is_mut: bool) -> bool {
+        self.impl_headers.values().any(|header| {
+            if header.trait_name.as_deref() != Some(trait_name) {
+                return false;
+            }
+            let inner = match (&header.ty, is_mut) {
+                (Type::Reference(inner), false) | (Type::MutReference(inner), true) => inner,
+                _ => return false,
+            };
+            matches!(inner.as_ref(), Type::Named(named)
+                if header.type_params.iter().any(|p| p.name == named.name))
+        })
+    }
+
     /// The number of impl-level type params on the bare-`T` blanket for
     /// `trait_name` (`2` for `impl<T: Reflect<Fields = [..F]>, ..F> Trait for
     /// T` — the receiver plus its derived field pack; `1` for a plain

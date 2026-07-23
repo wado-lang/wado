@@ -369,14 +369,24 @@ impl Monomorphizer {
         }
 
         // If this is a generic method call, rewrite to monomorphized name.
-        // Skip a call dispatched through a ref/mutref blanket (a synthesized ref
-        // dispatch like `..F::inspect::<Formatter>()` on a `&List<i32>` field):
-        // resolving by the receiver's peeled struct name would retarget the inner
-        // type's impl (`List<i32>^Inspect`) and drop the leading `&`. Only the
-        // shape blankets are skipped — a bare-`T` blanket (serde's `Serialize`)
-        // still resolves here. The blanket-fallback branch below keeps the ref.
+        // Skip a call dispatched through the *universal* ref blanket
+        // (`impl<T: Bound> Trait for &T`, template name `&^Trait` / `&mut^Trait`)
+        // — a synthesized ref dispatch like `..F::inspect::<Formatter>()` on a
+        // `&List<i32>` field: resolving by the receiver's peeled struct name would
+        // retarget the inner type's impl (`List<i32>^Inspect`) and drop the
+        // leading `&`. A bare-`T` blanket (serde `Serialize`) and a shape ref impl
+        // (`&List^IntoIterator`) both still resolve here — the former has no `&`
+        // head, the latter has no universal `&T` blanket.
         let is_ref_blanket_call = method_func.monomorph_info.as_ref().is_some_and(|m| {
-            m.is_blanket && (m.generic_name.starts_with('&'))
+            let is_mut = m.generic_name.starts_with("&mut^");
+            m.is_blanket
+                && (m.generic_name.starts_with("&^") || is_mut)
+                && method_func.method_info.as_ref().is_some_and(|i| {
+                    i.base_trait_name
+                        .as_deref()
+                        .or(i.trait_name.as_deref())
+                        .is_some_and(|tn| self.functions.trait_env.has_universal_ref_blanket(tn, is_mut))
+                })
         });
         if !type_args.is_empty()
             && !is_ref_blanket_call

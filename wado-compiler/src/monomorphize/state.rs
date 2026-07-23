@@ -229,8 +229,25 @@ impl Monomorphizer {
         // duplicate-function check; either body is complete. The struct blanket
         // carries `[T, ..F]` (len 2); the ref/mutref blankets carry `[pointee]`
         // (len 1) under a `&`/`&mut`-headed template name.
-        let is_blanket_key = key.impl_type_args.len() == 2
-            || (key.impl_type_args.len() == 1 && key.name.starts_with('&'));
+        // The ref/mutref case applies only to a *universal* `&T` blanket
+        // (`impl<T: Inspect> Inspect for &T`): its template name is `&^Trait` and
+        // the template + type-param dispatch both queue it. A `&^Trait` name that
+        // is really a newtype-peeled shape impl (`&List^IntoIterator` collapsed to
+        // `&`) has no universal blanket and must NOT be deduped — dropping it
+        // would leave the for-of loop's iterator unresolved.
+        let is_ref_universal_blanket = key.impl_type_args.len() == 1
+            && (key.name.starts_with("&^") || key.name.starts_with("&mut^"))
+            && key.method_info.as_ref().is_some_and(|i| {
+                i.base_trait_name
+                    .as_deref()
+                    .or(i.trait_name.as_deref())
+                    .is_some_and(|tn| {
+                        self.functions
+                            .trait_env
+                            .has_universal_ref_blanket(tn, key.name.starts_with("&mut^"))
+                    })
+            });
+        let is_blanket_key = key.impl_type_args.len() == 2 || is_ref_universal_blanket;
         if is_blanket_key
             && self
                 .functions
