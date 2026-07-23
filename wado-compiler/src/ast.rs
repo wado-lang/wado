@@ -1633,6 +1633,14 @@ impl ImportAttributes {
         self.entries.get("generator").and_then(AttrValue::as_object)
     }
 
+    /// Inline provider source (`with { provider: "./ext.wado" }`): a Wado file
+    /// compiled on-demand into a component that satisfies the imported
+    /// dependency's guest-effect imports (research-cm-boundary-callbacks.md).
+    #[must_use]
+    pub fn provider_path(&self) -> Option<&str> {
+        self.entries.get("provider").and_then(AttrValue::as_str)
+    }
+
     /// Raw lookup for any top-level attribute.
     #[must_use]
     pub fn get(&self, key: &str) -> Option<&AttrValue> {

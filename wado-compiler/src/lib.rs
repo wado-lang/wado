@@ -720,7 +720,7 @@ pub async fn compile_with_options<H: CompilerHost>(
     source: &str,
     host: &H,
     filename: Option<&str>,
-    options: CompilerOptions,
+    mut options: CompilerOptions,
 ) -> Result<CompileResult, CompileFailure> {
     let log_level = options.log_level.unwrap_or_default();
     let logger = Logger::new(host, log_level);
@@ -729,7 +729,7 @@ pub async fn compile_with_options<H: CompilerHost>(
     // === Phase 1: Load all modules ===
     // Loader performs: lex → parse → bind for each module, and preserves
     // the entry AST for tooling that takes it by value.
-    let load_result = {
+    let mut load_result = {
         let module_loader = loader::ModuleLoader::new(host, log_level)
             .with_invocations(options.invocations.clone());
         module_loader
@@ -747,6 +747,16 @@ pub async fn compile_with_options<H: CompilerHost>(
     // Detect #![TODO] from the entry module AST (available after Phase 1)
     let is_todo_module = load_result.entry_ast.has_todo();
 
+    // Provider pre-pass: an `import with { provider: "./p.wado" }` compiles `p`
+    // on-demand into a component satisfying the dependency's guest-effect
+    // imports, before effect-check (which discharges the requirement) and
+    // codegen (which composes it). Skipped when this compile is itself building
+    // a provider (`providers` is only set on the top-level consumer compile).
+    match resolve_inline_providers(&mut load_result, host, &logger).await {
+        Ok(mut extra) => options.providers.append(&mut extra),
+        Err(Bail) => return Err(CompileFailure { is_todo_module }),
+    }
+
     // Wrap all subsequent Bail errors with is_todo_module
     let result = compile_after_load(load_result, options, &logger, filename);
     match result {
@@ -759,6 +769,108 @@ pub async fn compile_with_options<H: CompilerHost>(
         }),
         Err(Bail) => Err(CompileFailure { is_todo_module }),
     }
+}
+
+/// Compile each `with { provider: "./p.wado" }` directive into a provider
+/// component satisfying its dependency's guest-effect imports. The provider's
+/// `export fn`s are lowered into the imported interface (`lib_interface_export`
+/// forces the interface grouping), and the result is wired
+/// `provider.export -> dependency.import` at codegen; a supplied provider also
+/// discharges the reconstructed effect at effect-check.
+async fn resolve_inline_providers<H: CompilerHost>(
+    load_result: &mut loader::LoadResult,
+    host: &H,
+    logger: &Logger<'_, H>,
+) -> Result<Vec<ProviderComponent>, Bail> {
+    use crate::ast::Item;
+
+    let entry_source = load_result.entry_module_source.clone();
+    let entry_dir = crate::name::entry_dir_of(Some(&entry_source));
+
+    // (importing module source, use decl, provider path) for every provider
+    // directive, collected before the on-demand compiles below.
+    let mut jobs: Vec<(ModuleSource, crate::ast::UseDecl, String)> = Vec::new();
+    for (src, module) in &load_result.modules {
+        for item in &module.items {
+            if let Item::Use(use_decl) = item
+                && let Some(path) = use_decl.attributes.as_ref().and_then(|a| a.provider_path())
+            {
+                jobs.push((src.clone(), use_decl.clone(), path.to_string()));
+            }
+        }
+    }
+
+    let bail = |msg: String| -> Bail {
+        let _ = logger.error(compiler_host::Diagnostic {
+            severity: compiler_host::Severity::Error,
+            code: compiler_host::Code::ModuleNotFound,
+            message: msg,
+            span: None,
+        });
+        Bail
+    };
+
+    let mut providers = Vec::new();
+    for (src, use_decl, prov_path) in jobs {
+        // Resolve against the loader's own interner so the `ModuleSource`'s
+        // interned strings match the loaded binding module's key (identity, not
+        // string, equality).
+        let dep_source = loader::resolve_use_decl_source(
+            &mut load_result.interner,
+            &src,
+            &use_decl,
+            Some(&entry_source),
+            &load_result.invocations,
+        );
+        let Some(dep_module) = load_result.modules.get(&dep_source) else {
+            return Err(bail(format!(
+                "`provider` on `{}` names an import that is not a component",
+                use_decl.source
+            )));
+        };
+        let guest_fqs: Vec<String> = crate::wit_consume::module_host_leaf_imports(dep_module)
+            .into_iter()
+            .filter(|fq| !fq.starts_with("wasi:"))
+            .collect();
+        let fq = match guest_fqs.as_slice() {
+            [fq] => fq.clone(),
+            [] => {
+                return Err(bail(format!(
+                    "`provider` on `{}`, which imports no guest effect to satisfy",
+                    use_decl.source
+                )));
+            }
+            _ => {
+                return Err(bail(format!(
+                    "`provider` on `{}` imports multiple guest effects ({}); a single \
+                     provider file for several interfaces is not yet supported",
+                    use_decl.source,
+                    guest_fqs.join(", ")
+                )));
+            }
+        };
+
+        let resolved = loader::resolve_wasm_asset_path(&src, &prov_path, &entry_dir)
+            .map_err(|_| bail(format!("cannot resolve provider path `{prov_path}`")))?;
+        let bytes = host
+            .load_source(&resolved)
+            .await
+            .map_err(|e| bail(format!("cannot read provider `{prov_path}`: {e}")))?;
+        let provider_src = String::from_utf8_lossy(&bytes).into_owned();
+        let opts = CompilerOptions {
+            lib_world: Some(fq.clone()),
+            lib_interface_export: true,
+            ..Default::default()
+        };
+        let result = Box::pin(compile_with_options(&provider_src, host, Some(&resolved), opts))
+            .await
+            .map_err(|_| bail(format!("provider `{prov_path}` failed to compile")))?;
+        providers.push(ProviderComponent {
+            import_fq: fq,
+            bytes: result.wasm,
+        });
+    }
+    Ok(providers)
 }
 
 /// Internal: run compilation phases after module loading.

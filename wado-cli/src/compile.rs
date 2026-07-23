@@ -272,7 +272,6 @@ enum Opt {
     Format,
     WatToStdout,
     World,
-    Implement,
     OptLevel,
     InlineThreshold,
     OptIterations,
@@ -292,7 +291,6 @@ impl Opt {
         Self::Format,
         Self::WatToStdout,
         Self::World,
-        Self::Implement,
         Self::OptLevel,
         Self::InlineThreshold,
         Self::OptIterations,
@@ -327,14 +325,6 @@ impl Opt {
                 desc: "Output WAT to stdout (shorthand for --format wat -o /dev/stdout)",
             },
             Self::World => args::WORLD_SPEC,
-            Self::Implement => args::OptSpec {
-                long: Some("implement"),
-                short: None,
-                value: Some("<fq>"),
-                desc: "Build a provider component: export the file's `export fn`s as \
-                                   the interface <fq> (ns:pkg/name@ver), satisfying another \
-                                   component's import of it",
-            },
             Self::OptLevel => args::OPT_LEVEL_SPEC,
             Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
             Self::OptIterations => args::OPT_ITERATIONS_SPEC,
@@ -390,7 +380,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     let mut wat_to_stdout = false;
     let mut log_level = args::DEFAULT_LOG_LEVEL;
     let mut target_world: Option<String> = None;
-    let mut implement: Option<String> = None;
     let mut skip_validation = false;
     let mut inline_threshold: Option<usize> = None;
     let mut opt_iterations: Option<u32> = None;
@@ -414,7 +403,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
                 }
                 Opt::WatToStdout => wat_to_stdout = true,
                 Opt::World => target_world = Some(args::require_string(&mut parser)?),
-                Opt::Implement => implement = Some(args::require_string(&mut parser)?),
                 Opt::OptLevel => opt_level = parse_opt_level_arg(&mut parser)?,
                 Opt::InlineThreshold => {
                     inline_threshold = Some(args::parse_inline_threshold_arg(
@@ -453,13 +441,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         ));
     }
 
-    if implement.is_some() && target_world.is_some() {
-        return Err(CliExit::error(
-            "`--implement` and `--world` are mutually exclusive: a provider \
-             component targets the library world of the implemented interface",
-        ));
-    }
-
     // `compile` is the file-scoped primitive: it takes one explicit `.wado`
     // file and never reads `wado.toml` to discover an entry or embed metadata.
     // Project builds (worlds, metadata, `build/<world>.wasm`) are `wado build`.
@@ -492,8 +473,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         allocator,
         no_cache,
         codegen_flags,
-        lib_interface_export: implement.is_some(),
-        lib_world: implement,
+        lib_interface_export: false,
+        lib_world: None,
         param_overrides: param_args.overrides,
         param_policy: param_args.policy,
         no_embed_wit,

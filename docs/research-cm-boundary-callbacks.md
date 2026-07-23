@@ -111,10 +111,19 @@ entering a top-level instance that is **on the current task's call chain**
 ### Provider composition — link-time dependency injection (adopted)
 
 Satisfy the dependency's guest-effect import with a **sibling provider
-component** at composition time: the consumer designates an implementation
-(its own Wado module compiled as a mini component, or a third-party
-component), and codegen connects `provider.export → dependency.import` in the
-existing `wasm-compose` graph. Sibling adapters are engine-clean and already
+component** at composition time. The consumer names a provider on the import:
+
+```wado
+use { Marl } from "wado-lang:marl" with { provider: "./highlight_provider.wado" };
+```
+
+The compiler compiles `highlight_provider.wado` on-demand into a component that
+exports the dependency's imported interface (its `export fn`s lowered into that
+interface), connects `provider.export → dependency.import` in the existing
+`wasm-compose` graph, and discharges the reconstructed effect at effect-check —
+so the consumer calls `Marl` with no handler installed. The provider file is
+plain (`export fn highlight(...) { ... }`); it binds by operation name to the
+dependency's imported interface. Sibling adapters are engine-clean and already
 exercised by the component-import pipeline.
 
 This is UseCases #8 exactly, and it completes the
@@ -187,5 +196,11 @@ world needs no contract change.
   materializes as an impl-able effect; unhandled use is a missing-effect
   error (`wit_consume::build_bindings`; fixture
   `guest_effect_missing_handler.wado`).
-- Provider composition: in progress.
+- Provider composition: implemented — `with { provider: "./p.wado" }` compiles
+  the provider on-demand, discharges the effect, and wires
+  `provider.export → dependency.import` (`resolve_inline_providers` in `lib.rs`,
+  `compose_dependency_components`; fixtures `provider_surface.wado`,
+  `cm_provider_compose.rs`). One guest interface per dependency for now; a single
+  provider file spanning several imported interfaces (bind by op name across all)
+  is the next increment.
 - Host effect pump, donut upstream: not started.
