@@ -1052,6 +1052,39 @@ impl TraitEnv {
         fallback
     }
 
+    /// The bound trait names on a blanket impl's receiver param (`Bound` in
+    /// `impl<I: Bound> Trait for I`) for `trait_name`. A call may only dispatch
+    /// through the blanket if the receiver actually satisfies these bounds —
+    /// otherwise a type with its own (unregistered, auto-derived) impl, e.g. a
+    /// closure's `Fn^Inspect`, would be misrouted to the blanket body.
+    pub(crate) fn blanket_impl_bounds_for_trait(
+        &self,
+        trait_name: &str,
+        type_module: Option<&ModuleSource>,
+    ) -> Option<Vec<String>> {
+        let mut fallback = None;
+        for entry in &self.blanket_impl_index {
+            let Some(header) = self.impl_headers.get(entry) else {
+                continue;
+            };
+            if header.trait_name.as_deref() != Some(trait_name) {
+                continue;
+            }
+            let param_name = get_type_name_static(&header.ty);
+            let bounds: Vec<String> = header
+                .type_params
+                .iter()
+                .find(|p| p.name == param_name)
+                .map(|p| p.bounds.iter().map(|b| b.name.clone()).collect())
+                .unwrap_or_default();
+            if type_module == Some(&entry.0) {
+                return Some(bounds);
+            }
+            fallback.get_or_insert(bounds);
+        }
+        fallback
+    }
+
     /// Like [`impl_module_for`] but only returns a hit when the impl block
     /// is **fully concrete** (no `impl<T, …>` type parameters). Used by
     /// the monomorphizer when redirecting a substituted trait-method call

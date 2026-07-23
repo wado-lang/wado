@@ -221,6 +221,23 @@ impl Monomorphizer {
         if self.functions.instantiated.contains_key(&key) {
             return false;
         }
+        // A `Reflect`-derived blanket (`impl<T: Reflect<Fields = [..F]>, ..F:
+        // Inspect>`) reaches the same instance from two dispatch sites — a
+        // template pre-resolution and a normal method dispatch — whose derived
+        // `..F` tuples can be distinct-but-equivalent `TypeId`s, so the keys
+        // differ but the mangled name is identical. Dedup those on the name to
+        // avoid the duplicate-function check; both carry the full `[T, ..F]`
+        // args, so either body is complete. Scoped to 2-arg keys so unrelated
+        // instantiations (e.g. serde value-copy helpers) are unaffected.
+        if key.impl_type_args.len() == 2
+            && self
+                .functions
+                .instantiated
+                .values()
+                .any(|v| v == &mangled_name)
+        {
+            return false;
+        }
         self.functions
             .instantiated
             .insert(key.clone(), mangled_name);

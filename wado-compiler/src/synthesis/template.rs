@@ -1125,7 +1125,10 @@ fn method_call_info_for_type(
             }
         }
         _ => {
-            let local_name = method_name_for_type(type_id, trait_name, method_name, tt);
+            let local_name = method_name_for_type(type_id, trait_name, method_name, ctx.tt);
+            if let Some(info) = blanket_method_call_info(&local_name, type_id, method_name, ctx) {
+                return info;
+            }
             let impl_module = trait_impl_module(&local_name, type_id, ctx);
             MethodCallInfo {
                 local_name,
@@ -1134,6 +1137,120 @@ fn method_call_info_for_type(
             }
         }
     }
+}
+
+/// Whether `type_id` satisfies a blanket impl's receiver-param `bounds`. Only
+/// the `Reflect` bound is checked structurally (via the `Fields` associated
+/// type registered for every reflected struct); other bounds are treated as
+/// satisfiable, preserving existing blanket dispatch (e.g. `IntoIterator`).
+pub(crate) fn receiver_satisfies_blanket_bounds(
+    type_id: TypeId,
+    bounds: Vec<String>,
+    tt: &TypeTable,
+) -> bool {
+    if bounds.is_empty() {
+        return true;
+    }
+    let reflect_name = tt.compiler_items().trait_name(CompilerItem::Reflect);
+    for bound in &bounds {
+        if bound == reflect_name
+            && tt
+                .resolve_assoc_type(type_id, crate::synthesis::traits::REFLECT_FIELDS_ASSOC)
+                .is_none()
+        {
+            return false;
+        }
+    }
+    true
+}
+
+/// The module of a struct-like `type_id`, used as the disambiguation hint for
+/// trait-impl lookups.
+fn type_module_hint(type_id: TypeId, tt: &Rc<RefCell<TypeTable>>) -> Option<ModuleSource> {
+    match tt.borrow().get(type_id) {
+        ResolvedType::Struct { module_source, .. }
+        | ResolvedType::Enum { module_source, .. }
+        | ResolvedType::Variant { module_source, .. }
+        | ResolvedType::Newtype { module_source, .. }
+        | ResolvedType::Flags { module_source, .. }
+        | ResolvedType::GenericInstance { module_source, .. }
+        | ResolvedType::GenericResource { module_source, .. } => Some(module_source.clone()),
+        _ => None,
+    }
+}
+
+/// When no concrete or synthesized impl provides `trait_name` for `type_id` but
+/// a blanket impl does (e.g. the `impl<T: Reflect<Fields = [..F]>, ..F: Inspect>
+/// Inspect for T` struct derive), route the call through the blanket — the same
+/// shape the `&T` / `&mut T` arms above build for the ref blankets.
+fn blanket_method_call_info(
+    local_name: &LocalMethodName,
+    type_id: TypeId,
+    method_name: &str,
+    ctx: &TemplateCtx,
+) -> Option<MethodCallInfo> {
+    let trait_name = local_name
+        .base_trait_name
+        .as_deref()
+        .or(local_name.trait_name.as_deref())?;
+    // A bodyless conformance marker (`impl Inspect for Point;`) registers in
+    // the impl index but provides no method — under the blanket regime it means
+    // "derive via the blanket", so route unless a real methodful impl exists.
+    if ctx
+        .trait_env
+        .has_any_methodful_impl(&local_name.base_struct_name, trait_name)
+    {
+        return None;
+    }
+    let type_module = type_module_hint(type_id, ctx.tt);
+    let blanket_module = ctx
+        .trait_env
+        .blanket_impl_module_for_trait(trait_name, type_module.as_ref())?
+        .clone();
+    // Only route to the blanket if the receiver satisfies its param bound. A
+    // `Reflect`-bound struct derive must not swallow a type with its own
+    // (auto-derived, unregistered) impl — e.g. a closure's `Fn^Inspect`.
+    if !receiver_satisfies_blanket_bounds(
+        type_id,
+        ctx.trait_env
+            .blanket_impl_bounds_for_trait(trait_name, Some(&blanket_module))
+            .unwrap_or_default(),
+        &ctx.tt.borrow(),
+    ) {
+        return None;
+    }
+    let param = ctx
+        .trait_env
+        .blanket_impl_param_for_trait(trait_name, Some(&blanket_module))?;
+    let generic_name = LocalMethodName::new(
+        param,
+        Some(trait_name.to_string()),
+        method_name.to_string(),
+    )
+    .to_mangled_name();
+    // The struct-Inspect blanket (`impl<T: Reflect<Fields = [..F]>, ..F:
+    // Inspect>`) carries a second, derived impl pack `..F = T::Fields`. A
+    // normal method dispatch infers it from the bound; a pre-resolved template
+    // call must supply it too, or the blanket instantiates with `T` alone and
+    // its field walk is left unresolved.
+    let mut impl_type_args = vec![type_id];
+    if let Some(fields) = ctx
+        .tt
+        .borrow()
+        .resolve_assoc_type(type_id, crate::synthesis::traits::REFLECT_FIELDS_ASSOC)
+    {
+        impl_type_args.push(fields);
+    }
+    Some(MethodCallInfo {
+        local_name: local_name.clone(),
+        monomorph_info: Some(MonomorphInfo {
+            generic_name,
+            impl_type_args,
+            method_type_args: vec![],
+            is_blanket: true,
+        }),
+        impl_module: blanket_module,
+    })
 }
 
 /// Build a `LocalMethodName` for a concrete (post-mono) type.

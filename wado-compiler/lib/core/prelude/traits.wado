@@ -570,6 +570,42 @@ internal trait Inspect {
     fn inspect(&self, f: &mut Formatter);
 }
 
+/// Struct debug formatting derived over `Reflect` (WEP 2026-06-13): walk the
+/// field tokens, writing `Name { field: value, ... }`. Secret fields are elided
+/// and reported with a trailing `, ..`.
+impl<T: Reflect<Fields = [..F]>, ..F: Inspect> Inspect for T {
+    fn inspect(&self, f: &mut Formatter) {
+        f.write_str(&Reflect::<T>::type_name());
+        let mut wrote_field = false;
+        let mut has_secret = false;
+        for let field of Reflect::<T>::field_tokens() {
+            if field.is_secret() {
+                has_secret = true;
+            } else {
+                if wrote_field {
+                    f.write_str(&", ");
+                } else {
+                    f.write_str(&" { ");
+                    wrote_field = true;
+                }
+                f.write_str(&field.name());
+                f.write_str(&": ");
+                field.get(self).inspect(f);
+            }
+        }
+        if wrote_field {
+            if has_secret {
+                f.write_str(&", ..");
+            }
+            f.write_str(&" }");
+        } else if has_secret {
+            f.write_str(&" { .. }");
+        } else {
+            f.write_str(&" {}");
+        }
+    }
+}
+
 /// Trait for formatting values as binary integers.
 /// Used with the `${x:b}` format specifier.
 #[compiler_item("binary")]

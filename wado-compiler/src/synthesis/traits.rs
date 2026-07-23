@@ -512,14 +512,14 @@ type ReflectTarget = (String, Vec<ReflectFieldInfo>, Option<String>, Span);
 /// non-generic, non-monomorphized, and actually requested by a bound.
 fn collect_reflect_targets(
     module: &TirModule,
-    ctx: &SynthesisCtx<'_, '_, '_>,
+    _ctx: &SynthesisCtx<'_, '_, '_>,
     reflect_trait_name: &str,
 ) -> Vec<ReflectTarget> {
+    let _ = reflect_trait_name;
     module
         .structs
         .iter()
         .filter(|s| s.type_params.is_empty() && s.monomorph_info.is_none())
-        .filter(|s| ctx.should_synthesize(&s.name, reflect_trait_name))
         .map(|s| {
             (
                 s.name.clone(),
@@ -3637,39 +3637,10 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         ctx.record_impl(name, &inspect_name);
     }
 
-    // Non-generic structs
-    let struct_infos = collect_struct_visible_fields(module);
-
-    for (name, fields, has_secret, sspan) in &struct_infos {
-        if name == tt.compiler_struct_name(crate::compiler_item::CompilerItem::String)
-            || name == &formatter_name
-        {
-            continue;
-        }
-        if ctx.has_methodful_impl_anywhere(name, &inspect_name) {
-            continue;
-        }
-        let struct_type = tt.make_struct(name.clone(), module_source.clone());
-        let ref_type = tt.make_ref(struct_type);
-        generated.push(Rc::new(RefCell::new(generate_struct_inspect_fn(
-            name,
-            &[],
-            fields,
-            *has_secret,
-            ref_type,
-            fmt_type,
-            string_type,
-            ref_string_type,
-            ctx.trait_env,
-            &module_source,
-            &mut tt,
-            *sspan,
-            &inspect_name,
-            &inspect_method,
-            &formatter_name,
-        ))));
-        ctx.record_impl(name, &inspect_name);
-    }
+    // Non-generic structs derive Inspect via the `impl<T: Reflect<Fields =
+    // [..F]>, ..F: Inspect> Inspect for T` blanket in `core:prelude/traits`
+    // (WEP 2026-06-13 item 5); the monomorphizer routes each `Struct^Inspect`
+    // call to it, so synthesis emits nothing for non-generic structs here.
 
     let generic_struct_infos = collect_generic_struct_visible_fields(module);
     for (name, type_params, fields, has_secret, sspan) in &generic_struct_infos {
