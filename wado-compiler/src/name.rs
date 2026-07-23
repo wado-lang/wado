@@ -441,17 +441,22 @@ impl MethodName {
         }
     }
 
-    /// Format a struct name with type arguments and optional trait.
-    /// Format: `Struct<TypeArgs>^Trait` or `Struct<TypeArgs>`
+    /// Format a base name with type arguments and optional trait.
+    /// Format: `Struct<TypeArgs>^Trait` or `Struct<TypeArgs>`.
+    ///
+    /// `ref_kind` carries the receiver's reference shape so a `&T` / `&mut T`
+    /// receiver mangles with a prefix; it comes from the typed receiver, never
+    /// from inspecting `base`.
     pub fn format_struct_with_args(
-        struct_name: &str,
+        base: &str,
+        ref_kind: Option<RefKind>,
         type_args: &[String],
         trait_name: Option<&str>,
     ) -> String {
         let struct_part = if type_args.is_empty() {
-            struct_name.to_string()
+            base.to_string()
         } else {
-            mangle_ref_aware(struct_name, type_args)
+            Receiver::mangle_with_ref(base, ref_kind, type_args)
         };
         match trait_name {
             Some(trait_n) => format!("{struct_part}^{trait_n}"),
@@ -584,7 +589,7 @@ pub struct LocalMethodName {
 
 /// Derive the bare base name from a possibly-mangled type/trait name.
 ///
-/// `mangle_ref_aware` and friends produce names like `Stream<u8>` or
+/// `Receiver::mangle` and friends produce names like `Stream<u8>` or
 /// `From<i32>` by appending the type-arg list to the base name; the
 /// reverse — recovering the base by truncating at the first `<` — is
 /// the canonical inverse and lives here so other components stay
@@ -664,25 +669,7 @@ pub enum Receiver {
 }
 
 impl Receiver {
-    /// Classify a base receiver name into its typed shape. The single place a
-    /// receiver string is inspected; every consumer reads the resulting enum.
-    #[must_use]
-    pub fn classify(base: &str) -> Self {
-        match base {
-            "&" => Receiver::Ref(RefKind::Shared),
-            "&mut" => Receiver::Ref(RefKind::Mut),
-            _ => match base.split_once("::") {
-                Some((b, a)) => Receiver::Projection {
-                    base: b.to_string(),
-                    assoc: a.to_string(),
-                },
-                None => Receiver::Type(base.to_string()),
-            },
-        }
-    }
-
-    /// The canonical head string — identity key and mangle base. Round-trips
-    /// `classify` (`Receiver::classify(s).head_key() == s`).
+    /// The canonical head string — identity key and mangle base.
     #[must_use]
     pub fn head_key(&self) -> Cow<'_, str> {
         match self {
@@ -693,22 +680,23 @@ impl Receiver {
     }
 
     /// Mangle the receiver with its type args (`Point<i32>`, `&List<i32>`,
-    /// `S::SeqSerializer`). The only place a `Receiver` becomes a `&`-prefixed
-    /// string.
+    /// `S::SeqSerializer`).
     #[must_use]
     pub fn mangle(&self, type_args: &[String]) -> String {
-        match self {
-            Receiver::Ref(RefKind::Shared) if type_args.len() == 1 => format!("&{}", type_args[0]),
-            Receiver::Ref(RefKind::Mut) if type_args.len() == 1 => format!("&mut {}", type_args[0]),
-            _ => mangle_generic_name(&self.head_key(), type_args),
-        }
+        Self::mangle_with_ref(&self.head_key(), self.ref_kind(), type_args)
     }
 
-    /// Mangle from a base-name string (transitional bridge for callers that
-    /// still hold `base_struct_name` rather than a `Receiver`).
+    /// Mangle a base name, applying a `&` / `&mut` prefix when `ref_kind` marks
+    /// a single-pointee reference receiver. The sole place a receiver becomes a
+    /// `&`-prefixed string; `ref_kind` is typed metadata, never parsed from
+    /// `base`.
     #[must_use]
-    pub fn mangle_base(base: &str, type_args: &[String]) -> String {
-        Receiver::classify(base).mangle(type_args)
+    pub fn mangle_with_ref(base: &str, ref_kind: Option<RefKind>, type_args: &[String]) -> String {
+        match ref_kind {
+            Some(RefKind::Shared) if type_args.len() == 1 => format!("&{}", type_args[0]),
+            Some(RefKind::Mut) if type_args.len() == 1 => format!("&mut {}", type_args[0]),
+            _ => mangle_generic_name(base, type_args),
+        }
     }
 
     /// The receiver's reference kind, or `None` for a value receiver.
@@ -817,11 +805,25 @@ impl LocalMethodName {
             !struct_name.contains('<'),
             "LocalMethodName::new() expects base struct name without type params, got: {struct_name}"
         );
+        Self::of(Receiver::Type(struct_name), trait_name, method_name)
+    }
+
+    /// Construct a method name for a `&T` / `&mut T` ref-impl receiver.
+    #[must_use]
+    pub fn new_ref(kind: RefKind, trait_name: Option<String>, method_name: String) -> Self {
+        Self::of(Receiver::Ref(kind), trait_name, method_name)
+    }
+
+    /// Construct from an explicit typed receiver — the single construction path;
+    /// `new` / `new_ref` are thin typed wrappers. No string is inspected.
+    #[must_use]
+    pub fn of(receiver: Receiver, trait_name: Option<String>, method_name: String) -> Self {
         let base_trait_name = trait_name
             .as_deref()
             .map(|n| split_base_name(n).to_string());
+        let struct_name = receiver.head_key().into_owned();
         Self {
-            receiver: Receiver::classify(&struct_name),
+            receiver,
             struct_name,
             base_trait_name,
             base_trait_module: None,
@@ -855,7 +857,7 @@ impl LocalMethodName {
             .as_deref()
             .map(|n| split_base_name(n).to_string());
         Self {
-            receiver: Receiver::classify(&struct_name),
+            receiver: Receiver::Type(struct_name.clone()),
             struct_name,
             base_trait_name,
             base_trait_module: None,
@@ -935,7 +937,7 @@ impl LocalMethodName {
         let mangled = if trait_type_args.is_empty() {
             base.clone()
         } else {
-            mangle_ref_aware(&base, trait_type_args)
+            mangle_generic_name(&base, trait_type_args)
         };
         Self {
             trait_name: Some(mangled),
@@ -953,7 +955,7 @@ impl LocalMethodName {
     pub fn with_substituted_struct_name(&self, new_name: &str, base_name: &str) -> Self {
         Self {
             struct_name: new_name.to_string(),
-            receiver: Receiver::classify(base_name),
+            receiver: Receiver::Type(base_name.to_string()),
             trait_name: self.trait_name.clone(),
             base_trait_name: self.base_trait_name.clone(),
             base_trait_module: self.base_trait_module.clone(),
@@ -1549,14 +1551,6 @@ pub fn format_type_name(info: TypeNameInfo) -> String {
     }
 }
 
-/// Build a mangled name that handles reference prefixes correctly.
-///
-/// For `&` and `&mut` base names, formats as prefix: `&List<i32>`, `&mut List<i32>`.
-/// For other base names, formats as generic: `List<i32>`, `Map<String,i32>`.
-fn mangle_ref_aware(base_name: &str, type_args: &[String]) -> String {
-    Receiver::mangle_base(base_name, type_args)
-}
-
 /// Build a monomorphized type name from base name and type arguments.
 ///
 /// Examples:
@@ -2119,15 +2113,17 @@ mod tests {
     }
 
     #[test]
-    fn test_mangle_ref_aware() {
-        assert_eq!(mangle_ref_aware("&", &["i32".into()]), "&i32");
-        assert_eq!(mangle_ref_aware("&", &["List<i32>".into()]), "&List<i32>");
-        assert_eq!(mangle_ref_aware("&mut", &["String".into()]), "&mut String");
+    fn test_receiver_mangle() {
+        let shared = Receiver::Ref(RefKind::Shared);
+        assert_eq!(shared.mangle(&["i32".into()]), "&i32");
+        assert_eq!(shared.mangle(&["List<i32>".into()]), "&List<i32>");
+        let mutable = Receiver::Ref(RefKind::Mut);
+        assert_eq!(mutable.mangle(&["String".into()]), "&mut String");
+        assert_eq!(mutable.mangle(&["List<i32>".into()]), "&mut List<i32>");
+        // Named receivers fall through to mangle_generic_name.
         assert_eq!(
-            mangle_ref_aware("&mut", &["List<i32>".into()]),
-            "&mut List<i32>"
+            Receiver::Type("List".into()).mangle(&["i32".into()]),
+            "List<i32>"
         );
-        // Non-ref base names fall through to mangle_generic_name
-        assert_eq!(mangle_ref_aware("List", &["i32".into()]), "List<i32>");
     }
 }

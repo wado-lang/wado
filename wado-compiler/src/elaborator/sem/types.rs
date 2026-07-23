@@ -881,6 +881,12 @@ pub(crate) struct ImplFacts {
     /// canonical name on the impl facts prevents the parity-bug class
     /// called out in WEP 2026-05-26 §"Stage 7 gap".
     pub(crate) struct_name: String,
+    /// The impl target's typed receiver, decided from the AST type at record
+    /// time (`Receiver::Ref` for `&T` / `&mut T`, `Receiver::Type` otherwise).
+    /// Reify builds the method's `LocalMethodName` from this so a ref impl's
+    /// receiver stays typed end-to-end — no string is re-inspected to recover
+    /// the `&` shape. `head_key()` reproduces [`Self::struct_name`].
+    pub(crate) receiver: crate::name::Receiver,
     /// Per-instantiation owner name (`"List<u8>"`) when this impl is a fully
     /// concrete generic instantiation (`impl List<u8>`, `impl Tag for
     /// List<u8>`) — `None` otherwise. Reify names such methods

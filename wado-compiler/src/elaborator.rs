@@ -1774,6 +1774,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 &impl_block.ty,
                 ast::Type::Reference(_) | ast::Type::MutReference(_),
             );
+            let receiver = match crate::name::RefKind::from_ast(&impl_block.ty) {
+                Some(kind) => crate::name::Receiver::Ref(kind),
+                None => crate::name::Receiver::Type(struct_name.clone()),
+            };
             // Concrete type args of the impl's trait reference
             // (`impl Future<i32>` → `[i32]`), resolved in the
             // impl's type-param scope so generic impls
@@ -1810,6 +1814,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     is_handler_method,
                     is_ref_impl,
                     struct_name: struct_name.clone(),
+                    receiver,
                     concrete_owner,
                 },
             );

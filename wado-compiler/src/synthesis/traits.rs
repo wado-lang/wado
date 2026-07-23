@@ -6057,11 +6057,13 @@ fn decompose_type_for_method_name(
     resolved: &ResolvedType,
     type_id: TypeId,
     tt: &TypeTable,
-) -> (String, bool, Vec<String>) {
+) -> (crate::name::Receiver, bool, Vec<String>) {
+    use crate::name::Receiver;
+    let named = |n: String| Receiver::Type(n);
     match resolved {
-        ResolvedType::TypeParam { name, .. } => (name.clone(), true, vec![]),
+        ResolvedType::TypeParam { name, .. } => (named(name.clone()), true, vec![]),
         ResolvedType::BuiltinArray(elem) => (
-            TypeTable::ARRAY_TYPE_NAME.to_string(),
+            named(TypeTable::ARRAY_TYPE_NAME.to_string()),
             false,
             vec![tt.mangle_type_name(*elem)],
         ),
@@ -6069,7 +6071,7 @@ fn decompose_type_for_method_name(
             name, type_args, ..
         } => {
             let args = type_args.iter().map(|t| tt.mangle_type_name(*t)).collect();
-            (name.clone(), false, args)
+            (named(name.clone()), false, args)
         }
         ResolvedType::Function {
             params,
@@ -6078,24 +6080,21 @@ fn decompose_type_for_method_name(
         } => {
             let args =
                 crate::name::fn_type_arg_names(params.len(), &tt.mangle_type_name(*return_type));
-            (crate::name::CLOSURE_FN_TRAIT.to_string(), false, args)
+            (named(crate::name::CLOSURE_FN_TRAIT.to_string()), false, args)
         }
         ResolvedType::GenericResource {
             name, type_args, ..
         } => {
             let args = type_args.iter().map(|t| tt.mangle_type_name(*t)).collect();
-            (name.clone(), false, args)
+            (named(name.clone()), false, args)
         }
         ResolvedType::Reactive(inner) => (
-            "Reactive".to_string(),
+            named("Reactive".to_string()),
             false,
             vec![tt.mangle_type_name(*inner)],
         ),
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => (
-            crate::name::RefKind::from_resolved(resolved)
-                .expect("ref classify")
-                .prefix()
-                .to_string(),
+            Receiver::Ref(crate::name::RefKind::from_resolved(resolved).expect("ref classify")),
             false,
             vec![tt.mangle_type_name(*inner)],
         ),
@@ -6105,7 +6104,7 @@ fn decompose_type_for_method_name(
                 !name.contains('<'),
                 "decompose_type_for_method_name: unhandled parameterized type: {name}"
             );
-            (name, false, vec![])
+            (named(name), false, vec![])
         }
     }
 }
@@ -6465,10 +6464,10 @@ fn trait_call_on_type(
     let receiver = ref_expr(value, ref_type, span);
 
     let resolved = tt.get(value_type).clone();
-    let (base_name, is_type_param, type_arg_names) =
+    let (recv, is_type_param, type_arg_names) =
         decompose_type_for_method_name(&resolved, value_type, tt);
 
-    let mut info = trait_method_info(&base_name, trait_name, method_name);
+    let mut info = LocalMethodName::of(recv, Some(trait_name.to_string()), method_name.to_string());
     if !type_arg_names.is_empty() {
         info = info.with_struct_type_args(&type_arg_names);
     }

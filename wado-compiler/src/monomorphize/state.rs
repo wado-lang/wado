@@ -359,6 +359,7 @@ impl Monomorphizer {
             // Replace struct name entirely: "I" → "StrCharIter"
             MethodName::format_struct_with_args(
                 &impl_arg_names[0],
+                None,
                 &[],
                 method_info.trait_name.as_deref(),
             )
@@ -366,6 +367,7 @@ impl Monomorphizer {
             // Normal: append type args: "List" → "List<i32>"
             MethodName::format_struct_with_args(
                 &method_info.struct_name,
+                method_info.receiver().ref_kind(),
                 &impl_arg_names,
                 method_info.trait_name.as_deref(),
             )

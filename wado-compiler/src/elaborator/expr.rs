@@ -4406,7 +4406,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name: method_name,
                     monomorph_info: None,
                     method_info: Some(crate::name::LocalMethodName {
-                        receiver: crate::name::Receiver::classify(&target_name),
+                        receiver: crate::name::Receiver::Type(target_name.clone()),
                         struct_name: target_name,
                         trait_name: Some(from_trait),
                         base_trait_name: Some(from_trait_name),

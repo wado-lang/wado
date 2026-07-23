@@ -1114,18 +1114,17 @@ fn method_call_info_for_type(
             }
         }
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-            let struct_name = crate::name::RefKind::from_resolved(&tt.borrow().get(type_id).clone())
-                .expect("ref classify")
-                .prefix();
+            let ref_kind = crate::name::RefKind::from_resolved(&tt.borrow().get(type_id).clone())
+                .expect("ref classify");
             let inner_name = tt.borrow().mangle_type_name(inner);
-            let local_name = LocalMethodName::new(
-                struct_name.to_string(),
+            let local_name = LocalMethodName::new_ref(
+                ref_kind,
                 Some(trait_name.to_string()),
                 method_name.to_string(),
             )
             .with_struct_type_args(&[inner_name]);
-            let generic_name = LocalMethodName::new(
-                struct_name.to_string(),
+            let generic_name = LocalMethodName::new_ref(
+                ref_kind,
                 Some(trait_name.to_string()),
                 method_name.to_string(),
             )

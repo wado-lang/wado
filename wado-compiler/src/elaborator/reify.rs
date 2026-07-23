@@ -1595,8 +1595,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let display_name = method_names.display;
         let mut mangled_name = method_names.mangled;
         let mut method_info = {
-            let mut info = LocalMethodName::new(
-                base_struct_name.clone(),
+            let mut info = LocalMethodName::of(
+                facts.receiver.clone(),
                 facts.trait_name_mangled.clone(),
                 func.name.clone(),
             );
@@ -6823,7 +6823,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     name: facts.mangled_name,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName {
-                        receiver: crate::name::Receiver::classify(&facts.target_name),
+                        receiver: crate::name::Receiver::Type(facts.target_name.clone()),
                         struct_name: facts.target_name,
                         trait_name: Some(from_trait),
                         base_trait_name: Some(facts.from_trait_name),

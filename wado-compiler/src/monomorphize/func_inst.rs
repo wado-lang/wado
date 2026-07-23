@@ -2780,16 +2780,15 @@ impl Monomorphizer {
         {
             return false;
         }
-        let ref_base = if is_mut {
+        let ref_kind = if is_mut {
             crate::name::RefKind::Mut
         } else {
             crate::name::RefKind::Shared
-        }
-        .prefix();
+        };
         let Some(ref_module) = self
             .functions
             .trait_env
-            .impl_module_for(ref_base, trait_name, None)
+            .impl_module_for(ref_kind.prefix(), trait_name, None)
         else {
             return false;
         };
@@ -2797,14 +2796,14 @@ impl Monomorphizer {
         // name carries the shape + inner type; `call_rewrite` resolves it to the
         // queued `&<inner>^Trait::method` instance via the blanket `monomorph_info`.
         let inner_name = type_table.mangle_type_name(inner);
-        let ref_info = LocalMethodName::new(
-            ref_base.to_string(),
+        let ref_info = LocalMethodName::new_ref(
+            ref_kind,
             Some(trait_name.to_string()),
             info.method_name.clone(),
         )
         .with_struct_type_args(&[inner_name]);
-        let generic_name = LocalMethodName::new(
-            ref_base.to_string(),
+        let generic_name = LocalMethodName::new_ref(
+            ref_kind,
             Some(trait_name.to_string()),
             info.method_name.clone(),
         )
