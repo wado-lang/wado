@@ -106,7 +106,7 @@ that is Phase 8 below.
 - [x] Phase 6 — codegen composes via `wasm-compose` (see below).
 - [x] Phase 7 — e2e round-trip (synchronous value-type surface).
 - [ ] Phase 8 — async value types (`stream<T>` / `future<T>`); see below.
-- [ ] Phase 9 — world-level function exports (case A, no named types); see below.
+- [x] Phase 9 — world-level function exports imported as free functions; see below.
 
 ### Codegen: fused composition via `wasm-compose`
 
@@ -175,9 +175,18 @@ combinations (`list<record>`, `option<record>`, `tuple<record, _>`,
       component function whose signature carries a `stream`/`future` is neither
       tested nor wired through the import binding yet. This is the async-import
       surface (subtask / `AsyncCall`, WEP-2026-04-22).
-- [ ] Phase 9 — world-level function exports (case A, no named types). Currently
-      rejected by `wit_consume`, which handles only interface exports; world-level
-      free-function imports also need an import-plan path that isn't interface-keyed.
+- [x] Phase 9 — world-level function exports imported as free functions. A
+      dependency function exported directly in its world (not under an interface)
+      is decoded into a bodyless free `Item::Function` carrying a world-level
+      `#[cm]` boundary (`CmBoundary::WorldImport`), then flows through the
+      interface-method binding pipeline keyed by bare name: a synthesized
+      lower/lift adapter (the call is rewritten to it, so the binding is pure —
+      no interface effect), a raw core import, an `ImportKind::WorldFunction`
+      plan entry, and a top-level `func` component import (not an instance)
+      canon-lowered and wired by name in `wasm-compose`. v1 covers the
+      primitive/string value surface; a signature referencing a
+      component-defined named type is rejected (records/lists/variants are future
+      work, as with the interface path's async surface).
 
 ## Notes
 
