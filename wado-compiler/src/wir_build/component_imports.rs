@@ -215,9 +215,8 @@ pub fn resolve_import_plan(
         }
     }
 
-    // Phase 4: world-level function imports (Phase 9) — a dependency function
-    // exported directly in its world. Composed away by `wasm-compose`, so it
-    // contributes nothing to the faithfulness list (`imported_cm_interface_fqs`).
+    // Phase 4: world-level function imports (Phase 9). Composed away by
+    // `wasm-compose`, so they drop out of `imported_cm_interface_fqs`.
     for (name, _) in registry.world_import_functions() {
         push(&mut entries, name.to_string(), ImportKind::WorldFunction);
     }

@@ -1276,7 +1276,10 @@ impl Attribute {
 ///   for naming a field, variant case, or method (no interface attached).
 #[derive(Debug, Clone)]
 pub enum CmBoundary {
-    Canonical { namespace: String, name: String },
+    Canonical {
+        namespace: String,
+        name: String,
+    },
     Import(CmImport),
     /// A world-level function import: the dependency component exports the
     /// function directly in its world (not under an interface), so its only

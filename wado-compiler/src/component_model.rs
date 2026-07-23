@@ -371,7 +371,9 @@ fn cm_attr_cm_name(attrs: &[crate::ast::Attribute], wado_name: &str) -> String {
             // Case-level CM names (variant cases, fields, ...) carry just
             // the CM-side identifier.
             Some(crate::ast::CmBoundary::Name(s)) => Some(s.clone()),
-            Some(crate::ast::CmBoundary::Canonical { .. } | crate::ast::CmBoundary::WorldImport(_))
+            Some(
+                crate::ast::CmBoundary::Canonical { .. } | crate::ast::CmBoundary::WorldImport(_),
+            )
             | None => None,
         })
         .unwrap_or_else(|| panic!("missing #[cm] attribute for CM name: {wado_name}"))
@@ -667,15 +669,14 @@ pub struct CmInterfaceRegistry {
     /// interface of one component shares the same set (v1 component-level union).
     component_host_leaf_imports: IndexMap<String, Vec<String>>,
 
-    /// Bare names of world-level function imports (Phase 9) — a dependency
-    /// component's function exported directly in its world, not under an
-    /// interface. Their `CmFunctionInfo` lives in `effect_to_func` keyed by the
-    /// bare name; this set marks which entries are world-level so codegen emits
-    /// a top-level `func` import (not an instance) and composition wires by name.
+    /// World-level function imports (Phase 9), by bare name. Marks which
+    /// `effect_to_func` entries are world-level (their `CmFunctionInfo` lives
+    /// there under the bare name).
     world_import_functions: IndexSet<String>,
 
-    /// Per world-level function import, the dependency `ModuleSource` that
-    /// exports it — the composition target.
+    /// World-level function import name → the dependency `ModuleSource` that
+    /// exports it (the composition target, and the identity that distinguishes
+    /// it from a same-named local function).
     world_import_sources: IndexMap<String, ModuleSource>,
 
     /// Reverse index for the `_by_module` accessors (see [`ModuleSourceIndex`]).
@@ -1585,8 +1586,8 @@ impl CmInterfaceRegistry {
             }
         }
 
-        // Register world-level function imports (Phase 9): a bodyless free
-        // function carrying a `#[cm]` world-import boundary.
+        // World-level function imports (Phase 9): a bodyless free function
+        // carrying a `#[cm]` world-import boundary.
         for item in &module.items {
             if let Item::Function(func) = item
                 && let Some(cm_func_name) = func
@@ -2763,12 +2764,9 @@ impl CmInterfaceRegistry {
             .insert(local_name, (interface_path, wasi_func_name));
     }
 
-    /// Register a world-level function import (Phase 9): a dependency function
-    /// exported directly in its world, addressed by its bare name. Its
-    /// `CmFunctionInfo` is stored in `effect_to_func` under the bare name (no
-    /// `Interface::` qualifier) and marked world-level, so the adapter pipeline
-    /// synthesizes a binding for it exactly like an interface method while
-    /// codegen emits a top-level `func` import instead of an instance.
+    /// Register a world-level function import (Phase 9), keyed by its bare name
+    /// (empty interface). Stored like an interface method so the adapter
+    /// pipeline reuses the interface-method path.
     pub fn register_world_import(
         &mut self,
         func_name: &str,
@@ -2794,8 +2792,7 @@ impl CmInterfaceRegistry {
         self.used_names.insert(local_name.clone());
         self.local_aliases
             .insert(local_name, (String::new(), cm_func_name.to_string()));
-        self.effect_to_func
-            .insert(func_name.to_string(), func_info);
+        self.effect_to_func.insert(func_name.to_string(), func_info);
         self.world_import_functions.insert(func_name.to_string());
     }
 

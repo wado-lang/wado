@@ -41,10 +41,13 @@ export fn go(source: String) -> String {
     let wit_component::DecodedWasm::Component(resolve, world) = decoded else {
         panic!("expected a component");
     };
-    let still_imports = resolve.worlds[world].imports.iter().any(|(_, item)| {
-        matches!(item, wit_parser::WorldItem::Function(f) if f.name == "highlight")
-    });
-    assert!(!still_imports, "provider/dep should satisfy the highlight import");
+    let still_imports = resolve.worlds[world].imports.iter().any(
+        |(_, item)| matches!(item, wit_parser::WorldItem::Function(f) if f.name == "highlight"),
+    );
+    assert!(
+        !still_imports,
+        "provider/dep should satisfy the highlight import"
+    );
 
     let mut config = wasmtime::Config::new();
     config.wasm_component_model(true);
@@ -59,8 +62,13 @@ export fn go(source: String) -> String {
     let go = instance
         .get_typed_func::<(&str,), (String,)>(&mut store, "go")
         .expect("go export (source) -> string");
-    let (text,) = go.call(&mut store, ("x",)).expect("go -> hlwf.highlight round-trip");
-    assert_eq!(text, "hl:x", "round-trip through the composed world-level function");
+    let (text,) = go
+        .call(&mut store, ("x",))
+        .expect("go -> hlwf.highlight round-trip");
+    assert_eq!(
+        text, "hl:x",
+        "round-trip through the composed world-level function"
+    );
 }
 
 /// A multi-word world-level function (`render_html`, WIT `render-html`) must
@@ -93,10 +101,13 @@ export fn go(source: String) -> String {
     let wit_component::DecodedWasm::Component(resolve, world) = decoded else {
         panic!("expected a component");
     };
-    let still_imports = resolve.worlds[world].imports.iter().any(|(_, item)| {
-        matches!(item, wit_parser::WorldItem::Function(f) if f.name == "render-html")
-    });
-    assert!(!still_imports, "render-html must be composed away, not left imported");
+    let still_imports = resolve.worlds[world].imports.iter().any(
+        |(_, item)| matches!(item, wit_parser::WorldItem::Function(f) if f.name == "render-html"),
+    );
+    assert!(
+        !still_imports,
+        "render-html must be composed away, not left imported"
+    );
 
     let mut config = wasmtime::Config::new();
     config.wasm_component_model(true);
@@ -111,6 +122,11 @@ export fn go(source: String) -> String {
     let go = instance
         .get_typed_func::<(&str,), (String,)>(&mut store, "go")
         .expect("go export");
-    let (text,) = go.call(&mut store, ("x",)).expect("go -> render-html round-trip");
-    assert_eq!(text, "<x>", "round-trip through the composed multi-word function");
+    let (text,) = go
+        .call(&mut store, ("x",))
+        .expect("go -> render-html round-trip");
+    assert_eq!(
+        text, "<x>",
+        "round-trip through the composed multi-word function"
+    );
 }

@@ -297,7 +297,7 @@ pub fn build_component(
             }
         }
     }
-    // World-level function imports (Phase 9) lower into the same `wasi` instance.
+    // World functions (Phase 9) lower into the same `wasi` instance.
     for (_, func) in project.cm_interface_registry.world_import_functions() {
         let local_name = func.local_alias_name();
         if ctx.has_core_func(&local_name) {
@@ -4041,11 +4041,9 @@ fn compose_dependency_components(
         .filter(|e| e.kind == ImportKind::Component)
         .map(|e| e.fq.as_str())
         .collect();
-    // World-level function imports (Phase 9): composed by their CM (WIT) export
-    // name. The plan keys entries by the Wado (snake) name; the dependency's
-    // export and the program's import both use the CM name, so translate through
-    // the registry (`wasi_func_name`) — otherwise a multi-word `render-html`
-    // never matches its plan entry `render_html`.
+    // World functions (Phase 9) compose by their CM (WIT) name, but the plan
+    // keys them by the Wado (snake) name, so translate via the registry —
+    // else a multi-word `render-html` never matches its plan entry `render_html`.
     let planned_world_funcs: IndexSet<&str> = import_plan
         .iter()
         .filter(|e| e.kind == ImportKind::WorldFunction)
@@ -4150,12 +4148,10 @@ fn compose_dependency_components(
     }
 }
 
-/// Emit a top-level `func` component import for each world-level function
-/// import in the plan (Phase 9). Unlike an interface method — imported inside an
-/// instance — a world function is imported bare, by its name, matching the
-/// dependency component's world-level export so `wasm-compose` wires them
-/// directly. v1 supports the primitive/string value surface; a signature that
-/// references a component-defined named type is rejected.
+/// Emit a top-level `func` component import for each world-level function in
+/// the plan (Phase 9) — bare, not inside an instance, matching the dependency's
+/// world-level export. v1 covers the primitive/string value surface; a
+/// component-defined named type in the signature is rejected.
 fn generate_cm_world_func_imports(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -4210,8 +4206,7 @@ fn lower_wasi_functions(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
 ) {
-    // World-level function imports (Phase 9): canon-lower each into the core
-    // `wasi` instance under its local alias, like a sync interface method.
+    // World functions (Phase 9): canon-lower each like a sync interface method.
     let world_funcs: Vec<crate::component_model::CmFunctionInfo> = project
         .cm_interface_registry
         .world_import_functions()
@@ -4225,10 +4220,13 @@ fn lower_wasi_functions(
         ctx.register_core_func(&local_name);
         let returns_via_outptr = func.return_type.as_ref().is_some_and(|ty| {
             let resolved = project.cm_interface_registry.resolve_type(ty);
-            crate::component_model::cm_return_needs_outptr(&resolved, &project.cm_interface_registry)
+            crate::component_model::cm_return_needs_outptr(
+                &resolved,
+                &project.cm_interface_registry,
+            )
         });
-        let needs_memory = func.needs_memory_with_registry(&project.cm_interface_registry)
-            || returns_via_outptr;
+        let needs_memory =
+            func.needs_memory_with_registry(&project.cm_interface_registry) || returns_via_outptr;
         let mut options: Vec<CanonicalOption> = Vec::new();
         if needs_memory {
             options.push(CanonicalOption::Memory(ctx.memory_idx()));

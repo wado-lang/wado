@@ -231,9 +231,8 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
         }
     }
 
-    // World-level function imports (Phase 9): synchronous, no interface. Their
-    // raw core import is registered exactly like a sync interface method so the
-    // synthesized adapter's `CmRawCall` resolves.
+    // World-level function imports (Phase 9): register the raw core import like
+    // a sync interface method so the synthesized adapter's `CmRawCall` resolves.
     let world_funcs: Vec<crate::component_model::CmFunctionInfo> = cm_interface_registry
         .world_import_functions()
         .map(|(_, f)| f.clone())
@@ -252,8 +251,10 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
         }
         let results: Vec<WirType> = if let Some(ret_ty) = &func.return_type {
             let resolved_ret_ty = cm_interface_registry.resolve_type(ret_ty);
-            if crate::component_model::cm_return_needs_outptr(&resolved_ret_ty, cm_interface_registry)
-            {
+            if crate::component_model::cm_return_needs_outptr(
+                &resolved_ret_ty,
+                cm_interface_registry,
+            ) {
                 param_vts.push(wasm_encoder::ValType::I32);
                 Vec::new()
             } else {

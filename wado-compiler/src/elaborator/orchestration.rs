@@ -3499,20 +3499,19 @@ pub(crate) fn fold_component_interfaces(
     }
 }
 
-/// Bare names of world-level function imports (Phase 9) a component-binding
-/// module declares — a bodyless free `Item::Function` carrying a `#[cm]`
-/// world-import boundary.
+/// Bare names of the world-level function imports (Phase 9) a component-binding
+/// module declares.
 fn component_world_func_names(module: &Module) -> Vec<String> {
     module
         .items
         .iter()
         .filter_map(|item| match item {
             Item::Function(func) => {
-                if func
-                    .attrs
-                    .iter()
-                    .any(|a| a.cm_boundary.as_ref().is_some_and(|b| b.as_world_import().is_some()))
-                {
+                if func.attrs.iter().any(|a| {
+                    a.cm_boundary
+                        .as_ref()
+                        .is_some_and(|b| b.as_world_import().is_some())
+                }) {
                     Some(func.name.clone())
                 } else {
                     None

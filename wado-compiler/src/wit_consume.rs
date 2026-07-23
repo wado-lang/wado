@@ -30,9 +30,8 @@ pub struct ComponentBindings {
     pub module: Module,
     /// FQ names of every exported interface (drives import-plan classification).
     pub interface_fqs: Vec<String>,
-    /// Bare names of every exported world-level function (Phase 9) — a
-    /// dependency function exported directly in the world, not under an
-    /// interface. Composition wires these by name.
+    /// Bare names of every exported world-level function (Phase 9); composition
+    /// wires these by name.
     pub world_func_names: Vec<String>,
     /// FQ names of the interfaces the component itself imports — its host-leaf
     /// capabilities (WASI, etc.). Effect reconstruction maps these onto the
@@ -194,9 +193,7 @@ impl Builder {
         }
     }
 
-    /// `#[cm]` as a world-level function-import boundary (Phase 9): the
-    /// dependency exports this function directly in its world, so the bare
-    /// function name is its only CM-side identity.
+    /// `#[cm]` as a world-level function-import boundary (Phase 9).
     fn cm_world_import_attr(&self, func_name: &str) -> Attribute {
         Attribute {
             name: "cm".to_string(),
@@ -289,9 +286,8 @@ impl Builder {
     }
 
     /// Emit a bodyless free `Item::Function` for a world-level function export
-    /// (Phase 9). The dependency exports it directly in its world; the consumer
-    /// calls it as a free function, and codegen synthesizes the CM import
-    /// trampoline from the `#[cm]` world-import boundary.
+    /// (Phase 9); the consumer calls it as a free function and codegen
+    /// synthesizes the CM import trampoline from the `#[cm]` boundary.
     fn emit_world_function(&mut self, resolve: &Resolve, func: &wit_parser::Function) {
         let cm_params: Vec<AttrArg> = func
             .params
