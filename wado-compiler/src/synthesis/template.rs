@@ -1207,10 +1207,6 @@ fn type_is_reflect(type_id: TypeId, tt: &TypeTable, allow_pre_reflect_struct: bo
 
 /// The module of a struct-like `type_id`, used as the disambiguation hint for
 /// trait-impl lookups.
-fn type_module_hint(type_id: TypeId, tt: &Rc<RefCell<TypeTable>>) -> Option<ModuleSource> {
-    type_module_hint_tt(type_id, &tt.borrow())
-}
-
 fn type_module_hint_tt(type_id: TypeId, tt: &TypeTable) -> Option<ModuleSource> {
     match tt.get(type_id) {
         ResolvedType::Struct { module_source, .. }
