@@ -137,6 +137,39 @@ test "shape compiles" {}
     );
 }
 
+/// Outside a `--lib` build no guest-effect CM import is registered, so a guest
+/// effect left open at a (non-lib) export must not ICE in WIR build: the
+/// dispatch wrapper's no-handler fallback traps rather than emitting an
+/// unresolvable import call. Regression guard for the open-boundary routing.
+#[test]
+fn open_guest_effect_in_a_non_lib_build_does_not_ice() {
+    let source = r#"
+interface E { fn op(c: String) -> String; }
+struct H {}
+impl E for H {
+    fn op(&mut self, c: String) -> String { resume c; }
+    ..trap
+}
+export fn opened(c: String) -> String with E { return E::op(c); }
+export fn run() {
+    let mut h = H {};
+    let _ = with &mut h do { E::op("a") };
+}
+"#;
+    // Default (CLI) world, not `--lib`: must compile without panicking.
+    let options = CompilerOptions {
+        opt_level: OptLevel::O2,
+        ..Default::default()
+    };
+    let result =
+        common::compile_source_with_compiler_options(Path::new("nonlib.wado"), source, options);
+    assert!(
+        result.is_ok(),
+        "a non-lib open guest effect should compile, not ICE: {:?}",
+        result.err()
+    );
+}
+
 /// An effect handled in one export but left unhandled in another must still
 /// surface as a CM import: the lib's import surface is the union of its
 /// exports' required effects. This is the two-function pattern (a default

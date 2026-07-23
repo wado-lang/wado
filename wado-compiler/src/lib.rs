@@ -443,7 +443,13 @@ fn collect_lib_surface(
         }
         for item in &module.items {
             match item {
-                Item::Interface(decl) => submodule_interfaces.push(decl.clone()),
+                // Only public interfaces reach the library's API: an effect a
+                // consumer must satisfy appears in an exported signature, so it
+                // is public. A private, internally-handled effect is excluded,
+                // so it cannot trip the name-collision check spuriously.
+                Item::Interface(decl) if decl.visibility.is_public() => {
+                    submodule_interfaces.push(decl.clone());
+                }
                 Item::Function(func) if func.is_export => {
                     submodule_exports.push(WorldExportInfo {
                         name: func.name.clone(),

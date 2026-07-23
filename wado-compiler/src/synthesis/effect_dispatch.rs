@@ -467,20 +467,36 @@ fn synthesize_dispatch_wrappers(
     key: &InstantiationKey,
     meta: &EffectMeta,
     plan: &DispatchPlan,
-    open_effects: &IndexSet<String>,
+    open_effects: &IndexSet<(ModuleSource, String)>,
 ) {
     let (effect_module, base_name, type_args) = key;
     let effect_module = effect_module.clone();
     let base_name = base_name.clone();
     let is_resource = meta.is_resource;
     let interner = project.interner.clone();
+    // Route the no-handler fallback to the CM import only for an effect that is
+    // both open at the boundary AND registered as a CM import (a `--lib` guest
+    // effect or WASI). A non-lib build registers no guest imports, so its
+    // wrappers keep trapping rather than emitting an unresolvable import call.
+    let is_open = open_effects.contains(&(effect_module.clone(), base_name.clone()));
+    let open_and_registered: Vec<bool> = plan
+        .operations
+        .iter()
+        .map(|op| {
+            is_open
+                && project
+                    .cm_interface_registry
+                    .get_function(&format!("{base_name}::{}", op.name))
+                    .is_some()
+        })
+        .collect();
     let entry_module = project
         .tir_modules
         .get_mut(entry_source)
         .expect("entry module must exist");
     let type_table = entry_module.type_table.clone();
     let label = instantiation_label(&base_name, type_args, &type_table.borrow());
-    for op in &plan.operations {
+    for (op, &is_open_import) in plan.operations.iter().zip(&open_and_registered) {
         let wrapper = build_dispatch_wrapper_function(
             entry_source,
             &effect_module,
@@ -490,7 +506,7 @@ fn synthesize_dispatch_wrappers(
             op,
             plan,
             is_resource,
-            open_effects.contains(&base_name),
+            is_open_import,
             &type_table,
             &interner,
         );
@@ -2936,14 +2952,23 @@ pub fn synthesize_pre_cm_binding(mut project: Package) -> Result<Package, String
 
 /// Effect names declared in the `with` clause of any exported function — the
 /// effects left open at the library boundary.
-fn open_boundary_effects(project: &Package) -> IndexSet<String> {
-    let mut out: IndexSet<String> = IndexSet::default();
+fn open_boundary_effects(project: &Package) -> IndexSet<(ModuleSource, String)> {
+    let mut out: IndexSet<(ModuleSource, String)> = IndexSet::default();
     for module in project.tir_modules.values() {
         for func_rc in &module.functions {
             let func = func_rc.borrow();
             if func.is_export {
                 for e in &func.effects {
-                    out.insert(e.name().to_string());
+                    // Key by `(module_source, name)` to match the dispatch
+                    // `InstantiationKey`; a generic `Param` effect has no concrete
+                    // identity and never keys a monomorphized wrapper.
+                    if let EffectRef::Concrete {
+                        name,
+                        module_source,
+                    } = e
+                    {
+                        out.insert((module_source.clone(), name.clone()));
+                    }
                 }
             }
         }
@@ -2997,7 +3022,7 @@ fn synthesize_dispatch_infrastructure(
     project: &mut Package,
     effect_index: &IndexMap<EffectKey, EffectMeta>,
     active_instantiations: &IndexSet<InstantiationKey>,
-    open_effects: &IndexSet<String>,
+    open_effects: &IndexSet<(ModuleSource, String)>,
 ) -> IndexMap<InstantiationKey, DispatchPlan> {
     let entry_source = project.entry_module_source.clone();
     // Pre-substitute every active instantiation's operations against the
