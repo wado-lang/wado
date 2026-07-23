@@ -474,10 +474,9 @@ fn synthesize_dispatch_wrappers(
     let base_name = base_name.clone();
     let is_resource = meta.is_resource;
     let interner = project.interner.clone();
-    // Route the no-handler fallback to the CM import only for an effect that is
-    // both open at the boundary AND registered as a CM import (a `--lib` guest
-    // effect or WASI). A non-lib build registers no guest imports, so its
-    // wrappers keep trapping rather than emitting an unresolvable import call.
+    // Route to the CM import only when the effect is open AND actually
+    // registered as one: a non-lib build registers no guest imports, so its
+    // wrappers keep trapping rather than emit an unresolvable import call.
     let is_open = open_effects.contains(&(effect_module.clone(), base_name.clone()));
     let open_and_registered: Vec<bool> = plan
         .operations
@@ -824,11 +823,9 @@ fn build_dispatch_wrapper_function(
             span,
         ));
     } else if op.cm_name.is_some() || is_open_boundary_effect {
-        // A cm-tagged (WASI) op, or a guest effect an exported function leaves
-        // open at the library boundary: emit the user-effect Call form
-        // (`Effect::op(args)`) so cm_binding's effect-call collector and
-        // rewriter lower it to the CM import — the no-handler case of an open
-        // effect is "call the consumer's implementation", not a trap.
+        // A cm-tagged (WASI) op or an open guest effect: emit the effect Call
+        // form so cm_binding lowers it to the CM import. The no-handler case of
+        // an open effect is "call the consumer's implementation", not a trap.
         let effect_call = TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef {
@@ -2928,12 +2925,11 @@ pub fn synthesize_pre_cm_binding(mut project: Package) -> Result<Package, String
         return Ok(project);
     }
 
-    // Effects an exported function declares `with E` are *open* at the library
-    // boundary: a consumer must satisfy them, so the dispatch wrapper's
-    // no-handler fallback routes to the CM import rather than trapping. An
-    // effect handled by every export (declared by none) keeps trapping. This is
-    // the union of exports' required effects, and is what lets one export
-    // install a default handler while a sibling leaves the effect open.
+    // Effects an exported function declares `with E` are open at the boundary
+    // (the union of exports' required effects); one handled by every export is
+    // not. An open effect's dispatch wrapper routes its no-handler fallback to
+    // the CM import instead of trapping — so a default-installing export and a
+    // sibling that leaves the effect open can coexist.
     let open_effects = open_boundary_effects(&project);
 
     let plans = synthesize_dispatch_infrastructure(

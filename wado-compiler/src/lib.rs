@@ -443,10 +443,9 @@ fn collect_lib_surface(
         }
         for item in &module.items {
             match item {
-                // Only public interfaces reach the library's API: an effect a
-                // consumer must satisfy appears in an exported signature, so it
-                // is public. A private, internally-handled effect is excluded,
-                // so it cannot trip the name-collision check spuriously.
+                // Only public interfaces reach the API: an effect a consumer
+                // satisfies is public (it appears in an exported signature). A
+                // private, internally-handled effect is excluded.
                 Item::Interface(decl) if decl.visibility.is_public() => {
                     submodule_interfaces.push(decl.clone());
                 }
@@ -1273,9 +1272,8 @@ fn compile_after_load<H: CompilerHost>(
         // Submodule-defined types reachable through the facade's exports.
         registry.register_lib_local_items(&lib_surface.submodule_type_decls, fq);
         // Guest effect interfaces left unhandled at the boundary become CM
-        // imports the consumer satisfies. Collected from the entry module and
-        // every submodule, since a library spreads its effects (like its types)
-        // across files behind the facade.
+        // imports the consumer satisfies — from the entry module and every
+        // submodule, since a library spreads its effects (like its types).
         let mut guest_interfaces: Vec<&ast::InterfaceDecl> = entry
             .items
             .iter()
