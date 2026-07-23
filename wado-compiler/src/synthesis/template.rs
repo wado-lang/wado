@@ -1094,6 +1094,25 @@ fn method_call_info_for_type(
     let tt = ctx.tt;
     let resolved = tt.borrow().get(type_id).clone();
     match resolved {
+        // A `&T` / `&mut T` over a bare type parameter formats transparently as
+        // the pointee (`T^Inspect`), not through the `&`-prefixing ref blanket:
+        // in generic code `&T` is a borrow of a `T`, so `${v:?}` on a `&T`
+        // parameter renders the `T`. A reference over a *concrete* type keeps the
+        // ref blanket (`${&x:?}` → `&42`).
+        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner)
+            if matches!(
+                tt.borrow().get(inner),
+                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+            ) =>
+        {
+            let local_name = method_name_for_type(inner, trait_name, method_name, ctx.tt);
+            let impl_module = trait_impl_module(&local_name, inner, ctx);
+            MethodCallInfo {
+                local_name,
+                monomorph_info: None,
+                impl_module,
+            }
+        }
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
             let struct_name = if matches!(tt.borrow().get(type_id).clone(), ResolvedType::Ref(_)) {
                 "&"
