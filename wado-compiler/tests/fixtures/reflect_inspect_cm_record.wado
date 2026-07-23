@@ -1,0 +1,17 @@
+// Inspecting a wasi Component Model record (`wasi:clocks#Instant`, fields
+// `seconds: i64`, `nanoseconds: u32`) drives the struct-`Inspect` blanket's
+// field walk, which calls a synthesized `$field_get$…` bridge helper per field.
+// Those helpers are free functions homed in the record's own wasi module.
+// Regression: `register_loaded_functions` skipped every wasi-module function, so
+// the helpers never reached WIR and the field walk trapped with an unresolved
+// `$field_get$…Instant$u32` call.
+use { println, Stdout } from "core:cli";
+use { Instant as ClockInstant } from "wasi:clocks";
+
+export fn run() with Stdout {
+    let i = ClockInstant { seconds: 5, nanoseconds: 7 };
+    println(`${i:?}`);
+}
+
+__DATA__
+{"stdout": "Instant { seconds: 5, nanoseconds: 7 }\n"}
