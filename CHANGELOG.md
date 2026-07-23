@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.0.22](https://github.com/wado-lang/wado/compare/v0.0.21...v0.0.22) - 2026-07-23
+
+- feat(marl): customizable code-block highlighting via a Highlight effect by @gfx in https://github.com/wado-lang/wado/pull/1669
+
 ## [v0.0.21](https://github.com/wado-lang/wado/compare/v0.0.20...v0.0.21) - 2026-07-23
 
 - chore(deps): bump @hono/node-server from 1.19.14 to 2.0.11 in /benchmark/http_routing in the npm_and_yarn group across 1 directory by @dependabot[bot] in https://github.com/wado-lang/wado/pull/1661
