@@ -267,14 +267,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::Ref(_) | ResolvedType::MutRef(_)
             );
             if is_ref {
-                let ref_struct_name = if matches!(
-                    self.tysys.type_table.borrow().get(receiver.type_id),
-                    ResolvedType::Ref(_)
-                ) {
-                    "&"
-                } else {
-                    "&mut"
-                };
+                let ref_struct_name = crate::name::RefKind::from_resolved(
+                    &self.tysys.type_table.borrow().get(receiver.type_id).clone(),
+                )
+                .expect("ref classify")
+                .prefix();
                 let result = self.find_trait_method_for_type(
                     ref_struct_name,
                     method_name,

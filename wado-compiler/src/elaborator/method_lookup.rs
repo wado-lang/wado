@@ -1997,7 +1997,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !names_to_check.contains(&impl_struct_name) && !is_blanket_type_param {
             return None;
         }
-        if !self.ref_impl_targets_receiver(&impl_block.ty, &impl_struct_name, receiver_type_id) {
+        if !self.ref_impl_targets_receiver(&impl_block.ty, receiver_type_id) {
             return None;
         }
         if !self.blanket_target_bounds_satisfied(impl_block, receiver_type_id) {
@@ -2019,10 +2019,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn ref_impl_targets_receiver(
         &self,
         impl_ty: &Type,
-        impl_struct_name: &str,
         receiver_type_id: Option<TypeId>,
     ) -> bool {
-        if impl_struct_name != "&" && impl_struct_name != "&mut" {
+        if crate::name::RefKind::from_ast(impl_ty).is_none() {
             return true;
         }
         let Some(rt) = receiver_type_id else {

@@ -2780,7 +2780,12 @@ impl Monomorphizer {
         {
             return false;
         }
-        let ref_base = if is_mut { "&mut" } else { "&" };
+        let ref_base = if is_mut {
+            crate::name::RefKind::Mut
+        } else {
+            crate::name::RefKind::Shared
+        }
+        .prefix();
         let Some(ref_module) = self
             .functions
             .trait_env

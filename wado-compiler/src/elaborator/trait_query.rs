@@ -1102,7 +1102,7 @@ impl TypeSystem {
                 if self.find_trait_impl_for_type_with_args(
                     ctx,
                     scope,
-                    "&",
+                    crate::name::RefKind::Shared.prefix(),
                     trait_name,
                     Some(&[inner_id]),
                 ) {
@@ -1119,7 +1119,7 @@ impl TypeSystem {
                 if self.find_trait_impl_for_type_with_args(
                     ctx,
                     scope,
-                    "&mut",
+                    crate::name::RefKind::Mut.prefix(),
                     trait_name,
                     Some(&[inner_id]),
                 ) {

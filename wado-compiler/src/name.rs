@@ -614,10 +614,32 @@ pub enum RefKind {
 
 impl RefKind {
     /// The mangle prefix — the sole spelling of `&` / `&mut` from a `RefKind`.
-    fn prefix(self) -> &'static str {
+    #[must_use]
+    pub fn prefix(self) -> &'static str {
         match self {
             RefKind::Shared => "&",
             RefKind::Mut => "&mut",
+        }
+    }
+
+    /// The ref kind of an AST type, or `None` for a non-reference. Lets producers
+    /// classify a receiver from the typed AST instead of emitting `"&"` literals.
+    #[must_use]
+    pub fn from_ast(ty: &crate::ast::Type) -> Option<Self> {
+        match ty {
+            crate::ast::Type::Reference(_) => Some(RefKind::Shared),
+            crate::ast::Type::MutReference(_) => Some(RefKind::Mut),
+            _ => None,
+        }
+    }
+
+    /// The ref kind of a resolved type, or `None` for a non-reference.
+    #[must_use]
+    pub fn from_resolved(ty: &crate::tir::ResolvedType) -> Option<Self> {
+        match ty {
+            crate::tir::ResolvedType::Ref(_) => Some(RefKind::Shared),
+            crate::tir::ResolvedType::MutRef(_) => Some(RefKind::Mut),
+            _ => None,
         }
     }
 }

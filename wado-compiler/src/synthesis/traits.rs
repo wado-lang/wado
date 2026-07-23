@@ -6091,10 +6091,14 @@ fn decompose_type_for_method_name(
             false,
             vec![tt.mangle_type_name(*inner)],
         ),
-        ResolvedType::Ref(inner) => ("&".to_string(), false, vec![tt.mangle_type_name(*inner)]),
-        ResolvedType::MutRef(inner) => {
-            ("&mut".to_string(), false, vec![tt.mangle_type_name(*inner)])
-        }
+        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => (
+            crate::name::RefKind::from_resolved(resolved)
+                .expect("ref classify")
+                .prefix()
+                .to_string(),
+            false,
+            vec![tt.mangle_type_name(*inner)],
+        ),
         _ => {
             let name = tt.mangle_type_name(type_id);
             debug_assert!(
@@ -6145,8 +6149,9 @@ fn resolve_impl_module_via_env(
     let resolved = tt.get(type_id).clone();
 
     let candidate_name: Option<String> = match &resolved {
-        ResolvedType::Ref(_) => Some("&".to_string()),
-        ResolvedType::MutRef(_) => Some("&mut".to_string()),
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
+            crate::name::RefKind::from_resolved(&resolved).map(|k| k.prefix().to_string())
+        }
         ResolvedType::Primitive(p) => Some(p.as_str().to_string()),
         ResolvedType::Unit => Some(TypeTable::UNIT_TYPE_NAME.to_string()),
         ResolvedType::Struct { name, .. }

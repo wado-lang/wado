@@ -1114,11 +1114,9 @@ fn method_call_info_for_type(
             }
         }
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-            let struct_name = if matches!(tt.borrow().get(type_id).clone(), ResolvedType::Ref(_)) {
-                "&"
-            } else {
-                "&mut"
-            };
+            let struct_name = crate::name::RefKind::from_resolved(&tt.borrow().get(type_id).clone())
+                .expect("ref classify")
+                .prefix();
             let inner_name = tt.borrow().mangle_type_name(inner);
             let local_name = LocalMethodName::new(
                 struct_name.to_string(),

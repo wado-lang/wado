@@ -1514,8 +1514,10 @@ pub(super) fn get_type_name_static(ty: &ast::Type) -> String {
         ast::Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),
         ast::Type::Named(named) => named.name.clone(),
         ast::Type::Generic(generic) => generic.name.clone(),
-        ast::Type::Reference(_) => "&".to_string(),
-        ast::Type::MutReference(_) => "&mut".to_string(),
+        ast::Type::Reference(_) | ast::Type::MutReference(_) => crate::name::RefKind::from_ast(ty)
+            .expect("Reference/MutReference classify")
+            .prefix()
+            .to_string(),
         ast::Type::Tuple(elems) => {
             if elems.is_empty() {
                 TypeTable::UNIT_TYPE_NAME.to_string()
