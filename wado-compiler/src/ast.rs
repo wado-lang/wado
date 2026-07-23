@@ -1278,6 +1278,11 @@ impl Attribute {
 pub enum CmBoundary {
     Canonical { namespace: String, name: String },
     Import(CmImport),
+    /// A world-level function import: the dependency component exports the
+    /// function directly in its world (not under an interface), so its only
+    /// CM-side identity is the bare function name. See Phase 9 in
+    /// `docs/wep-2026-06-26-wasm-cm-component-import.md`.
+    WorldImport(String),
     Name(String),
 }
 
@@ -1286,7 +1291,16 @@ impl CmBoundary {
     pub fn as_import(&self) -> Option<&CmImport> {
         match self {
             CmBoundary::Import(cm) => Some(cm),
-            CmBoundary::Canonical { .. } | CmBoundary::Name(_) => None,
+            CmBoundary::Canonical { .. } | CmBoundary::WorldImport(_) | CmBoundary::Name(_) => None,
+        }
+    }
+
+    /// Returns the bare function name if this boundary is a world-level
+    /// function import (Phase 9).
+    pub fn as_world_import(&self) -> Option<&str> {
+        match self {
+            CmBoundary::WorldImport(func) => Some(func),
+            CmBoundary::Canonical { .. } | CmBoundary::Import(_) | CmBoundary::Name(_) => None,
         }
     }
 
@@ -1302,6 +1316,7 @@ impl CmBoundary {
         match self {
             CmBoundary::Canonical { .. } => None,
             CmBoundary::Import(cm) => Some(cm.full_path()),
+            CmBoundary::WorldImport(func) => Some(func.clone()),
             CmBoundary::Name(s) => Some(s.clone()),
         }
     }

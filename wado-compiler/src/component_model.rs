@@ -371,7 +371,8 @@ fn cm_attr_cm_name(attrs: &[crate::ast::Attribute], wado_name: &str) -> String {
             // Case-level CM names (variant cases, fields, ...) carry just
             // the CM-side identifier.
             Some(crate::ast::CmBoundary::Name(s)) => Some(s.clone()),
-            Some(crate::ast::CmBoundary::Canonical { .. }) | None => None,
+            Some(crate::ast::CmBoundary::Canonical { .. } | crate::ast::CmBoundary::WorldImport(_))
+            | None => None,
         })
         .unwrap_or_else(|| panic!("missing #[cm] attribute for CM name: {wado_name}"))
 }
