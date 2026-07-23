@@ -738,9 +738,19 @@ fn find_unique_source_with_prefix<'a, V>(
     prefix: &str,
     name: &str,
 ) -> Option<&'a str> {
+    find_unique_source_in_set(map, name, &|src| src.starts_with(prefix))
+}
+
+/// The unique source interface registering `name` among sources for which
+/// `is_member` holds, or `None` when there is no or more than one match.
+fn find_unique_source_in_set<'a, V>(
+    map: &'a IndexMap<(String, String), V>,
+    name: &str,
+    is_member: &dyn Fn(&str) -> bool,
+) -> Option<&'a str> {
     let mut found: Option<&str> = None;
     for ((src, n), _) in map {
-        if n != name || !src.starts_with(prefix) {
+        if n != name || !is_member(src) {
             continue;
         }
         if found.is_some() {
@@ -2131,6 +2141,19 @@ impl CmInterfaceRegistry {
         find_unique_source_with_prefix(&self.flags, "wasi:", name)
     }
 
+    /// The owning interface FQ of a component-imported named type, when exactly
+    /// one composed dependency interface declares `name`. Mirrors the
+    /// `find_wasi_*` fallbacks for a type re-exported from a CM component
+    /// dependency (whose FQ carries no `wasi:` / `core:kiln/` prefix).
+    pub fn find_component_type_source(&self, name: &str) -> Option<&str> {
+        let member = |s: &str| self.component_interfaces.contains(s);
+        find_unique_source_in_set(&self.structs, name, &member)
+            .or_else(|| find_unique_source_in_set(&self.variants, name, &member))
+            .or_else(|| find_unique_source_in_set(&self.enums, name, &member))
+            .or_else(|| find_unique_source_in_set(&self.flags, name, &member))
+            .or_else(|| find_unique_source_in_set(&self.newtypes, name, &member))
+    }
+
     /// Given a source-interface prefix (e.g. `"wasi:filesystem/types@"`) and
     /// a Wado type name, return the full registered source interface that
     /// matches in any type kind. Used by TIR → AST conversion to recover the
@@ -3460,6 +3483,13 @@ impl CmTypeGen {
                                 .or_else(|| cm_interface_registry.find_wasi_struct_source(name))
                                 .or_else(|| cm_interface_registry.find_wasi_enum_source(name))
                                 .or_else(|| cm_interface_registry.find_wasi_flags_source(name))
+                                .map(str::to_string)
+                        })
+                        .or_else(|| {
+                            // A type re-exported from a CM component dependency,
+                            // owned by that component's interface.
+                            cm_interface_registry
+                                .find_component_type_source(name)
                                 .map(str::to_string)
                         })
                         .unwrap_or_else(|| {
