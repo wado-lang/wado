@@ -6472,27 +6472,50 @@ fn trait_call_on_type(
     // concrete type. `module_source` (the surrounding synthesis module)
     // is a placeholder; `resolve_method_call_substitution` rewrites it
     // to the concrete impl's module once `T` is resolved.
-    let impl_module = if is_type_param {
-        module_source.clone()
+    // A blanket-derived callee (e.g. a `Reflect`-derived struct's `Inspect`)
+    // has no per-type body; route the call through the blanket so the
+    // monomorphizer instantiates it, rather than emitting an unresolved
+    // `Struct^Inspect::inspect` the WIR-build trait-bound check rejects.
+    let blanket = if is_type_param {
+        None
     } else {
-        resolve_impl_module_via_env(value_type, trait_name, tt, trait_env, module_source)
+        crate::synthesis::template::blanket_dispatch_for(
+            trait_env,
+            value_type,
+            &info.base_struct_name,
+            trait_name,
+            method_name,
+            tt,
+            true,
+        )
     };
 
-    let monomorph_info = if needs_ref_monomorph {
-        match &resolved {
-            ResolvedType::Ref(inner_id) | ResolvedType::MutRef(inner_id) => {
-                let base_info = trait_method_info(&info.base_struct_name, trait_name, method_name);
-                Some(MonomorphInfo {
-                    generic_name: base_info.to_mangled_name(),
-                    impl_type_args: vec![*inner_id],
-                    method_type_args: vec![],
-                    is_blanket: true,
-                })
-            }
-            _ => None,
-        }
+    let (impl_module, monomorph_info) = if let Some((mono, blanket_module)) = blanket {
+        (blanket_module, Some(mono))
     } else {
-        None
+        let impl_module = if is_type_param {
+            module_source.clone()
+        } else {
+            resolve_impl_module_via_env(value_type, trait_name, tt, trait_env, module_source)
+        };
+        let monomorph_info = if needs_ref_monomorph {
+            match &resolved {
+                ResolvedType::Ref(inner_id) | ResolvedType::MutRef(inner_id) => {
+                    let base_info =
+                        trait_method_info(&info.base_struct_name, trait_name, method_name);
+                    Some(MonomorphInfo {
+                        generic_name: base_info.to_mangled_name(),
+                        impl_type_args: vec![*inner_id],
+                        method_type_args: vec![],
+                        is_blanket: true,
+                    })
+                }
+                _ => None,
+            }
+        } else {
+            None
+        };
+        (impl_module, monomorph_info)
     };
 
     let fn_name = info.to_mangled_name();
