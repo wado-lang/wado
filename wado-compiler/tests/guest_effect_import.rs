@@ -136,3 +136,38 @@ test "shape compiles" {}
         "a fully-handled effect must not surface as a CM import"
     );
 }
+
+/// An effect handled in one export but left unhandled in another must still
+/// surface as a CM import: the lib's import surface is the union of its
+/// exports' required effects. This is the two-function pattern (a default
+/// `render` that installs a handler, plus a `render_highlighted` a consumer
+/// customizes) that `marl` relies on.
+#[test]
+fn effect_handled_in_one_export_and_open_in_another_is_imported() {
+    let source = r#"
+interface Highlight {
+    fn highlight(code: String, lang: String) -> String;
+}
+struct DefaultHl {}
+impl Highlight for DefaultHl {
+    fn highlight(&mut self, code: String, lang: String) -> String {
+        resume `${lang}:${code}`;
+    }
+    ..trap
+}
+export fn render(code: String, lang: String) -> String {
+    let mut h = DefaultHl {};
+    return with &mut h do { Highlight::highlight(code, lang) };
+}
+export fn render_highlighted(code: String, lang: String) -> String with Highlight {
+    return Highlight::highlight(code, lang);
+}
+test "shape compiles" {}
+"#;
+    let wasm = compile_lib_source(source);
+    assert!(
+        imported_interface(&wasm, GUEST_IFACE_FQ).is_some(),
+        "an effect left unhandled by an export must surface as a CM import even \
+         if another export handles it internally"
+    );
+}

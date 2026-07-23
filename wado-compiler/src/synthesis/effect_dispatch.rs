@@ -467,6 +467,7 @@ fn synthesize_dispatch_wrappers(
     key: &InstantiationKey,
     meta: &EffectMeta,
     plan: &DispatchPlan,
+    open_effects: &IndexSet<String>,
 ) {
     let (effect_module, base_name, type_args) = key;
     let effect_module = effect_module.clone();
@@ -489,6 +490,7 @@ fn synthesize_dispatch_wrappers(
             op,
             plan,
             is_resource,
+            open_effects.contains(&base_name),
             &type_table,
             &interner,
         );
@@ -505,6 +507,7 @@ fn build_dispatch_wrapper_function(
     op: &TirEffectOp,
     plan: &DispatchPlan,
     is_resource: bool,
+    is_open_boundary_effect: bool,
     type_table: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
     interner: &std::cell::RefCell<ModuleSourceInterner>,
 ) -> TirFunction {
@@ -804,11 +807,12 @@ fn build_dispatch_wrapper_function(
             },
             span,
         ));
-    } else if op.cm_name.is_some() {
-        // WASI / cm-tagged effect call: emit the user-effect Call form
-        // (`Effect::op(args)`) so cm_binding's effect-call collector
-        // and rewriter pick it up exactly as it would a hand-written
-        // effect call.
+    } else if op.cm_name.is_some() || is_open_boundary_effect {
+        // A cm-tagged (WASI) op, or a guest effect an exported function leaves
+        // open at the library boundary: emit the user-effect Call form
+        // (`Effect::op(args)`) so cm_binding's effect-call collector and
+        // rewriter lower it to the CM import — the no-handler case of an open
+        // effect is "call the consumer's implementation", not a trap.
         let effect_call = TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef {
@@ -2908,13 +2912,43 @@ pub fn synthesize_pre_cm_binding(mut project: Package) -> Result<Package, String
         return Ok(project);
     }
 
-    let plans = synthesize_dispatch_infrastructure(&mut project, &effect_index, &active_effects);
+    // Effects an exported function declares `with E` are *open* at the library
+    // boundary: a consumer must satisfy them, so the dispatch wrapper's
+    // no-handler fallback routes to the CM import rather than trapping. An
+    // effect handled by every export (declared by none) keeps trapping. This is
+    // the union of exports' required effects, and is what lets one export
+    // install a default handler while a sibling leaves the effect open.
+    let open_effects = open_boundary_effects(&project);
+
+    let plans = synthesize_dispatch_infrastructure(
+        &mut project,
+        &effect_index,
+        &active_effects,
+        &open_effects,
+    );
     rewrite_call_sites_to_wrappers(&mut project, &plans);
     // Hand the plans off to `synthesize_post_check` via the project so
     // the late half doesn't re-derive the same struct / global / wrapper
     // triple from existing declarations.
     project.dispatch_plans = plans;
     Ok(project)
+}
+
+/// Effect names declared in the `with` clause of any exported function — the
+/// effects left open at the library boundary.
+fn open_boundary_effects(project: &Package) -> IndexSet<String> {
+    let mut out: IndexSet<String> = IndexSet::default();
+    for module in project.tir_modules.values() {
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
+            if func.is_export {
+                for e in &func.effects {
+                    out.insert(e.name().to_string());
+                }
+            }
+        }
+    }
+    out
 }
 
 /// **Late phase** — desugar `WithHandler` expressions into the
@@ -2963,6 +2997,7 @@ fn synthesize_dispatch_infrastructure(
     project: &mut Package,
     effect_index: &IndexMap<EffectKey, EffectMeta>,
     active_instantiations: &IndexSet<InstantiationKey>,
+    open_effects: &IndexSet<String>,
 ) -> IndexMap<InstantiationKey, DispatchPlan> {
     let entry_source = project.entry_module_source.clone();
     // Pre-substitute every active instantiation's operations against the
@@ -3006,7 +3041,7 @@ fn synthesize_dispatch_infrastructure(
         let meta = substituted_metas
             .get(key)
             .expect("substituted meta must exist for every active instantiation");
-        synthesize_dispatch_wrappers(project, &entry_source, key, meta, plan);
+        synthesize_dispatch_wrappers(project, &entry_source, key, meta, plan, open_effects);
     }
     plans
 }
