@@ -2691,7 +2691,8 @@ fn generate_flags_reflect_methods(
         option_flags_type,
         span,
     );
-    let bit_tokens_fn = generate_flags_bit_tokens_fn(type_table, env, flags_trait_name, target, span);
+    let bit_tokens_fn =
+        generate_flags_bit_tokens_fn(type_table, env, flags_trait_name, target, span);
 
     vec![
         type_name_fn,
@@ -2725,7 +2726,12 @@ fn generate_flags_bit_tokens_fn(
             tt.make_tuple(std::iter::repeat_n(token_type, target.members.len()).collect());
         let list_token_type = tt.make_list(token_type);
         let token_type_name = tt.mangle_type_name(token_type);
-        (token_type, token_tuple_type, list_token_type, token_type_name)
+        (
+            token_type,
+            token_tuple_type,
+            list_token_type,
+            token_type_name,
+        )
     };
 
     let rows = target

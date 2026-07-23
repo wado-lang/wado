@@ -186,7 +186,7 @@ via `Member::doc()` / `type_doc()`.
       tokens.
 - [x] `ReflectVariant` / `ReflectEnum` / `ReflectFlags` + `VariantCase` tokens.
 - [x] `core:serde::wire_name` / `apply_case` (library-side casing, decision 2-B).
-- [ ] `Member` on `VariantCase`; `EnumCase` / `FlagBit` tokens (enum / flags move
+- [x] `Member` on `VariantCase`; `EnumCase` / `FlagBit` tokens (enum / flags move
       to the token walk).
 - [ ] `Reflect::construct(Fields) -> Self`.
 - [ ] `#[validate]` — parse to `Validate`, expose via the tokens, enforce at the
