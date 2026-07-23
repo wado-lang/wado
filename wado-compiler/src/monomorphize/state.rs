@@ -221,15 +221,17 @@ impl Monomorphizer {
         if self.functions.instantiated.contains_key(&key) {
             return false;
         }
-        // A `Reflect`-derived blanket (`impl<T: Reflect<Fields = [..F]>, ..F:
-        // Inspect>`) reaches the same instance from two dispatch sites — a
-        // template pre-resolution and a normal method dispatch — whose derived
-        // `..F` tuples can be distinct-but-equivalent `TypeId`s, so the keys
-        // differ but the mangled name is identical. Dedup those on the name to
-        // avoid the duplicate-function check; both carry the full `[T, ..F]`
-        // args, so either body is complete. Scoped to 2-arg keys so unrelated
-        // instantiations (e.g. serde value-copy helpers) are unaffected.
-        if key.impl_type_args.len() == 2
+        // A blanket instance reaches the same function from two dispatch sites —
+        // a template pre-resolution and a normal method dispatch — whose derived
+        // args (`..F` tuple, or a ref blanket's pointee) can be
+        // distinct-but-equivalent `TypeId`s, so the keys differ but the mangled
+        // name is identical. Dedup those on the name to avoid the
+        // duplicate-function check; either body is complete. The struct blanket
+        // carries `[T, ..F]` (len 2); the ref/mutref blankets carry `[pointee]`
+        // (len 1) under a `&`/`&mut`-headed template name.
+        let is_blanket_key = key.impl_type_args.len() == 2
+            || (key.impl_type_args.len() == 1 && key.name.starts_with('&'));
+        if is_blanket_key
             && self
                 .functions
                 .instantiated
