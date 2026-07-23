@@ -35,33 +35,29 @@ type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wad
 
 type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(14)
 
-type "functype//core:prelude/string.wado/encode_char" = fn(ref Array<u8>, i32, u32) -> i32;  // TypeId(15)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(15)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(16)
+type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(16)
 
-type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(17)
+type "functype//core:rt/wait_for_blocked" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//core:rt/wait_for_blocked" = fn(i32) -> i32;  // TypeId(18)
+type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(18)
 
-type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(19)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(19)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(20)
+type "functype//core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(20)
 
-type "functype//core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(21)
+type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(21)
 
-type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(22)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(22)
 
-type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(23)
+type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(23)
 
-type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(24)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(24)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(25)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(25)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(27)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(28)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(26)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -81,6 +77,10 @@ global mut global:escape_brace.wado::__const_obj_0: ref null "core:prelude/strin
 
 fn "escape_brace.wado/run"() with Stdout {
     let __local_1: ref "core:prelude/string.wado//String";
+    let start_5: i32;
+    let start_14: i32;
+    let start_23: i32;
+    let start_32: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:escape_brace.wado::__modules_initialized);
         cold_path;
@@ -88,7 +88,7 @@ fn "escape_brace.wado/run"() with Stdout {
         global:escape_brace.wado::__modules_initialized = 1;
     };
     global:escape_brace.wado::__const_obj_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 };
-    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 }; "core:prelude/string.wado/String::push"(__local_1, 123); "core:prelude/string.wado/String::push"(__local_1, 34); "core:prelude/string.wado/String::push_str"(__local_1, global:escape_brace.wado::__const_obj_0); "core:prelude/string.wado/String::push"(__local_1, 34); "core:prelude/string.wado/String::push"(__local_1, 125); __local_1);
+    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 }; start_5 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1); builtin::array_set_u8(__local_1.repr, start_5, 123); start_14 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1); builtin::array_set_u8(__local_1.repr, start_14, 34); "core:prelude/string.wado/String::push_str"(__local_1, global:escape_brace.wado::__const_obj_0); start_23 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1); builtin::array_set_u8(__local_1.repr, start_23, 34); start_32 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1); builtin::array_set_u8(__local_1.repr, start_32, 125); __local_1);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"key\": \"value\"}"), used: 16 });
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("plain { and }"), used: 13 });
 }
@@ -151,38 +151,15 @@ fn "core:cli/println"(message) with Stdout {
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
-fn "core:prelude/string.wado/encode_char"(repr, pos, code) {
-    if code <u 128 {
-        builtin::array_set_u8(repr, pos, code & 255);
-        return 1;
-    }
-    if code <u 2048 {
-        builtin::array_set_u8(repr, pos, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | (code & 63)) & 255);
-        return 2;
-    }
-    if code <u 65536 {
-        builtin::array_set_u8(repr, pos, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(repr, pos + 2, (128 | (code & 63)) & 255);
-        return 3;
-    }
-    builtin::array_set_u8(repr, pos, (240 | (code >>u 18)) & 255);
-    builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 12) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 2, (128 | ((code >>u 6) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 3, (128 | (code & 63)) & 255);
-    return 4;
-}
-
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b4: block {
-        l5: loop {
-            break_if b4 i >= len;
+    b1: block {
+        l2: loop {
+            break_if b1 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
             i = i + 1;
-            continue l5;
+            continue l2;
         };
     };
 }
@@ -212,20 +189,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b6: block {
-        l7: loop {
-            break_if b6 offset >= count;
+    b3: block {
+        l4: loop {
+            break_if b3 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/wait_for_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b6 (if (result >> 4) == 0 -> i32 {
+            break_if b3 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l7;
+            continue l4;
         };
     };
 }
@@ -273,14 +250,6 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     }
     start = "core:prelude/string.wado/String::internal_reserve_uninit"(self, other_len);
     builtin::array_copy<u8>(self.repr, start, other.repr, 0, other_len);
-}
-
-fn "core:prelude/string.wado/String::push"(self, c) {
-    if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
-        cold_path;
-        "core:prelude/string.wado/String::grow"(self, self.used + 4);
-    }
-    self.used = self.used + "core:prelude/string.wado/encode_char"(self.repr, self.used, c);
 }
 
 export fn "escape_brace.wado/__cm_export__run" as "run"

@@ -473,6 +473,14 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
+    let byte: u8;
+    let start: i32;
+    if c <u 128 {
+        byte = c & 255;
+        start = "core:prelude/string.wado/String::internal_reserve_uninit"(self, 1);
+        builtin::array_set_u8(self.repr, start, byte);
+        return;
+    }
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
@@ -482,23 +490,44 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 
 fn "trait_default.wado/Person^Greet::greet"(self) {
     let __local_1: ref "core:prelude/string.wado//String";
-    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }, "core:prelude/string.wado/String::push"(__local_1, 72), "core:prelude/string.wado/String::push"(__local_1, 105), "core:prelude/string.wado/String::push"(__local_1, 44), "core:prelude/string.wado/String::push"(__local_1, 32), "core:prelude/string.wado/String::push_str"(__local_1, self.name), "core:prelude/string.wado/String::push"(__local_1, 33), __local_1;
+    let start_5: i32;
+    let start_14: i32;
+    let start_23: i32;
+    let start_32: i32;
+    let start_42: i32;
+    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }, start_5 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_5, 72), start_14 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_14, 105), start_23 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_23, 44), start_32 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_32, 32), "core:prelude/string.wado/String::push_str"(__local_1, self.name), start_42 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_42, 33), __local_1;
 }
 
 fn "trait_default.wado/Robot^Greet::name"(self) {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
-    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }, "core:prelude/string.wado/String::push"(__local_1, 82), "core:prelude/string.wado/String::push"(__local_1, 111), "core:prelude/string.wado/String::push"(__local_1, 98), "core:prelude/string.wado/String::push"(__local_1, 111), "core:prelude/string.wado/String::push"(__local_1, 116), "core:prelude/string.wado/String::push"(__local_1, 45), __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }, "core:prelude/primitive.wado/i32::fmt_decimal"(self.id, __local_2), __local_1;
+    let start_6: i32;
+    let start_15: i32;
+    let start_24: i32;
+    let start_33: i32;
+    let start_42: i32;
+    let start_51: i32;
+    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }, start_6 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_6, 82), start_15 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_15, 111), start_24 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_24, 98), start_33 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_33, 111), start_42 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_42, 116), start_51 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_51, 45), __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }, "core:prelude/primitive.wado/i32::fmt_decimal"(self.id, __local_2), __local_1;
 }
 
 fn "trait_default.wado/Robot^Greet::greet"(self) {
     let __local_1: ref "core:prelude/string.wado//String";
-    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }, "core:prelude/string.wado/String::push"(__local_1, 72), "core:prelude/string.wado/String::push"(__local_1, 101), "core:prelude/string.wado/String::push"(__local_1, 108), "core:prelude/string.wado/String::push"(__local_1, 108), "core:prelude/string.wado/String::push"(__local_1, 111), "core:prelude/string.wado/String::push"(__local_1, 44), "core:prelude/string.wado/String::push"(__local_1, 32), "core:prelude/string.wado/String::push_str"(__local_1, "trait_default.wado/Robot^Greet::name"(self)), "core:prelude/string.wado/String::push"(__local_1, 33), __local_1;
+    let start_5: i32;
+    let start_14: i32;
+    let start_23: i32;
+    let start_32: i32;
+    let start_41: i32;
+    let start_50: i32;
+    let start_59: i32;
+    let start_68: i32;
+    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }, start_5 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_5, 72), start_14 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_14, 101), start_23 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_23, 108), start_32 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_32, 108), start_41 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_41, 111), start_50 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_50, 44), start_59 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_59, 32), "core:prelude/string.wado/String::push_str"(__local_1, "trait_default.wado/Robot^Greet::name"(self)), start_68 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_68, 33), __local_1;
 }
 
 fn "trait_default.wado/Item^Describable::short_desc"(self) {
     let __local_1: ref "core:prelude/string.wado//String";
-    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }, "core:prelude/string.wado/String::push"(__local_1, 91), "core:prelude/string.wado/String::push_str"(__local_1, self.name), "core:prelude/string.wado/String::push"(__local_1, 93), __local_1;
+    let start_5: i32;
+    let start_15: i32;
+    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }, start_5 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_5, 91), "core:prelude/string.wado/String::push_str"(__local_1, self.name), start_15 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_15, 93), __local_1;
 }
 
 fn "trait_default.wado/Item^Describable::full_desc"(self) {
@@ -508,12 +537,22 @@ fn "trait_default.wado/Item^Describable::full_desc"(self) {
 
 fn "trait_default.wado/Article^Summary::summary"(self) {
     let __local_1: ref "core:prelude/string.wado//String";
-    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_1, self.headline), "core:prelude/string.wado/String::push"(__local_1, 32), "core:prelude/string.wado/String::push"(__local_1, 45), "core:prelude/string.wado/String::push"(__local_1, 32), "core:prelude/string.wado/String::push_str"(__local_1, self.content), __local_1;
+    let start_5: i32;
+    let start_14: i32;
+    let start_23: i32;
+    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_1, self.headline), start_5 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_5, 32), start_14 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_14, 45), start_23 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_23, 32), "core:prelude/string.wado/String::push_str"(__local_1, self.content), __local_1;
 }
 
 fn "trait_default.wado/Tweet^Summary::summary"(self) {
     let __local_1: ref "core:prelude/string.wado//String";
-    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 }, "core:prelude/string.wado/String::push"(__local_1, 84), "core:prelude/string.wado/String::push"(__local_1, 105), "core:prelude/string.wado/String::push"(__local_1, 116), "core:prelude/string.wado/String::push"(__local_1, 108), "core:prelude/string.wado/String::push"(__local_1, 101), "core:prelude/string.wado/String::push"(__local_1, 58), "core:prelude/string.wado/String::push"(__local_1, 32), "core:prelude/string.wado/String::push_str"(__local_1, self.text), __local_1;
+    let start_5: i32;
+    let start_14: i32;
+    let start_23: i32;
+    let start_32: i32;
+    let start_41: i32;
+    let start_50: i32;
+    let start_59: i32;
+    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 }, start_5 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_5, 84), start_14 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_14, 105), start_23 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_23, 116), start_32 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_32, 108), start_41 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_41, 101), start_50 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_50, 58), start_59 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_59, 32), "core:prelude/string.wado/String::push_str"(__local_1, self.text), __local_1;
 }
 
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
@@ -521,12 +560,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b23: block {
-        l24: loop {
-            break_if b23 i >= n;
+    b24: block {
+        l25: loop {
+            break_if b24 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l24;
+            continue l25;
         };
     };
 }

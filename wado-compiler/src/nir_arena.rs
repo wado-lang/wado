@@ -426,6 +426,15 @@ impl Body {
         }
     }
 
+    /// The scalar value of a constant-char `Operand::Value`. `None` for an
+    /// `Operand::Expr` or any non-char-constant operand.
+    pub fn operand_const_char(&self, op: Operand) -> Option<char> {
+        match self.values.kind(op.as_value()?) {
+            ValueKind::Char(c) => Some(*c),
+            _ => None,
+        }
+    }
+
     /// An empty body: no nodes and a placeholder `root` (set by the caller once
     /// the root block is built). Used by `lower::translate` as the canonical
     /// builder it pushes nodes into, and as a scratch arena for passes that
