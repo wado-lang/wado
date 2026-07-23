@@ -418,12 +418,14 @@ test "render reports no headings for a heading-free document" {
 
 use { render_highlighted, Highlight } from "./fmt_html.wado";
 
-struct MarkHl {}
+struct MarkHl {
+}
 
 impl Highlight for MarkHl {
     fn highlight(&mut self, code: String, lang: String) -> String {
         resume `<mark data-lang="${lang}">${code}</mark>`;
     }
+
     ..trap
 }
 
@@ -432,7 +434,7 @@ test "render_highlighted delegates each code block to the Highlight handler, une
     let out = with &mut h do {
         render_highlighted("```wado
 let x = 1;
-```")
+```");
     };
     assert out.html == "<pre><code class=\"language-wado\"><mark data-lang=\"wado\">let x = 1;
 </mark></code></pre>";

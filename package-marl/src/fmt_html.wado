@@ -52,19 +52,23 @@ pub interface Highlight {
 
 /// The default `Highlight`: no language-specific markup, just HTML-escape —
 /// so `render` reproduces plain `<pre><code>` output.
-struct PlainHighlight {}
+struct PlainHighlight {
+}
 
 impl Highlight for PlainHighlight {
     fn highlight(&mut self, code: String, _lang: String) -> String {
         resume escape_text_ref(&code);
     }
+
     ..trap
 }
 
 /// Render Markdown to HTML with plain (escaped) code blocks.
 export fn render(source: String) -> RenderResult {
     let mut h = PlainHighlight {};
-    return with &mut h do { render_document(source) };
+    return with &mut h do {
+        render_document(source);
+    };
 }
 
 /// Render Markdown to HTML, delegating each code block to a `Highlight`
