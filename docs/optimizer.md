@@ -130,7 +130,16 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
 - [ ] Dead store elimination.
 - [ ] Strength reduction; reassociation; jump threading; SimplifyCFG.
 - [ ] Cross-block copy propagation.
-- [ ] Function specialization / argument promotion.
+- [ ] Function specialization / argument promotion. High value: a hot caller
+      often passes a by-reference config struct whose fields are compile-time
+      constants — e.g. a template's `Formatter` (`precision`, `width`,
+      `sign_plus`, …) threaded through `fmt_into` → `fmt_fixed`. Because those
+      callees are above the inline threshold the constants never propagate, so
+      dead branches (`if f.sign_plus`, `if f.width > 0`) and redundant GC field
+      reloads survive across the whole format path. Specializing a callee on a
+      constant by-ref struct argument (interprocedural constant propagation over
+      struct fields) would fold them. Big change, but a real win for formatting
+      and other config-struct-driven hot paths.
 - [ ] Tail call optimization (`return_call`).
 - [ ] Bounds-check elimination for chained sequential access (`arr[0]; arr[1]; arr[2]`).
 
