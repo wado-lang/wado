@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784816427426,
+  "lastUpdate": 1784850902270,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -43441,6 +43441,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/37592f4981bd0467c84a719de5d73c6ed75bf5bd"
         },
         "date": 1784816427179,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1970,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8212,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16169,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 272252,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ebfd6d6f60db2103f8ae771b3619ab6007fe087d",
+          "message": "Merge pull request #1672 from wado-lang/claude/wado-gale-highlight-g3i0s8\n\nfix(cm): skip a provider whose dependency was eliminated instead of panicking",
+          "timestamp": "2026-07-24T08:44:06+09:00",
+          "tree_id": "072b614d14151b54a5f22d6cf10dca3ced1315c7",
+          "url": "https://github.com/wado-lang/wado/commit/ebfd6d6f60db2103f8ae771b3619ab6007fe087d"
+        },
+        "date": 1784850901759,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
