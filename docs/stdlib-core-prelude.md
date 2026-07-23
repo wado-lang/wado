@@ -3403,6 +3403,15 @@ Decodes the UTF-8 character starting at `byte_index` without bounds checks.
 
 Appends a Unicode scalar value (char) to this string.
 
+#### `pub fn push_ascii(&mut self, byte: u8)`
+
+Appends a single ASCII byte (a one-byte UTF-8 sequence).
+
+`push` routes its ASCII fast path here, and the optimizer's
+`nir/const_ascii_push` rewrite retargets `push(<const char < 0x80>)`
+here directly, skipping `encode_char`'s width dispatch. The caller must
+pass `byte < 0x80`.
+
 #### `pub fn truncate(&mut self, byte_len: i32)`
 
 Truncates the string to the given byte length.

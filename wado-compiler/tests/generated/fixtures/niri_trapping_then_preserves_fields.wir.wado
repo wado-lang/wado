@@ -107,20 +107,21 @@ fn "niri_trapping_then_preserves_fields.wado/run"() with Stdout {
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let f_7: ref "core:prelude/format.wado//Formatter";
-    let f_12: ref "core:prelude/format.wado//Formatter";
-    let repr_19: ref Array<u16>;
+    let start: i32;
+    let f_21: ref "core:prelude/format.wado//Formatter";
     let repr_28: ref Array<u16>;
+    let repr_37: ref Array<u16>;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:niri_trapping_then_preserves_fields.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:niri_trapping_then_preserves_fields.wado::__modules_initialized = 1;
     };
-    repr_19 = builtin::array_new<u16>(16);
-    builtin::array_fill<u16>(repr_19, 0, 0, 16);
     repr_28 = builtin::array_new<u16>(16);
     builtin::array_fill<u16>(repr_28, 0, 0, 16);
-    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; f_7 = __local_3; "core:prelude/primitive.wado/i32::fmt_decimal"(16, f_7); "core:prelude/string.wado/String::push"(__local_2, 44); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; f_12 = __local_3; "core:prelude/primitive.wado/i32::fmt_decimal"(-1, f_12); __local_2);
+    repr_37 = builtin::array_new<u16>(16);
+    builtin::array_fill<u16>(repr_37, 0, 0, 16);
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; f_7 = __local_3; "core:prelude/primitive.wado/i32::fmt_decimal"(16, f_7); start = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start, 44); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; f_21 = __local_3; "core:prelude/primitive.wado/i32::fmt_decimal"(-1, f_21); __local_2);
 }
 
 fn "niri_trapping_then_preserves_fields.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -357,6 +358,14 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
+    let byte: u8;
+    let start: i32;
+    if c <u 128 {
+        byte = c & 255;
+        start = "core:prelude/string.wado/String::internal_reserve_uninit"(self, 1);
+        builtin::array_set_u8(self.repr, start, byte);
+        return;
+    }
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
@@ -369,12 +378,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b20: block {
-        l21: loop {
-            break_if b20 i >= n;
+    b21: block {
+        l22: loop {
+            break_if b21 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l21;
+            continue l22;
         };
     };
 }

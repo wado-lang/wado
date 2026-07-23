@@ -8,7 +8,9 @@
 //! 1.  `container_sroa` — `AoS` → `SoA` for `List<Tuple<...>>` / `List<Struct>`.
 //! 2.  `peephole` (pre-inline) — unified engine session: `MatchToSwitchRule`
 //!     (dense `Match` → `Switch`), `string_push` (`buf.push_str("short")` →
-//!     per-byte `push`), `elide_local` (write-only local elimination), env-free
+//!     per-byte `push`), `const_ascii_push` (`push(<const char < 0x80>)` →
+//!     `push_ascii`, skipping `encode_char`'s UTF-8 width dispatch),
+//!     `elide_local` (write-only local elimination), env-free
 //!     `const_fold` (literal arithmetic + pure CTFE), and `const_branch_prune`
 //!     (trivial-block / dead-statement cleanup). See `optimize/peephole.rs`.
 //! 3.  `value_copy_demote` — demote deep `$value_copy$T` to a shallow spine

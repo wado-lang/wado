@@ -634,11 +634,28 @@ impl String {
     /// Appends a Unicode scalar value (char) to this string.
     #[compiler_item("string_push_char")]
     pub fn push(&mut self, c: char) {
+        let code = c as u32;
+        if code < 0x80 {
+            self.push_ascii(code as u8);
+            return;
+        }
         if self.used + 4 > self.repr.len() {
             builtin::cold_path();
             self.grow(self.used + 4);
         }
-        self.used += encode_char(&mut self.repr as &mut Array<u8>, self.used, c as u32);
+        self.used += encode_char(&mut self.repr as &mut Array<u8>, self.used, code);
+    }
+
+    /// Appends a single ASCII byte (a one-byte UTF-8 sequence).
+    ///
+    /// `push` routes its ASCII fast path here, and the optimizer's
+    /// `nir/const_ascii_push` rewrite retargets `push(<const char < 0x80>)`
+    /// here directly, skipping `encode_char`'s width dispatch. The caller must
+    /// pass `byte < 0x80`.
+    #[compiler_item("string_push_ascii")]
+    pub fn push_ascii(&mut self, byte: u8) {
+        let start = self.internal_reserve_uninit(1);
+        self.set_byte_unchecked(start, byte);
     }
 
     /// Truncates the string to the given byte length.

@@ -137,7 +137,8 @@ fn "niri_if_arm_meet_nested_match_arm.wado/run"() with Stdout, MonotonicClock {
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let f_9: ref "core:prelude/format.wado//Formatter";
-    let f_14: ref "core:prelude/format.wado//Formatter";
+    let start: i32;
+    let f_23: ref "core:prelude/format.wado//Formatter";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:niri_if_arm_meet_nested_match_arm.wado::__modules_initialized);
         cold_path;
@@ -147,7 +148,7 @@ fn "niri_if_arm_meet_nested_match_arm.wado/run"() with Stdout, MonotonicClock {
     drop(local.tee now("niri_if_arm_meet_nested_match_arm.wado/__cm_binding__MonotonicClock_now"()) != now);
     a = "niri_if_arm_meet_nested_match_arm.wado/check_match_arm_meet"(1);
     b = "niri_if_arm_meet_nested_match_arm.wado/check_match_arm_meet"(0);
-    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_9 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(a, f_9); "core:prelude/string.wado/String::push"(__local_4, 44); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_14 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(b, f_14); __local_4);
+    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_9 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(a, f_9); start = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1); builtin::array_set_u8(__local_4.repr, start, 44); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_23 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(b, f_23); __local_4);
 }
 
 fn "niri_if_arm_meet_nested_match_arm.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -388,6 +389,14 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
+    let byte: u8;
+    let start: i32;
+    if c <u 128 {
+        byte = c & 255;
+        start = "core:prelude/string.wado/String::internal_reserve_uninit"(self, 1);
+        builtin::array_set_u8(self.repr, start, byte);
+        return;
+    }
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
@@ -400,12 +409,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b23: block {
-        l24: loop {
-            break_if b23 i >= n;
+    b24: block {
+        l25: loop {
+            break_if b24 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l24;
+            continue l25;
         };
     };
 }

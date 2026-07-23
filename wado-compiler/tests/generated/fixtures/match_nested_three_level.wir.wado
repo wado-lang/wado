@@ -120,10 +120,18 @@ fn "match_nested_three_level.wado/run"() with Stdout {
     let result: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
-    let f_11: ref "core:prelude/format.wado//Formatter";
-    let f_16: ref "core:prelude/format.wado//Formatter";
-    let f_21: ref "core:prelude/format.wado//Formatter";
-    let f_26: ref "core:prelude/format.wado//Formatter";
+    let start_11: i32;
+    let f_20: ref "core:prelude/format.wado//Formatter";
+    let start_25: i32;
+    let f_34: ref "core:prelude/format.wado//Formatter";
+    let start_39: i32;
+    let start_48: i32;
+    let start_57: i32;
+    let start_66: i32;
+    let f_75: ref "core:prelude/format.wado//Formatter";
+    let start_80: i32;
+    let f_89: ref "core:prelude/format.wado//Formatter";
+    let start_94: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:match_nested_three_level.wado::__modules_initialized);
         cold_path;
@@ -143,26 +151,34 @@ fn "match_nested_three_level.wado/run"() with Stdout {
         x2 = __tuple_elem_3.x;
         y2 = __tuple_elem_3.y;
         __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(72), used: 0 };
-        "core:prelude/string.wado/String::push"(__local_6, 40);
+        start_11 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_6, 1);
+        builtin::array_set_u8(__local_6.repr, start_11, 40);
         __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 };
-        f_11 = __local_7;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(x1, f_11);
-        "core:prelude/string.wado/String::push"(__local_6, 44);
+        f_20 = __local_7;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(x1, f_20);
+        start_25 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_6, 1);
+        builtin::array_set_u8(__local_6.repr, start_25, 44);
         __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 };
-        f_16 = __local_7;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(y1, f_16);
-        "core:prelude/string.wado/String::push"(__local_6, 41);
-        "core:prelude/string.wado/String::push"(__local_6, 45);
-        "core:prelude/string.wado/String::push"(__local_6, 62);
-        "core:prelude/string.wado/String::push"(__local_6, 40);
+        f_34 = __local_7;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(y1, f_34);
+        start_39 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_6, 1);
+        builtin::array_set_u8(__local_6.repr, start_39, 41);
+        start_48 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_6, 1);
+        builtin::array_set_u8(__local_6.repr, start_48, 45);
+        start_57 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_6, 1);
+        builtin::array_set_u8(__local_6.repr, start_57, 62);
+        start_66 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_6, 1);
+        builtin::array_set_u8(__local_6.repr, start_66, 40);
         __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 };
-        f_21 = __local_7;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(x2, f_21);
-        "core:prelude/string.wado/String::push"(__local_6, 44);
+        f_75 = __local_7;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(x2, f_75);
+        start_80 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_6, 1);
+        builtin::array_set_u8(__local_6.repr, start_80, 44);
         __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 };
-        f_26 = __local_7;
-        "core:prelude/primitive.wado/i32::fmt_decimal"(y2, f_26);
-        "core:prelude/string.wado/String::push"(__local_6, 41);
+        f_89 = __local_7;
+        "core:prelude/primitive.wado/i32::fmt_decimal"(y2, f_89);
+        start_94 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_6, 1);
+        builtin::array_set_u8(__local_6.repr, start_94, 41);
         __local_6;
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 110, 101), used: 4 };
@@ -404,6 +420,14 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
+    let byte: u8;
+    let start: i32;
+    if c <u 128 {
+        byte = c & 255;
+        start = "core:prelude/string.wado/String::internal_reserve_uninit"(self, 1);
+        builtin::array_set_u8(self.repr, start, byte);
+        return;
+    }
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
@@ -416,12 +440,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b21: block {
-        l22: loop {
-            break_if b21 i >= n;
+    b22: block {
+        l23: loop {
+            break_if b22 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l22;
+            continue l23;
         };
     };
 }

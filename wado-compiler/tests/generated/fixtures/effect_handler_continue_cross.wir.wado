@@ -179,6 +179,8 @@ fn "effect_handler_continue_cross.wado/run"() with Stdout {
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let __save_Counter: ref null "effect_handler_continue_cross.wado//__Dispatch_Counter";
     let __d_Counter: ref "effect_handler_continue_cross.wado//__Dispatch_Counter";
+    let start_10: i32;
+    let start_19: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:effect_handler_continue_cross.wado::__modules_initialized);
         cold_path;
@@ -190,7 +192,7 @@ fn "effect_handler_continue_cross.wado/run"() with Stdout {
     __d_Counter = struct.new "effect_handler_continue_cross.wado//__Dispatch_Counter" { outer: __save_Counter, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_continue_cross.wado//__Closure_3" { __capture_0: outer }, func: ref.func "closure/effect_handler_continue_cross.wado/__closure_wrapper_1" } };
     global:effect_handler_continue_cross.wado::__effect_Counter = __d_Counter;
     r = "effect_handler_continue_cross.wado/helper"();
-    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }; "core:prelude/string.wado/String::push"(__local_2, 114); "core:prelude/string.wado/String::push"(__local_2, 61); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(r, __local_3); __local_2);
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }; start_10 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_10, 114); start_19 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_19, 61); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(r, __local_3); __local_2);
     global:effect_handler_continue_cross.wado::__effect_Counter = __save_Counter;
 }
 
@@ -497,6 +499,14 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
+    let byte: u8;
+    let start: i32;
+    if c <u 128 {
+        byte = c & 255;
+        start = "core:prelude/string.wado/String::internal_reserve_uninit"(self, 1);
+        builtin::array_set_u8(self.repr, start, byte);
+        return;
+    }
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
@@ -509,12 +519,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b26: block {
-        l27: loop {
-            break_if b26 i >= n;
+    b27: block {
+        l28: loop {
+            break_if b27 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l27;
+            continue l28;
         };
     };
 }

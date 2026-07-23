@@ -1,14 +1,21 @@
-//! Rewrite `buf.push_str("short_constant")` (≤8 ASCII bytes) into a
-//! sequence of `buf.push(ch)` calls — eliminates the temporary `String`
-//! allocation that the literal would otherwise materialize at lowering.
+//! Two composed string-append rewrites over the shared peephole session:
+//!
+//! * [`ShortPushStrRule`] rewrites `buf.push_str("short_constant")` (≤8 ASCII
+//!   bytes) into a sequence of `buf.push(ch)` calls — eliminating the temporary
+//!   `String` allocation that the literal would otherwise materialize at
+//!   lowering.
+//! * [`ConstAsciiPushRule`] then retargets each `buf.push(<const char < 0x80>)`
+//!   — the ones above, plus any direct constant-ASCII `push` — to
+//!   `buf.push_ascii(<byte>)`, skipping `encode_char`'s UTF-8 width dispatch.
 //!
 //! Must run *before* `inline`: once the inliner expands `push_str`'s body
 //! the `MethodCall` node is replaced by a labeled block, after which the
 //! literal-recognising rewrite no longer fires.
 //!
-//! Identifies the two methods via their [`crate::compiler_item::CompilerItem`]
-//! markers (`StringPushStr` / `StringPushChar`) so the pass does not depend
-//! on the canonical paths of `String::push_str` / `String::push`.
+//! Identifies the methods via their [`crate::compiler_item::CompilerItem`]
+//! markers (`StringPushStr` / `StringPushChar` / `StringPushAscii`) so the pass
+//! does not depend on the canonical paths of `String::push_str` /
+//! `String::push` / `String::push_ascii`.
 //!
 //! The receiver is duplicated once per output `push` call. We only rewrite
 //! when the receiver is one of the syntactically pure forms accepted by
@@ -58,12 +65,15 @@ pub(super) struct Ctx {
     /// `FuncId` of `push_char`, captured at resolution so the synthesized
     /// per-byte `push(ch)` calls are born resolved.
     push_char_id: crate::nir::FuncId,
+    /// `FuncId` of `push_ascii`, the retarget for a constant-ASCII `push`.
+    push_ascii_id: crate::nir::FuncId,
 }
 
 impl Ctx {
     fn resolve(project: &NirPackage) -> Option<Self> {
         let mut push_str_id: Option<crate::nir::FuncId> = None;
         let mut push_char_id: Option<crate::nir::FuncId> = None;
+        let mut push_ascii_id: Option<crate::nir::FuncId> = None;
         for func_rc in &project.functions {
             let f = func_rc.borrow();
             match f.compiler_item {
@@ -73,12 +83,16 @@ impl Ctx {
                 Some(CompilerItem::StringPushChar) => {
                     push_char_id = Some(f.id.expect("func_id assigned at lower"));
                 }
+                Some(CompilerItem::StringPushAscii) => {
+                    push_ascii_id = Some(f.id.expect("func_id assigned at lower"));
+                }
                 Some(_) | None => {}
             }
         }
         Some(Self {
             push_str_id: push_str_id?,
             push_char_id: push_char_id?,
+            push_ascii_id: push_ascii_id?,
         })
     }
 }
@@ -110,6 +124,76 @@ impl Rule for ShortPushStrRule {
             engine.set_block_stmts(id, new_stmts);
         }
         changed
+    }
+}
+
+/// Retarget `buf.push(<const char < 0x80>)` to `buf.push_ascii(<byte>)`,
+/// skipping `encode_char`'s UTF-8 width dispatch: a constant ASCII scalar is
+/// always a one-byte sequence. Composes with [`ShortPushStrRule`] — the
+/// per-byte `push(ch)` calls it emits for a short constant `push_str` are all
+/// ASCII, so they flow straight into this rule on the shared worklist.
+///
+/// `push` is `&mut self`-returning-unit, so its call is always a statement
+/// expression; the rewrite is an in-place `MethodCall` edit (swap the callee
+/// and coerce the `char` argument to its `u8` byte).
+pub(super) struct ConstAsciiPushRule {
+    push_char_id: crate::nir::FuncId,
+    push_ascii_id: crate::nir::FuncId,
+}
+
+impl ConstAsciiPushRule {
+    pub(super) fn new(ctx: &Ctx) -> Self {
+        Self {
+            push_char_id: ctx.push_char_id,
+            push_ascii_id: ctx.push_ascii_id,
+        }
+    }
+}
+
+impl Rule for ConstAsciiPushRule {
+    fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
+        let (receiver, arg0, type_args_empty) = {
+            let ExprKind::MethodCall {
+                receiver,
+                func_id,
+                args,
+                type_args,
+            } = &engine.body.exprs[id].kind
+            else {
+                return false;
+            };
+            if *func_id != self.push_char_id || args.len() != 1 {
+                return false;
+            }
+            (*receiver, args[0].expr, type_args.is_empty())
+        };
+        if !type_args_empty {
+            return false;
+        }
+        let Some(ch) = engine.body.operand_const_char(arg0) else {
+            return false;
+        };
+        let code = u32::from(ch);
+        if code >= 0x80 {
+            return false;
+        }
+        let byte_arg = engine.const_operand(
+            crate::nir_value_graph::ValueKind::Int(u64::from(code), TypeTable::U8),
+            TypeTable::U8,
+        );
+        engine.replace_expr_kind(
+            id,
+            ExprKind::MethodCall {
+                func_id: self.push_ascii_id,
+                receiver,
+                type_args: Vec::new(),
+                args: vec![ArenaCallArg {
+                    expr: byte_arg,
+                    is_mut: false,
+                }],
+            },
+        );
+        true
     }
 }
 
