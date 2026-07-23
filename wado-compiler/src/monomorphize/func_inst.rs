@@ -109,6 +109,26 @@ fn receiver_module_hint(tt: &TypeTable, tid: TypeId) -> Option<ModuleSource> {
 /// instantiation location is what lets the variadic-tuple guard and the
 /// ref-blanket dispatch both keep working under the
 /// `(ModuleSource, String)` template keying.
+/// Whether a blanket impl `impl<T: Bound> Trait for T` may claim the receiver.
+/// The blanket applies only when the receiver satisfies the param's bound
+/// (e.g. a `Reflect`-bound `Inspect` derive must not swallow a token type that
+/// has no `Reflect`). `None` receiver info means the caller cannot vet the
+/// bound and the blanket is allowed as before.
+fn blanket_receiver_satisfies(
+    trait_env: &TraitEnv,
+    trait_name: &str,
+    blanket_module: &ModuleSource,
+    blanket_receiver: Option<(TypeId, &TypeTable)>,
+) -> bool {
+    let Some((type_id, type_table)) = blanket_receiver else {
+        return true;
+    };
+    let bounds = trait_env
+        .blanket_impl_bounds_for_trait(trait_name, Some(blanket_module))
+        .unwrap_or_default();
+    crate::synthesis::template::receiver_satisfies_blanket_bounds(type_id, bounds, type_table)
+}
+
 fn lookup_template_with_trait_fallback<'a, V>(
     generic_functions: &'a IndexMap<(ModuleSource, String), V>,
     trait_env: &TraitEnv,
@@ -117,6 +137,7 @@ fn lookup_template_with_trait_fallback<'a, V>(
     info: Option<&LocalMethodName>,
     struct_candidates: &[&str],
     type_module_hint: Option<&ModuleSource>,
+    blanket_receiver: Option<(TypeId, &TypeTable)>,
 ) -> Option<&'a V> {
     if let Some(v) = generic_functions.get(&(module_hint.clone(), name.to_string())) {
         return Some(v);
@@ -137,6 +158,7 @@ fn lookup_template_with_trait_fallback<'a, V>(
         // the `IntoIterator` blanket in `core:prelude/traits`.
         if let Some(impl_module) =
             trait_env.blanket_impl_module_for_trait(trait_name, type_module_hint)
+            && blanket_receiver_satisfies(trait_env, trait_name, impl_module, blanket_receiver)
             && let Some(v) = generic_functions.get(&(impl_module.clone(), name.to_string()))
         {
             return Some(v);
@@ -491,6 +513,7 @@ impl Monomorphizer {
                             Some(info),
                             &[&info.base_struct_name, &info.struct_name],
                             None,
+                            None,
                         ) {
                             let generic_func = generic_func_rc.borrow();
                             // impl_type_args and method_type_args are now separate.
@@ -595,6 +618,7 @@ impl Monomorphizer {
                             Some(info),
                             &[&info.base_struct_name, &info.struct_name],
                             None,
+                            Some((receiver.type_id, type_table)),
                         ) {
                             let generic_func = generic_func_rc.borrow();
                             let impl_type_args = monomorph.impl_type_args.clone();
@@ -660,6 +684,7 @@ impl Monomorphizer {
                                 info_ref,
                                 &candidates,
                                 receiver_module.as_ref(),
+                                Some((receiver.type_id, type_table)),
                             ) {
                                 let method_info =
                                     gf.borrow().method_info.clone().unwrap_or_else(|| {
@@ -748,6 +773,7 @@ impl Monomorphizer {
                                             info_ref,
                                             &candidates,
                                             receiver_module.as_ref(),
+                                            Some((receiver.type_id, type_table)),
                                         )
                                     {
                                         let generic_func = generic_func_rc.borrow();
@@ -842,6 +868,7 @@ impl Monomorphizer {
                             info_ref,
                             &candidates,
                             receiver_module.as_ref(),
+                            Some((receiver.type_id, type_table)),
                         ) {
                             let generic_func = generic_func_rc.borrow();
                             // For true ref blanket impls (e.g., impl<T> Inspect for &T),
@@ -982,6 +1009,7 @@ impl Monomorphizer {
                             info_ref,
                             &candidates,
                             receiver_module.as_ref(),
+                            Some((receiver.type_id, type_table)),
                         ) {
                             let generic_func = generic_func_rc.borrow();
                             let has_method_type_params = generic_func.has_real_type_params();
@@ -1038,6 +1066,7 @@ impl Monomorphizer {
                         info_ref,
                         &candidates,
                         receiver_module.as_ref(),
+                        Some((receiver.type_id, type_table)),
                     )
                     .map(Rc::clone)
                 } else {
@@ -1163,6 +1192,7 @@ impl Monomorphizer {
                             info_ref,
                             &candidates,
                             receiver_module.as_ref(),
+                            Some((receiver.type_id, type_table)),
                         ) {
                             let generic_func = generic_func_rc.borrow();
                             let method_info = generic_func.method_info.clone();
