@@ -627,7 +627,12 @@ fn scan_left_corners(parser_rules: &List<ParserRule>, nullable: &List<bool>, rid
     }
 }
 
-fn scan_alt_left_corners(parser_rules: &List<ParserRule>, nullable: &List<bool>, elements: &List<Element>, out: &mut List<String>) {
+fn scan_alt_left_corners(
+    parser_rules: &List<ParserRule>,
+    nullable: &List<bool>,
+    elements: &List<Element>,
+    out: &mut List<String>,
+) {
     for let e of elements {
         scan_element_left_corners(parser_rules, nullable, e, out);
         if !element_scan_nullable(parser_rules, nullable, e) {
@@ -636,7 +641,12 @@ fn scan_alt_left_corners(parser_rules: &List<ParserRule>, nullable: &List<bool>,
     }
 }
 
-fn scan_element_left_corners(parser_rules: &List<ParserRule>, nullable: &List<bool>, elem: &Element, out: &mut List<String>) {
+fn scan_element_left_corners(
+    parser_rules: &List<ParserRule>,
+    nullable: &List<bool>,
+    elem: &Element,
+    out: &mut List<String>,
+) {
     match elem {
         RuleRef(r) => {
             if !out.contains(&r.name) {
@@ -650,7 +660,8 @@ fn scan_element_left_corners(parser_rules: &List<ParserRule>, nullable: &List<bo
             }
         },
         Repeat(rep) => scan_element_left_corners(parser_rules, nullable, &rep.element, out),
-        TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {},
+        TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {
+        },
     }
 }
 
