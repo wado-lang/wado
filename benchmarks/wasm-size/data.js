@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784891882609,
+  "lastUpdate": 1784898311715,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -43617,6 +43617,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6f4dc994a820a01e28df1e52f8a4b68ff8e6517f"
         },
         "date": 1784891882245,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1970,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8212,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16169,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276401,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "34beb28f653c4caf577b33a10d03cbf650661b05",
+          "message": "Merge pull request #1676 from wado-lang/claude/ci-oom-investigation-91l1ev\n\nfix(cli): surface wado test compile/load failures in the end-of-run summary",
+          "timestamp": "2026-07-24T21:54:43+09:00",
+          "tree_id": "7dd678297cca5e4d6981c2368ab3ea0a096196bb",
+          "url": "https://github.com/wado-lang/wado/commit/34beb28f653c4caf577b33a10d03cbf650661b05"
+        },
+        "date": 1784898310927,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
