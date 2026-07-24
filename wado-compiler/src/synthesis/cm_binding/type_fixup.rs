@@ -954,7 +954,8 @@ fn rewrite_calls_in_expr(
     {
         let mut qualified = format!(
             "{}::{}",
-            method_info.base_struct_name(), method_info.method_name
+            method_info.base_struct_name(),
+            method_info.method_name
         );
         // Resolve through type aliases (e.g., Headers -> Fields). Scoped to
         // `wasi:` — the method resolution path is WASI-only.
@@ -1306,7 +1307,8 @@ impl TirRefVisitor for EffectCallCollector<'_> {
                 if let Some(method_info) = func.method_info.clone() {
                     let qualified = format!(
                         "{}::{}",
-                        method_info.base_struct_name(), method_info.method_name
+                        method_info.base_struct_name(),
+                        method_info.method_name
                     );
                     if self
                         .cm_interface_registry

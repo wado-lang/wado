@@ -562,7 +562,11 @@ fn collect_existing_trait_methods(module: &TirModule) -> IndexSet<String> {
             let func = f.borrow();
             func.method_info.as_ref().and_then(|info| {
                 info.trait_name.as_ref().map(|trait_name| {
-                    mangle_local_trait_method(&info.base_struct_name(), trait_name, &info.method_name)
+                    mangle_local_trait_method(
+                        &info.base_struct_name(),
+                        trait_name,
+                        &info.method_name,
+                    )
                 })
             })
         })

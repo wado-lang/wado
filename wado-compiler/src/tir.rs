@@ -2839,8 +2839,10 @@ impl TypeTable {
                 module_source,
                 type_args,
             } => {
-                let args: Vec<String> =
-                    type_args.iter().map(|t| self.mangle_type_arg_erased(*t)).collect();
+                let args: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.mangle_type_arg_erased(*t))
+                    .collect();
                 if Self::is_tuple_type(name) {
                     return crate::name::mangle_tuple_type(&args);
                 }
