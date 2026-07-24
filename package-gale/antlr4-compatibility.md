@@ -405,6 +405,31 @@ the relevant sites.
    alt on a lookahead match even when its deeper structure cannot succeed
    (`ParserExec/Wildcard`: `(assign | .)+ EOF` on `x=10; abc;`). Fixture
    `tests/grammars/ll_wildcard_alt.g4`.
+5. A scan group's `lenient` fallthrough (bail out at the entry position
+   on no match) over-approximates, and the longest-match tournament relies
+   on it — so it is the default. But a mandatory non-nullable group emitted
+   `lenient` matches zero tokens in the scan and falls into the following
+   `RuleRef`; when that rule reaches the group's own rule at the same
+   position (`primary : closure`, `closure : ('||' | '|' … '|') expression`,
+   `|` ∈ FIRST(expression)), the scan recurses without consuming input and
+   traps (`call stack exhausted`, issue #1671). So leniency is dropped for a
+   mandatory group **only when its rule's scan can re-enter itself at the
+   same position** — `compute_scan_cyclic`, a zero-consumption left-corner
+   SCC over lenient groups and nullable prefixes. A strict group fails on a
+   gate miss (the first-set gate is kept), breaking the cycle. Cycle-gating
+   is essential: making every mandatory group strict flips the alt-tournament
+   winner and mis-parses grammars with no scan cycle at all — SQLite's
+   `CREATE TABLE` and RustParser's `crate : item*` both regress. Fixture
+   `tests/grammars/scan_group_recursion.g4`.
+
+Termination is a checked property, not only inline conservatism:
+`check_left_recursion` (grammar-check phase) rejects hidden (`a : x? a`, a
+nullable prefix before the self-ref) and indirect (`a : b …; b : a …`) left
+recursion — a rule reachable from itself through a left-corner chain of
+nullable prefixes. Gale, like ANTLR4, lowers only _direct_ left recursion
+(precedence climbing); the residual cycles would generate a
+non-terminating recursive-descent scan/parse, so they are rejected loudly
+at generation time rather than emitted as looping code.
 
 The static-path failed approaches that led here (RuleRef expansion, LL(\*)
 static variant emit) are recorded in [`AGENTS.md`](./AGENTS.md).

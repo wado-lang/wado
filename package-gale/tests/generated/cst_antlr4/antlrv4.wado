@@ -5348,7 +5348,7 @@ fn scan_rule_spec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if _kind_set_18(alt_kind) {
+        if _kind_set_19(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_parser_rule_spec(tokens, pos, follow, 0);
@@ -5826,7 +5826,7 @@ fn scan_lexer_command(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if _kind_set_19(alt_kind) {
+        if _kind_set_20(alt_kind) {
             let mut best: i32 = -1;
             pos = start;
             try_1: {
@@ -6005,7 +6005,7 @@ fn scan_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
             }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
-        } else if _kind_set_20(alt_kind) {
+        } else if _kind_set_21(alt_kind) {
             pos = start;
             try_1: {
                 pos = scan_atom(tokens, pos, follow, 0);
@@ -6137,24 +6137,29 @@ fn scan_labeled_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> 
     pos = scan_identifier(tokens, pos, &FOLLOW_MASK_12, 0);
     if pos < 0 { return -1; }
     let gp_13 = pos;
-    sg_13: {
-        pos = gp_13;
-        sg_13_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { break sg_13_0; }
-            pos += 1;
-            break sg_13;
+    let sgk_13 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_14(sgk_13) {
+        sg_13: {
+            pos = gp_13;
+            sg_13_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { break sg_13_0; }
+                pos += 1;
+                break sg_13;
+            }
+            pos = gp_13;
+            sg_13_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_PLUS_ASSIGN { break sg_13_1; }
+                pos += 1;
+                break sg_13;
+            }
+            return -1;
         }
-        pos = gp_13;
-        sg_13_1: {
-            if pos >= tokens.len() || tokens[pos] != TK_PLUS_ASSIGN { break sg_13_1; }
-            pos += 1;
-            break sg_13;
-        }
+    } else {
         return -1;
     }
     let gp_14 = pos;
     let sgk_14 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_14(sgk_14) {
+    if _kind_set_15(sgk_14) {
         sg_14: {
             pos = gp_14;
             sg_14_0: {
@@ -6309,7 +6314,7 @@ fn scan_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if _kind_set_15(alt_kind) {
+        if _kind_set_16(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_terminal_def(tokens, pos, follow, 0);
@@ -6476,7 +6481,7 @@ fn scan_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LPAREN { return -1; }
     pos += 1;
-    if pos < tokens.len() && _kind_set_16(tokens[pos]) {
+    if pos < tokens.len() && _kind_set_17(tokens[pos]) {
         let sp = pos;
         sg_16_done: {
             sg_16: {
@@ -6619,7 +6624,7 @@ fn scan_element_option(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
                 pos += 1;
                 let gp_18 = pos;
                 let sgk_18 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_17(sgk_18) {
+                if _kind_set_18(sgk_18) {
                     sg_18: {
                         pos = gp_18;
                         sg_18_0: {
@@ -7403,7 +7408,7 @@ fn _parse_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             }
         } else if p.peek_kind() == TK_TOKEN_REF {
             return _parse_rule_spec__inner_alt_1(p, follow);
-        } else if _kind_set_18(p.peek_kind()) {
+        } else if _kind_set_19(p.peek_kind()) {
             return _parse_rule_spec__inner_alt_0(p, follow);
         }
     }
@@ -8174,8 +8179,8 @@ fn _parse_lexer_command__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &Li
 
 fn _parse_lexer_command__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
-    if _kind_set_19(kind) {
-        if _kind_set_19(p.peek_kind()) {
+    if _kind_set_20(kind) {
+        if _kind_set_20(p.peek_kind()) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_1 = _parse_lexer_command__inner_scan_1(_sd_tokens, _sd_pos);
@@ -8467,7 +8472,7 @@ fn _parse_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
                 return _parse_element__inner_alt_1(p, follow);
             }
             return _parse_element__inner_alt_1(p, follow);
-        } else if _kind_set_20(p.peek_kind()) {
+        } else if _kind_set_21(p.peek_kind()) {
             return _parse_element__inner_alt_1(p, follow);
         }
     }
@@ -8773,7 +8778,7 @@ fn _parse_lexer_atom__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EM
 fn _parse_lexer_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
-    if _kind_set_15(kind) {
+    if _kind_set_16(kind) {
         if p.peek_kind() == TK_STRING_LITERAL {
             if p.peek_at(1) == TK_RANGE {
                 return _parse_lexer_atom__inner_alt_0(p, follow);
@@ -8818,7 +8823,7 @@ fn _parse_lexer_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 fn _parse_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
-    if _kind_set_15(kind) {
+    if _kind_set_16(kind) {
         let terminal_def = _parse_terminal_def(p, follow);
         return;
     }
@@ -8891,7 +8896,7 @@ fn _parse_not_set__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     let kind = p.peek_kind();
     if kind == TK_NOT {
         p.pos += 1;
-        if _kind_set_21(p.peek_kind()) {
+        if _kind_set_22(p.peek_kind()) {
             p.pos -= 1;
             return _parse_not_set__inner_alt_0(p, follow);
         } else if p.peek_kind() == TK_LPAREN {
@@ -9280,7 +9285,7 @@ fn _parse_element_option__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &L
     pos += 1;
     let gp_33 = pos;
     let sgk_33 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_17(sgk_33) {
+    if _kind_set_18(sgk_33) {
         sg_33: {
             pos = gp_33;
             sg_33_0: {
@@ -9792,34 +9797,38 @@ fn _kind_set_13(k: i32) -> bool {
 }
 
 fn _kind_set_14(k: i32) -> bool {
-    return k matches { TK_DOT | TK_LPAREN | TK_NOT | TK_RULE_REF | TK_STRING_LITERAL | TK_TOKEN_REF };
+    return k matches { TK_ASSIGN | TK_PLUS_ASSIGN };
 }
 
 fn _kind_set_15(k: i32) -> bool {
-    return k matches { TK_STRING_LITERAL | TK_TOKEN_REF };
+    return k matches { TK_DOT | TK_LPAREN | TK_NOT | TK_RULE_REF | TK_STRING_LITERAL | TK_TOKEN_REF };
 }
 
 fn _kind_set_16(k: i32) -> bool {
-    return k matches { TK_AT | TK_COLON | TK_OPTIONS };
+    return k matches { TK_STRING_LITERAL | TK_TOKEN_REF };
 }
 
 fn _kind_set_17(k: i32) -> bool {
-    return k matches { TK_INT | TK_RULE_REF | TK_STRING_LITERAL | TK_TOKEN_REF };
+    return k matches { TK_AT | TK_COLON | TK_OPTIONS };
 }
 
 fn _kind_set_18(k: i32) -> bool {
-    return k matches { TK_PRIVATE | TK_PROTECTED | TK_PUBLIC | TK_RULE_REF };
+    return k matches { TK_INT | TK_RULE_REF | TK_STRING_LITERAL | TK_TOKEN_REF };
 }
 
 fn _kind_set_19(k: i32) -> bool {
-    return k matches { TK_MODE | TK_RULE_REF | TK_TOKEN_REF };
+    return k matches { TK_PRIVATE | TK_PROTECTED | TK_PUBLIC | TK_RULE_REF };
 }
 
 fn _kind_set_20(k: i32) -> bool {
-    return k matches { TK_DOT | TK_NOT | TK_STRING_LITERAL };
+    return k matches { TK_MODE | TK_RULE_REF | TK_TOKEN_REF };
 }
 
 fn _kind_set_21(k: i32) -> bool {
+    return k matches { TK_DOT | TK_NOT | TK_STRING_LITERAL };
+}
+
+fn _kind_set_22(k: i32) -> bool {
     return k matches { TK_LEXER_CHAR_SET | TK_STRING_LITERAL | TK_TOKEN_REF };
 }
 

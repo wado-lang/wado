@@ -1872,19 +1872,24 @@ fn scan_s(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
     while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         let gp_1 = pos;
-        sg_1: {
-            pos = gp_1;
-            sg_1_0: {
-                pos = scan_a(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break sg_1_0; }
-                break sg_1;
+        let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if _kind_set_0(sgk_1) {
+            sg_1: {
+                pos = gp_1;
+                sg_1_0: {
+                    pos = scan_a(tokens, pos, &EMPTY_FOLLOW, 0);
+                    if pos < 0 { break sg_1_0; }
+                    break sg_1;
+                }
+                pos = gp_1;
+                sg_1_1: {
+                    pos = scan_b(tokens, pos, &EMPTY_FOLLOW, 0);
+                    if pos < 0 { break sg_1_1; }
+                    break sg_1;
+                }
+                pos = -1;
             }
-            pos = gp_1;
-            sg_1_1: {
-                pos = scan_b(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break sg_1_1; }
-                break sg_1;
-            }
+        } else {
             pos = -1;
         }
         if pos < 0 { pos = sp; break; }

@@ -38,6 +38,7 @@ use {
     DEFAULT_CHANNEL,
     HIDDEN_CHANNEL,
     check_references,
+    check_left_recursion,
     synthesize_implicit_tokens,
     merge_grammars,
 } from "../ir.wado";
@@ -1585,6 +1586,7 @@ pub fn parse_checked(input: String) -> Result<Grammar, ParseError> {
     let mut grammar = parse(input)?;
     synthesize_implicit_tokens(&mut grammar);
     check_references(&grammar)?;
+    check_left_recursion(&grammar)?;
     return Result::<Grammar, ParseError>::Ok(grammar);
 }
 
@@ -1609,6 +1611,13 @@ pub fn assemble_grammar(inputs: &List<[String, String]>) -> Result<Grammar, Asse
     let mut merged = merge_grammars(grammars);
     synthesize_implicit_tokens(&mut merged);
     match check_references(&merged) {
+        Ok(_) => {
+        },
+        Err(e) => {
+            return Result::Err(AssembleError::Check(e.message));
+        },
+    }
+    match check_left_recursion(&merged) {
         Ok(_) => {
         },
         Err(e) => {

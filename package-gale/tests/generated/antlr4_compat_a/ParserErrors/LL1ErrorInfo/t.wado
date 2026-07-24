@@ -1899,19 +1899,24 @@ fn scan_start(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 fn scan_animal(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_1 = pos;
-    sg_1: {
-        pos = gp_1;
-        sg_1_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_DOG { break sg_1_0; }
-            pos += 1;
-            break sg_1;
+    let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_0(sgk_1) {
+        sg_1: {
+            pos = gp_1;
+            sg_1_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_DOG { break sg_1_0; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_CAT { break sg_1_1; }
+                pos += 1;
+                break sg_1;
+            }
+            return -1;
         }
-        pos = gp_1;
-        sg_1_1: {
-            if pos >= tokens.len() || tokens[pos] != TK_CAT { break sg_1_1; }
-            pos += 1;
-            break sg_1;
-        }
+    } else {
         return -1;
     }
     return pos;
@@ -1920,19 +1925,24 @@ fn scan_animal(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 fn scan_service(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_2 = pos;
-    sg_2: {
-        pos = gp_2;
-        sg_2_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_HARDWARE { break sg_2_0; }
-            pos += 1;
-            break sg_2;
+    let sgk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_1(sgk_2) {
+        sg_2: {
+            pos = gp_2;
+            sg_2_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_HARDWARE { break sg_2_0; }
+                pos += 1;
+                break sg_2;
+            }
+            pos = gp_2;
+            sg_2_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_SOFTWARE { break sg_2_1; }
+                pos += 1;
+                break sg_2;
+            }
+            return -1;
         }
-        pos = gp_2;
-        sg_2_1: {
-            if pos >= tokens.len() || tokens[pos] != TK_SOFTWARE { break sg_2_1; }
-            pos += 1;
-            break sg_2;
-        }
+    } else {
         return -1;
     }
     return pos;
@@ -2088,6 +2098,14 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
         return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &token_names);
     }
     return String::new();
+}
+
+fn _kind_set_0(k: i32) -> bool {
+    return k matches { TK_CAT | TK_DOG };
+}
+
+fn _kind_set_1(k: i32) -> bool {
+    return k matches { TK_HARDWARE | TK_SOFTWARE };
 }
 
 global EMPTY_SYNC: List<i32> = [];

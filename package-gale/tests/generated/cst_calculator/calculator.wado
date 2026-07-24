@@ -2375,19 +2375,24 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
         sg_0_done: {
             sg_0: {
                 let gp_1 = pos;
-                sg_1: {
-                    pos = gp_1;
-                    sg_1_0: {
-                        if pos >= tokens.len() || tokens[pos] != TK_PLUS { break sg_1_0; }
-                        pos += 1;
-                        break sg_1;
+                let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if _kind_set_0(sgk_1) {
+                    sg_1: {
+                        pos = gp_1;
+                        sg_1_0: {
+                            if pos >= tokens.len() || tokens[pos] != TK_PLUS { break sg_1_0; }
+                            pos += 1;
+                            break sg_1;
+                        }
+                        pos = gp_1;
+                        sg_1_1: {
+                            if pos >= tokens.len() || tokens[pos] != TK_MINUS { break sg_1_1; }
+                            pos += 1;
+                            break sg_1;
+                        }
+                        break sg_0;
                     }
-                    pos = gp_1;
-                    sg_1_1: {
-                        if pos >= tokens.len() || tokens[pos] != TK_MINUS { break sg_1_1; }
-                        pos += 1;
-                        break sg_1;
-                    }
+                } else {
                     break sg_0;
                 }
                 pos = scan_multiplying_expression(tokens, pos, follow, 0);
@@ -2411,19 +2416,24 @@ fn scan_multiplying_expression(tokens: &Array<i32>, pos: i32, follow: &List<List
         sg_2_done: {
             sg_2: {
                 let gp_3 = pos;
-                sg_3: {
-                    pos = gp_3;
-                    sg_3_0: {
-                        if pos >= tokens.len() || tokens[pos] != TK_TIMES { break sg_3_0; }
-                        pos += 1;
-                        break sg_3;
+                let sgk_3 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if _kind_set_1(sgk_3) {
+                    sg_3: {
+                        pos = gp_3;
+                        sg_3_0: {
+                            if pos >= tokens.len() || tokens[pos] != TK_TIMES { break sg_3_0; }
+                            pos += 1;
+                            break sg_3;
+                        }
+                        pos = gp_3;
+                        sg_3_1: {
+                            if pos >= tokens.len() || tokens[pos] != TK_DIV { break sg_3_1; }
+                            pos += 1;
+                            break sg_3;
+                        }
+                        break sg_2;
                     }
-                    pos = gp_3;
-                    sg_3_1: {
-                        if pos >= tokens.len() || tokens[pos] != TK_DIV { break sg_3_1; }
-                        pos += 1;
-                        break sg_3;
-                    }
+                } else {
                     break sg_2;
                 }
                 pos = scan_pow_expression(tokens, pos, follow, 0);
@@ -2652,19 +2662,24 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             sg_6_done: {
                 sg_6: {
                     let gp_7 = pos;
-                    sg_7: {
-                        pos = gp_7;
-                        sg_7_0: {
-                            if pos >= tokens.len() || tokens[pos] != TK_PLUS { break sg_7_0; }
-                            pos += 1;
-                            break sg_7;
+                    let sgk_7 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                    if _kind_set_0(sgk_7) {
+                        sg_7: {
+                            pos = gp_7;
+                            sg_7_0: {
+                                if pos >= tokens.len() || tokens[pos] != TK_PLUS { break sg_7_0; }
+                                pos += 1;
+                                break sg_7;
+                            }
+                            pos = gp_7;
+                            sg_7_1: {
+                                if pos >= tokens.len() || tokens[pos] != TK_MINUS { break sg_7_1; }
+                                pos += 1;
+                                break sg_7;
+                            }
+                            break sg_6;
                         }
-                        pos = gp_7;
-                        sg_7_1: {
-                            if pos >= tokens.len() || tokens[pos] != TK_MINUS { break sg_7_1; }
-                            pos += 1;
-                            break sg_7;
-                        }
+                    } else {
                         break sg_6;
                     }
                     pos = scan_multiplying_expression(tokens, pos, follow, 0);
@@ -2707,19 +2722,24 @@ fn _parse_multiplying_expression__inner(p: &mut Parser, follow: &List<List<i32>>
             sg_8_done: {
                 sg_8: {
                     let gp_9 = pos;
-                    sg_9: {
-                        pos = gp_9;
-                        sg_9_0: {
-                            if pos >= tokens.len() || tokens[pos] != TK_TIMES { break sg_9_0; }
-                            pos += 1;
-                            break sg_9;
+                    let sgk_9 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                    if _kind_set_1(sgk_9) {
+                        sg_9: {
+                            pos = gp_9;
+                            sg_9_0: {
+                                if pos >= tokens.len() || tokens[pos] != TK_TIMES { break sg_9_0; }
+                                pos += 1;
+                                break sg_9;
+                            }
+                            pos = gp_9;
+                            sg_9_1: {
+                                if pos >= tokens.len() || tokens[pos] != TK_DIV { break sg_9_1; }
+                                pos += 1;
+                                break sg_9;
+                            }
+                            break sg_8;
                         }
-                        pos = gp_9;
-                        sg_9_1: {
-                            if pos >= tokens.len() || tokens[pos] != TK_DIV { break sg_9_1; }
-                            pos += 1;
-                            break sg_9;
-                        }
+                    } else {
                         break sg_8;
                     }
                     pos = scan_pow_expression(tokens, pos, follow, 0);

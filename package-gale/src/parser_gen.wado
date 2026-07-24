@@ -2589,14 +2589,17 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenCon
         }
     }
 
+    // First-set gate, emitted unless a wildcard alt (which matches any token)
+    // suppresses it. On a gate miss a lenient group matches zero and falls
+    // through; a strict group fails, since a mandatory group must be started.
     let has_wildcard = !ge.wildcard_alt_indices.is_empty();
     let mut union_first: List<String> = [];
-    if lenient && !has_wildcard {
+    if !has_wildcard {
         for let fs of first_sets {
             dedup_append_arr(&mut union_first, fs);
         }
     }
-    let gate_emitted = lenient && !has_wildcard && union_first.len() > 0;
+    let gate_emitted = !has_wildcard && union_first.len() > 0;
     if gate_emitted {
         let sgk_var = `sgk_${gc}`;
         w.line(&`let ${sgk_var} = if pos < tokens.len() \{ tokens[pos] \} else \{ TK_EOF \};`);
@@ -2652,7 +2655,13 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenCon
     w.end();  // close outer labeled block
 
     if gate_emitted {
-        w.end();  // close the first-set gate
+        if lenient {
+            w.end();
+        } else {
+            w.else_begin(&"else");
+            w.line(fail_stmt);
+            w.end();
+        }
     }
 }
 
