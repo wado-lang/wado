@@ -57,17 +57,19 @@ type "functype//core:prelude/string.wado/String::realloc_to" = fn(ref "core:prel
 
 type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(23)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(24)
+type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(24)
 
-type "functype//core:prelude/string.wado/String::from_iter<core:prelude/string.wado/StrCharIter>" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//String";  // TypeId(25)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(25)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
+type "functype//core:prelude/string.wado/String::from_iter<core:prelude/string.wado/StrCharIter>" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude/string.wado//String";  // TypeId(26)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(27)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(28)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
 
-type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(29)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(29)
+
+type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(30)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -288,7 +290,28 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     "core:prelude/string.wado/String::realloc_to"(self, a_4 = capacity * 2; a_6 = select i32(a_4 > min_capacity, a_4, min_capacity); select i32(a_6 > 8, a_6, 8));
 }
 
+fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
+    let new_used: i32;
+    let start: i32;
+    new_used = self.used + n;
+    if @unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
+        "core:prelude/string.wado/String::grow"(self, new_used);
+    }
+    start = self.used;
+    self.used = new_used;
+    return start;
+}
+
 fn "core:prelude/string.wado/String::push"(self, c) {
+    let byte: u8;
+    let start: i32;
+    if c <u 128 {
+        byte = c & 255;
+        start = "core:prelude/string.wado/String::internal_reserve_uninit"(self, 1);
+        builtin::array_set_u8(self.repr, start, byte);
+        return;
+    }
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
@@ -301,17 +324,17 @@ fn "core:prelude/string.wado/String::from_iter<core:prelude/string.wado/StrCharI
     let __iter_2: ref "core:prelude/string.wado//StrCharIter";
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(8), used: 0 };
     __iter_2 = struct.new "core:prelude/string.wado//StrCharIter" { repr: iter.repr, used: iter.used, byte_index: iter.byte_index };
-    b16: block {
-        l17: loop {
+    b18: block {
+        l19: loop {
             let __sroa___match_4_discriminant: i32;
             let __sroa___match_4_payload_0: char;
             multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
             if __sroa___match_4_discriminant == 0 {
                 "core:prelude/string.wado/String::push"(s, __sroa___match_4_payload_0);
             } else {
-                break b16;
+                break b18;
             }
-            continue l17;
+            continue l19;
         };
     };
     return s;
