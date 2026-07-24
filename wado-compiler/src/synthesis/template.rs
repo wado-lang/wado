@@ -1002,7 +1002,12 @@ fn peel_transparent_newtype(type_id: TypeId, trait_name: &str, ctx: &TemplateCtx
             match tt.get(tid) {
                 ResolvedType::Newtype {
                     name, base_type, ..
-                } if !ctx.trait_env.has_any_methodful_impl(name, trait_name) => *base_type,
+                } if !ctx
+                    .trait_env
+                    .has_any_methodful_impl(&crate::name::Receiver::Type(name.clone()), trait_name) =>
+                {
+                    *base_type
+                }
                 _ => return tid,
             }
         };
@@ -1232,7 +1237,11 @@ pub(crate) fn blanket_dispatch_for(
     tt: &TypeTable,
     allow_pre_reflect_struct: bool,
 ) -> Option<(MonomorphInfo, ModuleSource)> {
-    if trait_env.has_any_methodful_impl(base_struct_name, trait_name) {
+    let type_key = match crate::name::RefKind::from_resolved(tt.get(type_id)) {
+        Some(kind) => crate::name::Receiver::Ref(kind),
+        None => crate::name::Receiver::Type(base_struct_name.to_string()),
+    };
+    if trait_env.has_any_methodful_impl(&type_key, trait_name) {
         return None;
     }
     let type_module = type_module_hint_tt(type_id, tt);

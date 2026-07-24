@@ -3055,12 +3055,13 @@ impl SynthesisCtx<'_, '_, '_> {
     /// `impl Trait for Type;` marker does not count — it must not block the
     /// body it asks for.
     fn has_methodful_impl(&self, type_name: &str, trait_name: &str, scope: ImplScope) -> bool {
+        let type_key = crate::name::Receiver::Type(type_name.to_string());
         let real = match scope {
             ImplScope::CurrentModule => {
                 self.trait_env
-                    .has_methodful_impl(type_name, trait_name, &self.module)
+                    .has_methodful_impl(&type_key, trait_name, &self.module)
             }
-            ImplScope::AnyModule => self.trait_env.has_any_methodful_impl(type_name, trait_name),
+            ImplScope::AnyModule => self.trait_env.has_any_methodful_impl(&type_key, trait_name),
         };
         real || self.pending_has(type_name, trait_name)
     }

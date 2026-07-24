@@ -1421,7 +1421,7 @@ impl Monomorphizer {
         if self
             .functions
             .trait_env
-            .has_any_methodful_impl(&newtype_name, trait_name)
+            .has_any_methodful_impl(&crate::name::Receiver::Type(newtype_name), trait_name)
         {
             return tid;
         }

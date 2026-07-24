@@ -949,7 +949,12 @@ impl TypeSystem {
             }
             // For other traits, check the type name
             let type_name = format!("{prim:?}").to_lowercase();
-            return self.find_trait_impl_for_type(ctx, scope, &type_name, trait_name);
+            return self.find_trait_impl_for_type(
+                ctx,
+                scope,
+                &crate::name::Receiver::Type(type_name),
+                trait_name,
+            );
         }
 
         if let Some(tr) = on_bound
@@ -977,8 +982,13 @@ impl TypeSystem {
                 ..
             } = resolved
         {
-            let serde_blocked =
-                tr.is_serde() && self.has_real_trait_impl_for_type(ctx, scope, name, trait_name);
+            let serde_blocked = tr.is_serde()
+                && self.has_real_trait_impl_for_type(
+                    ctx,
+                    scope,
+                    &crate::name::Receiver::Type(name.clone()),
+                    trait_name,
+                );
             if !serde_blocked
                 && self.walk_structural_derive_members(scope, resolved, tr, &mut |_, member| {
                     self.type_implements_trait(ctx, scope, member, trait_name)
@@ -1102,7 +1112,7 @@ impl TypeSystem {
                 if self.find_trait_impl_for_type_with_args(
                     ctx,
                     scope,
-                    crate::name::RefKind::Shared.prefix(),
+                    &crate::name::Receiver::Ref(crate::name::RefKind::Shared),
                     trait_name,
                     Some(&[inner_id]),
                 ) {
@@ -1119,7 +1129,7 @@ impl TypeSystem {
                 if self.find_trait_impl_for_type_with_args(
                     ctx,
                     scope,
-                    crate::name::RefKind::Mut.prefix(),
+                    &crate::name::Receiver::Ref(crate::name::RefKind::Mut),
                     trait_name,
                     Some(&[inner_id]),
                 ) {
@@ -1137,7 +1147,12 @@ impl TypeSystem {
                 name, base_type, ..
             } => {
                 // Check for a direct impl on the newtype first (e.g., impl Describe for Meters)
-                if self.find_trait_impl_for_type(ctx, scope, name, trait_name) {
+                if self.find_trait_impl_for_type(
+                    ctx,
+                    scope,
+                    &crate::name::Receiver::Type(name.clone()),
+                    trait_name,
+                ) {
                     return true;
                 }
                 // Fall back to base type's trait implementation
@@ -1145,7 +1160,12 @@ impl TypeSystem {
                 return self.type_implements_trait(ctx, scope, base_id, trait_name);
             }
             ResolvedType::Flags { name, .. } => {
-                if self.find_trait_impl_for_type(ctx, scope, name, trait_name) {
+                if self.find_trait_impl_for_type(
+                    ctx,
+                    scope,
+                    &crate::name::Receiver::Type(name.clone()),
+                    trait_name,
+                ) {
                     return true;
                 }
                 return self.type_implements_trait(ctx, scope, TypeTable::U32, trait_name);
@@ -1156,7 +1176,7 @@ impl TypeSystem {
         self.find_trait_impl_for_type_with_args(
             ctx,
             scope,
-            &type_name,
+            &crate::name::Receiver::Type(type_name),
             trait_name,
             type_args.as_deref(),
         )
@@ -1167,21 +1187,21 @@ impl TypeSystem {
         &self,
         ctx: &Scope,
         scope: &TypeLookup,
-        type_name: &str,
+        type_key: &crate::name::Receiver,
         trait_name: &str,
     ) -> bool {
-        self.find_trait_impl_for_type_with_args(ctx, scope, type_name, trait_name, None)
+        self.find_trait_impl_for_type_with_args(ctx, scope, type_key, trait_name, None)
     }
 
     pub(super) fn has_real_trait_impl_for_type(
         &self,
         ctx: &Scope,
         scope: &TypeLookup,
-        type_name: &str,
+        type_key: &crate::name::Receiver,
         trait_name: &str,
     ) -> bool {
-        self.trait_env.has_any_methodful_impl(type_name, trait_name)
-            || self.blanket_trait_impl_applies(ctx, scope, type_name, trait_name)
+        self.trait_env.has_any_methodful_impl(type_key, trait_name)
+            || self.blanket_trait_impl_applies(ctx, scope, type_key, trait_name)
     }
 
     /// Check if there's a trait impl for a type, with optional type args for bounds checking.
@@ -1190,12 +1210,12 @@ impl TypeSystem {
         &self,
         ctx: &Scope,
         scope: &TypeLookup,
-        type_name: &str,
+        type_key: &crate::name::Receiver,
         trait_name: &str,
         type_args: Option<&[TypeId]>,
     ) -> bool {
         let trait_env = self.trait_env.clone();
-        if let Some(entries) = trait_env.impl_index.get(type_name) {
+        if let Some(entries) = trait_env.impl_index.get(type_key) {
             for entry in entries {
                 let (module_src, _) = entry;
                 let Some(header) = trait_env.impl_headers.get(entry) else {
@@ -1228,14 +1248,14 @@ impl TypeSystem {
         // `impl_index` above (the index is built from every loaded module,
         // including this one), so no separate current-module scan is needed.
 
-        self.blanket_trait_impl_applies(ctx, scope, type_name, trait_name)
+        self.blanket_trait_impl_applies(ctx, scope, type_key, trait_name)
     }
 
     fn blanket_trait_impl_applies(
         &self,
         ctx: &Scope,
         scope: &TypeLookup,
-        type_name: &str,
+        type_key: &crate::name::Receiver,
         trait_name: &str,
     ) -> bool {
         let trait_env = self.trait_env.clone();
@@ -1247,8 +1267,8 @@ impl TypeSystem {
             .filter(|b| b.receiver == super::trait_env::BlanketReceiver::Value)
         {
             let bounds_satisfied = blanket.bounds.iter().all(|bound| {
-                self.synthesized_reflect_bound_holds(scope, type_name, bound)
-                    || self.find_trait_impl_for_type(ctx, scope, type_name, bound)
+                self.synthesized_reflect_bound_holds(scope, &type_key.head_key(), bound)
+                    || self.find_trait_impl_for_type(ctx, scope, type_key, bound)
             });
             if bounds_satisfied {
                 return true;
@@ -1807,7 +1827,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let trait_env = self.tysys.trait_env.clone();
         let impl_infos: Vec<ImplInfo> = {
             let mut result = vec![];
-            if let Some(entries) = trait_env.impl_index.get(&type_name) {
+            if let Some(entries) = trait_env
+                .impl_index
+                .get(&crate::name::Receiver::Type(type_name))
+            {
                 for entry in entries {
                     let Some(header) = trait_env.impl_headers.get(entry) else {
                         continue;

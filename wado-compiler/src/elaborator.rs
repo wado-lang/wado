@@ -838,7 +838,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if self.tysys.has_real_trait_impl_for_type(
             &self.annotate_ctx,
             &self.type_lookup(),
-            target_type_name,
+            &crate::name::Receiver::Type(target_type_name.to_string()),
             trait_name,
         ) {
             return;

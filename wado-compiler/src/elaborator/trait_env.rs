@@ -223,7 +223,7 @@ pub(crate) type DeclKey = (ModuleSource, String);
 /// AstId)` payload plus the elaborator's per-call type-id comparison, so
 /// two `struct Widget` declarations in different modules share one bucket
 /// without ambiguity.
-pub(super) type TraitImplIndex = IndexMap<String, Vec<(ModuleSource, AstId)>>;
+pub(super) type TraitImplIndex = IndexMap<crate::name::Receiver, Vec<(ModuleSource, AstId)>>;
 
 /// Digested header of an `impl` block, pre-extracted at [`TraitEnv::build`]
 /// time so trait/method queries read its trait name, target type, methods,
@@ -839,6 +839,7 @@ impl TraitEnv {
                     continue;
                 };
                 let type_name = get_type_name_static(&impl_block.ty);
+                let type_key = receiver_key(&impl_block.ty);
                 impl_headers.insert(
                     (module_source.clone(), impl_block.id),
                     ImplHeader {
@@ -860,7 +861,7 @@ impl TraitEnv {
                 // Joins `all_impl_index` before the trait/inherent split, so its
                 // order matches `impl_headers`'s global insertion order.
                 all_impl_index
-                    .entry(type_name.clone())
+                    .entry(type_key.clone())
                     .or_default()
                     .push((module_source.clone(), impl_block.id));
                 if let Some(trait_type) = &impl_block.trait_type {
@@ -914,7 +915,7 @@ impl TraitEnv {
                         }
                     }
                     impl_index
-                        .entry(type_name.clone())
+                        .entry(type_key.clone())
                         .or_default()
                         .push((module_source.clone(), impl_block.id));
                     // Static methods on trait impl blocks (no `self`
@@ -1018,9 +1019,12 @@ impl TraitEnv {
     /// Keys of the **inherent** impls on `type_name`, in global build order —
     /// the `trait_name.is_none()` subset of [`Self::all_impl_index`]. Used by
     /// instance-method lookup, which must not treat trait impls as inherent.
-    pub(super) fn inherent_impl_keys(&self, type_name: &str) -> Vec<(ModuleSource, AstId)> {
+    pub(super) fn inherent_impl_keys(
+        &self,
+        type_key: &crate::name::Receiver,
+    ) -> Vec<(ModuleSource, AstId)> {
         self.all_impl_index
-            .get(type_name)
+            .get(type_key)
             .map(|keys| {
                 keys.iter()
                     .filter(|key| {
@@ -1035,8 +1039,12 @@ impl TraitEnv {
     }
 
     /// Whether `type_name` has an inherent impl declaring `method_name`.
-    pub(crate) fn has_inherent_method(&self, type_name: &str, method_name: &str) -> bool {
-        self.all_impl_index.get(type_name).is_some_and(|keys| {
+    pub(crate) fn has_inherent_method(
+        &self,
+        type_key: &crate::name::Receiver,
+        method_name: &str,
+    ) -> bool {
+        self.all_impl_index.get(type_key).is_some_and(|keys| {
             keys.iter().any(|key| {
                 self.impl_headers.get(key).is_some_and(|h| {
                     h.trait_name.is_none() && h.methods.iter().any(|m| m.name == method_name)
@@ -1062,19 +1070,23 @@ impl TraitEnv {
 
     pub(crate) fn has_methodful_impl(
         &self,
-        type_name: &str,
+        type_key: &crate::name::Receiver,
         trait_name: &str,
         module_source: &ModuleSource,
     ) -> bool {
-        self.impl_index.get(type_name).is_some_and(|entries| {
+        self.impl_index.get(type_key).is_some_and(|entries| {
             entries.iter().any(|entry| {
                 entry.0 == *module_source && self.methodful_header_matches(entry, trait_name)
             })
         })
     }
 
-    pub(crate) fn has_any_methodful_impl(&self, type_name: &str, trait_name: &str) -> bool {
-        self.impl_index.get(type_name).is_some_and(|entries| {
+    pub(crate) fn has_any_methodful_impl(
+        &self,
+        type_key: &crate::name::Receiver,
+        trait_name: &str,
+    ) -> bool {
+        self.impl_index.get(type_key).is_some_and(|entries| {
             entries
                 .iter()
                 .any(|entry| self.methodful_header_matches(entry, trait_name))
@@ -1509,6 +1521,18 @@ fn check_all_orphan_rules(
 }
 
 /// Extract a type name from an AST type without needing an Elaborator instance.
+/// The typed [`crate::name::Receiver`] key an `impl` target indexes under.
+/// A `&T` / `&mut T` target keys as `Receiver::Ref` (from the typed AST, never
+/// a `"&"` string); everything else keys as `Receiver::Type` over the canonical
+/// [`get_type_name_static`] head, so the key domain matches the old string keys
+/// exactly apart from the ref shape being typed.
+pub(super) fn receiver_key(ty: &ast::Type) -> crate::name::Receiver {
+    match crate::name::RefKind::from_ast(ty) {
+        Some(kind) => crate::name::Receiver::Ref(kind),
+        None => crate::name::Receiver::Type(get_type_name_static(ty)),
+    }
+}
+
 pub(super) fn get_type_name_static(ty: &ast::Type) -> String {
     match ty {
         ast::Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),
