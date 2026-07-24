@@ -140,6 +140,9 @@ internal trait ReflectVariant {
 /// See WEP 2026-06-13 §3b.
 #[compiler_item("reflect_enum")]
 internal trait ReflectEnum {
+    /// The per-case token tuple `[EnumCase<Self>, ...]`.
+    type CaseTokens;
+
     /// Returns the enum name.
     #[compiler_item("reflect_enum_type_name")]
     fn type_name() -> String;
@@ -154,7 +157,7 @@ internal trait ReflectEnum {
 
     /// Returns the per-case tokens.
     #[compiler_item("reflect_enum_case_tokens")]
-    fn case_tokens() -> List<EnumCase<Self>>;
+    fn case_tokens() -> Self::CaseTokens;
 }
 
 /// Compile-time flags introspection. The compiler synthesizes an impl for
@@ -163,6 +166,9 @@ internal trait ReflectEnum {
 /// See WEP 2026-06-13 §3c.
 #[compiler_item("reflect_flags")]
 internal trait ReflectFlags {
+    /// The per-bit token tuple `[FlagBit<Self>, ...]`.
+    type BitTokens;
+
     /// Returns the flags type name.
     #[compiler_item("reflect_flags_type_name")]
     fn type_name() -> String;
@@ -178,7 +184,7 @@ internal trait ReflectFlags {
 
     /// Returns the per-bit tokens.
     #[compiler_item("reflect_flags_bit_tokens")]
-    fn bit_tokens() -> List<FlagBit<Self>>;
+    fn bit_tokens() -> Self::BitTokens;
 }
 
 /// A case handle minted by `ReflectVariant::cases()`: the payload type `P`

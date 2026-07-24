@@ -57,29 +57,38 @@ internal trait ReflectVariant {                  // variant
 }
 
 internal trait ReflectEnum {                     // enum
-    fn case_tokens() -> List<EnumCase<Self>>;
+    type CaseTokens;                             // [EnumCase<Self>, …]
+    fn case_tokens() -> Self::CaseTokens;
     fn discriminant(&self) -> i32;
     fn from_discriminant(disc: i32) -> Option<Self>;
     fn type_name() -> String;
 }
 
 internal trait ReflectFlags {                    // flags
-    fn bit_tokens() -> List<FlagBit<Self>>;
+    type BitTokens;                              // [FlagBit<Self>, …]
+    fn bit_tokens() -> Self::BitTokens;
     fn bits(&self) -> u64;                        // u64-normalized regardless of width
     fn from_bits(raw: u64) -> Option<Self>;
     fn type_name() -> String;
 }
 ```
 
-The token walk's shape follows the members' types. Struct and variant tokens
+Every token walk returns a tuple, walked by tuple `for-of`; a generic derivation
+binds the token pack in its header, and the elaborator resolves the walk to the
+known token type so member methods stay callable. Struct and variant tokens
 carry a payload type parameter, so their walks are heterogeneous mapped packs
-(`[..Field<T, F>]` / `[..VariantCase<T, P>]`) returned as a tuple and walked by
-tuple `for-of`; a generic derivation binds the pack in its header
+(`[..Field<T, F>]` / `[..VariantCase<T, P>]`) bound via the payload pack
 (`Fields = [..F]` / `Cases = [..P]`). An enum case and a flag bit carry no
-payload, so their tokens share one type and the walk is a `List<EnumCase<Self>>`
-/ `List<FlagBit<Self>>` — homogeneous, so a generic `impl<T: ReflectEnum>` walks
-it with no pack binding and it does not unroll per case. Either way the token is
-the single member channel; no kind carries a parallel metadata list.
+payload, so their tokens share one type; the pack is the token tuple itself,
+bound as `CaseTokens = [..C]` / `BitTokens = [..B]` to source the arity. Either
+way the token is the single member channel; no kind carries a parallel metadata
+list. (A tuple carries no runtime index, so a homogeneous walk finds a member by
+`holds` rather than by discriminant index, matching the variant walk.)
+
+A generic derivation over a tuple walk binds a type pack, and a pack-bound
+blanket can currently expose only instance methods — resolving a `static` trait
+method through such a blanket (`T::from_wire(…)`, a deserialize entry) is an
+open compiler item, tracked separately.
 
 `from_discriminant` / `from_bits` return `Option` because an unknown input is a
 normal deserialize error, not a bug. `construct` assembles a struct from its

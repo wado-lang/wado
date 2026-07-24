@@ -1,14 +1,14 @@
 // Blanket derivation over ReflectFlags (WEP 2026-06-13 §3c): one derivation
-// covers every flags type — serialization walks the bit_tokens() list, keeping
-// the set bits by name (`FlagBit::is_set` / `name`); deserialization goes
-// through from_bits via the bound.
+// covers every flags type — the bound `BitTokens = [..B]` sources the token
+// tuple's arity, so serialization walks bit_tokens() keeping the set bits by name
+// (`FlagBit::is_set` / `name`); deserialization goes through from_bits.
 
 trait BitNames {
     fn bit_names(&self) -> String;
     fn from_raw(raw: u64) -> Option<Self>;
 }
 
-impl<T: ReflectFlags> BitNames for T {
+impl<T: ReflectFlags<BitTokens = [..B]>, ..B> BitNames for T {
     fn bit_names(&self) -> String {
         let mut out = "";
         for let b of ReflectFlags::<T>::bit_tokens() {

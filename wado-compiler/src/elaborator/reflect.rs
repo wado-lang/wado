@@ -33,6 +33,9 @@ pub(super) struct ScalarReflectSpec {
     from_method_item: CompilerItem,
     tokens_method_item: CompilerItem,
     token_struct_item: CompilerItem,
+    /// The `<Tokens>` associated-type name (`CaseTokens` / `BitTokens`), read off
+    /// a generic derivation's bound to source the token pack's arity.
+    tokens_assoc: &'static str,
     /// The scalar bridge type: `i32` (discriminant) or `u64` (bits).
     value_type: TypeId,
 }
@@ -47,6 +50,7 @@ impl ScalarReflectSpec {
         from_method_item: CompilerItem::ReflectEnumFromDiscriminant,
         tokens_method_item: CompilerItem::ReflectEnumCaseTokens,
         token_struct_item: CompilerItem::ReflectEnumCase,
+        tokens_assoc: crate::synthesis::traits::REFLECT_ENUM_CASE_TOKENS_ASSOC,
         value_type: TypeTable::I32,
     };
     pub(super) const FLAGS: Self = Self {
@@ -58,6 +62,7 @@ impl ScalarReflectSpec {
         from_method_item: CompilerItem::ReflectFlagsFromBits,
         tokens_method_item: CompilerItem::ReflectFlagsBitTokens,
         token_struct_item: CompilerItem::ReflectFlagBit,
+        tokens_assoc: crate::synthesis::traits::REFLECT_FLAGS_BIT_TOKENS_ASSOC,
         value_type: TypeTable::U64,
     };
 
@@ -901,18 +906,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .make_compiler_struct(CompilerItem::String)
                 })
         } else if *method == tokens_method {
-            self.reject_reflect_metadata_args(static_call, ctx)
-                .then(|| {
-                    let mut tt = self.tysys.type_table.borrow_mut();
-                    let (token_module, token_name) = {
-                        let items = tt.compiler_items();
-                        let (m, n) = items.require_struct(spec.token_struct_item);
-                        (m.clone(), n.to_string())
-                    };
-                    let token_type =
-                        tt.make_generic_instance(token_name, token_module, vec![self_ty]);
-                    tt.make_list(token_type)
-                })
+            if !self.reject_reflect_metadata_args(static_call, ctx) {
+                return None;
+            }
+            self.scalar_tokens_return_ty(spec, self_ty, self_name, static_call)
         } else if *method == value_method {
             self.check_reflect_fields_receiver(self_ty, self_name, static_call, ctx)
                 .then_some(spec.value_type)
@@ -946,6 +943,113 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             unreachable!("is_reflect_scalar_trait_call admits only the five trait methods")
         }
+    }
+
+    /// The return type of `case_tokens()` / `bit_tokens()`: a homogeneous token
+    /// tuple. For a concrete subject it is an N-tuple `[Token<Self>; N]` (N = the
+    /// case / member count); for a generic `T` it is the mapped pack
+    /// `[..Token<T>]` whose arity is sourced from `T`'s `<Tokens> = [..C]` bound.
+    /// `None` when a generic subject carries no such bound (diagnostic emitted).
+    fn scalar_tokens_return_ty(
+        &mut self,
+        spec: ScalarReflectSpec,
+        self_ty: TypeId,
+        self_name: &str,
+        static_call: &ast::StaticMethodCallExpr,
+    ) -> Option<TypeId> {
+        let subject_is_type_param = matches!(
+            self.tysys.type_table.borrow().get(self_ty),
+            ResolvedType::TypeParam { .. }
+        );
+        if !subject_is_type_param {
+            return Some(self.scalar_concrete_tokens_ty(spec, self_ty, self_name));
+        }
+        let trait_name = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_items()
+            .trait_name(spec.trait_item)
+            .to_string();
+        let Some(tokens_ty) = self.scalar_tokens_bound_ty(spec, self_ty, self_name, &trait_name)
+        else {
+            let method = &static_call.method;
+            let assoc = spec.tokens_assoc;
+            let _ = self.emit(TypeError::UnknownFunction {
+                name: format!(
+                    "{trait_name}::<{self_name}>::{method} (no `{assoc} = [..C]` bound on {self_name})"
+                ),
+                span: static_call.span,
+            });
+            return None;
+        };
+        Some(tokens_ty)
+    }
+
+    /// The concrete N-tuple `[Token<Self>; N]` for `case_tokens()` /
+    /// `bit_tokens()`, N being the subject's case / member count.
+    fn scalar_concrete_tokens_ty(
+        &mut self,
+        spec: ScalarReflectSpec,
+        self_ty: TypeId,
+        self_name: &str,
+    ) -> TypeId {
+        let count = self.scalar_member_count(spec, self_name);
+        let mut tt = self.tysys.type_table.borrow_mut();
+        let (token_module, token_name) = {
+            let items = tt.compiler_items();
+            let (m, n) = items.require_struct(spec.token_struct_item);
+            (m.clone(), n.to_string())
+        };
+        let token_type = tt.make_generic_instance(token_name, token_module, vec![self_ty]);
+        tt.make_tuple(std::iter::repeat_n(token_type, count).collect())
+    }
+
+    /// The subject's case (enum) / member (flags) count.
+    fn scalar_member_count(&self, spec: ScalarReflectSpec, self_name: &str) -> usize {
+        let lookup = self.type_lookup();
+        match spec.kind {
+            ScalarReflectKind::Enum => lookup
+                .enum_case(self_name)
+                .map_or(0, |info| info.cases.len()),
+            ScalarReflectKind::Flags => lookup
+                .flags_case(self_name)
+                .map_or(0, |info| info.members.len()),
+        }
+    }
+
+    /// The mapped token pack `[..Token<T>]` — the type of `case_tokens()` /
+    /// `bit_tokens()` under a `T: Trait<<Tokens> = [..C]>` bound. Analogous to
+    /// [`Self::case_tokens_bound_ty`], but the token carries no payload param, so
+    /// the mapped element is a constant `Token<T>` and the bound pack serves only
+    /// to source the arity. `None` when `T` carries no `<Tokens>` pack bound.
+    fn scalar_tokens_bound_ty(
+        &mut self,
+        spec: ScalarReflectSpec,
+        self_ty: TypeId,
+        type_param_name: &str,
+        trait_name: &str,
+    ) -> Option<TypeId> {
+        let tokens_ty =
+            self.reflect_pack_bound_ty(type_param_name, trait_name, spec.tokens_assoc)?;
+        let mut tt = self.tysys.type_table.borrow_mut();
+        let elems = tt.as_tuple(tokens_ty)?;
+        let (pack_name, pack_index) = elems.iter().find_map(|&e| match tt.get(e) {
+            crate::tir::ResolvedType::TypePack {
+                name,
+                index,
+                mapped_elem: None,
+            } => Some((name.clone(), *index)),
+            _ => None,
+        })?;
+        let (token_module, token_name) = {
+            let items = tt.compiler_items();
+            let (m, n) = items.require_struct(spec.token_struct_item);
+            (m.clone(), n.to_string())
+        };
+        let token = tt.make_generic_instance(token_name, token_module, vec![self_ty]);
+        let token_pack = tt.make_mapped_type_pack(pack_name, pack_index, token);
+        Some(tt.make_tuple(vec![token_pack]))
     }
 
     /// Per-parameter mutability of a scalar-kind member's dispatch record:
