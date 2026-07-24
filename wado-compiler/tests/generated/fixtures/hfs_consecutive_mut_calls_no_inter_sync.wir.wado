@@ -137,8 +137,9 @@ fn "hfs_consecutive_mut_calls_no_inter_sync.wado/run"() with Stdout {
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let f_11: ref "core:prelude/format.wado//Formatter";
-    let f_16: ref "core:prelude/format.wado//Formatter";
-    let __hfs_v_19: i32;
+    let start: i32;
+    let f_25: ref "core:prelude/format.wado//Formatter";
+    let __hfs_v_28: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:hfs_consecutive_mut_calls_no_inter_sync.wado::__modules_initialized);
         cold_path;
@@ -148,23 +149,23 @@ fn "hfs_consecutive_mut_calls_no_inter_sync.wado/run"() with Stdout {
     b = struct.new "hfs_consecutive_mut_calls_no_inter_sync.wado//Buf" { v: 0, pad: 0 };
     sum = 0;
     i = 0;
-    __hfs_v_19 = 0;
+    __hfs_v_28 = 0;
     b0: block {
         l1: loop {
             break_if b0 i >= 2;
-            __hfs_v_19 = local.tee __hfs_v_19(__hfs_v_19 + 0) + 0;
-            b.v = __hfs_v_19;
+            __hfs_v_28 = local.tee __hfs_v_28(__hfs_v_28 + 0) + 0;
+            b.v = __hfs_v_28;
             a_ret = "hfs_consecutive_mut_calls_no_inter_sync.wado/add1"(b);
             b_ret = "hfs_consecutive_mut_calls_no_inter_sync.wado/add10"(b);
             c_ret = "hfs_consecutive_mut_calls_no_inter_sync.wado/add100"(b);
             sum = ((sum + a_ret) + b_ret) + c_ret;
-            __hfs_v_19 = local.tee __hfs_v_19(b.v) + 0;
+            __hfs_v_28 = local.tee __hfs_v_28(b.v) + 0;
             i = i + 1;
-            b.v = __hfs_v_19;
+            b.v = __hfs_v_28;
             continue l1;
         };
     };
-    "core:cli/println"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; f_11 = __local_7; "core:prelude/primitive.wado/i32::fmt_decimal"(sum, f_11); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; f_16 = __local_7; "core:prelude/primitive.wado/i32::fmt_decimal"(b.v, f_16); __local_6);
+    "core:cli/println"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; f_11 = __local_7; "core:prelude/primitive.wado/i32::fmt_decimal"(sum, f_11); start = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_6, 1); builtin::array_set_u8(__local_6.repr, start, 32); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; f_25 = __local_7; "core:prelude/primitive.wado/i32::fmt_decimal"(b.v, f_25); __local_6);
 }
 
 fn "hfs_consecutive_mut_calls_no_inter_sync.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -401,6 +402,14 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
+    let byte: u8;
+    let start: i32;
+    if c <u 128 {
+        byte = c & 255;
+        start = "core:prelude/string.wado/String::internal_reserve_uninit"(self, 1);
+        builtin::array_set_u8(self.repr, start, byte);
+        return;
+    }
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
@@ -413,12 +422,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b22: block {
-        l23: loop {
-            break_if b22 i >= n;
+    b23: block {
+        l24: loop {
+            break_if b23 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l23;
+            continue l24;
         };
     };
 }

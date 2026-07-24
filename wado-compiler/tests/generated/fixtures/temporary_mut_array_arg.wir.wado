@@ -127,20 +127,21 @@ fn "temporary_mut_array_arg.wado/helper"(name, counts) {
     let prev: i32;
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5_5: ref "core:prelude/format.wado//Formatter";
-    let value_35: ref "tuple//[core:prelude/string.wado/String, i32]";
-    let _licm_used_44: i32;
-    let _licm_repr_45: ref "Array<[core:prelude/string.wado/String,i32]>";
+    let start: i32;
+    let value_44: ref "tuple//[core:prelude/string.wado/String, i32]";
+    let _licm_used_53: i32;
+    let _licm_repr_54: ref "Array<[core:prelude/string.wado/String,i32]>";
     i = 0;
-    _licm_used_44 = counts.used;
-    _licm_repr_45 = counts.repr;
+    _licm_used_53 = counts.used;
+    _licm_repr_54 = counts.repr;
     b0: block {
         l1: loop {
-            break_if b0 i >= _licm_used_44;
-            if "core:prelude/string.wado/String^Eq::eq"(builtin::array_get<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_45, i).0, name) {
-                prev = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_45, i).1;
-                value_35 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: ref.as_non_null(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = name.repr; let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__array_clone_src_1); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: name.used }), 1: prev + 1 };
-                builtin::array_set<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_45, i, value_35);
-                return __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_4, name), "core:prelude/string.wado/String::push"(__local_4, 95), __local_5_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }, "core:prelude/primitive.wado/i32::fmt_decimal"(prev + 1, __local_5_5), __local_4;
+            break_if b0 i >= _licm_used_53;
+            if "core:prelude/string.wado/String^Eq::eq"(builtin::array_get<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_54, i).0, name) {
+                prev = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_54, i).1;
+                value_44 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: ref.as_non_null(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = name.repr; let __array_clone_len_1: i32; __array_clone_len_1 = builtin::array_len(__array_clone_src_1); let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: name.used }), 1: prev + 1 };
+                builtin::array_set<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_54, i, value_44);
+                return __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_4, name), start = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_4, 1), builtin::array_set_u8(__local_4.repr, start, 95), __local_5_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }, "core:prelude/primitive.wado/i32::fmt_decimal"(prev + 1, __local_5_5), __local_4;
             }
             i = i + 1;
             continue l1;
@@ -399,6 +400,14 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
+    let byte: u8;
+    let start: i32;
+    if c <u 128 {
+        byte = c & 255;
+        start = "core:prelude/string.wado/String::internal_reserve_uninit"(self, 1);
+        builtin::array_set_u8(self.repr, start, byte);
+        return;
+    }
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
@@ -419,14 +428,14 @@ fn "core:prelude/string.wado/String^Eq::eq"(self, other) {
         haystack = self.repr;
         needle = other.repr;
         j = 0;
-        b24: block {
-            l25: loop {
-                break_if b24 j >= len;
+        b25: block {
+            l26: loop {
+                break_if b25 j >= len;
                 if builtin::array_get<u8>(haystack, 0 + j) != builtin::array_get<u8>(needle, j) {
                     break __inline_bytes_match_at_2: 0;
                 }
                 j = j + 1;
-                continue l25;
+                continue l26;
             };
         };
         break __inline_bytes_match_at_2: 1;
@@ -438,12 +447,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b27: block {
-        l28: loop {
-            break_if b27 i >= n;
+    b28: block {
+        l29: loop {
+            break_if b28 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l28;
+            continue l29;
         };
     };
 }

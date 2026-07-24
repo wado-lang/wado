@@ -144,7 +144,9 @@ fn "trait_bound_3.wado/__cm_export__run"() {
 fn "trait_bound_3.wado/trait_bound_3.wado/describe<trait_bound_3.wado/Player>"(x) {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
-    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_1, x.player_name), "core:prelude/string.wado/String::push"(__local_1, 58), "core:prelude/string.wado/String::push"(__local_1, 32), __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }, "core:prelude/primitive.wado/i32::fmt_decimal"(x.player_score, __local_2), __local_1;
+    let start_7: i32;
+    let start_16: i32;
+    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_1, x.player_name), start_7 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_7, 58), start_16 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1), builtin::array_set_u8(__local_1.repr, start_16, 32), __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }, "core:prelude/primitive.wado/i32::fmt_decimal"(x.player_score, __local_2), __local_1;
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
@@ -366,6 +368,14 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
+    let byte: u8;
+    let start: i32;
+    if c <u 128 {
+        byte = c & 255;
+        start = "core:prelude/string.wado/String::internal_reserve_uninit"(self, 1);
+        builtin::array_set_u8(self.repr, start, byte);
+        return;
+    }
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
@@ -378,12 +388,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b20: block {
-        l21: loop {
-            break_if b20 i >= n;
+    b21: block {
+        l22: loop {
+            break_if b21 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l21;
+            continue l22;
         };
     };
 }

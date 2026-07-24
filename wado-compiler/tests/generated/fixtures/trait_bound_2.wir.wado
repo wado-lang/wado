@@ -399,6 +399,14 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
+    let byte: u8;
+    let start: i32;
+    if c <u 128 {
+        byte = c & 255;
+        start = "core:prelude/string.wado/String::internal_reserve_uninit"(self, 1);
+        builtin::array_set_u8(self.repr, start, byte);
+        return;
+    }
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
@@ -421,9 +429,9 @@ fn "core:prelude/string.wado/String^Ord::cmp"(self, other) {
     a_repr = self.repr;
     b_repr = other.repr;
     i = 0;
-    b24: block {
-        l25: loop {
-            break_if b24 i >= min_len;
+    b25: block {
+        l26: loop {
+            break_if b25 i >= min_len;
             a_byte = builtin::array_get<u8>(a_repr, i);
             b_byte = builtin::array_get<u8>(b_repr, i);
             if a_byte <u b_byte {
@@ -433,7 +441,7 @@ fn "core:prelude/string.wado/String^Ord::cmp"(self, other) {
                 return 2;
             }
             i = i + 1;
-            continue l25;
+            continue l26;
         };
     };
     if len_a < len_b {
@@ -450,12 +458,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b30: block {
-        l31: loop {
-            break_if b30 i >= n;
+    b31: block {
+        l32: loop {
+            break_if b31 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l31;
+            continue l32;
         };
     };
 }

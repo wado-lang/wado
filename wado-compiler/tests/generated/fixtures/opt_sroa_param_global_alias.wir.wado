@@ -166,7 +166,10 @@ fn "opt_sroa_param_global_alias.wado/run"() with Stdout {
     let __local_9: ref "core:prelude/format.wado//Formatter";
     let __local_10: ref "core:prelude/string.wado//String";
     let __local_11: ref "core:prelude/format.wado//Formatter";
-    let self_34: i32;
+    let start_33: i32;
+    let start_42: i32;
+    let start_51: i32;
+    let self_61: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:opt_sroa_param_global_alias.wado::__modules_initialized);
         cold_path;
@@ -191,7 +194,7 @@ fn "opt_sroa_param_global_alias.wado/run"() with Stdout {
         "core:rt/panic"(__local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(47), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_8, global:opt_sroa_param_global_alias.wado::__const_obj_0); __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 }; "core:prelude/primitive.wado/i32::fmt_decimal"(c, __local_9); __local_8);
         unreachable;
     }
-    "core:cli/println"(__local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 }; "core:prelude/string.wado/String::push"(__local_10, 111); "core:prelude/string.wado/String::push"(__local_10, 107); "core:prelude/string.wado/String::push"(__local_10, 32); __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_34(global:opt_sroa_param_global_alias.wado::COUNTER), __local_11); __local_10);
+    "core:cli/println"(__local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 }; start_33 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_10, 1); builtin::array_set_u8(__local_10.repr, start_33, 111); start_42 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_10, 1); builtin::array_set_u8(__local_10.repr, start_42, 107); start_51 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_10, 1); builtin::array_set_u8(__local_10.repr, start_51, 32); __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_61(global:opt_sroa_param_global_alias.wado::COUNTER), __local_11); __local_10);
 }
 
 fn "opt_sroa_param_global_alias.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -481,6 +484,14 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
+    let byte: u8;
+    let start: i32;
+    if c <u 128 {
+        byte = c & 255;
+        start = "core:prelude/string.wado/String::internal_reserve_uninit"(self, 1);
+        builtin::array_set_u8(self.repr, start, byte);
+        return;
+    }
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
@@ -493,12 +504,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b24: block {
-        l25: loop {
-            break_if b24 i >= n;
+    b25: block {
+        l26: loop {
+            break_if b25 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l25;
+            continue l26;
         };
     };
 }

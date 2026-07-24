@@ -105,6 +105,7 @@ impl TestOptions {
             test_name_filters: self.test_name_filters.clone(),
             codegen_flags: Vec::new(),
             lib_world: None,
+            lib_interface_export: false,
             param_overrides: self.param_overrides.clone(),
             param_policy: self.param_policy,
             retain_wir: false,

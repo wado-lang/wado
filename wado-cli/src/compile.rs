@@ -88,6 +88,10 @@ pub struct CompileOptions {
     /// the compiler synthesizes a library world from the entry module's
     /// `export fn`s and exports each one as a Component Model function.
     pub lib_world: Option<String>,
+    /// `--implement <fq>`: build a provider component — a library world whose
+    /// exports are forced into the interface named by `lib_world`, so the
+    /// artifact satisfies another component's import of that interface.
+    pub lib_interface_export: bool,
     /// `-D NAME=value` compile-time parameter overrides.
     pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
     /// `--param-*` policy levels.
@@ -138,6 +142,7 @@ impl CompileOptions {
             no_cache: false,
             codegen_flags: Vec::new(),
             lib_world,
+            lib_interface_export: false,
             param_overrides: wado_compiler::hashmap::IndexMap::default(),
             param_policy: wado_compiler::param_resolution::ParamPolicy::default(),
             no_embed_wit: false,
@@ -224,6 +229,9 @@ pub struct CompileFlags {
     pub codegen_flags: Vec<String>,
     /// Library world FQ for `--lib`. Forwarded to `CompilerOptions::lib_world`.
     pub lib_world: Option<String>,
+    /// Force library exports into the `lib_world` interface (`--implement`).
+    /// Forwarded to `CompilerOptions::lib_interface_export`.
+    pub lib_interface_export: bool,
     /// `-D NAME=value` compile-time parameter overrides. Forwarded to
     /// `CompilerOptions::param_overrides`.
     pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
@@ -254,6 +262,7 @@ impl CompileOptions {
             test_name_filters: Vec::new(),
             codegen_flags: self.codegen_flags.clone(),
             lib_world: self.lib_world.clone(),
+            lib_interface_export: self.lib_interface_export,
             param_overrides: self.param_overrides.clone(),
             param_policy: self.param_policy,
             retain_wir: false,
@@ -469,6 +478,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         allocator,
         no_cache,
         codegen_flags,
+        lib_interface_export: false,
         lib_world: None,
         param_overrides: param_args.overrides,
         param_policy: param_args.policy,
@@ -593,6 +603,7 @@ pub async fn try_compile_with_kiln_cache(
         test_name_filters: flags.test_name_filters.clone(),
         codegen_flags: flags.codegen_flags.clone(),
         lib_world: flags.lib_world.clone(),
+        lib_interface_export: flags.lib_interface_export,
         param_overrides: flags.param_overrides.clone(),
         param_policy: flags.param_policy,
         retain_wir: flags.retain_wir,

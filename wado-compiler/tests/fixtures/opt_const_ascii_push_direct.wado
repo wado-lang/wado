@@ -1,0 +1,37 @@
+// Regression test: the `const_ascii_push` NIR rule retargets a *direct*
+// `buf.push(<const char < 0x80>)` (not one synthesized by the short-`push_str`
+// expansion) to `push_ascii_unchecked`, which inlines to
+// `internal_reserve_uninit(1)` + `array_set_u8`. A non-ASCII constant char
+// must be left on the general `push`/`encode_char` path — retargeting it would
+// write a raw code point where a UTF-8 sequence belongs.
+//
+// This guards the direct-push path specifically: `opt_string_push_short_literal`
+// only exercises pushes derived from `push_str`, so a regression in how char
+// literals reach the rule (e.g. no longer born as `Operand::Value`) would slip
+// past it but is caught here.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut buf = String::with_capacity(8);
+    buf.push('a'); // 97  — ASCII, specialized
+    buf.push('Z'); // 90  — ASCII, specialized
+    buf.push('€'); // 8364 — non-ASCII, stays on encode_char
+    println(buf);
+}
+
+__DATA__
+{
+    "stdout": "aZ€\n",
+    "wir_expect:O2": [
+        "String::internal_reserve_uninit\"(buf, 1)",
+        "array_set_u8(buf.repr,",
+        ", 97)",
+        ", 90)",
+        "String::push\"(buf, 8364)"
+    ],
+    "wir_not_expect:O2": [
+        "String::push\"(buf, 97)",
+        "String::push\"(buf, 90)"
+    ]
+}

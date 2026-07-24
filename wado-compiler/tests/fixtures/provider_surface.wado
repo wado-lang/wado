@@ -1,0 +1,10 @@
+// `with { provider: "..." }` compiles the named Wado file on-demand into a
+// component that satisfies the imported dependency's guest-effect imports, and
+// composes it — so `Hlc::wrap` runs with no handler installed (the reconstructed
+// `Highlight` effect is discharged by the provider).
+use { Hlc } from "./sub/hlc.wasm" with { type: "wasm", provider: "./sub/hl_ext.wado" };
+
+test "provider satisfies the dependency's guest effect" {
+    let w = Hlc::wrap("x", "wado");
+    assert w.text == "[wado:x]";
+}

@@ -357,6 +357,14 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
+    let byte: u8;
+    let start: i32;
+    if c <u 128 {
+        byte = c & 255;
+        start = "core:prelude/string.wado/String::internal_reserve_uninit"(self, 1);
+        builtin::array_set_u8(self.repr, start, byte);
+        return;
+    }
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
@@ -378,8 +386,8 @@ fn "hfs_break_from_scalar_state_commits.wado/Actions::fill"(self) {
     _licm_arith_5 = _licm_base_2 + 7;
     _licm_arith_6 = _licm_base_2 + 1;
     __hfs_channel_7 = self.channel;
-    b20: block {
-        l21: loop {
+    b21: block {
+        l22: loop {
             if i == 0 {
                 __hfs_channel_7 = _licm_arith_3;
             } else if i == 1 {
@@ -389,10 +397,10 @@ fn "hfs_break_from_scalar_state_commits.wado/Actions::fill"(self) {
             } else if i == 3 {
                 __hfs_channel_7 = _licm_arith_6;
                 self.channel = __hfs_channel_7;
-                break b20;
+                break b21;
             }
             i = i + 1;
-            continue l21;
+            continue l22;
         };
     };
 }
@@ -402,12 +410,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b26: block {
-        l27: loop {
-            break_if b26 i >= n;
+    b27: block {
+        l28: loop {
+            break_if b27 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l27;
+            continue l28;
         };
     };
 }

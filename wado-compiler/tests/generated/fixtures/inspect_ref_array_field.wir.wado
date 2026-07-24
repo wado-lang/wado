@@ -333,7 +333,13 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>"(repr
     let s_19: ref "core:prelude/string.wado//String";
     let s_21: ref "core:prelude/string.wado//String";
     let _licm_arith_24: bool;
-    "core:prelude/string.wado/String::push"(f.buf, 91);
+    let self_25: ref "core:prelude/string.wado//String";
+    let start_27: i32;
+    let self_34: ref "core:prelude/string.wado//String";
+    let start_36: i32;
+    self_25 = f.buf;
+    start_27 = "core:prelude/string.wado/String::internal_reserve_uninit"(self_25, 1);
+    builtin::array_set_u8(self_25.repr, start_27, 91);
     shown = 0;
     truncated = 0;
     i = 0;
@@ -372,7 +378,9 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>"(repr
             "core:prelude/string.wado/String::push_str"(f.buf, s_21);
         }
     }
-    "core:prelude/string.wado/String::push"(f.buf, 93);
+    self_34 = f.buf;
+    start_36 = "core:prelude/string.wado/String::internal_reserve_uninit"(self_34, 1);
+    builtin::array_set_u8(self_34.repr, start_36, 93);
 }
 
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
@@ -433,6 +441,14 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
+    let byte: u8;
+    let start: i32;
+    if c <u 128 {
+        byte = c & 255;
+        start = "core:prelude/string.wado/String::internal_reserve_uninit"(self, 1);
+        builtin::array_set_u8(self.repr, start, byte);
+        return;
+    }
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
@@ -445,12 +461,28 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
+<<<<<<< HEAD
     b28: block {
         l29: loop {
             break_if b28 i >= n;
+||||||| f0cafa1d0
+    b29: block {
+        l30: loop {
+            break_if b29 i >= n;
+=======
+    b30: block {
+        l31: loop {
+            break_if b30 i >= n;
+>>>>>>> origin/main
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
+<<<<<<< HEAD
             continue l29;
+||||||| f0cafa1d0
+            continue l30;
+=======
+            continue l31;
+>>>>>>> origin/main
         };
     };
 }

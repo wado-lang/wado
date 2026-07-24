@@ -3617,23 +3617,24 @@ fn fill_zeros(buf: &mut String, n: i32) {
     buf.String::append_byte_filled(48, n);
 }
 
+fn reserve_uninit(buf: &mut String, n: i32) -> i32 {
+    return buf.String::internal_reserve_uninit(n);
+}
+
 pub fn write_decimal(buf: &mut String, d: u64, p: i32, nd: i32) {
     let decimal_pos: i32 = (nd + p);
     if (decimal_pos <= 0) {
         buf.String::push_str(&String { repr: packed"0.", used: 2 });
         "core::prelude/fpfmt.wado::fill_zeros"(buf, -decimal_pos);
-        let digit_offset: i32 = buf.String::len();
-        "core::prelude/fpfmt.wado::fill_zeros"(buf, nd);
+        let digit_offset: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, nd);
         "core::prelude/fpfmt.wado::write_digits_at"(buf, digit_offset, d, nd);
     } else {
         if (decimal_pos >= nd) {
-            let start: i32 = buf.String::len();
-            "core::prelude/fpfmt.wado::fill_zeros"(buf, nd);
+            let start: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, nd);
             "core::prelude/fpfmt.wado::write_digits_at"(buf, start, d, nd);
             "core::prelude/fpfmt.wado::fill_zeros"(buf, (decimal_pos - nd));
         } else {
-            let start: i32 = buf.String::len();
-            "core::prelude/fpfmt.wado::fill_zeros"(buf, (nd + 1));
+            let start: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, (nd + 1));
             "core::prelude/fpfmt.wado::write_digits_at"(buf, start, d, nd);
             let raw: &mut Array<u8> = buf.String::internal_raw_bytes_mut();
             "core::builtin::core/builtin/array_copy<u8>"(raw, ((start + decimal_pos) + 1), raw, (start + decimal_pos), (nd - decimal_pos));
@@ -3661,15 +3662,13 @@ pub fn format_decimal(d: u64, p: i32, nd: i32) -> String {
 pub fn write_exp(buf: &mut String, d: u64, p: i32, nd: i32, upper: bool) {
     let exp: i32 = ((p + nd) - 1);
     if (nd > 1) {
-        let start: i32 = buf.String::len();
-        "core::prelude/fpfmt.wado::fill_zeros"(buf, (nd + 1));
+        let start: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, (nd + 1));
         "core::prelude/fpfmt.wado::write_digits_at"(buf, start, d, nd);
         let raw: &mut Array<u8> = buf.String::internal_raw_bytes_mut();
         "core::builtin::core/builtin/array_copy<u8>"(raw, (start + 2), raw, (start + 1), (nd - 1));
         buf.String::set_byte_unchecked((start + 1), 46);
     } else {
-        let start: i32 = buf.String::len();
-        "core::prelude/fpfmt.wado::fill_zeros"(buf, 1);
+        let start: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, 1);
         "core::prelude/fpfmt.wado::write_digits_at"(buf, start, d, 1);
     }
     buf.String::push_str(&if upper {
@@ -3739,14 +3738,12 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
             trim_d = (trim_d / 10);
             skip = (skip - 1);
         }
-        let digit_offset: i32 = buf.String::len();
-        "core::prelude/fpfmt.wado::fill_zeros"(buf, digits_to_output);
+        let digit_offset: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, digits_to_output);
         "core::prelude/fpfmt.wado::write_digits_at"(buf, digit_offset, trim_d, digits_to_output);
         "core::prelude/fpfmt.wado::fill_zeros"(buf, trailing);
     } else {
         if (decimal_pos >= nd) {
-            let start: i32 = buf.String::len();
-            "core::prelude/fpfmt.wado::fill_zeros"(buf, nd);
+            let start: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, nd);
             "core::prelude/fpfmt.wado::write_digits_at"(buf, start, d, nd);
             "core::prelude/fpfmt.wado::fill_zeros"(buf, (decimal_pos - nd));
             if (precision > 0) {
@@ -3766,9 +3763,7 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
                     trim_d = (trim_d / 10);
                     skip = (skip - 1);
                 }
-                let total: i32 = (output_nd + 1);
-                let start: i32 = buf.String::len();
-                "core::prelude/fpfmt.wado::fill_zeros"(buf, total);
+                let start: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, (output_nd + 1));
                 "core::prelude/fpfmt.wado::write_digits_at"(buf, start, trim_d, output_nd);
                 let raw: &mut Array<u8> = buf.String::internal_raw_bytes_mut();
                 "core::builtin::core/builtin/array_copy<u8>"(raw, ((start + decimal_pos) + 1), raw, (start + decimal_pos), (output_nd - decimal_pos));
@@ -3776,8 +3771,7 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
                 return;
             }
             let trailing: i32 = (precision - after_decimal);
-            let start: i32 = buf.String::len();
-            "core::prelude/fpfmt.wado::fill_zeros"(buf, (nd + 1));
+            let start: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, (nd + 1));
             "core::prelude/fpfmt.wado::write_digits_at"(buf, start, d, nd);
             let raw: &mut Array<u8> = buf.String::internal_raw_bytes_mut();
             "core::builtin::core/builtin/array_copy<u8>"(raw, ((start + decimal_pos) + 1), raw, (start + decimal_pos), (nd - decimal_pos));
@@ -3807,8 +3801,7 @@ pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32,
         };
         let trailing: i32 = (precision - to_output);
         let digit_count: i32 = (1 + to_output);
-        let start: i32 = buf.String::len();
-        "core::prelude/fpfmt.wado::fill_zeros"(buf, (digit_count + 1));
+        let start: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, (digit_count + 1));
         let mut trim_d: u64 = d;
         let mut skip: i32 = (nd - digit_count);
         loop {
@@ -3824,8 +3817,7 @@ pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32,
         buf.String::set_byte_unchecked((start + 1), 46);
         "core::prelude/fpfmt.wado::fill_zeros"(buf, trailing);
     } else {
-        let start: i32 = buf.String::len();
-        "core::prelude/fpfmt.wado::fill_zeros"(buf, 1);
+        let start: i32 = "core::prelude/fpfmt.wado::reserve_uninit"(buf, 1);
         let mut first_d: u64 = d;
         let mut skip: i32 = (nd - 1);
         loop {
@@ -10933,11 +10925,21 @@ pub fn String::char_at_byte_unchecked(self: &String, byte_index: i32) -> char {
 }
 
 pub fn String::push(self: &mut String, c: char) {
+    let code: u32 = c as u32;
+    if (code < 128) {
+        self.String::push_ascii_unchecked(code as u8);
+        return;
+    }
     if ((self.used + 4) > self.repr."Array<u8>::len"()) {
         core::builtin::cold_path();
         self.String::grow((self.used + 4));
     }
-    self.used = (self.used + "core::prelude/string.wado::encode_char"(&mut self.repr as &mut Array<u8>, self.used, c as u32));
+    self.used = (self.used + "core::prelude/string.wado::encode_char"(&mut self.repr as &mut Array<u8>, self.used, code));
+}
+
+pub fn String::push_ascii_unchecked(self: &mut String, byte: u8) {
+    let start: i32 = self.String::internal_reserve_uninit(1);
+    self.String::set_byte_unchecked(start, byte);
 }
 
 pub fn String::truncate(self: &mut String, byte_len: i32) {
@@ -10957,7 +10959,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 650 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 668 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"negative length", used: 15 });
                 __r.String::push_str(&String { repr: packed"\ncondition: byte_len >= 0\n", used: 26 });
@@ -10982,7 +10984,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 651 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 669 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"not on a UTF-8 character boundary", used: 33 });
                 __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_len)\n", used: 44 });
@@ -11175,7 +11177,7 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 814 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 832 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"byte range out of bounds", used: 24 });
                 __r.String::push_str(&String { repr: packed"\ncondition: 0 <= start && start <= end && end <= self.used\n", used: 59 });
@@ -11233,7 +11235,7 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 815 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 833 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"byte range not on UTF-8 character boundaries", used: 44 });
                 __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(start) && self.is_char_boundary(end)\n", used: 71 });
@@ -11411,7 +11413,7 @@ pub fn String::insert(self: &mut String, byte_index: i32, ch: char) {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 960 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 978 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"insert index not on UTF-8 character boundary", used: 44 });
                 __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_index)\n", used: 46 });
@@ -11445,7 +11447,7 @@ pub fn String::insert_str(self: &mut String, byte_index: i32, s: String) {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 977 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 995 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"insert_str index not on UTF-8 character boundary", used: 48 });
                 __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_index)\n", used: 46 });
@@ -11487,7 +11489,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 998 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1016 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"index out of bounds", used: 19 });
                 __r.String::push_str(&String { repr: packed"\ncondition: byte_index >= 0 && byte_index < self.used\n", used: 54 });
@@ -11528,7 +11530,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
                 __r.String::push_str(&String { repr: packed"core:prelude/string.wado", used: 24 });
                 __r.String::push_str(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 999 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1017 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&String { repr: packed": ", used: 2 });
                 __r.String::push_str(&String { repr: packed"remove index not on UTF-8 character boundary", used: 44 });
                 __r.String::push_str(&String { repr: packed"\ncondition: self.is_char_boundary(byte_index)\n", used: 46 });

@@ -29,6 +29,7 @@ pub fn build_component(
     project: &NirPackage,
     core_module: &[u8],
     wir_package: &WirPackage,
+    providers: &[crate::ProviderComponent],
 ) -> Vec<u8> {
     let wasm_modules = &wir_package.wasm_modules;
     let mut builder = ComponentBuilder::default();
@@ -38,6 +39,7 @@ pub fn build_component(
     // is decided by the WIR-level plan (the single source of truth); codegen
     // reads it rather than re-deriving, and its job is to encode each.
     generate_cm_imports(&mut builder, &mut ctx, project, &wir_package.import_plan);
+    generate_cm_world_func_imports(&mut builder, &mut ctx, project, &wir_package.import_plan);
 
     // Type: result unit for run function (needed for task.return)
     let result_unit_type = ctx.register_type("result-unit");
@@ -295,6 +297,13 @@ pub fn build_component(
             }
         }
     }
+    // World functions (Phase 9) lower into the same `wasi` instance.
+    for (_, func) in project.cm_interface_registry.world_import_functions() {
+        let local_name = func.local_alias_name();
+        if ctx.has_core_func(&local_name) {
+            available_wasi_funcs.insert(local_name);
+        }
+    }
 
     // Embed core module
     ctx.register_core_module("main-mod");
@@ -412,7 +421,12 @@ pub fn build_component(
     append_interface_instance_exports(&mut component_bytes, &ctx, component_plan);
 
     // Compose in imported CM component dependencies so the result is standalone.
-    compose_dependency_components(component_bytes, project, &wir_package.import_plan)
+    compose_dependency_components(
+        component_bytes,
+        project,
+        &wir_package.import_plan,
+        providers,
+    )
 }
 
 fn wado_type_to_cm_primitive(ty: &Type) -> ComponentValType {
@@ -4014,9 +4028,12 @@ fn compose_dependency_components(
     program_bytes: Vec<u8>,
     project: &NirPackage,
     import_plan: &[crate::wir::ImportEntry],
+    providers: &[crate::ProviderComponent],
 ) -> Vec<u8> {
     use crate::wir::ImportKind;
-    use wasm_compose::graph::{Component, CompositionGraph, EncodeOptions};
+    use wasm_compose::graph::{
+        Component, ComponentId, CompositionGraph, EncodeOptions, ImportIndex, InstanceId,
+    };
     use wasmparser::Validator;
 
     let dependency_fqs: IndexSet<&str> = import_plan
@@ -4024,7 +4041,21 @@ fn compose_dependency_components(
         .filter(|e| e.kind == ImportKind::Component)
         .map(|e| e.fq.as_str())
         .collect();
-    if dependency_fqs.is_empty() {
+    // World functions (Phase 9) compose by their CM (WIT) name, but the plan
+    // keys them by the Wado (snake) name, so translate via the registry —
+    // else a multi-word `render-html` never matches its plan entry `render_html`.
+    let planned_world_funcs: IndexSet<&str> = import_plan
+        .iter()
+        .filter(|e| e.kind == ImportKind::WorldFunction)
+        .map(|e| e.fq.as_str())
+        .collect();
+    let world_func_cm_names: IndexSet<String> = project
+        .cm_interface_registry
+        .world_import_functions()
+        .filter(|(name, _)| planned_world_funcs.contains(name))
+        .map(|(_, f)| f.wasi_func_name.clone())
+        .collect();
+    if dependency_fqs.is_empty() && world_func_cm_names.is_empty() && providers.is_empty() {
         return program_bytes;
     }
 
@@ -4036,6 +4067,10 @@ fn compose_dependency_components(
         let program_id = graph.add_component(program)?;
         let program_inst = graph.instantiate(program_id)?;
 
+        // Each composed dependency's (component, instance), so a provider can be
+        // wired into whichever dependency imports the interface it satisfies.
+        let mut dep_instances: Vec<(ComponentId, InstanceId)> = Vec::new();
+
         // Instantiate each dependency, connecting its exports to program imports.
         for asset in project.wasm_assets.values() {
             let provides: Vec<&String> = asset
@@ -4043,25 +4078,65 @@ fn compose_dependency_components(
                 .iter()
                 .filter(|fq| dependency_fqs.contains(fq.as_str()))
                 .collect();
-            if provides.is_empty() {
+            let provides_funcs: Vec<&String> = asset
+                .component_world_func_names
+                .iter()
+                .filter(|name| world_func_cm_names.contains(name.as_str()))
+                .collect();
+            if provides.is_empty() && provides_funcs.is_empty() {
                 continue;
             }
             let dep = Component::from_bytes(&mut validator, "dependency", asset.bytes.clone())?;
             let dep_id = graph.add_component(dep)?;
             let dep_inst = graph.instantiate(dep_id)?;
+            dep_instances.push((dep_id, dep_inst));
 
-            for fq in provides {
+            for name in provides.into_iter().chain(provides_funcs) {
                 let dep_export = graph
                     .get_component(dep_id)
-                    .and_then(|c| c.export_by_name(fq))
+                    .and_then(|c| c.export_by_name(name))
                     .map(|(idx, _, _)| idx)
-                    .ok_or_else(|| anyhow::anyhow!("dependency missing export `{fq}`"))?;
+                    .ok_or_else(|| anyhow::anyhow!("dependency missing export `{name}`"))?;
                 let program_import = graph
                     .get_component(program_id)
-                    .and_then(|c| c.import_by_name(fq))
+                    .and_then(|c| c.import_by_name(name))
                     .map(|(idx, _)| idx)
-                    .ok_or_else(|| anyhow::anyhow!("program missing import `{fq}`"))?;
+                    .ok_or_else(|| anyhow::anyhow!("program missing import `{name}`"))?;
                 graph.connect(dep_inst, Some(dep_export), program_inst, program_import)?;
+            }
+        }
+
+        // Wire each provider's exported interface into the dependency that
+        // imports it — the acyclic `provider -> dependency` shape (UseCases #8).
+        for provider in providers {
+            let fq = provider.import_fq.as_str();
+            // No target means the dependency was dead-code-eliminated, not that
+            // the name mismatched (`import_fq` comes from the dependency's own
+            // imports): the provider is then unused, so skip it rather than fail.
+            let targets: Vec<(InstanceId, ImportIndex)> = dep_instances
+                .iter()
+                .filter_map(|&(dep_id, dep_inst)| {
+                    graph
+                        .get_component(dep_id)
+                        .and_then(|c| c.import_by_name(fq))
+                        .map(|(import_idx, _)| (dep_inst, import_idx))
+                })
+                .collect();
+            if targets.is_empty() {
+                continue;
+            }
+
+            let prov = Component::from_bytes(&mut validator, "provider", provider.bytes.clone())?;
+            let prov_id = graph.add_component(prov)?;
+            let prov_inst = graph.instantiate(prov_id)?;
+            let prov_export = graph
+                .get_component(prov_id)
+                .and_then(|c| c.export_by_name(fq))
+                .map(|(idx, _, _)| idx)
+                .ok_or_else(|| anyhow::anyhow!("provider missing export `{fq}`"))?;
+
+            for (dep_inst, import_idx) in targets {
+                graph.connect(prov_inst, Some(prov_export), dep_inst, import_idx)?;
             }
         }
 
@@ -4079,11 +4154,93 @@ fn compose_dependency_components(
     }
 }
 
+/// Emit a top-level `func` component import for each world-level function in
+/// the plan (Phase 9) — bare, not inside an instance, matching the dependency's
+/// world-level export. v1 covers the primitive/string value surface; a
+/// component-defined named type in the signature is rejected.
+fn generate_cm_world_func_imports(
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+    project: &NirPackage,
+    import_plan: &[crate::wir::ImportEntry],
+) {
+    use crate::wir::ImportKind;
+    let empty: IndexMap<String, u32> = IndexMap::default();
+    let world_funcs: Vec<crate::component_model::CmFunctionInfo> = project
+        .cm_interface_registry
+        .world_import_functions()
+        .map(|(_, f)| f.clone())
+        .collect();
+    for func in &world_funcs {
+        if !import_plan
+            .iter()
+            .any(|e| e.kind == ImportKind::WorldFunction && e.fq == func.method_name)
+        {
+            continue;
+        }
+        let val_type = |ty: &Type| {
+            wado_type_to_cm_val_type(project, ty, None, None, None, &empty, &empty, &empty)
+        };
+        let local_name = func.local_alias_name();
+        let func_type_name = format!("world-func-type-{}", func.wasi_func_name);
+
+        let param_vals: Vec<(String, ComponentValType)> = func
+            .params
+            .iter()
+            .map(|(_, cm_name, ty)| (cm_name.clone(), val_type(ty)))
+            .collect();
+        let result_val = func.return_type.as_ref().map(val_type);
+
+        let func_type = ctx.register_type(&func_type_name);
+        {
+            let (_, enc) = builder.ty(Some(&func_type_name));
+            let param_refs: Vec<(&str, ComponentValType)> =
+                param_vals.iter().map(|(n, v)| (n.as_str(), *v)).collect();
+            enc.function().params(param_refs).result(result_val);
+        }
+
+        ctx.register_comp_func(&local_name);
+        builder.import(
+            &func.wasi_func_name,
+            wasm_encoder::ComponentTypeRef::Func(func_type),
+        );
+    }
+}
+
 fn lower_wasi_functions(
     project: &NirPackage,
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
 ) {
+    // World functions (Phase 9): canon-lower each like a sync interface method.
+    let world_funcs: Vec<crate::component_model::CmFunctionInfo> = project
+        .cm_interface_registry
+        .world_import_functions()
+        .map(|(_, f)| f.clone())
+        .collect();
+    for func in &world_funcs {
+        let local_name = func.local_alias_name();
+        if !ctx.has_comp_func(&local_name) {
+            continue;
+        }
+        ctx.register_core_func(&local_name);
+        let returns_via_outptr = func.return_type.as_ref().is_some_and(|ty| {
+            let resolved = project.cm_interface_registry.resolve_type(ty);
+            crate::component_model::cm_return_needs_outptr(
+                &resolved,
+                &project.cm_interface_registry,
+            )
+        });
+        let needs_memory =
+            func.needs_memory_with_registry(&project.cm_interface_registry) || returns_via_outptr;
+        let mut options: Vec<CanonicalOption> = Vec::new();
+        if needs_memory {
+            options.push(CanonicalOption::Memory(ctx.memory_idx()));
+            options.push(CanonicalOption::Realloc(ctx.core_func_idx("realloc")));
+        }
+        builder.lower_func(Some(&local_name), ctx.comp_func_idx(&local_name), options);
+    }
+
     for interface_info in project.cm_interface_registry.interfaces() {
         for func in &interface_info.functions {
             let local_name = func.local_alias_name();

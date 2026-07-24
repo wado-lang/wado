@@ -11,8 +11,8 @@
 use crate::ast::{AstId, AstIdSpace};
 use crate::ast::{
     AttrArg, Attribute, CmBoundary, CmImport, EnumCase, EnumDecl, FlagsDecl, FlagsVariant,
-    GenericType, InnerAttribute, InterfaceDecl, InterfaceMethod, Item, Module, NamedType, Newtype,
-    Param, SelfKind, StructDecl, StructField, Type, VariantCase, VariantDecl, Visibility,
+    Function, GenericType, InnerAttribute, InterfaceDecl, InterfaceMethod, Item, Module, NamedType,
+    Newtype, Param, SelfKind, StructDecl, StructField, Type, VariantCase, VariantDecl, Visibility,
 };
 use crate::token::Span;
 use crate::wit_emit::CmShape;
@@ -30,6 +30,9 @@ pub struct ComponentBindings {
     pub module: Module,
     /// FQ names of every exported interface (drives import-plan classification).
     pub interface_fqs: Vec<String>,
+    /// Bare names of every exported world-level function (Phase 9); composition
+    /// wires these by name.
+    pub world_func_names: Vec<String>,
     /// FQ names of the interfaces the component itself imports — its host-leaf
     /// capabilities (WASI, etc.). Effect reconstruction maps these onto the
     /// consumer's effects; a purely-computational component imports none.
@@ -68,6 +71,7 @@ pub fn module_host_leaf_imports(module: &Module) -> Vec<String> {
 pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBindings, String> {
     let mut b = Builder::new();
     let mut interface_fqs = Vec::new();
+    let mut world_func_names = Vec::new();
 
     for (_, item) in &resolve.worlds[world].exports {
         match item {
@@ -77,11 +81,8 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
                 interface_fqs.push(fq);
             }
             WorldItem::Function(f) => {
-                return Err(format!(
-                    "importing a component that exports the world-level function `{}` is not yet \
-                     supported (only interface exports are)",
-                    f.name
-                ));
+                b.emit_world_function(resolve, f);
+                world_func_names.push(f.name.clone());
             }
             WorldItem::Type { .. } => {
                 return Err(
@@ -90,10 +91,6 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
                 );
             }
         }
-    }
-
-    if !b.errors.is_empty() {
-        return Err(b.errors.join("; "));
     }
 
     // The component's own imports are its host-leaf capabilities. Collect every
@@ -108,6 +105,23 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
             WorldItem::Function(_) | WorldItem::Type { .. } => None,
         })
         .collect();
+
+    // A non-WASI import is a guest effect the consumer must provide: materialize
+    // it as an impl-able `#[cm]` interface so effect reconstruction resolves the
+    // requirement and a `with h do` handler can satisfy it. WASI leaves resolve
+    // to their auto-loaded stdlib effect and need no synthesis here.
+    for (_, item) in &resolve.worlds[world].imports {
+        if let WorldItem::Interface { id, .. } = item {
+            let fq = interface_fq(resolve, *id);
+            if !fq.starts_with("wasi:") {
+                b.emit_interface(resolve, *id, &fq);
+            }
+        }
+    }
+
+    if !b.errors.is_empty() {
+        return Err(b.errors.join("; "));
+    }
 
     // Carry the host-leaf set on the synthesized module so the registration
     // path (`fold_component_interfaces`) recovers it from the AST alone.
@@ -138,6 +152,7 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
     Ok(ComponentBindings {
         module,
         interface_fqs,
+        world_func_names,
         host_leaf_imports,
     })
 }
@@ -174,6 +189,16 @@ impl Builder {
             name: "cm".to_string(),
             args: Vec::new(),
             cm_boundary: Some(CmBoundary::Import(cm)),
+            span: syn(),
+        }
+    }
+
+    /// `#[cm]` as a world-level function-import boundary (Phase 9).
+    fn cm_world_import_attr(&self, func_name: &str) -> Attribute {
+        Attribute {
+            name: "cm".to_string(),
+            args: Vec::new(),
+            cm_boundary: Some(CmBoundary::WorldImport(func_name.to_string())),
             span: syn(),
         }
     }
@@ -256,6 +281,62 @@ impl Builder {
             visibility: Visibility::Public,
             attrs,
             methods,
+            span: syn(),
+        }));
+    }
+
+    /// Emit a bodyless free `Item::Function` for a world-level function export
+    /// (Phase 9); the consumer calls it as a free function and codegen
+    /// synthesizes the CM import trampoline from the `#[cm]` boundary.
+    fn emit_world_function(&mut self, resolve: &Resolve, func: &wit_parser::Function) {
+        let cm_params: Vec<AttrArg> = func
+            .params
+            .iter()
+            .map(|p| AttrArg::Str(p.name.clone()))
+            .collect();
+        let params: Vec<Param> = func
+            .params
+            .iter()
+            .map(|p| {
+                let ty = self.map_type(resolve, p.ty, "");
+                Param {
+                    id: self.id(),
+                    name: p.name.to_snake_case(),
+                    name_span: syn(),
+                    ty,
+                    self_kind: SelfKind::None,
+                    is_mut: false,
+                    default: None,
+                    span: syn(),
+                }
+            })
+            .collect();
+        let return_type = func.result.map(|r| self.map_type(resolve, r, ""));
+        let attrs = vec![
+            self.cm_world_import_attr(&func.name),
+            Attribute {
+                name: "cm_params".to_string(),
+                args: cm_params,
+                cm_boundary: None,
+                span: syn(),
+            },
+        ];
+        let id = self.id();
+        self.items.push(Item::Function(Function {
+            id,
+            name: func.name.to_snake_case(),
+            name_span: syn(),
+            visibility: Visibility::Public,
+            is_export: false,
+            is_async: false,
+            type_params: Vec::new(),
+            attrs,
+            params,
+            return_type,
+            effects: Vec::new(),
+            effect_ids: Vec::new(),
+            stores: Vec::new(),
+            body: None,
             span: syn(),
         }));
     }

@@ -361,6 +361,10 @@ pub enum CompilerItem {
     /// `String::push_char` — recognised by the WIR optimiser for
     /// string-building inlining.
     StringPushChar,
+    /// `String::push_ascii_unchecked` — the single-byte append the NIR
+    /// `const_ascii_push` rewrite retargets constant-ASCII `push` calls to,
+    /// skipping `encode_char`'s width dispatch.
+    StringPushAscii,
     /// `String::get_byte_unchecked` — the unchecked byte read helper
     /// used by synthesised deserializers (`serde_synth`). Routed
     /// through this item so renames in the stdlib do not silently
@@ -580,6 +584,7 @@ impl CompilerItem {
         Self::ReflectFlagsBitTokens,
         Self::StringPushStr,
         Self::StringPushChar,
+        Self::StringPushAscii,
         Self::StringGetByteUnchecked,
         Self::ByteSliceGetUnchecked,
         Self::ByteSliceLen,
@@ -733,6 +738,7 @@ impl CompilerItem {
             Self::ReflectFlagsBitTokens => "reflect_flags_bit_tokens",
             Self::StringPushStr => "string_push_str",
             Self::StringPushChar => "string_push_char",
+            Self::StringPushAscii => "string_push_ascii",
             Self::StringGetByteUnchecked => "string_get_byte_unchecked",
             Self::ByteSliceGetUnchecked => "byte_slice_get_unchecked",
             Self::ByteSliceLen => "byte_slice_len",
@@ -858,6 +864,7 @@ impl CompilerItem {
             | Self::ReflectFlagsBitTokens
             | Self::StringPushStr
             | Self::StringPushChar
+            | Self::StringPushAscii
             | Self::StringGetByteUnchecked
             | Self::ByteSliceGetUnchecked
             | Self::ByteSliceLen
@@ -1045,6 +1052,7 @@ impl CompilerItem {
             | Self::ReflectFlagsBitTokens
             | Self::StringPushStr
             | Self::StringPushChar
+            | Self::StringPushAscii
             | Self::StringGetByteUnchecked
             | Self::ByteSliceGetUnchecked
             | Self::ByteSliceLen

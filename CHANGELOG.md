@@ -1,5 +1,18 @@
 # Changelog
 
+## [v0.0.22](https://github.com/wado-lang/wado/compare/v0.0.21...v0.0.22) - 2026-07-23
+
+- feat(marl): customizable code-block highlighting via a Highlight effect by @gfx in https://github.com/wado-lang/wado/pull/1669
+
+## [v0.0.21](https://github.com/wado-lang/wado/compare/v0.0.20...v0.0.21) - 2026-07-23
+
+- chore(deps): bump @hono/node-server from 1.19.14 to 2.0.11 in /benchmark/http_routing in the npm_and_yarn group across 1 directory by @dependabot[bot] in https://github.com/wado-lang/wado/pull/1661
+- refactor(wit): compute the component-type section during the main compile by @gfx in https://github.com/wado-lang/wado/pull/1663
+- feat(reflect): struct-field reading API over Reflect (Member tokens + wire naming) by @gfx in https://github.com/wado-lang/wado/pull/1662
+- perf(optimizer): value-block normal form for SROA + zero-copy write_raw by @gfx in https://github.com/wado-lang/wado/pull/1664
+- feat(compiler): extensible libraries across the Component Model boundary by @gfx in https://github.com/wado-lang/wado/pull/1667
+- perf(optimizer): specialize constant-ASCII String::push and skip overwritten fpfmt fills by @gfx in https://github.com/wado-lang/wado/pull/1668
+
 ## [v0.0.20](https://github.com/wado-lang/wado/compare/v0.0.19...v0.0.20) - 2026-07-22
 
 - refactor(jade): spell the `type` field directly and split tests out by @gfx in https://github.com/wado-lang/wado/pull/1622

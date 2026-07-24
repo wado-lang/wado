@@ -15,7 +15,11 @@ mod emit;
 mod postprocess;
 
 /// Emit a Wasm component binary from a linked package and its WIR module.
-pub fn emit_wasm(package: &NirPackage, wir_package: &WirPackage) -> Vec<u8> {
+pub fn emit_wasm(
+    package: &NirPackage,
+    wir_package: &WirPackage,
+    providers: &[crate::ProviderComponent],
+) -> Vec<u8> {
     // Step 1: Emit core module bytes from WirPackage
     let core_module =
         emit::emit_core_module(wir_package, package.strip_names, package.codegen_flags);
@@ -26,7 +30,7 @@ pub fn emit_wasm(package: &NirPackage, wir_package: &WirPackage) -> Vec<u8> {
     }
 
     // Step 3: Wrap in Component Model
-    let wasm = component::build_component(package, &core_module, wir_package);
+    let wasm = component::build_component(package, &core_module, wir_package, providers);
 
     // Step 4: Validate
     if !package.skip_validation {

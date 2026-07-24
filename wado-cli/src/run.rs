@@ -384,6 +384,7 @@ pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
         test_name_filters: Vec::new(),
         codegen_flags: opts.codegen_flags,
         lib_world: None,
+        lib_interface_export: false,
         param_overrides: opts.param_overrides,
         param_policy: opts.param_policy,
         retain_wir: false,

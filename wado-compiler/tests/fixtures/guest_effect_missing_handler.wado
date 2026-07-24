@@ -1,0 +1,21 @@
+// A component that imports a guest effect (`test:hlc/highlight`) reconstructs it
+// as an effect the consumer must hold: calling `Hlc::wrap` without installing a
+// `Highlight` handler is a missing-effect error, not a silent pass.
+//
+// `sub/hlc.wasm` is a prebuilt `--lib` component. Regenerate from a package
+// (`wado.toml`: name `hlc`, namespace `test`, version `0.1.0`, `lib = src.wado`)
+// whose `src.wado` is:
+//     interface Highlight { fn highlight(code: String, lang: String) -> String; }
+//     pub struct Wrapped { text: String }
+//     export fn wrap(code: String, lang: String) -> Wrapped with Highlight {
+//         return Wrapped { text: `[${Highlight::highlight(code, lang)}]` };
+//     }
+// via `wado build`, then copy `build/lib.wasm` to `sub/hlc.wasm`.
+use { Hlc } from "./sub/hlc.wasm" with { type: "wasm" };
+
+export fn run() {
+    let _ = Hlc::wrap("x", "wado");
+}
+
+__DATA__
+{"compile_error": "missing effect 'Highlight' required by 'Hlc::wrap'"}

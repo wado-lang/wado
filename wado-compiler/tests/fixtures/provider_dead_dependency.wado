@@ -1,0 +1,13 @@
+// A `provider`-bearing `use` whose dependency call is dead code must still
+// compile. Nothing reachable calls `Hlc::wrap`, so the test world drops the
+// `test:hlc/hlc` dependency (and the `test:hlc/highlight` import the provider
+// would satisfy); the provider is then unused, not a compose error.
+use { Hlc } from "./sub/hlc.wasm" with { type: "wasm", provider: "./sub/hl_ext.wado" };
+
+pub fn wrap_unreachable(code: String, lang: String) -> String {
+    return Hlc::wrap(code, lang).text;
+}
+
+test "a provider whose dependency is dead code does not break compilation" {
+    assert 1 + 1 == 2;
+}

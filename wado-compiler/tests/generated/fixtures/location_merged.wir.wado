@@ -106,13 +106,25 @@ global mut global:location_merged.wado::__const_obj_0: ref null "core:prelude/st
 
 fn "location_merged.wado/test_data_template"() with Stdout {
     let __local_1: ref "core:prelude/string.wado//String";
+    let start_5: i32;
+    let start_14: i32;
+    let start_23: i32;
+    let start_32: i32;
+    let start_41: i32;
+    let start_50: i32;
     __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
-    "core:prelude/string.wado/String::push"(__local_1, 100);
-    "core:prelude/string.wado/String::push"(__local_1, 97);
-    "core:prelude/string.wado/String::push"(__local_1, 116);
-    "core:prelude/string.wado/String::push"(__local_1, 97);
-    "core:prelude/string.wado/String::push"(__local_1, 58);
-    "core:prelude/string.wado/String::push"(__local_1, 32);
+    start_5 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1);
+    builtin::array_set_u8(__local_1.repr, start_5, 100);
+    start_14 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1);
+    builtin::array_set_u8(__local_1.repr, start_14, 97);
+    start_23 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1);
+    builtin::array_set_u8(__local_1.repr, start_23, 116);
+    start_32 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1);
+    builtin::array_set_u8(__local_1.repr, start_32, 97);
+    start_41 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1);
+    builtin::array_set_u8(__local_1.repr, start_41, 58);
+    start_50 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_1, 1);
+    builtin::array_set_u8(__local_1.repr, start_50, 32);
     "core:prelude/string.wado/String::push_str"(__local_1, global:location_merged.wado::__const_obj_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"stdout_contains\": [\"LOCATION_DATA_MARKER\", \"data: \", \"LOCATION_DATA_MARKER\", \"location_merged.wado\"]}
 "), used: 104 }; global:location_merged.wado::__const_obj_0);
     "core:cli/println"(__local_1);
@@ -121,7 +133,13 @@ fn "location_merged.wado/test_data_template"() with Stdout {
 fn "location_merged.wado/test_line_template"() with Stdout {
     let __local_0: ref "core:prelude/string.wado//String";
     let __local_1: ref "core:prelude/format.wado//Formatter";
-    "core:cli/println"(__local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }; "core:prelude/string.wado/String::push"(__local_0, 108); "core:prelude/string.wado/String::push"(__local_0, 105); "core:prelude/string.wado/String::push"(__local_0, 110); "core:prelude/string.wado/String::push"(__local_0, 101); "core:prelude/string.wado/String::push"(__local_0, 58); "core:prelude/string.wado/String::push"(__local_0, 32); __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 }; "core:prelude/primitive.wado/i32::fmt_decimal"(25, __local_1); __local_0);
+    let start_5: i32;
+    let start_14: i32;
+    let start_23: i32;
+    let start_32: i32;
+    let start_41: i32;
+    let start_50: i32;
+    "core:cli/println"(__local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }; start_5 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_0, 1); builtin::array_set_u8(__local_0.repr, start_5, 108); start_14 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_0, 1); builtin::array_set_u8(__local_0.repr, start_14, 105); start_23 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_0, 1); builtin::array_set_u8(__local_0.repr, start_23, 110); start_32 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_0, 1); builtin::array_set_u8(__local_0.repr, start_32, 101); start_41 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_0, 1); builtin::array_set_u8(__local_0.repr, start_41, 58); start_50 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_0, 1); builtin::array_set_u8(__local_0.repr, start_50, 32); __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 }; "core:prelude/primitive.wado/i32::fmt_decimal"(25, __local_1); __local_0);
 }
 
 fn "location_merged.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -371,6 +389,14 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
+    let byte: u8;
+    let start: i32;
+    if c <u 128 {
+        byte = c & 255;
+        start = "core:prelude/string.wado/String::internal_reserve_uninit"(self, 1);
+        builtin::array_set_u8(self.repr, start, byte);
+        return;
+    }
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
@@ -383,12 +409,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b20: block {
-        l21: loop {
-            break_if b20 i >= n;
+    b21: block {
+        l22: loop {
+            break_if b21 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l21;
+            continue l22;
         };
     };
 }

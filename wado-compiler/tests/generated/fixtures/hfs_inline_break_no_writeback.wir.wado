@@ -371,6 +371,14 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
+    let byte: u8;
+    let start: i32;
+    if c <u 128 {
+        byte = c & 255;
+        start = "core:prelude/string.wado/String::internal_reserve_uninit"(self, 1);
+        builtin::array_set_u8(self.repr, start, byte);
+        return;
+    }
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
@@ -395,11 +403,11 @@ fn "hfs_inline_break_no_writeback.wado/Scanner::skip_spaces"(self) {
     _licm_used_6 = _licm_data_5.used;
     _licm_repr_7 = _licm_data_5.repr;
     __hfs_pos_10 = self.pos;
-    b24: block {
-        l25: loop {
+    b25: block {
+        l26: loop {
             if __hfs_pos_10 >= _licm_used_6 {
                 self.pos = __hfs_pos_10;
-                break b24;
+                break b25;
             }
             b = builtin::array_get<u8>(_licm_repr_7, __hfs_pos_10);
             if b == 32 {
@@ -408,7 +416,7 @@ fn "hfs_inline_break_no_writeback.wado/Scanner::skip_spaces"(self) {
                 self.pos = __hfs_pos_10;
                 return;
             }
-            continue l25;
+            continue l26;
         };
     };
 }
@@ -418,12 +426,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b28: block {
-        l29: loop {
-            break_if b28 i >= n;
+    b29: block {
+        l30: loop {
+            break_if b29 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l29;
+            continue l30;
         };
     };
 }

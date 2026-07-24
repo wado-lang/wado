@@ -158,6 +158,12 @@ fn "effect_handler_bundled_helper_effects.wado/run"() with Stdout {
     let __local_7: ref null "effect_handler_bundled_helper_effects.wado//__Dispatch_B";
     let __local_8: ref "effect_handler_bundled_helper_effects.wado//__Dispatch_B";
     let __local_9: i32;
+    let start_13: i32;
+    let start_22: i32;
+    let start_31: i32;
+    let start_40: i32;
+    let start_49: i32;
+    let start_58: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:effect_handler_bundled_helper_effects.wado::__modules_initialized);
         cold_path;
@@ -174,7 +180,7 @@ fn "effect_handler_bundled_helper_effects.wado/run"() with Stdout {
     __local_9 = "effect_handler_bundled_helper_effects.wado/__effect_dispatch__A__a"() + "effect_handler_bundled_helper_effects.wado/__effect_dispatch__B__b"();
     global:effect_handler_bundled_helper_effects.wado::__effect_B = __local_7;
     global:effect_handler_bundled_helper_effects.wado::__effect_A = __local_5;
-    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }; "core:prelude/string.wado/String::push"(__local_2, 116); "core:prelude/string.wado/String::push"(__local_2, 111); "core:prelude/string.wado/String::push"(__local_2, 116); "core:prelude/string.wado/String::push"(__local_2, 97); "core:prelude/string.wado/String::push"(__local_2, 108); "core:prelude/string.wado/String::push"(__local_2, 61); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(__local_9, __local_3); __local_2);
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }; start_13 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_13, 116); start_22 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_22, 111); start_31 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_31, 116); start_40 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_40, 97); start_49 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_49, 108); start_58 = "core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 1); builtin::array_set_u8(__local_2.repr, start_58, 61); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(__local_9, __local_3); __local_2);
 }
 
 fn "effect_handler_bundled_helper_effects.wado/__effect_dispatch__A__a"() {
@@ -501,6 +507,14 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
+    let byte: u8;
+    let start: i32;
+    if c <u 128 {
+        byte = c & 255;
+        start = "core:prelude/string.wado/String::internal_reserve_uninit"(self, 1);
+        builtin::array_set_u8(self.repr, start, byte);
+        return;
+    }
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
@@ -513,12 +527,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b25: block {
-        l26: loop {
-            break_if b25 i >= n;
+    b26: block {
+        l27: loop {
+            break_if b26 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l26;
+            continue l27;
         };
     };
 }

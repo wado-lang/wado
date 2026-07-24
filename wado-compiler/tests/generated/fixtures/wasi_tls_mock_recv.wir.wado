@@ -837,6 +837,14 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
+    let byte: u8;
+    let start: i32;
+    if c <u 128 {
+        byte = c & 255;
+        start = "core:prelude/string.wado/String::internal_reserve_uninit"(self, 1);
+        builtin::array_set_u8(self.repr, start, byte);
+        return;
+    }
     if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
@@ -857,9 +865,9 @@ fn "core:prelude/string.wado/String::from_utf8_slice"(bytes) {
     _licm_repr_9 = bytes.repr;
     _licm_start_10 = bytes.start;
     _licm_end_11 = bytes.end;
-    b60: block {
-        l61: loop {
-            break_if b60 i >= len;
+    b61: block {
+        l62: loop {
+            break_if b61 i >= len;
             let scalar_mv_code: u32;
             let scalar_mv_advance: i32;
             let scalar_mv_valid: bool;
@@ -869,7 +877,7 @@ fn "core:prelude/string.wado/String::from_utf8_slice"(bytes) {
                 return 1, ref.as_non_null(__local_4 = "core:prelude/string.wado/String::with_capacity"(38); "core:prelude/string.wado/String::push_str"(__local_4, global:core:prelude/string.wado::__const_obj_0); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: i }, __local_5); __local_4);
             }
             i = i + scalar_mv_advance;
-            continue l61;
+            continue l62;
         };
     };
     return 0, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null("core:prelude/slice.wado/ArraySlice<u8>::to_array"(bytes)), used: bytes.end - bytes.start };
@@ -884,12 +892,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b63: block {
-        l64: loop {
-            break_if b63 i >= n;
+    b64: block {
+        l65: loop {
+            break_if b64 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l64;
+            continue l65;
         };
     };
 }
@@ -998,14 +1006,14 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls
     if handle_1 != 0 {
         ws_3 = "wasi/waitable-set-new"();
         "wasi/waitable-join"(handle_1, ws_3);
-        b85: block {
-            l86: loop {
+        b86: block {
+            l87: loop {
                 let event_mv_code: i32;
                 let event_mv_handle: i32;
                 let event_mv_payload: u32;
                 multivalue_bind [event_mv_code, event_mv_handle, event_mv_payload] = "core:rt/cm_waitable_set_wait"(ws_3);
-                break_if b85 event_mv_payload == 2;
-                continue l86;
+                break_if b86 event_mv_payload == 2;
+                continue l87;
             };
         };
         "wasi/subtask-drop"(handle_1);

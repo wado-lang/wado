@@ -42,7 +42,43 @@ pub struct HeadingInfo {
     pub text: String,
 }
 
+/// Renders a fenced code block's body to HTML. The result is inserted
+/// verbatim (not escaped), so a handler owns output safety: the default
+/// `render` escapes; a syntax highlighter emits `<span class="...">` markup.
+/// `lang` is the fence info string (empty for a plain block).
+pub interface Highlight {
+    fn highlight(code: String, lang: String) -> String;
+}
+
+/// The default `Highlight`: no language-specific markup, just HTML-escape —
+/// so `render` reproduces plain `<pre><code>` output.
+struct PlainHighlight {
+}
+
+impl Highlight for PlainHighlight {
+    fn highlight(&mut self, code: String, _lang: String) -> String {
+        resume escape_text_ref(&code);
+    }
+
+    ..trap
+}
+
+/// Render Markdown to HTML with plain (escaped) code blocks.
 export fn render(source: String) -> RenderResult {
+    let mut h = PlainHighlight {};
+    return with &mut h do {
+        render_document(source);
+    };
+}
+
+/// Render Markdown to HTML, delegating each code block to a `Highlight`
+/// handler — the extension point a consumer satisfies with a syntax
+/// highlighter (e.g. a `provider` supplying `wado-lang:gale-highlight-wado`).
+export fn render_highlighted(source: String) -> RenderResult with Highlight {
+    return render_document(source);
+}
+
+fn render_document(source: String) -> RenderResult with Highlight {
     let parsed = parse(&source);
     let mut r = Renderer {
         refs: parsed.refs,
@@ -67,7 +103,7 @@ impl Renderer {
 
     /// Blocks join with a single newline, and front matter / reference
     /// definitions contribute no output — they are metadata, not content.
-    fn render_blocks(&mut self, nodes: &List<Node>) -> String {
+    fn render_blocks(&mut self, nodes: &List<Node>) -> String with Highlight {
         let mut parts: List<String> = [];
         for let node of nodes {
             if node matches { Node::FrontMatter(_) | Node::LinkReferenceDef(_) } {
@@ -78,7 +114,7 @@ impl Renderer {
         return parts.join("\n");
     }
 
-    fn render_block(&mut self, node: &Node) -> String {
+    fn render_block(&mut self, node: &Node) -> String with Highlight {
         return match node {
             Node::Heading(h) => self.render_heading(h),
             Node::Paragraph(p) => `<p>${render_inline_seq(&p.children, &self.refs)}</p>`,
@@ -102,7 +138,7 @@ impl Renderer {
 
     // --- lists ---
 
-    fn render_list(&mut self, list: &MdList) -> String {
+    fn render_list(&mut self, list: &MdList) -> String with Highlight {
         let loose = list_is_loose(list);
         let mut parts: List<String> = [];
         for let item of list.items {
@@ -113,7 +149,7 @@ impl Renderer {
         return `${open}\n${inner}\n${close}`;
     }
 
-    fn render_item(&mut self, item: &MdItem, loose: bool) -> String {
+    fn render_item(&mut self, item: &MdItem, loose: bool) -> String with Highlight {
         let marker = match item.marker {
             Some(m) => if m.checked { "[x] " } else { "[ ] " },
             None => "",
@@ -130,7 +166,7 @@ impl Renderer {
     /// normally. A task-list marker (`[ ] ` / `[x] `) leads the first child's
     /// content, so it lands inside the `<p>` of a loose item without
     /// inspecting the output.
-    fn render_item_children(&mut self, children: &List<Node>, loose: bool, marker: String) -> String {
+    fn render_item_children(&mut self, children: &List<Node>, loose: bool, marker: String) -> String with Highlight {
         let mut parts: List<String> = [];
         let mut first = true;
         for let child of children {
@@ -141,7 +177,7 @@ impl Renderer {
         return parts.join("\n");
     }
 
-    fn render_item_child(&mut self, child: &Node, loose: bool, lead: &String) -> String {
+    fn render_item_child(&mut self, child: &Node, loose: bool, lead: &String) -> String with Highlight {
         match child {
             Node::Paragraph(p) => {
                 let inline = render_inline_seq(&p.children, &self.refs);
@@ -182,14 +218,14 @@ fn collect_heading_text(children: &List<Node>, out: &mut String) {
     }
 }
 
-fn render_code_block(cb: &CodeBlock) -> String {
+fn render_code_block(cb: &CodeBlock) -> String with Highlight {
     let mut out = String::new();
     out.push_str(&"<pre><code");
     if cb.tag.len() > 0 {
         out.push_str(&` class="language-${escape_attr_ref(&cb.tag)}"`);
     }
     out.push('>');
-    out.push_str(&escape_text_ref(&cb.code));
+    out.push_str(&Highlight::highlight(cb.code, cb.tag));
     out.push_str(&"</code></pre>");
     return out;
 }
