@@ -57,28 +57,29 @@ internal trait ReflectVariant {                  // variant
 }
 
 internal trait ReflectEnum {                     // enum
-    type CaseTokens;                             // [EnumCase<Self>; N]
-    fn case_tokens() -> Self::CaseTokens;
+    fn case_tokens() -> List<EnumCase<Self>>;
     fn discriminant(&self) -> i32;
     fn from_discriminant(disc: i32) -> Option<Self>;
     fn type_name() -> String;
 }
 
 internal trait ReflectFlags {                    // flags
-    type BitTokens;                              // [FlagBit<Self>; N]
-    fn bit_tokens() -> Self::BitTokens;
-    fn bits(&self) -> u64;                       // u64-normalized regardless of width
+    fn bit_tokens() -> List<FlagBit<Self>>;
+    fn bits(&self) -> u64;                        // u64-normalized regardless of width
     fn from_bits(raw: u64) -> Option<Self>;
     fn type_name() -> String;
 }
 ```
 
-Every token walk returns a tuple. Struct and variant tokens carry a payload type
-parameter, so their tuples are heterogeneous mapped packs (`[..Field<T, F>]` /
-`[..VariantCase<T, P>]`) walked by tuple `for-of`. An enum case and a flag bit
-carry no payload, so their token tuples are homogeneous; a homogeneous tuple
-collects into a `List` by a library walk when runtime indexing is wanted, so no
-`List`-returning method is built — a tuple is the general form and a `List` is not.
+The token walk's shape follows the members' types. Struct and variant tokens
+carry a payload type parameter, so their walks are heterogeneous mapped packs
+(`[..Field<T, F>]` / `[..VariantCase<T, P>]`) returned as a tuple and walked by
+tuple `for-of`; a generic derivation binds the pack in its header
+(`Fields = [..F]` / `Cases = [..P]`). An enum case and a flag bit carry no
+payload, so their tokens share one type and the walk is a `List<EnumCase<Self>>`
+/ `List<FlagBit<Self>>` — homogeneous, so a generic `impl<T: ReflectEnum>` walks
+it with no pack binding and it does not unroll per case. Either way the token is
+the single member channel; no kind carries a parallel metadata list.
 
 `from_discriminant` / `from_bits` return `Option` because an unknown input is a
 normal deserialize error, not a bug. `construct` assembles a struct from its

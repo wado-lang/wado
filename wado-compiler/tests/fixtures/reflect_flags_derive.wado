@@ -1,6 +1,7 @@
-// Blanket derivation over ReflectFlags (WEP 2026-06-13 §3c): the u64 bridge
-// makes one derivation cover every flags type — serialization walks the set
-// bits by name, deserialization goes through from_bits via the bound.
+// Blanket derivation over ReflectFlags (WEP 2026-06-13 §3c): one derivation
+// covers every flags type — serialization walks the bit_tokens() list, keeping
+// the set bits by name (`FlagBit::is_set` / `name`); deserialization goes
+// through from_bits via the bound.
 
 trait BitNames {
     fn bit_names(&self) -> String;
@@ -9,14 +10,13 @@ trait BitNames {
 
 impl<T: ReflectFlags> BitNames for T {
     fn bit_names(&self) -> String {
-        let bits = ReflectFlags::<T>::bits(self);
         let mut out = "";
-        for let m of ReflectFlags::<T>::bit_meta() {
-            if (bits & m.bit) != 0 {
+        for let b of ReflectFlags::<T>::bit_tokens() {
+            if b.is_set(self) {
                 if out != "" {
                     out = `${out}|`;
                 }
-                out = `${out}${m.name}`;
+                out = `${out}${b.name()}`;
             }
         }
         return out;

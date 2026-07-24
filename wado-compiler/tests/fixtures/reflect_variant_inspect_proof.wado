@@ -10,15 +10,13 @@ trait LibInspect {
 impl<T: ReflectVariant<Cases = [..P]>, ..P: Inspect> LibInspect for T {
     fn lib_inspect(&self) -> String {
         let type_name = ReflectVariant::<T>::type_name();
-        let metas = ReflectVariant::<T>::case_meta();
         let mut out = "";
         for let c of ReflectVariant::<T>::cases() {
             if c.holds(self) {
-                let meta = metas[c.index()];
-                if meta.is_unit {
-                    out = `${type_name}::${meta.name}`;
+                if c.is_unit() {
+                    out = `${type_name}::${c.name()}`;
                 } else {
-                    out = `${type_name}::${meta.name}(${c.extract(self):?})`;
+                    out = `${type_name}::${c.name()}(${c.extract(self):?})`;
                 }
             }
         }

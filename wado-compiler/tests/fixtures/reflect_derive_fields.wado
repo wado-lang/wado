@@ -1,8 +1,9 @@
-// Field-value derivation over Reflect (WEP 2026-06-13 §1): the derivation reads
-// each field's VALUE via `Reflect::<T>::fields(self)`, whose type is the field
-// pack `[..F]`. The inline bound `impl<T: Reflect<Fields = [..F]>, ..F: Weight>`
-// projects `F` from `T`'s `Fields` at monomorphization; the `for-of` walks the
-// pack, dispatching `weight()` per concrete field type.
+// Field-value derivation over Reflect (WEP 2026-06-13): the derivation reads
+// each field's VALUE via the `field_tokens()` walk (`Field::get`), whose type is
+// the field pack element `F_k`. The inline bound
+// `impl<T: Reflect<Fields = [..F]>, ..F: Weight>` projects `F` from `T`'s
+// `Fields` at monomorphization; the token walk dispatches `weight()` per concrete
+// field type.
 
 trait Weight {
     fn weight(&self) -> i32;
@@ -25,10 +26,9 @@ impl Weight for bool {
 
 impl<T: Reflect<Fields = [..F]>, ..F: Weight> Weight for T {
     fn weight(&self) -> i32 {
-        let values: [..F] = Reflect::<T>::fields(self);
         let mut total: i32 = 0;
-        for let v of values {
-            total = total + v.weight();
+        for let f of Reflect::<T>::field_tokens() {
+            total = total + f.get(self).weight();
         }
         return total;
     }
@@ -44,7 +44,7 @@ struct Mixed {
     flag: bool,
 }
 
-test "field-value pack derivation sums field weights" {
+test "field-value token walk sums field weights" {
     let p = Point { x: 3, y: 4 };
     assert p.weight() == 7;
 

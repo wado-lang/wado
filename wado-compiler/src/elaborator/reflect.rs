@@ -14,9 +14,9 @@ use super::trait_query::OnBoundTrait;
 use super::types::{FunctionContext, TypeError};
 
 /// The two scalar-kind reflection traits share one static-call resolution shape
-/// (WEP 2026-06-13 §3b / §3c): four members — `type_name` / `<meta>` /
-/// `<value>(&self)` / `from_<value>(raw)` — differing only in the compiler items
-/// they name, the subject kind, and the scalar value type (`i32` / `u64`).
+/// (WEP 2026-06-13 §3b / §3c): four members — `type_name` / `<value>(&self)` /
+/// `from_<value>(raw)` / `<tokens>` — differing only in the compiler items they
+/// name, the subject kind, and the scalar value type (`i32` / `u64`).
 #[derive(Clone, Copy)]
 enum ScalarReflectKind {
     Enum,
@@ -28,9 +28,7 @@ pub(super) struct ScalarReflectSpec {
     kind: ScalarReflectKind,
     on_bound: OnBoundTrait,
     trait_item: CompilerItem,
-    meta_item: CompilerItem,
     type_name_item: CompilerItem,
-    meta_method_item: CompilerItem,
     value_method_item: CompilerItem,
     from_method_item: CompilerItem,
     tokens_method_item: CompilerItem,
@@ -44,9 +42,7 @@ impl ScalarReflectSpec {
         kind: ScalarReflectKind::Enum,
         on_bound: OnBoundTrait::ReflectEnum,
         trait_item: CompilerItem::ReflectEnum,
-        meta_item: CompilerItem::EnumCaseMeta,
         type_name_item: CompilerItem::ReflectEnumTypeName,
-        meta_method_item: CompilerItem::ReflectEnumCaseMeta,
         value_method_item: CompilerItem::ReflectEnumDiscriminant,
         from_method_item: CompilerItem::ReflectEnumFromDiscriminant,
         tokens_method_item: CompilerItem::ReflectEnumCaseTokens,
@@ -57,9 +53,7 @@ impl ScalarReflectSpec {
         kind: ScalarReflectKind::Flags,
         on_bound: OnBoundTrait::ReflectFlags,
         trait_item: CompilerItem::ReflectFlags,
-        meta_item: CompilerItem::FlagBitMeta,
         type_name_item: CompilerItem::ReflectFlagsTypeName,
-        meta_method_item: CompilerItem::ReflectFlagsBitMeta,
         value_method_item: CompilerItem::ReflectFlagsBits,
         from_method_item: CompilerItem::ReflectFlagsFromBits,
         tokens_method_item: CompilerItem::ReflectFlagsBitTokens,
@@ -79,7 +73,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a `Reflect::<T>::method()` trait-qualified static call to the
     /// synthesized `T^Reflect::method` and record the dispatch fact for reify.
     /// Self-contained: it does not go through the bare-`Type::method` static
-    /// path, so struct namespaces are never polluted with `T::field_names()`.
+    /// path, so struct namespaces are never polluted with `T::field_tokens()`.
     pub(super) fn resolve_reflect_static_call(
         &mut self,
         self_ty: TypeId,
@@ -107,25 +101,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         };
 
-        let (
-            reflect_trait_name,
-            type_name_method,
-            fields_method,
-            field_tokens_method,
-            wire_name_policy_method,
-            module_source,
-        ) = {
+        let (reflect_trait_name, field_tokens_method, wire_name_policy_method, module_source) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
                 items
                     .trait_name(crate::compiler_item::CompilerItem::Reflect)
-                    .to_string(),
-                items
-                    .method_name(crate::compiler_item::CompilerItem::ReflectTypeName)
-                    .to_string(),
-                items
-                    .method_name(crate::compiler_item::CompilerItem::ReflectFields)
                     .to_string(),
                 items
                     .method_name(crate::compiler_item::CompilerItem::ReflectFieldTokens)
@@ -137,14 +118,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         };
 
-        let is_fields = method == fields_method;
-        let is_field_tokens = method == field_tokens_method;
-        let args_valid = if is_fields {
-            self.check_reflect_fields_receiver(self_ty, &self_name, static_call, ctx)
-        } else {
-            self.reject_reflect_metadata_args(static_call, ctx)
-        };
-        if !args_valid {
+        if !self.reject_reflect_metadata_args(static_call, ctx) {
             return TypeTable::ERROR;
         }
 
@@ -153,9 +127,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow_mut()
             .record_bound_driven_synth_request(&self_name, &module_source, &reflect_trait_name);
 
-        let return_type = if is_fields {
-            self.tysys.type_table.borrow_mut().make_tuple(field_types)
-        } else if is_field_tokens {
+        let return_type = if method == field_tokens_method {
             let mut tt = self.tysys.type_table.borrow_mut();
             let (field_module, field_name) = {
                 let items = tt.compiler_items();
@@ -179,13 +151,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow_mut()
                 .make_compiler_enum(crate::compiler_item::CompilerItem::CaseStyle)
         } else {
-            let mut tt = self.tysys.type_table.borrow_mut();
-            let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
-            if method == type_name_method {
-                string_type
-            } else {
-                tt.make_list(string_type)
-            }
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_compiler_struct(crate::compiler_item::CompilerItem::String)
         };
 
         let func_ref = FunctionRef {
@@ -202,7 +171,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             static_call.id,
             super::sem::types::StaticMethodDispatch {
                 function_ref: func_ref,
-                param_is_mut: if is_fields { vec![false] } else { Vec::new() },
+                param_is_mut: Vec::new(),
                 type_args: Vec::new(),
                 param_defaults: Vec::new(),
             },
@@ -213,11 +182,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Resolve `Reflect::<T>::method()` where `T` is a generic type parameter
     /// (inside an `impl<T: Reflect<Fields = [..F]>, ..F: …>` derivation). The
-    /// value-free members (`field_names` / `type_name`) resolve to their fixed
-    /// return types; `fields(self)` resolves to the projected field pack `[..F]`
-    /// read off `T`'s `Reflect<Fields = [..F]>` bound. Each is recorded as a
-    /// type-param-receiver dispatch so monomorphization redirects it to the
-    /// concrete struct's synthesized `Struct^Reflect::method`.
+    /// value-free members (`type_name` / `wire_name_policy`) resolve to their
+    /// fixed return types; `field_tokens()` resolves to the constructor-mapped
+    /// token pack `[..Field<T, F>]` read off `T`'s `Reflect<Fields = [..F]>`
+    /// bound. Each is recorded as a type-param-receiver dispatch so
+    /// monomorphization redirects it to the concrete struct's synthesized
+    /// `Struct^Reflect::method`.
     fn resolve_generic_reflect_static_call(
         &mut self,
         self_ty: TypeId,
@@ -227,23 +197,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         use crate::compiler_item::CompilerItem;
         let method = static_call.method.clone();
-        let (
-            reflect_trait_name,
-            field_names_method,
-            type_name_method,
-            fields_method,
-            field_tokens_method,
-            wire_name_policy_method,
-        ) = {
+        let (reflect_trait_name, type_name_method, field_tokens_method, wire_name_policy_method) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
                 items.trait_name(CompilerItem::Reflect).to_string(),
-                items
-                    .method_name(CompilerItem::ReflectFieldNames)
-                    .to_string(),
                 items.method_name(CompilerItem::ReflectTypeName).to_string(),
-                items.method_name(CompilerItem::ReflectFields).to_string(),
                 items
                     .method_name(CompilerItem::ReflectFieldTokens)
                     .to_string(),
@@ -253,7 +212,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         };
 
-        let is_fields = method == fields_method;
         let return_type = if method == type_name_method {
             self.tysys
                 .type_table
@@ -264,28 +222,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .type_table
                 .borrow_mut()
                 .make_compiler_enum(CompilerItem::CaseStyle)
-        } else if method == field_names_method {
-            let mut tt = self.tysys.type_table.borrow_mut();
-            let string_type = tt.make_compiler_struct(CompilerItem::String);
-            tt.make_list(string_type)
-        } else if is_fields {
-            // `fields(self)` returns `Self::Fields = [..F]`. Read the pack off
-            // `T`'s `Reflect<Fields = [..F]>` bound and resolve it in the current
-            // scope, where `F` is the projected pack registered by `resolve_method`.
-            let Some(fields_ty) = self.reflect_pack_bound_ty(
-                type_param_name,
-                &reflect_trait_name,
-                crate::synthesis::traits::REFLECT_FIELDS_ASSOC,
-            ) else {
-                let _ = self.emit(TypeError::UnknownFunction {
-                    name: format!(
-                        "Reflect::<{type_param_name}>::{method} (no `Fields = [..F]` bound on {type_param_name})"
-                    ),
-                    span: static_call.span,
-                });
-                return TypeTable::ERROR;
-            };
-            fields_ty
         } else if method == field_tokens_method {
             let Some(tokens_ty) =
                 self.field_tokens_bound_ty(self_ty, type_param_name, &reflect_trait_name)
@@ -307,13 +243,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         };
 
-        if is_fields {
-            // `fields` takes the subject as its sole receiver argument; resolve
-            // it for its fact-recording side effects.
-            for arg in &static_call.args {
-                self.resolve_expr(arg, ctx, None);
-            }
-        } else if !self.reject_reflect_metadata_args(static_call, ctx) {
+        if !self.reject_reflect_metadata_args(static_call, ctx) {
             return TypeTable::ERROR;
         }
 
@@ -335,7 +265,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             static_call.id,
             super::sem::types::StaticMethodDispatch {
                 function_ref: func_ref,
-                param_is_mut: if is_fields { vec![false] } else { Vec::new() },
+                param_is_mut: Vec::new(),
                 type_args: Vec::new(),
                 param_defaults: Vec::new(),
             },
@@ -384,9 +314,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|info| info.fields.iter().map(|(_, ty, _)| *ty).collect())
     }
 
-    /// Resolve and type-check the sole receiver of `Reflect::<T>::fields`: one
-    /// argument whose type, refs peeled, is the subject struct. Returns whether
-    /// it is well-formed, emitting the diagnostic otherwise.
+    /// Resolve and type-check the sole receiver of a value-reading reflection
+    /// member (`ReflectVariant::discriminant` / `ReflectEnum::discriminant` /
+    /// `ReflectFlags::bits`): one argument whose type, refs peeled, is the
+    /// subject. Returns whether it is well-formed, emitting the diagnostic
+    /// otherwise.
     fn check_reflect_fields_receiver(
         &mut self,
         self_ty: TypeId,
@@ -444,7 +376,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether `prefix::method` names a `Reflect` trait-qualified static call
-    /// (`Reflect::<T>::field_names` / `type_name`). `prefix` must resolve to the
+    /// (`Reflect::<T>::type_name` / `field_tokens`). `prefix` must resolve to the
     /// compiler's `Reflect` trait *in this scope* — `classify_on_bound_trait`
     /// applies the same module check `on_bound` dispatch uses, so a user type or
     /// trait that happens to be named `Reflect` is not hijacked. `method` is
@@ -459,9 +391,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let tt = self.tysys.type_table.borrow();
         let items = tt.compiler_items();
-        method == items.method_name(crate::compiler_item::CompilerItem::ReflectFieldNames)
-            || method == items.method_name(crate::compiler_item::CompilerItem::ReflectTypeName)
-            || method == items.method_name(crate::compiler_item::CompilerItem::ReflectFields)
+        method == items.method_name(crate::compiler_item::CompilerItem::ReflectTypeName)
             || method == items.method_name(crate::compiler_item::CompilerItem::ReflectFieldTokens)
             || method
                 == items.method_name(crate::compiler_item::CompilerItem::ReflectWireNamePolicy)
@@ -480,8 +410,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let tt = self.tysys.type_table.borrow();
         let items = tt.compiler_items();
         method == items.method_name(crate::compiler_item::CompilerItem::ReflectVariantTypeName)
-            || method
-                == items.method_name(crate::compiler_item::CompilerItem::ReflectVariantCaseMeta)
             || method
                 == items.method_name(crate::compiler_item::CompilerItem::ReflectVariantDiscriminant)
             || method == items.method_name(crate::compiler_item::CompilerItem::ReflectVariantCases)
@@ -520,16 +448,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        let (trait_name, discriminant_method, case_meta_method, cases_method, module_source) = {
+        let (trait_name, discriminant_method, cases_method, module_source) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
                 items.trait_name(CompilerItem::ReflectVariant).to_string(),
                 items
                     .method_name(CompilerItem::ReflectVariantDiscriminant)
-                    .to_string(),
-                items
-                    .method_name(CompilerItem::ReflectVariantCaseMeta)
                     .to_string(),
                 items
                     .method_name(CompilerItem::ReflectVariantCases)
@@ -578,13 +503,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect();
             tt.make_tuple(tokens)
         } else {
-            let mut tt = self.tysys.type_table.borrow_mut();
-            if method == case_meta_method {
-                let meta_type = tt.make_compiler_struct(CompilerItem::VariantCaseMeta);
-                tt.make_list(meta_type)
-            } else {
-                tt.make_compiler_struct(CompilerItem::String)
-            }
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_compiler_struct(CompilerItem::String)
         };
 
         let func_ref = FunctionRef {
@@ -630,16 +552,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         use crate::compiler_item::CompilerItem;
         let method = static_call.method.clone();
-        let (trait_name, type_name_method, case_meta_method, discriminant_method, cases_method) = {
+        let (trait_name, type_name_method, discriminant_method, cases_method) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
                 items.trait_name(CompilerItem::ReflectVariant).to_string(),
                 items
                     .method_name(CompilerItem::ReflectVariantTypeName)
-                    .to_string(),
-                items
-                    .method_name(CompilerItem::ReflectVariantCaseMeta)
                     .to_string(),
                 items
                     .method_name(CompilerItem::ReflectVariantDiscriminant)
@@ -656,10 +575,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .type_table
                 .borrow_mut()
                 .make_compiler_struct(CompilerItem::String)
-        } else if method == case_meta_method {
-            let mut tt = self.tysys.type_table.borrow_mut();
-            let meta_type = tt.make_compiler_struct(CompilerItem::VariantCaseMeta);
-            tt.make_list(meta_type)
         } else if is_discriminant {
             TypeTable::I32
         } else if method == cases_method {
@@ -675,7 +590,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             tokens_ty
         } else {
-            unreachable!("is_reflect_variant_trait_call admits only the four trait methods")
+            unreachable!("is_reflect_variant_trait_call admits only the three trait methods")
         };
 
         let args_valid = if is_discriminant {
@@ -811,7 +726,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let items = tt.compiler_items();
         [
             spec.type_name_item,
-            spec.meta_method_item,
             spec.value_method_item,
             spec.from_method_item,
             spec.tokens_method_item,
@@ -956,9 +870,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Validate a scalar-kind member call's arguments and compute its return
     /// type (shared by the concrete and generic resolvers; `self_ty` is the
     /// subject or the type param). `None` when ill-formed (diagnostic already
-    /// emitted). `type_name`/`<meta>` reject args; `<value>(&self)` returns the
-    /// scalar type; `from_<value>(raw)` takes one scalar arg and returns
-    /// `Option<Self>`.
+    /// emitted). `type_name` rejects args; `<value>(&self)` returns the scalar
+    /// type; `from_<value>(raw)` takes one scalar arg and returns `Option<Self>`.
     fn check_reflect_scalar_args(
         &mut self,
         spec: ScalarReflectSpec,
@@ -968,12 +881,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
-        let (type_name_method, meta_method, value_method, from_method, tokens_method) = {
+        let (type_name_method, value_method, from_method, tokens_method) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
                 items.method_name(spec.type_name_item).to_string(),
-                items.method_name(spec.meta_method_item).to_string(),
                 items.method_name(spec.value_method_item).to_string(),
                 items.method_name(spec.from_method_item).to_string(),
                 items.method_name(spec.tokens_method_item).to_string(),
@@ -987,13 +899,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .type_table
                         .borrow_mut()
                         .make_compiler_struct(CompilerItem::String)
-                })
-        } else if *method == meta_method {
-            self.reject_reflect_metadata_args(static_call, ctx)
-                .then(|| {
-                    let mut tt = self.tysys.type_table.borrow_mut();
-                    let meta_type = tt.make_compiler_struct(spec.meta_item);
-                    tt.make_list(meta_type)
                 })
         } else if *method == tokens_method {
             self.reject_reflect_metadata_args(static_call, ctx)

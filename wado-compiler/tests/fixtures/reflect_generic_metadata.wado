@@ -1,16 +1,20 @@
-// Generic `Reflect::<T>::…` resolution (WEP 2026-06-13 §1): the trait-qualified
+// Generic `Reflect::<T>::…` resolution (WEP 2026-06-13): the trait-qualified
 // metadata call resolves for a generic `T: Reflect`, not only a concrete struct.
-// `field_names()` / `type_name()` are value-free (return `List<String>` /
-// `String`); the call is dispatched to `T`'s synthesized method after `T` is
-// monomorphized to a concrete struct.
+// `type_name()` is value-free (returns `String`); `field_tokens()` yields the
+// per-field `Member` face, so field names are read generically. The calls are
+// dispatched to `T`'s synthesized methods after `T` is monomorphized to a
+// concrete struct.
 
 trait Described {
     fn describe(&self) -> String;
 }
 
-impl<T: Reflect> Described for T {
+impl<T: Reflect<Fields = [..F]>, ..F> Described for T {
     fn describe(&self) -> String {
-        let names = Reflect::<T>::field_names();
+        let mut names: List<String> = [];
+        for let f of Reflect::<T>::field_tokens() {
+            names.push(f.name());
+        }
         return `${Reflect::<T>::type_name()}(${names.join(",")})`;
     }
 }

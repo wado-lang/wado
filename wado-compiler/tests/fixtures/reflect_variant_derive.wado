@@ -30,11 +30,10 @@ impl Tag for () {
 
 impl<T: ReflectVariant<Cases = [..P]>, ..P: Tag> Tag for T {
     fn tag(&self) -> String {
-        let metas = ReflectVariant::<T>::case_meta();
         let mut out = "";
         for let c of ReflectVariant::<T>::cases() {
             if c.holds(self) {
-                out = `${metas[c.index()].name}(${c.extract(self).tag()})`;
+                out = `${c.name()}(${c.extract(self).tag()})`;
             }
         }
         return out;
