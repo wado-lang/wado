@@ -42,7 +42,7 @@ Non-`.wado` files (`.g4`, `.proto`, ...) are imported via a generator declared i
 ```wado
 use { Parser } from "./Calc.g4" with { // Gale parses ANTLR4 grammar files
     generator: {
-        module: "wado:gale@0.1",
+        module: "wado-lang:gale@0.1",
     },
 };
 ```
@@ -59,9 +59,10 @@ use { sin, cos } from "./libm.wat" with { type: "wat" };
 use { helper }   from "./mod.wasm" with { type: "wasm" };
 
 // CM component: each exported interface becomes a Wado `interface`,
-// called like a WASI method (effectful).
+// called like a WASI method.
 use { Compress, Decompress } from "./brotli.wasm" with { type: "wasm" };
-let out = Compress::compress(bytes);              // requires `with Compress`
+
+let out = Compress::compress(bytes);  // requires `with Compress`
 ```
 
 Wado↔CM type correspondence at the boundary is in [the spec](./spec.md#type-mapping-at-component-boundaries).
@@ -103,8 +104,8 @@ b"\x89PNG\r\n"                 // ByteList [137, 80, 78, 71, 13, 10]
 let raw: List<u8> = b"abc";    // newtype literal coercion to the base type
 
 // Byte literal (b-prefix on a char) → u8, ASCII + \xNN escapes (no \u)
-b'A'                           // u8 = 65 (coerces like an integer literal)
-b'\xff'                        // u8 = 255
+b'A'                           // 65 (coerces like an integer literal)
+b'\xff'                        // 255
 
 // Characters
 'A'
@@ -162,22 +163,25 @@ f32, f64                  // floats
 char                      // a valid unicode scalar
 bool
 
-// 128-bit integers (prelude types, work like primitives)
+// wide integers (GC types, work like primitives)
 i128, u128
 
-// Composite (provided by prelude)
+// Composites
 String                  // UTF-8 string
-List<T>                // dynamic array
+List<T>                 // dynamic array
 [T, U, V]               // tuple
 Option<T>               // optional value
 Result<T, E>            // result type
 
-// Reference
+// References
 &T                      // immutable reference
 &mut T                  // mutable reference
 
 // Unit type
 ()
+
+// Never type
+!
 ```
 
 ### Newtype
@@ -196,7 +200,7 @@ let sum = m + m;              // OK: Meters + Meters -> Meters
 let raw: f64 = m as f64;      // explicit cast required
 
 type Location = Point;
-let loc: Location = Point { x: 0, y: 0 } as Location;
+let loc = Location { x: 0, y: 0 };
 loc.distance(&loc2);  // inherits Point methods, params expect &Location
 
 impl Location {
@@ -214,7 +218,7 @@ let t = [1, "hello", true];   // [i32, String, bool]
 let x = t.0;                  // dot notation
 let y = t[1];                 // bracket notation (constant index only)
 
-// Arrays (requires explicit type context)
+// Lists (requires explicit type context)
 let a: List<i32> = [1, 2, 3];           // type annotation
 let b = [1, 2, 3] as List<i32>;         // explicit cast
 fn takes(arr: List<i32>) {}
@@ -236,8 +240,8 @@ for let mut i = 0; i < arr.len(); i += 1 { arr[i] = arr[i] * 2; }
 
 // Sorting
 let mut nums: List<i32> = [5, 3, 8, 1];
-nums.sort();                             // in-place ascending sort (requires T: Ord)
-let asc = nums.sorted();                 // returns new sorted array
+nums.sort();                               // in-place ascending sort (requires T: Ord)
+let asc = nums.sorted();                   // returns new sorted array
 nums.sort_by(|a: &i32, b: &i32| { ... });  // sort with custom Ordering comparator
 ```
 
@@ -246,7 +250,7 @@ nums.sort_by(|a: &i32, b: &i32| { ... });  // sort with custom Ordering comparat
 `String` is a prelude type with a literal syntax.
 
 ```wado
-// Template strings (interpolation)
+// Template string literals (interpolation)
 let name = "Alice";
 let greeting = `Hello, ${name}!`;         // "Hello, Alice!"
 
@@ -257,30 +261,18 @@ let s = `${3.14}`;                        // "3.14"
 // Format specifiers via Display (see docs/wep-2026-01-17-template-format-specifiers.md)
 let formatted = `${3.14159:0.2f}`;        // "3.14"
 let hex = `${255:x}`;                     // "ff"
-let hex_alt = `${255:#x}`;                // "0xff" (via alternate flag)
+let hex_alt = `${255:#x}`;                // "0xff" (DisplayAlt)
 
-// Inspect — auto-derived debug outputs (see docs/wep-2026-02-21-inspect-debug-output.md)
+// Inspect (:?) — auto-derived debug outputs (see docs/wep-2026-02-21-inspect-debug-output.md)
 println(`${point:?}`);                    // "Point { x: 10, y: 20 }"
-println(`${point:#?}`);                   // pretty-print with indentation (see below)
+println(`${point:#?}`);                   // pretty-print with indentation (InspectAlt)
 // `${point}` (Display) needs an `impl Display for Point`; use `${point:?}` for debug.
-
-// Pretty-print (:#?) — multi-line indented output for composite types
-let arr: List<i32> = [1, 2, 3];
-println(`${arr:#?}`);
-// [
-//   1,
-//   2,
-//   3,
-// ]
 
 // String methods (mostly Rust compatible)
 let n = s.len();                         // UTF8 byte length
 let chars = s.chars().count();           // character count based on Unicode scalars
 
 // String building
-// String::push_str takes its argument by reference (mirrors Rust's `&str` borrow):
-//   pub fn push_str(&mut self, other: &String)
-// Pass with `&` — Wado never implicitly takes a reference at a call site.
 let mut builder = String::with_capacity(20);
 let part: String = "Hello";
 builder.push_str(&part);
@@ -423,7 +415,7 @@ pub flags Perms {
     Execute,  // bit 2 → value 4
 }
 
-let rw = Perms::Read | Perms::Write;   // bitwise combination
+let rw = Perms::Read | Perms::Write;   // bitwise OR
 let masked = rw & Perms::Read;         // bitwise AND
 let toggled = rw ^ Perms::Read;        // bitwise XOR
 
@@ -640,7 +632,7 @@ let b = if cond() { 1; } else { 2; }; // ditto
 
 ## Assert
 
-`assert` behaves like power assert.
+`assert` behaves like power-assert.
 
 ```wado
 assert x > 0;
@@ -669,7 +661,7 @@ pub fn api_function() -> i32 {
 // Component export (public API at CM boundary)
 export fn run() { ... }
 
-// Default args, trailing only — see WEP: Default Arguments
+// Default args, trailing only
 fn connect(host: String, port: i32 = 8080) { ... }
 connect("localhost");           // → connect("localhost", 8080)
 ```
@@ -701,8 +693,6 @@ p.reset();
 let origin = Point::origin();
 ```
 
-Note: bare `self` (by value) is not allowed. Use `&self` or `&mut self`.
-
 ### Closures
 
 See [WEP: Closure Implementation](./wep-2026-01-16-closure-implementation.md).
@@ -731,27 +721,6 @@ let get = || count;                          // captures &count; type fn() -> i3
 inc();
 inc();
 assert get() == 2;
-```
-
-### Mut Parameters
-
-```wado
-// mut allows reassigning the parameter inside the function
-fn increment(mut n: i32) -> i32 {
-    n += 1;
-    return n;
-}
-
-// Caller's variable is unchanged for primitives (value type)
-let x = 5;
-let y = increment(x);
-// x == 5, y == 6
-
-// Closures also support mut parameters
-let double = |mut n: i32| { n *= 2; return n; };
-
-// Without mut, assignment is a compile error
-// fn bad(n: i32) { n = 0; }  // Error: cannot assign to immutable variable 'n'
 ```
 
 ### Generics
@@ -901,8 +870,6 @@ Traits use static dispatch. Use `Self::TypeName` to refer to associated types.
 
 ### Prelude Traits
 
-See [WEP: Default Trait](./wep-2026-03-04-default-trait.md) for `Default`.
-
 ```wado
 // For == and != operators
 trait Eq { fn eq(&self, other: &Self) -> bool; }
@@ -910,14 +877,15 @@ trait Eq { fn eq(&self, other: &Self) -> bool; }
 // For <, <=, >, >= operators
 trait Ord { fn cmp(&self, other: &Self) -> Ordering; }
 
-// For default value (auto-implemented for primitives, String, List<T>,
+// For default value (implemented for primitives, String, List<T>,
 // Option<T>, TreeMap<K, V>; not Result)
 trait Default { fn default() -> Self; }
 
 // For [] operators
+trait IndexRef<I> { type Output: Ref; fn index_ref(&self, index: I) -> &Self::Output; }
+trait IndexMutRef<I> { type Output: RefMut; fn index_mut_ref(&mut self, index: I) -> &mut Self::Output; }
 trait IndexValue<I> { type Output; fn index_value(&self, index: I) -> Self::Output; }
 trait IndexAssign<I> { type Input; fn index_assign(&mut self, index: I, value: Self::Input); }
-trait Index<I> { type Output; fn index(&self, index: I) -> &Self::Output; }
 
 // For string template interpolation
 pub trait Display { fn fmt(&self, f: &mut Formatter); }         // stringify with specifiers
@@ -939,14 +907,6 @@ pub trait LenientFromStr {
     type Err;  // built-in impls all use LenientParseError
     fn from_str_lenient(s: &String) -> Result<Self, Self::Err>;
 }
-```
-
-```wado
-i32::from_str_lenient(&"0x2A")    // Ok(42)
-i32::from_str_lenient(&"1_000")   // Ok(1000)
-bool::from_str_lenient(&"TRUE")   // Ok(true)
-f64::from_str_lenient(&"inf")     // Ok(f64::INFINITY)
-i32::from_str_lenient(&" 1 ")     // Err — no trimming
 ```
 
 ### Trait Bounds
@@ -1164,7 +1124,7 @@ fn main() {
 }
 ```
 
-`resume value` (only valid inside a handler method) hands `value` back to the caller of the operation. Without post-resume code it lowers to `return value`.
+`resume value` (only valid inside a handler) hands `value` back to the caller of the operation.
 
 ## Entrypoints
 
@@ -1216,8 +1176,7 @@ Discovery walks the project root for every `*.wado` file, honouring
 `.gitignore`, `.gitmodules`, dot-prefixed entries, and nested `wado.toml`
 boundaries (each sub-package is run in its own context). Add
 `[test].exclude = ["..."]` to `wado.toml` to skip extra paths. Files without
-`test` blocks are still parsed and compiled (compile-only validation); only
-files with `test` blocks register and run tests.
+`test` blocks are still parsed and compiled.
 
 `--filter <pattern>` is a path-based shell wildcard (`*`, `?`, `[...]`); it
 is _not_ a regex. To match anywhere in a path, wrap the term in `*`s, e.g.
@@ -1228,11 +1187,7 @@ or `#[TODO]` test that resolved unexpectedly.
 `cargo test <name>` does: a case-sensitive substring match against the test's
 original name (matched against the source name, so multibyte names work).
 It is repeatable and combines with OR — a test runs if its name contains any
-pattern. It composes with `--filter`: `--filter` narrows which files are
-compiled, `--test-name` narrows which tests within them run. Unmatched test
-blocks are dropped before codegen, so they are not compiled at all — handy for
-iterating on one test in a large file. Unnamed `test { … }` blocks have no name
-to match and are skipped whenever `--test-name` is given.
+pattern.
 
 ```wado
 test {
@@ -1260,6 +1215,8 @@ test "not yet implemented" {
 // module's `## Synopsis` section.
 #[synopsis]
 test {
+    struct Point { x: i32, y: i32 }
+
     let p = Point { x: 3, y: 4 };
     assert p.length() == 5.0;
 }
@@ -1283,42 +1240,21 @@ Paths in `#include_str` and `#include_bytes` are resolved relative to the source
 
 `#[param]` on a `global` makes it a build input fed by the `wado` invocation: the type annotation gives the type, the initializer is the fallback, and read sites are ordinary global references.
 
+See [WEP: Compile-Time Parameters](./wep-2026-04-26-compile-time-params.md).
+
 ```wado
 #[param]
 global API_URL: String = "http://localhost";   // -D API_URL=...
 
 #[param(from_env = "PORT")]
-global PORT: i32 = 8080;                        // read from an env var
+global PORT: i32 = 8080;                       // read from an env var
 
 #[param(name = "build.id")]
-global BUILD_ID: String = "dev";                // -D build.id=...
+global BUILD_ID: String = "dev";               // -D build.id=...
 ```
 
 ```sh
 wado compile -D API_URL=https://prod.example.com -D PORT=80 app.wado
-```
-
-Each parameter resolves highest priority first: `-D NAME=value` (alias `--define`), then `from_env`, then the initializer. The override is trimmed and parsed into the declared type — a built-in scalar (`String`, `char`, the integer types, `f32`/`f64`, `bool`) — with the `LenientFromStr` spellings (radix prefixes, `_` separators, `nan`/`inf`, `1`/`0` for `bool`). Parameter names share one flat namespace across the build. `--param-unknown` / `--param-invalid` / `--param-missing` set what an unmatched `-D`, an unparseable value, or a missing override does (`error` / `warn` / `ignore`). See [WEP: Compile-Time Parameters](./wep-2026-04-26-compile-time-params.md).
-
-## Attributes
-
-```wado
-#![no_prelude]             // disable auto-import of core:prelude
-#![TODO]                   // all tests must fail or not compile
-#![generated]              // marks machine-generated code
-#![generated(by = "wado-from-idl", sources = ["deps/random.wit"])]  // with metadata
-
-struct Foo {
-    #[secret]
-    password: String,      // omitted from Inspect (`${x:?}`)
-}
-
-#[inline]                  // hint: prefer inlining
-#[inline(always)]          // always inline
-#[inline(never)]           // never inline
-
-#[param]                   // compile-time parameter global (see above)
-global PORT: i32 = 8080;
 ```
 
 ## Standard Library
@@ -1329,9 +1265,7 @@ global PORT: i32 = 8080;
 
 Auto-imported (disable with `#![no_prelude]`). Home of `String`, `List<T>`,
 `Option<T>`, `Result<T, E>`, `RangeExclusive`/`RangeInclusive`, the primitive
-type methods, and the prelude traits (`Eq`, `Ord`, `Default`, `Display`,
-`Inspect`, `FromStr`, `Iterator`, `IntoIterator`, …). See
-[`core:prelude`](./stdlib-core-prelude.md).
+type methods, and the prelude traits. See [`core:prelude`](./stdlib-core-prelude.md).
 
 ```wado
 panic("error message");   // log to stderr and trap
@@ -1340,7 +1274,7 @@ unreachable();            // trap on unreachable code
 
 ### core:cli
 
-`println` / `eprintln` / `print` / `eprint` (effectful), `args`, `env`, `cwd`,
+`println` / `eprintln` / `print` / `eprint`, `args`, `env`, `cwd`,
 `exit`; `log_stdout` / `log_stderr` print with no effect. See
 [`core:cli`](./stdlib-core-cli.md).
 
@@ -1369,17 +1303,17 @@ let opt = map.get("key");     // fallible access -> Option<V>
 map.remove("key");            // -> bool
 for let [k, v] of map.entries() { println(`${k}=${v}`); }
 
-let sizes = { small: 1, large: 3 } as TreeMap<String, i32>;  // literal
+let sizes = { small: 1, large: 3 } as TreeMap<String, i32>;
 let set = ["foo", "bar", "baz"] as TreeSet<String>;
 set.contains("foo");          // -> bool; set.insert(x) -> bool
 ```
 
 ### core:serde
 
-Format-agnostic `Serialize` / `Deserialize`. A plain struct derives with no
-marker (see Auto-Derived Traits); `impl Serialize for T;` attaches
+Format-agnostic `Serialize` / `Deserialize` framework.
+A plain struct derives with no marker; `impl Serialize for T;` attaches
 `#[serde(...)]` customization. Wire keys default to the field name; override
-with `#[serde(rename_all = "...")]` (per struct) or `#[serde(rename = "...")]`
+with `#[serde(rename_all = "...")]` (per type) or `#[serde(rename = "...")]`
 (per field). See [`core:serde`](./stdlib-core-serde.md) and
 [WEP: Serde](./wep-2026-02-28-serde.md).
 
@@ -1404,24 +1338,23 @@ impl Deserialize for Config;
 
 ### core:json
 
-JSON over `core:serde`; bytes-primary (prefer `to_bytes` / `from_bytes`). See
-[`core:json`](./stdlib-core-json.md).
+JSON serialization and deserialization. See [`core:json`](./stdlib-core-json.md).
 
 ```wado
-use { to_string, to_bytes, from_string, from_bytes } from "core:json";
-use { to_bytes_pretty, to_bytes_canonical } from "core:json";
+use { to_string, to_bytes, from_string, from_bytes, to_bytes_pretty, to_bytes_canonical  } from "core:json";
 
-let json = to_string(&Point { x: 1, y: 2 });      // Ok("{\"x\":1,\"y\":2}")
-let p = from_string::<Point>("{\"x\":1,\"y\":2}"); // Ok(Point { x: 1, y: 2 })
-let bytes = to_bytes(&p);                          // UTF-8 bytes, no re-encode
+let bytes = to_bytes(&p);                          // UTF-8 bytes
 let pretty = to_bytes_pretty(&p);                  // indented
-let canon = to_bytes_canonical(&p);                // sorted keys, for signing
+let canon = to_bytes_canonical(&p);                // sorted keys, deterministic
+
+let json = to_string(&Point { x: 1, y: 2 });       // Ok("{\"x\":1,\"y\":2}")
+let p = from_string::<Point>("{\"x\":1,\"y\":2}"); // Ok(Point { x: 1, y: 2 })
 ```
 
 ### core:cbor
 
 CBOR (RFC 8949), same serde model as JSON — any JSON-serializable type works
-unchanged. Bytes-only. See [`core:cbor`](./stdlib-core-cbor.md).
+unchanged. See [`core:cbor`](./stdlib-core-cbor.md).
 
 ```wado
 use { to_bytes, from_bytes, to_bytes_canonical } from "core:cbor";
