@@ -43,6 +43,7 @@
 
 use crate::ast::{self, AstId};
 use crate::hashmap::IndexMap;
+use crate::name::Receiver;
 use crate::tir::{FunctionRef, TypeId};
 
 /// Method-dispatch decision recorded by the body walk for a
@@ -886,7 +887,7 @@ pub(crate) struct ImplFacts {
     /// Reify builds the method's `LocalMethodName` from this so a ref impl's
     /// receiver stays typed end-to-end — no string is re-inspected to recover
     /// the `&` shape. `head_key()` reproduces [`Self::struct_name`].
-    pub(crate) receiver: crate::name::Receiver,
+    pub(crate) receiver: Receiver,
     /// Per-instantiation owner name (`"List<u8>"`) when this impl is a fully
     /// concrete generic instantiation (`impl List<u8>`, `impl Tag for
     /// List<u8>`) — `None` otherwise. Reify names such methods

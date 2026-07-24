@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
+use crate::name::{LocalMethodName, MethodName, Receiver, RefKind, mangle_generic_name};
 use crate::tir::{InstantiationKey, ResolvedType, TypeId, TypeTable};
 
 /// Tracks struct monomorphization state
@@ -247,10 +247,9 @@ impl Monomorphizer {
                         .as_deref()
                         .or(i.trait_name.as_deref())
                         .is_some_and(|tn| {
-                            self.functions.trait_env.has_universal_ref_blanket(
-                                tn,
-                                ref_kind == crate::name::RefKind::Mut,
-                            )
+                            self.functions
+                                .trait_env
+                                .has_universal_ref_blanket(tn, ref_kind == RefKind::Mut)
                         })
                 })
             });
@@ -493,10 +492,9 @@ impl Monomorphizer {
             }),
             None => self.newtype_own_name(receiver_type_id, type_table, |own| {
                 let head = crate::name::split_base_name(own);
-                self.functions.trait_env.has_inherent_method(
-                    &crate::name::Receiver::Type(head.to_string()),
-                    &info.method_name,
-                )
+                self.functions
+                    .trait_env
+                    .has_inherent_method(&Receiver::Type(head.to_string()), &info.method_name)
             }),
         };
         own.as_deref() == Some(info.struct_name.as_str())

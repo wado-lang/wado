@@ -6,7 +6,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::ast::{self, AstId, AstVisitor, Condition, Expr, IfExpr, Item, Literal, MatchArm};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
+use crate::name::{LocalMethodName, MethodName, Receiver, mangle_generic_name};
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirField, TirStruct, TirStructField,
     TypeId, TypeTable,
@@ -4406,7 +4406,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name: method_name,
                     monomorph_info: None,
                     method_info: Some(crate::name::LocalMethodName {
-                        receiver: crate::name::Receiver::Type(target_name.clone()),
+                        receiver: Receiver::Type(target_name.clone()),
                         struct_name: target_name,
                         trait_name: Some(from_trait),
                         base_trait_name: Some(from_trait_name),

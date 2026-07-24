@@ -67,7 +67,7 @@ use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::global_name;
+use crate::name::{Receiver, global_name};
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, ResolvedType, TirBinaryOp, TirBlock, TirEnum, TirEnumCase, TirExpr,
@@ -6823,7 +6823,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     name: facts.mangled_name,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName {
-                        receiver: crate::name::Receiver::Type(facts.target_name.clone()),
+                        receiver: Receiver::Type(facts.target_name.clone()),
                         struct_name: facts.target_name,
                         trait_name: Some(from_trait),
                         base_trait_name: Some(facts.from_trait_name),

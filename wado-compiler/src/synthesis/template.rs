@@ -17,7 +17,7 @@ use std::sync::Arc;
 use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::elaborator::trait_env::TraitEnv;
 use crate::module_source::ModuleSource;
-use crate::name::LocalMethodName;
+use crate::name::{LocalMethodName, Receiver, RefKind};
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TemplateFormatSpec, TirBlock, TirExpr,
     TirExprKind, TirLocal, TirModule, TirStmt, TirStmtKind, TirStructField, TirTemplatePart,
@@ -1004,7 +1004,7 @@ fn peel_transparent_newtype(type_id: TypeId, trait_name: &str, ctx: &TemplateCtx
                     name, base_type, ..
                 } if !ctx
                     .trait_env
-                    .has_any_methodful_impl(&crate::name::Receiver::Type(name.clone()), trait_name) =>
+                    .has_any_methodful_impl(&Receiver::Type(name.clone()), trait_name) =>
                 {
                     *base_type
                 }
@@ -1119,8 +1119,8 @@ fn method_call_info_for_type(
             }
         }
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-            let ref_kind = crate::name::RefKind::from_resolved(&tt.borrow().get(type_id).clone())
-                .expect("ref classify");
+            let ref_kind =
+                RefKind::from_resolved(&tt.borrow().get(type_id).clone()).expect("ref classify");
             let inner_name = tt.borrow().mangle_type_name(inner);
             let local_name = LocalMethodName::new_ref(
                 ref_kind,
@@ -1237,9 +1237,9 @@ pub(crate) fn blanket_dispatch_for(
     tt: &TypeTable,
     allow_pre_reflect_struct: bool,
 ) -> Option<(MonomorphInfo, ModuleSource)> {
-    let type_key = match crate::name::RefKind::from_resolved(tt.get(type_id)) {
-        Some(kind) => crate::name::Receiver::Ref(kind),
-        None => crate::name::Receiver::Type(base_struct_name.to_string()),
+    let type_key = match RefKind::from_resolved(tt.get(type_id)) {
+        Some(kind) => Receiver::Ref(kind),
+        None => Receiver::Type(base_struct_name.to_string()),
     };
     if trait_env.has_any_methodful_impl(&type_key, trait_name) {
         return None;
@@ -1259,12 +1259,9 @@ pub(crate) fn blanket_dispatch_for(
         return None;
     }
     let param = trait_env.blanket_impl_param_for_trait(trait_name, Some(&blanket_module))?;
-    let generic_name = LocalMethodName::new(
-        param,
-        Some(trait_name.to_string()),
-        method_name.to_string(),
-    )
-    .to_mangled_name();
+    let generic_name =
+        LocalMethodName::new(param, Some(trait_name.to_string()), method_name.to_string())
+            .to_mangled_name();
     let mut impl_type_args = vec![type_id];
     if let Some(fields) =
         tt.resolve_assoc_type(type_id, crate::synthesis::traits::REFLECT_FIELDS_ASSOC)

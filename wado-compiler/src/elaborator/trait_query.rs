@@ -7,6 +7,7 @@ use crate::ast::{self, Item, Type};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
+use crate::name::{Receiver, RefKind};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -952,7 +953,7 @@ impl TypeSystem {
             return self.find_trait_impl_for_type(
                 ctx,
                 scope,
-                &crate::name::Receiver::Type(type_name),
+                &Receiver::Type(type_name),
                 trait_name,
             );
         }
@@ -986,7 +987,7 @@ impl TypeSystem {
                 && self.has_real_trait_impl_for_type(
                     ctx,
                     scope,
-                    &crate::name::Receiver::Type(name.clone()),
+                    &Receiver::Type(name.clone()),
                     trait_name,
                 );
             if !serde_blocked
@@ -1112,7 +1113,7 @@ impl TypeSystem {
                 if self.find_trait_impl_for_type_with_args(
                     ctx,
                     scope,
-                    &crate::name::Receiver::Ref(crate::name::RefKind::Shared),
+                    &Receiver::Ref(RefKind::Shared),
                     trait_name,
                     Some(&[inner_id]),
                 ) {
@@ -1129,7 +1130,7 @@ impl TypeSystem {
                 if self.find_trait_impl_for_type_with_args(
                     ctx,
                     scope,
-                    &crate::name::Receiver::Ref(crate::name::RefKind::Mut),
+                    &Receiver::Ref(RefKind::Mut),
                     trait_name,
                     Some(&[inner_id]),
                 ) {
@@ -1150,7 +1151,7 @@ impl TypeSystem {
                 if self.find_trait_impl_for_type(
                     ctx,
                     scope,
-                    &crate::name::Receiver::Type(name.clone()),
+                    &Receiver::Type(name.clone()),
                     trait_name,
                 ) {
                     return true;
@@ -1163,7 +1164,7 @@ impl TypeSystem {
                 if self.find_trait_impl_for_type(
                     ctx,
                     scope,
-                    &crate::name::Receiver::Type(name.clone()),
+                    &Receiver::Type(name.clone()),
                     trait_name,
                 ) {
                     return true;
@@ -1176,7 +1177,7 @@ impl TypeSystem {
         self.find_trait_impl_for_type_with_args(
             ctx,
             scope,
-            &crate::name::Receiver::Type(type_name),
+            &Receiver::Type(type_name),
             trait_name,
             type_args.as_deref(),
         )
@@ -1187,7 +1188,7 @@ impl TypeSystem {
         &self,
         ctx: &Scope,
         scope: &TypeLookup,
-        type_key: &crate::name::Receiver,
+        type_key: &Receiver,
         trait_name: &str,
     ) -> bool {
         self.find_trait_impl_for_type_with_args(ctx, scope, type_key, trait_name, None)
@@ -1197,7 +1198,7 @@ impl TypeSystem {
         &self,
         ctx: &Scope,
         scope: &TypeLookup,
-        type_key: &crate::name::Receiver,
+        type_key: &Receiver,
         trait_name: &str,
     ) -> bool {
         self.trait_env.has_any_methodful_impl(type_key, trait_name)
@@ -1210,7 +1211,7 @@ impl TypeSystem {
         &self,
         ctx: &Scope,
         scope: &TypeLookup,
-        type_key: &crate::name::Receiver,
+        type_key: &Receiver,
         trait_name: &str,
         type_args: Option<&[TypeId]>,
     ) -> bool {
@@ -1255,7 +1256,7 @@ impl TypeSystem {
         &self,
         ctx: &Scope,
         scope: &TypeLookup,
-        type_key: &crate::name::Receiver,
+        type_key: &Receiver,
         trait_name: &str,
     ) -> bool {
         let trait_env = self.trait_env.clone();
@@ -1827,10 +1828,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let trait_env = self.tysys.trait_env.clone();
         let impl_infos: Vec<ImplInfo> = {
             let mut result = vec![];
-            if let Some(entries) = trait_env
-                .impl_index
-                .get(&crate::name::Receiver::Type(type_name))
-            {
+            if let Some(entries) = trait_env.impl_index.get(&Receiver::Type(type_name)) {
                 for entry in entries {
                     let Some(header) = trait_env.impl_headers.get(entry) else {
                         continue;
@@ -1925,7 +1923,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let blanket_infos: Vec<BlanketImplInfo> = {
             let mut result = vec![];
-            for blanket in trait_env.blanket_impls.get(trait_name).into_iter().flatten() {
+            for blanket in trait_env
+                .blanket_impls
+                .get(trait_name)
+                .into_iter()
+                .flatten()
+            {
                 let Some(header) = trait_env
                     .impl_headers
                     .get(&(blanket.module.clone(), blanket.ast_id))

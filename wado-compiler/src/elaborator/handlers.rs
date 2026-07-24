@@ -28,6 +28,7 @@
 use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
+use crate::name::Receiver;
 use crate::tir::{EffectRef, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
@@ -387,7 +388,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .trait_env
             .impl_index
-            .get(&crate::name::Receiver::Type(type_name.to_string()))
+            .get(&Receiver::Type(type_name.to_string()))
         {
             for (module_src, item_id) in entries {
                 let module = &self.loaded_modules[module_src];

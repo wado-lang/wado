@@ -18,7 +18,7 @@ use crate::hashmap::IndexSet;
 
 use crate::elaborator::trait_env::TraitEnv;
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName};
+use crate::name::{LocalMethodName, MethodName, Receiver, RefKind};
 use crate::package::Package;
 use crate::tir::{
     CallArg, FnDispatchTrait, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType,
@@ -3055,7 +3055,7 @@ impl SynthesisCtx<'_, '_, '_> {
     /// `impl Trait for Type;` marker does not count — it must not block the
     /// body it asks for.
     fn has_methodful_impl(&self, type_name: &str, trait_name: &str, scope: ImplScope) -> bool {
-        let type_key = crate::name::Receiver::Type(type_name.to_string());
+        let type_key = Receiver::Type(type_name.to_string());
         let real = match scope {
             ImplScope::CurrentModule => {
                 self.trait_env
@@ -6058,8 +6058,7 @@ fn decompose_type_for_method_name(
     resolved: &ResolvedType,
     type_id: TypeId,
     tt: &TypeTable,
-) -> (crate::name::Receiver, bool, Vec<String>) {
-    use crate::name::Receiver;
+) -> (Receiver, bool, Vec<String>) {
     let named = |n: String| Receiver::Type(n);
     match resolved {
         ResolvedType::TypeParam { name, .. } => (named(name.clone()), true, vec![]),
@@ -6081,7 +6080,11 @@ fn decompose_type_for_method_name(
         } => {
             let args =
                 crate::name::fn_type_arg_names(params.len(), &tt.mangle_type_name(*return_type));
-            (named(crate::name::CLOSURE_FN_TRAIT.to_string()), false, args)
+            (
+                named(crate::name::CLOSURE_FN_TRAIT.to_string()),
+                false,
+                args,
+            )
         }
         ResolvedType::GenericResource {
             name, type_args, ..
@@ -6095,7 +6098,7 @@ fn decompose_type_for_method_name(
             vec![tt.mangle_type_name(*inner)],
         ),
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => (
-            Receiver::Ref(crate::name::RefKind::from_resolved(resolved).expect("ref classify")),
+            Receiver::Ref(RefKind::from_resolved(resolved).expect("ref classify")),
             false,
             vec![tt.mangle_type_name(*inner)],
         ),
@@ -6150,7 +6153,7 @@ fn resolve_impl_module_via_env(
 
     let candidate_name: Option<String> = match &resolved {
         ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
-            crate::name::RefKind::from_resolved(&resolved).map(|k| k.prefix().to_string())
+            RefKind::from_resolved(&resolved).map(|k| k.prefix().to_string())
         }
         ResolvedType::Primitive(p) => Some(p.as_str().to_string()),
         ResolvedType::Unit => Some(TypeTable::UNIT_TYPE_NAME.to_string()),

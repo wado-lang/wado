@@ -17,7 +17,7 @@ use crate::ast::{AstId, NamedType, Type};
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::LocalMethodName;
+use crate::name::{LocalMethodName, Receiver};
 use crate::package::Package;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp,
@@ -1318,7 +1318,7 @@ fn synthesize_stream_read_func(
                 }),
                 method_info: Some(LocalMethodName {
                     struct_name: format!("{list_struct_name}<{elem_inst_name}>"),
-                    receiver: crate::name::Receiver::Type(list_struct_name.clone()),
+                    receiver: Receiver::Type(list_struct_name.clone()),
                     trait_name: None,
                     base_trait_name: None,
                     base_trait_module: None,
@@ -1427,7 +1427,7 @@ fn synthesize_stream_read_func(
                 }),
                 method_info: Some(LocalMethodName {
                     struct_name: format!("{list_struct_name}<{elem_inst_name}>"),
-                    receiver: crate::name::Receiver::Type(list_struct_name),
+                    receiver: Receiver::Type(list_struct_name),
                     trait_name: None,
                     base_trait_name: None,
                     base_trait_module: None,

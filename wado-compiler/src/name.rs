@@ -1002,7 +1002,9 @@ impl LocalMethodName {
             Some(trait_name) => {
                 format!(
                     "{}^{}::{}",
-                    self.base_struct_name(), trait_name, self.method_name
+                    self.base_struct_name(),
+                    trait_name,
+                    self.method_name
                 )
             }
             None => format!("{}::{}", self.base_struct_name(), self.method_name),

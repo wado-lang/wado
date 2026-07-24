@@ -8,7 +8,7 @@ use std::sync::Arc;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
+use crate::name::{LocalMethodName, MethodName, Receiver, RefKind, mangle_generic_name};
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBinaryOp,
     TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern,
@@ -143,8 +143,8 @@ pub(super) fn normalize_reflect_blanket_args(
     let mut out = args.to_vec();
     if is_struct_blanket
         && out.len() == 1
-        && let Some(fields) = type_table
-            .resolve_assoc_type(out[0], crate::synthesis::traits::REFLECT_FIELDS_ASSOC)
+        && let Some(fields) =
+            type_table.resolve_assoc_type(out[0], crate::synthesis::traits::REFLECT_FIELDS_ASSOC)
     {
         out.push(fields);
     }
@@ -744,8 +744,10 @@ impl Monomorphizer {
                                 info_ref,
                                 &struct_name,
                             );
-                            let candidates: Vec<&str> =
-                                candidates_owned.iter().map(std::convert::AsRef::as_ref).collect();
+                            let candidates: Vec<&str> = candidates_owned
+                                .iter()
+                                .map(std::convert::AsRef::as_ref)
+                                .collect();
                             if let Some(gf) = lookup_template_with_trait_fallback(
                                 generic_functions,
                                 &self.functions.trait_env,
@@ -825,8 +827,9 @@ impl Monomorphizer {
                                     let receiver_module =
                                         receiver_module_hint(type_table, receiver.type_id);
                                     let info_ref = method_func.method_info.as_ref();
-                                    let info_base =
-                                        info_ref.map(LocalMethodName::base_struct_name).unwrap_or_default();
+                                    let info_base = info_ref
+                                        .map(LocalMethodName::base_struct_name)
+                                        .unwrap_or_default();
                                     let candidates: Vec<&str> = if let Some(info) = info_ref {
                                         vec![&info_base, &info.struct_name, &base_struct]
                                     } else {
@@ -923,7 +926,9 @@ impl Monomorphizer {
                     for generic_method_name in &names_to_try {
                         let receiver_module = receiver_module_hint(type_table, receiver.type_id);
                         let info_ref = method_func.method_info.as_ref();
-                        let info_base = info_ref.map(LocalMethodName::base_struct_name).unwrap_or_default();
+                        let info_base = info_ref
+                            .map(LocalMethodName::base_struct_name)
+                            .unwrap_or_default();
                         let candidates: Vec<&str> = if let Some(info) = info_ref {
                             vec![&info_base, &info.struct_name, &base_struct]
                         } else {
@@ -1065,7 +1070,9 @@ impl Monomorphizer {
                     for generic_method_name in names_to_try {
                         let receiver_module = receiver_module_hint(type_table, receiver.type_id);
                         let info_ref = method_func.method_info.as_ref();
-                        let info_base = info_ref.map(LocalMethodName::base_struct_name).unwrap_or_default();
+                        let info_base = info_ref
+                            .map(LocalMethodName::base_struct_name)
+                            .unwrap_or_default();
                         let candidates: Vec<&str> = if let Some(info) = info_ref {
                             vec![&info_base, &info.struct_name, base_struct]
                         } else {
@@ -1123,7 +1130,9 @@ impl Monomorphizer {
                 {
                     let receiver_module = receiver_module_hint(type_table, receiver.type_id);
                     let info_ref = method_func.method_info.as_ref();
-                    let info_base = info_ref.map(LocalMethodName::base_struct_name).unwrap_or_default();
+                    let info_base = info_ref
+                        .map(LocalMethodName::base_struct_name)
+                        .unwrap_or_default();
                     let candidates: Vec<&str> = if let Some(info) = info_ref {
                         vec![&info_base, &info.struct_name]
                     } else {
@@ -1305,7 +1314,9 @@ impl Monomorphizer {
                     {
                         let receiver_module = receiver_module_hint(type_table, receiver.type_id);
                         let info_ref = method_func.method_info.as_ref();
-                        let info_base = info_ref.map(LocalMethodName::base_struct_name).unwrap_or_default();
+                        let info_base = info_ref
+                            .map(LocalMethodName::base_struct_name)
+                            .unwrap_or_default();
                         let candidates: Vec<&str> = if let Some(info) = info_ref {
                             vec![&info_base, &info.struct_name]
                         } else {
@@ -1421,7 +1432,7 @@ impl Monomorphizer {
         if self
             .functions
             .trait_env
-            .has_any_methodful_impl(&crate::name::Receiver::Type(newtype_name), trait_name)
+            .has_any_methodful_impl(&Receiver::Type(newtype_name), trait_name)
         {
             return tid;
         }
@@ -2769,7 +2780,10 @@ impl Monomorphizer {
             ResolvedType::MutRef(inner) => (true, *inner),
             _ => return false,
         };
-        let Some(trait_name) = info.base_trait_name.as_deref().or(info.trait_name.as_deref())
+        let Some(trait_name) = info
+            .base_trait_name
+            .as_deref()
+            .or(info.trait_name.as_deref())
         else {
             return false;
         };
@@ -2781,14 +2795,14 @@ impl Monomorphizer {
             return false;
         }
         let ref_kind = if is_mut {
-            crate::name::RefKind::Mut
+            RefKind::Mut
         } else {
-            crate::name::RefKind::Shared
+            RefKind::Shared
         };
-        let Some(ref_module) = self
-            .functions
-            .trait_env
-            .impl_module_for(ref_kind.prefix(), trait_name, None)
+        let Some(ref_module) =
+            self.functions
+                .trait_env
+                .impl_module_for(ref_kind.prefix(), trait_name, None)
         else {
             return false;
         };
@@ -3050,8 +3064,11 @@ impl Monomorphizer {
         // call on a *different* param (a pack member `F` inside the blanket
         // body) must still resolve to `T^Trait::method`.
         let blanket_param = blanket_module.as_ref().and_then(|bm| {
-            trait_name_for_blanket
-                .and_then(|tn| self.functions.trait_env.blanket_impl_param_for_trait(tn, Some(bm)))
+            trait_name_for_blanket.and_then(|tn| {
+                self.functions
+                    .trait_env
+                    .blanket_impl_param_for_trait(tn, Some(bm))
+            })
         });
         let concrete_impl_module = self
             .functions
@@ -3098,7 +3115,8 @@ impl Monomorphizer {
             // two-arg instance name the call site never asks for, so its
             // `into_iter` is never materialized. Only consult `Fields` when the
             // target blanket is genuinely the struct blanket.
-            let is_reflect_struct_blanket = match (blanket_module.as_ref(), trait_name_for_blanket) {
+            let is_reflect_struct_blanket = match (blanket_module.as_ref(), trait_name_for_blanket)
+            {
                 (Some(bm), Some(tn)) => {
                     let reflect = type_table
                         .compiler_items()

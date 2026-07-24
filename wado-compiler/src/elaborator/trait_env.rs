@@ -223,7 +223,7 @@ pub(crate) type DeclKey = (ModuleSource, String);
 /// AstId)` payload plus the elaborator's per-call type-id comparison, so
 /// two `struct Widget` declarations in different modules share one bucket
 /// without ambiguity.
-pub(super) type TraitImplIndex = IndexMap<crate::name::Receiver, Vec<(ModuleSource, AstId)>>;
+pub(super) type TraitImplIndex = IndexMap<name::Receiver, Vec<(ModuleSource, AstId)>>;
 
 /// Digested header of an `impl` block, pre-extracted at [`TraitEnv::build`]
 /// time so trait/method queries read its trait name, target type, methods,
@@ -316,8 +316,11 @@ fn classify_blanket_receiver(
     type_params: &[ast::GenericParam],
 ) -> Option<(BlanketReceiver, String)> {
     let is_param = |name: &str| type_params.iter().any(|p| p.name == name);
-    let is_bounded_param =
-        |name: &str| type_params.iter().any(|p| p.name == name && !p.bounds.is_empty());
+    let is_bounded_param = |name: &str| {
+        type_params
+            .iter()
+            .any(|p| p.name == name && !p.bounds.is_empty())
+    };
     match ty {
         Type::Named(named) if is_bounded_param(&named.name) => {
             Some((BlanketReceiver::Value, named.name.clone()))
@@ -875,16 +878,17 @@ impl TraitEnv {
                             .find(|p| p.name == param)
                             .map(|p| p.bounds.iter().map(|b| b.name.clone()).collect())
                             .unwrap_or_default();
-                        blanket_impls.entry(trait_name.clone()).or_default().push(
-                            BlanketImpl {
+                        blanket_impls
+                            .entry(trait_name.clone())
+                            .or_default()
+                            .push(BlanketImpl {
                                 module: module_source.clone(),
                                 ast_id: impl_block.id,
                                 receiver,
                                 param,
                                 bounds,
                                 arity: impl_block.type_params.len(),
-                            },
-                        );
+                            });
                     }
                     // A value blanket (`impl<T: Bound> Trait for T`) has no
                     // per-type home to index; every other impl (concrete, shape
@@ -1021,7 +1025,7 @@ impl TraitEnv {
     /// instance-method lookup, which must not treat trait impls as inherent.
     pub(super) fn inherent_impl_keys(
         &self,
-        type_key: &crate::name::Receiver,
+        type_key: &name::Receiver,
     ) -> Vec<(ModuleSource, AstId)> {
         self.all_impl_index
             .get(type_key)
@@ -1039,11 +1043,7 @@ impl TraitEnv {
     }
 
     /// Whether `type_name` has an inherent impl declaring `method_name`.
-    pub(crate) fn has_inherent_method(
-        &self,
-        type_key: &crate::name::Receiver,
-        method_name: &str,
-    ) -> bool {
+    pub(crate) fn has_inherent_method(&self, type_key: &name::Receiver, method_name: &str) -> bool {
         self.all_impl_index.get(type_key).is_some_and(|keys| {
             keys.iter().any(|key| {
                 self.impl_headers.get(key).is_some_and(|h| {
@@ -1070,7 +1070,7 @@ impl TraitEnv {
 
     pub(crate) fn has_methodful_impl(
         &self,
-        type_key: &crate::name::Receiver,
+        type_key: &name::Receiver,
         trait_name: &str,
         module_source: &ModuleSource,
     ) -> bool {
@@ -1083,7 +1083,7 @@ impl TraitEnv {
 
     pub(crate) fn has_any_methodful_impl(
         &self,
-        type_key: &crate::name::Receiver,
+        type_key: &name::Receiver,
         trait_name: &str,
     ) -> bool {
         self.impl_index.get(type_key).is_some_and(|entries| {
@@ -1521,15 +1521,15 @@ fn check_all_orphan_rules(
 }
 
 /// Extract a type name from an AST type without needing an Elaborator instance.
-/// The typed [`crate::name::Receiver`] key an `impl` target indexes under.
+/// The typed [`name::Receiver`] key an `impl` target indexes under.
 /// A `&T` / `&mut T` target keys as `Receiver::Ref` (from the typed AST, never
 /// a `"&"` string); everything else keys as `Receiver::Type` over the canonical
 /// [`get_type_name_static`] head, so the key domain matches the old string keys
 /// exactly apart from the ref shape being typed.
-pub(super) fn receiver_key(ty: &ast::Type) -> crate::name::Receiver {
-    match crate::name::RefKind::from_ast(ty) {
-        Some(kind) => crate::name::Receiver::Ref(kind),
-        None => crate::name::Receiver::Type(get_type_name_static(ty)),
+pub(super) fn receiver_key(ty: &ast::Type) -> name::Receiver {
+    match name::RefKind::from_ast(ty) {
+        Some(kind) => name::Receiver::Ref(kind),
+        None => name::Receiver::Type(get_type_name_static(ty)),
     }
 }
 
@@ -1538,7 +1538,7 @@ pub(super) fn get_type_name_static(ty: &ast::Type) -> String {
         ast::Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),
         ast::Type::Named(named) => named.name.clone(),
         ast::Type::Generic(generic) => generic.name.clone(),
-        ast::Type::Reference(_) | ast::Type::MutReference(_) => crate::name::RefKind::from_ast(ty)
+        ast::Type::Reference(_) | ast::Type::MutReference(_) => name::RefKind::from_ast(ty)
             .expect("Reference/MutReference classify")
             .prefix()
             .to_string(),

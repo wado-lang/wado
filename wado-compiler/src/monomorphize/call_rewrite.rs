@@ -2,7 +2,7 @@
 
 use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
-use crate::name::MethodName;
+use crate::name::{MethodName, RefKind};
 use crate::tir::{
     CallArg, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr,
     TirExprKind, TirLocal, TirModule, TirStmt, TirStmtKind, TypeId, TypeTable,
@@ -378,15 +378,20 @@ impl Monomorphizer {
         // leading `&`. A bare-`T` blanket (serde `Serialize`) and a shape ref impl
         // (`&List^IntoIterator`) both still resolve here — the former has no `&`
         // head, the latter has no universal `&T` blanket.
-        let is_ref_blanket_call = method_func.monomorph_info.as_ref().is_some_and(|m| m.is_blanket)
+        let is_ref_blanket_call = method_func
+            .monomorph_info
+            .as_ref()
+            .is_some_and(|m| m.is_blanket)
             && method_func.method_info.as_ref().is_some_and(|i| {
                 i.ref_receiver().is_some_and(|ref_kind| {
-                    let is_mut = ref_kind == crate::name::RefKind::Mut;
+                    let is_mut = ref_kind == RefKind::Mut;
                     i.base_trait_name
                         .as_deref()
                         .or(i.trait_name.as_deref())
                         .is_some_and(|tn| {
-                            self.functions.trait_env.has_universal_ref_blanket(tn, is_mut)
+                            self.functions
+                                .trait_env
+                                .has_universal_ref_blanket(tn, is_mut)
                         })
                 })
             });
@@ -413,7 +418,10 @@ impl Monomorphizer {
             let info_ref = method_func.method_info.as_ref();
             let candidates_owned =
                 self.newtype_aware_candidates(own_name.as_deref(), info_ref, &struct_name);
-            let candidates: Vec<&str> = candidates_owned.iter().map(std::convert::AsRef::as_ref).collect();
+            let candidates: Vec<&str> = candidates_owned
+                .iter()
+                .map(std::convert::AsRef::as_ref)
+                .collect();
             let receiver_module = receiver_module_hint(type_table, receiver.type_id);
             let mut rewritten = false;
             for (full_method_name, _tn) in &names_to_try {
@@ -470,7 +478,9 @@ impl Monomorphizer {
                     }
 
                     let info_ref = method_func.method_info.as_ref();
-                    let info_base = info_ref.map(LocalMethodName::base_struct_name).unwrap_or_default();
+                    let info_base = info_ref
+                        .map(LocalMethodName::base_struct_name)
+                        .unwrap_or_default();
                     let dg_candidates: Vec<&str> = if let Some(info) = info_ref {
                         vec![&info_base, &info.struct_name, &base_struct]
                     } else {
@@ -600,7 +610,9 @@ impl Monomorphizer {
             });
 
             let info_ref = method_func.method_info.as_ref();
-            let info_base = info_ref.map(LocalMethodName::base_struct_name).unwrap_or_default();
+            let info_base = info_ref
+                .map(LocalMethodName::base_struct_name)
+                .unwrap_or_default();
             let pk_candidates: Vec<&str> = if let Some(info) = info_ref {
                 vec![&info_base, &info.struct_name, &base_struct]
             } else {
@@ -672,7 +684,9 @@ impl Monomorphizer {
                     method_info: method_func.method_info.clone(),
                 };
                 let mi = method_func.method_info.as_ref();
-                let mi_base = mi.map(LocalMethodName::base_struct_name).unwrap_or_default();
+                let mi_base = mi
+                    .map(LocalMethodName::base_struct_name)
+                    .unwrap_or_default();
                 let candidates: Vec<&str> = if let Some(info) = mi {
                     vec![&mi_base, &info.struct_name]
                 } else {
