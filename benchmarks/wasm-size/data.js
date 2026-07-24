@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784850902270,
+  "lastUpdate": 1784888473657,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -43505,6 +43505,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 272252,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e54961fc0ca991252e31cdaf209404a3341226de",
+          "message": "Merge pull request #1674 from wado-lang/claude/package-gale-bug-fix-l7qyir\n\nfix(gale): terminate scan on mandatory-group mismatch; reject hidden/indirect left recursion",
+          "timestamp": "2026-07-24T19:11:06+09:00",
+          "tree_id": "2def12e5a2ed6dc04193cd7d2ee9e72c83b5a34e",
+          "url": "https://github.com/wado-lang/wado/commit/e54961fc0ca991252e31cdaf209404a3341226de"
+        },
+        "date": 1784888473280,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1970,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8212,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16169,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276401,
             "unit": "bytes"
           }
         ]
