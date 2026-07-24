@@ -1739,3 +1739,33 @@ fn assert_option_qualified(opt: &GrammarOption, expected: List<String>) {
         panic(`option '${opt.name}': expected Qualified, got other`);
     }
 }
+
+// Left-recursion policy (issue #1671): Gale, like ANTLR4, supports only direct
+// left recursion (a self-ref as an alt's leading element, lowered by
+// precedence climbing). Hidden and indirect left recursion would generate a
+// recursive-descent scan/parse that re-enters a rule without consuming input
+// and never terminates, so `check_left_recursion` rejects them at grammar-check
+// time rather than emitting looping code.
+
+test "direct left recursion is accepted" {
+    let g = "grammar D;\nprog : e EOF ;\ne : e '+' e | INT ;\nINT : [0-9]+ ;\nWS : [ \\t]+ -> skip ;";
+    assert parse_checked(g) matches { Ok(_) }, "direct left recursion must be accepted (precedence climbing)";
+}
+
+test "hidden left recursion through a nullable prefix is rejected" {
+    // `e : g e` with `g : A? B?` nullable: `e` re-enters itself at the same
+    // position when `g` matches empty. Mirrors the scan cycle behind #1671.
+    let g = "grammar H;\nprog : e EOF ;\ne : g e | INT ;\ng : A? B? ;\nINT : [0-9]+ ;\nA : 'a' ; B : 'b' ;\nWS : [ \\t]+ -> skip ;";
+    assert parse_checked(g) matches { Err(_) }, "hidden left recursion must be rejected";
+}
+
+test "indirect (mutual) left recursion is rejected" {
+    let g = "grammar I;\nprog : a EOF ;\na : b ';' ;\nb : a '(' | X ;\nX : 'x' ; SEMI : ';' ; LP : '(' ;";
+    assert parse_checked(g) matches { Err(_) }, "indirect left recursion must be rejected";
+}
+
+test "a non-left-recursive grammar with nullable rules is accepted" {
+    // `g` is nullable but no rule reaches itself through it, so no cycle.
+    let g = "grammar N;\nprog : e EOF ;\ne : g t ('+' t)* ;\ng : A? ;\nt : INT ;\nINT : [0-9]+ ;\nA : 'a' ;\nWS : [ \\t]+ -> skip ;";
+    assert parse_checked(g) matches { Ok(_) }, "a plain grammar with nullable rules must be accepted";
+}

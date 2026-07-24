@@ -1913,19 +1913,24 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32) -> i32 {
 fn scan_e_lr_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     let gp_0 = pos;
-    sg_0: {
-        pos = gp_0;
-        sg_0_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break sg_0_0; }
-            pos += 1;
-            break sg_0;
+    let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_0(sgk_0) {
+        sg_0: {
+            pos = gp_0;
+            sg_0_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break sg_0_0; }
+                pos += 1;
+                break sg_0;
+            }
+            pos = gp_0;
+            sg_0_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_SLASH { break sg_0_1; }
+                pos += 1;
+                break sg_0;
+            }
+            return -1;
         }
-        pos = gp_0;
-        sg_0_1: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_SLASH { break sg_0_1; }
-            pos += 1;
-            break sg_0;
-        }
+    } else {
         return -1;
     }
     pos = scan_e(tokens, pos, 3);
@@ -1936,19 +1941,24 @@ fn scan_e_lr_0(tokens: &Array<i32>, pos: i32) -> i32 {
 fn scan_e_lr_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     let gp_1 = pos;
-    sg_1: {
-        pos = gp_1;
-        sg_1_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { break sg_1_0; }
-            pos += 1;
-            break sg_1;
+    let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_1(sgk_1) {
+        sg_1: {
+            pos = gp_1;
+            sg_1_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { break sg_1_0; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_MINUS { break sg_1_1; }
+                pos += 1;
+                break sg_1;
+            }
+            return -1;
         }
-        pos = gp_1;
-        sg_1_1: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_MINUS { break sg_1_1; }
-            pos += 1;
-            break sg_1;
-        }
+    } else {
         return -1;
     }
     pos = scan_e(tokens, pos, 2);

@@ -3293,19 +3293,24 @@ fn scan_script(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
     if pos >= tokens.len() || tokens[pos] != TK_SCRIPT_OPEN { return -1; }
     pos += 1;
     let gp_5 = pos;
-    sg_5: {
-        pos = gp_5;
-        sg_5_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_SCRIPT_BODY { break sg_5_0; }
-            pos += 1;
-            break sg_5;
+    let sgk_5 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_9(sgk_5) {
+        sg_5: {
+            pos = gp_5;
+            sg_5_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_SCRIPT_BODY { break sg_5_0; }
+                pos += 1;
+                break sg_5;
+            }
+            pos = gp_5;
+            sg_5_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_SCRIPT_SHORT_BODY { break sg_5_1; }
+                pos += 1;
+                break sg_5;
+            }
+            return -1;
         }
-        pos = gp_5;
-        sg_5_1: {
-            if pos >= tokens.len() || tokens[pos] != TK_SCRIPT_SHORT_BODY { break sg_5_1; }
-            pos += 1;
-            break sg_5;
-        }
+    } else {
         return -1;
     }
     return pos;
@@ -3316,19 +3321,24 @@ fn scan_style(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
     if pos >= tokens.len() || tokens[pos] != TK_STYLE_OPEN { return -1; }
     pos += 1;
     let gp_6 = pos;
-    sg_6: {
-        pos = gp_6;
-        sg_6_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_STYLE_BODY { break sg_6_0; }
-            pos += 1;
-            break sg_6;
+    let sgk_6 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_10(sgk_6) {
+        sg_6: {
+            pos = gp_6;
+            sg_6_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_STYLE_BODY { break sg_6_0; }
+                pos += 1;
+                break sg_6;
+            }
+            pos = gp_6;
+            sg_6_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_STYLE_SHORT_BODY { break sg_6_1; }
+                pos += 1;
+                break sg_6;
+            }
+            return -1;
         }
-        pos = gp_6;
-        sg_6_1: {
-            if pos >= tokens.len() || tokens[pos] != TK_STYLE_SHORT_BODY { break sg_6_1; }
-            pos += 1;
-            break sg_6;
-        }
+    } else {
         return -1;
     }
     return pos;
@@ -4011,6 +4021,14 @@ fn _kind_set_7(k: i32) -> bool {
 
 fn _kind_set_8(k: i32) -> bool {
     return k matches { TK_HTML_TEXT | TK_SEA_WS };
+}
+
+fn _kind_set_9(k: i32) -> bool {
+    return k matches { TK_SCRIPT_BODY | TK_SCRIPT_SHORT_BODY };
+}
+
+fn _kind_set_10(k: i32) -> bool {
+    return k matches { TK_STYLE_BODY | TK_STYLE_SHORT_BODY };
 }
 
 global EMPTY_SYNC: List<i32> = [];

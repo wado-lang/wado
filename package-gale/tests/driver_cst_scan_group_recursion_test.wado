@@ -1,0 +1,34 @@
+//! Regression for issue #1671: the scan predicate for a rule that begins with
+//! a mandatory (non-nullable) alternation group must fail when the group does
+//! not match, rather than bail out lenient (matching zero tokens). When the
+//! group's FIRST set is reachable through the rule's own recursive tail (as in
+//! Wado's `closure : ('||' | '|' ... '|') expression`, with `|` in
+//! FIRST(closure) ⊆ FIRST(expr)), a lenient scan falls into the tail without
+//! consuming input and recurses unboundedly — `wasm trap: call stack
+//! exhausted`. The parser must terminate on any input; a passing test (no
+//! trap) is the assertion.
+use recur from "./grammars/scan_group_recursion.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_scan_group_recursion" },
+    };
+
+// A lone `|` starts `closure`'s mandatory `('||' | '|' '|')` group but cannot
+// complete it, so `closure` — and thus `expr` — must not match. Before the fix
+// the scan of `expr` recursed `expr -> primary -> closure -> expr` forever.
+test "lone pipe does not recurse unboundedly" {
+    let r = recur::parse(&"|");
+    assert r.diagnostics.len() > 0, "expected diagnostics for a lone '|'";
+}
+
+// `| |` also cannot form `closure ('||' | '|' '|') expr` (the body `expr` is
+// absent), and must terminate with diagnostics rather than trap.
+test "double pipe without a body does not recurse unboundedly" {
+    let r = recur::parse(&"| |");
+    assert r.diagnostics.len() > 0, "expected diagnostics for '| |'";
+}
+
+// A well-formed `closure` still parses: `|| 1 ;` is `('||') expr` then `';'`.
+test "valid closure still parses cleanly" {
+    let r = recur::parse(&"|| 1 ;");
+    assert r.ok(), `expected a clean parse, got ${r.diagnostics.len()} diagnostics`;
+}

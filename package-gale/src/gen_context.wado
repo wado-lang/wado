@@ -1,4 +1,13 @@
-use { ParserRule, Alternative, Element, RepeatElement, LabelElement, RepeatKind, ActionLanguage } from "./ir.wado";
+use {
+    ParserRule,
+    Alternative,
+    Element,
+    RepeatElement,
+    LabelElement,
+    RepeatKind,
+    ActionLanguage,
+    compute_scan_cyclic,
+} from "./ir.wado";
 use { SuperOp } from "./superclass.wado";
 use { LitToken } from "./lexer_gen.wado";
 use {
@@ -55,6 +64,10 @@ pub global FOLLOW_MASK_MAX_K: i32 = 4;
 /// emission call chains.
 pub struct GenContext {
     pub parser_rules: List<ParserRule>,
+    /// Per-rule flag (parallel to `parser_rules`): true when the rule's scan can
+    /// re-enter itself at the same input position (`compute_scan_cyclic`). Its
+    /// mandatory groups are emitted strict to break that zero-consumption cycle.
+    scan_cyclic: List<bool>,
     pub lit_tokens: List<LitToken>,
     rule_index: TreeMap<String, i32>,
     /// Canonical token-kind table (id <-> `TK_*` name). FIRST sets are carried
@@ -212,8 +225,10 @@ impl GenContext {
         }
         let single_alt_owner = build_single_alt_owner_map(parser_rules);
         let rule_count = parser_rules.len();
+        let scan_cyclic = compute_scan_cyclic(parser_rules);
         return GenContext {
             parser_rules: *parser_rules,
+            scan_cyclic,
             lit_tokens: *lit_tokens,
             rule_index,
             token_kinds: TokenKinds::empty(),
@@ -369,6 +384,16 @@ impl GenContext {
     /// `parser_rules`). Set by `gen_parse_fn` before the body walk.
     pub fn set_current_rule_index(&mut self, idx: i32) {
         self.current_rule_index = idx;
+    }
+
+    /// True when rule `idx`'s scan can re-enter itself at the same input
+    /// position (a zero-consumption scan cycle). A mandatory group in such a
+    /// rule must scan strict to break the cycle (issue #1671).
+    pub fn is_rule_scan_cyclic(&self, idx: i32) -> bool {
+        if idx < 0 || idx >= self.scan_cyclic.len() {
+            return false;
+        }
+        return self.scan_cyclic[idx];
     }
 
     /// The rule currently being emitted, or -1 outside rule-body emission.

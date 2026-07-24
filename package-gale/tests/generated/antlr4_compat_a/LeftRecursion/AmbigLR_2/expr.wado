@@ -1915,7 +1915,7 @@ fn scan_stat(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if _kind_set_0(alt_kind) {
+        if _kind_set_2(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_expr(tokens, pos, 0);
@@ -2007,19 +2007,24 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32) -> i32 {
 fn scan_expr_lr_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     let gp_0 = pos;
-    sg_0: {
-        pos = gp_0;
-        sg_0_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break sg_0_0; }
-            pos += 1;
-            break sg_0;
+    let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_0(sgk_0) {
+        sg_0: {
+            pos = gp_0;
+            sg_0_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break sg_0_0; }
+                pos += 1;
+                break sg_0;
+            }
+            pos = gp_0;
+            sg_0_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_SLASH { break sg_0_1; }
+                pos += 1;
+                break sg_0;
+            }
+            return -1;
         }
-        pos = gp_0;
-        sg_0_1: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_SLASH { break sg_0_1; }
-            pos += 1;
-            break sg_0;
-        }
+    } else {
         return -1;
     }
     pos = scan_expr(tokens, pos, 3);
@@ -2030,19 +2035,24 @@ fn scan_expr_lr_0(tokens: &Array<i32>, pos: i32) -> i32 {
 fn scan_expr_lr_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     let gp_1 = pos;
-    sg_1: {
-        pos = gp_1;
-        sg_1_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { break sg_1_0; }
-            pos += 1;
-            break sg_1;
+    let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_1(sgk_1) {
+        sg_1: {
+            pos = gp_1;
+            sg_1_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { break sg_1_0; }
+                pos += 1;
+                break sg_1;
+            }
+            pos = gp_1;
+            sg_1_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_MINUS { break sg_1_1; }
+                pos += 1;
+                break sg_1;
+            }
+            return -1;
         }
-        pos = gp_1;
-        sg_1_1: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_MINUS { break sg_1_1; }
-            pos += 1;
-            break sg_1;
-        }
+    } else {
         return -1;
     }
     pos = scan_expr(tokens, pos, 2);
@@ -2056,7 +2066,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         let _lr_pos0 = pos;
-        if _kind_set_1(suffix_kind) {
+        if _kind_set_0(suffix_kind) {
             if 2 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_0(tokens, pos);
@@ -2064,7 +2074,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
             } else {
                 break;
             }
-        } else if _kind_set_2(suffix_kind) {
+        } else if _kind_set_1(suffix_kind) {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_1(tokens, pos);
@@ -2165,7 +2175,7 @@ fn _parse_stat__inner(p: &mut Parser) -> () {
                 return _parse_stat__inner_alt_0(p);
             }
             return _parse_stat__inner_alt_0(p);
-        } else if _kind_set_0(p.peek_kind()) {
+        } else if _kind_set_2(p.peek_kind()) {
             return _parse_stat__inner_alt_0(p);
         }
     }
@@ -2230,7 +2240,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
     loop {
         if p.recovering { break; }
         let _sk = p.peek_kind();
-        if _kind_set_1(_sk) {
+        if _kind_set_0(_sk) {
             if 2 >= min_prec {
                 if scan_expr_lr_0(&p.kinds, p.pos) < 0 {
                     break;
@@ -2243,7 +2253,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
             } else {
                 break;
             }
-        } else if _kind_set_2(_sk) {
+        } else if _kind_set_1(_sk) {
             if 1 >= min_prec {
                 if scan_expr_lr_1(&p.kinds, p.pos) < 0 {
                     break;
@@ -2332,15 +2342,15 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 }
 
 fn _kind_set_0(k: i32) -> bool {
-    return k matches { TK_INT | TK_LIT_LPAREN };
-}
-
-fn _kind_set_1(k: i32) -> bool {
     return k matches { TK_LIT_SLASH | TK_LIT_STAR };
 }
 
-fn _kind_set_2(k: i32) -> bool {
+fn _kind_set_1(k: i32) -> bool {
     return k matches { TK_LIT_MINUS | TK_LIT_PLUS };
+}
+
+fn _kind_set_2(k: i32) -> bool {
+    return k matches { TK_INT | TK_LIT_LPAREN };
 }
 
 fn _kind_set_3(k: i32) -> bool {

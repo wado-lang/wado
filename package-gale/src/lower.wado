@@ -414,12 +414,11 @@ fn walk_scan_element_for_kind_sets(elem: &ScanElement, ctx: &mut GenContext) {
                     ctx.intern_kind_set(fs);
                 }
             }
-            // Lenient gate union: when emit takes the top-level call
-            // path with `lenient = true`, it builds the union of every
-            // alt's first set and emits a single kind-set check before
-            // entering the dispatch. Compute the same union here so the
-            // intern lands at lower time.
-            if g.lenient {
+            // Intern the first-set gate union `gen_scan_op_group` checks before
+            // the dispatch. A lenient group always interned it; a strict group
+            // now needs it too, but only when no wildcard alt suppresses the
+            // gate — so non-cyclic grammars keep their exact prior intern set.
+            if g.lenient || g.wildcard_alt_indices.is_empty() {
                 let mut union_first: List<String> = [];
                 for let fs of &g.alt_first_sets {
                     for let tk of fs {
@@ -514,6 +513,10 @@ fn walk_op_for_kind_sets(op: &Op, ctx: &mut GenContext) {
 /// branching exactly so the eventual Phase 4 split is a structural
 /// translation rather than a re-classification.
 fn lower_rule(rule: &ParserRule, ctx: &mut GenContext) -> Rule {
+    // Scan-group leniency (`scan_group_is_nullable`) reads the rule's
+    // scan-cyclic flag; record which rule we are lowering. Emit re-sets this per
+    // rule later, so sharing the field is safe (lowering fully precedes emit).
+    ctx.set_current_rule_index(ctx.rule_index_of(&rule.name));
     if rule.alternatives.len() == 1 {
         return Rule::Simple(lower_simple_rule(rule, ctx));
     }
@@ -1954,10 +1957,43 @@ fn lower_general_scan_group(
     return ScanElement::Group(ScanGroupElement {
         alts: bodies,
         dispatch: dispatch,
-        lenient: true,
+        lenient: scan_group_lenient(alts, ctx),
         alt_first_sets: first_sets,
         wildcard_alt_indices: wildcard_indices,
     });
+}
+
+/// Whether a required scan group is emitted `lenient` — bailing out at its entry
+/// position on no match instead of failing. The lenient over-approximation is
+/// what the longest-match tournament relies on, so it is the default; only a
+/// mandatory (non-nullable) group whose rule's scan can re-enter itself at the
+/// same position (`is_rule_scan_cyclic`) must scan strict, or that
+/// zero-consumption cycle never terminates (issue #1671).
+fn scan_group_lenient(alts: &List<Alternative>, ctx: &mut GenContext) -> bool {
+    if scan_group_is_nullable(alts, ctx) {
+        return true;
+    }
+    let cyclic = ctx.is_rule_scan_cyclic(ctx.current_rule_index());
+    return !cyclic;
+}
+
+/// True iff some alternative of the group is fully nullable (the group can match
+/// zero tokens grammatically).
+fn scan_group_is_nullable(alts: &List<Alternative>, ctx: &mut GenContext) -> bool {
+    for let alt of alts {
+        let mut all_null = true;
+        for let e of &alt.elements {
+            let mut visiting: List<String> = [];
+            if !ctx.element_is_nullable_deep(e, &mut visiting) {
+                all_null = false;
+                break;
+            }
+        }
+        if all_null {
+            return true;
+        }
+    }
+    return false;
 }
 
 /// Scan-side twin of `lower_repeat_op`. Same restrictions: greedy
@@ -2950,7 +2986,7 @@ fn lower_simple_cst_scan_group(
     return ScanElement::Group(ScanGroupElement {
         alts: bodies,
         dispatch: dispatch,
-        lenient: true,
+        lenient: scan_group_lenient(alts, ctx),
         alt_first_sets: first_sets,
         wildcard_alt_indices: [] as List<i32>,
     });

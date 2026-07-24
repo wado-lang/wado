@@ -1918,23 +1918,28 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
     while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         let gp_0 = pos;
-        sg_0: {
-            pos = gp_0;
-            sg_0_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break sg_0_0; }
-                pos += 1;
-                pos = scan_expr(tokens, pos, follow, 0);
-                if pos < 0 { break sg_0_0; }
-                break sg_0;
+        let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if _kind_set_0(sgk_0) {
+            sg_0: {
+                pos = gp_0;
+                sg_0_0: {
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break sg_0_0; }
+                    pos += 1;
+                    pos = scan_expr(tokens, pos, follow, 0);
+                    if pos < 0 { break sg_0_0; }
+                    break sg_0;
+                }
+                pos = gp_0;
+                sg_0_1: {
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { break sg_0_1; }
+                    pos += 1;
+                    pos = scan_expr(tokens, pos, follow, 0);
+                    if pos < 0 { break sg_0_1; }
+                    break sg_0;
+                }
+                pos = -1;
             }
-            pos = gp_0;
-            sg_0_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { break sg_0_1; }
-                pos += 1;
-                pos = scan_expr(tokens, pos, follow, 0);
-                if pos < 0 { break sg_0_1; }
-                break sg_0;
-            }
+        } else {
             pos = -1;
         }
         if pos < 0 { pos = sp; break; }

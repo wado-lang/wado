@@ -3877,31 +3877,36 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
             pos = start;
             try_8: {
                 let gp_4 = pos;
-                sg_4: {
-                    pos = gp_4;
-                    sg_4_0: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { break sg_4_0; }
-                        pos += 1;
-                        break sg_4;
+                let sgk_4 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if _kind_set_2(sgk_4) {
+                    sg_4: {
+                        pos = gp_4;
+                        sg_4_0: {
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { break sg_4_0; }
+                            pos += 1;
+                            break sg_4;
+                        }
+                        pos = gp_4;
+                        sg_4_1: {
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_MINUS { break sg_4_1; }
+                            pos += 1;
+                            break sg_4;
+                        }
+                        pos = gp_4;
+                        sg_4_2: {
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUSPLUS { break sg_4_2; }
+                            pos += 1;
+                            break sg_4;
+                        }
+                        pos = gp_4;
+                        sg_4_3: {
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_MINUSMINUS { break sg_4_3; }
+                            pos += 1;
+                            break sg_4;
+                        }
+                        break try_8;
                     }
-                    pos = gp_4;
-                    sg_4_1: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_MINUS { break sg_4_1; }
-                        pos += 1;
-                        break sg_4;
-                    }
-                    pos = gp_4;
-                    sg_4_2: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUSPLUS { break sg_4_2; }
-                        pos += 1;
-                        break sg_4;
-                    }
-                    pos = gp_4;
-                    sg_4_3: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_MINUSMINUS { break sg_4_3; }
-                        pos += 1;
-                        break sg_4;
-                    }
+                } else {
                     break try_8;
                 }
                 pos = scan_e(tokens, pos, follow, 0);
@@ -3913,19 +3918,24 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
             pos = start;
             try_9: {
                 let gp_5 = pos;
-                sg_5: {
-                    pos = gp_5;
-                    sg_5_0: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_TILDE { break sg_5_0; }
-                        pos += 1;
-                        break sg_5;
+                let sgk_5 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if _kind_set_3(sgk_5) {
+                    sg_5: {
+                        pos = gp_5;
+                        sg_5_0: {
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_TILDE { break sg_5_0; }
+                            pos += 1;
+                            break sg_5;
+                        }
+                        pos = gp_5;
+                        sg_5_1: {
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_BANG { break sg_5_1; }
+                            pos += 1;
+                            break sg_5;
+                        }
+                        break try_9;
                     }
-                    pos = gp_5;
-                    sg_5_1: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_BANG { break sg_5_1; }
-                        pos += 1;
-                        break sg_5;
-                    }
+                } else {
                     break try_9;
                 }
                 pos = scan_e(tokens, pos, follow, 0);
@@ -4010,19 +4020,24 @@ fn scan_e_lr_11(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
 fn scan_e_lr_13(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     let gp_6 = pos;
-    sg_6: {
-        pos = gp_6;
-        sg_6_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUSPLUS { break sg_6_0; }
-            pos += 1;
-            break sg_6;
+    let sgk_6 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_4(sgk_6) {
+        sg_6: {
+            pos = gp_6;
+            sg_6_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUSPLUS { break sg_6_0; }
+                pos += 1;
+                break sg_6;
+            }
+            pos = gp_6;
+            sg_6_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_MINUSMINUS { break sg_6_1; }
+                pos += 1;
+                break sg_6;
+            }
+            return -1;
         }
-        pos = gp_6;
-        sg_6_1: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_MINUSMINUS { break sg_6_1; }
-            pos += 1;
-            break sg_6;
-        }
+    } else {
         return -1;
     }
     return pos;
@@ -4045,25 +4060,30 @@ fn scan_e_lr_14(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
 fn scan_e_lr_17(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     let gp_7 = pos;
-    sg_7: {
-        pos = gp_7;
-        sg_7_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break sg_7_0; }
-            pos += 1;
-            break sg_7;
+    let sgk_7 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_5(sgk_7) {
+        sg_7: {
+            pos = gp_7;
+            sg_7_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break sg_7_0; }
+                pos += 1;
+                break sg_7;
+            }
+            pos = gp_7;
+            sg_7_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_SLASH { break sg_7_1; }
+                pos += 1;
+                break sg_7;
+            }
+            pos = gp_7;
+            sg_7_2: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_PERCENT { break sg_7_2; }
+                pos += 1;
+                break sg_7;
+            }
+            return -1;
         }
-        pos = gp_7;
-        sg_7_1: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_SLASH { break sg_7_1; }
-            pos += 1;
-            break sg_7;
-        }
-        pos = gp_7;
-        sg_7_2: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_PERCENT { break sg_7_2; }
-            pos += 1;
-            break sg_7;
-        }
+    } else {
         return -1;
     }
     pos = scan_e(tokens, pos, follow, 14);
@@ -4074,19 +4094,24 @@ fn scan_e_lr_17(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
 fn scan_e_lr_18(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     let gp_8 = pos;
-    sg_8: {
-        pos = gp_8;
-        sg_8_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { break sg_8_0; }
-            pos += 1;
-            break sg_8;
+    let sgk_8 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_6(sgk_8) {
+        sg_8: {
+            pos = gp_8;
+            sg_8_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { break sg_8_0; }
+                pos += 1;
+                break sg_8;
+            }
+            pos = gp_8;
+            sg_8_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_MINUS { break sg_8_1; }
+                pos += 1;
+                break sg_8;
+            }
+            return -1;
         }
-        pos = gp_8;
-        sg_8_1: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_MINUS { break sg_8_1; }
-            pos += 1;
-            break sg_8;
-        }
+    } else {
         return -1;
     }
     pos = scan_e(tokens, pos, follow, 13);
@@ -4097,25 +4122,30 @@ fn scan_e_lr_18(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
 fn scan_e_lr_19(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     let gp_9 = pos;
-    sg_9: {
-        pos = gp_9;
-        sg_9_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_LTLT { break sg_9_0; }
-            pos += 1;
-            break sg_9;
+    let sgk_9 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_7(sgk_9) {
+        sg_9: {
+            pos = gp_9;
+            sg_9_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_LTLT { break sg_9_0; }
+                pos += 1;
+                break sg_9;
+            }
+            pos = gp_9;
+            sg_9_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_GTGTGT { break sg_9_1; }
+                pos += 1;
+                break sg_9;
+            }
+            pos = gp_9;
+            sg_9_2: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_GTGT { break sg_9_2; }
+                pos += 1;
+                break sg_9;
+            }
+            return -1;
         }
-        pos = gp_9;
-        sg_9_1: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_GTGTGT { break sg_9_1; }
-            pos += 1;
-            break sg_9;
-        }
-        pos = gp_9;
-        sg_9_2: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_GTGT { break sg_9_2; }
-            pos += 1;
-            break sg_9;
-        }
+    } else {
         return -1;
     }
     pos = scan_e(tokens, pos, follow, 12);
@@ -4126,31 +4156,36 @@ fn scan_e_lr_19(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
 fn scan_e_lr_20(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     let gp_10 = pos;
-    sg_10: {
-        pos = gp_10;
-        sg_10_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_LTEQ { break sg_10_0; }
-            pos += 1;
-            break sg_10;
+    let sgk_10 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_8(sgk_10) {
+        sg_10: {
+            pos = gp_10;
+            sg_10_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_LTEQ { break sg_10_0; }
+                pos += 1;
+                break sg_10;
+            }
+            pos = gp_10;
+            sg_10_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_GTEQ { break sg_10_1; }
+                pos += 1;
+                break sg_10;
+            }
+            pos = gp_10;
+            sg_10_2: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break sg_10_2; }
+                pos += 1;
+                break sg_10;
+            }
+            pos = gp_10;
+            sg_10_3: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_LT { break sg_10_3; }
+                pos += 1;
+                break sg_10;
+            }
+            return -1;
         }
-        pos = gp_10;
-        sg_10_1: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_GTEQ { break sg_10_1; }
-            pos += 1;
-            break sg_10;
-        }
-        pos = gp_10;
-        sg_10_2: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break sg_10_2; }
-            pos += 1;
-            break sg_10;
-        }
-        pos = gp_10;
-        sg_10_3: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_LT { break sg_10_3; }
-            pos += 1;
-            break sg_10;
-        }
+    } else {
         return -1;
     }
     pos = scan_e(tokens, pos, follow, 11);
@@ -4170,19 +4205,24 @@ fn scan_e_lr_21(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
 fn scan_e_lr_22(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     let gp_11 = pos;
-    sg_11: {
-        pos = gp_11;
-        sg_11_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_EQEQ { break sg_11_0; }
-            pos += 1;
-            break sg_11;
+    let sgk_11 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_9(sgk_11) {
+        sg_11: {
+            pos = gp_11;
+            sg_11_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_EQEQ { break sg_11_0; }
+                pos += 1;
+                break sg_11;
+            }
+            pos = gp_11;
+            sg_11_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_BANGEQ { break sg_11_1; }
+                pos += 1;
+                break sg_11;
+            }
+            return -1;
         }
-        pos = gp_11;
-        sg_11_1: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_BANGEQ { break sg_11_1; }
-            pos += 1;
-            break sg_11;
-        }
+    } else {
         return -1;
     }
     pos = scan_e(tokens, pos, follow, 9);
@@ -4251,79 +4291,84 @@ fn scan_e_lr_28(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
 fn scan_e_lr_29(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     let gp_12 = pos;
-    sg_12: {
-        pos = gp_12;
-        sg_12_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { break sg_12_0; }
-            pos += 1;
-            break sg_12;
+    let sgk_12 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_10(sgk_12) {
+        sg_12: {
+            pos = gp_12;
+            sg_12_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { break sg_12_0; }
+                pos += 1;
+                break sg_12;
+            }
+            pos = gp_12;
+            sg_12_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUSEQ { break sg_12_1; }
+                pos += 1;
+                break sg_12;
+            }
+            pos = gp_12;
+            sg_12_2: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_MINUSEQ { break sg_12_2; }
+                pos += 1;
+                break sg_12;
+            }
+            pos = gp_12;
+            sg_12_3: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_STAREQ { break sg_12_3; }
+                pos += 1;
+                break sg_12;
+            }
+            pos = gp_12;
+            sg_12_4: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_SLASHEQ { break sg_12_4; }
+                pos += 1;
+                break sg_12;
+            }
+            pos = gp_12;
+            sg_12_5: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_AMPEQ { break sg_12_5; }
+                pos += 1;
+                break sg_12;
+            }
+            pos = gp_12;
+            sg_12_6: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_PIPEEQ { break sg_12_6; }
+                pos += 1;
+                break sg_12;
+            }
+            pos = gp_12;
+            sg_12_7: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_CARETEQ { break sg_12_7; }
+                pos += 1;
+                break sg_12;
+            }
+            pos = gp_12;
+            sg_12_8: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_GTGTEQ { break sg_12_8; }
+                pos += 1;
+                break sg_12;
+            }
+            pos = gp_12;
+            sg_12_9: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_GTGTGTEQ { break sg_12_9; }
+                pos += 1;
+                break sg_12;
+            }
+            pos = gp_12;
+            sg_12_10: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_LTLTEQ { break sg_12_10; }
+                pos += 1;
+                break sg_12;
+            }
+            pos = gp_12;
+            sg_12_11: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_PERCENTEQ { break sg_12_11; }
+                pos += 1;
+                break sg_12;
+            }
+            return -1;
         }
-        pos = gp_12;
-        sg_12_1: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUSEQ { break sg_12_1; }
-            pos += 1;
-            break sg_12;
-        }
-        pos = gp_12;
-        sg_12_2: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_MINUSEQ { break sg_12_2; }
-            pos += 1;
-            break sg_12;
-        }
-        pos = gp_12;
-        sg_12_3: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_STAREQ { break sg_12_3; }
-            pos += 1;
-            break sg_12;
-        }
-        pos = gp_12;
-        sg_12_4: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_SLASHEQ { break sg_12_4; }
-            pos += 1;
-            break sg_12;
-        }
-        pos = gp_12;
-        sg_12_5: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_AMPEQ { break sg_12_5; }
-            pos += 1;
-            break sg_12;
-        }
-        pos = gp_12;
-        sg_12_6: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_PIPEEQ { break sg_12_6; }
-            pos += 1;
-            break sg_12;
-        }
-        pos = gp_12;
-        sg_12_7: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_CARETEQ { break sg_12_7; }
-            pos += 1;
-            break sg_12;
-        }
-        pos = gp_12;
-        sg_12_8: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_GTGTEQ { break sg_12_8; }
-            pos += 1;
-            break sg_12;
-        }
-        pos = gp_12;
-        sg_12_9: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_GTGTGTEQ { break sg_12_9; }
-            pos += 1;
-            break sg_12;
-        }
-        pos = gp_12;
-        sg_12_10: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_LTLTEQ { break sg_12_10; }
-            pos += 1;
-            break sg_12;
-        }
-        pos = gp_12;
-        sg_12_11: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_PERCENTEQ { break sg_12_11; }
-            pos += 1;
-            break sg_12;
-        }
+    } else {
         return -1;
     }
     pos = scan_e(tokens, pos, follow, 1);

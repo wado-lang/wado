@@ -1905,19 +1905,24 @@ fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
     while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         let gp_0 = pos;
-        sg_0: {
-            pos = gp_0;
-            sg_0_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_0_0; }
-                pos += 1;
-                break sg_0;
+        let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if _kind_set_0(sgk_0) {
+            sg_0: {
+                pos = gp_0;
+                sg_0_0: {
+                    if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_0_0; }
+                    pos += 1;
+                    break sg_0;
+                }
+                pos = gp_0;
+                sg_0_1: {
+                    if pos >= tokens.len() || tokens[pos] != TK_INT { break sg_0_1; }
+                    pos += 1;
+                    break sg_0;
+                }
+                pos = -1;
             }
-            pos = gp_0;
-            sg_0_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_INT { break sg_0_1; }
-                pos += 1;
-                break sg_0;
-            }
+        } else {
             pos = -1;
         }
         if pos < 0 { pos = sp; break; }
@@ -1937,19 +1942,24 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             let gp_1 = pos;
-            sg_1: {
-                pos = gp_1;
-                sg_1_0: {
-                    if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_1_0; }
-                    pos += 1;
-                    break sg_1;
+            let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if _kind_set_0(sgk_1) {
+                sg_1: {
+                    pos = gp_1;
+                    sg_1_0: {
+                        if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_1_0; }
+                        pos += 1;
+                        break sg_1;
+                    }
+                    pos = gp_1;
+                    sg_1_1: {
+                        if pos >= tokens.len() || tokens[pos] != TK_INT { break sg_1_1; }
+                        pos += 1;
+                        break sg_1;
+                    }
+                    break rep_scan;
                 }
-                pos = gp_1;
-                sg_1_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_INT { break sg_1_1; }
-                    pos += 1;
-                    break sg_1;
-                }
+            } else {
                 break rep_scan;
             }
             if pos <= p.pos { break rep_scan; }
