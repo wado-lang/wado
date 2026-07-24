@@ -50,6 +50,45 @@ pub(crate) enum LoadEvent {
     Failed { detail: Option<String> },
 }
 
+#[derive(Default)]
+struct FailureRecap {
+    compile: Mutex<Vec<(String, Option<String>)>>,
+    load: Mutex<Vec<(String, Option<String>)>>,
+}
+
+impl FailureRecap {
+    fn lock(
+        vec: &Mutex<Vec<(String, Option<String>)>>,
+    ) -> std::sync::MutexGuard<'_, Vec<(String, Option<String>)>> {
+        vec.lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    fn record_compile(&self, path: &str, detail: Option<&str>) {
+        Self::lock(&self.compile).push((path.to_owned(), detail.map(str::to_owned)));
+    }
+
+    fn record_load(&self, path: &str, detail: Option<&str>) {
+        Self::lock(&self.load).push((path.to_owned(), detail.map(str::to_owned)));
+    }
+
+    fn lines(&self) -> Vec<String> {
+        let compile = Self::lock(&self.compile);
+        let load = Self::lock(&self.load);
+        let compile_entries: Vec<(&str, Option<&str>)> = compile
+            .iter()
+            .map(|(p, m)| (p.as_str(), m.as_deref()))
+            .collect();
+        let load_entries: Vec<(&str, Option<&str>)> = load
+            .iter()
+            .map(|(p, m)| (p.as_str(), m.as_deref()))
+            .collect();
+        let mut lines = test::failure_recap_lines("compile failures:", &compile_entries);
+        lines.extend(test::failure_recap_lines("load failures:", &load_entries));
+        lines
+    }
+}
+
 /// Everything a reporter needs to render one package's final result.
 /// `totals` is already-computed and authoritative (drives the exit code);
 /// the rest is the raw material a batch-style reporter needs to lay out
@@ -272,6 +311,7 @@ fn print_heartbeat(state: &HeartbeatState) {
 /// otherwise, and a final three-axis summary.
 pub(crate) struct HeartbeatReporter {
     state: Arc<HeartbeatState>,
+    failures: FailureRecap,
 }
 
 impl HeartbeatReporter {
@@ -309,7 +349,10 @@ impl HeartbeatReporter {
             }
         });
 
-        Self { state }
+        Self {
+            state,
+            failures: FailureRecap::default(),
+        }
     }
 
     /// Print an immediate one-line notice and wake the heartbeat loop so
@@ -349,6 +392,7 @@ impl TestReporter for HeartbeatReporter {
             CompileEvent::TodoModule => self.state.mark_file_done(),
             CompileEvent::Failed { detail } => {
                 self.state.mark_file_done();
+                self.failures.record_compile(path, detail.as_deref());
                 let suffix = detail.map(|d| format!(": {d}")).unwrap_or_default();
                 self.announce(&format!("not ok  {path} (compile failed){suffix}"));
             }
@@ -371,6 +415,7 @@ impl TestReporter for HeartbeatReporter {
             }
             LoadEvent::Failed { detail } => {
                 self.state.mark_file_done();
+                self.failures.record_load(path, detail.as_deref());
                 let suffix = detail.map(|d| format!(": {d}")).unwrap_or_default();
                 self.announce(&format!("not ok  {path} (load failed){suffix}"));
             }
@@ -424,6 +469,9 @@ impl TestReporter for HeartbeatReporter {
         self.state.notify.notify_one();
         println!();
         test::print_three_axis(grand, Some(&test::format_duration(wall)));
+        for line in self.failures.lines() {
+            println!("{line}");
+        }
     }
 }
 
@@ -608,6 +656,7 @@ impl TapDoc {
 pub(crate) struct TapReporter {
     overall_start: Instant,
     doc: Mutex<TapDoc>,
+    failures: FailureRecap,
 }
 
 impl TapReporter {
@@ -617,6 +666,7 @@ impl TapReporter {
         Self {
             overall_start,
             doc: Mutex::new(TapDoc::new()),
+            failures: FailureRecap::default(),
         }
     }
 
@@ -656,6 +706,7 @@ impl TestReporter for TapReporter {
             }
             CompileEvent::Failed { detail } => {
                 self.comment(&format!("FAILED to compile {path} ({dur}){rss}"));
+                self.failures.record_compile(path, detail.as_deref());
                 let mut block = vec![format!("not ok - {path} (compile failed)")];
                 if let Some(msg) = detail {
                     block.extend(yaml_block("", &[("message", &msg)]));
@@ -679,6 +730,7 @@ impl TestReporter for TapReporter {
             }
             LoadEvent::Failed { detail } => {
                 self.comment(&format!("FAILED to load {path} ({dur})"));
+                self.failures.record_load(path, detail.as_deref());
                 let mut block = vec![format!("not ok - {path} (load failed)")];
                 if let Some(msg) = detail {
                     block.extend(yaml_block("", &[("message", &msg)]));
@@ -741,6 +793,11 @@ impl TestReporter for TapReporter {
         let wall_str = test::format_duration(wall);
         for line in test::format_three_axis_lines(grand, Some(&wall_str)) {
             self.comment(&line);
+        }
+        for line in self.failures.lines() {
+            if !line.is_empty() {
+                self.comment(&line);
+            }
         }
     }
 }

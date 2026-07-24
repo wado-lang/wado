@@ -821,6 +821,7 @@ pub(crate) struct TodoCompileError {
 /// other files still get a chance to compile and report.
 pub(crate) struct CompileFailure {
     pub(crate) path: String,
+    pub(crate) message: Option<String>,
 }
 
 /// Per-file outcome from the **compile** stage.
@@ -889,15 +890,18 @@ async fn compile_artifact(
     let compile_result = match panic_or_result {
         Ok(r) => r,
         Err(payload) => {
-            let cause = format_panic_payload(&payload);
+            let message = format!("panicked: {}", format_panic_payload(&payload));
             reporter.on_compile(
                 &path,
                 CompileEvent::Failed {
-                    detail: Some(format!("panicked: {cause}")),
+                    detail: Some(message.clone()),
                 },
                 compile_duration,
             );
-            return CompileOutcome::CompileFailure(CompileFailure { path });
+            return CompileOutcome::CompileFailure(CompileFailure {
+                path,
+                message: Some(message),
+            });
         }
     };
 
@@ -913,13 +917,18 @@ async fn compile_artifact(
             reporter.on_compile(&path, CompileEvent::TodoModule, compile_duration);
             CompileOutcome::TodoCompileError(TodoCompileError { path })
         }
-        Err(_) => {
+        Err(failure) => {
             reporter.on_compile(
                 &path,
-                CompileEvent::Failed { detail: None },
+                CompileEvent::Failed {
+                    detail: failure.message.clone(),
+                },
                 compile_duration,
             );
-            CompileOutcome::CompileFailure(CompileFailure { path })
+            CompileOutcome::CompileFailure(CompileFailure {
+                path,
+                message: failure.message,
+            })
         }
     }
 }
@@ -1116,39 +1125,51 @@ async fn run_compile_stage(
                             reporter,
                         )),
                         Ok(Err(e)) => {
+                            let message = format!("unable to create compile runtime: {e}");
                             reporter.on_compile(
                                 &path,
                                 CompileEvent::Failed {
-                                    detail: Some(format!("unable to create compile runtime: {e}")),
+                                    detail: Some(message.clone()),
                                 },
                                 Duration::ZERO,
                             );
-                            CompileOutcome::CompileFailure(CompileFailure { path })
+                            CompileOutcome::CompileFailure(CompileFailure {
+                                path,
+                                message: Some(message),
+                            })
                         }
                         Err(payload) => {
-                            let cause = format_panic_payload(&payload);
+                            let message = format!(
+                                "compile worker panicked: {}",
+                                format_panic_payload(&payload)
+                            );
                             reporter.on_compile(
                                 &path,
                                 CompileEvent::Failed {
-                                    detail: Some(format!("compile worker panicked: {cause}")),
+                                    detail: Some(message.clone()),
                                 },
                                 Duration::ZERO,
                             );
-                            CompileOutcome::CompileFailure(CompileFailure { path })
+                            CompileOutcome::CompileFailure(CompileFailure {
+                                path,
+                                message: Some(message),
+                            })
                         }
                     }
                 })
                 .await
                 .unwrap_or_else(|join_err| {
+                    let message = format!("blocking-task join error: {join_err}");
                     reporter_for_join_err.on_compile(
                         &path_for_failure,
                         CompileEvent::Failed {
-                            detail: Some(format!("blocking-task join error: {join_err}")),
+                            detail: Some(message.clone()),
                         },
                         Duration::ZERO,
                     );
                     CompileOutcome::CompileFailure(CompileFailure {
                         path: path_for_failure,
+                        message: Some(message),
                     })
                 })
             })
@@ -2065,24 +2086,34 @@ pub(crate) fn print_todo_section(todo_entries: &[TodoEntry], todo_resolved: u32)
 }
 
 pub(crate) fn print_compile_failures_section(failures: &[CompileFailure]) {
-    if failures.is_empty() {
-        return;
-    }
-    println!();
-    println!("compile failures:");
-    for entry in failures {
-        println!("    {}", entry.path);
+    let entries: Vec<(&str, Option<&str>)> = failures
+        .iter()
+        .map(|f| (f.path.as_str(), f.message.as_deref()))
+        .collect();
+    for line in failure_recap_lines("compile failures:", &entries) {
+        println!("{line}");
     }
 }
 
-pub(crate) fn print_load_failures_section(failures: &[LoadFailure]) {
-    if failures.is_empty() {
-        return;
+pub(crate) fn failure_recap_lines(header: &str, entries: &[(&str, Option<&str>)]) -> Vec<String> {
+    if entries.is_empty() {
+        return Vec::new();
     }
-    println!();
-    println!("load failures:");
-    for entry in failures {
-        println!("    {}", entry.path);
+    let mut lines = vec![String::new(), header.to_owned()];
+    for (path, message) in entries {
+        lines.push(format!("    {path}"));
+        if let Some(message) = message {
+            lines.extend(message.lines().map(|l| format!("        {l}")));
+        }
+    }
+    lines
+}
+
+pub(crate) fn print_load_failures_section(failures: &[LoadFailure]) {
+    let entries: Vec<(&str, Option<&str>)> =
+        failures.iter().map(|f| (f.path.as_str(), None)).collect();
+    for line in failure_recap_lines("load failures:", &entries) {
+        println!("{line}");
     }
 }
 
