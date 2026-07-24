@@ -530,8 +530,7 @@ pub struct LocalMethodName {
     /// The struct name, possibly with type args (e.g., "Point" or "Point<i32>")
     pub struct_name: String,
     /// The typed receiver shape (`Point`, `&T`, `S::SeqSerializer`). Its
-    /// `head_key()` is the base identity string preserved across monomorphization
-    /// (formerly the `base_struct_name` field).
+    /// `head_key()` is the base identity string preserved across monomorphization.
     pub receiver: Receiver,
     /// The trait/effect/resource name, possibly with type args
     /// (e.g., `"Display"`, `"Stream<u8>"`).
@@ -627,8 +626,7 @@ impl RefKind {
         }
     }
 
-    /// The ref kind of an AST type, or `None` for a non-reference. Lets producers
-    /// classify a receiver from the typed AST instead of emitting `"&"` literals.
+    /// The ref kind of an AST type, or `None` for a non-reference.
     #[must_use]
     pub fn from_ast(ty: &crate::ast::Type) -> Option<Self> {
         match ty {
@@ -651,8 +649,7 @@ impl RefKind {
 
 /// The shape of a method receiver, typed so nothing inspects a mangled name to
 /// recover it. The `&` / `&mut` / `::` spellings appear only in this type's
-/// `mangle` / `head_key`. `classify` is the single (transitional) string→shape
-/// boundary; once producers construct `Receiver` directly it can be removed.
+/// `mangle` / `head_key`; producers build it from typed AST / resolved types.
 ///
 /// Whether the receiver is a generic type parameter to substitute is an
 /// orthogonal concern (a `Projection` head can be a param too), kept as
@@ -760,16 +757,14 @@ pub fn rebase_monomorph_method(mangled: &str, base: &str) -> String {
 }
 
 impl LocalMethodName {
-    /// The typed receiver shape, classified from the structured base fields (not
-    /// the composed mangled identity). The single query consumers use to reason
-    /// about the receiver; transitional until producers store it directly.
+    /// The typed receiver shape — the query consumers use to reason about the
+    /// receiver instead of parsing its mangled identity.
     #[must_use]
     pub fn receiver(&self) -> &Receiver {
         &self.receiver
     }
 
-    /// The base receiver identity string (formerly the `base_struct_name` field):
-    /// `Point`, `&`, `&mut`, `S::SeqSerializer`.
+    /// The base receiver identity string: `Point`, `&`, `&mut`, `S::SeqSerializer`.
     #[must_use]
     pub fn base_struct_name(&self) -> String {
         self.receiver.head_key().into_owned()
