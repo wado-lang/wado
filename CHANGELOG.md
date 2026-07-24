@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.0.23](https://github.com/wado-lang/wado/compare/v0.0.22...v0.0.23) - 2026-07-24
+
+- fix(cm): skip a provider whose dependency was eliminated instead of panicking by @gfx in https://github.com/wado-lang/wado/pull/1672
+- fix(gale): terminate scan on mandatory-group mismatch; reject hidden/indirect left recursion by @gfx in https://github.com/wado-lang/wado/pull/1674
+- feat(reflect): Inspect over the Reflect blanket; Member/EnumCase/FlagBit tokens; typed method receivers by @gfx in https://github.com/wado-lang/wado/pull/1675
+
 ## [v0.0.22](https://github.com/wado-lang/wado/compare/v0.0.21...v0.0.22) - 2026-07-23
 
 - feat(marl): customizable code-block highlighting via a Highlight effect by @gfx in https://github.com/wado-lang/wado/pull/1669
