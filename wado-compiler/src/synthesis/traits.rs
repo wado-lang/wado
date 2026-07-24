@@ -18,7 +18,7 @@ use crate::hashmap::IndexSet;
 
 use crate::elaborator::trait_env::TraitEnv;
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName};
+use crate::name::{LocalMethodName, MethodName, Receiver, RefKind};
 use crate::package::Package;
 use crate::tir::{
     CallArg, FnDispatchTrait, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType,
@@ -469,7 +469,7 @@ fn generate_struct_reflect_impls(
         return;
     }
 
-    let targets = collect_reflect_targets(module, ctx, reflect_trait_name);
+    let targets = collect_reflect_targets(module);
     if targets.is_empty() {
         return;
     }
@@ -509,17 +509,13 @@ struct ReflectFieldInfo {
 type ReflectTarget = (String, Vec<ReflectFieldInfo>, Option<String>, Span);
 
 /// Select the structs in `module` that need a synthesized `Reflect` impl:
-/// non-generic, non-monomorphized, and actually requested by a bound.
-fn collect_reflect_targets(
-    module: &TirModule,
-    ctx: &SynthesisCtx<'_, '_, '_>,
-    reflect_trait_name: &str,
-) -> Vec<ReflectTarget> {
+/// every non-generic, non-monomorphized struct (all are unconditionally
+/// `Reflect`-derived).
+fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
     module
         .structs
         .iter()
         .filter(|s| s.type_params.is_empty() && s.monomorph_info.is_none())
-        .filter(|s| ctx.should_synthesize(&s.name, reflect_trait_name))
         .map(|s| {
             (
                 s.name.clone(),
@@ -1255,10 +1251,16 @@ fn generate_field_bridge_helpers(
 ) -> Vec<TirFunction> {
     let mangled_struct = type_table.borrow().mangle_type_arg_for_generic(struct_type);
 
+    // Key each helper by the field type's *erased* mangle. `erase_newtypes_and_flags`
+    // (after monomorphize, before lower) collapses `Newtype`/`Flags` to their base,
+    // and the `struct_field_get` call site mangles its `field_ty` through that
+    // erasure — so a helper minted here under the pre-erasure newtype name would
+    // never be found. Fields sharing an erased type share one index-dispatched
+    // helper.
     let mut by_field_type: crate::hashmap::IndexMap<String, (TypeId, Vec<(String, u32)>)> =
         crate::hashmap::IndexMap::default();
     for (field_name, field_type, index) in fields {
-        let mangled = type_table.borrow().mangle_type_arg_for_generic(*field_type);
+        let mangled = type_table.borrow().mangle_type_arg_erased(*field_type);
         by_field_type
             .entry(mangled)
             .or_insert_with(|| (*field_type, Vec::new()))
@@ -1422,8 +1424,9 @@ fn generate_variant_reflect_impls(
 /// A variant selected for `ReflectVariant` synthesis.
 struct ReflectVariantTarget {
     name: String,
-    /// Per-case `(name, index, payload type)`; unit cases carry `()`.
-    cases: Vec<(String, u32, TypeId)>,
+    /// Per-case `(name, index, payload type, #[serde(rename)])`; unit cases
+    /// carry `()` as their payload.
+    cases: Vec<(String, u32, TypeId, Option<String>)>,
     span: Span,
 }
 
@@ -1444,7 +1447,7 @@ fn collect_reflect_variant_targets(
             cases: v
                 .cases
                 .iter()
-                .map(|c| (c.name.clone(), c.index, c.payload))
+                .map(|c| (c.name.clone(), c.index, c.payload, c.serde_rename.clone()))
                 .collect(),
             span: v.span,
         })
@@ -1552,7 +1555,7 @@ fn generate_variant_reflect_methods(
         let token_types: Vec<TypeId> = target
             .cases
             .iter()
-            .map(|(_, _, payload)| {
+            .map(|(_, _, payload, _)| {
                 tt.make_generic_instance(
                     env.case_struct_name.clone(),
                     env.case_struct_module.clone(),
@@ -1561,7 +1564,8 @@ fn generate_variant_reflect_methods(
             })
             .collect();
         let token_tuple_type = tt.make_tuple(token_types.clone());
-        let payloads_tuple_type = tt.make_tuple(target.cases.iter().map(|(_, _, p)| *p).collect());
+        let payloads_tuple_type =
+            tt.make_tuple(target.cases.iter().map(|(_, _, p, _)| *p).collect());
         tt.register_assoc_type_resolution(
             variant_type,
             REFLECT_CASES_ASSOC.to_string(),
@@ -1592,6 +1596,7 @@ fn generate_variant_reflect_methods(
         span,
     );
     let cases_fn = generate_variant_cases_fn(
+        type_table,
         env,
         variant_trait_name,
         target,
@@ -1612,9 +1617,11 @@ fn generate_variant_reflect_methods(
 }
 
 /// Build `Variant^ReflectVariant::cases()` as
-/// `return [Case { index: 0 }, Case { index: 1 }, …];` — one token per case,
-/// each typed `Case<Variant, P_k>`.
+/// `return [Case { index: 0, case_name: "…", wire_override: …, is_unit: … }, …];`
+/// — one fat token per case, each typed `Case<Variant, P_k>` and carrying the
+/// `Member` metadata alongside the payload bridge.
 fn generate_variant_cases_fn(
+    type_table: &RefCell<TypeTable>,
     env: &ReflectVariantSynthEnv,
     variant_trait_name: &str,
     target: &ReflectVariantTarget,
@@ -1625,27 +1632,60 @@ fn generate_variant_cases_fn(
     let method_info = trait_method_info(&target.name, variant_trait_name, &env.cases_method);
     let qualified_name = method_info.to_mangled_name();
 
+    let option_string_type = type_table.borrow_mut().make_option(env.string_type);
+
     let elements = target
         .cases
         .iter()
         .zip(token_types)
-        .map(|((_, index, _), token_type)| {
+        .map(|((case_name, index, payload, serde_rename), token_type)| {
+            let wire_override = {
+                let tt = type_table.borrow();
+                let items = tt.compiler_items();
+                match serde_rename {
+                    Some(rename) => crate::synthesis::common::option_some(
+                        TirExpr::new(
+                            TirExprKind::StringLiteral(rename.clone()),
+                            env.string_type,
+                            span,
+                        ),
+                        option_string_type,
+                        items,
+                    ),
+                    None => crate::synthesis::common::option_none(option_string_type, items),
+                }
+            };
+            let case_fields = vec![
+                reflect_meta_int_field("index", u64::from(*index), TypeTable::I32, 0, span),
+                TirStructField {
+                    name: "case_name".to_string(),
+                    value: TirExpr::new(
+                        TirExprKind::StringLiteral(case_name.clone()),
+                        env.string_type,
+                        span,
+                    ),
+                    field_index: 1,
+                },
+                TirStructField {
+                    name: "wire_override".to_string(),
+                    value: wire_override,
+                    field_index: 2,
+                },
+                TirStructField {
+                    name: "is_unit".to_string(),
+                    value: TirExpr::new(
+                        TirExprKind::BoolLiteral(*payload == TypeTable::UNIT),
+                        TypeTable::BOOL,
+                        span,
+                    ),
+                    field_index: 3,
+                },
+            ];
             TirExpr::new(
                 TirExprKind::StructLiteral {
                     struct_type: *token_type,
                     struct_name: env.case_struct_name.clone(),
-                    fields: vec![TirStructField {
-                        name: "index".to_string(),
-                        value: TirExpr::new(
-                            TirExprKind::IntLiteral {
-                                value: u64::from(*index),
-                                repr: index.to_string(),
-                            },
-                            TypeTable::I32,
-                            span,
-                        ),
-                        field_index: 0,
-                    }],
+                    fields: case_fields,
                 },
                 *token_type,
                 span,
@@ -1693,7 +1733,7 @@ fn generate_case_bridge_helpers(
 
     let mut by_payload: crate::hashmap::IndexMap<String, (TypeId, Vec<(String, u32)>)> =
         crate::hashmap::IndexMap::default();
-    for (case_name, index, payload) in &target.cases {
+    for (case_name, index, payload, _) in &target.cases {
         let mangled = type_table.borrow().mangle_type_arg_for_generic(*payload);
         by_payload
             .entry(mangled)
@@ -1968,7 +2008,7 @@ fn generate_variant_case_meta_fn(
     let rows = target
         .cases
         .iter()
-        .map(|(case_name, index, payload)| {
+        .map(|(case_name, index, payload, _)| {
             vec![
                 reflect_meta_name_field(case_name, env.string_type, span),
                 reflect_meta_int_field("discriminant", u64::from(*index), TypeTable::I32, 1, span),
@@ -2056,7 +2096,11 @@ fn generate_enum_reflect_impls(
         .filter(|e| ctx.should_synthesize(&e.name, enum_trait_name))
         .map(|e| ReflectEnumTarget {
             name: e.name.clone(),
-            cases: e.cases.iter().map(|c| (c.name.clone(), c.index)).collect(),
+            cases: e
+                .cases
+                .iter()
+                .map(|c| (c.name.clone(), c.index, c.serde_rename.clone()))
+                .collect(),
             span: e.span,
         })
         .collect();
@@ -2086,8 +2130,9 @@ fn generate_enum_reflect_impls(
 /// An enum selected for `ReflectEnum` synthesis.
 struct ReflectEnumTarget {
     name: String,
-    /// Per-case `(name, index)`; an enum case's discriminant is its index.
-    cases: Vec<(String, u32)>,
+    /// Per-case `(name, index, #[serde(rename)])`; a case's discriminant is
+    /// its index.
+    cases: Vec<(String, u32, Option<String>)>,
     span: Span,
 }
 
@@ -2100,10 +2145,13 @@ struct ReflectEnumSynthEnv {
     meta_struct_name: String,
     list_meta_type: TypeId,
     from_tuple: FromTupleItem,
+    case_struct_name: String,
+    case_struct_module: ModuleSource,
     type_name_method: String,
     case_meta_method: String,
     discriminant_method: String,
     from_discriminant_method: String,
+    case_tokens_method: String,
 }
 
 impl ReflectEnumSynthEnv {
@@ -2117,6 +2165,10 @@ impl ReflectEnumSynthEnv {
             from_tuple,
         } = ReflectMetaEnv::resolve(tt, CompilerItem::EnumCaseMeta);
         let items = tt.compiler_items();
+        let (case_struct_module, case_struct_name) = {
+            let (m, n) = items.require_struct(CompilerItem::ReflectEnumCase);
+            (m.clone(), n.to_string())
+        };
         Self {
             string_type,
             meta_type,
@@ -2124,6 +2176,8 @@ impl ReflectEnumSynthEnv {
             meta_struct_name,
             list_meta_type,
             from_tuple,
+            case_struct_name,
+            case_struct_module,
             type_name_method: items
                 .method_name(CompilerItem::ReflectEnumTypeName)
                 .to_string(),
@@ -2135,6 +2189,9 @@ impl ReflectEnumSynthEnv {
                 .to_string(),
             from_discriminant_method: items
                 .method_name(CompilerItem::ReflectEnumFromDiscriminant)
+                .to_string(),
+            case_tokens_method: items
+                .method_name(CompilerItem::ReflectEnumCaseTokens)
                 .to_string(),
         }
     }
@@ -2192,13 +2249,114 @@ fn generate_enum_reflect_methods(
         option_enum_type,
         span,
     );
+    let case_tokens_fn =
+        generate_enum_case_tokens_fn(type_table, env, enum_trait_name, target, enum_type, span);
 
     vec![
         type_name_fn,
         case_meta_fn,
         discriminant_fn,
         from_discriminant_fn,
+        case_tokens_fn,
     ]
+}
+
+/// Build `Enum^ReflectEnum::case_tokens() -> List<EnumCase<Enum>>` as
+/// `return List::<EnumCase<Enum>>::from_tuple([EnumCase { discriminant: k,
+/// value: Enum::Case_k, case_name: "…", wire_override: … }, …]);`.
+fn generate_enum_case_tokens_fn(
+    type_table: &RefCell<TypeTable>,
+    env: &ReflectEnumSynthEnv,
+    enum_trait_name: &str,
+    target: &ReflectEnumTarget,
+    enum_type: TypeId,
+    span: Span,
+) -> TirFunction {
+    let method_info = trait_method_info(&target.name, enum_trait_name, &env.case_tokens_method);
+
+    let (token_type, token_tuple_type, list_token_type, token_type_name, option_string_type) = {
+        let mut tt = type_table.borrow_mut();
+        let token_type = tt.make_generic_instance(
+            env.case_struct_name.clone(),
+            env.case_struct_module.clone(),
+            vec![enum_type],
+        );
+        let token_tuple_type =
+            tt.make_tuple(std::iter::repeat_n(token_type, target.cases.len()).collect());
+        let list_token_type = tt.make_list(token_type);
+        let token_type_name = tt.mangle_type_name(token_type);
+        let option_string_type = tt.make_option(env.string_type);
+        (
+            token_type,
+            token_tuple_type,
+            list_token_type,
+            token_type_name,
+            option_string_type,
+        )
+    };
+
+    let rows = target
+        .cases
+        .iter()
+        .map(|(case_name, index, serde_rename)| {
+            let wire_override = {
+                let tt = type_table.borrow();
+                let items = tt.compiler_items();
+                match serde_rename {
+                    Some(rename) => crate::synthesis::common::option_some(
+                        TirExpr::new(
+                            TirExprKind::StringLiteral(rename.clone()),
+                            env.string_type,
+                            span,
+                        ),
+                        option_string_type,
+                        items,
+                    ),
+                    None => crate::synthesis::common::option_none(option_string_type, items),
+                }
+            };
+            let value = TirExpr::new(
+                TirExprKind::EnumConstruct {
+                    enum_type,
+                    case_index: *index,
+                    case_name: case_name.clone(),
+                },
+                enum_type,
+                span,
+            );
+            vec![
+                reflect_meta_int_field("discriminant", u64::from(*index), TypeTable::I32, 0, span),
+                TirStructField {
+                    name: "value".to_string(),
+                    value,
+                    field_index: 1,
+                },
+                TirStructField {
+                    name: "case_name".to_string(),
+                    value: TirExpr::new(
+                        TirExprKind::StringLiteral(case_name.clone()),
+                        env.string_type,
+                        span,
+                    ),
+                    field_index: 2,
+                },
+                TirStructField {
+                    name: "wire_override".to_string(),
+                    value: wire_override,
+                    field_index: 3,
+                },
+            ]
+        })
+        .collect();
+
+    let parts = MetaListParts {
+        meta_type: token_type,
+        meta_struct_name: &env.case_struct_name,
+        meta_type_name: &token_type_name,
+        list_meta_type: list_token_type,
+        from_tuple: &env.from_tuple,
+    };
+    generate_reflect_meta_list_fn(method_info, parts, token_tuple_type, rows, span)
 }
 
 /// Build `Enum^ReflectEnum::case_meta() -> List<EnumCaseMeta>` as
@@ -2214,7 +2372,7 @@ fn generate_enum_case_meta_fn(
     let rows = target
         .cases
         .iter()
-        .map(|(case_name, index)| {
+        .map(|(case_name, index, _)| {
             vec![
                 reflect_meta_name_field(case_name, env.string_type, span),
                 reflect_meta_int_field("discriminant", u64::from(*index), TypeTable::I32, 1, span),
@@ -2284,7 +2442,7 @@ fn generate_enum_from_discriminant_fn(
     let qualified_name = method_info.to_mangled_name();
 
     let mut stmts = Vec::new();
-    for (case_name, index) in &target.cases {
+    for (case_name, index, _) in &target.cases {
         let comparison = TirExpr::new(
             TirExprKind::Binary {
                 op: TirBinaryOp::Eq,
@@ -2435,10 +2593,13 @@ struct ReflectFlagsSynthEnv {
     meta_struct_name: String,
     list_meta_type: TypeId,
     from_tuple: FromTupleItem,
+    bit_struct_name: String,
+    bit_struct_module: ModuleSource,
     type_name_method: String,
     bit_meta_method: String,
     bits_method: String,
     from_bits_method: String,
+    bit_tokens_method: String,
 }
 
 impl ReflectFlagsSynthEnv {
@@ -2452,6 +2613,10 @@ impl ReflectFlagsSynthEnv {
             from_tuple,
         } = ReflectMetaEnv::resolve(tt, CompilerItem::FlagBitMeta);
         let items = tt.compiler_items();
+        let (bit_struct_module, bit_struct_name) = {
+            let (m, n) = items.require_struct(CompilerItem::ReflectFlagBit);
+            (m.clone(), n.to_string())
+        };
         Self {
             string_type,
             meta_type,
@@ -2459,6 +2624,8 @@ impl ReflectFlagsSynthEnv {
             meta_struct_name,
             list_meta_type,
             from_tuple,
+            bit_struct_name,
+            bit_struct_module,
             type_name_method: items
                 .method_name(CompilerItem::ReflectFlagsTypeName)
                 .to_string(),
@@ -2470,6 +2637,9 @@ impl ReflectFlagsSynthEnv {
                 .to_string(),
             from_bits_method: items
                 .method_name(CompilerItem::ReflectFlagsFromBits)
+                .to_string(),
+            bit_tokens_method: items
+                .method_name(CompilerItem::ReflectFlagsBitTokens)
                 .to_string(),
         }
     }
@@ -2523,8 +2693,90 @@ fn generate_flags_reflect_methods(
         option_flags_type,
         span,
     );
+    let bit_tokens_fn =
+        generate_flags_bit_tokens_fn(type_table, env, flags_trait_name, target, span);
 
-    vec![type_name_fn, bit_meta_fn, bits_fn, from_bits_fn]
+    vec![
+        type_name_fn,
+        bit_meta_fn,
+        bits_fn,
+        from_bits_fn,
+        bit_tokens_fn,
+    ]
+}
+
+/// Build `Flags^ReflectFlags::bit_tokens() -> List<FlagBit<Flags>>` as
+/// `return List::<FlagBit<Flags>>::from_tuple([FlagBit { bit: b, value: (b as
+/// Flags), member_name: "…" }, …]);`.
+fn generate_flags_bit_tokens_fn(
+    type_table: &RefCell<TypeTable>,
+    env: &ReflectFlagsSynthEnv,
+    flags_trait_name: &str,
+    target: &ReflectFlagsTarget,
+    span: Span,
+) -> TirFunction {
+    let method_info = trait_method_info(&target.name, flags_trait_name, &env.bit_tokens_method);
+
+    let (token_type, token_tuple_type, list_token_type, token_type_name) = {
+        let mut tt = type_table.borrow_mut();
+        let token_type = tt.make_generic_instance(
+            env.bit_struct_name.clone(),
+            env.bit_struct_module.clone(),
+            vec![target.flags_type],
+        );
+        let token_tuple_type =
+            tt.make_tuple(std::iter::repeat_n(token_type, target.members.len()).collect());
+        let list_token_type = tt.make_list(token_type);
+        let token_type_name = tt.mangle_type_name(token_type);
+        (
+            token_type,
+            token_tuple_type,
+            list_token_type,
+            token_type_name,
+        )
+    };
+
+    let rows = target
+        .members
+        .iter()
+        .map(|(member_name, bitmask)| {
+            let bit_u32 = TirExpr::new(
+                TirExprKind::IntLiteral {
+                    value: u64::from(*bitmask),
+                    repr: bitmask.to_string(),
+                },
+                TypeTable::U32,
+                span,
+            );
+            let value = crate::synthesis::common::cast(bit_u32, target.flags_type);
+            vec![
+                reflect_meta_int_field("bit", u64::from(*bitmask), TypeTable::U64, 0, span),
+                TirStructField {
+                    name: "value".to_string(),
+                    value,
+                    field_index: 1,
+                },
+                TirStructField {
+                    name: "member_name".to_string(),
+                    value: TirExpr::new(
+                        TirExprKind::StringLiteral(member_name.clone()),
+                        env.string_type,
+                        span,
+                    ),
+                    field_index: 2,
+                },
+            ]
+        })
+        .collect();
+
+    let parts = MetaListParts {
+        meta_type: token_type,
+        meta_struct_name: &env.bit_struct_name,
+        meta_type_name: &token_type_name,
+        list_meta_type: list_token_type,
+        from_tuple: &env.from_tuple,
+    };
+    generate_reflect_meta_list_fn(method_info, parts, token_tuple_type, rows, span)
 }
 
 /// Build `Flags^ReflectFlags::bit_meta() -> List<FlagBitMeta>` as
@@ -2803,12 +3055,13 @@ impl SynthesisCtx<'_, '_, '_> {
     /// `impl Trait for Type;` marker does not count — it must not block the
     /// body it asks for.
     fn has_methodful_impl(&self, type_name: &str, trait_name: &str, scope: ImplScope) -> bool {
+        let type_key = Receiver::Type(type_name.to_string());
         let real = match scope {
             ImplScope::CurrentModule => {
                 self.trait_env
-                    .has_methodful_impl(type_name, trait_name, &self.module)
+                    .has_methodful_impl(&type_key, trait_name, &self.module)
             }
-            ImplScope::AnyModule => self.trait_env.has_any_methodful_impl(type_name, trait_name),
+            ImplScope::AnyModule => self.trait_env.has_any_methodful_impl(&type_key, trait_name),
         };
         real || self.pending_has(type_name, trait_name)
     }
@@ -3387,39 +3640,10 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         ctx.record_impl(name, &inspect_name);
     }
 
-    // Non-generic structs
-    let struct_infos = collect_struct_visible_fields(module);
-
-    for (name, fields, has_secret, sspan) in &struct_infos {
-        if name == tt.compiler_struct_name(crate::compiler_item::CompilerItem::String)
-            || name == &formatter_name
-        {
-            continue;
-        }
-        if ctx.has_methodful_impl_anywhere(name, &inspect_name) {
-            continue;
-        }
-        let struct_type = tt.make_struct(name.clone(), module_source.clone());
-        let ref_type = tt.make_ref(struct_type);
-        generated.push(Rc::new(RefCell::new(generate_struct_inspect_fn(
-            name,
-            &[],
-            fields,
-            *has_secret,
-            ref_type,
-            fmt_type,
-            string_type,
-            ref_string_type,
-            ctx.trait_env,
-            &module_source,
-            &mut tt,
-            *sspan,
-            &inspect_name,
-            &inspect_method,
-            &formatter_name,
-        ))));
-        ctx.record_impl(name, &inspect_name);
-    }
+    // Non-generic structs derive Inspect via the `impl<T: Reflect<Fields =
+    // [..F]>, ..F: Inspect> Inspect for T` blanket in `core:prelude/traits`
+    // (WEP 2026-06-13 item 5); the monomorphizer routes each `Struct^Inspect`
+    // call to it, so synthesis emits nothing for non-generic structs here.
 
     let generic_struct_infos = collect_generic_struct_visible_fields(module);
     for (name, type_params, fields, has_secret, sspan) in &generic_struct_infos {
@@ -5834,11 +6058,12 @@ fn decompose_type_for_method_name(
     resolved: &ResolvedType,
     type_id: TypeId,
     tt: &TypeTable,
-) -> (String, bool, Vec<String>) {
+) -> (Receiver, bool, Vec<String>) {
+    let named = |n: String| Receiver::Type(n);
     match resolved {
-        ResolvedType::TypeParam { name, .. } => (name.clone(), true, vec![]),
+        ResolvedType::TypeParam { name, .. } => (named(name.clone()), true, vec![]),
         ResolvedType::BuiltinArray(elem) => (
-            TypeTable::ARRAY_TYPE_NAME.to_string(),
+            named(TypeTable::ARRAY_TYPE_NAME.to_string()),
             false,
             vec![tt.mangle_type_name(*elem)],
         ),
@@ -5846,7 +6071,7 @@ fn decompose_type_for_method_name(
             name, type_args, ..
         } => {
             let args = type_args.iter().map(|t| tt.mangle_type_name(*t)).collect();
-            (name.clone(), false, args)
+            (named(name.clone()), false, args)
         }
         ResolvedType::Function {
             params,
@@ -5855,30 +6080,35 @@ fn decompose_type_for_method_name(
         } => {
             let args =
                 crate::name::fn_type_arg_names(params.len(), &tt.mangle_type_name(*return_type));
-            (crate::name::CLOSURE_FN_TRAIT.to_string(), false, args)
+            (
+                named(crate::name::CLOSURE_FN_TRAIT.to_string()),
+                false,
+                args,
+            )
         }
         ResolvedType::GenericResource {
             name, type_args, ..
         } => {
             let args = type_args.iter().map(|t| tt.mangle_type_name(*t)).collect();
-            (name.clone(), false, args)
+            (named(name.clone()), false, args)
         }
         ResolvedType::Reactive(inner) => (
-            "Reactive".to_string(),
+            named("Reactive".to_string()),
             false,
             vec![tt.mangle_type_name(*inner)],
         ),
-        ResolvedType::Ref(inner) => ("&".to_string(), false, vec![tt.mangle_type_name(*inner)]),
-        ResolvedType::MutRef(inner) => {
-            ("&mut".to_string(), false, vec![tt.mangle_type_name(*inner)])
-        }
+        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => (
+            Receiver::Ref(RefKind::from_resolved(resolved).expect("ref classify")),
+            false,
+            vec![tt.mangle_type_name(*inner)],
+        ),
         _ => {
             let name = tt.mangle_type_name(type_id);
             debug_assert!(
                 !name.contains('<'),
                 "decompose_type_for_method_name: unhandled parameterized type: {name}"
             );
-            (name, false, vec![])
+            (named(name), false, vec![])
         }
     }
 }
@@ -5922,8 +6152,9 @@ fn resolve_impl_module_via_env(
     let resolved = tt.get(type_id).clone();
 
     let candidate_name: Option<String> = match &resolved {
-        ResolvedType::Ref(_) => Some("&".to_string()),
-        ResolvedType::MutRef(_) => Some("&mut".to_string()),
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
+            RefKind::from_resolved(&resolved).map(|k| k.prefix().to_string())
+        }
         ResolvedType::Primitive(p) => Some(p.as_str().to_string()),
         ResolvedType::Unit => Some(TypeTable::UNIT_TYPE_NAME.to_string()),
         ResolvedType::Struct { name, .. }
@@ -6237,10 +6468,10 @@ fn trait_call_on_type(
     let receiver = ref_expr(value, ref_type, span);
 
     let resolved = tt.get(value_type).clone();
-    let (base_name, is_type_param, type_arg_names) =
+    let (recv, is_type_param, type_arg_names) =
         decompose_type_for_method_name(&resolved, value_type, tt);
 
-    let mut info = trait_method_info(&base_name, trait_name, method_name);
+    let mut info = LocalMethodName::of(recv, Some(trait_name.to_string()), method_name.to_string());
     if !type_arg_names.is_empty() {
         info = info.with_struct_type_args(&type_arg_names);
     }
@@ -6251,27 +6482,50 @@ fn trait_call_on_type(
     // concrete type. `module_source` (the surrounding synthesis module)
     // is a placeholder; `resolve_method_call_substitution` rewrites it
     // to the concrete impl's module once `T` is resolved.
-    let impl_module = if is_type_param {
-        module_source.clone()
+    // A blanket-derived callee (e.g. a `Reflect`-derived struct's `Inspect`)
+    // has no per-type body; route the call through the blanket so the
+    // monomorphizer instantiates it, rather than emitting an unresolved
+    // `Struct^Inspect::inspect` the WIR-build trait-bound check rejects.
+    let blanket = if is_type_param {
+        None
     } else {
-        resolve_impl_module_via_env(value_type, trait_name, tt, trait_env, module_source)
+        crate::synthesis::template::blanket_dispatch_for(
+            trait_env,
+            value_type,
+            &info.base_struct_name(),
+            trait_name,
+            method_name,
+            tt,
+            true,
+        )
     };
 
-    let monomorph_info = if needs_ref_monomorph {
-        match &resolved {
-            ResolvedType::Ref(inner_id) | ResolvedType::MutRef(inner_id) => {
-                let base_info = trait_method_info(&info.base_struct_name, trait_name, method_name);
-                Some(MonomorphInfo {
-                    generic_name: base_info.to_mangled_name(),
-                    impl_type_args: vec![*inner_id],
-                    method_type_args: vec![],
-                    is_blanket: true,
-                })
-            }
-            _ => None,
-        }
+    let (impl_module, monomorph_info) = if let Some((mono, blanket_module)) = blanket {
+        (blanket_module, Some(mono))
     } else {
-        None
+        let impl_module = if is_type_param {
+            module_source.clone()
+        } else {
+            resolve_impl_module_via_env(value_type, trait_name, tt, trait_env, module_source)
+        };
+        let monomorph_info = if needs_ref_monomorph {
+            match &resolved {
+                ResolvedType::Ref(inner_id) | ResolvedType::MutRef(inner_id) => {
+                    let base_info =
+                        trait_method_info(&info.base_struct_name(), trait_name, method_name);
+                    Some(MonomorphInfo {
+                        generic_name: base_info.to_mangled_name(),
+                        impl_type_args: vec![*inner_id],
+                        method_type_args: vec![],
+                        is_blanket: true,
+                    })
+                }
+                _ => None,
+            }
+        } else {
+            None
+        };
+        (impl_module, monomorph_info)
     };
 
     let fn_name = info.to_mangled_name();

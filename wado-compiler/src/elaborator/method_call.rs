@@ -3,7 +3,7 @@
 use crate::ast::{self, AstId, Item};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
+use crate::name::{LocalMethodName, MethodName, Receiver, RefKind, mangle_generic_name};
 use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TirExpr, TirExprKind, TypeId,
     TypeTable,
@@ -257,6 +257,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut blanket_type_param: Option<String> = None;
         let mut trait_impl_struct_name: Option<String> = None;
         let mut matched_impl_struct_name: Option<String> = None;
+        // `Some` when the ref-priority path below adopts a `&T` / `&mut T` impl,
+        // so `base_struct_name` (then `"&"` / `"&mut"`) keys back to its typed
+        // `Receiver::Ref` without re-inspecting the string.
+        let mut matched_ref_kind: Option<RefKind> = None;
 
         // If receiver is a reference type, try ref-type trait impls first.
         // e.g., impl IntoIterator for &List<T> takes priority over impl IntoIterator for List<T>.
@@ -267,16 +271,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::Ref(_) | ResolvedType::MutRef(_)
             );
             if is_ref {
-                let ref_struct_name = if matches!(
-                    self.tysys.type_table.borrow().get(receiver.type_id),
-                    ResolvedType::Ref(_)
-                ) {
-                    "&"
-                } else {
-                    "&mut"
-                };
+                let ref_kind = RefKind::from_resolved(
+                    &self.tysys.type_table.borrow().get(receiver.type_id).clone(),
+                )
+                .expect("ref classify");
                 let result = self.find_trait_method_for_type(
-                    ref_struct_name,
+                    &Receiver::Ref(ref_kind),
                     method_name,
                     &struct_module,
                     receiver_type_args_for_trait.as_deref(),
@@ -290,6 +290,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     matched_impl_struct_name = Some(trait_match.impl_struct_name.clone());
                     trait_impl_struct_name = Some(trait_match.impl_struct_name);
+                    matched_ref_kind = Some(ref_kind);
                     trait_name = Some(trait_match.trait_name);
                     let mut info = trait_match.method_info;
                     info.is_ref_impl = true;
@@ -308,7 +309,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Fall back to base type trait methods
         if method_info.is_none()
             && let Some(trait_match) = self.find_trait_method_for_type(
-                &struct_name,
+                &Receiver::Type(struct_name.clone()),
                 method_name,
                 &struct_module,
                 receiver_type_args_for_trait.as_deref(),
@@ -961,13 +962,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 | ResolvedType::TypePack { .. }
                 | ResolvedType::AssocTypeProjection { .. }
         );
-        let param_is_mut = self.lookup_method_param_is_mut(&base_struct_name, method_name);
-        let mut method_info = LocalMethodName::new(
-            base_struct_name.clone(), // Use base struct name without type params
-            trait_name,
-            method_name.to_string(),
-        )
-        .with_type_args(&impl_type_arg_names, &method_type_arg_names);
+        let base_receiver = match matched_ref_kind {
+            Some(kind) => Receiver::Ref(kind),
+            None => Receiver::Type(base_struct_name.clone()),
+        };
+        let param_is_mut = self.lookup_method_param_is_mut(&base_receiver, method_name);
+        let mut method_info =
+            LocalMethodName::of(base_receiver, trait_name, method_name.to_string())
+                .with_type_args(&impl_type_arg_names, &method_type_arg_names);
         method_info.is_type_param_receiver = is_type_param_receiver;
         method_info.is_ref_impl = is_ref_impl;
         method_info.cm_name = cm_name;
@@ -2359,7 +2361,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(found) = scan(self.current_module_items) {
             return found;
         }
-        if let Some(entries) = self.tysys.trait_env.impl_index.get(struct_name) {
+        if let Some(entries) = self
+            .tysys
+            .trait_env
+            .impl_index
+            .get(&Receiver::Type(struct_name.to_string()))
+        {
             for (module_source, item_id) in entries {
                 if let Some(module) = self.loaded_modules.get(module_source)
                     && let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id)
@@ -2711,8 +2718,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Impl blocks on `struct_name`, current-module-first. `all_impl_index` is
     /// already in global order, so the partition needs no per-call sort.
-    fn impl_blocks_for_type<'b>(&'b self, struct_name: &str) -> Vec<&'b ast::ImplBlock> {
-        let Some(keys) = self.tysys.trait_env.all_impl_index.get(struct_name) else {
+    fn impl_blocks_for_type<'b>(&'b self, type_key: &Receiver) -> Vec<&'b ast::ImplBlock> {
+        let Some(keys) = self.tysys.trait_env.all_impl_index.get(type_key) else {
             return Vec::new();
         };
         let mut current: Vec<&ast::ImplBlock> = Vec::new();
@@ -2737,8 +2744,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Look up whether each non-self parameter of an instance method is `mut`.
     /// Returns empty vec (conservative) for unknown methods.
-    fn lookup_method_param_is_mut(&self, struct_name: &str, method_name: &str) -> Vec<bool> {
-        for impl_block in self.impl_blocks_for_type(struct_name) {
+    fn lookup_method_param_is_mut(&self, type_key: &Receiver, method_name: &str) -> Vec<bool> {
+        for impl_block in self.impl_blocks_for_type(type_key) {
             for method in &impl_block.methods {
                 if method.name == method_name {
                     return method
@@ -2760,7 +2767,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> Vec<bool> {
-        for impl_block in self.impl_blocks_for_type(struct_name) {
+        let type_key = Receiver::Type(struct_name.to_string());
+        for impl_block in self.impl_blocks_for_type(&type_key) {
             for method in &impl_block.methods {
                 let has_self = method
                     .params
@@ -2993,7 +3001,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Use trait_env.impl_index for O(1) lookup instead of scanning all modules
-        if let Some(entries) = self.tysys.trait_env.impl_index.get(struct_name) {
+        if let Some(entries) = self
+            .tysys
+            .trait_env
+            .impl_index
+            .get(&Receiver::Type(struct_name.to_string()))
+        {
             for (module_source, item_id) in entries {
                 if let Some(module) = self.loaded_modules.get(module_source)
                     && let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id)

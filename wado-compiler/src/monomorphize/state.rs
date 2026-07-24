@@ -3,9 +3,9 @@
 use std::sync::Arc;
 
 use crate::elaborator::trait_env::TraitEnv;
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
+use crate::name::{LocalMethodName, MethodName, Receiver, RefKind, mangle_generic_name};
 use crate::tir::{InstantiationKey, ResolvedType, TypeId, TypeTable};
 
 /// Tracks struct monomorphization state
@@ -29,6 +29,10 @@ pub(super) struct FuncInstState {
     /// before insert/lookup so that pre-/post-substitution `TypeId`
     /// variants of the same logical type collapse onto a single entry.
     pub instantiated: IndexMap<InstantiationKey, String>,
+    /// The mangled names present in [`Self::instantiated`], for O(1)
+    /// name-membership during blanket dedup (`instantiated` is grow-only, so
+    /// this stays a faithful mirror of its value set).
+    pub instantiated_names: IndexSet<String>,
     /// Work queue of pending function instantiations. Holds canonicalised
     /// keys.
     pub pending: Vec<InstantiationKey>,
@@ -50,7 +54,7 @@ impl FuncInstState {
     /// instantiation rather than collapsing it to `List<i32>::inspect`.
     ///
     /// The lookup uses `info.struct_name` (the post-substitution type
-    /// name) rather than `info.base_struct_name`, which mirrors the
+    /// name) rather than `info.base_struct_name()`, which mirrors the
     /// legacy `trait_method_locations.contains_key(<full mangled name>)`
     /// semantics: a concrete impl's key is the full type name (e.g. the
     /// `impl Ord for i32` block keys ("i32", "Ord")), and post-mono
@@ -75,9 +79,9 @@ impl FuncInstState {
         }
         // Fall back to the head name for argument shapes the qualified
         // instantiated index above cannot spell (tuples, function types).
-        if info.base_struct_name != info.struct_name
+        if info.base_struct_name() != info.struct_name
             && let Some(m) = self.trait_env.concrete_impl_module_for(
-                &info.base_struct_name,
+                &info.base_struct_name(),
                 trait_name,
                 type_module,
             )
@@ -120,10 +124,10 @@ impl FuncInstState {
         {
             return Some(m.clone());
         }
-        if info.base_struct_name != info.struct_name
+        if info.base_struct_name() != info.struct_name
             && let Some(m) =
                 self.trait_env
-                    .impl_module_for(&info.base_struct_name, trait_name, type_module)
+                    .impl_module_for(&info.base_struct_name(), trait_name, type_module)
         {
             return Some(m.clone());
         }
@@ -175,6 +179,7 @@ impl Monomorphizer {
             },
             functions: FuncInstState {
                 instantiated: IndexMap::default(),
+                instantiated_names: IndexSet::default(),
                 pending: Vec::new(),
                 trait_env,
             },
@@ -221,6 +226,47 @@ impl Monomorphizer {
         if self.functions.instantiated.contains_key(&key) {
             return false;
         }
+        // A blanket instance reaches the same function from two dispatch sites —
+        // a template pre-resolution and a normal method dispatch — whose derived
+        // args (`..F` tuple, or a ref blanket's pointee) can be
+        // distinct-but-equivalent `TypeId`s, so the keys differ but the mangled
+        // name is identical. Dedup those on the name to avoid the
+        // duplicate-function check; either body is complete. The struct blanket
+        // carries `[T, ..F]` (len 2); the ref/mutref blankets carry `[pointee]`
+        // (len 1) under a `&`/`&mut`-headed template name.
+        // The ref/mutref case applies only to a *universal* `&T` blanket
+        // (`impl<T: Inspect> Inspect for &T`): its template name is `&^Trait` and
+        // the template + type-param dispatch both queue it. A `&^Trait` name that
+        // is really a newtype-peeled shape impl (`&List^IntoIterator` collapsed to
+        // `&`) has no universal blanket and must NOT be deduped — dropping it
+        // would leave the for-of loop's iterator unresolved.
+        let is_ref_universal_blanket = key.impl_type_args.len() == 1
+            && key.method_info.as_ref().is_some_and(|i| {
+                i.ref_receiver().is_some_and(|ref_kind| {
+                    i.base_trait_name
+                        .as_deref()
+                        .or(i.trait_name.as_deref())
+                        .is_some_and(|tn| {
+                            self.functions
+                                .trait_env
+                                .has_universal_ref_blanket(tn, ref_kind == RefKind::Mut)
+                        })
+                })
+            });
+        let is_blanket_key = key.impl_type_args.len() == 2 || is_ref_universal_blanket;
+        // A deduped blanket key is intentionally dropped without an
+        // `instantiated` entry: a call site that re-derives it misses the
+        // literal lookup and resolves through
+        // `lookup_instantiation_with_trait_fallback`'s blanket-module fallback,
+        // which finds the single queued instance under the blanket's home
+        // module. `instantiated_names` gives this membership test O(1) instead
+        // of scanning every queued name.
+        if is_blanket_key && self.functions.instantiated_names.contains(&mangled_name) {
+            return false;
+        }
+        self.functions
+            .instantiated_names
+            .insert(mangled_name.clone());
         self.functions
             .instantiated
             .insert(key.clone(), mangled_name);
@@ -306,12 +352,13 @@ impl Monomorphizer {
         // Detected by checking if base_struct_name matches an impl type param name.
         let is_blanket = impl_type_params
             .iter()
-            .any(|p| p.name == method_info.base_struct_name);
+            .any(|p| p.name == method_info.base_struct_name());
 
         let mangled_struct = if is_blanket && !impl_arg_names.is_empty() {
             // Replace struct name entirely: "I" → "StrCharIter"
             MethodName::format_struct_with_args(
                 &impl_arg_names[0],
+                None,
                 &[],
                 method_info.trait_name.as_deref(),
             )
@@ -319,6 +366,7 @@ impl Monomorphizer {
             // Normal: append type args: "List" → "List<i32>"
             MethodName::format_struct_with_args(
                 &method_info.struct_name,
+                method_info.receiver().ref_kind(),
                 &impl_arg_names,
                 method_info.trait_name.as_deref(),
             )
@@ -446,7 +494,7 @@ impl Monomorphizer {
                 let head = crate::name::split_base_name(own);
                 self.functions
                     .trait_env
-                    .has_inherent_method(head, &info.method_name)
+                    .has_inherent_method(&Receiver::Type(head.to_string()), &info.method_name)
             }),
         };
         own.as_deref() == Some(info.struct_name.as_str())
@@ -498,16 +546,17 @@ impl Monomorphizer {
         own_name: Option<&'a str>,
         info: Option<&'a LocalMethodName>,
         struct_name: &'a str,
-    ) -> Vec<&'a str> {
-        let mut c: Vec<&'a str> = Vec::new();
+    ) -> Vec<std::borrow::Cow<'a, str>> {
+        use std::borrow::Cow;
+        let mut c: Vec<Cow<'a, str>> = Vec::new();
         if let Some(own) = own_name {
-            c.push(own);
+            c.push(Cow::Borrowed(own));
         }
         if let Some(info) = info {
-            c.push(info.base_struct_name.as_str());
-            c.push(info.struct_name.as_str());
+            c.push(info.receiver.head_key());
+            c.push(Cow::Borrowed(info.struct_name.as_str()));
         }
-        c.push(struct_name);
+        c.push(Cow::Borrowed(struct_name));
         c
     }
 

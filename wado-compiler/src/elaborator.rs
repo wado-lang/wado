@@ -49,7 +49,7 @@ use crate::ast::{self, Item, Module};
 use crate::compiler_host::CompilerHost;
 use crate::logger::Logger;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{self as name, MethodName};
+use crate::name::{self as name, MethodName, Receiver, RefKind};
 use crate::symbol::{Symbol, SymbolTable};
 use crate::tir::{self as tir, TypeId, TypeTable};
 
@@ -838,7 +838,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if self.tysys.has_real_trait_impl_for_type(
             &self.annotate_ctx,
             &self.type_lookup(),
-            target_type_name,
+            &Receiver::Type(target_type_name.to_string()),
             trait_name,
         ) {
             return;
@@ -1774,6 +1774,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 &impl_block.ty,
                 ast::Type::Reference(_) | ast::Type::MutReference(_),
             );
+            let receiver = match RefKind::from_ast(&impl_block.ty) {
+                Some(kind) => Receiver::Ref(kind),
+                None => Receiver::Type(struct_name.clone()),
+            };
             // Concrete type args of the impl's trait reference
             // (`impl Future<i32>` → `[i32]`), resolved in the
             // impl's type-param scope so generic impls
@@ -1810,6 +1814,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     is_handler_method,
                     is_ref_impl,
                     struct_name: struct_name.clone(),
+                    receiver,
                     concrete_owner,
                 },
             );

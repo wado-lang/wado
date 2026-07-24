@@ -28,6 +28,7 @@
 use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
+use crate::name::Receiver;
 use crate::tir::{EffectRef, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
@@ -383,7 +384,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // borrows on `trait_env.impl_index` / `loaded_modules` /
         // `current_module_items`.
         let mut trait_types: Vec<ast::Type> = Vec::new();
-        if let Some(entries) = self.tysys.trait_env.impl_index.get(type_name) {
+        if let Some(entries) = self
+            .tysys
+            .trait_env
+            .impl_index
+            .get(&Receiver::Type(type_name.to_string()))
+        {
             for (module_src, item_id) in entries {
                 let module = &self.loaded_modules[module_src];
                 if let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id)

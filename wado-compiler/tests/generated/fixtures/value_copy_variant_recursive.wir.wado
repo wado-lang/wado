@@ -81,11 +81,11 @@ type "functype//value_copy_variant_recursive.wado/__cm_export____test_0_recursiv
 
 type "functype//value_copy_variant_recursive.wado/__cm_export____test_1_recursive_variant_copy_is_deep" = fn();  // TypeId(23)
 
-type "functype//value_copy_variant_recursive.wado/$value_copy$value_copy_variant_recursive.wado/Tree" = fn(ref "value_copy_variant_recursive.wado//Tree") -> ref "value_copy_variant_recursive.wado//Tree";  // TypeId(24)
+type "functype//value_copy_variant_recursive.wado/$value_copy$core:prelude/types.wado/Option<value_copy_variant_recursive.wado/Node>" = fn(ref null "value_copy_variant_recursive.wado//Node") -> ref null "value_copy_variant_recursive.wado//Node";  // TypeId(24)
 
-type "functype//value_copy_variant_recursive.wado/$value_copy$value_copy_variant_recursive.wado/Node" = fn(ref "value_copy_variant_recursive.wado//Node") -> ref "value_copy_variant_recursive.wado//Node";  // TypeId(25)
+type "functype//value_copy_variant_recursive.wado/$value_copy$value_copy_variant_recursive.wado/Tree" = fn(ref "value_copy_variant_recursive.wado//Tree") -> ref "value_copy_variant_recursive.wado//Tree";  // TypeId(25)
 
-type "functype//value_copy_variant_recursive.wado/$value_copy$core:prelude/types.wado/Option<value_copy_variant_recursive.wado/Node>" = fn(ref null "value_copy_variant_recursive.wado//Node") -> ref null "value_copy_variant_recursive.wado//Node";  // TypeId(26)
+type "functype//value_copy_variant_recursive.wado/$value_copy$value_copy_variant_recursive.wado/Node" = fn(ref "value_copy_variant_recursive.wado//Node") -> ref "value_copy_variant_recursive.wado//Node";  // TypeId(26)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(27)
 
@@ -307,6 +307,16 @@ fn "value_copy_variant_recursive.wado/__cm_export____test_1_recursive_variant_co
     "wasi/task-return"(0);
 }
 
+fn "value_copy_variant_recursive.wado/$value_copy$core:prelude/types.wado/Option<value_copy_variant_recursive.wado/Node>"(v) {
+    let __vc_payload_0: ref "value_copy_variant_recursive.wado//Node";
+    return (if ref.is_null(v) == 0 -> ref null "value_copy_variant_recursive.wado//Node" {
+        __vc_payload_0 = ref.as_non_null(v);
+        ref.as_non_null("value_copy_variant_recursive.wado/$value_copy$value_copy_variant_recursive.wado/Node"(__vc_payload_0));
+    } else {
+        v;
+    });
+}
+
 fn "value_copy_variant_recursive.wado/$value_copy$value_copy_variant_recursive.wado/Tree"(v) {
     let __vc_payload_0: ref "core:prelude//List<value_copy_variant_recursive.wado/Tree>";
     let __vc_payload_1: i32;
@@ -321,16 +331,6 @@ fn "value_copy_variant_recursive.wado/$value_copy$value_copy_variant_recursive.w
 
 fn "value_copy_variant_recursive.wado/$value_copy$value_copy_variant_recursive.wado/Node"(v) {
     return struct.new "value_copy_variant_recursive.wado//Node" { value: v.value, next: "value_copy_variant_recursive.wado/$value_copy$core:prelude/types.wado/Option<value_copy_variant_recursive.wado/Node>"(v.next) };
-}
-
-fn "value_copy_variant_recursive.wado/$value_copy$core:prelude/types.wado/Option<value_copy_variant_recursive.wado/Node>"(v) {
-    let __vc_payload_0: ref "value_copy_variant_recursive.wado//Node";
-    return (if ref.is_null(v) == 0 -> ref null "value_copy_variant_recursive.wado//Node" {
-        __vc_payload_0 = ref.as_non_null(v);
-        ref.as_non_null("value_copy_variant_recursive.wado/$value_copy$value_copy_variant_recursive.wado/Node"(__vc_payload_0));
-    } else {
-        v;
-    });
 }
 
 fn "core:prelude/primitive.wado/count_digits_i64"(val) {

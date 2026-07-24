@@ -7,6 +7,7 @@ use crate::ast::{self, Item, Type};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
+use crate::name::{Receiver, RefKind};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -949,7 +950,12 @@ impl TypeSystem {
             }
             // For other traits, check the type name
             let type_name = format!("{prim:?}").to_lowercase();
-            return self.find_trait_impl_for_type(ctx, scope, &type_name, trait_name);
+            return self.find_trait_impl_for_type(
+                ctx,
+                scope,
+                &Receiver::Type(type_name),
+                trait_name,
+            );
         }
 
         if let Some(tr) = on_bound
@@ -977,8 +983,13 @@ impl TypeSystem {
                 ..
             } = resolved
         {
-            let serde_blocked =
-                tr.is_serde() && self.has_real_trait_impl_for_type(ctx, scope, name, trait_name);
+            let serde_blocked = tr.is_serde()
+                && self.has_real_trait_impl_for_type(
+                    ctx,
+                    scope,
+                    &Receiver::Type(name.clone()),
+                    trait_name,
+                );
             if !serde_blocked
                 && self.walk_structural_derive_members(scope, resolved, tr, &mut |_, member| {
                     self.type_implements_trait(ctx, scope, member, trait_name)
@@ -1102,7 +1113,7 @@ impl TypeSystem {
                 if self.find_trait_impl_for_type_with_args(
                     ctx,
                     scope,
-                    "&",
+                    &Receiver::Ref(RefKind::Shared),
                     trait_name,
                     Some(&[inner_id]),
                 ) {
@@ -1119,7 +1130,7 @@ impl TypeSystem {
                 if self.find_trait_impl_for_type_with_args(
                     ctx,
                     scope,
-                    "&mut",
+                    &Receiver::Ref(RefKind::Mut),
                     trait_name,
                     Some(&[inner_id]),
                 ) {
@@ -1137,7 +1148,12 @@ impl TypeSystem {
                 name, base_type, ..
             } => {
                 // Check for a direct impl on the newtype first (e.g., impl Describe for Meters)
-                if self.find_trait_impl_for_type(ctx, scope, name, trait_name) {
+                if self.find_trait_impl_for_type(
+                    ctx,
+                    scope,
+                    &Receiver::Type(name.clone()),
+                    trait_name,
+                ) {
                     return true;
                 }
                 // Fall back to base type's trait implementation
@@ -1145,7 +1161,12 @@ impl TypeSystem {
                 return self.type_implements_trait(ctx, scope, base_id, trait_name);
             }
             ResolvedType::Flags { name, .. } => {
-                if self.find_trait_impl_for_type(ctx, scope, name, trait_name) {
+                if self.find_trait_impl_for_type(
+                    ctx,
+                    scope,
+                    &Receiver::Type(name.clone()),
+                    trait_name,
+                ) {
                     return true;
                 }
                 return self.type_implements_trait(ctx, scope, TypeTable::U32, trait_name);
@@ -1156,7 +1177,7 @@ impl TypeSystem {
         self.find_trait_impl_for_type_with_args(
             ctx,
             scope,
-            &type_name,
+            &Receiver::Type(type_name),
             trait_name,
             type_args.as_deref(),
         )
@@ -1167,21 +1188,21 @@ impl TypeSystem {
         &self,
         ctx: &Scope,
         scope: &TypeLookup,
-        type_name: &str,
+        type_key: &Receiver,
         trait_name: &str,
     ) -> bool {
-        self.find_trait_impl_for_type_with_args(ctx, scope, type_name, trait_name, None)
+        self.find_trait_impl_for_type_with_args(ctx, scope, type_key, trait_name, None)
     }
 
     pub(super) fn has_real_trait_impl_for_type(
         &self,
         ctx: &Scope,
         scope: &TypeLookup,
-        type_name: &str,
+        type_key: &Receiver,
         trait_name: &str,
     ) -> bool {
-        self.trait_env.has_any_methodful_impl(type_name, trait_name)
-            || self.blanket_trait_impl_applies(ctx, scope, type_name, trait_name)
+        self.trait_env.has_any_methodful_impl(type_key, trait_name)
+            || self.blanket_trait_impl_applies(ctx, scope, type_key, trait_name)
     }
 
     /// Check if there's a trait impl for a type, with optional type args for bounds checking.
@@ -1190,12 +1211,12 @@ impl TypeSystem {
         &self,
         ctx: &Scope,
         scope: &TypeLookup,
-        type_name: &str,
+        type_key: &Receiver,
         trait_name: &str,
         type_args: Option<&[TypeId]>,
     ) -> bool {
         let trait_env = self.trait_env.clone();
-        if let Some(entries) = trait_env.impl_index.get(type_name) {
+        if let Some(entries) = trait_env.impl_index.get(type_key) {
             for entry in entries {
                 let (module_src, _) = entry;
                 let Some(header) = trait_env.impl_headers.get(entry) else {
@@ -1228,39 +1249,30 @@ impl TypeSystem {
         // `impl_index` above (the index is built from every loaded module,
         // including this one), so no separate current-module scan is needed.
 
-        self.blanket_trait_impl_applies(ctx, scope, type_name, trait_name)
+        self.blanket_trait_impl_applies(ctx, scope, type_key, trait_name)
     }
 
     fn blanket_trait_impl_applies(
         &self,
         ctx: &Scope,
         scope: &TypeLookup,
-        type_name: &str,
+        type_key: &Receiver,
         trait_name: &str,
     ) -> bool {
         let trait_env = self.trait_env.clone();
-        for entry in &trait_env.blanket_impl_index {
-            let Some(header) = trait_env.impl_headers.get(entry) else {
-                continue;
-            };
-            let Some(impl_trait_name) = &header.trait_name else {
-                continue;
-            };
-            if impl_trait_name == trait_name {
-                let impl_type_name = super::trait_env::get_type_name_static(&header.ty);
-                let matching_param = header
-                    .type_params
-                    .iter()
-                    .find(|tp| tp.name == impl_type_name);
-                if let Some(param) = matching_param {
-                    let bounds_satisfied = param.bounds.iter().all(|bound| {
-                        self.synthesized_reflect_bound_holds(scope, type_name, &bound.name)
-                            || self.find_trait_impl_for_type(ctx, scope, type_name, &bound.name)
-                    });
-                    if bounds_satisfied {
-                        return true;
-                    }
-                }
+        for blanket in trait_env
+            .blanket_impls
+            .get(trait_name)
+            .into_iter()
+            .flatten()
+            .filter(|b| b.receiver == super::trait_env::BlanketReceiver::Value)
+        {
+            let bounds_satisfied = blanket.bounds.iter().all(|bound| {
+                self.synthesized_reflect_bound_holds(scope, &type_key.head_key(), bound)
+                    || self.find_trait_impl_for_type(ctx, scope, type_key, bound)
+            });
+            if bounds_satisfied {
+                return true;
             }
         }
 
@@ -1816,7 +1828,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let trait_env = self.tysys.trait_env.clone();
         let impl_infos: Vec<ImplInfo> = {
             let mut result = vec![];
-            if let Some(entries) = trait_env.impl_index.get(&type_name) {
+            if let Some(entries) = trait_env.impl_index.get(&Receiver::Type(type_name)) {
                 for entry in entries {
                     let Some(header) = trait_env.impl_headers.get(entry) else {
                         continue;
@@ -1911,36 +1923,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let blanket_infos: Vec<BlanketImplInfo> = {
             let mut result = vec![];
-            for entry in &trait_env.blanket_impl_index {
-                let Some(header) = trait_env.impl_headers.get(entry) else {
+            for blanket in trait_env
+                .blanket_impls
+                .get(trait_name)
+                .into_iter()
+                .flatten()
+            {
+                let Some(header) = trait_env
+                    .impl_headers
+                    .get(&(blanket.module.clone(), blanket.ast_id))
+                else {
                     continue;
                 };
-                if header.trait_name.as_deref() == Some(trait_name)
-                    && !header.associated_types.is_empty()
-                {
-                    let impl_type_name = Self::get_type_name_static(&header.ty);
-                    if let Some(blanket_param) = header
-                        .type_params
-                        .iter()
-                        .find(|tp| tp.name == impl_type_name && !tp.bounds.is_empty())
-                    {
-                        // Check if the concrete type satisfies the blanket param's bounds
-                        let bounds_ok = blanket_param.bounds.iter().all(|bound| {
-                            self.tysys.type_implements_trait(
-                                &self.annotate_ctx,
-                                &self.type_lookup(),
-                                concrete_type_id,
-                                &bound.name,
-                            )
-                        });
-                        if bounds_ok {
-                            result.push(BlanketImplInfo {
-                                blanket_param_name: blanket_param.name.clone(),
-                                blanket_param_bounds: blanket_param.bounds.clone(),
-                                assoc_types: header.associated_types.clone(),
-                            });
-                        }
-                    }
+                if header.associated_types.is_empty() {
+                    continue;
+                }
+                let impl_type_name = Self::get_type_name_static(&header.ty);
+                let Some(blanket_param) = header
+                    .type_params
+                    .iter()
+                    .find(|tp| tp.name == impl_type_name && !tp.bounds.is_empty())
+                else {
+                    continue;
+                };
+                // Check if the concrete type satisfies the blanket param's bounds
+                let bounds_ok = blanket_param.bounds.iter().all(|bound| {
+                    self.tysys.type_implements_trait(
+                        &self.annotate_ctx,
+                        &self.type_lookup(),
+                        concrete_type_id,
+                        &bound.name,
+                    )
+                });
+                if bounds_ok {
+                    result.push(BlanketImplInfo {
+                        blanket_param_name: blanket_param.name.clone(),
+                        blanket_param_bounds: blanket_param.bounds.clone(),
+                        assoc_types: header.associated_types.clone(),
+                    });
                 }
             }
             result

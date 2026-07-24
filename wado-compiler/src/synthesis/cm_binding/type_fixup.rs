@@ -1007,15 +1007,16 @@ fn rewrite_calls_in_expr(
     {
         let mut qualified = format!(
             "{}::{}",
-            method_info.base_struct_name, method_info.method_name
+            method_info.base_struct_name(),
+            method_info.method_name
         );
         // Resolve through type aliases (e.g., Headers -> Fields). Scoped to
         // `wasi:` — the method resolution path is WASI-only.
         if !adapters.contains_key(&qualified)
             && let Some(source) =
-                cm_interface_registry.find_wasi_newtype_source(&method_info.base_struct_name)
+                cm_interface_registry.find_wasi_newtype_source(&method_info.base_struct_name())
             && let Some(Type::Named(resolved)) =
-                cm_interface_registry.get_newtype_by_source(source, &method_info.base_struct_name)
+                cm_interface_registry.get_newtype_by_source(source, &method_info.base_struct_name())
         {
             let aliased = format!("{}::{}", resolved.name, method_info.method_name);
             if adapters.contains_key(&aliased) {
@@ -1366,7 +1367,8 @@ impl TirRefVisitor for EffectCallCollector<'_> {
                 if let Some(method_info) = func.method_info.clone() {
                     let qualified = format!(
                         "{}::{}",
-                        method_info.base_struct_name, method_info.method_name
+                        method_info.base_struct_name(),
+                        method_info.method_name
                     );
                     if self
                         .cm_interface_registry
@@ -1376,10 +1378,10 @@ impl TirRefVisitor for EffectCallCollector<'_> {
                         self.effects.insert(qualified);
                     } else if let Some(source) = self
                         .cm_interface_registry
-                        .find_wasi_newtype_source(&method_info.base_struct_name)
+                        .find_wasi_newtype_source(&method_info.base_struct_name())
                         && let Some(Type::Named(resolved)) = self
                             .cm_interface_registry
-                            .get_newtype_by_source(source, &method_info.base_struct_name)
+                            .get_newtype_by_source(source, &method_info.base_struct_name())
                     {
                         // Resolve through type aliases (e.g. Headers -> Fields).
                         let aliased = format!("{}::{}", resolved.name, method_info.method_name);

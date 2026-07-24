@@ -2823,6 +2823,41 @@ impl TypeTable {
         self.mangle_type_arg_for_generic(resolved)
     }
 
+    /// [`Self::mangle_type_arg_for_generic`] as it reads *after*
+    /// [`Self::erase_newtypes_and_flags`]: every `Newtype` collapses to its
+    /// ultimate base and every `Flags` to `u32`, recursively through composite
+    /// types. Lets pre-erasure synthesis (the `Field::get` bridge helpers) mint a
+    /// name that matches the post-erasure call site, whose `field_ty` reads
+    /// through the erasure redirect map.
+    pub fn mangle_type_arg_erased(&self, id: TypeId) -> String {
+        match self.get(id) {
+            ResolvedType::Newtype { .. } | ResolvedType::Flags { .. } => {
+                self.mangle_type_arg_erased(self.get_ultimate_base_type(id))
+            }
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+            } => {
+                let args: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.mangle_type_arg_erased(*t))
+                    .collect();
+                if Self::is_tuple_type(name) {
+                    return crate::name::mangle_tuple_type(&args);
+                }
+                let unqualified = crate::name::mangle_generic_name(name, &args);
+                format!("{module_source}/{unqualified}")
+            }
+            ResolvedType::Ref(inner) => format!("&{}", self.mangle_type_arg_erased(*inner)),
+            ResolvedType::MutRef(inner) => format!("&mut {}", self.mangle_type_arg_erased(*inner)),
+            ResolvedType::BuiltinArray(elem) => {
+                crate::name::mangle_builtin_array_type(&self.mangle_type_arg_erased(*elem))
+            }
+            _ => self.mangle_type_arg_for_generic(id),
+        }
+    }
+
     /// Return the base type name without type arguments.
     ///
     /// For `GenericInstance { name: "Option", type_args: [String] }` → `"Option"`.

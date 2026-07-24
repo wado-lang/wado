@@ -311,8 +311,9 @@ fn register_entry_functions(ctx: &mut WirContext<'_>) {
             continue;
         }
 
-        // Skip methods (handled in register_methods)
-        if tir_func.name.contains("::") {
+        // Skip methods (handled in register_methods, which selects on the same
+        // `method_info` field — so the two registrars partition functions).
+        if tir_func.method_info.is_some() {
             continue;
         }
 
@@ -341,11 +342,20 @@ fn register_loaded_functions(ctx: &mut WirContext<'_>) {
     for func_rc in &ctx.package.functions {
         let tir_func = func_rc.borrow();
         let module_source = &tir_func.module_source;
-        if module_source == entry_source || module_source.is_wasi() {
+        // The entry module is handled by `register_entry_functions`. A wasi
+        // module contributes only bodyless CM imports from source, filtered by
+        // the `body.is_none()` check below — but the reflect derivation
+        // synthesizes body-carrying free-function helpers (`$field_get$…`) homed
+        // in a wasi CM record's own module (e.g. `wasi:clocks#Instant`). Those
+        // must register here, mirroring how `register_methods` (no wasi filter)
+        // already emits a wasi CM record's synthesized `Eq`/`Ord` methods.
+        if module_source == entry_source {
             continue;
         }
 
-        if tir_func.name == "run" || tir_func.body.is_none() || tir_func.name.contains("::") {
+        // Methods are registered by `register_methods` (same `method_info`
+        // selector), so they partition cleanly against the free functions here.
+        if tir_func.name == "run" || tir_func.body.is_none() || tir_func.method_info.is_some() {
             continue;
         }
 

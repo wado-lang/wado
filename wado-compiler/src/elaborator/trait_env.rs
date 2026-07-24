@@ -223,7 +223,7 @@ pub(crate) type DeclKey = (ModuleSource, String);
 /// AstId)` payload plus the elaborator's per-call type-id comparison, so
 /// two `struct Widget` declarations in different modules share one bucket
 /// without ambiguity.
-pub(super) type TraitImplIndex = IndexMap<String, Vec<(ModuleSource, AstId)>>;
+pub(super) type TraitImplIndex = IndexMap<name::Receiver, Vec<(ModuleSource, AstId)>>;
 
 /// Digested header of an `impl` block, pre-extracted at [`TraitEnv::build`]
 /// time so trait/method queries read its trait name, target type, methods,
@@ -261,6 +261,83 @@ pub(super) struct ImplMethodHeader {
     pub(super) has_body: bool,
 }
 
+/// The receiver shape of a blanket impl.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum BlanketReceiver {
+    /// `impl<T: Bound> Trait for T` — applies to any value receiver.
+    Value,
+    /// `impl<T: Bound> Trait for &T` (`is_mut` selects `&mut T`) — applies to
+    /// any reference receiver.
+    Ref { is_mut: bool },
+}
+
+/// A reified blanket impl `impl<Param: Bounds, ..> Trait for <receiver>`.
+///
+/// The single source of truth for "what kind of blanket is this", replacing the
+/// former per-query re-derivations (`has_universal_ref_blanket`,
+/// `blanket_impl_{module,param,bounds,arity}_for_trait`, and the caller-side
+/// `is_reflect_struct_blanket` / `is_ref_universal_blanket` predicates). Those
+/// are now selections over this descriptor.
+#[derive(Clone, Debug)]
+pub(crate) struct BlanketImpl {
+    pub(crate) module: ModuleSource,
+    /// The impl block's AST id; with `module`, the key into `impl_headers` for
+    /// consumers needing the full header (associated types, bound constraints).
+    pub(crate) ast_id: AstId,
+    pub(crate) receiver: BlanketReceiver,
+    /// Receiver param name (`T` in `impl<T: Bound> Trait for T`).
+    pub(crate) param: String,
+    /// Bound trait names on the receiver param.
+    pub(crate) bounds: Vec<String>,
+    /// Impl-level type-param count (`2` for the `Reflect` struct blanket
+    /// `impl<T: Reflect<Fields = [..F]>, ..F> Trait for T`).
+    pub(crate) arity: usize,
+}
+
+impl BlanketImpl {
+    /// Whether this is the `Reflect`-derived struct blanket
+    /// (`impl<T: Reflect<Fields = [..F]>, ..F> Trait for T`): a value receiver
+    /// keyed `[T, Fields]` (arity 2) with a `Reflect` bound. Distinguishes it
+    /// from a one-arg value blanket like `impl<I: Iterator> IntoIterator for I`.
+    pub(crate) fn is_reflect_struct(&self, reflect_trait_name: &str) -> bool {
+        self.receiver == BlanketReceiver::Value
+            && self.arity == 2
+            && self.bounds.iter().any(|b| b == reflect_trait_name)
+    }
+}
+
+/// Classify a blanket impl's receiver, or `None` for a concrete/shape impl
+/// (`impl Display for String`, `impl<T> IntoIterator for &List<T>`). A blanket
+/// receiver is a *bounded* type param (`impl<T: B> Trait for T`) or a reference
+/// to a type param (`impl<T: B> Trait for &T`). Returns the receiver kind and
+/// the param name.
+fn classify_blanket_receiver(
+    ty: &ast::Type,
+    type_params: &[ast::GenericParam],
+) -> Option<(BlanketReceiver, String)> {
+    let is_param = |name: &str| type_params.iter().any(|p| p.name == name);
+    let is_bounded_param = |name: &str| {
+        type_params
+            .iter()
+            .any(|p| p.name == name && !p.bounds.is_empty())
+    };
+    match ty {
+        Type::Named(named) if is_bounded_param(&named.name) => {
+            Some((BlanketReceiver::Value, named.name.clone()))
+        }
+        Type::Reference(inner) | Type::MutReference(inner) => {
+            let is_mut = matches!(ty, Type::MutReference(_));
+            match inner.as_ref() {
+                Type::Named(named) if is_param(&named.name) => {
+                    Some((BlanketReceiver::Ref { is_mut }, named.name.clone()))
+                }
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
 /// Digested header of a `trait` declaration: its name plus per-method
 /// signatures method-lookup queries read off the AST. Built in
 /// [`TraitEnv::build`] and keyed by `(ModuleSource, AstId)` in
@@ -296,11 +373,6 @@ pub(super) type EffectDeclIndex = IndexMap<DeclKey, (ModuleSource, AstId)>;
 /// resource on its wrapper's `effects` list (resources are not effects).
 pub(super) type ResourceDeclIndex = IndexMap<DeclKey, (ModuleSource, AstId)>;
 
-/// Pre-built list of blanket trait impls: `impl<T: Trait> OtherTrait for T`.
-/// These are impl blocks where the impl type is a free type parameter with trait bounds.
-/// Stored separately because they can't be indexed by concrete type name.
-pub(super) type BlanketTraitImplIndex = Vec<(ModuleSource, AstId)>;
-
 /// Pre-built index of static methods (no `self` parameter) from impl blocks.
 /// Key: canonical receiver [`DeclKey`] → list of
 /// `(method_name, impl_module_source, item_ast_id, method_index)`.
@@ -334,9 +406,9 @@ pub(super) type ResourceStaticMethodIndex =
 /// through; a follow-up could re-key by canonical pair when the
 /// inhabited-by-multiple-declarations case becomes user-visible.
 ///
-/// Blanket impls (`impl<T: Trait> Trait for T`) are still represented by
-/// [`BlanketTraitImplIndex`]; they are excluded from this map because they
-/// apply structurally and don't have a concrete receiver type name.
+/// Value blanket impls (`impl<T: Trait> Trait for T`) are represented by
+/// [`BlanketImpl`] (in `blanket_impls`); they are excluded from this map because
+/// they apply structurally and don't have a concrete receiver type name.
 pub(crate) type TraitImplModuleIndex = IndexMap<(String, String), Vec<ModuleSource>>;
 
 /// Immutable global knowledge base for trait resolution.
@@ -369,8 +441,6 @@ pub struct TraitEnv {
     /// `effect_decl_index` to recognise handler-installable kinds in `with`
     /// clauses and `impl R for T` blocks.
     pub(super) resource_decl_index: ResourceDeclIndex,
-    /// Blanket impls (`impl<T: Bound> Trait for T`), checked as fallback.
-    pub(super) blanket_impl_index: BlanketTraitImplIndex,
     /// Digested headers for every indexed impl block, keyed by
     /// `(ModuleSource, AstId)`. Trait/method queries read this instead of
     /// re-fetching the impl block AST from `loaded_modules`. See [`ImplHeader`].
@@ -403,18 +473,16 @@ pub struct TraitEnv {
     /// declaration wins (matching the previous whole-program scan order).
     /// Consumed by `find_assoc_type_bounds` without an AST scan.
     pub(super) assoc_type_bound_index: IndexMap<String, Vec<ast::TraitBound>>,
-    /// `trait_name` → modules that host a blanket impl of that trait
-    /// (`impl<T: Bound> Trait for T`). Used by the monomorphizer to find
-    /// the home module of a generic dispatch when the receiver type
-    /// itself has no dedicated `impl Trait for Type` block — the blanket
-    /// provides the body, and the body lives in the blanket's module.
-    ///
-    /// Keyed by bare trait name (see [`TraitImplModuleIndex`] for the
-    /// rationale): canonical-key disambiguation would require build-time
-    /// resolution of the trait reference, which isn't plumbed through
-    /// `TraitEnv::build`. The multi-value `Vec<ModuleSource>` plus the
-    /// `type_module` hint at the call site handles the common case.
-    pub(crate) blanket_trait_impl_modules: IndexMap<String, Vec<ModuleSource>>,
+    /// `trait_name` → reified blanket impls of that trait, in registration
+    /// order. The single classification source for blanket dispatch (module,
+    /// receiver kind, param, bounds, arity); the `blanket_impl_*_for_trait`
+    /// queries, `has_universal_ref_blanket`, and `is_reflect_struct_blanket`
+    /// select over it. Used by the monomorphizer to find the home module of a
+    /// generic dispatch when the receiver type has no dedicated `impl Trait for
+    /// Type` block — the blanket provides the body, homed in the blanket's
+    /// module. Keyed by bare trait name; the `type_module` hint at the call site
+    /// disambiguates when several modules host a blanket for the same trait.
+    pub(super) blanket_impls: IndexMap<String, Vec<BlanketImpl>>,
     /// `type_name` → `[(method_name, ModuleSource, item_ast_id, method_idx)]` for static methods.
     pub(super) static_method_index: StaticMethodIndex,
     /// `type_name` → `[(method_name, ModuleSource, item_ast_id, method_idx)]` for resource static methods.
@@ -551,7 +619,7 @@ impl TraitEnv {
         let mut assoc_type_bound_index: IndexMap<String, Vec<ast::TraitBound>> =
             IndexMap::default();
         let mut resource_decl_index: ResourceDeclIndex = IndexMap::default();
-        let mut blanket_impl_index: BlanketTraitImplIndex = Vec::new();
+        let mut blanket_impls: IndexMap<String, Vec<BlanketImpl>> = IndexMap::default();
         let mut impl_headers: IndexMap<(ModuleSource, AstId), ImplHeader> = IndexMap::default();
         let mut trait_decl_headers: IndexMap<(ModuleSource, AstId), TraitDeclHeader> =
             IndexMap::default();
@@ -559,8 +627,6 @@ impl TraitEnv {
             IndexMap::default();
         let mut struct_like_decl_modules: IndexMap<String, Vec<ModuleSource>> = IndexMap::default();
         let mut newtype_decl_modules: IndexMap<String, Vec<ModuleSource>> = IndexMap::default();
-        let mut blanket_trait_impl_modules: IndexMap<String, Vec<ModuleSource>> =
-            IndexMap::default();
         let mut trait_impl_modules: TraitImplModuleIndex = IndexMap::default();
         let mut concrete_trait_impl_modules: TraitImplModuleIndex = IndexMap::default();
         // (declaring module, type name) → module source, for orphan rule
@@ -776,6 +842,7 @@ impl TraitEnv {
                     continue;
                 };
                 let type_name = get_type_name_static(&impl_block.ty);
+                let type_key = receiver_key(&impl_block.ty);
                 impl_headers.insert(
                     (module_source.clone(), impl_block.id),
                     ImplHeader {
@@ -797,22 +864,40 @@ impl TraitEnv {
                 // Joins `all_impl_index` before the trait/inherent split, so its
                 // order matches `impl_headers`'s global insertion order.
                 all_impl_index
-                    .entry(type_name.clone())
+                    .entry(type_key.clone())
                     .or_default()
                     .push((module_source.clone(), impl_block.id));
                 if let Some(trait_type) = &impl_block.trait_type {
                     let trait_name = get_type_name_static(trait_type);
-                    let is_blanket = impl_block
-                        .type_params
-                        .iter()
-                        .any(|tp| tp.name == type_name && !tp.bounds.is_empty());
-                    if is_blanket {
-                        blanket_impl_index.push((module_source.clone(), impl_block.id));
-                        let modules = blanket_trait_impl_modules.entry(trait_name).or_default();
-                        if !modules.contains(module_source) {
-                            modules.push(module_source.clone());
-                        }
-                    } else {
+                    if let Some((receiver, param)) =
+                        classify_blanket_receiver(&impl_block.ty, &impl_block.type_params)
+                    {
+                        let bounds = impl_block
+                            .type_params
+                            .iter()
+                            .find(|p| p.name == param)
+                            .map(|p| p.bounds.iter().map(|b| b.name.clone()).collect())
+                            .unwrap_or_default();
+                        blanket_impls
+                            .entry(trait_name.clone())
+                            .or_default()
+                            .push(BlanketImpl {
+                                module: module_source.clone(),
+                                ast_id: impl_block.id,
+                                receiver,
+                                param,
+                                bounds,
+                                arity: impl_block.type_params.len(),
+                            });
+                    }
+                    // A value blanket (`impl<T: Bound> Trait for T`) has no
+                    // per-type home to index; every other impl (concrete, shape
+                    // generic, or ref blanket) registers its module below.
+                    let is_value_blanket = matches!(
+                        classify_blanket_receiver(&impl_block.ty, &impl_block.type_params),
+                        Some((BlanketReceiver::Value, _))
+                    );
+                    if !is_value_blanket {
                         let key = (type_name.clone(), trait_name.clone());
                         let modules = trait_impl_modules.entry(key.clone()).or_default();
                         if !modules.contains(module_source) {
@@ -834,7 +919,7 @@ impl TraitEnv {
                         }
                     }
                     impl_index
-                        .entry(type_name.clone())
+                        .entry(type_key.clone())
                         .or_default()
                         .push((module_source.clone(), impl_block.id));
                     // Static methods on trait impl blocks (no `self`
@@ -893,7 +978,6 @@ impl TraitEnv {
                 decl_index,
                 effect_decl_index,
                 resource_decl_index,
-                blanket_impl_index,
                 impl_headers,
                 trait_decl_headers,
                 function_type_params,
@@ -901,7 +985,7 @@ impl TraitEnv {
                 newtype_decl_modules,
                 module_import_scopes,
                 assoc_type_bound_index,
-                blanket_trait_impl_modules,
+                blanket_impls,
                 static_method_index,
                 resource_static_method_index,
                 trait_impl_modules,
@@ -939,9 +1023,12 @@ impl TraitEnv {
     /// Keys of the **inherent** impls on `type_name`, in global build order —
     /// the `trait_name.is_none()` subset of [`Self::all_impl_index`]. Used by
     /// instance-method lookup, which must not treat trait impls as inherent.
-    pub(super) fn inherent_impl_keys(&self, type_name: &str) -> Vec<(ModuleSource, AstId)> {
+    pub(super) fn inherent_impl_keys(
+        &self,
+        type_key: &name::Receiver,
+    ) -> Vec<(ModuleSource, AstId)> {
         self.all_impl_index
-            .get(type_name)
+            .get(type_key)
             .map(|keys| {
                 keys.iter()
                     .filter(|key| {
@@ -956,8 +1043,8 @@ impl TraitEnv {
     }
 
     /// Whether `type_name` has an inherent impl declaring `method_name`.
-    pub(crate) fn has_inherent_method(&self, type_name: &str, method_name: &str) -> bool {
-        self.all_impl_index.get(type_name).is_some_and(|keys| {
+    pub(crate) fn has_inherent_method(&self, type_key: &name::Receiver, method_name: &str) -> bool {
+        self.all_impl_index.get(type_key).is_some_and(|keys| {
             keys.iter().any(|key| {
                 self.impl_headers.get(key).is_some_and(|h| {
                     h.trait_name.is_none() && h.methods.iter().any(|m| m.name == method_name)
@@ -983,19 +1070,23 @@ impl TraitEnv {
 
     pub(crate) fn has_methodful_impl(
         &self,
-        type_name: &str,
+        type_key: &name::Receiver,
         trait_name: &str,
         module_source: &ModuleSource,
     ) -> bool {
-        self.impl_index.get(type_name).is_some_and(|entries| {
+        self.impl_index.get(type_key).is_some_and(|entries| {
             entries.iter().any(|entry| {
                 entry.0 == *module_source && self.methodful_header_matches(entry, trait_name)
             })
         })
     }
 
-    pub(crate) fn has_any_methodful_impl(&self, type_name: &str, trait_name: &str) -> bool {
-        self.impl_index.get(type_name).is_some_and(|entries| {
+    pub(crate) fn has_any_methodful_impl(
+        &self,
+        type_key: &name::Receiver,
+        trait_name: &str,
+    ) -> bool {
+        self.impl_index.get(type_key).is_some_and(|entries| {
             entries
                 .iter()
                 .any(|entry| self.methodful_header_matches(entry, trait_name))
@@ -1008,48 +1099,95 @@ impl TraitEnv {
         })
     }
 
-    /// Return the home module of a blanket impl (`impl<T: Bound> Trait for T`)
-    /// for `trait_name`, if one exists. When multiple blanket impls
-    /// implement the same trait, the first registered module is returned,
-    /// with `type_module` preferred when present (used as a stable
-    /// tie-breaker).
+    /// Return the home module of a *value* blanket (`impl<T: Bound> Trait for
+    /// T`) for `trait_name`, if one exists — `value_blanket_for_trait` excludes
+    /// ref blankets, so a `impl<T: Inspect> Inspect for &T` is never returned for
+    /// a value receiver. `type_module` is preferred as a stable tie-breaker when
+    /// several modules host a value blanket for the trait.
     pub(crate) fn blanket_impl_module_for_trait(
         &self,
         trait_name: &str,
         type_module: Option<&ModuleSource>,
     ) -> Option<&ModuleSource> {
-        let modules = self.blanket_trait_impl_modules.get(trait_name)?;
-        if let Some(hint) = type_module
-            && let Some(m) = modules.iter().find(|m| *m == hint)
-        {
-            return Some(m);
-        }
-        modules.first()
+        self.value_blanket_for_trait(trait_name, type_module)
+            .map(|b| &b.module)
     }
 
-    /// The blanket impl's type-param name (`I` in `impl<I: Bound> Trait for I`)
-    /// for `trait_name`, preferring a blanket in `type_module`. Used to
-    /// reconstruct the blanket template's mangled name `I^Trait::method`.
+    /// The value blanket `impl<Param: Bounds, ..> Trait for Param` for
+    /// `trait_name`, preferring one homed in `type_module`, else the first
+    /// registered. Ref blankets (`impl<T> Trait for &T`) are excluded — they
+    /// never dispatch a value receiver. The `blanket_impl_{param,bounds,arity}`
+    /// projections below all read the same selected blanket, so they stay
+    /// mutually consistent.
+    fn value_blanket_for_trait(
+        &self,
+        trait_name: &str,
+        type_module: Option<&ModuleSource>,
+    ) -> Option<&BlanketImpl> {
+        let impls = self.blanket_impls.get(trait_name)?;
+        let mut values = impls
+            .iter()
+            .filter(|b| b.receiver == BlanketReceiver::Value);
+        if let Some(hint) = type_module
+            && let Some(b) = values.clone().find(|b| &b.module == hint)
+        {
+            return Some(b);
+        }
+        values.next()
+    }
+
+    /// The value blanket's receiver-param name (`I` in `impl<I: Bound> Trait for
+    /// I`), used to reconstruct the template's mangled name `I^Trait::method`.
     pub(crate) fn blanket_impl_param_for_trait(
         &self,
         trait_name: &str,
         type_module: Option<&ModuleSource>,
     ) -> Option<String> {
-        let mut fallback = None;
-        for entry in &self.blanket_impl_index {
-            let Some(header) = self.impl_headers.get(entry) else {
-                continue;
-            };
-            if header.trait_name.as_deref() != Some(trait_name) {
-                continue;
-            }
-            let param_name = get_type_name_static(&header.ty);
-            if type_module == Some(&entry.0) {
-                return Some(param_name);
-            }
-            fallback.get_or_insert(param_name);
-        }
-        fallback
+        self.value_blanket_for_trait(trait_name, type_module)
+            .map(|b| b.param.clone())
+    }
+
+    /// The bound trait names on the value blanket's receiver param (`Bound` in
+    /// `impl<I: Bound> Trait for I`). A call may only dispatch through the
+    /// blanket if the receiver satisfies these bounds — otherwise a type with
+    /// its own (unregistered, auto-derived) impl, e.g. a closure's `Fn^Inspect`,
+    /// would be misrouted to the blanket body.
+    pub(crate) fn blanket_impl_bounds_for_trait(
+        &self,
+        trait_name: &str,
+        type_module: Option<&ModuleSource>,
+    ) -> Option<Vec<String>> {
+        self.value_blanket_for_trait(trait_name, type_module)
+            .map(|b| b.bounds.clone())
+    }
+
+    /// Whether `trait_name` has a *universal* ref blanket
+    /// `impl<T: Bound> Trait for &T` (`is_mut` selects `&mut T`) — the inner is a
+    /// bare type param, so it applies to every reference. Distinguished from a
+    /// shape ref impl (`impl<T> IntoIterator for &List<T>`), whose inner is a
+    /// concrete/parametric type. Callers route a `&<pointee>` type-param dispatch
+    /// through the universal blanket only when one exists.
+    pub(crate) fn has_universal_ref_blanket(&self, trait_name: &str, is_mut: bool) -> bool {
+        self.blanket_impls.get(trait_name).is_some_and(|impls| {
+            impls
+                .iter()
+                .any(|b| b.receiver == BlanketReceiver::Ref { is_mut })
+        })
+    }
+
+    /// Whether the value blanket for `trait_name` (preferring `type_module`) is
+    /// the `Reflect`-derived struct blanket keyed `[T, Fields]`. Callers pass
+    /// the registry's `Reflect` trait name (this layer has no `CompilerItem`
+    /// registry). Consolidates the former caller-side `arity == 2 && bounds
+    /// contains Reflect` re-derivations.
+    pub(crate) fn is_reflect_struct_blanket(
+        &self,
+        trait_name: &str,
+        type_module: Option<&ModuleSource>,
+        reflect_trait_name: &str,
+    ) -> bool {
+        self.value_blanket_for_trait(trait_name, type_module)
+            .is_some_and(|b| b.is_reflect_struct(reflect_trait_name))
     }
 
     /// Like [`impl_module_for`] but only returns a hit when the impl block
@@ -1383,13 +1521,27 @@ fn check_all_orphan_rules(
 }
 
 /// Extract a type name from an AST type without needing an Elaborator instance.
+/// The typed [`name::Receiver`] key an `impl` target indexes under.
+/// A `&T` / `&mut T` target keys as `Receiver::Ref` (from the typed AST, never
+/// a `"&"` string); everything else keys as `Receiver::Type` over the canonical
+/// [`get_type_name_static`] head, so the key domain matches the old string keys
+/// exactly apart from the ref shape being typed.
+pub(super) fn receiver_key(ty: &ast::Type) -> name::Receiver {
+    match name::RefKind::from_ast(ty) {
+        Some(kind) => name::Receiver::Ref(kind),
+        None => name::Receiver::Type(get_type_name_static(ty)),
+    }
+}
+
 pub(super) fn get_type_name_static(ty: &ast::Type) -> String {
     match ty {
         ast::Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),
         ast::Type::Named(named) => named.name.clone(),
         ast::Type::Generic(generic) => generic.name.clone(),
-        ast::Type::Reference(_) => "&".to_string(),
-        ast::Type::MutReference(_) => "&mut".to_string(),
+        ast::Type::Reference(_) | ast::Type::MutReference(_) => name::RefKind::from_ast(ty)
+            .expect("Reference/MutReference classify")
+            .prefix()
+            .to_string(),
         ast::Type::Tuple(elems) => {
             if elems.is_empty() {
                 TypeTable::UNIT_TYPE_NAME.to_string()

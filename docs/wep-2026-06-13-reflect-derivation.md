@@ -186,13 +186,22 @@ via `Member::doc()` / `type_doc()`.
       tokens.
 - [x] `ReflectVariant` / `ReflectEnum` / `ReflectFlags` + `VariantCase` tokens.
 - [x] `core:serde::wire_name` / `apply_case` (library-side casing, decision 2-B).
-- [ ] `Member` on `VariantCase`; `EnumCase` / `FlagBit` tokens (enum / flags move
+- [x] `Member` on `VariantCase`; `EnumCase` / `FlagBit` tokens (enum / flags move
       to the token walk).
 - [ ] `Reflect::construct(Fields) -> Self`.
 - [ ] `#[validate]` — parse to `Validate`, expose via the tokens, enforce at the
       `Deserialize` boundary.
 - [ ] `Member::doc()` / `type_doc()` (needs a doc-comment → string path).
-- [ ] Migrate `Inspect` / serde / `Default` onto library impls over `Reflect`.
+- [x] Migrate struct `Inspect` onto a library blanket
+      (`impl<T: Reflect<Fields = [..F]>, ..F: Inspect> Inspect for T` in
+      `core:prelude/traits`): non-generic structs derive `Inspect` through the
+      field walk instead of a bespoke synthesizer. Format dispatch (`:?` /
+      `${}`, power-assert, auto-derive bodies) resolves the blanket coherently —
+      routed only when the receiver satisfies the `Reflect` bound, so tokens /
+      refs / non-`Reflect` types keep their own impls.
+- [ ] Migrate the remaining `Inspect` kinds (variant / enum / flags / generic
+      structs / newtypes) and serde / `Default` onto library impls over
+      `Reflect`.
 
 ## Consequences
 

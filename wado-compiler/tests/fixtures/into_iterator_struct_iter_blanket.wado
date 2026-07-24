@@ -1,0 +1,16 @@
+// `StrCharIter` (a plain `struct`) gets `IntoIterator` from the bare
+// `impl<I: Iterator> IntoIterator for I` blanket. `String::from_iter` is
+// `fn<I: IntoIterator<Item = char>>`, so iterating its `iter` param dispatches
+// the type-param receiver `I` (resolved to `StrCharIter`) through that blanket.
+// Regression: the struct-`Inspect` `[T, Fields]` blanket path wrongly claimed
+// this call because a struct is `Reflect`, appending `Fields` to the one-arg
+// `IntoIterator` blanket so its `into_iter` instance was never materialized.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let s = String::from_iter("hello".chars());
+    println(s);
+}
+
+__DATA__
+{"stdout": "hello\n"}

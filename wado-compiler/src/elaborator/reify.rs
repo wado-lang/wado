@@ -67,7 +67,7 @@ use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::global_name;
+use crate::name::{Receiver, global_name};
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, ResolvedType, TirBinaryOp, TirBlock, TirEnum, TirEnumCase, TirExpr,
@@ -1595,8 +1595,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let display_name = method_names.display;
         let mut mangled_name = method_names.mangled;
         let mut method_info = {
-            let mut info = LocalMethodName::new(
-                base_struct_name.clone(),
+            let mut info = LocalMethodName::of(
+                facts.receiver.clone(),
                 facts.trait_name_mangled.clone(),
                 func.name.clone(),
             );
@@ -6823,8 +6823,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     name: facts.mangled_name,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName {
-                        struct_name: facts.target_name.clone(),
-                        base_struct_name: facts.target_name,
+                        receiver: Receiver::Type(facts.target_name.clone()),
+                        struct_name: facts.target_name,
                         trait_name: Some(from_trait),
                         base_trait_name: Some(facts.from_trait_name),
                         base_trait_module: None,

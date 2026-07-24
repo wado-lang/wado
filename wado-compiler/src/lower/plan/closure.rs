@@ -183,7 +183,7 @@ fn make_call_method_args(args: Vec<TirExpr>, call_method: &TirFunction) -> Vec<C
 fn build_specialized_method_info(info: &LocalMethodName, functor_suffix: &str) -> LocalMethodName {
     LocalMethodName {
         struct_name: info.struct_name.clone(),
-        base_struct_name: info.base_struct_name.clone(),
+        receiver: info.receiver.clone(),
         trait_name: info.trait_name.clone(),
         base_trait_name: info.base_trait_name.clone(),
         base_trait_module: info.base_trait_module.clone(),
@@ -1681,7 +1681,7 @@ impl ClosureCallSiteLowerer<'_> {
             Some(info) => info,
             None => return,
         };
-        if info.base_struct_name != crate::name::CLOSURE_FN_TRAIT {
+        if info.base_struct_name() != crate::name::CLOSURE_FN_TRAIT {
             return;
         }
         let Some(base_trait) = info.base_trait_name.as_deref() else {

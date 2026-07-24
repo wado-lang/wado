@@ -9,7 +9,7 @@ use super::types::{
     EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, StructFieldInfo,
     VariantCaseData, VariantInfo,
 };
-use crate::name::MethodName;
+use crate::name::{MethodName, RefKind};
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn collect_types(&mut self, module: &Module) {
@@ -593,8 +593,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),
             Type::Named(named) => named.name.clone(),
             Type::Generic(generic) => generic.name.clone(),
-            Type::Reference(_) => "&".to_string(),
-            Type::MutReference(_) => "&mut".to_string(),
+            Type::Reference(_) | Type::MutReference(_) => RefKind::from_ast(ty)
+                .expect("ref classify")
+                .prefix()
+                .to_string(),
             Type::Tuple(elems) => {
                 if elems.is_empty() {
                     TypeTable::UNIT_TYPE_NAME.to_string()
@@ -611,8 +613,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),
             Type::Named(named) => named.name.clone(),
             Type::Generic(generic) => generic.name.clone(),
-            Type::Reference(_) => "&".to_string(),
-            Type::MutReference(_) => "&mut".to_string(),
+            Type::Reference(_) | Type::MutReference(_) => RefKind::from_ast(ty)
+                .expect("ref classify")
+                .prefix()
+                .to_string(),
             Type::Tuple(elems) => {
                 if elems.is_empty() {
                     TypeTable::UNIT_TYPE_NAME.to_string()

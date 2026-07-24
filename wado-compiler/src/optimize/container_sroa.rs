@@ -151,7 +151,7 @@ enum ListMethodKind {
 fn classify_array_method_sig(func: &NirFunction, type_table: &TypeTable) -> Option<ListMethodKind> {
     // Must be a method (instance or static) on `List`.
     let info = func.method_info.as_ref()?;
-    if info.base_struct_name != "List" {
+    if info.base_struct_name() != "List" {
         return None;
     }
     // Must be a monomorphized instance so we know the concrete element type.
@@ -411,7 +411,7 @@ fn build_method_catalog(
         // Must be a method on List (by base struct name). The kind is still
         // List-specific because the pass itself is List-specific — we only
         // de-hardcode method *names*, not the container type.
-        if method_info.base_struct_name != "List" {
+        if method_info.base_struct_name() != "List" {
             continue;
         }
         // Must be a monomorphized method (we need the concrete impl type arg).

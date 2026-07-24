@@ -119,6 +119,12 @@ pub enum CompilerItem {
     /// `Field<T, F>` — the per-field token struct minted by
     /// `Reflect::field_tokens()` (WEP 2026-06-13).
     ReflectField,
+    /// `EnumCase<T>` — the per-case token struct minted by
+    /// `ReflectEnum::case_tokens()` (WEP 2026-06-13 §3b).
+    ReflectEnumCase,
+    /// `FlagBit<T>` — the per-bit token struct minted by
+    /// `ReflectFlags::bit_tokens()` (WEP 2026-06-13 §3c).
+    ReflectFlagBit,
 
     // ── Variants (sum types) ──────────────────────────────────────────
     /// `Option<T>` — `Some(_)` / `None`.
@@ -336,6 +342,8 @@ pub enum CompilerItem {
     /// `ReflectEnum::from_discriminant` — the reverse bridge; unknown
     /// tags return `None`.
     ReflectEnumFromDiscriminant,
+    /// `ReflectEnum::case_tokens` — the per-case token list.
+    ReflectEnumCaseTokens,
     /// `ReflectFlags::type_name` — the per-flags type name.
     ReflectFlagsTypeName,
     /// `ReflectFlags::bit_meta` — the per-flags bit-descriptor list.
@@ -345,6 +353,8 @@ pub enum CompilerItem {
     /// `ReflectFlags::from_bits` — the reverse bridge; unknown bits
     /// return `None`.
     ReflectFlagsFromBits,
+    /// `ReflectFlags::bit_tokens` — the per-bit token list.
+    ReflectFlagsBitTokens,
     /// `String::push_str` — recognised by the WIR optimiser for
     /// string-building inlining.
     StringPushStr,
@@ -492,6 +502,8 @@ impl CompilerItem {
         Self::VariantCaseMeta,
         Self::ReflectVariantCase,
         Self::ReflectField,
+        Self::ReflectEnumCase,
+        Self::ReflectFlagBit,
         Self::ReflectEnum,
         Self::EnumCaseMeta,
         Self::ReflectFlags,
@@ -564,10 +576,12 @@ impl CompilerItem {
         Self::ReflectEnumCaseMeta,
         Self::ReflectEnumDiscriminant,
         Self::ReflectEnumFromDiscriminant,
+        Self::ReflectEnumCaseTokens,
         Self::ReflectFlagsTypeName,
         Self::ReflectFlagsBitMeta,
         Self::ReflectFlagsBits,
         Self::ReflectFlagsFromBits,
+        Self::ReflectFlagsBitTokens,
         Self::StringPushStr,
         Self::StringPushChar,
         Self::StringPushAscii,
@@ -642,6 +656,8 @@ impl CompilerItem {
             Self::VariantCaseMeta => "variant_case_meta",
             Self::ReflectVariantCase => "reflect_variant_case",
             Self::ReflectField => "reflect_field",
+            Self::ReflectEnumCase => "reflect_enum_case",
+            Self::ReflectFlagBit => "reflect_flag_bit",
             Self::ReflectEnum => "reflect_enum",
             Self::EnumCaseMeta => "enum_case_meta",
             Self::ReflectFlags => "reflect_flags",
@@ -714,10 +730,12 @@ impl CompilerItem {
             Self::ReflectEnumCaseMeta => "reflect_enum_case_meta",
             Self::ReflectEnumDiscriminant => "reflect_enum_discriminant",
             Self::ReflectEnumFromDiscriminant => "reflect_enum_from_discriminant",
+            Self::ReflectEnumCaseTokens => "reflect_enum_case_tokens",
             Self::ReflectFlagsTypeName => "reflect_flags_type_name",
             Self::ReflectFlagsBitMeta => "reflect_flags_bit_meta",
             Self::ReflectFlagsBits => "reflect_flags_bits",
             Self::ReflectFlagsFromBits => "reflect_flags_from_bits",
+            Self::ReflectFlagsBitTokens => "reflect_flags_bit_tokens",
             Self::StringPushStr => "string_push_str",
             Self::StringPushChar => "string_push_char",
             Self::StringPushAscii => "string_push_ascii",
@@ -809,6 +827,8 @@ impl CompilerItem {
             | Self::VariantCaseMeta
             | Self::ReflectVariantCase
             | Self::ReflectField
+            | Self::ReflectEnumCase
+            | Self::ReflectFlagBit
             | Self::ReflectEnum
             | Self::EnumCaseMeta
             | Self::ReflectFlags
@@ -836,10 +856,12 @@ impl CompilerItem {
             | Self::ReflectEnumCaseMeta
             | Self::ReflectEnumDiscriminant
             | Self::ReflectEnumFromDiscriminant
+            | Self::ReflectEnumCaseTokens
             | Self::ReflectFlagsTypeName
             | Self::ReflectFlagsBitMeta
             | Self::ReflectFlagsBits
             | Self::ReflectFlagsFromBits
+            | Self::ReflectFlagsBitTokens
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringPushAscii
@@ -960,6 +982,8 @@ impl CompilerItem {
             | Self::VariantCaseMeta
             | Self::ReflectVariantCase
             | Self::ReflectField
+            | Self::ReflectEnumCase
+            | Self::ReflectFlagBit
             | Self::EnumCaseMeta
             | Self::FlagBitMeta => CompilerItemKind::Struct,
             Self::Option | Self::Result => CompilerItemKind::Variant,
@@ -1020,10 +1044,12 @@ impl CompilerItem {
             | Self::ReflectEnumCaseMeta
             | Self::ReflectEnumDiscriminant
             | Self::ReflectEnumFromDiscriminant
+            | Self::ReflectEnumCaseTokens
             | Self::ReflectFlagsTypeName
             | Self::ReflectFlagsBitMeta
             | Self::ReflectFlagsBits
             | Self::ReflectFlagsFromBits
+            | Self::ReflectFlagsBitTokens
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringPushAscii

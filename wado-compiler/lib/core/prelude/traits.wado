@@ -185,6 +185,10 @@ internal trait ReflectEnum {
     /// Returns the case with the given tag; `None` for an unknown tag.
     #[compiler_item("reflect_enum_from_discriminant")]
     fn from_discriminant(disc: i32) -> Option<Self>;
+
+    /// Returns the per-case tokens.
+    #[compiler_item("reflect_enum_case_tokens")]
+    fn case_tokens() -> List<EnumCase<Self>>;
 }
 
 /// Per-bit descriptor returned by `ReflectFlags::bit_meta()`, in
@@ -217,6 +221,10 @@ internal trait ReflectFlags {
     /// are set.
     #[compiler_item("reflect_flags_from_bits")]
     fn from_bits(raw: u64) -> Option<Self>;
+
+    /// Returns the per-bit tokens.
+    #[compiler_item("reflect_flags_bit_tokens")]
+    fn bit_tokens() -> List<FlagBit<Self>>;
 }
 
 /// A case handle minted by `ReflectVariant::cases()`: the payload type `P`
@@ -226,12 +234,20 @@ internal trait ReflectFlags {
 #[compiler_item("reflect_variant_case")]
 pub struct VariantCase<T, P> {
     index: i32,
+    case_name: String,
+    wire_override: Option<String>,
+    is_unit: bool,
 }
 
 impl<T, P> VariantCase<T, P> {
     /// The case's declaration index (== its discriminant).
     pub fn index(&self) -> i32 {
         return self.index;
+    }
+
+    /// Whether the case carries no payload.
+    pub fn is_unit(&self) -> bool {
+        return self.is_unit;
     }
 
     /// Whether `v`'s live case is this case.
@@ -247,6 +263,91 @@ impl<T, P> VariantCase<T, P> {
     /// Builds this case around `payload`.
     pub fn construct(&self, payload: P) -> T {
         return builtin::variant_case_construct(payload, self.index);
+    }
+}
+
+impl<T, P> Member for VariantCase<T, P> {
+    fn name(&self) -> String {
+        return self.case_name;
+    }
+
+    fn wire_name_override(&self) -> Option<String> {
+        return self.wire_override;
+    }
+}
+
+/// A case handle minted by `ReflectEnum::case_tokens()`: an enum case carries
+/// no payload, so the token holds the case value itself. `make` mints it and
+/// `holds` tests a value's live case. See WEP 2026-06-13 §3b.
+#[compiler_item("reflect_enum_case")]
+pub struct EnumCase<T> {
+    discriminant: i32,
+    value: T,
+    case_name: String,
+    wire_override: Option<String>,
+}
+
+impl<T: ReflectEnum> EnumCase<T> {
+    /// The case's discriminant.
+    pub fn discriminant(&self) -> i32 {
+        return self.discriminant;
+    }
+
+    /// Whether `v` is this case.
+    pub fn holds(&self, v: &T) -> bool {
+        return ReflectEnum::<T>::discriminant(v) == self.discriminant;
+    }
+
+    /// The enum value for this case.
+    pub fn make(&self) -> T {
+        return self.value;
+    }
+}
+
+impl<T> Member for EnumCase<T> {
+    fn name(&self) -> String {
+        return self.case_name;
+    }
+
+    fn wire_name_override(&self) -> Option<String> {
+        return self.wire_override;
+    }
+}
+
+/// A bit handle minted by `ReflectFlags::bit_tokens()`: the token holds the
+/// single-bit flags value. `set` mints it and `is_set` tests a value for the
+/// bit. See WEP 2026-06-13 §3c.
+#[compiler_item("reflect_flag_bit")]
+pub struct FlagBit<T> {
+    bit: u64,
+    value: T,
+    member_name: String,
+}
+
+impl<T: ReflectFlags> FlagBit<T> {
+    /// The member's bitmask, u64-normalized.
+    pub fn bit(&self) -> u64 {
+        return self.bit;
+    }
+
+    /// Whether `v` has this bit set.
+    pub fn is_set(&self, v: &T) -> bool {
+        return ReflectFlags::<T>::bits(v) & self.bit != 0;
+    }
+
+    /// The flags value with only this bit set.
+    pub fn set(&self) -> T {
+        return self.value;
+    }
+}
+
+impl<T> Member for FlagBit<T> {
+    fn name(&self) -> String {
+        return self.member_name;
+    }
+
+    fn wire_name_override(&self) -> Option<String> {
+        return Option::None;
     }
 }
 
@@ -467,6 +568,42 @@ internal trait Display {
 internal trait Inspect {
     /// Formats the value as a debug representation and writes to the given formatter.
     fn inspect(&self, f: &mut Formatter);
+}
+
+/// Struct debug formatting derived over `Reflect` (WEP 2026-06-13): walk the
+/// field tokens, writing `Name { field: value, ... }`. Secret fields are elided
+/// and reported with a trailing `, ..`.
+impl<T: Reflect<Fields = [..F]>, ..F: Inspect> Inspect for T {
+    fn inspect(&self, f: &mut Formatter) {
+        f.write_str(&Reflect::<T>::type_name());
+        let mut wrote_field = false;
+        let mut has_secret = false;
+        for let field of Reflect::<T>::field_tokens() {
+            if field.is_secret() {
+                has_secret = true;
+            } else {
+                if wrote_field {
+                    f.write_str(&", ");
+                } else {
+                    f.write_str(&" { ");
+                    wrote_field = true;
+                }
+                f.write_str(&field.name());
+                f.write_str(&": ");
+                field.get(self).inspect(f);
+            }
+        }
+        if wrote_field {
+            if has_secret {
+                f.write_str(&", ..");
+            }
+            f.write_str(&" }");
+        } else if has_secret {
+            f.write_str(&" { .. }");
+        } else {
+            f.write_str(&" {}");
+        }
+    }
 }
 
 /// Trait for formatting values as binary integers.
