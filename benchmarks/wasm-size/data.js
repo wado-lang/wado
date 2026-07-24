@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784888473657,
+  "lastUpdate": 1784889230721,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -43529,6 +43529,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e54961fc0ca991252e31cdaf209404a3341226de"
         },
         "date": 1784888473280,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1970,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8212,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16169,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276401,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1f39622f4b40d1afaca834ae67a19670dcde961e",
+          "message": "Merge pull request #1675 from wado-lang/claude/reflection-api-continue-vo0vsv\n\nfeat(reflect): Inspect over the Reflect blanket; Member/EnumCase/FlagBit tokens; typed method receivers",
+          "timestamp": "2026-07-24T19:14:50+09:00",
+          "tree_id": "d2c658e50e84837edce93cba23088730f7be3e95",
+          "url": "https://github.com/wado-lang/wado/commit/1f39622f4b40d1afaca834ae67a19670dcde961e"
+        },
+        "date": 1784889229927,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
