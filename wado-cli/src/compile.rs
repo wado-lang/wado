@@ -8,6 +8,7 @@ use wado_manifest::DependencySource;
 use lexopt::Arg::Value;
 use lexopt::Parser;
 use wado_compiler::LogLevel;
+use wado_compiler::Severity;
 use wado_compiler::wit_bundle;
 
 use crate::args::{self, CliExit};
@@ -520,6 +521,11 @@ pub fn parse_opt_level_arg(parser: &mut Parser) -> Result<OptLevel, CliExit> {
     }
 }
 
+pub struct TryCompileError {
+    pub is_todo_module: bool,
+    pub message: Option<String>,
+}
+
 /// Compile without bailing. Used by the test runner so `#![TODO]` modules
 /// can be observed (via `CompileFailure::is_todo_module`) rather than
 /// aborting the whole batch.
@@ -527,7 +533,11 @@ pub async fn try_compile(
     filename: &str,
     flags: &CompileFlags,
 ) -> Result<wado_compiler::CompileResult, wado_compiler::CompileFailure> {
-    try_compile_with_kiln_cache(filename, flags, None).await
+    try_compile_with_kiln_cache(filename, flags, None)
+        .await
+        .map_err(|e| wado_compiler::CompileFailure {
+            is_todo_module: e.is_todo_module,
+        })
 }
 
 /// `try_compile` with an optional [`KilnComponentCache`]. `wado test`
@@ -537,15 +547,17 @@ pub async fn try_compile_with_kiln_cache(
     filename: &str,
     flags: &CompileFlags,
     kiln_cache: Option<Arc<KilnComponentCache>>,
-) -> Result<wado_compiler::CompileResult, wado_compiler::CompileFailure> {
+) -> Result<wado_compiler::CompileResult, TryCompileError> {
     let path = Path::new(filename);
 
     let source = match fs::read_to_string(path) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("Error reading '{}': {e}", path.display());
-            return Err(wado_compiler::CompileFailure {
+            let message = format!("Error reading '{}': {e}", path.display());
+            eprintln!("{message}");
+            return Err(TryCompileError {
                 is_todo_module: false,
+                message: Some(message),
             });
         }
     };
@@ -573,9 +585,11 @@ pub async fn try_compile_with_kiln_cache(
     {
         Ok(host) => host,
         Err(e) => {
-            eprintln!("Error fetching component dependencies: {e}");
-            return Err(wado_compiler::CompileFailure {
+            let message = format!("Error fetching component dependencies: {e}");
+            eprintln!("{message}");
+            return Err(TryCompileError {
                 is_todo_module: false,
+                message: Some(message),
             });
         }
     };
@@ -584,9 +598,11 @@ pub async fn try_compile_with_kiln_cache(
         match maybe_run_pipeline(path, &host, flags.no_cache, manifest_pair).await {
             Ok(outcome) => outcome,
             Err(e) => {
-                eprintln!("{e}");
-                return Err(wado_compiler::CompileFailure {
+                let message = e.to_string();
+                eprintln!("{message}");
+                return Err(TryCompileError {
                     is_todo_module: false,
+                    message: Some(message),
                 });
             }
         };
@@ -611,7 +627,25 @@ pub async fn try_compile_with_kiln_cache(
         ..Default::default()
     };
 
-    wado_compiler::compile_with_options(&source, &host, Some(filename), options).await
+    wado_compiler::compile_with_options(&source, &host, Some(filename), options)
+        .await
+        .map_err(|failure| TryCompileError {
+            is_todo_module: failure.is_todo_module,
+            message: render_error_diagnostics(&host),
+        })
+}
+
+fn render_error_diagnostics(host: &FilesystemCompilerHost) -> Option<String> {
+    let rendered: Vec<String> = host
+        .diagnostics()
+        .iter()
+        .filter(|d| matches!(d.severity, Severity::Error | Severity::Fatal))
+        .map(|d| match &d.span {
+            Some(span) => format!("{}:{}:{}: {}", span.file, span.line, span.column, d.message),
+            None => d.message.clone(),
+        })
+        .collect();
+    (!rendered.is_empty()).then(|| rendered.join("\n"))
 }
 
 /// Compile a Wado source file and return the produced wasm bytes. On

@@ -667,7 +667,46 @@ fn test_test_compile_failure_reported_on_compile_axis() {
         .stdout(predicate::str::contains("compile failures:"))
         .stdout(predicate::str::contains(
             "wado-cli/tests/fixtures/test_compile_error.wado",
-        ));
+        ))
+        .stdout(predicate::str::contains("type mismatch"));
+}
+
+#[test]
+fn test_test_heartbeat_recaps_compile_failures_at_end() {
+    wado()
+        .args([
+            "test",
+            "wado-cli/tests/fixtures/test_compile_error.wado",
+            "wado-compiler/tests/fixtures/test_decl.wado",
+        ])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("compile: 1 ok, 1 failed"))
+        .stdout(predicate::str::contains("compile failures:"))
+        .stdout(predicate::str::contains(
+            "wado-cli/tests/fixtures/test_compile_error.wado",
+        ))
+        .stdout(predicate::str::contains("type mismatch"));
+}
+
+#[test]
+fn test_test_tap_recaps_compile_failures_at_end() {
+    wado()
+        .args([
+            "test",
+            "--format",
+            "tap",
+            "wado-cli/tests/fixtures/test_compile_error.wado",
+            "wado-compiler/tests/fixtures/test_decl.wado",
+        ])
+        .assert()
+        .failure()
+        .stdout(predicate::str::is_match(r"#.*compile: 1 ok, 1 failed").unwrap())
+        .stdout(predicate::str::is_match(r"#.*compile failures:").unwrap())
+        .stdout(predicate::str::contains(
+            "wado-cli/tests/fixtures/test_compile_error.wado",
+        ))
+        .stdout(predicate::str::contains("type mismatch"));
 }
 
 #[test]
