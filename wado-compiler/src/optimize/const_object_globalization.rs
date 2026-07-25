@@ -100,7 +100,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         .functions
         .iter()
         .zip(&fn_effects)
-        .map(|(f, e)| e.is_pure() && is_hoistable_shape(&f.borrow()))
+        .map(|(f, e)| e.is_pure() && crate::niri::is_ctfe_eligible(&f.borrow()))
         .collect();
     let gate = Gate {
         funcs: &project.functions,
@@ -756,26 +756,9 @@ fn contains_aggregate(body: &Body, expr: ExprId, gate: &Gate<'_>) -> bool {
 struct Gate<'a> {
     funcs: &'a [Rc<RefCell<NirFunction>>],
     type_table: &'a Rc<RefCell<TypeTable>>,
-    /// Indexed by `func_id.index()`. See [`is_hoistable_shape`].
+    /// Indexed by `func_id.index()`.
     hoistable_pure: &'a [bool],
     structs: &'a [crate::nir::NirStruct],
-}
-
-/// Shape preconditions a callee must meet on top of `FnEffect::is_pure`.
-///
-/// Deliberately not [`crate::niri::is_ctfe_eligible`]: that predicate also
-/// rejects `#[inline(never)]`, which is an inlining *policy*, not a statement
-/// about determinism. Hoisting does not inline, so the marker is irrelevant
-/// here — and honouring it would silently exempt exactly the functions a
-/// caller marked "keep this an out-of-line call".
-fn is_hoistable_shape(f: &NirFunction) -> bool {
-    f.body.is_some()
-        && f.task_return_type.is_none()
-        && !f.is_cm_binding
-        && !f.is_cm_export
-        && !f.is_dispatch_wrapper
-        && f.type_params.is_empty()
-        && f.impl_type_params.is_empty()
 }
 
 impl Gate<'_> {

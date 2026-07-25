@@ -1,8 +1,14 @@
 // Test: boolean identity folding eliminates redundant short-circuit operators.
 //
 // `false || x` folds to `x`, `true && x` folds to `x`.
+//
+// The arguments go through `SEED`, a `global mut`: const-folding treats a
+// mutable global as `NonConst`, so the calls survive and the folded bodies
+// stay in the WIR. `#[inline(never)]` keeps the bodies out of line.
 
 use { println, Stdout } from "core:cli";
+
+global mut SEED: i32 = 0;
 
 #[inline(never)]
 fn test_or_identity(x: bool) -> bool {
@@ -15,10 +21,10 @@ fn test_and_identity(x: bool) -> bool {
 }
 
 export fn run() with Stdout {
-    println(`${test_or_identity(true)}`);
-    println(`${test_or_identity(false)}`);
-    println(`${test_and_identity(true)}`);
-    println(`${test_and_identity(false)}`);
+    println(`${test_or_identity(SEED == 0)}`);
+    println(`${test_or_identity(SEED != 0)}`);
+    println(`${test_and_identity(SEED == 0)}`);
+    println(`${test_and_identity(SEED != 0)}`);
 }
 
 __DATA__

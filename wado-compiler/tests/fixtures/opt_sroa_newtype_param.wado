@@ -9,6 +9,11 @@
 
 use { println, Stdout } from "core:cli";
 
+// `SEED` is a `global mut` (always 0): const-folding treats a mutable global
+// as `NonConst`, so the newtype values stay opaque and the methods below
+// survive into the WIR to be matched.
+global mut SEED: i32 = 0;
+
 type Meters = f64;
 type Seconds = f64;
 type Count = i32;
@@ -62,7 +67,7 @@ fn abs_meters(m: &Meters) -> Meters {
 // Newtype in loop
 #[inline("never")]
 fn sum_n_counts(n: i32) -> Count {
-    let mut total: Count = 0 as Count;
+    let mut total: Count = (0 + SEED) as Count;
     for let mut i = 0; i < n; i += 1 {
         total = total.add_raw(1);
     }
@@ -79,10 +84,10 @@ fn triple_inc(c: &Count) -> Count {
 
 export fn run() with Stdout {
     // Basic newtype &self methods
-    let m: Meters = 42.5 as Meters;
+    let m: Meters = (42.5 + SEED as f64) as Meters;
     assert m.raw() == 42.5;
 
-    let c: Count = 10 as Count;
+    let c: Count = (10 + SEED) as Count;
     assert c.raw() == 10;
 
     // Newtype method returning newtype
@@ -90,31 +95,31 @@ export fn run() with Stdout {
     assert c2.raw() == 11;
 
     // Two different newtypes of same base type as params
-    let dist: Meters = 100.0 as Meters;
-    let time: Seconds = 5.0 as Seconds;
+    let dist: Meters = (100.0 + SEED as f64) as Meters;
+    let time: Seconds = (5.0 + SEED as f64) as Seconds;
     assert speed(&dist, &time) == 20.0;
 
     // Newtype add (two newtype &self params)
-    let m1: Meters = 30.0 as Meters;
-    let m2: Meters = 12.5 as Meters;
+    let m1: Meters = (30.0 + SEED as f64) as Meters;
+    let m2: Meters = (12.5 + SEED as f64) as Meters;
     let m3 = m1.add(&m2);
     assert m3.raw() == 42.5;
 
     // Conditional with newtype
-    let neg: Meters = -5.0 as Meters;
+    let neg: Meters = (-5.0 + SEED as f64) as Meters;
     let pos = abs_meters(&neg);
     assert pos.raw() == 5.0;
 
-    let already_pos: Meters = 3.0 as Meters;
+    let already_pos: Meters = (3.0 + SEED as f64) as Meters;
     let still_pos = abs_meters(&already_pos);
     assert still_pos.raw() == 3.0;
 
     // Loop with newtype
-    let total = sum_n_counts(5);
+    let total = sum_n_counts(5 + SEED);
     assert total.raw() == 5;
 
     // Chain of newtype method calls
-    let start: Count = 0 as Count;
+    let start: Count = (0 + SEED) as Count;
     assert triple_inc(&start).raw() == 3;
 
     println("ok");

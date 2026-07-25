@@ -5,7 +5,12 @@
 // straight in the operand, so before the fix these shapes never lowered to
 // `builtin::select` and survived as `if` expressions.
 
+// `SEED` is a `global mut`, so const-folding sees `NonConst` and the calls
+// survive to give `c` / `x` their opaque values.
+
 use { println, Stdout } from "core:cli";
+
+global mut SEED: i32 = 0;
 
 #[inline(never)]
 fn opaque_bool(x: i32) -> bool {
@@ -18,8 +23,8 @@ fn opaque_i(x: i32) -> i32 {
 }
 
 export fn run() with Stdout {
-    let c = opaque_bool(1);
-    let x = opaque_i(7);
+    let c = opaque_bool(1 + SEED);
+    let x = opaque_i(7 + SEED);
 
     // Literal-constant arms (both born as `Operand::Value`).
     let a = if c { 1 } else { 2 };

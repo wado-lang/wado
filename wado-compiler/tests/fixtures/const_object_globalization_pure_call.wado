@@ -8,12 +8,12 @@
 // GC can build the value once and share it, exactly like a literal.
 //
 // `encode_key` is the shape that motivated the extension: a pure encoder
-// applied to a literal, whose result is passed on by `&`. `#[inline(never)]`
-// keeps the call from being inlined and folded away before the pass runs.
+// applied to a literal, whose result is passed on by `&`. Its result owns a
+// GC array, so CTFE cannot fold it to a constant and the hoist is what
+// removes the per-iteration rebuild.
 
 use { println, Stdout } from "core:cli";
 
-#[inline(never)]
 fn encode_key(name: &String) -> String {
     let mut s = String::with_capacity(name.len() + 3);
     s.push('"');
@@ -22,7 +22,6 @@ fn encode_key(name: &String) -> String {
     return s;
 }
 
-#[inline(never)]
 fn byte_sum(s: &String) -> i32 {
     let mut total = 0;
     for let i of 0..<s.len() {
