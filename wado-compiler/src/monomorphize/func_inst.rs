@@ -134,8 +134,8 @@ struct SubstitutedCall {
 /// `[T, T::Assoc, …]`, but a call site (and auto-derive bodies) supply `[T]`
 /// only; appending the resolved packs makes both keys identical so the shared
 /// blanket instance is queued and looked up under one key, not split across two.
-/// General over the blanket's own projected assocs (`Reflect<Fields>`,
-/// `ReflectEnum<CaseTokens>`, `ReflectFlags<BitTokens>`, …); a blanket that
+/// General over the blanket's own projected assocs (`ReflectStruct<FieldTypes>`,
+/// `ReflectEnum<Members>`, `ReflectFlags<Members>`, …); a blanket that
 /// projects nothing (`impl<I: Iterator> IntoIterator for I`) is returned
 /// unchanged, so iterator / serde blankets are untouched.
 pub(super) fn blanket_impl_args_with_projected_packs(
@@ -159,9 +159,9 @@ pub(super) fn blanket_impl_args_with_projected_packs(
 /// Whether `generic_name` names a bare-`T` blanket *template*
 /// (`param^Trait::method`) for `trait_name` that keys on projected type packs —
 /// `impl<T: Bound<Assoc = [..P]>, ..P> Trait for T`, instantiated under
-/// `[T, T::Assoc, …]`. The general form of the former `Reflect`-struct-only
-/// check: covers `Reflect<Fields>` / `ReflectEnum<CaseTokens>` /
-/// `ReflectFlags<BitTokens>`, and excludes both one-arg blankets
+/// `[T, T::Assoc, …]`. The general form of the former `ReflectStruct`-struct-only
+/// check: covers `ReflectStruct<FieldTypes>` / `ReflectEnum<Members>` /
+/// `ReflectFlags<Members>`, and excludes both one-arg blankets
 /// (`impl<I: Iterator> IntoIterator for I`) and non-template (concrete / shape /
 /// ref) dispatches, whose `generic_name` is not the blanket param's template.
 pub(super) fn is_pack_blanket_dispatch(
@@ -185,8 +185,8 @@ pub(super) fn is_pack_blanket_dispatch(
 
 /// Whether a blanket impl `impl<T: Bound> Trait for T` may claim the receiver.
 /// The blanket applies only when the receiver satisfies the param's bound
-/// (e.g. a `Reflect`-bound `Inspect` derive must not swallow a token type that
-/// has no `Reflect`). `None` receiver info means the caller cannot vet the
+/// (e.g. a `ReflectStruct`-bound `Inspect` derive must not swallow a token type that
+/// has no `ReflectStruct`). `None` receiver info means the caller cannot vet the
 /// bound and the blanket is allowed as before.
 fn blanket_receiver_satisfies(
     trait_env: &TraitEnv,
@@ -677,7 +677,7 @@ impl Monomorphizer {
                     .clone()
                     .map(|info| info.method_name)
                     .unwrap_or_else(|| method_func.name.clone());
-                // A blanket-dispatched method call (e.g. the `impl<T: Reflect>
+                // A blanket-dispatched method call (e.g. the `impl<T: ReflectStruct>
                 // Inspect for T` struct derive, called on a plain-struct
                 // receiver inside the blanket body) carries its instantiation
                 // in `monomorph_info` with no explicit method type args — queue
@@ -691,7 +691,7 @@ impl Monomorphizer {
                     && type_table
                         .resolve_assoc_type(
                             type_table.peel_refs(receiver.type_id),
-                            crate::synthesis::traits::REFLECT_FIELDS_ASSOC,
+                            crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC,
                         )
                         .is_some()
                 {
@@ -1200,8 +1200,8 @@ impl Monomorphizer {
                     // Does this dispatch go through a blanket template that keys on
                     // projected type packs (`impl<T: Bound<Assoc = [..P]>, ..P>
                     // Trait for T`, keyed by `[T, T::Assoc, …]`)? Covers
-                    // `Reflect<Fields>` / `ReflectEnum<CaseTokens>` /
-                    // `ReflectFlags<BitTokens>`; a one-arg blanket, the shape-keyed
+                    // `ReflectStruct<FieldTypes>` / `ReflectEnum<Members>` /
+                    // `ReflectFlags<Members>`; a one-arg blanket, the shape-keyed
                     // ref blankets, and any non-template dispatch project none.
                     let projects_packs = match (trait_name, info) {
                         (Some(tn), Some(info)) => is_pack_blanket_dispatch(
@@ -1214,9 +1214,9 @@ impl Monomorphizer {
                         _ => false,
                     };
                     // The direct-name blanket lookup finds a pack blanket even when
-                    // the receiver arg does not satisfy its bound — a non-`Reflect`
+                    // the receiver arg does not satisfy its bound — a non-`ReflectStruct`
                     // generic struct (a token like `EnumCase<Color>`) or a ref.
-                    // Instantiating it would call `Reflect::<T>::…` on a `T` that has
+                    // Instantiating it would call `ReflectStruct::<T>::…` on a `T` that has
                     // no such impl and trap. Skip so the type-specific dispatch
                     // (bespoke, or the ref blanket) is used instead.
                     let blanket_bound_ok = {
@@ -1501,7 +1501,7 @@ impl Monomorphizer {
             .count();
         for param in &generic.impl_type_params {
             if let Some((src_idx, assoc_name)) = &param.projected_from {
-                // A projected pack `..F` (`impl<T: Reflect<Fields = [..F]>>`) is
+                // A projected pack `..F` (`impl<T: ReflectStruct<FieldTypes = [..F]>>`) is
                 // not caller-supplied: resolve `T::Fields` for the concrete `T`,
                 // which precedes the pack and is already bound.
                 let projected = substitution
@@ -2010,9 +2010,9 @@ impl Monomorphizer {
                                 None
                             };
                             // Only dispatch through the blanket if the receiver
-                            // satisfies its param bound (e.g. a `Reflect` struct
+                            // satisfies its param bound (e.g. a `ReflectStruct` struct
                             // derive must not swallow a token type without a
-                            // `Reflect` impl).
+                            // `ReflectStruct` impl).
                             let blanket_module = blanket_module.filter(|bm| {
                                 let bounds = trait_name_for_blanket
                                     .and_then(|tn| {
@@ -3030,7 +3030,7 @@ impl Monomorphizer {
     /// type) to its impl: a concrete/generic per-type impl in the receiver's
     /// module, or — when the type has none — a blanket impl in the blanket's
     /// module. Only claims the blanket if the receiver satisfies its param
-    /// bound, and keys the `Reflect` struct blanket by `[T, Fields]`.
+    /// bound, and keys the `ReflectStruct` struct blanket by `[T, Fields]`.
     fn resolve_type_param_dispatch(
         &self,
         method_func: &mut FunctionRef,
@@ -3082,7 +3082,7 @@ impl Monomorphizer {
             None
         };
         // Only dispatch through the blanket if the receiver satisfies its
-        // param bound — a `Reflect`-bound struct derive must not swallow a
+        // param bound — a `ReflectStruct`-bound struct derive must not swallow a
         // type carrying its own unregistered impl (e.g. `Fn^Inspect`).
         let blanket_module = blanket_module.filter(|bm| {
             let recv_inner = type_table.peel_refs(receiver_type_id);
@@ -3142,14 +3142,14 @@ impl Monomorphizer {
             // site's param head (`old_func_name`) only matches it for a
             // direct `T::method` call, not a call on another param. This
             // and the receiver-derived impl args below apply only to a
-            // `Reflect`-derived blanket (identified by the receiver's
+            // `ReflectStruct`-derived blanket (identified by the receiver's
             // `Fields` pack); every other blanket keeps its original
             // dispatch so serde / iterator blankets are untouched.
             let recv_inner = type_table.peel_refs(receiver_type_id);
             // Resolve the type packs a blanket keys on. The general form of the
-            // former `Reflect`-struct-only `[T, Fields]` keying: a blanket
-            // `impl<T: Bound<Assoc = [..P]>, ..P> Trait for T` (`Reflect<Fields>`,
-            // `ReflectEnum<CaseTokens>`, `ReflectFlags<BitTokens>`, …) is keyed by
+            // former `ReflectStruct`-struct-only `[T, Fields]` keying: a blanket
+            // `impl<T: Bound<Assoc = [..P]>, ..P> Trait for T` (`ReflectStruct<FieldTypes>`,
+            // `ReflectEnum<Members>`, `ReflectFlags<Members>`, …) is keyed by
             // `[T, T::Assoc, …]` so its instance name matches the two-arg template.
             // A plain one-arg blanket (`impl<I: Iterator> IntoIterator for I`)
             // projects nothing, so it stays keyed by the call-site args.

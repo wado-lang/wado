@@ -356,7 +356,7 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A sealed, compiler-synthesized trait (`Reflect`) cannot be implemented
+    /// A sealed, compiler-synthesized trait (`ReflectStruct`) cannot be implemented
     /// in user code — the compiler provides its impl for every eligible type.
     SealedTraitImpl {
         trait_name: String,

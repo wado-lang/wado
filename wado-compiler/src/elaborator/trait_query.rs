@@ -24,7 +24,7 @@ pub(super) enum OnBoundTrait {
     Serialize,
     Deserialize,
     Default,
-    Reflect,
+    ReflectStruct,
     ReflectVariant,
     ReflectEnum,
     ReflectFlags,
@@ -638,8 +638,8 @@ impl TypeSystem {
                 of(CompilerItem::Deserialize, OnBoundTrait::Deserialize)
             } else if trait_name == items.trait_name(CompilerItem::Default) {
                 of(CompilerItem::Default, OnBoundTrait::Default)
-            } else if trait_name == items.trait_name(CompilerItem::Reflect) {
-                of(CompilerItem::Reflect, OnBoundTrait::Reflect)
+            } else if trait_name == items.trait_name(CompilerItem::ReflectStruct) {
+                of(CompilerItem::ReflectStruct, OnBoundTrait::ReflectStruct)
             } else if trait_name == items.trait_name(CompilerItem::ReflectVariant) {
                 of(CompilerItem::ReflectVariant, OnBoundTrait::ReflectVariant)
             } else if trait_name == items.trait_name(CompilerItem::ReflectEnum) {
@@ -1016,14 +1016,14 @@ impl TypeSystem {
             return true;
         }
 
-        // `Reflect` is synthesized for every struct: eligibility is "is a
+        // `ReflectStruct` is synthesized for every struct: eligibility is "is a
         // struct", not a field-recursive check.
         if let ResolvedType::Struct {
             name,
             module_source,
             ..
         } = &resolved
-            && on_bound == Some(OnBoundTrait::Reflect)
+            && on_bound == Some(OnBoundTrait::ReflectStruct)
         {
             self.type_table
                 .borrow_mut()
@@ -1280,7 +1280,7 @@ impl TypeSystem {
     }
 
     /// Whether `bound_name` is a synthesized reflection trait the subject type
-    /// is eligible for by kind (`Reflect` on a struct, `ReflectVariant` on a
+    /// is eligible for by kind (`ReflectStruct` on a struct, `ReflectVariant` on a
     /// variant, …). These have no impl blocks, so the name-based search misses
     /// them; a hit records the bound-driven synth request.
     fn synthesized_reflect_bound_holds(
@@ -1293,7 +1293,7 @@ impl TypeSystem {
             return false;
         };
         let subject = match on_bound {
-            OnBoundTrait::Reflect => scope
+            OnBoundTrait::ReflectStruct => scope
                 .struct_fields(type_name)
                 .map(|info| info.module_source.clone()),
             OnBoundTrait::ReflectVariant => scope

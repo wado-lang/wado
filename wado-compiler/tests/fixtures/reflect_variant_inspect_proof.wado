@@ -1,5 +1,5 @@
 // Completion proof (WEP 2026-06-13 §3g): variant `Inspect` written as
-// library code over the VariantCase-token machinery reproduces the compiler
+// library code over the VariantCase member machinery reproduces the compiler
 // synthesizer's output byte for byte — the §3 design is expressive enough
 // to take over the built-in derivation.
 
@@ -7,11 +7,11 @@ trait LibInspect {
     fn lib_inspect(&self) -> String;
 }
 
-impl<T: ReflectVariant<Cases = [..P]>, ..P: Inspect> LibInspect for T {
+impl<T: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect> LibInspect for T {
     fn lib_inspect(&self) -> String {
         let type_name = ReflectVariant::<T>::type_name();
         let mut out = "";
-        for let c of ReflectVariant::<T>::cases() {
+        for let c of ReflectVariant::<T>::members() {
             if c.holds(self) {
                 if c.is_unit() {
                     out = `${type_name}::${c.name()}`;

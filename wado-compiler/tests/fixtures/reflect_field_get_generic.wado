@@ -8,10 +8,10 @@ struct Bag {
     label: String,
 }
 
-test "field_tokens get() reads a generic-instance field value at runtime" {
+test "members() get() reads a generic-instance field value at runtime" {
     let b = Bag { items: [1, 2, 3], label: "hi" };
     let mut out = "";
-    for let f of Reflect::<Bag>::field_tokens() {
+    for let f of ReflectStruct::<Bag>::members() {
         out = `${out}${f.name()}=${f.get(&b):?};`;
     }
     assert out == `items=[1, 2, 3];label="hi";`;

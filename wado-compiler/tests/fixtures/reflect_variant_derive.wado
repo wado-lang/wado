@@ -1,5 +1,5 @@
 // Blanket derivation over ReflectVariant (WEP 2026-06-13 §3b, §3e–§3f): the
-// bound `Cases = [..P]` projects the payload pack, and `cases()` has the
+// bound `CasePayloads = [..P]` projects the payload pack, and `members()` has the
 // constructor-mapped pack type `[..VariantCase<T, P>]`. One walk serves both
 // directions: `holds`/`extract` dispatch on the live case (serialize shape),
 // `construct` rebuilds a case (deserialize shape). The value-free direction
@@ -28,10 +28,10 @@ impl Tag for () {
     }
 }
 
-impl<T: ReflectVariant<Cases = [..P]>, ..P: Tag> Tag for T {
+impl<T: ReflectVariant<CasePayloads = [..P]>, ..P: Tag> Tag for T {
     fn tag(&self) -> String {
         let mut out = "";
-        for let c of ReflectVariant::<T>::cases() {
+        for let c of ReflectVariant::<T>::members() {
             if c.holds(self) {
                 out = `${c.name()}(${c.extract(self).tag()})`;
             }
@@ -44,10 +44,10 @@ trait Rebuild {
     fn rebuild(&self) -> Self;
 }
 
-impl<T: ReflectVariant<Cases = [..P]>, ..P: Tag> Rebuild for T {
+impl<T: ReflectVariant<CasePayloads = [..P]>, ..P: Tag> Rebuild for T {
     fn rebuild(&self) -> T {
         let mut out: Option<T> = Option::None;
-        for let c of ReflectVariant::<T>::cases() {
+        for let c of ReflectVariant::<T>::members() {
             if c.holds(self) {
                 out = Option::Some(c.construct(c.extract(self)));
             }
@@ -82,7 +82,7 @@ trait OneOf {
     fn oneof(&self) -> String;
 }
 
-impl<T: ReflectVariant<Cases = [..P]>, ..P: TypeTag> OneOf for T {
+impl<T: ReflectVariant<CasePayloads = [..P]>, ..P: TypeTag> OneOf for T {
     fn oneof(&self) -> String {
         let mut out = "";
         for let t of [..P::ttag()] {

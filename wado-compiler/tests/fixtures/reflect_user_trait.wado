@@ -1,7 +1,8 @@
-// A user who declares their own `trait Reflect` owns that name: the seal (for
-// the compiler's sealed Reflect) must not fire on an impl of the user's trait.
+// A user who declares their own `trait ReflectStruct` owns that name: the seal
+// (for the compiler's sealed ReflectStruct) must not fire on an impl of the
+// user's trait.
 
-trait Reflect {
+trait ReflectStruct {
     fn describe(&self) -> String;
 }
 
@@ -9,13 +10,13 @@ struct Foo {
     a: i32,
 }
 
-impl Reflect for Foo {
+impl ReflectStruct for Foo {
     fn describe(&self) -> String {
         return "foo";
     }
 }
 
-test "user-defined Reflect trait works" {
+test "user-defined ReflectStruct trait works" {
     let f = Foo { a: 1 };
     assert f.describe() == "foo";
 }

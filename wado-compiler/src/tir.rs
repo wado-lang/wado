@@ -3844,7 +3844,7 @@ pub struct TirTypeParam {
     /// Default type if specified (e.g., `Effects = []`)
     pub default: Option<TypeId>,
     pub index: u32,
-    /// For a pack param bound by projection — `impl<T: Reflect<Fields = [..F]>,
+    /// For a pack param bound by projection — `impl<T: ReflectStruct<FieldTypes = [..F]>,
     /// ..F: Trait>` — records `(source param index, assoc type name)`. The pack
     /// is not supplied by the caller; monomorphization derives it by resolving
     /// the source param's associated type (e.g. `T::Fields`) to its tuple.

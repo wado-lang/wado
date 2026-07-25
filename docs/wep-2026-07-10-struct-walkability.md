@@ -1,4 +1,4 @@
-# WEP: Struct Walkability — Field Walks over `Reflect` and `#[secret]` Fields
+# WEP: Struct Walkability — Field Walks over `ReflectStruct` and `#[secret]` Fields
 
 Status: Draft
 
@@ -15,7 +15,7 @@ its concrete type.
 The substrate already exists. Type packs, `[..T::method()]` expansion, variadic
 trait impls, and tuple `for-of` are implemented
 ([Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md));
-`Reflect` — the compiler-synthesized projection of a struct's fields into a
+`ReflectStruct` — the compiler-synthesized projection of a struct's fields into a
 typed tuple — is designed there (§10–11) and extended by
 [Reflect Derivation](./wep-2026-06-13-reflect-derivation.md), but unbuilt.
 
@@ -26,17 +26,17 @@ This WEP settles two questions raised while reviewing that design:
 2. How does field redaction interact with reflection? Today `#[secret]` affects
    only `Inspect`/`InspectAlt` and `wado doc`; serde serializes secret fields
    normally, so a redacted credential still leaks through `json::to_string`.
-   Once any package can walk any struct via `Reflect`, this hole widens.
+   Once any package can walk any struct via `ReflectStruct`, this hole widens.
 
 ## Decision
 
-### Struct walk is `Reflect::fields()` + tuple `for-of` — no new primitive
+### Struct walk is `ReflectStruct::members()` + tuple `for-of` — no new primitive
 
-A struct walk is the existing tuple unrolling applied to the `Reflect`
+A struct walk is the existing tuple unrolling applied to the `ReflectStruct`
 projection:
 
 ```wado
-fn walk_fields<T, ..F: Inspect>(s: &T) where T: Reflect<Fields = [..F]> {
+fn walk_fields<T, ..F: Inspect>(s: &T) where T: ReflectStruct<FieldTypes = [..F]> {
     let names = T::field_names();
     for let [i, v] of s.fields().enumerate() {
         println(`${names[i]} = ${v.inspect()}`);
@@ -73,7 +73,7 @@ impl Walk for i32    { fn walk(&self, v: &mut Visitor) { v.visit_int(*self); } }
 impl Walk for String { fn walk(&self, v: &mut Visitor) { v.visit_str(self); } }
 
 impl<T, ..F: Walk> Walk for T
-where T: Reflect<Fields = [..F]>
+where T: ReflectStruct<FieldTypes = [..F]>
 {
     fn walk(&self, visitor: &mut Visitor) {
         let names = T::field_names();
@@ -95,8 +95,8 @@ expansion; only type-growing recursion diverges, as anywhere else.
 
 Consequently the only compiler work for struct walkability is finishing the
 three unbuilt items already on the WEP 2026-03-14 / 2026-06-13 checklists:
-`Reflect` per-struct synthesis, `where`-clause pack binding
-`T: Reflect<Fields = [..F]>`, and coherence Rules 1–2.
+`ReflectStruct` per-struct synthesis, `where`-clause pack binding
+`T: ReflectStruct<FieldTypes = [..F]>`, and coherence Rules 1–2.
 
 ### `#[secret]` — upgrade to a security contract
 
@@ -116,14 +116,14 @@ exfiltration (logs, serialization, dumps, schemas), not against deliberate use
 by authorized code.
 
 Threat model, stated honestly: `#[secret]` seals the language-level generic
-channels — `Inspect`, serde, and everything built on `Reflect`. It does not
+channels — `Inspect`, serde, and everything built on `ReflectStruct`. It does not
 seal the CM boundary (lowering a struct through an `export fn` signature is a
 deliberate act by the type's owner, same rank as direct field access), host
 memory inspection, or a debugger.
 
 ### `Secret<T>` — value-opaque, type-transparent projection
 
-In the `Reflect` projection (and only there), a `#[secret]` field appears as
+In the `ReflectStruct` projection (and only there), a `#[secret]` field appears as
 `Secret<F_k>` in the `Fields` pack. The struct declaration and direct field
 access are unchanged: `self.password` is still `String`.
 
@@ -163,11 +163,11 @@ implements:
   deliberate act, and may choose constant-time comparison.
 
 Why not plug the leak in `serde_synth` now: serde is slated to become
-`Reflect`-based library code (WEP 2026-06-13 §5), so a secret-skip written into
+`ReflectStruct`-based library code (WEP 2026-06-13 §5), so a secret-skip written into
 the bespoke synthesizer is thrown away at that migration. The skip belongs in
-the `Reflect`-based serde, where it reads `FieldMeta::secret` and is correct by
+the `ReflectStruct`-based serde, where it reads `FieldMeta::secret` and is correct by
 construction. The whole contract — serialize skip, `Eq`/`Ord` refusal,
-`Secret<T>` — therefore lands as one change on top of `Reflect`, not dribbled
+`Secret<T>` — therefore lands as one change on top of `ReflectStruct`, not dribbled
 into the synthesizers ahead of the rest (which would leave a half-migrated
 semantics: serialize still leaking while inspect is already hardened). The
 accepted cost is that serde keeps serializing secret fields until the migration
@@ -182,21 +182,21 @@ defaulted trait method that `Secret<T>` overrides to a no-op.
 ## Implementation checklist
 
 The `#[secret]` attribute already exists with inspect-only semantics. Everything
-below rides on the `Reflect` substrate, which this WEP does not own — it is the
+below rides on the `ReflectStruct` substrate, which this WEP does not own — it is the
 three unbuilt items on the WEP 2026-03-14 / 2026-06-13 checklists (per-struct
-`Reflect` synthesis, `where`-clause pack binding `T: Reflect<Fields = [..F]>`,
+`ReflectStruct` synthesis, `where`-clause pack binding `T: ReflectStruct<FieldTypes = [..F]>`,
 coherence Rules 1–2). Struct walkability needs nothing beyond them; the
 `#[secret]` security upgrade needs the two staged items below.
 
-- [ ] Extend `Reflect` to project a `#[secret]` field as `Secret<T>` in `Fields`
-      and add `FieldMeta::secret` (blocked on `Reflect` synthesis).
+- [ ] Extend `ReflectStruct` to project a `#[secret]` field as `Secret<T>` in `Fields`
+      and add `FieldMeta::secret` (blocked on `ReflectStruct` synthesis).
 - [ ] Land the `#[secret]` security upgrade in one step — not piecemeal in the
       bespoke synthesizers ahead of the rest: serialize skip (in the
-      `Reflect`-based serde, reading `FieldMeta::secret`), require
+      `ReflectStruct`-based serde, reading `FieldMeta::secret`), require
       default/`Option` for serializability, and `Eq`/`Ord` auto-derive + marker
       refusal (a guard in trait synthesis). Resolve the unrolled-loop skip open
       question above. Deserialize is unchanged.
-- [ ] Document the walk/nesting idiom in the cheatsheet once `Reflect` lands.
+- [ ] Document the walk/nesting idiom in the cheatsheet once `ReflectStruct` lands.
 
 ## Consequences
 
@@ -205,7 +205,7 @@ coherence Rules 1–2). Struct walkability needs nothing beyond them; the
 - Struct walkability costs no new language surface: one projection trait plus
   machinery that already exists; nesting falls out of coherence rules.
 - The end state closes a leak serde has today (it serializes redacted fields)
-  and gives credentials a contract that every future `Reflect` consumer
+  and gives credentials a contract that every future `ReflectStruct` consumer
   inherits automatically — a library cannot forget to redact.
 - The axis framing keeps the visibility model clean: name access, CM surface,
   and value flow stay independent.
@@ -222,7 +222,7 @@ coherence Rules 1–2). Struct walkability needs nothing beyond them; the
 - A struct with a secret field loses derived `Eq`/`Ord` and (without a default)
   `Serialize`; users must opt back in manually. This friction is the point, but
   it is friction.
-- The security upgrade is deferred to the `Reflect`-based serde rather than
+- The security upgrade is deferred to the `ReflectStruct`-based serde rather than
   patched into `serde_synth` now, so secret fields stay serializable until the
   migration lands. Deliberate: an interim bespoke patch would be thrown away at
   that migration.

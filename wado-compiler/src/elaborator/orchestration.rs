@@ -875,7 +875,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
 
         for sealed_item in [
-            CompilerItem::Reflect,
+            CompilerItem::ReflectStruct,
             CompilerItem::ReflectVariant,
             CompilerItem::ReflectEnum,
             CompilerItem::ReflectFlags,

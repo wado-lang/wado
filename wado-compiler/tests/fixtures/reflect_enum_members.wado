@@ -1,5 +1,5 @@
-// ReflectEnum case walk (WEP 2026-06-13 §3b): case_tokens() returns a tuple of
-// EnumCase<E> tokens carrying the case name, #[serde(rename)] override, and the
+// ReflectEnum case walk (WEP 2026-06-13 §3b): members() returns a tuple of
+// EnumCase<E> members carrying the case name, #[serde(rename)] override, and the
 // case value; discriminant / holds / make bridge a value and its case, and
 // core:serde::wire_name resolves a case tag through the shared Member helper.
 
@@ -14,7 +14,7 @@ enum Color {
 }
 
 test "Member exposes case name and rename override" {
-    let ts = ReflectEnum::<Color>::case_tokens();
+    let ts = ReflectEnum::<Color>::members();
     assert ts.0.name() == "LightRed";
     assert ts.0.wire_name_override() matches { None };
     assert ts.2.name() == "Blue";
@@ -22,7 +22,7 @@ test "Member exposes case name and rename override" {
 }
 
 test "discriminant, holds, and make round-trip a case" {
-    let ts = ReflectEnum::<Color>::case_tokens();
+    let ts = ReflectEnum::<Color>::members();
     assert ts.1.discriminant() == 1;
     let g = Color::Green;
     assert ts.1.holds(&g);
@@ -31,7 +31,7 @@ test "discriminant, holds, and make round-trip a case" {
 }
 
 test "wire_name resolves a case tag via the shared Member helper" {
-    let ts = ReflectEnum::<Color>::case_tokens();
+    let ts = ReflectEnum::<Color>::members();
     assert wire_name(&ts.0, CaseStyle::Kebab) == "light-red";
     assert wire_name(&ts.1, CaseStyle::Kebab) == "green";
     assert wire_name(&ts.2, CaseStyle::Kebab) == "blau";

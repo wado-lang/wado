@@ -1,5 +1,5 @@
-// Blanket derivation over `Reflect` (WEP 2026-06-13 §2): a generic
-// `field_tokens()` walk reads each field's name (via the `Member` face) and its
+// Blanket derivation over `ReflectStruct` (WEP 2026-06-13 §2): a generic
+// `members()` walk reads each field's name (via the `Member` face) and its
 // value (via `Field::get`), exercising the generic resolution.
 
 trait Row {
@@ -18,10 +18,10 @@ impl Row for String {
     }
 }
 
-impl<T: Reflect<Fields = [..F]>, ..F: Row> Row for T {
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Row> Row for T {
     fn row(&self) -> String {
         let mut out = "";
-        for let f of Reflect::<T>::field_tokens() {
+        for let f of ReflectStruct::<T>::members() {
             let wire = match f.wire_name_override() {
                 Option::Some(w) => w,
                 Option::None => f.name(),
@@ -38,7 +38,7 @@ struct User {
     name: String,
 }
 
-test "blanket derivation walks field_tokens() with metadata and values" {
+test "blanket derivation walks members() with metadata and values" {
     let u = User { id: 7, name: "ada" };
     assert u.row() == "user_id=7;name=ada;";
 }

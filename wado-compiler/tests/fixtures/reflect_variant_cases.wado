@@ -1,5 +1,5 @@
-// ReflectVariant case walk (WEP 2026-06-13 §3e): cases() returns VariantCase<V, P>
-// tokens; a tuple for-of statically binds each case's payload type, and
+// ReflectVariant case walk (WEP 2026-06-13 §3e): members() returns VariantCase<V, P>
+// members; a tuple for-of statically binds each case's payload type, and
 // holds / extract / construct bridge values in both directions.
 
 variant Shape {
@@ -11,7 +11,7 @@ variant Shape {
 test "holds finds the live case" {
     let s = Shape::Rectangle([3.0, 4.0]);
     let mut hits = 0;
-    for let c of ReflectVariant::<Shape>::cases() {
+    for let c of ReflectVariant::<Shape>::members() {
         if c.holds(&s) {
             hits += 1;
             assert c.index() == 1;
@@ -23,7 +23,7 @@ test "holds finds the live case" {
 test "extract returns the typed payload" {
     let s = Shape::Circle(2.5);
     let mut out = "";
-    for let c of ReflectVariant::<Shape>::cases() {
+    for let c of ReflectVariant::<Shape>::members() {
         if c.holds(&s) {
             out = `${c.extract(&s):?}`;
         }
@@ -32,7 +32,7 @@ test "extract returns the typed payload" {
 }
 
 test "construct builds each case" {
-    let cs = ReflectVariant::<Shape>::cases();
+    let cs = ReflectVariant::<Shape>::members();
     let circle = cs.0.construct(2.5);
     assert circle matches { Circle(r) && r == 2.5 };
     let rect = cs.1.construct([3.0, 4.0]);
@@ -44,7 +44,7 @@ test "construct builds each case" {
 #[expect_trap]
 test "extract on a non-live case traps" {
     let s = Shape::Point;
-    let cs = ReflectVariant::<Shape>::cases();
+    let cs = ReflectVariant::<Shape>::members();
     let r = cs.0.extract(&s);
     assert r == 0.0;
 }

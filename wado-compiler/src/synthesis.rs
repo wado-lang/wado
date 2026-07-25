@@ -47,7 +47,7 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
     // requests later than `synthesize_traits`' snapshot (WEP 2026-06-25).
     traits::synthesize_defaults(&mut project);
 
-    // Reflect struct metadata (WEP 2026-06-13 §1). After defaults so any late
+    // ReflectStruct struct metadata (WEP 2026-06-13 §1). After defaults so any late
     // demand recorded by synthesized bodies is included.
     traits::synthesize_reflect(&mut project);
 

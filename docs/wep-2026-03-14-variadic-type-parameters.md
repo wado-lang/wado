@@ -210,7 +210,7 @@ update spread (`..p`) and the general "spread a sequence" meaning of `..`.
 
 ### 10. Reflect: Struct Metadata as a Typed Tuple
 
-`Reflect` is a **compiler-synthesized**, sealed language feature — it cannot be implemented
+`ReflectStruct` is a **compiler-synthesized**, sealed language feature — it cannot be implemented
 in user code. It exposes a struct's field types and names at compile time via a trait, and
 its members are reached only as `Reflect::<T>::field_names()` (see
 [Reflect Derivation §1a](./wep-2026-06-13-reflect-derivation.md)):
@@ -228,12 +228,12 @@ internal trait Reflect {
 The compiler automatically synthesizes `impl Reflect for S` for every struct `S`. For a
 struct with fields `f_0: F_0, f_1: F_1, …`:
 
-- `type Fields = [F_0, F_1, …]`
+- `type FieldTypes = [F_0, F_1, …]`
 - `fields(&self)` returns `[self.f_0, self.f_1, …]` — field values packed into a tuple
 - `field_names()` returns `["f_0", "f_1", …]` — field names as strings
 - `type_name()` returns the struct name as a string
 
-**Why compiler-synthesized**: `Reflect` returns `Self::Fields`, which is a concrete tuple
+**Why compiler-synthesized**: `ReflectStruct` returns `Self::Fields`, which is a concrete tuple
 type specific to each struct. Without `any`, the compiler must generate the implementation
 at compile time for each struct individually.
 
@@ -247,7 +247,7 @@ A `where` clause may bind a type pack from an associated type:
 
 ```wado
 impl<T, ..F: Inspect> Inspect for T
-where T: Reflect<Fields = [..F]>
+where T: ReflectStruct<FieldTypes = [..F]>
 {
     fn inspect(&self) -> String {
         let names = Reflect::<T>::field_names();
@@ -261,7 +261,7 @@ where T: Reflect<Fields = [..F]>
 }
 ```
 
-`T: Reflect<Fields = [..F]>` constrains `T` to be any type that implements `Reflect`
+`T: ReflectStruct<FieldTypes = [..F]>` constrains `T` to be any type that implements `ReflectStruct`
 with a `Fields` associated type that matches the pack `F`. The compiler extracts `F` from
 the concrete `Fields` type at monomorphization. This is the mechanism that lets the
 struct-inspect implementation be written entirely in Wado.
@@ -368,11 +368,11 @@ impl<..T: Deserialize> Deserialize for [..T] {
 }
 ```
 
-### Struct `Inspect` via `Reflect`
+### Struct `Inspect` via `ReflectStruct`
 
 ```wado
 impl<T, ..F: Inspect> Inspect for T
-where T: Reflect<Fields = [..F]>
+where T: ReflectStruct<FieldTypes = [..F]>
 {
     fn inspect(&self) -> String {
         let names = Reflect::<T>::field_names();
@@ -409,14 +409,14 @@ where T: Reflect<Fields = [..F]>
       in `core:serde`; monomorphizer handles cross-module variadic impls with method-level
       type params (e.g., `fn serialize<S: Serializer>`) and associated type projections
 - [ ] Coherence: implement Rule 1 (non-VG wins) and Rule 2 (VG overlap forbidden)
-- [x] `Reflect` trait: synthesize per-struct impl (`type_name`, `field_names`,
+- [x] `ReflectStruct` trait: synthesize per-struct impl (`type_name`, `field_names`,
       `fields`, and the `Fields` associated tuple) in the synthesis pass
 - [ ] `where` clause pack binding: parse `T: Trait<Assoc = [..F]>` and extract `F`
 - [ ] Error messages: show call site, element index, and body location
 - [x] Tuple `Eq`: monomorphizer expands `==`/`!=` on concrete tuples to element-wise
       comparisons; enables `<..T: Eq>` trait bounds on variadic functions
 - [ ] Standard library: add variadic impls for `Default`, `Clone`
-- [ ] Remove compiler-magic struct `Inspect`; replace with the `Reflect`-based impl
+- [ ] Remove compiler-magic struct `Inspect`; replace with the `ReflectStruct`-based impl
 
 ---
 
@@ -437,7 +437,7 @@ where T: Reflect<Fields = [..F]>
   message quality requires careful engineering
 - Each unique pack instantiation generates separate code (binary size growth for large
   tuples or many distinct instantiations)
-- `Reflect` is compiler-synthesized; it cannot be manually implemented or overridden by
+- `ReflectStruct` is compiler-synthesized; it cannot be manually implemented or overridden by
   user code
 
 ### Out of Scope (Future Work)

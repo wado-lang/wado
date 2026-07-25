@@ -1,6 +1,6 @@
 // Stage C resolver (WEP 2026-06-13): `wire_name(field, policy)` resolves a
 // field's wire key — its `#[serde(rename)]` override wins, else the struct's
-// `rename_all` policy is applied. Walks the `Reflect::<S>::field_tokens()`.
+// `rename_all` policy is applied. Walks the `ReflectStruct::<S>::members()`.
 
 use { wire_name } from "core:serde";
 
@@ -13,9 +13,9 @@ struct S {
 }
 
 test "wire_name resolves override then policy" {
-    let policy = Reflect::<S>::wire_name_policy();
+    let policy = ReflectStruct::<S>::wire_name_policy();
     let mut out = "";
-    for let f of Reflect::<S>::field_tokens() {
+    for let f of ReflectStruct::<S>::members() {
         out = `${out}${wire_name(&f, policy)};`;
     }
     assert out == "userId;explicit;createdAt;";

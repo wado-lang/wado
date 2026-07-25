@@ -1,5 +1,5 @@
 // Blanket derivation over ReflectEnum (WEP 2026-06-13 §3b): the bound
-// `CaseTokens = [..C]` sources the token tuple's arity, so `case_tokens()` walks
+// `Members = [..C]` sources the member tuple's arity, so `members()` walks
 // the live case (serialize) and finds a case by name (deserialize, minting via
 // make()); from_tag() uses from_discriminant().
 
@@ -9,10 +9,10 @@ trait CaseName {
     fn from_tag(disc: i32) -> Option<Self>;
 }
 
-impl<T: ReflectEnum<CaseTokens = [..C]>, ..C> CaseName for T {
+impl<T: ReflectEnum<Members = [..C]>, ..C> CaseName for T {
     fn case_name(&self) -> String {
         let mut out = "";
-        for let c of ReflectEnum::<T>::case_tokens() {
+        for let c of ReflectEnum::<T>::members() {
             if c.holds(self) {
                 out = c.name();
             }
@@ -21,7 +21,7 @@ impl<T: ReflectEnum<CaseTokens = [..C]>, ..C> CaseName for T {
     }
 
     fn by_name(name: String) -> Option<T> {
-        for let c of ReflectEnum::<T>::case_tokens() {
+        for let c of ReflectEnum::<T>::members() {
             if c.name() == name {
                 return Option::Some(c.make());
             }

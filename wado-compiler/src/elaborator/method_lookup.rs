@@ -1980,7 +1980,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let type_lookup = self.type_lookup();
         for (module, ast_id, bounds) in &value_blankets {
             // Gate on all bounds. The receiver-`TypeId` check is preferred:
-            // it recognises synthesized bounds (`Reflect`, `Default`) with no
+            // it recognises synthesized bounds (`ReflectStruct`, `Default`) with no
             // explicit `impl`, which the name-based lookup misses. A viable
             // blanket must survive to the authoritative `candidate_matches_receiver`.
             let bounds_satisfied = bounds.iter().all(|bound_trait_name| {

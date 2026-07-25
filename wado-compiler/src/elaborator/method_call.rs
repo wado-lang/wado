@@ -1074,11 +1074,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        // Reflect trait-qualified static call: `Reflect::<T>::field_names()` /
-        // `type_name()`. `Reflect` is a (sealed) trait, not a type, so
+        // ReflectStruct trait-qualified static call: `ReflectStruct::<T>::field_names()` /
+        // `type_name()`. `ReflectStruct` is a (sealed) trait, not a type, so
         // `target_type` would not resolve — intercept and route to the
-        // concrete `T`'s synthesized `T^Reflect::method`. This is the only
-        // spelling for Reflect metadata; a bare `T::field_names()` never
+        // concrete `T`'s synthesized `T^ReflectStruct::method`. This is the only
+        // spelling for ReflectStruct metadata; a bare `T::field_names()` never
         // resolves, so struct namespaces stay clean.
         if let ast::Type::Generic(g) = &static_call.target_type
             && self.is_reflect_trait_call(&g.name, &static_call.method)
@@ -3136,8 +3136,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return true;
         }
 
-        // `Reflect` metadata is reachable only through the trait-qualified form
-        // `Reflect::<T>::method()` (see `resolve_call`), never as a bare
+        // `ReflectStruct` metadata is reachable only through the trait-qualified form
+        // `ReflectStruct::<T>::method()` (see `resolve_call`), never as a bare
         // `T::method()` static method — that keeps struct namespaces clean.
 
         // Defaulted trait method: when `impl Trait for Type` does not
