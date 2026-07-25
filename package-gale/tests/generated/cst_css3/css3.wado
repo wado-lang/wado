@@ -29431,9 +29431,11 @@ fn scan_namespace_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
 }
 
 fn scan_namespace_prefix(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_ident(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -29580,9 +29582,11 @@ fn scan_media_query(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
 }
 
 fn scan_media_type(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_ident(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -29618,11 +29622,13 @@ fn scan_media_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
 }
 
 fn scan_media_feature(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_ident(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     pos = scan_ws(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -29685,6 +29691,7 @@ fn scan_pseudo_page(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
 }
 
 fn scan_selector_group(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_selector(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -29705,10 +29712,12 @@ fn scan_selector_group(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_selector(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_simple_selector_sequence(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -29731,6 +29740,7 @@ fn scan_selector(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPT
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -29957,6 +29967,7 @@ fn scan_simple_selector_sequence(tokens: &Array<i32>, pos: i32, follow: &List<Li
 }
 
 fn scan_type_selector(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     if pos < tokens.len() && _kind_set_12(tokens[pos]) {
         let sp = pos;
@@ -29965,6 +29976,7 @@ fn scan_type_selector(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
     }
     pos = scan_element_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -30001,9 +30013,11 @@ fn scan_type_namespace_prefix(tokens: &Array<i32>, pos: i32, follow: &List<List<
 }
 
 fn scan_element_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_ident(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -30171,6 +30185,7 @@ fn scan_functional_pseudo(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
 }
 
 fn scan_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     sg_34_done: {
         sg_34: {
@@ -30291,6 +30306,7 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -30578,6 +30594,7 @@ fn scan_ruleset(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
 }
 
 fn scan_declaration_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_LIT_SEMI {
         let sp = pos;
@@ -30618,6 +30635,7 @@ fn scan_declaration_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -30676,6 +30694,7 @@ fn scan_prio(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
 }
 
 fn scan_value(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     let gp_40 = pos;
     let sgk_40 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -30738,10 +30757,12 @@ fn scan_value(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_term(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -30763,6 +30784,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -32035,6 +32057,7 @@ fn scan_calc(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
 }
 
 fn scan_calc_sum(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_calc_product(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -32082,10 +32105,12 @@ fn scan_calc_sum(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPT
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_calc_product(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_calc_value(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -32125,6 +32150,7 @@ fn scan_calc_product(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -32525,6 +32551,7 @@ fn scan_font_feature_values_rule(tokens: &Array<i32>, pos: i32, follow: &List<Li
 }
 
 fn scan_font_family_name_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_font_family_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -32547,6 +32574,7 @@ fn scan_font_family_name_list(tokens: &Array<i32>, pos: i32, follow: &List<List<
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 

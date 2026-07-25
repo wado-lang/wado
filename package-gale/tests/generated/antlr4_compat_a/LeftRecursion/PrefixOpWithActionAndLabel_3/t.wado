@@ -1857,9 +1857,11 @@ struct EVals {
 }
 
 fn scan_s(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_e(tokens, pos, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 

@@ -1479,6 +1479,51 @@ fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule,
 /// Body emitter for a rule's scan function. Left-recursive rules
 /// dispatch to `gen_scan_lr_functions`; every other shape emits a
 /// single `scan_<rule>` body below.
+/// Whether this scan body can run to its end at the position it started —
+/// the only shape where the non-nullable post-condition can fire. A body
+/// holding any element that must consume never reaches it, so emitting the
+/// check there would be dead code in every generated scan.
+fn scan_body_can_match_empty(elements: &List<ScanElement>) -> bool {
+    for let e of elements {
+        if !scan_element_can_match_empty(e) {
+            return false;
+        }
+    }
+    return true;
+}
+
+fn scan_element_can_match_empty(se: &ScanElement) -> bool {
+    return match se {
+        Token(_) => false,
+        Wildcard => false,
+        Excluded(_) => false,
+        // Only the snake name reaches scan IR, so the callee's nullability is
+        // out of reach here; assume it can be empty and let the body's other
+        // elements decide.
+        RuleCall(_) => true,
+        Repeat(re) => if let Plus = re.kind {
+            scan_element_can_match_empty(&re.body);
+        } else {
+            true;
+        },
+        Group(ge) => {
+            if ge.lenient {
+                true;
+            } else {
+                let mut any = false;
+                for let alt of &ge.alts {
+                    if scan_body_can_match_empty(&alt.elements) {
+                        any = true;
+                        break;
+                    }
+                }
+                any;
+            }
+        },
+        OptionalLookahead(_) => true,
+    };
+}
+
 fn gen_scan_function_named(
     w: &mut CodeWriter,
     rule: &ParserRule,
@@ -1546,8 +1591,24 @@ fn gen_scan_function_named(
                 "gen_scan_function_named: single-alt rule but lowered_rule is not Simple — lower_rule invariant violated",
             );
         };
+        // A rule that cannot derive the empty string must not report a
+        // zero-token match. Its body's mandatory group scans `lenient` by
+        // default, so a gate miss rewinds to the entry position and the rule
+        // would return "matched, consumed nothing" — which a caller's repeat
+        // gate reads as a viable iteration (SQLite's `( ';'+ sql_stmt )*`
+        // entering on a trailing `';'`). Leniency inside the body is kept:
+        // only the whole-rule result is checked.
+        let mut nullable_visiting: List<String> = [];
+        let non_nullable = !ctx.rule_is_nullable(&rule.name, &mut nullable_visiting)
+            && scan_body_can_match_empty(&scan_body.elements);
+        if non_nullable {
+            w.line(&"let scan_start = pos;");
+        }
         w.line(&"let mut pos = pos;");
         gen_scan_op_elements(w, &scan_body.elements, 0, scan_body.elements.len(), ctx, &"return -1;");
+        if non_nullable {
+            w.line(&"if pos == scan_start { return -1; }");
+        }
         w.line(&"return pos;");
     } else if all_alts_are_single_token(&rule.alternatives) {
         // Compact form: every alt matches exactly one fixed token, so the

@@ -3702,6 +3702,7 @@ fn scan_s(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
 }
 
 fn scan_expression_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_e(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -3720,6 +3721,7 @@ fn scan_expression_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> 
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 

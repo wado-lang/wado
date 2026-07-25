@@ -1825,9 +1825,11 @@ fn scan_item(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 }
 
 fn scan_expr(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_primary(tokens, pos, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 

@@ -3596,6 +3596,7 @@ fn scan_error(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
 }
 
 fn scan_sql_stmt_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_LIT_SEMI {
         let sp = pos;
@@ -3632,10 +3633,12 @@ fn scan_sql_stmt_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_sql_stmt(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_K_EXPLAIN && pos + 1 < tokens.len() && tokens[pos + 1] == TK_K_QUERY && pos + 2 < tokens.len() && tokens[pos + 2] == TK_K_PLAN {
         let sol_2_save = pos;
@@ -3851,6 +3854,7 @@ fn scan_sql_stmt(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPT
             pos = gp_4;
         }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -4082,6 +4086,7 @@ fn scan_commit_stmt(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
 }
 
 fn scan_compound_select_stmt(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_K_WITH {
         let sp = pos;
@@ -4250,6 +4255,7 @@ fn scan_compound_select_stmt(tokens: &Array<i32>, pos: i32, follow: &List<List<i
             pos = sol_22_save;
         }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -5222,6 +5228,7 @@ fn scan_drop_view_stmt(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
 }
 
 fn scan_factored_select_stmt(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_K_WITH {
         let sp = pos;
@@ -5324,6 +5331,7 @@ fn scan_factored_select_stmt(tokens: &Array<i32>, pos: i32, follow: &List<List<i
             pos = sol_75_save;
         }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -5743,6 +5751,7 @@ fn scan_savepoint_stmt(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
 }
 
 fn scan_simple_select_stmt(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_K_WITH {
         let sp = pos;
@@ -5830,10 +5839,12 @@ fn scan_simple_select_stmt(tokens: &Array<i32>, pos: i32, follow: &List<List<i32
             pos = sol_97_save;
         }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_select_stmt(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_K_WITH {
         let sp = pos;
@@ -5936,6 +5947,7 @@ fn scan_select_stmt(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
             pos = sol_103_save;
         }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -6477,6 +6489,7 @@ fn scan_vacuum_stmt(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
 }
 
 fn scan_column_def(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_column_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -6491,10 +6504,12 @@ fn scan_column_def(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_type_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_name(tokens, pos, &EMPTY_FOLLOW, 0);
     if pos < 0 { return -1; }
@@ -6543,10 +6558,12 @@ fn scan_type_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
         }
         if pos < 0 { pos = sp; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_column_constraint(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_K_CONSTRAINT {
         let sp = pos;
@@ -6693,6 +6710,7 @@ fn scan_column_constraint(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
             pos = gp_129;
         }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -8667,6 +8685,7 @@ fn scan_raise_function(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
 }
 
 fn scan_indexed_column(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_column_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -8709,10 +8728,12 @@ fn scan_indexed_column(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
         }
         if pos < 0 { pos = sp; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_table_constraint(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_K_CONSTRAINT {
         let sp = pos;
@@ -8826,6 +8847,7 @@ fn scan_table_constraint(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
             pos = gp_203;
         }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -8859,6 +8881,7 @@ fn scan_with_clause(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
 }
 
 fn scan_qualified_table_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     if pos < tokens.len() && _kind_set_8(tokens[pos]) {
         let sp = pos;
@@ -8907,10 +8930,12 @@ fn scan_qualified_table_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i
         }
         if pos < 0 { pos = sp; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_ordering_term(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_expr(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -8953,6 +8978,7 @@ fn scan_ordering_term(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
         }
         if pos < 0 { pos = sp; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -9534,6 +9560,7 @@ fn scan_table_or_subquery(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
 }
 
 fn scan_join_clause(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_table_or_subquery(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -9554,6 +9581,7 @@ fn scan_join_clause(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -10061,121 +10089,155 @@ fn scan_keyword(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
 }
 
 fn scan_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_function_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_database_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_schema_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_table_function_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_table_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_table_or_index_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_new_table_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_column_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_collation_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_foreign_table(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_index_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_trigger_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_view_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_module_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_pragma_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_savepoint_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -10220,9 +10282,11 @@ fn scan_table_alias(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
 }
 
 fn scan_transaction_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
+    if pos == scan_start { return -1; }
     return pos;
 }
 

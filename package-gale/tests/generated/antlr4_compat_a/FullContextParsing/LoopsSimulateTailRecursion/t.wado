@@ -3084,6 +3084,7 @@ fn scan_expr_or_assign(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
 }
 
 fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_expr_primary(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -3101,6 +3102,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
         }
         if pos < 0 { pos = sp; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 

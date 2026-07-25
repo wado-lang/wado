@@ -1873,6 +1873,7 @@ fn scan_prog(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
 }
 
 fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_term(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -1910,10 +1911,12 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_term(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let scan_start = pos;
     let mut pos = pos;
     pos = scan_factor(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -1951,6 +1954,7 @@ fn scan_term(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
+    if pos == scan_start { return -1; }
     return pos;
 }
 

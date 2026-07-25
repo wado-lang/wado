@@ -440,6 +440,17 @@ relevant sites.
    `'('` because `table_alias` is parenthesizable, then fails on the
    argument. Same fixture as 6 — the rewind is what lets the tournament
    run at all, and the walk is what routes the decision to it.
+8. A rule that cannot derive the empty string never reports a zero-token
+   scan match. Invariant 5 keeps its mandatory group `lenient`, so a gate
+   miss rewinds to the entry position and the rule would answer "matched,
+   consumed nothing" — which a caller's repeat gate reads as a viable
+   iteration, since that gate only checks that the body as a whole moved.
+   SQLite's `sql_stmt_list : ';'* sql_stmt ( ';'+ sql_stmt )* ';'*` then
+   entered the loop on a trailing `';'` and appended an empty `sql_stmt`,
+   accepting `SELECT 1;` with a phantom node and no diagnostic. The check
+   is on the whole-rule result only, so leniency inside the body — what
+   the tournament relies on — is untouched. Fixture
+   `tests/grammars/scan_zero_length_rule.g4`.
 
 Termination is a checked property, not only inline conservatism:
 `check_left_recursion` (grammar-check phase) rejects hidden (`a : x? a`, a
