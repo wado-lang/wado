@@ -2027,21 +2027,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (None, Some(d)) => (Some(d), true),
                 (None, None) => (None, false),
             };
-            if let Some((decl_module, decl_id)) = decl_ref
-                && let Some(module) = scope.loaded_modules.get(&decl_module)
-                && let Some(methods) = match module.item_by_id(decl_id) {
-                    Some(ast::Item::Interface(d)) => Some(&d.methods),
-                    Some(ast::Item::Resource(d)) => Some(&d.methods),
-                    _ => None,
-                }
-                && let Some(method) = methods.iter().find(|m| m.name == func.name)
-                && method.is_async
-            {
-                let cm_backed = method
-                    .attrs
-                    .iter()
-                    .find_map(ast::Attribute::cm_identifier)
-                    .is_some();
+            let async_op = decl_ref.and_then(|(_, decl_id)| {
+                scope
+                    .tysys
+                    .effect_ops(decl_id)
+                    .and_then(|ops| ops.iter().find(|op| op.name == func.name))
+                    .filter(|op| op.is_async)
+                    .map(|op| op.cm_name.is_some())
+            });
+            if let Some(cm_backed) = async_op {
                 if is_resource_effect || !cm_backed {
                     let _ = scope
                         .logger
