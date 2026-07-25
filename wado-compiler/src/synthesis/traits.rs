@@ -576,8 +576,8 @@ fn generate_struct_reflect_methods(
             .iter()
             .map(|f| {
                 tt.make_generic_instance(
-                    env.field_struct_name.clone(),
-                    env.field_struct_module.clone(),
+                    env.member_struct_name.clone(),
+                    env.member_struct_module.clone(),
                     vec![struct_type, f.type_id],
                 )
             })
@@ -637,8 +637,8 @@ pub(crate) const REFLECT_FIELD_TYPES_ASSOC: &str = "FieldTypes";
 struct ReflectSynthEnv {
     string_type: TypeId,
     case_style_type: TypeId,
-    field_struct_name: String,
-    field_struct_module: ModuleSource,
+    member_struct_name: String,
+    member_struct_module: ModuleSource,
     type_name_method: String,
     members_method: String,
     wire_name_policy_method: String,
@@ -649,15 +649,15 @@ impl ReflectSynthEnv {
         let string_type = tt.make_compiler_struct(CompilerItem::String);
         let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
         let items = tt.compiler_items();
-        let (field_struct_module, field_struct_name) = {
+        let (member_struct_module, member_struct_name) = {
             let (m, n) = items.require_struct(CompilerItem::ReflectStructField);
             (m.clone(), n.to_string())
         };
         Self {
             string_type,
             case_style_type,
-            field_struct_name,
-            field_struct_module,
+            member_struct_name,
+            member_struct_module,
             type_name_method: items.method_name(CompilerItem::ReflectStructTypeName).to_string(),
             members_method: items
                 .method_name(CompilerItem::ReflectStructMembers)
@@ -790,7 +790,7 @@ fn reflect_meta_int_field(
 
 /// Build `Struct^ReflectStruct::members()` as
 /// `return [Field { index: 0, field_name: "f", wire_override: …, has_default: …,
-/// is_secret: … }, …];` — one fat member per field, each typed `Field<S, F_k>`.
+/// is_secret: … }, …];` — one fat member per field, each typed `StructField<S, F_k>`.
 #[allow(clippy::too_many_arguments)]
 fn generate_struct_members_fn(
     type_table: &RefCell<TypeTable>,
@@ -865,7 +865,7 @@ fn generate_struct_members_fn(
             TirExpr::new(
                 TirExprKind::StructLiteral {
                     struct_type: *member_type,
-                    struct_name: env.field_struct_name.clone(),
+                    struct_name: env.member_struct_name.clone(),
                     fields: field_fields,
                 },
                 *member_type,
@@ -1181,8 +1181,8 @@ fn collect_reflect_variant_targets(
 /// registry and reused across every variant's `ReflectVariant` synthesis.
 struct ReflectVariantSynthEnv {
     string_type: TypeId,
-    case_struct_name: String,
-    case_struct_module: ModuleSource,
+    member_struct_name: String,
+    member_struct_module: ModuleSource,
     type_name_method: String,
     discriminant_method: String,
     cases_method: String,
@@ -1195,14 +1195,14 @@ impl ReflectVariantSynthEnv {
         let string_type = tt.make_compiler_struct(CompilerItem::String);
         let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
         let items = tt.compiler_items();
-        let (case_struct_module, case_struct_name) = {
+        let (member_struct_module, member_struct_name) = {
             let (m, n) = items.require_struct(CompilerItem::ReflectVariantCase);
             (m.clone(), n.to_string())
         };
         Self {
             string_type,
-            case_struct_name,
-            case_struct_module,
+            member_struct_name,
+            member_struct_module,
             type_name_method: items
                 .method_name(CompilerItem::ReflectVariantTypeName)
                 .to_string(),
@@ -1254,8 +1254,8 @@ fn generate_variant_reflect_methods(
             .iter()
             .map(|(_, _, payload, _)| {
                 tt.make_generic_instance(
-                    env.case_struct_name.clone(),
-                    env.case_struct_module.clone(),
+                    env.member_struct_name.clone(),
+                    env.member_struct_module.clone(),
                     vec![variant_type, *payload],
                 )
             })
@@ -1387,7 +1387,7 @@ fn generate_variant_cases_fn(
             TirExpr::new(
                 TirExprKind::StructLiteral {
                     struct_type: *member_type,
-                    struct_name: env.case_struct_name.clone(),
+                    struct_name: env.member_struct_name.clone(),
                     fields: case_fields,
                 },
                 *member_type,
@@ -1807,8 +1807,8 @@ struct ReflectEnumTarget {
 /// registry and reused across every enum's `ReflectEnum` synthesis.
 struct ReflectEnumSynthEnv {
     string_type: TypeId,
-    case_struct_name: String,
-    case_struct_module: ModuleSource,
+    member_struct_name: String,
+    member_struct_module: ModuleSource,
     type_name_method: String,
     discriminant_method: String,
     from_discriminant_method: String,
@@ -1822,14 +1822,14 @@ impl ReflectEnumSynthEnv {
         let string_type = tt.make_compiler_struct(CompilerItem::String);
         let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
         let items = tt.compiler_items();
-        let (case_struct_module, case_struct_name) = {
+        let (member_struct_module, member_struct_name) = {
             let (m, n) = items.require_struct(CompilerItem::ReflectEnumCase);
             (m.clone(), n.to_string())
         };
         Self {
             string_type,
-            case_struct_name,
-            case_struct_module,
+            member_struct_name,
+            member_struct_module,
             type_name_method: items
                 .method_name(CompilerItem::ReflectEnumTypeName)
                 .to_string(),
@@ -1875,8 +1875,8 @@ fn generate_enum_reflect_methods(
         let ref_enum_type = tt.make_ref(enum_type);
         let option_enum_type = tt.make_option(enum_type);
         let member_type = tt.make_generic_instance(
-            env.case_struct_name.clone(),
-            env.case_struct_module.clone(),
+            env.member_struct_name.clone(),
+            env.member_struct_module.clone(),
             vec![enum_type],
         );
         let members_tuple_type =
@@ -2009,7 +2009,7 @@ fn generate_enum_members_fn(
 
     generate_reflect_member_tuple_fn(
         method_info,
-        &env.case_struct_name,
+        &env.member_struct_name,
         member_type,
         members_tuple_type,
         rows,
@@ -2219,8 +2219,8 @@ struct ReflectFlagsTarget {
 /// registry and reused across every flags type's `ReflectFlags` synthesis.
 struct ReflectFlagsSynthEnv {
     string_type: TypeId,
-    bit_struct_name: String,
-    bit_struct_module: ModuleSource,
+    member_struct_name: String,
+    member_struct_module: ModuleSource,
     type_name_method: String,
     bits_method: String,
     from_bits_method: String,
@@ -2234,14 +2234,14 @@ impl ReflectFlagsSynthEnv {
         let string_type = tt.make_compiler_struct(CompilerItem::String);
         let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
         let items = tt.compiler_items();
-        let (bit_struct_module, bit_struct_name) = {
+        let (member_struct_module, member_struct_name) = {
             let (m, n) = items.require_struct(CompilerItem::ReflectFlagsBit);
             (m.clone(), n.to_string())
         };
         Self {
             string_type,
-            bit_struct_name,
-            bit_struct_module,
+            member_struct_name,
+            member_struct_module,
             type_name_method: items
                 .method_name(CompilerItem::ReflectFlagsTypeName)
                 .to_string(),
@@ -2285,8 +2285,8 @@ fn generate_flags_reflect_methods(
         let ref_flags_type = tt.make_ref(target.flags_type);
         let option_flags_type = tt.make_option(target.flags_type);
         let member_type = tt.make_generic_instance(
-            env.bit_struct_name.clone(),
-            env.bit_struct_module.clone(),
+            env.member_struct_name.clone(),
+            env.member_struct_module.clone(),
             vec![target.flags_type],
         );
         let members_tuple_type =
@@ -2389,7 +2389,7 @@ fn generate_flags_members_fn(
 
     generate_reflect_member_tuple_fn(
         method_info,
-        &env.bit_struct_name,
+        &env.member_struct_name,
         member_type,
         members_tuple_type,
         rows,

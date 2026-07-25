@@ -192,7 +192,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// (inside an `impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: …>` derivation). The
     /// value-free members (`type_name` / `wire_name_policy`) resolve to their
     /// fixed return types; `members()` resolves to the constructor-mapped
-    /// member pack `[..Field<T, F>]` read off `T`'s `ReflectStruct<FieldTypes = [..F]>`
+    /// member pack `[..StructField<T, F>]` read off `T`'s `ReflectStruct<FieldTypes = [..F]>`
     /// bound. Each is recorded as a type-param-receiver dispatch so
     /// monomorphization redirects it to the concrete struct's synthesized
     /// `Struct^ReflectStruct::method`.
@@ -695,7 +695,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(tt.make_tuple(vec![member_pack]))
     }
 
-    /// The constructor-mapped member pack `[..Field<T, F>]` — the type of
+    /// The constructor-mapped member pack `[..StructField<T, F>]` — the type of
     /// `members()` under a `T: ReflectStruct<FieldTypes = [..F]>` bound. The variant
     /// analog is [`Self::variant_members_bound_ty`]; both map the projected element
     /// pack through a member constructor. `None` when `T` carries no `FieldTypes`

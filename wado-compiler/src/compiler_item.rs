@@ -107,7 +107,7 @@ pub enum CompilerItem {
     /// `Case<T, P>` — the per-case member struct minted by
     /// `ReflectVariant::members()` (WEP 2026-06-13 §3e).
     ReflectVariantCase,
-    /// `Field<T, F>` — the per-field member struct minted by
+    /// `StructField<T, F>` — the per-field member struct minted by
     /// `ReflectStruct::members()` (WEP 2026-06-13).
     ReflectStructField,
     /// `EnumCase<T>` — the per-case member struct minted by
@@ -149,7 +149,7 @@ pub enum CompilerItem {
     /// per-flags `impl ReflectFlags for F` synthesis points at it.
     ReflectFlags,
     /// `Member` — the sealed attr-reading face implemented by every
-    /// `Field<T, F>` member (WEP 2026-06-13).
+    /// `StructField<T, F>` member (WEP 2026-06-13).
     Member,
     /// `Ref` — sealed marker for reference-identity types (GC references);
     /// its `Output: Ref` bound gates the reference-returning index traits.
@@ -636,10 +636,10 @@ impl CompilerItem {
             Self::Default => "default",
             Self::ReflectStruct => "reflect_struct",
             Self::ReflectVariant => "reflect_variant",
-            Self::ReflectVariantCase => "reflect_variant_case",
-            Self::ReflectStructField => "reflect_struct_field",
-            Self::ReflectEnumCase => "reflect_enum_case",
-            Self::ReflectFlagsBit => "reflect_flags_bit",
+            Self::ReflectVariantCase => "variant_case",
+            Self::ReflectStructField => "struct_field",
+            Self::ReflectEnumCase => "enum_case",
+            Self::ReflectFlagsBit => "flags_bit",
             Self::ReflectEnum => "reflect_enum",
             Self::ReflectFlags => "reflect_flags",
             Self::Member => "member",

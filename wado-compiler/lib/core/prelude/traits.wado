@@ -67,7 +67,7 @@ internal trait ReflectStruct {
     /// The field types as a tuple `[F_0, F_1, ...]`.
     type FieldTypes;
 
-    /// The per-field member tuple `[Field<Self, F_0>, ...]`.
+    /// The per-field member tuple `[StructField<Self, F_0>, ...]`.
     type Members;
 
     /// Returns the struct name.
@@ -203,7 +203,7 @@ internal trait ReflectFlags {
 /// is static, the case index is a value. `extract` / `construct` bridge a
 /// variant value and its payload in both directions.
 /// See WEP 2026-06-13 §3e.
-#[compiler_item("reflect_variant_case")]
+#[compiler_item("variant_case")]
 pub struct VariantCase<T, P> {
     index: i32,
     case_name: String,
@@ -212,8 +212,8 @@ pub struct VariantCase<T, P> {
 }
 
 impl<T, P> VariantCase<T, P> {
-    /// The case's declaration index (== its discriminant).
-    pub fn index(&self) -> i32 {
+    /// The case's tag.
+    pub fn discriminant(&self) -> i32 {
         return self.index;
     }
 
@@ -251,7 +251,7 @@ impl<T, P> Member for VariantCase<T, P> {
 /// A case handle minted by `ReflectEnum::members()`: an enum case carries
 /// no payload, so the member holds the case value itself. `make` mints it and
 /// `holds` tests a value's live case. See WEP 2026-06-13 §3b.
-#[compiler_item("reflect_enum_case")]
+#[compiler_item("enum_case")]
 pub struct EnumCase<T> {
     discriminant: i32,
     value: T,
@@ -289,7 +289,7 @@ impl<T> Member for EnumCase<T> {
 /// A bit handle minted by `ReflectFlags::members()`: the member holds the
 /// single-bit flags value. `set` mints it and `is_set` tests a value for the
 /// bit. See WEP 2026-06-13 §3c.
-#[compiler_item("reflect_flags_bit")]
+#[compiler_item("flags_bit")]
 pub struct FlagsBit<T> {
     bit: u64,
     value: T,
@@ -325,8 +325,8 @@ impl<T> Member for FlagsBit<T> {
 
 /// A field handle minted by `ReflectStruct::members()`: the field type `F` is
 /// static, and `get` reads the field's value out of a struct. See WEP 2026-06-13.
-#[compiler_item("reflect_struct_field")]
-pub struct Field<T, F> {
+#[compiler_item("struct_field")]
+pub struct StructField<T, F> {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -334,7 +334,7 @@ pub struct Field<T, F> {
     is_secret: bool,
 }
 
-impl<T, F> Field<T, F> {
+impl<T, F> StructField<T, F> {
     /// The field's declaration index.
     pub fn index(&self) -> i32 {
         return self.index;
@@ -356,7 +356,7 @@ impl<T, F> Field<T, F> {
     }
 }
 
-impl<T, F> Member for Field<T, F> {
+impl<T, F> Member for StructField<T, F> {
     fn name(&self) -> String {
         return self.field_name;
     }

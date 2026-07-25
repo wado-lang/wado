@@ -42,7 +42,7 @@ parallel metadata list or value accessor.
 ```wado
 internal trait ReflectStruct {                    // struct
     type FieldTypes;                             // payload pack [F_0, F_1, …]
-    type Members;                                // [Field<Self, F_0>, …]
+    type Members;                                // [StructField<Self, F_0>, …]
     fn members() -> Self::Members;
     fn construct(fields: Self::FieldTypes) -> Self;  // assemble from field values
     fn type_name() -> String;
@@ -81,7 +81,7 @@ internal trait ReflectFlags {                    // flags
 one pack in its header, and the elaborator resolves the walk to the known member
 type so member methods stay callable. Which pack a derivation binds follows from
 whether the kind has payloads. A struct or variant member carries a payload type
-parameter, so its walk is a heterogeneous mapped pack (`[..Field<T, F>]` /
+parameter, so its walk is a heterogeneous mapped pack (`[..StructField<T, F>]` /
 `[..VariantCase<T, P>]`) derived from the payload pack — and binding
 `FieldTypes = [..F]` / `CasePayloads = [..P]` is what lets a derivation constrain
 the payload types (`..F: SomeTrait`). An enum case and a flag bit carry no
@@ -112,8 +112,8 @@ internal trait Member {
     fn doc(&self) -> Option<String>;                 // /// doc comment
 }
 
-struct Field<T, F>       { … }  // Member + index() has_default() is_secret() validate() get(&self, v: &T) -> F
-struct VariantCase<T, P> { … }  // Member + index() is_unit() validate() holds(&v) extract(&v) -> P construct(P) -> T
+struct StructField<T, F> { … }  // Member + index() has_default() is_secret() validate() get(&self, v: &T) -> F
+struct VariantCase<T, P> { … }  // Member + discriminant() is_unit() validate() holds(&v) extract(&v) -> P construct(P) -> T
 struct EnumCase<T>       { … }  // Member + discriminant() holds(&v) make() -> T
 struct FlagsBit<T>        { … }  // Member + bit() is_set(&v) set() -> T
 ```
