@@ -412,16 +412,9 @@ where T: ReflectStruct<FieldTypes = [..F]>
       synthesis pass
 - [x] `ReflectStruct` over a generic struct: one generic impl over `S<T, …>`,
       substituted per instantiation; value bridges minted post-monomorphize
-- [ ] `ReflectVariant` over a generic variant. The synthesis and the
-      per-instantiation case bridges are in place, but dispatch is not: a
-      generic variant is never instantiated into its own declaration
-      (WEP 2026-02-09), so an instantiated subject stays spelled as a
-      `GenericInstance`, and the `variant_tag` / case-bridge lowering resolves
-      its target by variant name. Routing the tag to the base declaration's
-      non-generic method is unsound — the base variant type's GC layout differs
-      from the instance's, so the read returns a struct ref where an `i32` is
-      expected. Needs a per-instantiation dispatch for the value-reading
-      members, not a shared one.
+- [x] `ReflectVariant` over a generic variant: the case bridges and the tag read
+      are minted per instantiation, since a generic variant is never
+      instantiated into its own declaration
 - [ ] `where` clause pack binding: parse `T: Trait<Assoc = [..F]>` and extract `F`
 - [ ] Error messages: show call site, element index, and body location
 - [x] Tuple `Eq`: monomorphizer expands `==`/`!=` on concrete tuples to element-wise

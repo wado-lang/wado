@@ -1808,7 +1808,20 @@ fn generate_variant_discriminant_fn(
 ) -> TirFunction {
     let method_info = trait_method_info(variant_name, variant_trait_name, discriminant_method);
     let qualified_name = method_info.to_mangled_name();
+    let mut function = make_synthetic_method(
+        qualified_name,
+        method_info,
+        vec![self_param(ref_variant_type, span)],
+        TypeTable::I32,
+        variant_tag_body(ref_variant_type, variant_type, span),
+        vec![param_local("self", ref_variant_type, false)],
+    );
+    function.locals = vec![param_local("self", ref_variant_type, false)];
+    function
+}
 
+/// `return <tag of *self>;` — the body every `discriminant` shares.
+fn variant_tag_body(ref_variant_type: TypeId, variant_type: TypeId, span: Span) -> TirBlock {
     let tag = TirExpr::new(
         TirExprKind::VariantTag {
             expr: Box::new(deref_local(0, "self", ref_variant_type, variant_type, span)),
@@ -1816,17 +1829,28 @@ fn generate_variant_discriminant_fn(
         TypeTable::I32,
         span,
     );
-    let body = TirBlock::new(
+    TirBlock::new(
         vec![TirStmt::new(TirStmtKind::Return { value: Some(tag) }, span)],
         span,
-    );
+    )
+}
 
-    make_synthetic_method(
+/// The `discriminant` of one instantiated generic variant, as a free function
+/// under the name lowering builds from the instance (`V<A>^ReflectVariant::…`).
+///
+/// It cannot be a method: the method-name machinery rejects type arguments in a
+/// base struct name, the same reason the value bridges are free functions.
+pub(super) fn generate_variant_instance_discriminant_fn(
+    qualified_name: String,
+    ref_variant_type: TypeId,
+    variant_type: TypeId,
+    span: Span,
+) -> TirFunction {
+    crate::synthesis::common::make_synthetic_free_function(
         qualified_name,
-        method_info,
         vec![self_param(ref_variant_type, span)],
         TypeTable::I32,
-        body,
+        variant_tag_body(ref_variant_type, variant_type, span),
         vec![param_local("self", ref_variant_type, false)],
     )
 }

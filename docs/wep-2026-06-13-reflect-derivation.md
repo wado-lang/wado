@@ -173,13 +173,22 @@ rather than unconditional:
 - A plain struct's impl is synthesized unconditionally — the set is closed and
   each impl is finite. A generic one is synthesized only where a bound demands
   it, because the member handles above are generic structs too.
-- A generic type's value bridges (`$field_get$S$F`) are minted *after*
-  monomorphization — the only synthesis that is. Lowering names a bridge by the
-  concrete struct and field mangles, and fields sharing an erased field type
-  share one index-dispatched bridge: `Pair<i32>` merges `left: T` with
-  `right: i32`, `Pair<String>` keeps them apart. The grouping exists only per
-  instantiation, and the two call sites are indistinguishable, so a generic
-  bridge could not be selected.
+- A generic type's value bridges (`$field_get$S$F`, `$case_extract$V$P`,
+  `$case_construct$V$P`) are minted *after* monomorphization — the only synthesis
+  that is. Lowering names a bridge by the concrete subject and member mangles,
+  and members sharing a mangled member type share one index-dispatched bridge:
+  `Pair<i32>` merges `left: T` with `right: i32`, `Pair<String>` keeps them
+  apart. The grouping exists only per instantiation, and the two call sites are
+  indistinguishable, so a generic bridge could not be selected.
+
+The two kinds reach their instantiations differently. A generic struct becomes
+its own monomorphized declaration, so its bridges are minted off the declaration
+list. A generic variant never does (WEP 2026-02-09), so its instantiations are
+the `GenericInstance` types naming it, read off the type table — and its tag read
+is minted per instantiation too (`$variant_tag$V`), because the declaration that
+would host a shared one does not exist. Its receiver must be the instance: the
+base variant type has no GC layout of its own, so a shared tag read would misread
+the value.
 
 ## Wire naming
 

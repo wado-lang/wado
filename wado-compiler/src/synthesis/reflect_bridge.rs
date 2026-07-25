@@ -24,6 +24,7 @@ use crate::tir::{ResolvedType, TirFunction, TypeId};
 
 use super::traits::{
     REFLECT_MEMBERS_ASSOC, generate_case_bridge_helpers, generate_field_bridge_helpers,
+    generate_variant_instance_discriminant_fn,
 };
 
 /// Mint the value bridges of every instantiated generic struct and variant whose
@@ -135,11 +136,25 @@ fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Ti
                 .collect()
         };
         let ref_subject = flat.type_table.borrow_mut().make_ref(subject);
-        push_helpers(
-            generate_case_bridge_helpers(&flat.type_table, &cases, subject, ref_subject, span),
-            &module_source,
-            generated,
+        let mut helpers =
+            generate_case_bridge_helpers(&flat.type_table, &cases, subject, ref_subject, span);
+        // The tag read is named after the subject, so an instantiated generic
+        // variant needs its own `discriminant`: the generic declaration's is a
+        // template that nothing instantiates, because lowering mints this call
+        // after monomorphization has finished.
+        let discriminant_name = crate::name::variant_tag_helper_name(
+            &flat
+                .type_table
+                .borrow()
+                .mangle_type_arg_for_generic(subject),
         );
+        helpers.push(generate_variant_instance_discriminant_fn(
+            discriminant_name,
+            ref_subject,
+            subject,
+            span,
+        ));
+        push_helpers(helpers, &module_source, generated);
     }
 }
 

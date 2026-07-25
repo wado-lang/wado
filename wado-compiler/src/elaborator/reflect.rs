@@ -392,6 +392,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
+    /// The variant `ReflectVariant::<T>` targets: its declared name, the
+    /// instantiation's type args (empty for a plain variant), and its case
+    /// payloads in declaration order with those args substituted. `None` when
+    /// `T` is not a variant.
+    fn reflect_variant_subject(&self, self_ty: TypeId) -> Option<ReflectSubject> {
+        let (base_name, type_args) = match self.tysys.type_table.borrow().get(self_ty).clone() {
+            ResolvedType::Variant { name, .. } => (name, Vec::new()),
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } => (name, type_args),
+            _ => return None,
+        };
+        let info = self.lookup_variant_case(&base_name)?;
+        let declared: Vec<TypeId> = info.cases.iter().map(|c| c.payload).collect();
+        let param_ids = info.type_param_type_ids.clone();
+        Some(ReflectSubject {
+            member_types: self.substitute_declared_params(&declared, &param_ids, &type_args),
+            base_name,
+            type_args,
+        })
+    }
+
     /// Substitute an instantiation's `type_args` into member types written
     /// against the declaration's own parameters. A no-op for a plain type
     /// (`type_args` empty), which carries no parameters to substitute.
@@ -550,13 +572,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let self_name = self.tysys.type_table.borrow().type_name(self_ty);
-        if !matches!(subject, crate::tir::ResolvedType::Variant { .. }) {
+        let Some(subject) = self.reflect_variant_subject(self_ty) else {
             let _ = self.emit(TypeError::UnknownFunction {
                 name: format!("ReflectVariant::<{self_name}>::{method}"),
                 span: static_call.span,
             });
             return TypeTable::ERROR;
-        }
+        };
+        let ReflectSubject {
+            base_name: self_name,
+            type_args,
+            member_types: payloads,
+        } = subject;
 
         let (trait_name, discriminant_method, cases_method, wire_name_policy_method, module_source) = {
             let tt = self.tysys.type_table.borrow();
@@ -599,10 +626,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow_mut()
                 .make_compiler_enum(CompilerItem::CaseStyle)
         } else if method == cases_method {
-            let payloads: Vec<TypeId> = self
-                .lookup_variant_case(&self_name)
-                .map(|info| info.cases.iter().map(|c| c.payload).collect())
-                .unwrap_or_default();
             let mut tt = self.tysys.type_table.borrow_mut();
             let (case_module, case_name) = {
                 let items = tt.compiler_items();
@@ -627,16 +650,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .make_compiler_struct(CompilerItem::String)
         };
 
-        let func_ref = FunctionRef {
-            module_source,
-            name: MethodName::format_local(&self_name, Some(&trait_name), &method),
-            monomorph_info: None,
-            method_info: Some(LocalMethodName::new(
-                self_name.clone(),
-                Some(trait_name.clone()),
-                method.clone(),
-            )),
-        };
+        let func_ref =
+            self.reflect_func_ref(&self_name, &type_args, &trait_name, &method, module_source);
         self.sem.types.static_method_dispatch.insert(
             static_call.id,
             super::sem::types::StaticMethodDispatch {

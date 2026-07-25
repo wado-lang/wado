@@ -1,0 +1,65 @@
+// Blanket derivation over `ReflectVariant` for a generic variant: the
+// synthesized impl is generic, so `CasePayloads` binds the variant's own type
+// params and each instantiation substitutes them (WEP 2026-06-13).
+
+trait Tag {
+    fn tag(&self) -> String;
+}
+
+impl Tag for i32 {
+    fn tag(&self) -> String {
+        return `${*self}`;
+    }
+}
+
+impl Tag for String {
+    fn tag(&self) -> String {
+        return *self;
+    }
+}
+
+impl Tag for bool {
+    fn tag(&self) -> String {
+        return `${*self}`;
+    }
+}
+
+impl<T: ReflectVariant<CasePayloads = [..P]>, ..P: Tag> Tag for T {
+    fn tag(&self) -> String {
+        for let c of ReflectVariant::<T>::members() {
+            if c.holds(self) {
+                return `${c.name()}(${c.extract(self).tag()})`;
+            }
+        }
+        return "?";
+    }
+}
+
+variant Either<T> {
+    Left(T),
+    Right(i32),
+}
+
+test "a generic variant walks its members with the type arg substituted" {
+    let e: Either<String> = Either::Left("ada");
+    assert e.tag() == "Left(ada)";
+}
+
+test "the non-parameterized case of a generic variant keeps its own payload" {
+    let e: Either<String> = Either::Right(7);
+    assert e.tag() == "Right(7)";
+}
+
+test "two instantiations of one generic variant walk independently" {
+    let s: Either<String> = Either::Left("ada");
+    let b: Either<bool> = Either::Left(true);
+    assert s.tag() == "Left(ada)";
+    assert b.tag() == "Left(true)";
+}
+
+test "type_name is the declared name, not the instantiation" {
+    assert ReflectVariant::<Either<String>>::type_name() == "Either";
+}
+
+__DATA__
+{"test": {}}

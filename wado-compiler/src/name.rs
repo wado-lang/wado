@@ -154,6 +154,14 @@ pub fn case_construct_helper_name(mangled_variant: &str, mangled_payload: &str) 
     format!("$case_construct${mangled_variant}${mangled_payload}")
 }
 
+/// The `discriminant` of one instantiated generic variant, identified by the
+/// instance's structural mangle. A generic variant has no declaration of its
+/// own to carry a shared tag read, and the method-name form cannot spell an
+/// instance, so this is a free helper like the value bridges.
+pub fn variant_tag_helper_name(mangled_variant: &str) -> String {
+    format!("$variant_tag${mangled_variant}")
+}
+
 /// The name of the synthesized `StructField::<S, F>::get` helper for a struct and one
 /// of its field types, both identified by their structural mangles (same
 /// identity discipline as [`case_extract_helper_name`]). Lowering rewrites
