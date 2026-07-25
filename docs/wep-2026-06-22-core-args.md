@@ -51,7 +51,7 @@ Implemented (`lib/core/args.wado`, tested in `lib/core/args_test.wado`):
       detection.
 - [x] Subcommands (`variant` fields) via externally-tagged `begin_variant`,
       including nesting and `command [global-opts] subcommand [sub-opts]`. A
-      subcommand field is marked `#[serde(positional)]` (see
+      subcommand field is marked `#[wire(positional)]` (see
       [Subcommands as Variants](#subcommands-as-variants)); the case tag matches
       the variant case name verbatim.
 - [x] Lenient scalar conversion (`LenientFromStr`) and the `ArgsError` kinds.
@@ -67,8 +67,8 @@ Deferred:
 - [ ] `--help` / `--version`.
 
 Lowercase / kebab subcommand tags are handled by serde's case rename, not by
-args: `#[serde(rename_all = "kebab-case")]` on the subcommand `variant` (or
-`#[serde(rename = "...")]` per case) makes the wire tag `add-remote` while the
+args: `#[wire(name_policy = "kebab-case")]` on the subcommand `variant` (or
+`#[wire(name = "...")]` per case) makes the wire tag `add-remote` while the
 cases stay idiomatic PascalCase. `core:args` matches the tag against that wire
 name with no special support — the same rename that drives JSON/CBOR. (Case
 _folding_ — accepting `add` for a `PascalCase`-wire `Add` — is intentionally not
@@ -128,14 +128,14 @@ deferred (see that WEP's future work).
 
 ### Positional Arguments
 
-`#[serde(positional)]` (serde-general) fills a field from non-option tokens in
+`#[wire(positional)]` (serde-general) fills a field from non-option tokens in
 declaration order, never by `--name`:
 
 ```wado
 struct Cli {
-    #[serde(positional)] input: String,            // required
-    #[serde(positional)] out: String = "out.txt",  // optional (default)
-    #[serde(positional)] rest: List<String> = [],  // variadic
+    #[wire(positional)] input: String,            // required
+    #[wire(positional)] out: String = "out.txt",  // optional (default)
+    #[wire(positional)] rest: List<String> = [],  // variadic
     jobs: i32 = 1,                                  // --jobs <n>
 }
 impl Deserialize for Cli;
@@ -165,12 +165,12 @@ Defaults must be pure (effect system); CLI defaults always are.
 
 ### Subcommands as Variants
 
-A subcommand set is a `#[serde(positional)]` field whose type is a `variant`,
+A subcommand set is a `#[wire(positional)]` field whose type is a `variant`,
 read via serde's externally-tagged representation: the leading non-option token
 is the tag selecting the case, its payload parsed from the rest.
 
 ```wado
-struct AddArgs { #[serde(positional)] path: String, all: bool = false }
+struct AddArgs { #[wire(positional)] path: String, all: bool = false }
 
 variant Command {
     Add(AddArgs),
@@ -180,12 +180,12 @@ variant RemoteCmd { AddRemote(AddRemoteArgs), List }
 
 struct Cli {
     verbose: bool = false,
-    #[serde(positional)] command: Command,   // the subcommand tag is an ordinal slot
+    #[wire(positional)] command: Command,   // the subcommand tag is an ordinal slot
 }
 impl Deserialize for Cli;
 ```
 
-The `#[serde(positional)]` marker is what lets `next_field` reach the variant
+The `#[wire(positional)]` marker is what lets `next_field` reach the variant
 field at all: serde addresses a field only by name (`--option`) or by ordinal
 (`positional_at`), and the subcommand tag is an ordinal token, not a `--name`.
 This keeps the compiler at two format-agnostic addressing primitives — no

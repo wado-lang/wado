@@ -1,13 +1,13 @@
 // Stage C resolver (WEP 2026-06-13): `wire_name(field, policy)` resolves a
-// field's wire key — its `#[serde(rename)]` override wins, else the struct's
+// field's wire key — its `#[wire(name)]` override wins, else the struct's
 // `rename_all` policy is applied. Walks the `ReflectStruct::<S>::members()`.
 
 use { wire_name } from "core:serde";
 
-#[serde(rename_all = "camelCase")]
+#[wire(name_policy = "camelCase")]
 struct S {
     user_id: i32,
-    #[serde(rename = "explicit")]
+    #[wire(name = "explicit")]
     other_field: i32,
     created_at: i32,
 }

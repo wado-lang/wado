@@ -78,12 +78,12 @@ internal trait ReflectStruct {
     #[compiler_item("reflect_struct_members")]
     fn members() -> Self::Members;
 
-    /// The struct's `#[serde(rename_all)]` policy (`Identity` if none).
+    /// The struct's `#[wire(name_policy)]` policy (`Identity` if none).
     #[compiler_item("reflect_struct_wire_name_policy")]
     fn wire_name_policy() -> CaseStyle;
 }
 
-/// The wire-naming policy declared by `#[serde(rename_all = "...")]` (casing
+/// The wire-naming policy declared by `#[wire(name_policy = "...")]` (casing
 /// not applied here — `core:serde::wire_name` resolves it). See WEP 2026-06-13.
 #[compiler_item("case_style")]
 pub enum CaseStyle {
@@ -104,7 +104,7 @@ internal trait Member {
     #[compiler_item("member_name")]
     fn name(&self) -> String;
 
-    /// The raw `#[serde(rename)]` value (casing not applied), or `None`.
+    /// The raw `#[wire(name)]` value (casing not applied), or `None`.
     #[compiler_item("member_wire_name_override")]
     fn wire_name_override(&self) -> Option<String>;
 }

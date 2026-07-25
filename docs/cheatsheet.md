@@ -945,7 +945,7 @@ Point { x: 1, y: 2 } == Point { x: 1, y: 2 };  // Eq synthesized here
 to_string(&Point { x: 1, y: 2 });              // Serialize synthesized here
 ```
 
-An empty marker `impl Trait for T;` asserts conformance: the compiler checks `T` is eligible and errors if not. Optional for these traits, but it documents intent and is the way to attach `#[serde(...)]` customization.
+An empty marker `impl Trait for T;` asserts conformance: the compiler checks `T` is eligible and errors if not. Optional for these traits, but it documents intent and is the way to attach `#[wire(...)]` customization.
 
 ```wado
 struct Broken { retries: i32 = 3, name: String }
@@ -1312,8 +1312,8 @@ set.contains("foo");          // -> bool; set.insert(x) -> bool
 
 Format-agnostic `Serialize` / `Deserialize` framework.
 A plain struct derives with no marker; `impl Serialize for T;` attaches
-`#[serde(...)]` customization. Wire keys default to the field name; override
-with `#[serde(rename_all = "...")]` (per type) or `#[serde(rename = "...")]`
+`#[wire(...)]` customization. Wire keys default to the field name; override
+with `#[wire(name_policy = "...")]` (per type) or `#[wire(name = "...")]`
 (per field). See [`core:serde`](./stdlib-core-serde.md) and
 [WEP: Serde](./wep-2026-02-28-serde.md).
 
@@ -1322,10 +1322,10 @@ struct Point { x: i32, y: i32 }         // serializable, no marker needed
 
 // rename_all: camelCase / snake_case / PascalCase / SCREAMING_SNAKE_CASE /
 //             kebab-case / SCREAMING-KEBAB-CASE
-#[serde(rename_all = "camelCase")]
+#[wire(name_policy = "camelCase")]
 struct Event {
     created_at: String,                 // wire key: "createdAt"
-    #[serde(rename = "type")]
+    #[wire(name = "type")]
     event_type: String,                 // wire key: "type"
 }
 

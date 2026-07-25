@@ -4147,7 +4147,7 @@ The first value is greater than the second.
 
 ### `pub enum CaseStyle`
 
-The wire-naming policy declared by `#[serde(rename_all = "...")]` (casing
+The wire-naming policy declared by `#[wire(name_policy = "...")]` (casing
 not applied here — `core:serde::wire_name` resolves it). See WEP 2026-06-13.
 
 #### `Identity`
@@ -4230,7 +4230,7 @@ The first value is greater than the second.
 
 ### `pub enum CaseStyle`
 
-The wire-naming policy declared by `#[serde(rename_all = "...")]` (casing
+The wire-naming policy declared by `#[wire(name_policy = "...")]` (casing
 not applied here — `core:serde::wire_name` resolves it). See WEP 2026-06-13.
 
 #### `Identity`

@@ -801,11 +801,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     name: case.name.clone(),
                     index: i as u32,
                     span: case.span,
-                    serde_rename: serde_rename_of(&case.attrs),
+                    wire_name_override: wire_name_override_of(&case.attrs),
                 })
                 .collect(),
             span: enum_decl.span,
-            serde_rename_all: serde_rename_all_of(&enum_decl.attrs),
+            wire_name_policy: wire_name_policy_of(&enum_decl.attrs),
         }
     }
 
@@ -892,7 +892,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         for (index, field) in struct_decl.fields.iter().enumerate() {
             let type_id = field_types[index];
 
-            let serde_rename = serde_rename_of(&field.attrs);
+            let wire_name_override = wire_name_override_of(&field.attrs);
 
             let default_expr: Option<Box<TirExpr>> = field.default.as_ref().map(|default_ast| {
                 Box::new(self.reify_expr(default_ast, &mut field_ctx, Some(type_id)))
@@ -905,7 +905,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let serde_positional = field
                 .attrs
                 .iter()
-                .any(|a| a.name == "serde" && a.has_arg("positional"));
+                .any(|a| a.name == "wire" && a.has_arg("positional"));
 
             fields.push(crate::tir::TirField {
                 name: field.name.clone(),
@@ -914,7 +914,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 index: index as u32,
                 span: field.span,
                 is_secret: field.attrs.iter().any(|a| a.name == "secret"),
-                serde_rename,
+                wire_name_override,
                 serde_default,
                 serde_positional,
                 default_expr,
@@ -928,7 +928,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .ann_decl_type_params(struct_decl.id)
             .expect("resolve_struct records the type params for every struct reify emits");
 
-        let serde_rename_all = serde_rename_all_of(&struct_decl.attrs);
+        let wire_name_policy = wire_name_policy_of(&struct_decl.attrs);
 
         TirStruct {
             name: struct_decl.name.clone(),
@@ -938,7 +938,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             monomorph_info: None,
             fields,
             span: struct_decl.span,
-            serde_rename_all,
+            wire_name_policy,
         }
     }
 
@@ -1001,11 +1001,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     index: index as u32,
                     span: field.map_or(struct_decl.span, |f| f.span),
                     is_secret: attrs.iter().any(|a| a.name == "secret"),
-                    serde_rename: serde_rename_of(attrs),
+                    wire_name_override: wire_name_override_of(attrs),
                     serde_default: field.is_some_and(|f| f.default.is_some()),
                     serde_positional: attrs
                         .iter()
-                        .any(|a| a.name == "serde" && a.has_arg("positional")),
+                        .any(|a| a.name == "wire" && a.has_arg("positional")),
                     default_expr,
                 }
             })
@@ -1032,7 +1032,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             monomorph_info: None,
             fields,
             span: struct_decl.span,
-            serde_rename_all: None,
+            wire_name_policy: None,
         });
     }
 
@@ -1079,7 +1079,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     index: index as u32,
                     payload,
                     span: case.span,
-                    serde_rename: serde_rename_of(&case.attrs),
+                    wire_name_override: wire_name_override_of(&case.attrs),
                 }
             })
             .collect();
@@ -1107,7 +1107,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             type_params,
             cases,
             span: variant_decl.span,
-            serde_rename_all: serde_rename_all_of(&variant_decl.attrs),
+            wire_name_policy: wire_name_policy_of(&variant_decl.attrs),
         }
     }
 
@@ -10637,10 +10637,10 @@ fn ast_binary_op_to_tir(op: ast::BinaryOp) -> crate::tir::TirBinaryOp {
 }
 
 /// `#[serde(rename = "...")]` on a struct field, enum case, or variant case.
-fn serde_rename_of(attrs: &[ast::Attribute]) -> Option<String> {
+fn wire_name_override_of(attrs: &[ast::Attribute]) -> Option<String> {
     attrs.iter().find_map(|a| {
-        if a.name == "serde" {
-            a.kv_value("rename").map(str::to_string)
+        if a.name == "wire" {
+            a.kv_value("name").map(str::to_string)
         } else {
             None
         }
@@ -10648,10 +10648,10 @@ fn serde_rename_of(attrs: &[ast::Attribute]) -> Option<String> {
 }
 
 /// `#[serde(rename_all = "...")]` on a struct, enum, or variant declaration.
-fn serde_rename_all_of(attrs: &[ast::Attribute]) -> Option<String> {
+fn wire_name_policy_of(attrs: &[ast::Attribute]) -> Option<String> {
     attrs.iter().find_map(|a| {
-        if a.name == "serde" {
-            a.kv_value("rename_all").map(str::to_string)
+        if a.name == "wire" {
+            a.kv_value("name_policy").map(str::to_string)
         } else {
             None
         }

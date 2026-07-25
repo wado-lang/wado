@@ -46,7 +46,7 @@ internal trait ReflectStruct {                    // struct
     fn members() -> Self::Members;
     fn construct(fields: Self::FieldTypes) -> Self;  // assemble from field values
     fn type_name() -> String;
-    fn wire_name_policy() -> CaseStyle;          // #[serde(rename_all)], casing not applied
+    fn wire_name_policy() -> CaseStyle;          // #[wire(name_policy)], casing not applied
 }
 
 internal trait ReflectVariant {                  // variant
@@ -108,7 +108,7 @@ once and reused across kinds.
 ```wado
 internal trait Member {
     fn name(&self) -> String;                        // source name
-    fn wire_name_override(&self) -> Option<String>;  // #[serde(rename)], casing not applied
+    fn wire_name_override(&self) -> Option<String>;  // #[wire(name)], casing not applied
     fn doc(&self) -> Option<String>;                 // /// doc comment
 }
 

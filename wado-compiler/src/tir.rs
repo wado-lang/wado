@@ -4270,7 +4270,7 @@ pub struct TirStruct {
     pub fields: Vec<TirField>,
     pub span: Span,
     /// `#[serde(rename_all = "...")]` — naming strategy for all fields.
-    pub serde_rename_all: Option<String>,
+    pub wire_name_policy: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -4283,7 +4283,7 @@ pub struct TirField {
     /// `#[secret]` — field not shown in debug inspect output.
     pub is_secret: bool,
     /// `#[serde(rename = "name")]` — custom serialization name for this field.
-    pub serde_rename: Option<String>,
+    pub wire_name_override: Option<String>,
     /// `#[serde(default)]` — use default value when field is missing during deserialization.
     pub serde_default: bool,
     /// `#[serde(positional)]` — field is resolved by position, not by name.
@@ -4308,7 +4308,7 @@ pub struct TirEnum {
     pub cases: Vec<TirEnumCase>,
     pub span: Span,
     /// `#[serde(rename_all = "...")]` — naming strategy for all cases.
-    pub serde_rename_all: Option<String>,
+    pub wire_name_policy: Option<String>,
 }
 
 /// A case in a TIR enum.
@@ -4319,7 +4319,7 @@ pub struct TirEnumCase {
     pub index: u32,
     pub span: Span,
     /// `#[serde(rename = "...")]` — custom serialized name for this case.
-    pub serde_rename: Option<String>,
+    pub wire_name_override: Option<String>,
 }
 
 /// A flags type declaration (bitmask type, like WIT flags)
@@ -4358,7 +4358,7 @@ pub struct TirVariantDecl {
     pub cases: Vec<TirVariantCase>,
     pub span: Span,
     /// `#[serde(rename_all = "...")]` — naming strategy for all cases.
-    pub serde_rename_all: Option<String>,
+    pub wire_name_policy: Option<String>,
 }
 
 /// A case in a variant declaration
@@ -4377,7 +4377,7 @@ pub struct TirVariantCase {
     pub payload: TypeId,
     pub span: Span,
     /// `#[serde(rename = "...")]` — custom serialized name for this case.
-    pub serde_rename: Option<String>,
+    pub wire_name_override: Option<String>,
 }
 
 #[derive(Debug, Clone)]

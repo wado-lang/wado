@@ -337,8 +337,8 @@ use super::common::{
 /// `"userId"`). Used by both the serialize and deserialize synthesisers so the
 /// two never disagree.
 fn serialized_field_name(f: &crate::tir::TirField, struct_def: &crate::tir::TirStruct) -> String {
-    f.serde_rename.clone().unwrap_or_else(|| {
-        if let Some(strategy) = &struct_def.serde_rename_all {
+    f.wire_name_override.clone().unwrap_or_else(|| {
+        if let Some(strategy) = &struct_def.wire_name_policy {
             apply_rename_all(&f.name, strategy)
         } else {
             f.name.clone()
@@ -372,10 +372,10 @@ fn apply_rename_all(s: &str, strategy: &str) -> String {
 /// case name is used verbatim.
 fn serialized_case_name(
     name: &str,
-    serde_rename: &Option<String>,
+    wire_name_override: &Option<String>,
     rename_all: &Option<String>,
 ) -> String {
-    if let Some(r) = serde_rename {
+    if let Some(r) = wire_name_override {
         return r.clone();
     }
     match rename_all {
@@ -2272,7 +2272,7 @@ fn generate_enum_serialize(
     let wire_names: Vec<String> = enum_def
         .cases
         .iter()
-        .map(|c| serialized_case_name(&c.name, &c.serde_rename, &enum_def.serde_rename_all))
+        .map(|c| serialized_case_name(&c.name, &c.wire_name_override, &enum_def.wire_name_policy))
         .collect();
 
     drop(tt);
@@ -2451,7 +2451,7 @@ fn generate_enum_deserialize(
     let wire_names = enum_def
         .cases
         .iter()
-        .map(|c| serialized_case_name(&c.name, &c.serde_rename, &enum_def.serde_rename_all))
+        .map(|c| serialized_case_name(&c.name, &c.wire_name_override, &enum_def.wire_name_policy))
         .collect();
     Some(generate_variant_family_deserialize(
         module,
@@ -2994,7 +2994,7 @@ fn generate_variant_serialize(
     let wire_names: Vec<String> = variant_def
         .cases
         .iter()
-        .map(|c| serialized_case_name(&c.name, &c.serde_rename, &variant_def.serde_rename_all))
+        .map(|c| serialized_case_name(&c.name, &c.wire_name_override, &variant_def.wire_name_policy))
         .collect();
     let payload_ref_types: Vec<TypeId> = cases
         .iter()
@@ -3267,7 +3267,7 @@ fn generate_variant_deserialize(
     let wire_names = variant_def
         .cases
         .iter()
-        .map(|c| serialized_case_name(&c.name, &c.serde_rename, &variant_def.serde_rename_all))
+        .map(|c| serialized_case_name(&c.name, &c.wire_name_override, &variant_def.wire_name_policy))
         .collect();
     let type_params = variant_def.type_params.clone();
     Some(generate_variant_family_deserialize(

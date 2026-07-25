@@ -1,14 +1,14 @@
 use { Deserialize, DeserializeError, DeserializeErrorKind } from "core:serde";
 use { from_string } from "core:json";
 
-// `#[serde(positional)]` marks a field as ordinal: the synthesized
+// `#[wire(positional)]` marks a field as ordinal: the synthesized
 // `FieldSchema::lookup` omits it, so a self-describing format (JSON) never
 // matches it by key name. Such a field is reachable only through a positional
 // format (`core:args`); via JSON it behaves as an absent field.
 
 struct WithDefaults {
-    #[serde(positional)] input: String = "DEFAULT_IN",
-    #[serde(positional)] out: String = "DEFAULT_OUT",
+    #[wire(positional)] input: String = "DEFAULT_IN",
+    #[wire(positional)] out: String = "DEFAULT_OUT",
     jobs: i32 = 1,
     verbose: bool = false,
 }
@@ -31,7 +31,7 @@ test "positional fields are not matched by JSON key, named fields still are" {
 }
 
 struct RequiredPositional {
-    #[serde(positional)] input: String,
+    #[wire(positional)] input: String,
     jobs: i32 = 1,
 }
 

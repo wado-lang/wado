@@ -1,15 +1,15 @@
 // ReflectEnum case walk (WEP 2026-06-13 §3b): members() returns a tuple of
-// EnumCase<E> members carrying the case name, #[serde(rename)] override, and the
+// EnumCase<E> members carrying the case name, #[wire(name)] override, and the
 // case value; discriminant / holds / make bridge a value and its case, and
 // core:serde::wire_name resolves a case tag through the shared Member helper.
 
 use { wire_name } from "core:serde";
 
-#[serde(rename_all = "kebab-case")]
+#[wire(name_policy = "kebab-case")]
 enum Color {
     LightRed,
     Green,
-    #[serde(rename = "blau")]
+    #[wire(name = "blau")]
     Blue,
 }
 

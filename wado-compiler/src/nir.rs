@@ -664,7 +664,7 @@ pub struct NirStruct {
     pub fields: Vec<NirField>,
     pub span: Span,
     /// `#[serde(rename_all = "...")]` — naming strategy for all fields.
-    pub serde_rename_all: Option<String>,
+    pub wire_name_policy: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -677,7 +677,7 @@ pub struct NirField {
     /// `#[secret]` — field not shown in debug inspect output.
     pub is_secret: bool,
     /// `#[serde(rename = "name")]` — custom serialization name for this field.
-    pub serde_rename: Option<String>,
+    pub wire_name_override: Option<String>,
     /// `#[serde(default)]` — use default value when field is missing during deserialization.
     pub serde_default: bool,
 }

@@ -78,7 +78,7 @@ impl Monomorphizer {
                     index: field.index,
                     span: field.span,
                     is_secret: field.is_secret,
-                    serde_rename: field.serde_rename.clone(),
+                    wire_name_override: field.wire_name_override.clone(),
                     serde_default: field.serde_default,
                     serde_positional: field.serde_positional,
                     default_expr: None,
@@ -99,7 +99,7 @@ impl Monomorphizer {
             }),
             fields,
             span: generic.span,
-            serde_rename_all: generic.serde_rename_all.clone(),
+            wire_name_policy: generic.wire_name_policy.clone(),
         };
 
         Some(concrete)

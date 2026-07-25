@@ -14,7 +14,7 @@
 use { Serialize, Deserialize } from "core:serde";
 use { TreeMap } from "core:collections";
 
-#[serde(rename_all = "camelCase")]
+#[wire(name_policy = "camelCase")]
 pub struct Event {
     description: Option<String> = null,
     id: i64,
@@ -28,7 +28,7 @@ pub struct Event {
 impl Serialize for Event;
 impl Deserialize for Event;
 
-#[serde(rename_all = "camelCase")]
+#[wire(name_policy = "camelCase")]
 pub struct Price {
     amount: i64,
     audience_sub_category_id: i64,
@@ -37,7 +37,7 @@ pub struct Price {
 impl Serialize for Price;
 impl Deserialize for Price;
 
-#[serde(rename_all = "camelCase")]
+#[wire(name_policy = "camelCase")]
 pub struct Area {
     area_id: i64,
     block_ids: List<i64>,
@@ -45,7 +45,7 @@ pub struct Area {
 impl Serialize for Area;
 impl Deserialize for Area;
 
-#[serde(rename_all = "camelCase")]
+#[wire(name_policy = "camelCase")]
 pub struct SeatCategory {
     areas: List<Area>,
     seat_category_id: i64,
@@ -53,7 +53,7 @@ pub struct SeatCategory {
 impl Serialize for SeatCategory;
 impl Deserialize for SeatCategory;
 
-#[serde(rename_all = "camelCase")]
+#[wire(name_policy = "camelCase")]
 pub struct Performance {
     event_id: i64,
     id: i64,
@@ -68,7 +68,7 @@ pub struct Performance {
 impl Serialize for Performance;
 impl Deserialize for Performance;
 
-#[serde(rename_all = "camelCase")]
+#[wire(name_policy = "camelCase")]
 pub struct CitmCatalog {
     area_names: TreeMap<String, String>,
     audience_sub_category_names: TreeMap<String, String>,

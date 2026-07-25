@@ -499,7 +499,7 @@ struct ReflectFieldInfo {
     name: String,
     type_id: TypeId,
     index: u32,
-    serde_rename: Option<String>,
+    wire_name_override: Option<String>,
     is_secret: bool,
     has_default: bool,
 }
@@ -525,12 +525,12 @@ fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
                         name: f.name.clone(),
                         type_id: f.type_id,
                         index: f.index,
-                        serde_rename: f.serde_rename.clone(),
+                        wire_name_override: f.wire_name_override.clone(),
                         is_secret: f.is_secret,
                         has_default: f.default_expr.is_some(),
                     })
                     .collect(),
-                s.serde_rename_all.clone(),
+                s.wire_name_policy.clone(),
                 s.span,
             )
         })
@@ -814,7 +814,7 @@ fn generate_struct_members_fn(
             let wire_override = {
                 let tt = type_table.borrow();
                 let items = tt.compiler_items();
-                match &f.serde_rename {
+                match &f.wire_name_override {
                     Some(rename) => crate::synthesis::common::option_some(
                         TirExpr::new(
                             TirExprKind::StringLiteral(rename.clone()),
@@ -1167,7 +1167,7 @@ fn collect_reflect_variant_targets(
             cases: v
                 .cases
                 .iter()
-                .map(|c| (c.name.clone(), c.index, c.payload, c.serde_rename.clone()))
+                .map(|c| (c.name.clone(), c.index, c.payload, c.wire_name_override.clone()))
                 .collect(),
             span: v.span,
         })
@@ -1322,11 +1322,11 @@ fn generate_variant_cases_fn(
         .cases
         .iter()
         .zip(member_types)
-        .map(|((case_name, index, payload, serde_rename), member_type)| {
+        .map(|((case_name, index, payload, wire_name_override), member_type)| {
             let wire_override = {
                 let tt = type_table.borrow();
                 let items = tt.compiler_items();
-                match serde_rename {
+                match wire_name_override {
                     Some(rename) => crate::synthesis::common::option_some(
                         TirExpr::new(
                             TirExprKind::StringLiteral(rename.clone()),
@@ -1745,7 +1745,7 @@ fn generate_enum_reflect_impls(
             cases: e
                 .cases
                 .iter()
-                .map(|c| (c.name.clone(), c.index, c.serde_rename.clone()))
+                .map(|c| (c.name.clone(), c.index, c.wire_name_override.clone()))
                 .collect(),
             span: e.span,
         })
@@ -1918,11 +1918,11 @@ fn generate_enum_members_fn(
     let rows = target
         .cases
         .iter()
-        .map(|(case_name, index, serde_rename)| {
+        .map(|(case_name, index, wire_name_override)| {
             let wire_override = {
                 let tt = type_table.borrow();
                 let items = tt.compiler_items();
-                match serde_rename {
+                match wire_name_override {
                     Some(rename) => crate::synthesis::common::option_some(
                         TirExpr::new(
                             TirExprKind::StringLiteral(rename.clone()),

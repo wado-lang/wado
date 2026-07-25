@@ -182,7 +182,7 @@ if let Some(m) = ROUTER.match_request(&request) {
 
 Path parameter names are matched against the struct field names as written
 (the serde identity default): a pattern segment `:user_id` binds to a field
-`user_id`. `#[serde(rename = "...")]` / `#[serde(rename_all = "...")]`
+`user_id`. `#[wire(name = "...")]` / `#[wire(name_policy = "...")]`
 override the matched name exactly as they do for any other serde format.
 
 Unsupported shapes (sequences, maps, variants, nested structs) return

@@ -20,10 +20,10 @@ impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> WireRow for T {
     }
 }
 
-#[serde(rename_all = "snake_case")]
+#[wire(name_policy = "snake_case")]
 struct Account {
     accountId: i32,
-    #[serde(rename = "e_mail")]
+    #[wire(name = "e_mail")]
     email: String,
     displayName: i32,
 }

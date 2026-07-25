@@ -344,7 +344,7 @@ A struct with any required field (no default) does not auto-derive `Default`.
 A field default makes the field optional on deserialize, falling back to that
 default when absent. This extends the "has default → optional" rule from
 construction to deserialization, and is the single mechanism for an optional
-field (`#[serde(default)]` is removed):
+field (`#[wire(default)]` is removed):
 
 ```wado
 struct Config {

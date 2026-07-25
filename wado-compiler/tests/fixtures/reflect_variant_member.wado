@@ -1,14 +1,14 @@
 // VariantCase implements Member (WEP 2026-06-13 §3): each case member carries
-// its source name, `#[serde(rename)]` override, and unit-ness alongside the
+// its source name, `#[wire(name)]` override, and unit-ness alongside the
 // payload bridge, so `core:serde::wire_name` resolves a case tag uniformly.
 
 use { wire_name } from "core:serde";
 
-#[serde(rename_all = "kebab-case")]
+#[wire(name_policy = "kebab-case")]
 variant Command {
     AddRemote(i32),
     List,
-    #[serde(rename = "rm")]
+    #[wire(name = "rm")]
     Remove(i32),
 }
 
