@@ -128,7 +128,7 @@ pub enum CompilerItem {
     /// dispatch and by the trait-synthesis pass that emits
     /// `T^Ord::cmp` bodies.
     Ordering,
-    /// `CaseStyle` — the `#[serde(rename_all)]` policy returned by
+    /// `CaseStyle` — the `#[wire(name_policy)]` policy returned by
     /// `ReflectStruct::wire_name_policy()` (WEP 2026-06-13). Casing is resolved
     /// library-side by `core:serde::wire_name`.
     CaseStyle,
@@ -307,11 +307,11 @@ pub enum CompilerItem {
     ReflectStructTypeName,
     /// `ReflectStruct::members` — the per-field member tuple.
     ReflectStructMembers,
-    /// `ReflectStruct::wire_name_policy` — the struct's `#[serde(rename_all)]` policy.
+    /// `ReflectStruct::wire_name_policy` — the struct's `#[wire(name_policy)]` policy.
     ReflectStructWireNamePolicy,
     /// `Member::name` — the member's source field name.
     MemberName,
-    /// `Member::wire_name_override` — the member's raw `#[serde(rename)]` value.
+    /// `Member::wire_name_override` — the member's raw `#[wire(name)]` value.
     MemberWireNameOverride,
     /// `ReflectVariant::type_name` — the per-variant type name.
     ReflectVariantTypeName,

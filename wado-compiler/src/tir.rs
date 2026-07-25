@@ -4269,7 +4269,7 @@ pub struct TirStruct {
     pub monomorph_info: Option<MonomorphInfo>,
     pub fields: Vec<TirField>,
     pub span: Span,
-    /// `#[serde(rename_all = "...")]` — naming strategy for all fields.
+    /// `#[wire(name_policy = "...")]` — naming strategy for all fields.
     pub wire_name_policy: Option<String>,
 }
 
@@ -4282,11 +4282,11 @@ pub struct TirField {
     pub span: Span,
     /// `#[secret]` — field not shown in debug inspect output.
     pub is_secret: bool,
-    /// `#[serde(rename = "name")]` — custom serialization name for this field.
+    /// `#[wire(name = "name")]` — custom serialization name for this field.
     pub wire_name_override: Option<String>,
-    /// `#[serde(default)]` — use default value when field is missing during deserialization.
+    /// `#[wire(default)]` — use default value when field is missing during deserialization.
     pub serde_default: bool,
-    /// `#[serde(positional)]` — field is resolved by position, not by name.
+    /// `#[wire(positional)]` — field is resolved by position, not by name.
     /// Format-agnostic ordinal hint: synthesized `FieldSchema::lookup` omits it
     /// (never matched by name) and `positional_at` enumerates it. Name-only and
     /// sequence-only formats ignore it; `core:args` binds it to a bare token.
@@ -4307,7 +4307,7 @@ pub struct TirEnum {
     pub monomorph_info: Option<MonomorphInfo>,
     pub cases: Vec<TirEnumCase>,
     pub span: Span,
-    /// `#[serde(rename_all = "...")]` — naming strategy for all cases.
+    /// `#[wire(name_policy = "...")]` — naming strategy for all cases.
     pub wire_name_policy: Option<String>,
 }
 
@@ -4318,7 +4318,7 @@ pub struct TirEnumCase {
     pub name: String,
     pub index: u32,
     pub span: Span,
-    /// `#[serde(rename = "...")]` — custom serialized name for this case.
+    /// `#[wire(name = "...")]` — custom serialized name for this case.
     pub wire_name_override: Option<String>,
 }
 
@@ -4358,7 +4358,7 @@ pub struct TirVariantDecl {
     /// Cases of the variant (e.g., Some, None for Option)
     pub cases: Vec<TirVariantCase>,
     pub span: Span,
-    /// `#[serde(rename_all = "...")]` — naming strategy for all cases.
+    /// `#[wire(name_policy = "...")]` — naming strategy for all cases.
     pub wire_name_policy: Option<String>,
 }
 
@@ -4377,7 +4377,7 @@ pub struct TirVariantCase {
     /// Payload type for this case. Unit variants have `()` (unit type) payload.
     pub payload: TypeId,
     pub span: Span,
-    /// `#[serde(rename = "...")]` — custom serialized name for this case.
+    /// `#[wire(name = "...")]` — custom serialized name for this case.
     pub wire_name_override: Option<String>,
 }
 

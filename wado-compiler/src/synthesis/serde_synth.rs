@@ -331,7 +331,7 @@ use super::common::{
 /// Wire-form name for a struct field.
 ///
 /// Single source of truth for the serialized key: an explicit
-/// `#[serde(rename = "...")]` wins; otherwise `#[serde(rename_all = "...")]`
+/// `#[wire(name = "...")]` wins; otherwise `#[wire(name_policy = "...")]`
 /// applies its case strategy; otherwise the Wado source field name is used
 /// verbatim (identity — `user_id` stays `"user_id"`, `userId` stays
 /// `"userId"`). Used by both the serialize and deserialize synthesisers so the
@@ -367,8 +367,8 @@ fn apply_name_policy(s: &str, strategy: &str) -> String {
     }
 }
 
-/// Serialized name of an enum / variant case. `#[serde(rename = "...")]` wins;
-/// otherwise `#[serde(rename_all = "...")]` applies its strategy; otherwise the
+/// Serialized name of an enum / variant case. `#[wire(name = "...")]` wins;
+/// otherwise `#[wire(name_policy = "...")]` applies its strategy; otherwise the
 /// case name is used verbatim.
 fn serialized_case_name(
     name: &str,
@@ -1434,7 +1434,7 @@ fn generate_struct_deserialize(
     let compiler_items = tt.compiler_items().clone();
     drop(tt);
 
-    // `#[serde(positional)]` flags, aligned with `fields` (enumerate index ==
+    // `#[wire(positional)]` flags, aligned with `fields` (enumerate index ==
     // field index used by the deserialize loop). A positional field is ordinal:
     // `lookup` omits it, `positional_at` enumerates it.
     let positional_flags: Vec<bool> = struct_def
@@ -2177,7 +2177,7 @@ fn generate_lookup_function(
 
 /// `impl FieldSchema for <Type> { fn positional_at(rank: i32) -> Option<i32> }`
 /// — the static, per-type ordinal-field matcher. Maps the `rank`-th
-/// `#[serde(positional)]` field (in declaration order) to its field index;
+/// `#[wire(positional)]` field (in declaration order) to its field index;
 /// returns `null` for an out-of-range rank, and for every rank when the type
 /// has no positional fields. `positional_flags` is aligned with the deserialize
 /// loop's field indices, so the returned index drives the same `field == i`

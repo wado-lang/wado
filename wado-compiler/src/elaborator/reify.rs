@@ -902,7 +902,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             });
 
             // A field is optional on deserialize iff it has a default value.
-            // `#[serde(default)]` is removed (rejected in `resolve_struct`).
+            // `#[wire(default)]` is removed (rejected in `resolve_struct`).
             let serde_default = field.default.is_some();
 
             let serde_positional = field
@@ -963,7 +963,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Field types and type-param bounds come from `sem.decls.local_struct_fields`
     /// — the durable, mangled-name-keyed fact `resolve_local_struct` recorded.
-    /// Field attributes (`#[serde(...)]`, `#[secret]`) and default-value
+    /// Field attributes (`#[wire(...)]`, `#[secret]`) and default-value
     /// expressions are read straight from the AST here, exactly matching
     /// `reify_struct`'s handling for a top-level struct — `StructFieldInfo`
     /// doesn't carry attributes, only `(name, type, visibility)`.
@@ -10639,7 +10639,7 @@ fn ast_binary_op_to_tir(op: ast::BinaryOp) -> crate::tir::TirBinaryOp {
     }
 }
 
-/// `#[serde(rename = "...")]` on a struct field, enum case, or variant case.
+/// `#[wire(name = "...")]` on a struct field, enum case, or variant case.
 fn wire_name_override_of(attrs: &[ast::Attribute]) -> Option<String> {
     attrs.iter().find_map(|a| {
         if a.name == "wire" {
@@ -10650,7 +10650,7 @@ fn wire_name_override_of(attrs: &[ast::Attribute]) -> Option<String> {
     })
 }
 
-/// `#[serde(rename_all = "...")]` on a struct, enum, or variant declaration.
+/// `#[wire(name_policy = "...")]` on a struct, enum, or variant declaration.
 fn wire_name_policy_of(attrs: &[ast::Attribute]) -> Option<String> {
     attrs.iter().find_map(|a| {
         if a.name == "wire" {

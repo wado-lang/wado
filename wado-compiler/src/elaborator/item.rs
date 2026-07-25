@@ -577,7 +577,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .find(|a| a.name == "wire" && a.has_arg("default"))
             {
-                let _ = scope.emit(TypeError::SerdeDefaultAttr {
+                let _ = scope.emit(TypeError::WireDefaultAttr {
                     field: field.name.clone(),
                     span: serde_default.span,
                 });

@@ -458,9 +458,9 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// `#[serde(default)]` is removed: a struct field default value is the
+    /// `#[wire(default)]` is removed: a struct field default value is the
     /// single mechanism for an optional field. Guides to `field: T = <value>`.
-    SerdeDefaultAttr {
+    WireDefaultAttr {
         field: String,
         span: Span,
     },
@@ -961,10 +961,10 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::SerdeDefaultAttr { field, span } => (
+            TypeError::WireDefaultAttr { field, span } => (
                 Code::UnsupportedFeature,
                 format!(
-                    "`#[serde(default)]` is not supported; give field '{field}' a default value instead, e.g. `{field}: T = <value>` (a field with a default value is optional on deserialize)"
+                    "`#[wire(default)]` is not supported; give field '{field}' a default value instead, e.g. `{field}: T = <value>` (a field with a default value is optional on deserialize)"
                 ),
                 *span,
             ),

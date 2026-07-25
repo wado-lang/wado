@@ -663,7 +663,7 @@ pub struct NirStruct {
     pub monomorph_info: Option<MonomorphInfo>,
     pub fields: Vec<NirField>,
     pub span: Span,
-    /// `#[serde(rename_all = "...")]` — naming strategy for all fields.
+    /// `#[wire(name_policy = "...")]` — naming strategy for all fields.
     pub wire_name_policy: Option<String>,
 }
 
@@ -676,9 +676,9 @@ pub struct NirField {
     pub span: Span,
     /// `#[secret]` — field not shown in debug inspect output.
     pub is_secret: bool,
-    /// `#[serde(rename = "name")]` — custom serialization name for this field.
+    /// `#[wire(name = "name")]` — custom serialization name for this field.
     pub wire_name_override: Option<String>,
-    /// `#[serde(default)]` — use default value when field is missing during deserialization.
+    /// `#[wire(default)]` — use default value when field is missing during deserialization.
     pub serde_default: bool,
 }
 
