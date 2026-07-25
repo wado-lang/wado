@@ -160,23 +160,27 @@ and cost it the immutability its consumers rely on. Two maps under the same
 ### One canonical frame implies one way to leave it
 
 A signature's canonical frame is only enforceable if there is exactly one
-operation that instantiates it. Today substitution is open-coded per consumer
-— `type_resolution::substitute_type_params` and `expr::substitute_type_params`
-(AST `Type`, by name), `method_lookup::resolve_type_with_param_mapping`,
-`trait_query::build_type_param_mapping`, and the `TypeId`-level
-`TypeTable::substitute_type_params`. Migrating consumers onto the digest
-without first collapsing these would just mint new ad-hoc substitution sites
-and leave the frame invariant unverifiable.
+operation that instantiates it. The `TypeId`-level primitive already exists
+and is canonical (`TypeTable::substitute_type_params`, keyed by slot index),
+but no type pairs a signature with the slots it is abstract over, so each
+consumer open-codes "clone the param types, substitute each, substitute the
+return". Migrating consumers onto the digest without first naming that
+operation would mint one more copy of it per converted site.
 
-So `Signatures` entries are binders — a signature plus the `TypeParam` slots
-it is abstract over — and `TypeSystem::instantiate` is the only way to read
-one at a use site. `MethodInfo` stops being independently computed and becomes
-exactly `instantiate(impl_method_sig, receiver_args)`.
+So a signature is a [`DeclSig`]: the slots plus the parameter and return
+types resolved against them. `DeclSig::instantiate` fills the slots
+positionally and is how a use site reads one; inference, which solves *for*
+the arguments, is the one consumer that reads the canonical types directly.
+`MethodInfo` stops being independently computed and becomes exactly
+`instantiate(impl_method_sig, receiver_args)`.
 
-The AST-level substitution helpers exist only because signatures were AST when
-consumed. They have no place once signatures are `TypeId`s, so their count is
-the sharper completion metric: `loaded_modules` measures what was unplugged,
-AST-level substitution helpers measure what was actually lowered.
+The two genuinely AST-level helpers —
+`method_lookup::resolve_type_with_param_mapping` and the
+`trait_query::build_type_param_mapping` that exists only to feed it — survive
+only because impl-method signatures are still AST when consumed. S5 deletes
+both, which makes their count the sharper completion metric: `loaded_modules`
+measures what was unplugged, AST-level substitution measures what was actually
+lowered.
 
 ### Scope — transient walk state with RAII-only mutation
 
@@ -291,17 +295,21 @@ panicking at whichever use site happens to reach it first.
       S5 impl/static digest; the imported-globals decl loop still reads
       the source module's AST (S5, needs visibility on the globals
       digest).
-- [ ] S4.5 Header-only consumers → `ImplHeader`. Most `get_impl_block`
-      callers read only `ty` / `trait_type` / `associated_types` /
-      `type_params`, all of which the header already carries; they need no
-      digest and land ahead of it, shrinking S5's blast radius.
-- [ ] S4.6 One frame exit: the binder shape on `Signatures` entries plus
-      `TypeSystem::instantiate`; route the AST-level substitution helpers
-      through it. Prerequisite for S5 — without it each converted consumer
-      invents its own substitution.
+- [x] S4.5 Header-only consumers → `ImplHeader`, which gained the full
+      `trait_type` and `is_synthesize_request`. `get_impl_block`'s 14
+      callers are down to the 3 that read method signatures — the exact
+      surface S5 replaces. `impl_header` borrows through an `Arc<TraitEnv>`
+      handle, not `&self`, so a header outlives the `&mut self` calls a
+      lookup makes.
+- [x] S4.6 One frame exit: [`DeclSig`] (`elaborator/sig.rs`) — slots,
+      param types, return type — and `DeclSig::instantiate`, the single
+      positional substitution. `FunctionSig` embeds it, separating the
+      canonical frame from the per-declaration extras (names, `is_mut`,
+      defaults, effects). `instantiate` takes the `TypeTable` rather than
+      the `TypeSystem`, keeping `sig` a leaf module.
 - [ ] S5 `Signatures` stage B — impl methods: per-method canonical
-      signatures keyed by the method's `AstId`, plus `associated_types`
-      and `is_synthesize_request` on the impl entry; convert
+      signatures as `DeclSig`s keyed by the method's `AstId`, plus
+      `associated_types` and `is_synthesize_request` on the impl entry; convert
       `method_lookup` / `method_call` / `trait_query` consumers;
       `MethodInfo` becomes `instantiate(sig, receiver_args)`; delete
       `get_impl_block`.

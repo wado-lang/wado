@@ -1,0 +1,151 @@
+//! Canonical declaration signatures and the one way to instantiate them.
+
+use std::cell::RefCell;
+
+use crate::hashmap::IndexMap;
+use crate::tir::{TypeId, TypeTable};
+
+/// A declaration's parameter and return types, resolved once in its
+/// declaring frame and abstract over the positional slots in
+/// [`Self::type_params`] (WEP 2026-07-10).
+///
+/// Slot `i` is a `ResolvedType::TypeParam` (or `TypePack`) whose index is
+/// `i`, so a use site's type arguments fill the slots positionally.
+/// Effect parameters and `<F: fn(…)>` bounds consume no slot — they are
+/// scope entries, not substitution targets — so this list is dense.
+///
+/// A use site that knows its type arguments reads the signature through
+/// [`Self::instantiate`]. Inference, which solves *for* those arguments,
+/// is the one consumer that reads the canonical types directly.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct DeclSig {
+    pub(crate) type_params: Vec<(String, TypeId)>,
+    pub(crate) param_types: Vec<TypeId>,
+    /// `None` when the declaration declares no return type.
+    pub(crate) return_type: Option<TypeId>,
+}
+
+/// A [`DeclSig`] with its slots filled by a use site's type arguments.
+#[derive(Clone, Debug)]
+pub(crate) struct InstantiatedSig {
+    pub(crate) param_types: Vec<TypeId>,
+    pub(crate) return_type: TypeId,
+}
+
+impl DeclSig {
+    /// Fill the signature's slots with `type_args`, positionally.
+    ///
+    /// Arity is the caller's contract: it owns the diagnostic for a
+    /// mismatch, and passing fewer arguments than slots is how a
+    /// partially-inferred call site instantiates what it knows, leaving
+    /// the trailing slots abstract. Passing none substitutes nothing.
+    pub(crate) fn instantiate(
+        &self,
+        type_table: &RefCell<TypeTable>,
+        type_args: &[TypeId],
+    ) -> InstantiatedSig {
+        let substitution: IndexMap<u32, TypeId> = type_args
+            .iter()
+            .enumerate()
+            .map(|(i, &t)| (i as u32, t))
+            .collect();
+        let mut table = type_table.borrow_mut();
+        InstantiatedSig {
+            param_types: self
+                .param_types
+                .iter()
+                .map(|&p| table.substitute_type_params(p, &substitution))
+                .collect(),
+            return_type: table
+                .substitute_type_params(self.return_type.unwrap_or(TypeTable::UNIT), &substitution),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `fn id<T>(x: T) -> T` instantiated at `T = i32`.
+    fn generic_identity(table: &RefCell<TypeTable>) -> DeclSig {
+        let t = table.borrow_mut().make_type_param("T".to_string(), 0);
+        DeclSig {
+            type_params: vec![("T".to_string(), t)],
+            param_types: vec![t],
+            return_type: Some(t),
+        }
+    }
+
+    #[test]
+    fn instantiate_fills_slots_positionally() {
+        let table = RefCell::new(TypeTable::new());
+        let sig = generic_identity(&table);
+
+        let inst = sig.instantiate(&table, &[TypeTable::I32]);
+
+        assert_eq!(inst.param_types, vec![TypeTable::I32]);
+        assert_eq!(inst.return_type, TypeTable::I32);
+    }
+
+    #[test]
+    fn instantiate_without_args_keeps_the_canonical_form() {
+        let table = RefCell::new(TypeTable::new());
+        let sig = generic_identity(&table);
+        let canonical = sig.param_types.clone();
+
+        let inst = sig.instantiate(&table, &[]);
+
+        assert_eq!(inst.param_types, canonical);
+        assert_eq!(inst.return_type, canonical[0]);
+    }
+
+    #[test]
+    fn instantiate_substitutes_inside_containers() {
+        let table = RefCell::new(TypeTable::new());
+        let t = table.borrow_mut().make_type_param("T".to_string(), 0);
+        let list_of_t = table.borrow_mut().make_ref(t);
+        let sig = DeclSig {
+            type_params: vec![("T".to_string(), t)],
+            param_types: vec![list_of_t],
+            return_type: None,
+        };
+
+        let inst = sig.instantiate(&table, &[TypeTable::I32]);
+
+        let expected = table.borrow_mut().make_ref(TypeTable::I32);
+        assert_eq!(inst.param_types, vec![expected]);
+        assert_eq!(inst.return_type, TypeTable::UNIT);
+    }
+
+    #[test]
+    fn a_partial_instantiation_leaves_trailing_slots_abstract() {
+        let table = RefCell::new(TypeTable::new());
+        let t = table.borrow_mut().make_type_param("T".to_string(), 0);
+        let u = table.borrow_mut().make_type_param("U".to_string(), 1);
+        let sig = DeclSig {
+            type_params: vec![("T".to_string(), t), ("U".to_string(), u)],
+            param_types: vec![t, u],
+            return_type: Some(u),
+        };
+
+        let inst = sig.instantiate(&table, &[TypeTable::I32]);
+
+        assert_eq!(inst.param_types, vec![TypeTable::I32, u]);
+        assert_eq!(inst.return_type, u);
+    }
+
+    #[test]
+    fn a_slotless_signature_is_unchanged_by_instantiation() {
+        let table = RefCell::new(TypeTable::new());
+        let sig = DeclSig {
+            type_params: Vec::new(),
+            param_types: vec![TypeTable::I32],
+            return_type: Some(TypeTable::BOOL),
+        };
+
+        let inst = sig.instantiate(&table, &[]);
+
+        assert_eq!(inst.param_types, vec![TypeTable::I32]);
+        assert_eq!(inst.return_type, TypeTable::BOOL);
+    }
+}

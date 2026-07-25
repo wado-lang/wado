@@ -30,6 +30,7 @@ mod reflect;
 pub(crate) mod reify;
 mod scope;
 pub(crate) mod sem;
+pub(crate) mod sig;
 mod stmt;
 mod template;
 pub(crate) mod trait_env;

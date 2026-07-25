@@ -1025,13 +1025,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .function_return_types
             .insert(func.name.clone(), return_type.unwrap_or(TypeTable::UNIT));
         super::sem::decls::FunctionSig {
+            decl: super::sig::DeclSig {
+                type_params: real_type_params,
+                param_types,
+                return_type,
+            },
             type_param_ids,
-            real_type_params,
-            param_types,
             param_names: func.params.iter().map(|p| p.name.clone()).collect(),
             param_is_mut: func.params.iter().map(|p| p.is_mut).collect(),
             param_defaults: func.params.iter().map(|p| p.default.clone()).collect(),
-            return_type,
             effects,
         }
     }
@@ -1047,9 +1049,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .function_sigs
             .get(&func.name)
             .expect("decl pass records every free function's canonical signature");
-        let type_param_list = sig.real_type_params.clone();
-        let resolved_param_types = sig.param_types.clone();
-        let declared_return_type = sig.return_type.unwrap_or(TypeTable::UNIT);
+        let type_param_list = sig.decl.type_params.clone();
+        let resolved_param_types = sig.decl.param_types.clone();
+        let declared_return_type = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
         self.sem
             .decls
             .generic_function_params

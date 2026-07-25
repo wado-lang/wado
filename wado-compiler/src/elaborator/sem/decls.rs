@@ -19,6 +19,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::TypeId;
 
+use super::super::sig::DeclSig;
 use super::super::types::{EnumInfo, FlagsInfo, GenericNewtypeInfo, StructFieldInfo, VariantInfo};
 
 /// A function's canonical signature, resolved once by its module's decl
@@ -27,23 +28,21 @@ use super::super::types::{EnumInfo, FlagsInfo, GenericNewtypeInfo, StructFieldIn
 /// they never re-resolve the signature AST.
 #[derive(Clone)]
 pub(crate) struct FunctionSig {
+    /// The canonical frame: the positional slots, the parameter types, and
+    /// the return type. Instantiated at a use site through
+    /// [`DeclSig::instantiate`].
+    pub(crate) decl: DeclSig,
     /// Registered `(name, TypeId)` pairs, in registration order — real
     /// params as `TypeParam` slots, fn-bound params as their realised
     /// function type. Effect params are excluded; empty iff the function
-    /// declares only effect params (or none).
+    /// declares only effect params (or none). A superset of
+    /// `decl.type_params`, which holds only the slot-consuming subset.
     pub(crate) type_param_ids: Vec<(String, TypeId)>,
-    /// The real (non-effect, non-fn-bound) subset of `type_param_ids`:
-    /// the positional slots substituted by explicit or inferred type args.
-    pub(crate) real_type_params: Vec<(String, TypeId)>,
-    /// Parameter types in declaration order.
-    pub(crate) param_types: Vec<TypeId>,
     pub(crate) param_names: Vec<String>,
     pub(crate) param_is_mut: Vec<bool>,
     /// Default-value expressions — irreducibly AST, re-resolved per call
     /// site under the callee's scope (WEP 2026-04-11).
     pub(crate) param_defaults: Vec<Option<ast::Expr>>,
-    /// Declared return type; `None` when the declaration has none.
-    pub(crate) return_type: Option<TypeId>,
     /// Declared `with` effects, resolved in the declaring perspective
     /// (effect parameters stay symbolic as `EffectRef::Param`).
     pub(crate) effects: Vec<crate::tir::EffectRef>,
