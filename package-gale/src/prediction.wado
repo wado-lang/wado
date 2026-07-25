@@ -15,6 +15,7 @@ use { Element, RepeatElement, Alternative } from "./ir.wado";
 use { GenContext, is_nullable } from "./gen_context.wado";
 use { bits_set, bits_test } from "./token_kinds.wado";
 use { sort_group_by_specificity } from "./alt_grouping.wado";
+use { all_alts_are_single_token } from "./gen_util.wado";
 use { TreeSet } from "core:collections";
 
 pub variant PredictionNode {
@@ -419,6 +420,9 @@ fn repeat_entry_alts(rep: &RepeatElement, ctx: &mut GenContext) -> Option<List<A
         return null;
     }
     if let Group(g) = rep.element {
+        if all_alts_are_single_token(&g.alternatives) {
+            return null;
+        }
         return Option::Some(g.alternatives);
     }
     return null;
@@ -455,6 +459,7 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
                         if inner_alts.len() <= 8 {
                             entered = true;
                             let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
+                            let mut body_results: List<SllConfig> = [];
                             for let alt of inner_alts {
                                 let mut v2: List<String> = [];
                                 if !ctx.first_ids_of_alt(&alt, &mut v2).contains(&token) {
@@ -468,6 +473,17 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
                                 };
                                 let advanced = sll_advance(&exp, token, ctx, inline_depth + 1);
                                 for let a of advanced {
+                                    body_results.push(a);
+                                }
+                            }
+                            // Entered configs all carry this config's alt index, so
+                            // `sll_dedup_by_alt` would keep one and drop the rest —
+                            // a walk over a subset of the body. Opacity is the honest
+                            // answer: it hands the decision to the tournament.
+                            if body_results.len() > 1 {
+                                results.push(SllConfig { ..*c, pos: SLL_POS_OPAQUE });
+                            } else {
+                                for let a of body_results {
                                     results.push(a);
                                 }
                             }
