@@ -289,21 +289,6 @@ pub(crate) struct BlanketImpl {
     pub(crate) param: String,
     /// Bound trait names on the receiver param.
     pub(crate) bounds: Vec<String>,
-    /// Impl-level type-param count (`2` for the `Reflect` struct blanket
-    /// `impl<T: Reflect<Fields = [..F]>, ..F> Trait for T`).
-    pub(crate) arity: usize,
-}
-
-impl BlanketImpl {
-    /// Whether this is the `Reflect`-derived struct blanket
-    /// (`impl<T: Reflect<Fields = [..F]>, ..F> Trait for T`): a value receiver
-    /// keyed `[T, Fields]` (arity 2) with a `Reflect` bound. Distinguishes it
-    /// from a one-arg value blanket like `impl<I: Iterator> IntoIterator for I`.
-    pub(crate) fn is_reflect_struct(&self, reflect_trait_name: &str) -> bool {
-        self.receiver == BlanketReceiver::Value
-            && self.arity == 2
-            && self.bounds.iter().any(|b| b == reflect_trait_name)
-    }
 }
 
 /// Classify a blanket impl's receiver, or `None` for a concrete/shape impl
@@ -887,7 +872,6 @@ impl TraitEnv {
                                 receiver,
                                 param,
                                 bounds,
-                                arity: impl_block.type_params.len(),
                             });
                     }
                     // A value blanket (`impl<T: Bound> Trait for T`) has no
@@ -1175,19 +1159,43 @@ impl TraitEnv {
         })
     }
 
-    /// Whether the value blanket for `trait_name` (preferring `type_module`) is
-    /// the `Reflect`-derived struct blanket keyed `[T, Fields]`. Callers pass
-    /// the registry's `Reflect` trait name (this layer has no `CompilerItem`
-    /// registry). Consolidates the former caller-side `arity == 2 && bounds
-    /// contains Reflect` re-derivations.
-    pub(crate) fn is_reflect_struct_blanket(
+    /// The associated-type names a value blanket projects into type packs —
+    /// `impl<T: Bound<Assoc = [..P]>, ..P> Trait for T` yields `["Assoc"]`, in
+    /// header order. Empty for a blanket with no projected pack. This is the
+    /// general form of the former `Reflect`-struct-only `[T, Fields]` keying:
+    /// it also covers `ReflectEnum<CaseTokens = [..C]>` /
+    /// `ReflectFlags<BitTokens = [..B]>`, so dispatch keys such a blanket by
+    /// `[T, T::Assoc, …]` uniformly without hard-coding any one trait.
+    pub(crate) fn blanket_projected_pack_assocs(
         &self,
         trait_name: &str,
         type_module: Option<&ModuleSource>,
-        reflect_trait_name: &str,
-    ) -> bool {
-        self.value_blanket_for_trait(trait_name, type_module)
-            .is_some_and(|b| b.is_reflect_struct(reflect_trait_name))
+    ) -> Vec<String> {
+        let Some(blanket) = self.value_blanket_for_trait(trait_name, type_module) else {
+            return Vec::new();
+        };
+        let Some(header) = self
+            .impl_headers
+            .get(&(blanket.module.clone(), blanket.ast_id))
+        else {
+            return Vec::new();
+        };
+        header
+            .type_params
+            .iter()
+            .flat_map(|tp| &tp.bounds)
+            .flat_map(|bound| &bound.assoc_types)
+            .filter_map(|assoc| match &assoc.ty {
+                ast::Type::Tuple(elems)
+                    if elems
+                        .iter()
+                        .any(|e| matches!(e, ast::Type::TypePackSpread(..))) =>
+                {
+                    Some(assoc.name.clone())
+                }
+                _ => None,
+            })
+            .collect()
     }
 
     /// Like [`impl_module_for`] but only returns a hit when the impl block

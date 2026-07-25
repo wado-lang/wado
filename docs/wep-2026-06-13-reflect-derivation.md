@@ -85,10 +85,9 @@ way the token is the single member channel; no kind carries a parallel metadata
 list. (A tuple carries no runtime index, so a homogeneous walk finds a member by
 `holds` rather than by discriminant index, matching the variant walk.)
 
-A generic derivation over a tuple walk binds a type pack, and a pack-bound
-blanket can currently expose only instance methods — resolving a `static` trait
-method through such a blanket (`T::from_wire(…)`, a deserialize entry) is an
-open compiler item, tracked separately.
+A generic derivation over a tuple walk binds a type pack, and both instance and
+`static` trait methods resolve through such a pack-bound blanket — a deserialize
+entry (`T::from_wire(…)`) dispatches the same way a walk does.
 
 `from_discriminant` / `from_bits` return `Option` because an unknown input is a
 normal deserialize error, not a bug. `construct` assembles a struct from its

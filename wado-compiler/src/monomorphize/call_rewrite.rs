@@ -315,13 +315,37 @@ impl Monomorphizer {
                 if monomorph.is_blanket {
                     names_to_try.insert(0, monomorph.generic_name.clone());
                 }
+                // A blanket that projects type packs is keyed by `[T, T::Assoc, …]`;
+                // the recorded impl args carry only `[T]`, so append the packs.
+                let blanket_trait = info.base_trait_name.as_deref().or(info.trait_name.as_deref());
+                let impl_ta = match blanket_trait {
+                    Some(tn)
+                        if monomorph.is_blanket
+                            && super::func_inst::is_pack_blanket_dispatch(
+                                &self.functions.trait_env,
+                                tn,
+                                &info.method_name,
+                                &func.module_source,
+                                &monomorph.generic_name,
+                            ) =>
+                    {
+                        super::func_inst::blanket_impl_args_with_projected_packs(
+                            &monomorph.impl_type_args,
+                            &self.functions.trait_env,
+                            tn,
+                            &func.module_source,
+                            type_table,
+                        )
+                    }
+                    _ => monomorph.impl_type_args.clone(),
+                };
                 let base_struct_name = info.base_struct_name();
                 let candidates: Vec<&str> = vec![&base_struct_name, &info.struct_name];
                 for generic_method_name in names_to_try {
                     let key = InstantiationKey {
                         name: generic_method_name.clone(),
                         module_source: func.module_source.clone(),
-                        impl_type_args: monomorph.impl_type_args.clone(),
+                        impl_type_args: impl_ta.clone(),
                         method_type_args: monomorph.method_type_args.clone(),
                         method_info: Some(info.clone()),
                     };
@@ -654,28 +678,31 @@ impl Monomorphizer {
             } = &*method_func
                 && mono.is_blanket
             {
-                let is_struct_blanket = match (
-                    method_func
-                        .method_info
-                        .as_ref()
-                        .and_then(|i| i.base_trait_name.as_deref().or(i.trait_name.as_deref())),
-                    method_func.method_info.as_ref(),
-                ) {
-                    (Some(tn), Some(info)) => super::func_inst::is_struct_blanket_dispatch(
+                let info = method_func.method_info.as_ref();
+                let blanket_trait =
+                    info.and_then(|i| i.base_trait_name.as_deref().or(i.trait_name.as_deref()));
+                let projects_packs = match (blanket_trait, info) {
+                    (Some(tn), Some(info)) => super::func_inst::is_pack_blanket_dispatch(
                         &self.functions.trait_env,
                         tn,
                         &info.method_name,
                         &method_func.module_source,
                         &mono.generic_name,
-                        type_table,
                     ),
                     _ => false,
                 };
-                let impl_ta = super::func_inst::normalize_reflect_blanket_args(
-                    &mono.impl_type_args,
-                    type_table,
-                    is_struct_blanket,
-                );
+                let impl_ta = match blanket_trait {
+                    Some(tn) if projects_packs => {
+                        super::func_inst::blanket_impl_args_with_projected_packs(
+                            &mono.impl_type_args,
+                            &self.functions.trait_env,
+                            tn,
+                            &method_func.module_source,
+                            type_table,
+                        )
+                    }
+                    _ => mono.impl_type_args.clone(),
+                };
                 let key = InstantiationKey {
                     name: mono.generic_name.clone(),
                     module_source: method_func.module_source.clone(),
