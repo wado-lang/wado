@@ -174,13 +174,18 @@ the arguments, is the one consumer that reads the canonical types directly.
 `MethodInfo` stops being independently computed and becomes exactly
 `instantiate(impl_method_sig, receiver_args)`.
 
-The two genuinely AST-level helpers —
+The two genuinely AST-level helpers are
 `method_lookup::resolve_type_with_param_mapping` and the
-`trait_query::build_type_param_mapping` that exists only to feed it — survive
-only because impl-method signatures are still AST when consumed. S5 deletes
-both, which makes their count the sharper completion metric: `loaded_modules`
-measures what was unplugged, AST-level substitution measures what was actually
-lowered.
+`trait_query::build_type_param_mapping` that exists only to feed it. Their
+count is the sharper completion metric: `loaded_modules` measures what was
+unplugged, AST-level substitution measures what was actually lowered.
+
+They outlive S5, though. Of their nine call sites only one resolves a method's
+parameter type; the other eight resolve an impl block's **associated-type
+bindings** (`type Item = …`) and the type arguments of its trait reference.
+Those are declaration facts too, and they belong in the digest as `TypeId`s —
+but as the impl's own bindings, not as method signatures. Digesting them is
+its own slice (S5c), and until it lands these two helpers stay.
 
 ### Scope — transient walk state with RAII-only mutation
 
@@ -307,12 +312,31 @@ panicking at whichever use site happens to reach it first.
       canonical frame from the per-declaration extras (names, `is_mut`,
       defaults, effects). `instantiate` takes the `TypeTable` rather than
       the `TypeSystem`, keeping `sig` a leaf module.
-- [ ] S5 `Signatures` stage B — impl methods: per-method canonical
-      signatures as `DeclSig`s keyed by the method's `AstId`, plus
-      `associated_types` and `is_synthesize_request` on the impl entry; convert
-      `method_lookup` / `method_call` / `trait_query` consumers;
-      `MethodInfo` becomes `instantiate(sig, receiver_args)`; delete
-      `get_impl_block`.
+- [x] S5a Impl-method signatures resolved in the decl pass, keyed by the
+      method's `AstId`. `MethodFrame` / `enter_impl_method_frame` is the
+      one definition of the frame and its slot numbering, shared by the
+      decl pass and the body walk — previously `resolve_impl_item`'s
+      `actual_idx` counter and `resolve_method`'s `method_param_offset`
+      defined it twice and agreed by luck. `resolve_method` reads its
+      return type back, making every impl method in the suite a
+      consistency check between the passes.
+
+      Trait default methods are excluded *in the type*: `resolve_method`
+      takes the recorded signature as an argument and the synthesis path
+      passes `None`. The same trait method `AstId` resolves in a different
+      frame for every impl that inherits it, so a declaration-keyed digest
+      cannot represent it — that is S6's job, not a licence to re-resolve.
+- [ ] S5b Consumers: the three `get_impl_block` method-signature reads and
+      the `method_call` whole-module scans read the digest; `MethodInfo`
+      becomes `instantiate(sig, receiver_args)`; `resolve_method` takes its
+      parameter types from the digest too, ending the interim state where
+      both passes resolve them; delete `get_impl_block`.
+- [ ] S5c Impl associated-type bindings and trait-reference type
+      arguments as `TypeId` facts on the impl entry, plus
+      `is_synthesize_request`. Deletes
+      `resolve_type_with_param_mapping` / `build_type_param_mapping`,
+      which S5a/S5b do not reach: eight of their nine call sites resolve
+      these bindings, not method signatures.
 - [ ] S6 `Signatures` stage C — trait decls: method signatures + `has_body` +
       `Rc` bodies; convert `find_trait_decl_methods_with_module` /
       `find_method_in_trait_bounds`; reify reads default bodies from the
@@ -327,9 +351,11 @@ panicking at whichever use site happens to reach it first.
       `wado-compiler/AGENTS.md`.
 
 Ordering: S1–S3 are mutually independent and independent of S4–S6. S4.5 is
-independent of everything. S4.6 gates S5. S4–S6 build one digest each and can
-land per consumer category. S7 requires S4–S6, and converts one query at a
-time rather than as a single cut. S8–S9 are last.
+independent of everything. S4.6 gates S5. S5a–S5c build one digest each and
+can land per consumer category, but S5b follows S5a directly: between them
+both passes resolve method parameter types, and that duplication is exactly
+what the digest exists to remove. S7 requires S4–S6, and converts one query at
+a time rather than as a single cut. S8–S9 are last.
 
 Progress metric, measured at S4's completion:
 
@@ -337,6 +363,7 @@ Progress metric, measured at S4's completion:
 | ------------------------------------------------ | --- | ------ |
 | `loaded_modules` reads outside reify / decl pass | 25  | 0      |
 | AST-level type-param substitution helpers        | 2   | 0      |
+| — of which S5c (not S5a/S5b) removes             | 2   | 0      |
 | `get_impl_block` + callers                       | 15  | 0      |
 | `with_module_perspective` sites                  | 16  | 1      |
 | `suppress_reference_recording` sites             | 7   | 0      |
