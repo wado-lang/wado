@@ -273,10 +273,10 @@ Passing a narrow "resolution context" (`type_table` + reference sink + logger
 Slices land independently, each keeping `mise run test`, the WIR goldens, and
 the LSP query tests green. Converted consumers read the digest via
 `.expect(…)` — a missing entry is a loud panic, never a fallback to AST
-re-resolution (the reify Stage-7 precedent). A completeness test asserts that
-after `annotate_decls` every free function and impl method in every loaded
-module has an entry, so a gap fails one deterministic test instead of
-panicking at whichever use site happens to reach it first.
+re-resolution (the reify Stage-7 precedent). The impl-method digest needs no separate
+completeness test: the body walk visits every impl block in every module and
+`.expect`s the entry, so the suite already fails deterministically at the
+declaration rather than at whichever use site reaches it first.
 
 - [x] S1 `Scope` + guards (subsumes the parent WEP's Track B Stage E).
       Refinements: effect params live on `TraitContext` (restored by
@@ -326,11 +326,26 @@ panicking at whichever use site happens to reach it first.
       passes `None`. The same trait method `AstId` resolves in a different
       frame for every impl that inherits it, so a declaration-keyed digest
       cannot represent it — that is S6's job, not a licence to re-resolve.
-- [ ] S5b Consumers: the three `get_impl_block` method-signature reads and
-      the `method_call` whole-module scans read the digest; `MethodInfo`
-      becomes `instantiate(sig, receiver_args)`; `resolve_method` takes its
-      parameter types from the digest too, ending the interim state where
-      both passes resolve them; delete `get_impl_block`.
+- [x] S5b-1 `resolve_method` takes its parameter types from the digest,
+      ending the interim state where both passes resolved them.
+- [x] S5b-2 The three `get_impl_block` method-signature reads instantiate
+      the recorded signature; `get_impl_block` is deleted, so dispatch
+      cannot reach an impl AST. `Self` stopped needing special handling:
+      the canonical frame binds it to the impl target, so filling the
+      impl's slots with the receiver's arguments yields what
+      `with_self_type_if_known` + `with_module_perspective_for` used to
+      construct.
+
+      `instantiate_slots` fills slots by index, because the alignment lives
+      in the shape-aware slot map the call site already holds — generic,
+      ref, blanket, and variadic-tuple impls number slots differently, and
+      a positional list cannot express a non-contiguous subset.
+      `instantiate` delegates to it, so there is still one substitution.
+
+      Note at the boundary: `MethodInfo::param_types` excludes the
+      receiver, the digest includes it (`MethodSig::first_value_param`).
+- [ ] S5b-3 `method_call`'s whole-module scans read the digest;
+      `MethodInfo` becomes `instantiate(sig, receiver_args)` throughout.
 - [ ] S5c Impl associated-type bindings and trait-reference type
       arguments as `TypeId` facts on the impl entry, plus
       `is_synthesize_request`. Deletes
