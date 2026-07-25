@@ -339,7 +339,7 @@ use super::common::{
 fn serialized_field_name(f: &crate::tir::TirField, struct_def: &crate::tir::TirStruct) -> String {
     f.wire_name_override.clone().unwrap_or_else(|| {
         if let Some(strategy) = &struct_def.wire_name_policy {
-            apply_rename_all(&f.name, strategy)
+            apply_name_policy(&f.name, strategy)
         } else {
             f.name.clone()
         }
@@ -349,7 +349,7 @@ fn serialized_field_name(f: &crate::tir::TirField, struct_def: &crate::tir::TirS
 /// Apply a `rename_all` strategy. Source-casing-agnostic, so it works for both
 /// `snake_case` struct fields and `PascalCase` enum/variant cases (Wado casing is
 /// convention, not a rule, so the source form is open).
-fn apply_rename_all(s: &str, strategy: &str) -> String {
+fn apply_name_policy(s: &str, strategy: &str) -> String {
     use heck::{
         ToKebabCase, ToLowerCamelCase, ToShoutyKebabCase, ToShoutySnakeCase, ToSnakeCase,
         ToUpperCamelCase,
@@ -379,7 +379,7 @@ fn serialized_case_name(
         return r.clone();
     }
     match rename_all {
-        Some(strategy) => apply_rename_all(name, strategy),
+        Some(strategy) => apply_name_policy(name, strategy),
         None => name.to_string(),
     }
 }
@@ -4016,7 +4016,7 @@ mod tests {
     /// heck changes, this fails first and the Wado vectors are updated in step.
     #[test]
     fn rename_all_edge_corpus_locks_heck_output() {
-        let snake = |s: &str| apply_rename_all(s, "snake_case");
+        let snake = |s: &str| apply_name_policy(s, "snake_case");
         assert_eq!(snake("userID"), "user_id");
         assert_eq!(snake("HTTPStatus"), "http_status");
         assert_eq!(snake("parseHTTP"), "parse_http");
@@ -4024,18 +4024,18 @@ mod tests {
         assert_eq!(snake("iOS"), "i_os");
         assert_eq!(snake("field2Name"), "field2_name");
         assert_eq!(snake("Apple2Banana"), "apple2_banana");
-        assert_eq!(apply_rename_all("HTTPStatus", "camelCase"), "httpStatus");
-        assert_eq!(apply_rename_all("userID", "PascalCase"), "UserId");
+        assert_eq!(apply_name_policy("HTTPStatus", "camelCase"), "httpStatus");
+        assert_eq!(apply_name_policy("userID", "PascalCase"), "UserId");
     }
 
     #[test]
     fn rename_all_from_snake_field() {
-        assert_eq!(apply_rename_all("user_name", "camelCase"), "userName");
-        assert_eq!(apply_rename_all("user_name", "snake_case"), "user_name");
-        assert_eq!(apply_rename_all("user_name", "PascalCase"), "UserName");
-        assert_eq!(apply_rename_all("user_name", "kebab-case"), "user-name");
+        assert_eq!(apply_name_policy("user_name", "camelCase"), "userName");
+        assert_eq!(apply_name_policy("user_name", "snake_case"), "user_name");
+        assert_eq!(apply_name_policy("user_name", "PascalCase"), "UserName");
+        assert_eq!(apply_name_policy("user_name", "kebab-case"), "user-name");
         assert_eq!(
-            apply_rename_all("user_name", "SCREAMING_SNAKE_CASE"),
+            apply_name_policy("user_name", "SCREAMING_SNAKE_CASE"),
             "USER_NAME"
         );
     }
@@ -4043,10 +4043,10 @@ mod tests {
     #[test]
     fn rename_all_from_pascal_case() {
         // PascalCase source, not the snake_case of struct fields.
-        assert_eq!(apply_rename_all("AddRemote", "kebab-case"), "add-remote");
-        assert_eq!(apply_rename_all("AddRemote", "snake_case"), "add_remote");
-        assert_eq!(apply_rename_all("AddRemote", "camelCase"), "addRemote");
-        assert_eq!(apply_rename_all("List", "kebab-case"), "list");
+        assert_eq!(apply_name_policy("AddRemote", "kebab-case"), "add-remote");
+        assert_eq!(apply_name_policy("AddRemote", "snake_case"), "add_remote");
+        assert_eq!(apply_name_policy("AddRemote", "camelCase"), "addRemote");
+        assert_eq!(apply_name_policy("List", "kebab-case"), "list");
     }
 
     #[test]

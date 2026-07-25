@@ -131,7 +131,7 @@ after inlining they fold to the code a hand-written impl would emit.
 ## Wire naming
 
 The reflection layer exposes only the authored facts — a member's `rename`
-override (`Member::wire_name_override`) and the type's `rename_all` policy
+override (`Member::wire_name_override`) and the type's `name_policy`
 (`wire_name_policy` as a `CaseStyle`, on every kind). A resolved wire name is policy, and
 casing is serialization vocabulary, not type structure, so it lives in
 `core:serde`; any schema library (Jade) calls the same helper, so wire names never
@@ -146,7 +146,7 @@ pub fn wire_name<M: Member>(m: &M, policy: CaseStyle) -> String {
 }
 ```
 
-`CaseStyle` is total (`Identity` when no `rename_all` is set). `apply_case` covers
+`CaseStyle` is total (`Identity` when no `name_policy` is set). `apply_case` covers
 the six styles (`camelCase`, `snake_case`, `PascalCase`, `SCREAMING_SNAKE_CASE`,
 `kebab-case`, `SCREAMING-KEBAB-CASE`). `core:args` reuses the same policy for CLI
 tags, so "wire name" is the boundary-facing name in general, not a serde-only

@@ -3358,7 +3358,7 @@ impl Deserialize for User;    // compiler generates deserialize method
 
 The compiler inspects the type definition (struct, enum, variant, or flags) and synthesizes the appropriate method body. This is a compile error if a field or case's type doesn't implement the required trait.
 
-Struct field names are serialized verbatim by default (identity); see [Serialization Names](./wep-2026-02-28-serde.md#serialization-names) for `rename` / `rename_all` overrides.
+Struct field names are serialized verbatim by default (identity); see [Serialization Names](./wep-2026-02-28-serde.md#serialization-names) for `name` / `name_policy` overrides.
 
 ### Bound-Driven Serialize / Deserialize
 

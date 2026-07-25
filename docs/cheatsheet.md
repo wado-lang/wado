@@ -1320,7 +1320,7 @@ with `#[wire(name_policy = "...")]` (per type) or `#[wire(name = "...")]`
 ```wado
 struct Point { x: i32, y: i32 }         // serializable, no marker needed
 
-// rename_all: camelCase / snake_case / PascalCase / SCREAMING_SNAKE_CASE /
+// name_policy: camelCase / snake_case / PascalCase / SCREAMING_SNAKE_CASE /
 //             kebab-case / SCREAMING-KEBAB-CASE
 #[wire(name_policy = "camelCase")]
 struct Event {
