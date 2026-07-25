@@ -750,6 +750,16 @@ impl FunctionTranslator<'_, '_> {
             "builtin::f32_max" => binary!(self, args, WirInstr::F32Max),
             "builtin::f32_copysign" => binary!(self, args, WirInstr::F32Copysign),
             "builtin::ref_eq" => binary!(self, args, WirInstr::RefEq),
+            "builtin::is_uninitialized" => {
+                let mut a = self.translate_operand(args[0].expr);
+                // The point of the read is to observe the `null` placeholder,
+                // so it is typed nullable — otherwise codegen narrows it with
+                // `ref.as_non_null` and traps before the test can run.
+                if let WirInstr::GlobalGet { result_ty, .. } = &mut a {
+                    result_ty.set_nullable();
+                }
+                WirInstr::RefIsNull(Box::new(a))
+            }
             "builtin::i32_and" => binary!(self, args, WirInstr::I32And),
             "builtin::i32_eqz" => unary!(self, args, WirInstr::I32Eqz),
             "builtin::i32_clz" => unary!(self, args, WirInstr::I32Clz),

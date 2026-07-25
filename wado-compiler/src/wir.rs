@@ -1185,6 +1185,28 @@ impl WirType {
         )
     }
 
+    pub fn set_nullable(&mut self) {
+        match self {
+            Self::Ref { nullable, .. } | Self::AbstractRef { nullable, .. } => *nullable = true,
+            Self::I8
+            | Self::I16
+            | Self::I32
+            | Self::I64
+            | Self::U8
+            | Self::U16
+            | Self::U32
+            | Self::U64
+            | Self::F32
+            | Self::F64
+            | Self::V128
+            | Self::Bool
+            | Self::Char
+            | Self::Unit
+            | Self::Enum { .. }
+            | Self::Flags { .. } => {}
+        }
+    }
+
     /// True when this type lowers to a Wasm GC reference (`Ref` /
     /// `AbstractRef`), as opposed to a scalar (`i32`/`i64`/`f64`/`v128`/…,
     /// including `Enum`/`Flags` which are `i32`, and `Unit`). Used to

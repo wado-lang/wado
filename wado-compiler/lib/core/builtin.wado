@@ -220,6 +220,14 @@ fn f32_reinterpret_i32(i: i32) -> f32;
 /// Traps unconditionally, marking unreachable code.
 fn unreachable() -> !;
 
+/// True while a lazy-initialized global still holds its `null` placeholder.
+///
+/// The only argument that carries meaning is a global whose slot starts
+/// `null` and is written once before use (`WirGlobal::lazy_init`); the read
+/// is typed nullable so it observes the placeholder instead of asserting it
+/// away. Any other reference reads back as already-initialized.
+fn is_uninitialized<T>(value: &T) -> bool;
+
 /// Marks the enclosing code path as cold (rarely executed). `cold_path()` is a
 /// statement placed inside a branch body, so it works anywhere — an `if` /
 /// `if let` / `match` arm, or as the cold fall-through after a guard clause —

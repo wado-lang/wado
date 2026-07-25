@@ -92,6 +92,13 @@ enum CandidateKind {
 
 pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
     let type_table = project.type_table.clone();
+    // One id serves every instantiation — the hoisted type rides the call node.
+    let is_uninitialized = project.intern_extern(&crate::nir::FunctionRef {
+        module_source: ModuleSource::builtin(),
+        name: "is_uninitialized".to_string(),
+        monomorph_info: None,
+        method_info: None,
+    });
 
     // Phase 1 — analysis (all immutable borrows).
     let fn_effects =
@@ -153,38 +160,32 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
                 // replace the binding.
                 rewrite_reads(body, local_index, &module_source, &name, ty);
                 assert!(
-                    replace_let_with_set(body, local_index, &module_source, &name, guarded),
+                    replace_let_with_set(
+                        body,
+                        local_index,
+                        &module_source,
+                        &name,
+                        ty,
+                        guarded.then_some(is_uninitialized)
+                    ),
                     "[NIR] const_object_globalization: LetBinding candidate's `let` \
                      (local {local_index}) went missing between collection and mutation"
                 );
                 inline_sibling_lets(body, local_index, &sibling_lets, &module_source, &name);
             }
             CandidateKind::InlineRef { ref_expr } => {
-                hoist_inline_ref(body, ref_expr, &module_source, &name, ty, guarded);
+                hoist_inline_ref(
+                    body,
+                    ref_expr,
+                    &module_source,
+                    &name,
+                    ty,
+                    guarded.then_some(is_uninitialized),
+                );
             }
         }
         drop(func);
 
-        if guarded {
-            project.globals.push(NirGlobal {
-                name: guard_flag_name(&name),
-                ty: TypeTable::BOOL,
-                initializer: ExprBody::wrapping_value(
-                    crate::nir_value_graph::ValueKind::Bool(false),
-                    TypeTable::BOOL,
-                    crate::token::Span::new(0, 0, 1, 1),
-                ),
-                mutable: true,
-                wado_mutable: true,
-                visibility: crate::ast::Visibility::Private,
-                module_source: module_source.clone(),
-                span: crate::token::Span::new(0, 0, 1, 1),
-                is_nullable: false,
-                lazy_init: false,
-                locals: Vec::new(),
-                prefer_fixed_string_repr: false,
-            });
-        }
         project.globals.push(NirGlobal {
             name,
             ty,
@@ -303,7 +304,7 @@ fn hoist_inline_ref(
     module_source: &ModuleSource,
     name: &str,
     ty: TypeId,
-    guarded: bool,
+    guarded: Option<crate::nir::FuncId>,
 ) {
     let ExprKind::Unary {
         expr: Operand::Expr(inner),
@@ -323,8 +324,16 @@ fn hoist_inline_ref(
         type_id: TypeTable::UNIT,
         span,
     });
-    let set_stmt = if guarded {
-        guard_set_on_flag(body, set_expr, module_source, &guard_flag_name(name), span)
+    let set_stmt = if let Some(is_uninitialized) = guarded {
+        guard_set_on_uninit(
+            body,
+            set_expr,
+            module_source,
+            name,
+            ty,
+            is_uninitialized,
+            span,
+        )
     } else {
         body.stmts.push(StmtNode {
             kind: StmtKind::Expr(Operand::Expr(set_expr)),
@@ -1209,50 +1218,41 @@ fn stmt_value_contains_call(body: &Body, stmt: StmtId) -> bool {
 /// post-initialization, so it narrows reads with `ref.as_non_null` — and the
 /// guard's own read is by construction the one that precedes it. Testing a
 /// flag keeps that promise intact. Same shape as `__modules_initialized`.
-fn guard_set_on_flag(
+fn guard_set_on_uninit(
     body: &mut Body,
     set: ExprId,
     module_source: &ModuleSource,
-    flag_name: &str,
+    name: &str,
+    ty: TypeId,
+    is_uninitialized: crate::nir::FuncId,
     span: crate::token::Span,
 ) -> StmtId {
-    let flag_get = body.exprs.push(ExprNode {
+    let global_get = body.exprs.push(ExprNode {
         kind: ExprKind::GlobalVarGet {
             module_source: module_source.clone(),
-            name: flag_name.to_string(),
+            name: name.to_string(),
         },
-        type_id: TypeTable::BOOL,
+        type_id: ty,
         span,
     });
     let cond = body.exprs.push(ExprNode {
-        kind: ExprKind::Unary {
-            op: NirUnaryOp::Not,
-            expr: flag_get.into(),
+        kind: ExprKind::Call {
+            func_id: is_uninitialized,
+            type_args: vec![ty],
+            args: vec![crate::nir_arena::ArenaCallArg {
+                expr: global_get.into(),
+                is_mut: false,
+            }],
         },
         type_id: TypeTable::BOOL,
-        span,
-    });
-    let truth = body.values.bool(true);
-    body.values.set_type(truth, TypeTable::BOOL);
-    let flag_set = body.exprs.push(ExprNode {
-        kind: ExprKind::GlobalVarSet {
-            module_source: module_source.clone(),
-            name: flag_name.to_string(),
-            value: Operand::Value(truth),
-        },
-        type_id: TypeTable::UNIT,
         span,
     });
     let set_stmt = body.stmts.push(StmtNode {
         kind: StmtKind::Expr(set.into()),
         span,
     });
-    let flag_stmt = body.stmts.push(StmtNode {
-        kind: StmtKind::Expr(flag_set.into()),
-        span,
-    });
     let then_block = body.blocks.push(BlockNode {
-        stmts: vec![set_stmt, flag_stmt],
+        stmts: vec![set_stmt],
         span,
     });
     body.stmts.push(StmtNode {
@@ -1265,17 +1265,13 @@ fn guard_set_on_flag(
     })
 }
 
-/// Name of the init flag paired with a guarded `__const_obj_*` global.
-fn guard_flag_name(global_name: &str) -> String {
-    format!("{global_name}__init")
-}
-
 fn replace_let_with_set(
     body: &mut Body,
     local_index: u32,
     module_source: &ModuleSource,
     name: &str,
-    guarded: bool,
+    ty: TypeId,
+    guarded: Option<crate::nir::FuncId>,
 ) -> bool {
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
@@ -1298,9 +1294,16 @@ fn replace_let_with_set(
                 type_id: TypeTable::UNIT,
                 span,
             });
-            if guarded {
-                let guard =
-                    guard_set_on_flag(body, set, module_source, &guard_flag_name(name), span);
+            if let Some(is_uninitialized) = guarded {
+                let guard = guard_set_on_uninit(
+                    body,
+                    set,
+                    module_source,
+                    name,
+                    ty,
+                    is_uninitialized,
+                    span,
+                );
                 body.stmts[s].kind = body.stmts[guard].kind.clone();
             } else {
                 body.stmts[s].kind = StmtKind::Expr(set.into());
