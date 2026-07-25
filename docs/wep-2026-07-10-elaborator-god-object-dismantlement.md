@@ -344,8 +344,29 @@ declaration rather than at whichever use site reaches it first.
 
       Note at the boundary: `MethodInfo::param_types` excludes the
       receiver, the digest includes it (`MethodSig::first_value_param`).
-- [ ] S5b-3 `method_call`'s whole-module scans read the digest;
-      `MethodInfo` becomes `instantiate(sig, receiver_args)` throughout.
+- [x] S5b-3 The static-method index carries the method's own `AstId`
+      (`StaticMethodEntry`) instead of a positional index into an AST
+      vector, so its consumers reach the digest directly. Four of five
+      collapse; `MethodSig` absorbs parameter defaults so they and the
+      parameter types can no longer drift apart.
+- [ ] S5b-4 Resource methods. Their signatures are **already digested** as
+      `sem.types.effect_ops` — `resolve_effect_ops` resolves them in a
+      canonical frame (type params registered, `Self` constructed), which is
+      the same shape as the impl-method digest. Do not build a second one.
+
+      The blocker is timing, not shape: `effect_ops` is produced by the
+      annotate pass, so another module's annotate cannot rely on it being
+      populated. Merging it the way `all_impl_method_sigs` is merged would
+      be order-dependent. Resource signature resolution has to move into the
+      decl pass first, exactly as S5a did for impl methods; only then can
+      the resource consumers (`find_static_method_def`'s `StaticMethodSig`
+      path, the resource return-type lookup) read it.
+- [ ] S5b-5 The current-module scan branches. They exist because the static
+      indexes cover only non-entry modules, while the digest covers every
+      module. Widening the index to the current module deletes the branches
+      rather than converting them.
+- [ ] S5b-6 `MethodInfo` becomes `instantiate(sig, receiver_args)`
+      throughout.
 - [ ] S5c Impl associated-type bindings and trait-reference type
       arguments as `TypeId` facts on the impl entry, plus
       `is_synthesize_request`. Deletes
