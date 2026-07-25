@@ -268,14 +268,9 @@ pub struct NirGlobal {
     /// True when this global is lazy-initialized: the Wasm slot starts
     /// `null`, and `__initialize_module` runs the original (non-constant)
     /// initializer to assign the real value before any non-init use.
-    /// Codegen narrows `global.get` results with `ref.as_non_null` for
-    /// these globals, since the read result is guaranteed non-null after
-    /// init.
     ///
-    /// `false` for constant-initialized globals (including
-    /// `Option<&T> = null` whose `null` is itself the runtime value) —
-    /// codegen leaves the read result nullable so a `None` value reads
-    /// back as `ref.null` instead of trapping in `ref.as_non_null`.
+    /// `false` for constant-initialized globals, including
+    /// `Option<&T> = null` whose `null` is itself the runtime value.
     pub lazy_init: bool,
     /// Per-local metadata for the initializer expression. Populated when
     /// the initializer is non-trivial (e.g., `SequenceLiteralBuilder`
