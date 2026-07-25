@@ -1,0 +1,43 @@
+// Probe for the blanket-dispatched method-call queueing path: an enum blanket's
+// body calls another blanket-derived method on a *concrete* enum receiver, so
+// the instantiation must be queued from inside the blanket rather than from the
+// generic call site.
+
+trait Label {
+    fn label(&self) -> String;
+}
+
+impl<T: ReflectEnum<Members = [..C]>, ..C> Label for T {
+    fn label(&self) -> String {
+        return ReflectEnum::<T>::type_name();
+    }
+}
+
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+impl<T: ReflectEnum<Members = [..C]>, ..C> Describe for T {
+    fn describe(&self) -> String {
+        let mine = Size::Small;
+        return `${self.label()}/${mine.label()}`;
+    }
+}
+
+enum Color {
+    Red,
+    Blue,
+}
+
+enum Size {
+    Small,
+    Large,
+}
+
+test "blanket body dispatches on a concrete enum receiver" {
+    let c = Color::Red;
+    assert c.describe() == "Color/Size";
+}
+
+__DATA__
+{"test": {}}
