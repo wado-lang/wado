@@ -373,12 +373,28 @@ declaration rather than at whichever use site reaches it first.
       never a filter on the index loops. The entry module is indexed like
       any other.
 
-      So the branches are redundant for *coverage*. What they still encode
-      is *priority* — current module wins over another module declaring the
-      same-named type — which the canonical `DeclKey` now handles. Deleting
-      them is therefore a change to dispatch priority, not a no-op, and
-      needs a fixture pinning same-name disambiguation across modules
-      before the deletion, not after.
+      So the branches are redundant for *coverage*. Whether they are also
+      redundant for *priority* depends on how their fall-through is keyed,
+      and the two indexes differ:
+
+      - `static_method_index` is keyed by canonical `DeclKey`, so it already
+        separates two modules' same-named structs. A scan in front of it is
+        pure redundancy — removed, with `static_method_same_name_priority`
+        pinning the rule.
+      - `impl_index` / `all_impl_index` are keyed by **bare name**;
+        same-named types across modules share one bucket and are told apart
+        only by each entry's `ModuleSource`. Here the current-module scan
+        *is* the disambiguator. Removing it changes which module's impl
+        wins.
+
+      So the remaining scans (`find_impl_assoc_types`, the trait-static
+      lookup) stay until their index is re-keyed canonically. `is_static_method`
+      and `has_static_method_direct` are a third case: their scans sit behind
+      bare-name scans of their own, so they are not a redundancy question
+      but a conversion one.
+
+      Blanket "these branches are dead" is wrong. The property that made two
+      of them removable is the canonical key, not the index's coverage.
 - [ ] S5b-6 `MethodInfo` becomes `instantiate(sig, receiver_args)`
       throughout.
 - [ ] S5c Impl associated-type bindings and trait-reference type
