@@ -1480,7 +1480,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             > = IndexMap::default();
             let mut all_globals: IndexMap<ModuleSource, IndexMap<String, (TypeId, bool)>> =
                 IndexMap::default();
-            let mut all_impl_method_sigs: IndexMap<crate::ast::AstId, super::sig::DeclSig> =
+            let mut all_impl_method_sigs: IndexMap<crate::ast::AstId, super::sig::MethodSig> =
                 IndexMap::default();
             for module_source in &sorted_sources {
                 let Some(sem) = state.module_semantics.get(module_source) else {

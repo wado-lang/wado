@@ -262,6 +262,9 @@ pub(super) struct ImplHeader {
 #[derive(Clone, Debug)]
 pub(super) struct ImplMethodHeader {
     pub(super) name: String,
+    /// The method's own `AstId` — the key into the canonical-signature
+    /// digest, so a header lookup reaches the signature without the AST.
+    pub(super) ast_id: AstId,
     pub(super) type_params: Vec<ast::GenericParam>,
     /// Whether the method has a body. Always true for impl methods; for trait
     /// declarations it distinguishes default methods from bare signatures,
@@ -820,6 +823,7 @@ impl TraitEnv {
                                 .iter()
                                 .map(|m| ImplMethodHeader {
                                     name: m.name.clone(),
+                                    ast_id: m.id,
                                     type_params: m.type_params.clone(),
                                     has_body: m.body.is_some(),
                                 })
@@ -845,6 +849,7 @@ impl TraitEnv {
                             .iter()
                             .map(|m| ImplMethodHeader {
                                 name: m.name.clone(),
+                                ast_id: m.id,
                                 type_params: m.type_params.clone(),
                                 has_body: m.body.is_some(),
                             })

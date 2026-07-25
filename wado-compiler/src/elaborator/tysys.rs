@@ -130,7 +130,7 @@ pub(crate) struct TypeSystem {
     /// the method's globally-unique `AstId`. `TraitEnv::impl_headers`
     /// carries each method's `ast_id`, so a dispatch query goes header →
     /// signature without ever reaching for the impl AST.
-    pub(crate) all_impl_method_sigs: Rc<IndexMap<crate::ast::AstId, super::sig::DeclSig>>,
+    pub(crate) all_impl_method_sigs: Rc<IndexMap<crate::ast::AstId, super::sig::MethodSig>>,
 
     /// Per-module `__DATA__` section contents; modules without one have
     /// no entry.
@@ -142,7 +142,7 @@ impl TypeSystem {
     pub(crate) fn impl_method_sig(
         &self,
         ast_id: crate::ast::AstId,
-    ) -> Option<&super::sig::DeclSig> {
+    ) -> Option<&super::sig::MethodSig> {
         self.all_impl_method_sigs.get(&ast_id)
     }
 

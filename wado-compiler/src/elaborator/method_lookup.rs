@@ -3151,37 +3151,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .iter()
                     .map(|a| (a.name.clone(), a.ty.clone()))
                     .collect();
-                let impl_block = s.get_impl_block(impl_ref);
-                let method = impl_block.methods.iter().find(|m| m.name == method_name)?;
-                let self_kind = method
-                    .params
-                    .first()
-                    .map(|p| p.self_kind)
-                    .unwrap_or(ast::SelfKind::None);
-                let rhs_param_ty = method
-                    .params
-                    .iter()
-                    .find(|p| p.self_kind == ast::SelfKind::None)
-                    .map(|p| p.ty.clone());
+                // The method's signature comes from the decl pass, resolved
+                // in the impl's frame; instantiating it with the receiver's
+                // type arguments is what the by-name re-resolution below used
+                // to approximate.
+                let method_header = header.methods.iter().find(|m| m.name == method_name)?;
+                let method_sig = s.tysys.impl_method_sig(method_header.ast_id)?;
+                let self_kind = method_sig.self_kind;
+                let rhs_index = usize::from(self_kind != ast::SelfKind::None);
+                let rhs_type = method_sig
+                    .decl
+                    .instantiate(&s.tysys.type_table, &concrete_type_args)
+                    .param_types
+                    .get(rhs_index)
+                    .copied();
 
-                let (output_type, rhs_type) = s.with_self_type(base_type_id, |s| {
-                    // Process associated types (e.g., `type Output = Self`)
+                // Associated types are still AST here — the impl's own
+                // bindings become digest facts in S5c.
+                let output_type = s.with_self_type(base_type_id, |s| {
                     let mut assoc_type_map: IndexMap<String, TypeId> = IndexMap::default();
                     for (name, ty) in &assoc_types {
                         let resolved_type = s.resolve_type_with_param_mapping(ty, mapping);
                         assoc_type_map.insert(name.clone(), resolved_type);
                     }
-
-                    let output_type = assoc_type_map
+                    assoc_type_map
                         .get("Output")
                         .copied()
-                        .unwrap_or(base_type_id);
-
-                    // Resolve the rhs parameter type (first non-self parameter)
-                    let rhs_type = rhs_param_ty
-                        .as_ref()
-                        .map(|ty| s.resolve_type_with_param_mapping(ty, mapping));
-                    (output_type, rhs_type)
+                        .unwrap_or(base_type_id)
                 });
 
                 Some(ArithmeticTraitInfo {

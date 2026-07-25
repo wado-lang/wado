@@ -19,7 +19,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::TypeId;
 
-use super::super::sig::DeclSig;
+use super::super::sig::{DeclSig, MethodSig};
 use super::super::types::{EnumInfo, FlagsInfo, GenericNewtypeInfo, StructFieldInfo, VariantInfo};
 
 /// A function's canonical signature, resolved once by its module's decl
@@ -98,7 +98,7 @@ pub(crate) struct ModuleDecls {
     /// impl's frame — impl type params in their positional slots, the
     /// method's own after them, `Self` bound to the impl target — so a use
     /// site instantiates instead of re-resolving the method AST.
-    pub(crate) impl_method_sigs: IndexMap<crate::ast::AstId, DeclSig>,
+    pub(crate) impl_method_sigs: IndexMap<crate::ast::AstId, MethodSig>,
 
     /// Names of generic structs declared in this module (used to decide
     /// whether a struct reference needs generic-instance handling).

@@ -19,7 +19,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::scope::TypeParamScope;
-use super::sig::DeclSig;
+use super::sig::{DeclSig, MethodSig};
 use super::types::{FunctionContext, TypeError};
 
 /// Extract the [`CompilerItem`] marker — if any — from a declaration's
@@ -913,12 +913,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
                 .collect();
             type_params.extend(frame.method_type_params.iter().cloned());
+            let self_kind = method
+                .params
+                .first()
+                .map(|p| p.self_kind)
+                .unwrap_or(ast::SelfKind::None);
             frame_scope.sem.decls.impl_method_sigs.insert(
                 method.id,
-                DeclSig {
-                    type_params,
-                    param_types,
-                    return_type,
+                MethodSig {
+                    decl: DeclSig {
+                        type_params,
+                        param_types,
+                        return_type,
+                    },
+                    self_kind,
                 },
             );
         }
@@ -1874,7 +1882,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_type: Option<&Type>,
         impl_is_concrete: bool,
         impl_declared_params: &[ast::GenericParam],
-        recorded_sig: Option<&DeclSig>,
+        recorded_sig: Option<&MethodSig>,
     ) -> Option<TirFunction> {
         // Use an inherited scope so the caller's `assoc_type_bindings` (set up
         // for the surrounding impl block) remain visible — `Self::Output` etc.
@@ -1926,7 +1934,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // canonical per impl, not per declaration, so it resolves here until
         // the trait-decl digest (S6) gives it a per-impl key.
         let return_type = match recorded_sig {
-            Some(sig) => sig.return_type.unwrap_or(TypeTable::UNIT),
+            Some(sig) => sig.decl.return_type.unwrap_or(TypeTable::UNIT),
             None => func
                 .return_type
                 .as_ref()
@@ -2026,7 +2034,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Parameter types come from the decl pass for a method the impl block
         // declares; a synthesised trait default resolves its own (S5a).
         let param_types: Vec<TypeId> = match recorded_sig {
-            Some(sig) => sig.param_types.clone(),
+            Some(sig) => sig.decl.param_types.clone(),
             None => func
                 .params
                 .iter()

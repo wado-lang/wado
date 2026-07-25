@@ -25,6 +25,16 @@ pub(crate) struct DeclSig {
     pub(crate) return_type: Option<TypeId>,
 }
 
+/// An impl method's canonical signature: the frame, plus the receiver shape
+/// that dispatch needs before it can adjust a receiver expression. The shape
+/// is not part of [`DeclSig`] because it is not a type and nothing
+/// substitutes into it.
+#[derive(Clone, Debug)]
+pub(crate) struct MethodSig {
+    pub(crate) decl: DeclSig,
+    pub(crate) self_kind: crate::ast::SelfKind,
+}
+
 /// A [`DeclSig`] with its slots filled by a use site's type arguments.
 #[derive(Clone, Debug)]
 pub(crate) struct InstantiatedSig {
