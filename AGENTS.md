@@ -41,7 +41,7 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 ## Tooling
 
 - Never `pgrep` to check whether a job is alive — it matches the watcher's own command line, so the loop never exits. Have the job record its own completion: `cmd > run.log 2>&1; echo $? > run.done`.
-- Never pipe output through `tail`/`head` to read a failure — the reason precedes the backtrace, so a tail keeps the backtrace and drops the reason. Select by content: `grep -E "test result|panicked at"`.
+- Always redirect output to a file and read the file. Filtering a live command (`| tail`, `| grep`) discards everything you did not anticipate, and a filter that misses costs a full re-run — tens of minutes.
 - Run long jobs (`mise run test`, `test-wado`, `update-golden-fixtures`, `on-task-done`) through the harness's background mechanism, not `nohup ... &`, so completion is notified. Never foreground `sleep` to wait.
 
 ## General Rules
