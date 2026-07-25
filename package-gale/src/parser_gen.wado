@@ -2681,12 +2681,9 @@ fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookahea
         } else {
             w.else_begin(&`else if ${cond}`);
         }
-        // Same `done` / `body` / `save` structure as a lenient
-        // `gen_scan_op_group`: a failed optional means "skip", so the
-        // position must rewind to where the shape started. Falling out
-        // with a callee's `-1` (or a half-consumed position) poisons the
-        // element after the optional, whose bounds guard tests only
-        // `pos < tokens.len()`.
+        // A failed optional means "skip", so the position rewinds: leaving a
+        // callee's `-1` in `pos` mis-scans the elements after it and traps
+        // their `pos < tokens.len()` guard.
         let gc = ctx.next_scan_group();
         let body = `sol_${gc}`;
         let done = `sol_${gc}_done`;

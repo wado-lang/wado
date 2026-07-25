@@ -403,16 +403,10 @@ fn sll_config_first(c: &SllConfig, ctx: &mut GenContext) -> List<i32> {
 }
 
 /// Alternatives to walk into for a nullable `Repeat` whose body can consume
-/// more than one token — a `RuleRef` to a multi-token rule, or a `Group`
-/// (whose alternatives are opaque at the repeat's own position). Skipping such
-/// a body to `pos + 1` would claim the whole repeat matched a single token, so
-/// prediction would keep separating alternatives on lookahead that actually
-/// sits inside the body: `item : name ( 'as'? alias )? … | name '(' inner ')'`
-/// resolved `f ( … ` from the token after the '(' as if `alias` were one token
-/// (`tests/grammars/scan_optional_lookahead_restore.g4`). Returning the body's
-/// alternatives lets the normal walk reach the real opacity and hand the
-/// decision to the scan tournament. A single-token body keeps the cheap skip,
-/// which is exact for it.
+/// more than one token. Skipping such a body to `pos + 1` would claim the
+/// repeat matched a single token, so the walk would keep separating
+/// alternatives on lookahead that actually sits inside the body. A
+/// single-token body keeps the cheap skip, which is exact for it.
 fn repeat_entry_alts(rep: &RepeatElement, ctx: &mut GenContext) -> Option<List<Alternative>> {
     if let RuleRef(rr) = rep.element {
         let mut stv: List<String> = [];
@@ -453,7 +447,6 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
         let mut results: List<SllConfig> = [];
         let mut visiting: List<String> = [];
         if ctx.first_ids_of_element(elem, &mut visiting).contains(&token) {
-            // A multi-token inner is entered via the return stack rather than skipped to pos+1.
             let mut entered = false;
             if let Repeat(rep) = elem {
                 if c.return_stack.len() < 1 {

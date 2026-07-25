@@ -272,17 +272,9 @@ Pinned grammars:
   `factored`, `delete_stmt` vs `delete_stmt_limited`), `any_name`'s
   `'(' any_name ')'` competing with `'(' expr ')'`, the `FROM`
   comma-list vs `join_clause` tie, `type_name`'s non-greedy `name+?`,
-  and the `expr` precedence climb. 7 are `#[TODO]`, in three groups:
-  `column_def` enters `type_name?` too reluctantly (ANTLR4 reads
-  `a NOT NULL` as `type_name(NOT)` + `constraint(NULL)`, and takes three
-  names for `a UNSIGNED BIG INT`); the `expr … BETWEEN … AND …` operands
-  climb from too high a precedence, so `a NOT BETWEEN 1 AND 2 AND b`
-  brackets as `(a BETWEEN 1 AND 2) AND b` instead of
-  `a BETWEEN (1 AND 2) AND b`; and `IN`'s bare `table_name` branch plus
-  the `sql_stmt_list` `';'` separators are rejected outright.
+  and the `expr` precedence climb. 7 are `#[TODO]`; the divergences
+  behind them are itemised in [`TODO.md`](./TODO.md).
 - **`json`** — 11 cases; Gale's JSON parser matches ANTLR4 exactly.
-
-Both lock the generated trees against regressions.
 
 Adding a grammar is config + a cases file, but only for a **clean single
 combined grammar with `WS -> skip`**. Out of scope, with reasons recorded
@@ -434,27 +426,22 @@ the relevant sites.
    `CREATE TABLE` and RustParser's `crate : item*` both regress. Fixture
    `tests/grammars/scan_group_recursion.g4`.
 6. A nullable `Repeat` whose body can consume more than one token is
-   walked into, not skipped to `pos + 1`. Skipping claims the whole repeat
-   matched a single token, so the walk keeps separating alternatives on
-   lookahead that actually sits inside the body — `item : name
-   ( 'as'? alias )? … | name '(' inner ')'` resolved `f ( …` from the
-   token after the `'('` as if `alias` were one token, and committed to
-   the wrong alt. Entering the body reaches the real opacity and hands the
-   decision to the tournament. A single-token body keeps the cheap skip,
-   which is exact for it — widening this to every repeat would downgrade
-   decisions the static path resolves correctly today.
+   walked into, not skipped past. Skipping claims the repeat matched a
+   single token, so the walk keeps separating alternatives on lookahead
+   that actually sits inside the body: `item : name ( 'as'? alias )? … |
+   name '(' inner ')'` read the token after the `'('` as if `alias` were
+   one token, and committed to the wrong alt. A single-token body keeps
+   the cheap skip — widening this to every repeat would downgrade
+   decisions the static path resolves correctly today. Fixture
+   `tests/grammars/scan_optional_lookahead_restore.g4`.
 7. A scan-side optional rewinds to its entry position when its body
-   fails. A failed optional means "skip", so leaving the callee's `-1` (or
-   a half-consumed position) in `pos` both mis-scans the elements after it
-   and traps the next bounds guard, which tests only `pos < tokens.len()`.
-   SQLite's `table_or_subquery` hit this on every `FROM f(...)`: alt 0's
-   `( K_AS? table_alias )?` gate admits `'('` because `table_alias` is
-   parenthesizable, and `table_alias` then fails on the argument.
-
-Invariants 6 and 7 share one fixture,
-`tests/grammars/scan_optional_lookahead_restore.g4` — the rewind is what
-lets the tournament run at all, and the walk is what routes the decision
-to it.
+   fails, because a failed optional means "skip". Leaving the callee's
+   `-1` in the scan position both mis-scans the elements after it and
+   traps their bounds guard. SQLite's `table_or_subquery` hit this on
+   every `FROM f(...)`: alt 0's `( K_AS? table_alias )?` is entered on
+   `'('` because `table_alias` is parenthesizable, then fails on the
+   argument. Same fixture as 6 — the rewind is what lets the tournament
+   run at all, and the walk is what routes the decision to it.
 
 Termination is a checked property, not only inline conservatism:
 `check_left_recursion` (grammar-check phase) rejects hidden (`a : x? a`, a

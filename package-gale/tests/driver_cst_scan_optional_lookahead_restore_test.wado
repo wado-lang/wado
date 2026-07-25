@@ -11,10 +11,6 @@ fn assert_tree(input: &String, expected: &String) {
     assert actual == norm, `\ninput:    ${*input}\nexpected: ${norm}\nactual:   ${actual}`;
 }
 
-// The optional's lookahead gate admits '(' but `alias` then fails on the
-// NUMBER at the bottom of the chain. Scanning must rewind to the position
-// the optional started at, so the trailing `( 'idx' name | 'no' 'idx' )?`
-// reads a live token instead of tokens[-1].
 test "tree: optional-lookahead body failure rewinds the scan position" {
     assert_tree(&"f ( ( ( ( 1 ) ) ) )", &"
         (s (stmt (item (name f) ( (inner ( (inner ( (inner ( (inner 1) )) )) )) ))))
@@ -27,10 +23,7 @@ test "tree: rewind still lets the outer tournament pick the longer alt" {
     ");
 }
 
-// The rejection case for the same decision: only `alias` reaches the `x`, so
-// the parse side must not commit to alt 1 from the depth-2 static prefix. The
-// '(' branch halts `Ambiguous` and the tournament picks.
-test "tree: the same optional matches when its body succeeds" {
+test "tree: the body that reaches the input wins over the shorter static prefix" {
     assert_tree(&"f ( ( ( ( x ) ) ) )", &"
         (s (stmt (item (name f) (alias ( (alias ( (alias ( (alias ( (alias x) )) )) )) )))))
     ");

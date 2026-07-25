@@ -1,19 +1,16 @@
-// Source: hand-written regression for the scan-side `OptionalLookahead`
-// position restore (the SQLite `table_or_subquery` / `FROM f(1)` shape).
+// Source: hand-written regression for the scan-side optional rewind and the
+// nullable-repeat walk (the SQLite `table_or_subquery` / `FROM f(1)` shape).
 // License: BSD-3-Clause (matches the rest of the gale test corpus).
 //
-// Both `item` alts open with the same rule ref and a '(' chain deep enough to
-// hide the disambiguating token, so the decision lands on the longest-match
-// scan tournament. Scanning alt 0 on `f ( ( ( ( 1 ) ) ) )` enters the
-// two-shape optional `( 'as'? alias )?` (its gate admits '(') and then fails
-// inside `alias`; the trailing `( 'idx' name | 'no' 'idx' )?` reads
-// tokens[pos] immediately after, so an unrestored scan position poisons it.
+// `item`'s alts share a rule ref and a '(' chain deeper than the static walk
+// can separate, so the decision lands on the longest-match tournament. On
+// `f ( ( ( ( 1 ) ) ) )` the optional `( 'as'? alias )?` is entered on '(' and
+// then fails inside `alias`, with a trailing group reading the next token.
 grammar ScanOptionalLookaheadRestore;
 
 s : stmt EOF ;
 
-// Both alts open with the same opaque rule ref, so picking one scans `item`
-// to the end — this is the call site that reaches the poisoned position.
+// Forces a scan of `item` to the end — the call site that reached the trap.
 stmt
  : item
  | item 'z'
