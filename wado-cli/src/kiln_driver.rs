@@ -603,10 +603,23 @@ fn walk_and_delete(
     kept: &indexmap::IndexSet<&str>,
     deleted: &mut Vec<String>,
 ) -> std::io::Result<()> {
-    for entry in std::fs::read_dir(dir)? {
-        let entry = entry?;
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e),
+    };
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(e),
+        };
         let path = entry.path();
-        let ft = entry.file_type()?;
+        let ft = match entry.file_type() {
+            Ok(ft) => ft,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(e),
+        };
         if ft.is_dir() {
             walk_and_delete(manifest_root, &path, kept, deleted)?;
             continue;
@@ -628,8 +641,11 @@ fn walk_and_delete(
         if kept.contains(rel_str.as_str()) {
             continue;
         }
-        std::fs::remove_file(&path)?;
-        deleted.push(rel_str);
+        match std::fs::remove_file(&path) {
+            Ok(()) => deleted.push(rel_str),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
+        }
     }
     Ok(())
 }
