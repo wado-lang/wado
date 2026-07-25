@@ -33,10 +33,10 @@ pub(crate) fn takes_self_by_value(params: &[ast::Param]) -> bool {
     matches!(params.first(), Some(p) if p.self_kind == ast::SelfKind::Value)
 }
 
-/// Lightweight reference to an impl block, avoiding deep clones. Stores
-/// `(module_source, item_id)`, resolved to the block's digested
-/// [`ImplHeader`] via [`impl_header`] — or, for the method-signature reads
-/// still on the AST, to the block itself via `Elaborator::get_impl_block`.
+/// Lightweight reference to an impl block. Stores `(module_source,
+/// item_id)` and resolves to the block's digested [`ImplHeader`] via
+/// [`impl_header`]; the impl AST itself is no longer reachable from
+/// dispatch.
 struct ImplBlockRef(ModuleSource, AstId);
 
 /// The digested header of the impl block `r` points at. Borrowed from the
@@ -181,16 +181,6 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// Get a reference to the `ImplBlock` from an `ImplBlockRef`.
-    fn get_impl_block<'b>(&'b self, r: &ImplBlockRef) -> &'b ast::ImplBlock {
-        let ImplBlockRef(module_src, item_id) = r;
-        let module = &self.loaded_modules[module_src];
-        match module.item_by_id(*item_id) {
-            Some(Item::Impl(impl_block)) => impl_block,
-            _ => unreachable!("ImplBlockRef points to non-impl item"),
-        }
-    }
-
     /// Get the module source for an `ImplBlockRef`.
     fn impl_block_module_source(&self, r: &ImplBlockRef) -> ModuleSource {
         r.0.clone()
@@ -2459,32 +2449,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => false,
         };
 
-        // Extract method info from impl block before calling &mut self methods
-        let impl_block = scope.get_impl_block(impl_ref);
-        let method_data: Option<(
-            Option<ast::Type>,
-            ast::SelfKind,
-            Vec<ast::Param>,
-            Vec<ast::GenericParam>,
-        )> = impl_block
+        // The method's canonical signature comes from the decl pass; only its
+        // type parameters and the impl's trait reference come off the header.
+        let method_data = header
             .methods
             .iter()
             .find(|m| m.name == method_name)
             .map(|m| {
-                (
-                    m.return_type.clone(),
-                    m.params
-                        .first()
-                        .map(|p| p.self_kind)
-                        .unwrap_or(ast::SelfKind::None),
-                    m.params.clone(),
-                    m.type_params.clone(),
-                )
+                let sig = scope
+                    .tysys
+                    .impl_method_sig(m.ast_id)
+                    .expect("the decl pass records every impl-declared method's signature")
+                    .clone();
+                (sig, m.type_params.clone())
             });
-        let trait_type_for_name = impl_block.trait_type.as_ref().unwrap().clone();
+        let trait_type_for_name = header.trait_type.as_ref().unwrap().clone();
 
         let mut method_found = false;
-        if let Some((return_type_ast, self_kind, params, method_type_params)) = method_data {
+        if let Some((method_sig, method_type_params)) = method_data {
+            let self_kind = method_sig.self_kind;
             let trait_name = scope.get_type_name_full(&trait_type_for_name);
 
             // Set up method-level type params (e.g., V in deserialize_any<V: Visitor>)
@@ -2514,29 +2497,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
 
-            // Make `Self` in the method signature resolve to the concrete
-            // receiver type (e.g. `&Self` → `&Result<String, i32>` when
-            // calling through `impl<T: Eq, E: Eq> Eq for Result<T, E>`).
-            // Without this, `resolve_type("Self")` falls through to
-            // UNKNOWN and the caller's argument typecheck silently
-            // accepts anything, surfacing as an ICE at codegen.
+            // Bind the impl's slots to the receiver's type arguments. The
+            // slot map the scope already holds is the alignment — it is built
+            // per impl shape (generic, ref, blanket, variadic), which a flat
+            // positional list cannot express. Method-level slots stay
+            // abstract: inference solves them at the call site.
             //
-            // Resolve the signature in the impl's module (see the
-            // `assoc_bindings` note above): the return / param types may name
-            // types private to that module.
-            let (return_type, param_types) = scope.with_self_type_if_known(receiver_type_id, |s| {
-                s.with_module_perspective_for(&impl_module_source, |s| {
-                    let return_type = return_type_ast
-                        .as_ref()
-                        .map(|t| s.resolve_type(t))
-                        .unwrap_or(TypeTable::UNIT);
-                    // Extract param_types while method-level type params are
-                    // still in scope — otherwise `&T` in a parameter would not
-                    // resolve to the proper `TypeParam` id inference expects.
-                    let param_types = s.extract_param_types(&params);
-                    (return_type, param_types)
-                })
-            });
+            // `Self` needs no special handling now. The canonical frame bound
+            // it to the impl target, so instantiating with the receiver's
+            // arguments yields the concrete receiver — what re-resolving the
+            // signature under `with_self_type_if_known` used to produce.
+            let impl_slots: IndexMap<u32, TypeId> = scope
+                .annotate_ctx
+                .trait_ctx
+                .type_params
+                .values()
+                .copied()
+                .collect();
+            let instantiated = method_sig
+                .decl
+                .instantiate_slots(&scope.tysys.type_table, &impl_slots);
+            let return_type = instantiated.return_type;
+            // `MethodInfo::param_types` excludes the receiver; the digest
+            // includes it.
+            let param_types = instantiated.param_types[method_sig
+                .first_value_param()
+                .min(instantiated.param_types.len())..]
+                .to_vec();
 
             // Remove method-level type params from scope
             for type_param in &method_type_params {
@@ -2551,16 +2538,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .type_param_bounds
                     .shift_remove(&type_param.name);
             }
-            let param_is_mut: Vec<bool> = params
-                .iter()
-                .filter(|p| p.name != "self")
-                .map(|p| p.is_mut)
-                .collect();
-            let param_names: Vec<String> = params
-                .iter()
-                .filter(|p| p.name != "self")
-                .map(|p| p.name.clone())
-                .collect();
+            let param_is_mut = method_sig.param_is_mut.clone();
+            let param_names = method_sig.param_names.clone();
             // Parameter defaults live on the trait declaration only (WEP
             // 2026-04-11). Pull them from the trait's method, keyed by
             // parameter name, instead of the impl's re-specified params.
@@ -2600,7 +2579,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     from_concrete_impl: impl_is_concrete,
                     param_defaults,
                     param_names,
-                    consumes_self: takes_self_by_value(&params),
+                    consumes_self: self_kind == ast::SelfKind::Value,
                 },
                 impl_module_source: impl_module_source.clone(),
                 blanket_type_param: blanket_type_param.clone(),
@@ -3308,14 +3287,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .map(|b| (b.name.clone(), b.ty.clone()))
                     .collect();
                 let trait_name = s.get_type_name_full(header.trait_type.as_ref().unwrap());
-                // Find the method
-                let impl_block = s.get_impl_block(impl_ref);
-                let method = impl_block.methods.iter().find(|m| m.name == method_name)?;
-                let self_kind = method
-                    .params
-                    .first()
-                    .map(|p| p.self_kind)
-                    .unwrap_or(ast::SelfKind::None);
+                // Find the method. Only its receiver shape is needed here —
+                // the indexing types come from the impl's associated-type
+                // bindings, which are still AST until S5c.
+                let method_header = header.methods.iter().find(|m| m.name == method_name)?;
+                let self_kind = s.tysys.impl_method_sig(method_header.ast_id)?.self_kind;
                 let impl_source = s.impl_block_module_source(impl_ref);
 
                 // Set up associated type bindings (auto-restored on scope drop)

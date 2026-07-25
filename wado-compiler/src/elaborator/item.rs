@@ -927,6 +927,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return_type,
                     },
                     self_kind,
+                    param_names: method
+                        .params
+                        .iter()
+                        .filter(|p| p.self_kind == ast::SelfKind::None)
+                        .map(|p| p.name.clone())
+                        .collect(),
+                    param_is_mut: method
+                        .params
+                        .iter()
+                        .filter(|p| p.self_kind == ast::SelfKind::None)
+                        .map(|p| p.is_mut)
+                        .collect(),
                 },
             );
         }

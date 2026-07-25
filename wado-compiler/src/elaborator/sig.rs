@@ -33,6 +33,18 @@ pub(crate) struct DeclSig {
 pub(crate) struct MethodSig {
     pub(crate) decl: DeclSig,
     pub(crate) self_kind: crate::ast::SelfKind,
+    /// Names and mutability of the non-receiver parameters, in order.
+    /// `decl.param_types` includes the receiver at index 0 when there is
+    /// one, so these are offset by [`Self::first_value_param`].
+    pub(crate) param_names: Vec<String>,
+    pub(crate) param_is_mut: Vec<bool>,
+}
+
+impl MethodSig {
+    /// Index of the first non-receiver parameter in `decl.param_types`.
+    pub(crate) fn first_value_param(&self) -> usize {
+        usize::from(self.self_kind != crate::ast::SelfKind::None)
+    }
 }
 
 /// A [`DeclSig`] with its slots filled by a use site's type arguments.
@@ -59,15 +71,27 @@ impl DeclSig {
             .enumerate()
             .map(|(i, &t)| (i as u32, t))
             .collect();
+        self.instantiate_slots(type_table, &substitution)
+    }
+
+    /// Fill slots by index rather than by position, for a caller that already
+    /// holds a slot map. Equivalent to [`Self::instantiate`] when the map is
+    /// dense from zero; the two differ only when the caller knows a
+    /// non-contiguous subset, which positional arguments cannot express.
+    pub(crate) fn instantiate_slots(
+        &self,
+        type_table: &RefCell<TypeTable>,
+        substitution: &IndexMap<u32, TypeId>,
+    ) -> InstantiatedSig {
         let mut table = type_table.borrow_mut();
         InstantiatedSig {
             param_types: self
                 .param_types
                 .iter()
-                .map(|&p| table.substitute_type_params(p, &substitution))
+                .map(|&p| table.substitute_type_params(p, substitution))
                 .collect(),
             return_type: table
-                .substitute_type_params(self.return_type.unwrap_or(TypeTable::UNIT), &substitution),
+                .substitute_type_params(self.return_type.unwrap_or(TypeTable::UNIT), substitution),
         }
     }
 }
