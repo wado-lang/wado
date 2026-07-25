@@ -674,7 +674,7 @@ ordinary TIR, using the shared `synthesize_lift` / `synthesize_lower` +
 (`Result<(), E>`, `Result<Option<resource>, E>`) was the last operation still
 hand-emitted in `wir_build`; it now routes through `__cm_future_write_<T>` too,
 lowering its value with the generic variant/option/resource memory lowerer and
-awaiting a BLOCKED write via `core:rt`'s `future_await_blocked`.
+awaiting a BLOCKED write via `core:rt`'s `cm_await_blocked`.
 `wir_build` no longer contains any CM canonical emission.
 
 ## Consequences

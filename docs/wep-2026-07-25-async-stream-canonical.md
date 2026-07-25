@@ -129,8 +129,14 @@ replaces it. This is a follow-up to the correctness change, not a precondition.
 ### Cancellation
 
 With asynchronous copies the guest observes `COPYING`, so `Stream::cancel_read`
-and `cancel_write` become callable. They need `async = true` in codegen and e2e
-coverage; until then they stay unreachable-but-declared, as today.
+and `cancel_write` become callable for the first time.
+
+The cancel canonicals stay synchronous. `cancel_copy` rejects an asynchronous
+cancel only when the end sits in a waitable set, and the await helper unjoins
+before returning, so a synchronous cancel is always legal here. It is also the
+only correct choice for the current lowering: cancel is emitted as a void call
+with nowhere to put a BLOCKED result, which an asynchronous cancel could
+return.
 
 ### Validation
 
@@ -183,14 +189,15 @@ Neutral:
 
 ## TODO
 
-- [ ] Emit `CanonicalOption::Async` for `stream.read` / `stream.write`
-- [ ] Replace `wait_for_blocked` and `future_await_blocked` with one helper that
-      unjoins before dropping the set
-- [ ] E2E fixture that blocks a stream read and a stream write, covering the
-      await path at both ends
-- [ ] Regenerate the golden WIR fixtures
+- [x] Emit `CanonicalOption::Async` for `stream.read` / `stream.write`
+- [x] Replace `wait_for_blocked` and `future_await_blocked` with `cm_await_blocked`,
+      which unjoins before dropping the set
+- [x] E2E fixture that blocks a stream read and a stream write, covering the
+      await path at both ends (`stream_await_blocked_roundtrip.wado`)
+- [x] Regenerate the golden fixtures
 - [ ] Reuse a per-task waitable set instead of new/drop per await
-- [ ] Emit cancel canonicals with `async = true` and cover them with e2e tests
+- [ ] E2E coverage for `Stream::cancel_read` / `cancel_write`, reachable for the
+      first time now that copies are asynchronous
 
 ## Related WEPs
 

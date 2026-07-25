@@ -241,7 +241,7 @@ fn synthesize_record_stream_read_func(
 /// For each distinct future payload `T` consumed by `future-read`, synthesizes
 /// `__cm_future_read_<mangle(T)>(handle: i32) -> Option<T>` which allocates a
 /// CM buffer (sized via `cm_abi`), calls the payload-parameterized
-/// `future-read` canonical, handles BLOCKED via `future_await_blocked`, lifts the
+/// `future-read` canonical, handles BLOCKED via `cm_await_blocked`, lifts the
 /// payload with the shared `synthesize_lift`, and wraps it in `Option`. This
 /// replaces the hand-rolled WIR-build lift with its hardcoded CM offsets.
 pub(super) fn synthesize_future_reads(project: &mut Package) {
@@ -533,8 +533,8 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
                     TypeTable::I32,
                 ),
             )),
-            // if result == BLOCKED { result = wait_for_blocked(handle) }
-            await_if_blocked(result_idx, "result", handle_idx, "wait_for_blocked"),
+            // if result == BLOCKED { result = cm_await_blocked(handle) }
+            await_if_blocked(result_idx, "result", handle_idx),
             // offset += packed count (the copied-element count)
             expr_stmt(assign(
                 offset_ref(),
@@ -662,14 +662,14 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
 
 /// `if <status> == BLOCKED { <status> = <awaiter>(handle) }` — re-reads the
 /// packed result after the host signals readiness.
-fn await_if_blocked(status_idx: u32, status_name: &str, handle_idx: u32, awaiter: &str) -> TirStmt {
+fn await_if_blocked(status_idx: u32, status_name: &str, handle_idx: u32) -> TirStmt {
     if_stmt(
         is_blocked(local_ref(status_idx, status_name, TypeTable::I32)),
         TirBlock {
             stmts: vec![expr_stmt(assign(
                 local_ref(status_idx, status_name, TypeTable::I32),
                 internal_call(
-                    awaiter,
+                    "cm_await_blocked",
                     vec![local_ref(handle_idx, "handle", TypeTable::I32)],
                     TypeTable::I32,
                 ),
@@ -833,12 +833,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
     ));
 
     if awaits_reader {
-        stmts.push(await_if_blocked(
-            written_idx,
-            "__written",
-            handle_idx,
-            "future_await_blocked",
-        ));
+        stmts.push(await_if_blocked(written_idx, "__written", handle_idx));
         stmts.push(free_cm_buffer(
             ptr_idx,
             size,
@@ -1024,12 +1019,7 @@ fn synthesize_future_read_func(
         ),
     ));
 
-    stmts.push(await_if_blocked(
-        status_idx,
-        "status",
-        handle_idx,
-        "future_await_blocked",
-    ));
+    stmts.push(await_if_blocked(status_idx, "status", handle_idx));
 
     // let mut result: Option<T> = None
     let result_idx = alloc_named_local(
@@ -1276,13 +1266,8 @@ fn synthesize_stream_read_func(
         stream_read_call,
     ));
 
-    // if result == BLOCKED { result = wait_for_blocked(handle); }
-    stmts.push(await_if_blocked(
-        result_idx,
-        "result",
-        handle_idx,
-        "wait_for_blocked",
-    ));
+    // if result == BLOCKED { result = cm_await_blocked(handle); }
+    stmts.push(await_if_blocked(result_idx, "result", handle_idx));
 
     // let count = packed count of result
     let count_idx = alloc_named_local(

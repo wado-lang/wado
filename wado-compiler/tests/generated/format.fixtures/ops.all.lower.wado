@@ -12485,18 +12485,7 @@ fn write_escaped_string(s: String, f: &mut Formatter) {
     }
 }
 
-fn wait_for_blocked(handle: i32) -> i32 {
-    let ws: i32 = core::builtin::waitable_set_new();
-    core::builtin::waitable_join(handle, ws);
-    let evt_ptr: i32 = core::builtin::realloc(0, 0, 4, 8);
-    let code: i32 = core::builtin::waitable_set_wait(ws, evt_ptr);
-    let payload: i32 = core::builtin::i32_load((evt_ptr + 4));
-    let freed: i32 = core::builtin::realloc(evt_ptr, 8, 4, 0);
-    core::builtin::waitable_set_drop(ws);
-    return payload;
-}
-
-fn future_await_blocked(handle: i32) -> i32 {
+fn cm_await_blocked(handle: i32) -> i32 {
     let ws: i32 = core::builtin::waitable_set_new();
     core::builtin::waitable_join(handle, ws);
     let evt_ptr: i32 = core::builtin::realloc(0, 0, 4, 8);
@@ -12512,7 +12501,7 @@ fn cm_stream_read_u8(handle: i32, max: i32) -> List<u8> {
     let ptr: i32 = core::builtin::realloc(0, 0, 1, max);
     let mut result: i32 = core::builtin::stream_read(handle, ptr, max);
     if (result == -1) {
-        result = core::rt::wait_for_blocked(handle);
+        result = core::rt::cm_await_blocked(handle);
     }
     let count: i32 = (result >> 4);
     let arr: Array<u8> = core::rt::memory_to_gc_array(ptr, count);
@@ -12525,7 +12514,7 @@ fn cm_stream_read_raw(handle: i32, max: i32, element_size: i32, element_align: i
     let ptr: i32 = core::builtin::realloc(0, 0, element_align, byte_count);
     let mut result: i32 = core::builtin::stream_read(handle, ptr, max);
     if (result == -1) {
-        result = core::rt::wait_for_blocked(handle);
+        result = core::rt::cm_await_blocked(handle);
     }
     let count: i32 = (result >> 4);
     return [ptr, count];
@@ -12556,7 +12545,7 @@ fn cm_stream_write_drain(handle: i32, ptr: i32, count: i32, elem_size: i32) {
         __for_0_body: {
             let mut result: i32 = core::builtin::stream_write(handle, (ptr + (offset * elem_size)), (count - offset));
             if (result == -1) {
-                result = core::rt::wait_for_blocked(handle);
+                result = core::rt::cm_await_blocked(handle);
             }
             offset = (offset + (result >> 4));
             if (((result >> 4) == 0) || ((result & 15) != 0)) {

@@ -1555,6 +1555,7 @@ fn emit_canonical_intrinsics(
                 builder.stream_write(
                     st,
                     [
+                        CanonicalOption::Async,
                         CanonicalOption::Memory(ctx.memory_idx()),
                         CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
                     ],
@@ -1565,6 +1566,7 @@ fn emit_canonical_intrinsics(
                 builder.stream_read(
                     st,
                     [
+                        CanonicalOption::Async,
                         CanonicalOption::Memory(ctx.memory_idx()),
                         CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
                     ],
