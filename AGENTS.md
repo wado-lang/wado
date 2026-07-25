@@ -40,44 +40,9 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 
 ## Tooling
 
-Rules for driving the shell, learned from failures that cost real time.
-
-### Never use `pgrep` to test whether a job is alive
-
-`pgrep -f <pattern>` matches the watcher's own command line, so a
-`until ! pgrep -f foo` loop never exits and the job looks alive forever after it
-finished. Have the job record its own completion instead:
-
-```sh
-cmd > run.log 2>&1; echo $? > run.done
-```
-
-Then wait on `[ -f run.done ]` and read the exit code from it.
-
-### Never pipe command output through `tail` or `head` when you need to read a failure
-
-The line you need is almost always outside the cut. A test harness prints the
-assertion message first and the backtrace after it, so `| tail -20` shows the
-backtrace and hides the reason. Select by content:
-
-```sh
-cargo test --test e2e 2>&1 | grep -E "test result|compilation failed|panicked at"
-```
-
-Redirect to a file and grep that when the output is large. `tail -f` on a log is
-fine; `| tail -n` on the output you are trying to understand is not.
-
-### Run long jobs through the harness, not `&`
-
-Use the tool's own background mechanism so completion arrives as a notification,
-and a progress monitor when you want intermediate events. A process detached
-with `nohup ... &` is untracked: nothing tells you when it ends, and the sentinel
-file above becomes the only way to find out. Never `sleep` in the foreground to
-wait for something.
-
-Jobs worth backgrounding: `mise run test`, `mise run test-wado`,
-`mise run update-golden-fixtures`, `mise run on-task-done`, full `cargo test`
-runs. All exceed a couple of minutes.
+- Never `pgrep` to check whether a job is alive — it matches the watcher's own command line, so the loop never exits. Have the job record its own completion: `cmd > run.log 2>&1; echo $? > run.done`.
+- Never pipe output through `tail`/`head` to read a failure — the reason precedes the backtrace, so a tail keeps the backtrace and drops the reason. Select by content: `grep -E "test result|panicked at"`.
+- Run long jobs (`mise run test`, `test-wado`, `update-golden-fixtures`, `on-task-done`) through the harness's background mechanism, not `nohup ... &`, so completion is notified. Never foreground `sleep` to wait.
 
 ## General Rules
 
