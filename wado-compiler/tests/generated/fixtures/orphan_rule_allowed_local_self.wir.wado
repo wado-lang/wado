@@ -28,9 +28,9 @@ struct core:prelude/format.wado//Formatter {  // TypeId(4)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct tuple//[core:prelude/traits.wado/Field<orphan_rule_allowed_local_self.wado/MyPoint,i32>, core:prelude/traits.wado/Field<orphan_rule_allowed_local_self.wado/MyPoint,i32>] {  // TypeId(5)
-    mut 0: ref "core:prelude/traits.wado//Field<orphan_rule_allowed_local_self.wado/MyPoint,i32>",
-    mut 1: ref "core:prelude/traits.wado//Field<orphan_rule_allowed_local_self.wado/MyPoint,i32>",
+struct tuple//[core:prelude/traits.wado/StructField<orphan_rule_allowed_local_self.wado/MyPoint,i32>, core:prelude/traits.wado/StructField<orphan_rule_allowed_local_self.wado/MyPoint,i32>] {  // TypeId(5)
+    mut 0: ref "core:prelude/traits.wado//StructField<orphan_rule_allowed_local_self.wado/MyPoint,i32>",
+    mut 1: ref "core:prelude/traits.wado//StructField<orphan_rule_allowed_local_self.wado/MyPoint,i32>",
 }
 
 struct orphan_rule_allowed_local_self.wado//MyPoint {  // TypeId(6)
@@ -38,7 +38,7 @@ struct orphan_rule_allowed_local_self.wado//MyPoint {  // TypeId(6)
     mut y: i32,
 }
 
-struct core:prelude/traits.wado//Field<orphan_rule_allowed_local_self.wado/MyPoint,i32> {  // TypeId(7)
+struct core:prelude/traits.wado//StructField<orphan_rule_allowed_local_self.wado/MyPoint,i32> {  // TypeId(7)
     mut index: i32,
     mut field_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
@@ -110,7 +110,7 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(39)
 
-type "functype//orphan_rule_allowed_local_self.wado/MyPoint^Reflect::field_tokens" = fn() -> ref "tuple//[core:prelude/traits.wado/Field<orphan_rule_allowed_local_self.wado/MyPoint,i32>, core:prelude/traits.wado/Field<orphan_rule_allowed_local_self.wado/MyPoint,i32>]";  // TypeId(40)
+type "functype//orphan_rule_allowed_local_self.wado/MyPoint^ReflectStruct::members" = fn() -> ref "tuple//[core:prelude/traits.wado/StructField<orphan_rule_allowed_local_self.wado/MyPoint,i32>, core:prelude/traits.wado/StructField<orphan_rule_allowed_local_self.wado/MyPoint,i32>]";  // TypeId(40)
 
 type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(41)
 
@@ -454,8 +454,8 @@ fn "core:prelude/string.wado/String::push_ascii_unchecked"(self, byte) {
     builtin::array_set_u8(self.repr, start, byte);
 }
 
-fn "orphan_rule_allowed_local_self.wado/MyPoint^Reflect::field_tokens"() {
-    return struct.new "tuple//[core:prelude/traits.wado/Field<orphan_rule_allowed_local_self.wado/MyPoint,i32>, core:prelude/traits.wado/Field<orphan_rule_allowed_local_self.wado/MyPoint,i32>]" { 0: struct.new "core:prelude/traits.wado//Field<orphan_rule_allowed_local_self.wado/MyPoint,i32>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 1: struct.new "core:prelude/traits.wado//Field<orphan_rule_allowed_local_self.wado/MyPoint,i32>" { index: 1, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 } };
+fn "orphan_rule_allowed_local_self.wado/MyPoint^ReflectStruct::members"() {
+    return struct.new "tuple//[core:prelude/traits.wado/StructField<orphan_rule_allowed_local_self.wado/MyPoint,i32>, core:prelude/traits.wado/StructField<orphan_rule_allowed_local_self.wado/MyPoint,i32>]" { 0: struct.new "core:prelude/traits.wado//StructField<orphan_rule_allowed_local_self.wado/MyPoint,i32>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 1: struct.new "core:prelude/traits.wado//StructField<orphan_rule_allowed_local_self.wado/MyPoint,i32>" { index: 1, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 } };
 }
 
 fn "core:prelude/format.wado/Formatter::new"(buf) {
@@ -592,9 +592,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 fn "core:prelude/traits.wado/orphan_rule_allowed_local_self.wado/MyPoint^Inspect::inspect"(self, f) {
     let wrote_field: bool;
     let has_secret: bool;
-    let __tuple_4: ref "tuple//[core:prelude/traits.wado/Field<orphan_rule_allowed_local_self.wado/MyPoint,i32>, core:prelude/traits.wado/Field<orphan_rule_allowed_local_self.wado/MyPoint,i32>]";
-    let field_6: ref "core:prelude/traits.wado//Field<orphan_rule_allowed_local_self.wado/MyPoint,i32>";
-    let field_7: ref "core:prelude/traits.wado//Field<orphan_rule_allowed_local_self.wado/MyPoint,i32>";
+    let __tuple_4: ref "tuple//[core:prelude/traits.wado/StructField<orphan_rule_allowed_local_self.wado/MyPoint,i32>, core:prelude/traits.wado/StructField<orphan_rule_allowed_local_self.wado/MyPoint,i32>]";
+    let field_6: ref "core:prelude/traits.wado//StructField<orphan_rule_allowed_local_self.wado/MyPoint,i32>";
+    let field_7: ref "core:prelude/traits.wado//StructField<orphan_rule_allowed_local_self.wado/MyPoint,i32>";
     let s_9: ref "core:prelude/string.wado//String";
     let s_14: ref "core:prelude/string.wado//String";
     let s_19: ref "core:prelude/string.wado//String";
@@ -611,7 +611,7 @@ fn "core:prelude/traits.wado/orphan_rule_allowed_local_self.wado/MyPoint^Inspect
     "core:prelude/string.wado/String::push_str"(f.buf, s_9);
     wrote_field = 0;
     has_secret = 0;
-    __tuple_4 = "orphan_rule_allowed_local_self.wado/MyPoint^Reflect::field_tokens"();
+    __tuple_4 = "orphan_rule_allowed_local_self.wado/MyPoint^ReflectStruct::members"();
     field_6 = __tuple_4.0;
     if field_6.is_secret {
         has_secret = 1;

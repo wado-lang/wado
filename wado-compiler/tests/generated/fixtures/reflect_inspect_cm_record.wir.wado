@@ -25,12 +25,12 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct tuple//[core:prelude/traits.wado/Field<wasi:clocks/system_clock.wado/Instant,i64>, core:prelude/traits.wado/Field<wasi:clocks/system_clock.wado/Instant,u32>] {  // TypeId(4)
-    mut 0: ref "core:prelude/traits.wado//Field<wasi:clocks/system_clock.wado/Instant,i64>",
-    mut 1: ref "core:prelude/traits.wado//Field<wasi:clocks/system_clock.wado/Instant,u32>",
+struct tuple//[core:prelude/traits.wado/StructField<wasi:clocks/system_clock.wado/Instant,i64>, core:prelude/traits.wado/StructField<wasi:clocks/system_clock.wado/Instant,u32>] {  // TypeId(4)
+    mut 0: ref "core:prelude/traits.wado//StructField<wasi:clocks/system_clock.wado/Instant,i64>",
+    mut 1: ref "core:prelude/traits.wado//StructField<wasi:clocks/system_clock.wado/Instant,u32>",
 }
 
-struct core:prelude/traits.wado//Field<wasi:clocks/system_clock.wado/Instant,u32> {  // TypeId(5)
+struct core:prelude/traits.wado//StructField<wasi:clocks/system_clock.wado/Instant,u32> {  // TypeId(5)
     mut index: i32,
     mut field_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
@@ -38,7 +38,7 @@ struct core:prelude/traits.wado//Field<wasi:clocks/system_clock.wado/Instant,u32
     mut is_secret: bool,
 }
 
-struct core:prelude/traits.wado//Field<wasi:clocks/system_clock.wado/Instant,i64> {  // TypeId(6)
+struct core:prelude/traits.wado//StructField<wasi:clocks/system_clock.wado/Instant,i64> {  // TypeId(6)
     mut index: i32,
     mut field_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
@@ -104,7 +104,7 @@ type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelud
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(35)
 
-type "functype//wasi:clocks/system_clock.wado/Instant^Reflect::field_tokens" = fn() -> ref "tuple//[core:prelude/traits.wado/Field<wasi:clocks/system_clock.wado/Instant,i64>, core:prelude/traits.wado/Field<wasi:clocks/system_clock.wado/Instant,u32>]";  // TypeId(36)
+type "functype//wasi:clocks/system_clock.wado/Instant^ReflectStruct::members" = fn() -> ref "tuple//[core:prelude/traits.wado/StructField<wasi:clocks/system_clock.wado/Instant,i64>, core:prelude/traits.wado/StructField<wasi:clocks/system_clock.wado/Instant,u32>]";  // TypeId(36)
 
 type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(37)
 
@@ -426,8 +426,8 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     self.used = self.used + "core:prelude/string.wado/encode_char"(self.repr, self.used, c);
 }
 
-fn "wasi:clocks/system_clock.wado/Instant^Reflect::field_tokens"() {
-    return struct.new "tuple//[core:prelude/traits.wado/Field<wasi:clocks/system_clock.wado/Instant,i64>, core:prelude/traits.wado/Field<wasi:clocks/system_clock.wado/Instant,u32>]" { 0: struct.new "core:prelude/traits.wado//Field<wasi:clocks/system_clock.wado/Instant,i64>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("seconds"), used: 7 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 1: struct.new "core:prelude/traits.wado//Field<wasi:clocks/system_clock.wado/Instant,u32>" { index: 1, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("nanoseconds"), used: 11 }, wire_override: ref.null none, has_default: 0, is_secret: 0 } };
+fn "wasi:clocks/system_clock.wado/Instant^ReflectStruct::members"() {
+    return struct.new "tuple//[core:prelude/traits.wado/StructField<wasi:clocks/system_clock.wado/Instant,i64>, core:prelude/traits.wado/StructField<wasi:clocks/system_clock.wado/Instant,u32>]" { 0: struct.new "core:prelude/traits.wado//StructField<wasi:clocks/system_clock.wado/Instant,i64>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("seconds"), used: 7 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 1: struct.new "core:prelude/traits.wado//StructField<wasi:clocks/system_clock.wado/Instant,u32>" { index: 1, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("nanoseconds"), used: 11 }, wire_override: ref.null none, has_default: 0, is_secret: 0 } };
 }
 
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
@@ -528,9 +528,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 fn "core:prelude/traits.wado/wasi:clocks/system_clock.wado/Instant^Inspect::inspect"(self, f) {
     let wrote_field: bool;
     let has_secret: bool;
-    let __tuple_4: ref "tuple//[core:prelude/traits.wado/Field<wasi:clocks/system_clock.wado/Instant,i64>, core:prelude/traits.wado/Field<wasi:clocks/system_clock.wado/Instant,u32>]";
-    let field_6: ref "core:prelude/traits.wado//Field<wasi:clocks/system_clock.wado/Instant,i64>";
-    let field_7: ref "core:prelude/traits.wado//Field<wasi:clocks/system_clock.wado/Instant,u32>";
+    let __tuple_4: ref "tuple//[core:prelude/traits.wado/StructField<wasi:clocks/system_clock.wado/Instant,i64>, core:prelude/traits.wado/StructField<wasi:clocks/system_clock.wado/Instant,u32>]";
+    let field_6: ref "core:prelude/traits.wado//StructField<wasi:clocks/system_clock.wado/Instant,i64>";
+    let field_7: ref "core:prelude/traits.wado//StructField<wasi:clocks/system_clock.wado/Instant,u32>";
     let s_9: ref "core:prelude/string.wado//String";
     let s_14: ref "core:prelude/string.wado//String";
     let s_19: ref "core:prelude/string.wado//String";
@@ -547,7 +547,7 @@ fn "core:prelude/traits.wado/wasi:clocks/system_clock.wado/Instant^Inspect::insp
     "core:prelude/string.wado/String::push_str"(f.buf, s_9);
     wrote_field = 0;
     has_secret = 0;
-    __tuple_4 = "wasi:clocks/system_clock.wado/Instant^Reflect::field_tokens"();
+    __tuple_4 = "wasi:clocks/system_clock.wado/Instant^ReflectStruct::members"();
     field_6 = __tuple_4.0;
     if field_6.is_secret {
         has_secret = 1;

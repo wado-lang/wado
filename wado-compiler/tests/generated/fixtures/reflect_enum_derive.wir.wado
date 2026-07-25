@@ -169,9 +169,9 @@ type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/s
 
 type "functype//reflect_enum_derive.wado/Color^ReflectEnum::from_discriminant" = fn(i32) -> ref "core:prelude/types.wado//Option<reflect_enum_derive.wado/Color>";  // TypeId(57)
 
-type "functype//reflect_enum_derive.wado/Color^ReflectEnum::case_tokens" = fn() -> ref "tuple//[core:prelude/traits.wado/EnumCase<reflect_enum_derive.wado/Color>, core:prelude/traits.wado/EnumCase<reflect_enum_derive.wado/Color>, core:prelude/traits.wado/EnumCase<reflect_enum_derive.wado/Color>]";  // TypeId(58)
+type "functype//reflect_enum_derive.wado/Color^ReflectEnum::members" = fn() -> ref "tuple//[core:prelude/traits.wado/EnumCase<reflect_enum_derive.wado/Color>, core:prelude/traits.wado/EnumCase<reflect_enum_derive.wado/Color>, core:prelude/traits.wado/EnumCase<reflect_enum_derive.wado/Color>]";  // TypeId(58)
 
-type "functype//reflect_enum_derive.wado/Size^ReflectEnum::case_tokens" = fn() -> ref "tuple//[core:prelude/traits.wado/EnumCase<reflect_enum_derive.wado/Size>, core:prelude/traits.wado/EnumCase<reflect_enum_derive.wado/Size>]";  // TypeId(59)
+type "functype//reflect_enum_derive.wado/Size^ReflectEnum::members" = fn() -> ref "tuple//[core:prelude/traits.wado/EnumCase<reflect_enum_derive.wado/Size>, core:prelude/traits.wado/EnumCase<reflect_enum_derive.wado/Size>]";  // TypeId(59)
 
 type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(60)
 
@@ -823,11 +823,11 @@ fn "reflect_enum_derive.wado/Color^ReflectEnum::from_discriminant"(disc) {
     return struct.new "core:prelude/types.wado//Option<reflect_enum_derive.wado/Color>" { 1 };
 }
 
-fn "reflect_enum_derive.wado/Color^ReflectEnum::case_tokens"() {
+fn "reflect_enum_derive.wado/Color^ReflectEnum::members"() {
     return struct.new "tuple//[core:prelude/traits.wado/EnumCase<reflect_enum_derive.wado/Color>, core:prelude/traits.wado/EnumCase<reflect_enum_derive.wado/Color>, core:prelude/traits.wado/EnumCase<reflect_enum_derive.wado/Color>]" { 0: struct.new "core:prelude/traits.wado//EnumCase<reflect_enum_derive.wado/Color>" { discriminant: 0, value: 0, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(82, 101, 100), used: 3 }, wire_override: ref.null none }, 1: struct.new "core:prelude/traits.wado//EnumCase<reflect_enum_derive.wado/Color>" { discriminant: 1, value: 1, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Green"), used: 5 }, wire_override: ref.null none }, 2: struct.new "core:prelude/traits.wado//EnumCase<reflect_enum_derive.wado/Color>" { discriminant: 2, value: 2, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(66, 108, 117, 101), used: 4 }, wire_override: ref.null none } };
 }
 
-fn "reflect_enum_derive.wado/Size^ReflectEnum::case_tokens"() {
+fn "reflect_enum_derive.wado/Size^ReflectEnum::members"() {
     return struct.new "tuple//[core:prelude/traits.wado/EnumCase<reflect_enum_derive.wado/Size>, core:prelude/traits.wado/EnumCase<reflect_enum_derive.wado/Size>]" { 0: struct.new "core:prelude/traits.wado//EnumCase<reflect_enum_derive.wado/Size>" { discriminant: 0, value: 0, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Small"), used: 5 }, wire_override: ref.null none }, 1: struct.new "core:prelude/traits.wado//EnumCase<reflect_enum_derive.wado/Size>" { discriminant: 1, value: 1, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Large"), used: 5 }, wire_override: ref.null none } };
 }
 
@@ -1052,7 +1052,7 @@ fn "reflect_enum_derive.wado/reflect_enum_derive.wado/Size^CaseName::case_name"(
     let v_9: ref "core:prelude/string.wado//String";
     let v_13: ref "core:prelude/string.wado//String";
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    __tuple_2 = "reflect_enum_derive.wado/Size^ReflectEnum::case_tokens"();
+    __tuple_2 = "reflect_enum_derive.wado/Size^ReflectEnum::members"();
     c_4 = __tuple_2.0;
     if self.value == c_4.discriminant {
         v_9 = c_4.case_name;
@@ -1076,7 +1076,7 @@ fn "reflect_enum_derive.wado/reflect_enum_derive.wado/Color^CaseName::case_name"
     let v_14: ref "core:prelude/string.wado//String";
     let v_18: ref "core:prelude/string.wado//String";
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    __tuple_2 = "reflect_enum_derive.wado/Color^ReflectEnum::case_tokens"();
+    __tuple_2 = "reflect_enum_derive.wado/Color^ReflectEnum::members"();
     c_4 = __tuple_2.0;
     if self.value == c_4.discriminant {
         v_10 = c_4.case_name;
@@ -1100,7 +1100,7 @@ fn "reflect_enum_derive.wado/reflect_enum_derive.wado/Color^CaseName::by_name"(n
     let c_3: ref "core:prelude/traits.wado//EnumCase<reflect_enum_derive.wado/Color>";
     let c_4: ref "core:prelude/traits.wado//EnumCase<reflect_enum_derive.wado/Color>";
     let c_5: ref "core:prelude/traits.wado//EnumCase<reflect_enum_derive.wado/Color>";
-    __tuple_1 = "reflect_enum_derive.wado/Color^ReflectEnum::case_tokens"();
+    __tuple_1 = "reflect_enum_derive.wado/Color^ReflectEnum::members"();
     c_3 = __tuple_1.0;
     if "core:prelude/string.wado/String^Eq::eq"(c_3.case_name, name) {
         return struct.new "core:prelude/types.wado//Option<reflect_enum_derive.wado/Color>::Some" { discriminant: 0, payload_0: c_3.value };
@@ -1120,7 +1120,7 @@ fn "reflect_enum_derive.wado/reflect_enum_derive.wado/Size^CaseName::by_name"(na
     let __tuple_1: ref "tuple//[core:prelude/traits.wado/EnumCase<reflect_enum_derive.wado/Size>, core:prelude/traits.wado/EnumCase<reflect_enum_derive.wado/Size>]";
     let c_3: ref "core:prelude/traits.wado//EnumCase<reflect_enum_derive.wado/Size>";
     let c_4: ref "core:prelude/traits.wado//EnumCase<reflect_enum_derive.wado/Size>";
-    __tuple_1 = "reflect_enum_derive.wado/Size^ReflectEnum::case_tokens"();
+    __tuple_1 = "reflect_enum_derive.wado/Size^ReflectEnum::members"();
     c_3 = __tuple_1.0;
     if "core:prelude/string.wado/String^Eq::eq"(c_3.case_name, name) {
         return 0, c_3.value;

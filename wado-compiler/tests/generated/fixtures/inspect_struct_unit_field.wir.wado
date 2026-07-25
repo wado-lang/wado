@@ -30,10 +30,10 @@ struct core:prelude/format.wado//Formatter {  // TypeId(4)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct tuple//[core:prelude/traits.wado/Field<inspect_struct_unit_field.wado/WithUnit,i32>, core:prelude/traits.wado/Field<inspect_struct_unit_field.wado/WithUnit,()>, core:prelude/traits.wado/Field<inspect_struct_unit_field.wado/WithUnit,i32>] {  // TypeId(5)
-    mut 0: ref "core:prelude/traits.wado//Field<inspect_struct_unit_field.wado/WithUnit,i32>",
-    mut 1: ref "core:prelude/traits.wado//Field<inspect_struct_unit_field.wado/WithUnit,()>",
-    mut 2: ref "core:prelude/traits.wado//Field<inspect_struct_unit_field.wado/WithUnit,i32>",
+struct tuple//[core:prelude/traits.wado/StructField<inspect_struct_unit_field.wado/WithUnit,i32>, core:prelude/traits.wado/StructField<inspect_struct_unit_field.wado/WithUnit,()>, core:prelude/traits.wado/StructField<inspect_struct_unit_field.wado/WithUnit,i32>] {  // TypeId(5)
+    mut 0: ref "core:prelude/traits.wado//StructField<inspect_struct_unit_field.wado/WithUnit,i32>",
+    mut 1: ref "core:prelude/traits.wado//StructField<inspect_struct_unit_field.wado/WithUnit,()>",
+    mut 2: ref "core:prelude/traits.wado//StructField<inspect_struct_unit_field.wado/WithUnit,i32>",
 }
 
 struct inspect_struct_unit_field.wado//WithUnit {  // TypeId(6)
@@ -41,7 +41,7 @@ struct inspect_struct_unit_field.wado//WithUnit {  // TypeId(6)
     mut y: i32,
 }
 
-struct core:prelude/traits.wado//Field<inspect_struct_unit_field.wado/WithUnit,()> {  // TypeId(7)
+struct core:prelude/traits.wado//StructField<inspect_struct_unit_field.wado/WithUnit,()> {  // TypeId(7)
     mut index: i32,
     mut field_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
@@ -49,7 +49,7 @@ struct core:prelude/traits.wado//Field<inspect_struct_unit_field.wado/WithUnit,(
     mut is_secret: bool,
 }
 
-struct core:prelude/traits.wado//Field<inspect_struct_unit_field.wado/WithUnit,i32> {  // TypeId(8)
+struct core:prelude/traits.wado//StructField<inspect_struct_unit_field.wado/WithUnit,i32> {  // TypeId(8)
     mut index: i32,
     mut field_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
@@ -129,7 +129,7 @@ type "functype//core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref 
 
 type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(44)
 
-type "functype//inspect_struct_unit_field.wado/WithUnit^Reflect::field_tokens" = fn() -> ref "tuple//[core:prelude/traits.wado/Field<inspect_struct_unit_field.wado/WithUnit,i32>, core:prelude/traits.wado/Field<inspect_struct_unit_field.wado/WithUnit,()>, core:prelude/traits.wado/Field<inspect_struct_unit_field.wado/WithUnit,i32>]";  // TypeId(45)
+type "functype//inspect_struct_unit_field.wado/WithUnit^ReflectStruct::members" = fn() -> ref "tuple//[core:prelude/traits.wado/StructField<inspect_struct_unit_field.wado/WithUnit,i32>, core:prelude/traits.wado/StructField<inspect_struct_unit_field.wado/WithUnit,()>, core:prelude/traits.wado/StructField<inspect_struct_unit_field.wado/WithUnit,i32>]";  // TypeId(45)
 
 type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(46)
 
@@ -613,8 +613,8 @@ fn "core:prelude/string.wado/String^Eq::eq"(self, other) {
     };
 }
 
-fn "inspect_struct_unit_field.wado/WithUnit^Reflect::field_tokens"() {
-    return struct.new "tuple//[core:prelude/traits.wado/Field<inspect_struct_unit_field.wado/WithUnit,i32>, core:prelude/traits.wado/Field<inspect_struct_unit_field.wado/WithUnit,()>, core:prelude/traits.wado/Field<inspect_struct_unit_field.wado/WithUnit,i32>]" { 0: struct.new "core:prelude/traits.wado//Field<inspect_struct_unit_field.wado/WithUnit,i32>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 1: struct.new "core:prelude/traits.wado//Field<inspect_struct_unit_field.wado/WithUnit,()>" { index: 1, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("nothing"), used: 7 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 2: struct.new "core:prelude/traits.wado//Field<inspect_struct_unit_field.wado/WithUnit,i32>" { index: 2, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 } };
+fn "inspect_struct_unit_field.wado/WithUnit^ReflectStruct::members"() {
+    return struct.new "tuple//[core:prelude/traits.wado/StructField<inspect_struct_unit_field.wado/WithUnit,i32>, core:prelude/traits.wado/StructField<inspect_struct_unit_field.wado/WithUnit,()>, core:prelude/traits.wado/StructField<inspect_struct_unit_field.wado/WithUnit,i32>]" { 0: struct.new "core:prelude/traits.wado//StructField<inspect_struct_unit_field.wado/WithUnit,i32>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 1: struct.new "core:prelude/traits.wado//StructField<inspect_struct_unit_field.wado/WithUnit,()>" { index: 1, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("nothing"), used: 7 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 2: struct.new "core:prelude/traits.wado//StructField<inspect_struct_unit_field.wado/WithUnit,i32>" { index: 2, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 } };
 }
 
 fn "core:prelude/format.wado/Formatter::new"(buf) {
@@ -833,10 +833,10 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
 fn "core:prelude/traits.wado/inspect_struct_unit_field.wado/WithUnit^Inspect::inspect"(self, f) {
     let wrote_field: bool;
     let has_secret: bool;
-    let __tuple_4: ref "tuple//[core:prelude/traits.wado/Field<inspect_struct_unit_field.wado/WithUnit,i32>, core:prelude/traits.wado/Field<inspect_struct_unit_field.wado/WithUnit,()>, core:prelude/traits.wado/Field<inspect_struct_unit_field.wado/WithUnit,i32>]";
-    let field_6: ref "core:prelude/traits.wado//Field<inspect_struct_unit_field.wado/WithUnit,i32>";
-    let field_7: ref "core:prelude/traits.wado//Field<inspect_struct_unit_field.wado/WithUnit,()>";
-    let field_8: ref "core:prelude/traits.wado//Field<inspect_struct_unit_field.wado/WithUnit,i32>";
+    let __tuple_4: ref "tuple//[core:prelude/traits.wado/StructField<inspect_struct_unit_field.wado/WithUnit,i32>, core:prelude/traits.wado/StructField<inspect_struct_unit_field.wado/WithUnit,()>, core:prelude/traits.wado/StructField<inspect_struct_unit_field.wado/WithUnit,i32>]";
+    let field_6: ref "core:prelude/traits.wado//StructField<inspect_struct_unit_field.wado/WithUnit,i32>";
+    let field_7: ref "core:prelude/traits.wado//StructField<inspect_struct_unit_field.wado/WithUnit,()>";
+    let field_8: ref "core:prelude/traits.wado//StructField<inspect_struct_unit_field.wado/WithUnit,i32>";
     let s_10: ref "core:prelude/string.wado//String";
     let s_15: ref "core:prelude/string.wado//String";
     let s_20: ref "core:prelude/string.wado//String";
@@ -857,7 +857,7 @@ fn "core:prelude/traits.wado/inspect_struct_unit_field.wado/WithUnit^Inspect::in
     "core:prelude/string.wado/String::push_str"(f.buf, s_10);
     wrote_field = 0;
     has_secret = 0;
-    __tuple_4 = "inspect_struct_unit_field.wado/WithUnit^Reflect::field_tokens"();
+    __tuple_4 = "inspect_struct_unit_field.wado/WithUnit^ReflectStruct::members"();
     field_6 = __tuple_4.0;
     if field_6.is_secret {
         has_secret = 1;
