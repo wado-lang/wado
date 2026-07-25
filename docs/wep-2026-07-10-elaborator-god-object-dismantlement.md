@@ -354,17 +354,31 @@ declaration rather than at whichever use site reaches it first.
       canonical frame (type params registered, `Self` constructed), which is
       the same shape as the impl-method digest. Do not build a second one.
 
-      The blocker is timing, not shape: `effect_ops` is produced by the
-      annotate pass, so another module's annotate cannot rely on it being
-      populated. Merging it the way `all_impl_method_sigs` is merged would
-      be order-dependent. Resource signature resolution has to move into the
-      decl pass first, exactly as S5a did for impl methods; only then can
-      the resource consumers (`find_static_method_def`'s `StaticMethodSig`
-      path, the resource return-type lookup) read it.
-- [ ] S5b-5 The current-module scan branches. They exist because the static
-      indexes cover only non-entry modules, while the digest covers every
-      module. Widening the index to the current module deletes the branches
-      rather than converting them.
+      Done. Resolution moved to the decl pass, which phase 1a runs for
+      every module before any body walk, so the merged `all_effect_ops` is
+      complete by the time any consumer reads it. The resource return-type
+      and `#[cm(...)]` lookups now read it.
+
+      Still open: `find_static_method_def`'s `StaticMethodSig` path, which
+      needs parameter defaults (`TirEffectOp` has names, types and
+      mutability but not defaults), and the weak `effect_op_sigs`, which
+      resolves the same declarations in a bare scope. Retiring the latter
+      has to reconcile the receiver parameter — `effect_op_sigs` resolves
+      the AST's `self` param type, `resolve_effect_ops` synthesises
+      `&Self`.
+- [ ] S5b-5 The current-module scan branches. An in-code comment claims
+      they exist because the current module is "not in the pre-built index".
+      That is stale: `TraitEnv::build` walks every module in `modules`, and
+      its `entry_module` argument feeds only the per-module import scopes,
+      never a filter on the index loops. The entry module is indexed like
+      any other.
+
+      So the branches are redundant for *coverage*. What they still encode
+      is *priority* — current module wins over another module declaring the
+      same-named type — which the canonical `DeclKey` now handles. Deleting
+      them is therefore a change to dispatch priority, not a no-op, and
+      needs a fixture pinning same-name disambiguation across modules
+      before the deletion, not after.
 - [ ] S5b-6 `MethodInfo` becomes `instantiate(sig, receiver_args)`
       throughout.
 - [ ] S5c Impl associated-type bindings and trait-reference type
