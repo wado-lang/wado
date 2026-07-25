@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784933817700,
+  "lastUpdate": 1784966013127,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -43705,6 +43705,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/20274d22c46cebcf644cc2fcd304235a38f46ec8"
         },
         "date": 1784933816896,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1970,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8212,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16169,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276401,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bab72dfff83bd6b0ba1e3db618749eca2c18826a",
+          "message": "Merge pull request #1680 from wado-lang/claude/ci-oom-investigation-91l1ev\n\nfix(cli): tolerate concurrent removal in kiln output reconcile",
+          "timestamp": "2026-07-25T16:42:39+09:00",
+          "tree_id": "2c38b95fe8db1d06806ebbf87acafacf05055f1e",
+          "url": "https://github.com/wado-lang/wado/commit/bab72dfff83bd6b0ba1e3db618749eca2c18826a"
+        },
+        "date": 1784966012545,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
