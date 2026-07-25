@@ -2370,36 +2370,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         static_key_hint: Option<&crate::elaborator::trait_env::DeclKey>,
     ) -> Vec<(String, Option<ast::Expr>)> {
-        fn extract(method: &ast::Function) -> Vec<(String, Option<ast::Expr>)> {
-            method
-                .params
-                .iter()
-                .filter(|p| p.self_kind == ast::SelfKind::None)
-                .map(|p| (p.name.clone(), p.default.clone()))
-                .collect()
-        }
-
-        // Current module's impl blocks take priority over the global index.
-        let found: Option<ast::Function> = self.current_module_items.iter().find_map(|item| {
-            if let Item::Impl(impl_block) = item
-                && self.get_type_name(&impl_block.ty) == struct_name
-            {
-                for method in &impl_block.methods {
-                    let has_self = method
-                        .params
-                        .iter()
-                        .any(|p| p.self_kind != ast::SelfKind::None);
-                    if method.name == method_name && !has_self {
-                        return Some(method.clone());
-                    }
-                }
-            }
-            None
-        });
-        if let Some(method) = found {
-            return extract(&method);
-        }
-
         let static_key = static_key_hint
             .cloned()
             .unwrap_or_else(|| self.canonical_decl_key(struct_name));
@@ -2447,24 +2417,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        // Check current module
-        for item in self.current_module_items {
-            if let Item::Impl(impl_block) = item
-                && Self::get_type_name_static(&impl_block.ty) == struct_name
-            {
-                for method in &impl_block.methods {
-                    let has_self = method
-                        .params
-                        .iter()
-                        .any(|p| p.self_kind != ast::SelfKind::None);
-                    if method.name == method_name && !has_self {
-                        let names = extract_impl_type_param_names(&impl_block.ty);
-                        return Some((names, method.clone()));
-                    }
-                }
-            }
-        }
-        // Check indexed modules — index keyed by canonical decl key.
+        // The index covers every module, the entry module included, and is
+        // keyed by canonical decl key.
         let static_key = self.canonical_decl_key(struct_name);
         if let Some(methods) = self.tysys.trait_env.static_method_index.get(&static_key) {
             // Still on the AST: this feeds `StaticMethodSig`, which unifies
