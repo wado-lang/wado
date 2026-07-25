@@ -68,7 +68,7 @@ internal trait ReflectEnum {                     // enum
 }
 
 internal trait ReflectFlags {                    // flags
-    type Members;                                // [FlagBit<Self>, …]
+    type Members;                                // [FlagsBit<Self>, …]
     fn members() -> Self::Members;
     fn bits(&self) -> u64;                        // u64-normalized regardless of width
     fn from_bits(raw: u64) -> Option<Self>;
@@ -115,7 +115,7 @@ internal trait Member {
 struct Field<T, F>       { … }  // Member + index() has_default() is_secret() validate() get(&self, v: &T) -> F
 struct VariantCase<T, P> { … }  // Member + index() is_unit() validate() holds(&v) extract(&v) -> P construct(P) -> T
 struct EnumCase<T>       { … }  // Member + discriminant() holds(&v) make() -> T
-struct FlagBit<T>        { … }  // Member + bit() is_set(&v) set() -> T
+struct FlagsBit<T>        { … }  // Member + bit() is_set(&v) set() -> T
 ```
 
 Members are sealed to these four stdlib types and minted only by `members()`

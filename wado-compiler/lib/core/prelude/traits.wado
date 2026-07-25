@@ -174,7 +174,7 @@ internal trait ReflectEnum {
 /// See WEP 2026-06-13 §3c.
 #[compiler_item("reflect_flags")]
 internal trait ReflectFlags {
-    /// The per-bit member tuple `[FlagBit<Self>, ...]`.
+    /// The per-bit member tuple `[FlagsBit<Self>, ...]`.
     type Members;
 
     /// Returns the flags type name.
@@ -290,13 +290,13 @@ impl<T> Member for EnumCase<T> {
 /// single-bit flags value. `set` mints it and `is_set` tests a value for the
 /// bit. See WEP 2026-06-13 §3c.
 #[compiler_item("reflect_flags_bit")]
-pub struct FlagBit<T> {
+pub struct FlagsBit<T> {
     bit: u64,
     value: T,
     member_name: String,
 }
 
-impl<T: ReflectFlags> FlagBit<T> {
+impl<T: ReflectFlags> FlagsBit<T> {
     /// The member's bitmask, u64-normalized.
     pub fn bit(&self) -> u64 {
         return self.bit;
@@ -313,7 +313,7 @@ impl<T: ReflectFlags> FlagBit<T> {
     }
 }
 
-impl<T> Member for FlagBit<T> {
+impl<T> Member for FlagsBit<T> {
     fn name(&self) -> String {
         return self.member_name;
     }

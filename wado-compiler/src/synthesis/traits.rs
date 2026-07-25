@@ -2341,8 +2341,8 @@ fn generate_flags_reflect_methods(
 }
 
 /// Build `Flags^ReflectFlags::members() -> Self::Members` as
-/// `return [FlagBit { bit: b, value: (b as Flags), member_name: "…" }, …];` —
-/// one `FlagBit<Flags>` per member, packed into the homogeneous `Members`
+/// `return [FlagsBit { bit: b, value: (b as Flags), member_name: "…" }, …];` —
+/// one `FlagsBit<Flags>` per member, packed into the homogeneous `Members`
 /// tuple.
 fn generate_flags_members_fn(
     env: &ReflectFlagsSynthEnv,

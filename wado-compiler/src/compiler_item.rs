@@ -113,7 +113,7 @@ pub enum CompilerItem {
     /// `EnumCase<T>` — the per-case member struct minted by
     /// `ReflectEnum::members()` (WEP 2026-06-13 §3b).
     ReflectEnumCase,
-    /// `FlagBit<T>` — the per-bit member struct minted by
+    /// `FlagsBit<T>` — the per-bit member struct minted by
     /// `ReflectFlags::members()` (WEP 2026-06-13 §3c).
     ReflectFlagsBit,
 
