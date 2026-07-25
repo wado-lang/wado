@@ -1,0 +1,51 @@
+// Regression: `const_object_globalization` must NOT hoist a call whose callee
+// is impure, even though every argument is a closed constant.
+//
+// Hoisting evaluates the callee once for the whole program instead of once per
+// activation. That is unobservable only when the callee is deterministic and
+// side-effect free. `bump` writes a mutable global, so hoisting would collapse
+// three increments into one; `offset_of` reads one, so hoisting would freeze
+// the value observed before the store instead of after it.
+//
+// Neither callee declares a Wado effect and neither `stores` a reference, so a
+// purity gate resting on the effect system alone would wrongly admit both — the
+// gate has to look at what the body does to globals.
+
+use { println, Stdout } from "core:cli";
+
+global mut CALLS: i32 = 0;
+global mut BASE: i32 = 0;
+
+#[inline(never)]
+fn bump(step: i32) -> List<i32> {
+    CALLS = CALLS + step;
+    return [CALLS, 7];
+}
+
+#[inline(never)]
+fn offset_of(k: i32) -> List<i32> {
+    return [BASE + k, 7];
+}
+
+#[inline(never)]
+fn head(xs: &List<i32>) -> i32 {
+    return xs[0];
+}
+
+export fn run() with Stdout {
+    let mut acc = 0;
+    for let _i of 0..<3 {
+        let xs = bump(1);
+        acc = acc + head(&xs);
+    }
+    // acc = 1 + 2 + 3 = 6; a wrongly hoisted `bump` yields 1+1+1 = 3.
+    BASE = 10;
+    let ys = offset_of(5);
+    // 15; a wrongly hoisted `offset_of` runs before `BASE = 10` and yields 5.
+    println(`${acc} ${head(&ys)}`);
+}
+
+__DATA__
+{
+    "stdout": "6 15\n"
+}

@@ -1,0 +1,51 @@
+// Constant Object Globalization for a *pure call on closed constants*.
+//
+// `is_globalizable_const` originally accepted only a closed constant
+// aggregate (a literal / struct / array). A pure function applied to
+// compile-time constants is equally a closed constant expression: it is
+// deterministic, side-effect free, and its result here is only ever read.
+// Such a call is re-evaluated on every activation for no reason — Wasm 3.0
+// GC can build the value once and share it, exactly like a literal.
+//
+// `encode_key` is the shape that motivated the extension: a pure encoder
+// applied to a literal, whose result is passed on by `&`. `#[inline(never)]`
+// keeps the call from being inlined and folded away before the pass runs.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn encode_key(name: &String) -> String {
+    let mut s = String::with_capacity(name.len() + 3);
+    s.push('"');
+    s.push_str(name);
+    s.push_str(&"\":");
+    return s;
+}
+
+#[inline(never)]
+fn byte_sum(s: &String) -> i32 {
+    let mut total = 0;
+    for let i of 0..<s.len() {
+        total = total + s.get_byte_unchecked(i) as i32;
+    }
+    return total;
+}
+
+export fn run() with Stdout {
+    let mut acc = 0;
+    for let _i of 0..<3 {
+        let key = encode_key(&"ab");
+        acc = acc + byte_sum(&key);
+    }
+    // key = "\"ab\":" = 34+97+98+34+58 = 321; three iterations = 963.
+    println(`${acc}`);
+}
+
+__DATA__
+{
+    "stdout": "963\n",
+    "wir_expect:O2": [
+        "if global:const_object_globalization_pure_call.wado::__const_obj_0__init == 0",
+        "global:const_object_globalization_pure_call.wado::__const_obj_0 = \"const_object_globalization_pure_call.wado/encode_key\""
+    ]
+}
