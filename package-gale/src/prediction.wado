@@ -409,23 +409,33 @@ fn sll_config_first(c: &SllConfig, ctx: &mut GenContext) -> List<i32> {
 /// alternatives on lookahead that actually sits inside the body. A
 /// single-token body keeps the cheap skip, which is exact for it.
 fn repeat_entry_alts(rep: &RepeatElement, ctx: &mut GenContext) -> Option<List<Alternative>> {
-    if let RuleRef(rr) = rep.element {
-        let mut stv: List<String> = [];
-        if ctx.rule_is_single_token(&rr.name, &mut stv) {
-            return null;
-        }
-        if let Some(inner_rule) = ctx.find_rule(&rr.name) {
-            return Option::Some(inner_rule.alternatives);
-        }
-        return null;
-    }
-    if let Group(g) = rep.element {
-        if all_alts_are_single_token(&g.alternatives) {
-            return null;
-        }
-        return Option::Some(g.alternatives);
-    }
-    return null;
+    return match rep.element {
+        RuleRef(rr) => {
+            let mut stv: List<String> = [];
+            if ctx.rule_is_single_token(&rr.name, &mut stv) {
+                null;
+            } else if let Some(inner_rule) = ctx.find_rule(&rr.name) {
+                Option::Some(inner_rule.alternatives);
+            } else {
+                null;
+            }
+        },
+        Group(g) => if all_alts_are_single_token(&g.alternatives) { null } else { Option::Some(g.alternatives) },
+        TokenRef(_) => null,
+        Literal(_) => null,
+        Label(_) => null,
+        Wildcard(_) => null,
+        Not(_) => null,
+        Repeat(_) => null,
+    };
+}
+
+/// The one-config result of moving `c` to `pos` — the shape every advancing
+/// arm of `sll_advance` returns.
+fn sll_step(c: &SllConfig, pos: i32) -> List<SllConfig> {
+    return [
+        SllConfig { ..*c, pos },
+    ];
 }
 
 /// Advance a config by one token, expanding RuleRefs into the rule's alternatives.
@@ -539,77 +549,57 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
         return results;
     }
 
-    if let TokenRef(t) = elem {
-        if ctx.token_ref_id(&t.name, t.kind_id) == token {
-            return [
-                SllConfig { ..*c, pos: c.pos + 1 },
-            ];
-        }
-        return [];
-    }
-    if let Literal(l) = elem {
-        if ctx.literal_id(&l.text, l.kind_id) == token {
-            return [
-                SllConfig { ..*c, pos: c.pos + 1 },
-            ];
-        }
-        return [];
-    }
-
-    // RuleRef: advance past only if the rule always consumes exactly one token.
-    // Multi-token rules return opaque (pos=-1); expansion happens in build_sll_node
-    // only when needed to resolve ambiguity.
-    if let RuleRef(r) = elem {
-        let mut visiting: List<String> = [];
-        let rule_first = ctx.first_ids_of_rule(&r.name, &mut visiting);
-        if !rule_first.contains(&token) {
-            return [];
-        }
-        let mut st_visiting: List<String> = [];
-        if ctx.rule_is_single_token(&r.name, &mut st_visiting) {
-            // Single-token rule: safe to advance, element position == token position.
-            return [
-                SllConfig { ..*c, pos: c.pos + 1 },
-            ];
-        }
-        // Multi-token rule: token matches FIRST but we can't advance past it.
-        // Return config with pos = -1 as a sentinel meaning "opaque match".
-        return [
-            SllConfig { ..*c, pos: SLL_POS_OPAQUE },
-        ];
-    }
-
-    // Group: consume one token if it is in FIRST(group).
-    if let Group(g) = elem {
-        for let alt of g.alternatives {
+    return match elem {
+        TokenRef(t) => if ctx.token_ref_id(&t.name, t.kind_id) == token { sll_step(c, c.pos + 1) } else { [] },
+        Literal(l) => if ctx.literal_id(&l.text, l.kind_id) == token { sll_step(c, c.pos + 1) } else { [] },
+        // Advance past a RuleRef only if the rule always consumes exactly one
+        // token. A multi-token rule whose FIRST holds the token is opaque —
+        // `build_sll_node` expands it only when needed to resolve ambiguity.
+        RuleRef(r) => {
             let mut visiting: List<String> = [];
-            if ctx.first_ids_of_alt(&alt, &mut visiting).contains(&token) {
-                return [
-                    SllConfig { ..*c, pos: c.pos + 1 },
-                ];
+            if !ctx.first_ids_of_rule(&r.name, &mut visiting).contains(&token) {
+                [];
+            } else {
+                let mut st_visiting: List<String> = [];
+                if ctx.rule_is_single_token(&r.name, &mut st_visiting) {
+                    sll_step(c, c.pos + 1);
+                } else {
+                    sll_step(c, SLL_POS_OPAQUE);
+                }
             }
-        }
-        return [];
-    }
-
-    if let Repeat(rep) = elem {
-        let mut visiting: List<String> = [];
-        let inner_first = ctx.first_ids_of_element(&rep.element, &mut visiting);
-        if inner_first.contains(&token) {
-            // Advance past the repeat element (simplified: treat as consuming 1 token).
-            return [
-                SllConfig { ..*c, pos: c.pos + 1 },
-            ];
-        }
-        return [];
-    }
-
-    if let Label(lab) = elem {
-        let unwrapped = SllConfig { ..*c, elements: replace_element_at(&c.elements, c.pos, &lab.element) };
-        return sll_advance(&unwrapped, token, ctx, inline_depth);
-    }
-
-    return [];
+        },
+        Group(g) => {
+            let mut hit = false;
+            for let alt of g.alternatives {
+                let mut visiting: List<String> = [];
+                if ctx.first_ids_of_alt(&alt, &mut visiting).contains(&token) {
+                    hit = true;
+                    break;
+                }
+            }
+            if hit {
+                sll_step(c, c.pos + 1);
+            } else {
+                [];
+            }
+        },
+        // Treat the repeat as consuming one token — the approximation
+        // `scan_body_can_match_empty` and invariant 6 both work around.
+        Repeat(rep) => {
+            let mut visiting: List<String> = [];
+            if ctx.first_ids_of_element(&rep.element, &mut visiting).contains(&token) {
+                sll_step(c, c.pos + 1);
+            } else {
+                [];
+            }
+        },
+        Label(lab) => {
+            let unwrapped = SllConfig { ..*c, elements: replace_element_at(&c.elements, c.pos, &lab.element) };
+            sll_advance(&unwrapped, token, ctx, inline_depth);
+        },
+        Wildcard(_) => [],
+        Not(_) => [],
+    };
 }
 
 fn replace_element_at(elements: &List<Element>, pos: i32, replacement: &Element) -> List<Element> {
@@ -953,33 +943,35 @@ fn sll_find_common_terminal(configs: &List<SllConfig>) -> Option<Element> {
         }
     }
     let first_elem = &configs[0].elements[configs[0].pos];
-    if let TokenRef(t) = first_elem {
-        for let mut i = 1; i < configs.len(); i += 1 {
-            let elem = &configs[i].elements[configs[i].pos];
-            if let TokenRef(other) = elem {
-                if other.name != t.name {
-                    return null;
+    let mut shared = true;
+    match first_elem {
+        TokenRef(t) => {
+            for let mut i = 1; i < configs.len(); i += 1 {
+                if !configs[i].elements[configs[i].pos] matches { TokenRef(other) && other.name == t.name } {
+                    shared = false;
+                    break;
                 }
-            } else {
-                return null;
             }
-        }
-        return Option::<Element>::Some(*first_elem);
-    }
-    if let Literal(l) = first_elem {
-        for let mut i = 1; i < configs.len(); i += 1 {
-            let elem = &configs[i].elements[configs[i].pos];
-            if let Literal(other) = elem {
-                if other.text != l.text {
-                    return null;
+        },
+        Literal(l) => {
+            for let mut i = 1; i < configs.len(); i += 1 {
+                if !configs[i].elements[configs[i].pos] matches { Literal(other) && other.text == l.text } {
+                    shared = false;
+                    break;
                 }
-            } else {
-                return null;
             }
-        }
-        return Option::<Element>::Some(*first_elem);
+        },
+        RuleRef(_) => shared = false,
+        Group(_) => shared = false,
+        Repeat(_) => shared = false,
+        Label(_) => shared = false,
+        Wildcard(_) => shared = false,
+        Not(_) => shared = false,
     }
-    return null;
+    if !shared {
+        return null;
+    }
+    return Option::<Element>::Some(*first_elem);
 }
 
 fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
