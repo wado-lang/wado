@@ -465,6 +465,15 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// `#[serde(...)]` is not a Wado attribute; `#[wire(...)]` is. Rejected
+    /// explicitly rather than left unrecognized, since an unknown attribute is
+    /// dropped silently and would take its behaviour with it. `suggestion` is
+    /// the `#[wire(...)]` spelling of the offending attribute.
+    SerdeAttrDoesNotExist {
+        suggestion: String,
+        span: Span,
+    },
+
     /// `resume` expression appeared outside an effect handler method body.
     /// `resume value` is only valid inside the body of a method belonging
     /// to an `impl Effect for Type` block (see WEP 2026-04-11).
@@ -965,6 +974,13 @@ impl TypeError {
                 Code::UnsupportedFeature,
                 format!(
                     "`#[wire(default)]` is not supported; give field '{field}' a default value instead, e.g. `{field}: T = <value>` (a field with a default value is optional on deserialize)"
+                ),
+                *span,
+            ),
+            TypeError::SerdeAttrDoesNotExist { suggestion, span } => (
+                Code::UnsupportedFeature,
+                format!(
+                    "`#[serde]` does not exist; use `{suggestion}` (`rename_all` is `name_policy`, `rename` is `name`)"
                 ),
                 *span,
             ),
