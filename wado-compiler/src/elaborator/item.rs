@@ -1127,7 +1127,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// post-cm-binding call shape `__cm_binding__<R>_<op>(self, args)`.
     /// For effects (where `resource_self == None`) any `self_kind` is
     /// silently dropped — effect declarations don't take receivers.
-    fn resolve_effect_ops(
+    /// Operation signatures the decl pass recorded for `decl_id`.
+    fn declared_effect_ops(&self, decl_id: ast::AstId) -> Vec<TirEffectOp> {
+        self.sem
+            .decls
+            .effect_ops
+            .get(&decl_id)
+            .cloned()
+            .expect("the decl pass records every interface / resource declaration's operations")
+    }
+
+    pub(super) fn resolve_effect_ops(
         &mut self,
         type_params: &[ast::GenericParam],
         methods: &[ast::InterfaceMethod],
@@ -1266,7 +1276,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     pub(super) fn resolve_effect_decl(&mut self, decl: &ast::InterfaceDecl) -> TirEffect {
-        let operations = self.resolve_effect_ops(&[], &decl.methods, None);
+        let operations = self.declared_effect_ops(decl.id);
         // Record the resolved op signatures for reify to read back (single
         // source of truth = this path) instead of re-resolving them.
         self.sem
@@ -1282,12 +1292,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     pub(super) fn resolve_resource_decl(&mut self, decl: &ast::ResourceDecl) -> TirResource {
-        let module_source = self.current_module_source.clone();
-        let operations = self.resolve_effect_ops(
-            &decl.type_params,
-            &decl.methods,
-            Some((decl.name.as_str(), module_source)),
-        );
+        let operations = self.declared_effect_ops(decl.id);
         // Record the resolved op signatures for reify to read back (single
         // source of truth = this path) instead of re-resolving them.
         self.sem

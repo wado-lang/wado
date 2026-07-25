@@ -1555,6 +1555,38 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             );
         }
 
+        // Resolve each `interface` / `resource` declaration's operations in
+        // its own frame, so a generic resource's methods see its type params
+        // and `Self`. The body pass reads these back rather than repeating
+        // the work.
+        self.sem.decls.effect_ops.clear();
+        let decl_ops: Vec<(
+            crate::ast::AstId,
+            Vec<ast::GenericParam>,
+            Vec<ast::InterfaceMethod>,
+            Option<String>,
+        )> = module
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                Item::Interface(decl) => Some((decl.id, Vec::new(), decl.methods.clone(), None)),
+                Item::Resource(decl) => Some((
+                    decl.id,
+                    decl.type_params.clone(),
+                    decl.methods.clone(),
+                    Some(decl.name.clone()),
+                )),
+                _ => None,
+            })
+            .collect();
+        for (decl_id, type_params, methods, resource_name) in decl_ops {
+            let resource_self = resource_name
+                .as_deref()
+                .map(|name| (name, module_source.clone()));
+            let ops = self.resolve_effect_ops(&type_params, &methods, resource_self);
+            self.sem.decls.effect_ops.insert(decl_id, ops);
+        }
+
         self.sem.decls.effect_op_sigs.clear();
         let op_inputs: Vec<(String, String, Vec<ast::Type>, Option<ast::Type>)> = module
             .items
