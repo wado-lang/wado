@@ -1793,18 +1793,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             };
             // Concrete-impl owner (`impl List<u8>`): the receiver's
             // qualified mangle, matching call sites (issue #1348).
-            let concrete_owner: Option<String> =
-                if scope.impl_is_concrete_instantiation(impl_block, &scope.current_module_source) {
-                    let tt = scope.tysys.type_table.borrow();
-                    let peeled = tt.peel_refs(self_type);
-                    matches!(
-                        tt.get(peeled),
-                        crate::tir::ResolvedType::GenericInstance { .. }
-                    )
-                    .then(|| tt.mangle_type_name(peeled))
-                } else {
-                    None
-                };
+            let concrete_owner: Option<String> = if scope.impl_is_concrete_instantiation(
+                &impl_block.ty,
+                &impl_block.type_params,
+                &scope.current_module_source,
+            ) {
+                let tt = scope.tysys.type_table.borrow();
+                let peeled = tt.peel_refs(self_type);
+                matches!(
+                    tt.get(peeled),
+                    crate::tir::ResolvedType::GenericInstance { .. }
+                )
+                .then(|| tt.mangle_type_name(peeled))
+            } else {
+                None
+            };
             scope.record_impl_facts(
                 impl_block.id,
                 sem::types::ImplFacts {
@@ -1824,8 +1827,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let provided_method_names: Vec<String> =
             impl_block.methods.iter().map(|m| m.name.clone()).collect();
 
-        let impl_is_concrete =
-            scope.impl_is_concrete_instantiation(impl_block, &scope.current_module_source);
+        let impl_is_concrete = scope.impl_is_concrete_instantiation(
+            &impl_block.ty,
+            &impl_block.type_params,
+            &scope.current_module_source,
+        );
         for method in &impl_block.methods {
             // Records-only: reify emits the method `TirFunction`
             // from the recorded signature facts + the AST.

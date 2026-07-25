@@ -1392,17 +1392,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// concrete functions, named `List<u8>::method` and called directly.
     pub(super) fn impl_is_concrete_instantiation(
         &self,
-        impl_block: &ast::ImplBlock,
+        impl_ty: &ast::Type,
+        impl_type_params: &[ast::GenericParam],
         impl_module: &ModuleSource,
     ) -> bool {
-        let inner = match &impl_block.ty {
+        let inner = match impl_ty {
             ast::Type::Reference(i) | ast::Type::MutReference(i) => i.as_ref(),
             other => other,
         };
         matches!(inner, ast::Type::Generic(g)
         if !g.args.is_empty()
             && g.args.iter().all(|a| {
-                self.is_concrete_type_arg(a, &impl_block.type_params, impl_module)
+                self.is_concrete_type_arg(a, impl_type_params, impl_module)
             }))
     }
 

@@ -2797,43 +2797,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .compiler_trait_name(crate::compiler_item::CompilerItem::From)
             .to_string();
-        let check_impl = |impl_block: &ast::ImplBlock| -> bool {
-            if !impl_block.is_synthesize_request {
+        self.tysys.trait_env.impl_headers.values().any(|header| {
+            if !header.is_synthesize_request {
                 return false;
             }
-            let Some(trait_type) = &impl_block.trait_type else {
+            let Some(trait_type) = &header.trait_type else {
                 return false;
             };
-            if Self::get_type_name_static(trait_type) != from_trait_name
-                || Self::get_type_name_static(&impl_block.ty) != target_name
+            if header.trait_name.as_deref() != Some(from_trait_name.as_str())
+                || Self::get_type_name_static(&header.ty) != target_name
             {
                 return false;
             }
-            if let ast::Type::Generic(generic) = trait_type
-                && generic.args.len() == 1
-            {
-                self.get_type_name_full(&generic.args[0]) == arg_type_name
-            } else {
-                false
-            }
-        };
-        for item in self.current_module_items {
-            if let Item::Impl(impl_block) = item
-                && check_impl(impl_block)
-            {
-                return true;
-            }
-        }
-        for module in self.loaded_modules.values() {
-            for item in &module.items {
-                if let Item::Impl(impl_block) = item
-                    && check_impl(impl_block)
-                {
-                    return true;
-                }
-            }
-        }
-        false
+            matches!(trait_type, ast::Type::Generic(generic)
+                if generic.args.len() == 1
+                    && self.get_type_name_full(&generic.args[0]) == arg_type_name)
+        })
     }
 
     pub(super) fn find_static_method_trait(

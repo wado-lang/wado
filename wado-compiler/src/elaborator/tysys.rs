@@ -23,7 +23,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::ast::{BinaryOp, Expr, ImplBlock, Literal, Type, UnaryOp};
+use crate::ast::{self, BinaryOp, Expr, Literal, Type, UnaryOp};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
@@ -319,14 +319,17 @@ impl TypeSystem {
 /// reify both reach them through `self.tysys`.
 impl TypeSystem {
     /// Build declared type params for an impl block, filtering out known type names.
-    pub(crate) fn build_declared_type_params(&self, impl_block: &ImplBlock) -> IndexSet<String> {
-        let mut declared: IndexSet<String> = impl_block
-            .type_params
+    pub(crate) fn build_declared_type_params(
+        &self,
+        impl_ty: &Type,
+        impl_type_params: &[ast::GenericParam],
+    ) -> IndexSet<String> {
+        let mut declared: IndexSet<String> = impl_type_params
             .iter()
             .map(|p| p.name.clone())
             .filter(|name| !self.is_known_type_name(name))
             .collect();
-        if let Type::Generic(g) = &impl_block.ty {
+        if let Type::Generic(g) = impl_ty {
             for arg in &g.args {
                 if let Type::Named(n) = arg
                     && !self.is_known_type_name(&n.name)

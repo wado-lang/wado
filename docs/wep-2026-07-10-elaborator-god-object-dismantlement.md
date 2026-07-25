@@ -98,11 +98,10 @@ from AST. Each signature is resolved exactly once, by the decl pass, in its
 own declaration frame, and stored as `TypeId`-level facts:
 
 - Free functions — type params, param types, return type, `is_mut`,
-  param-default `ast::Expr`s. Keyed by `(ModuleSource, name)`.
-- Impl methods — the existing `ImplHeader` digest on `TraitEnv` grows its
-  missing half: per-method canonical signatures (params / return /
-  `self_kind` / `is_mut` / type params / defaults / defining `AstId`), plus
-  the header's `associated_types` bindings and `is_synthesize_request` flag.
+  param-default `ast::Expr`s.
+- Impl methods — per-method canonical signatures (params / return /
+  `self_kind` / `is_mut` / type params / defaults), plus the owning impl's
+  `associated_types` bindings and `is_synthesize_request` flag.
 - Trait-decl methods — signatures + `has_body`, and `Rc<ast::Function>` for
   default-method bodies (the walker's synthesis input).
 - Effect ops, resource static methods (including resolved `#[cm]` names),
@@ -141,11 +140,43 @@ What this deletes, structurally:
 - `&mut self` on the dispatch-query cluster: `lookup_method_info` and its
   callees become `impl TypeSystem` operations over `(ctx, scope, ids)`.
 
-Placement: `Signatures` is a field on `TypeSystem` (`Rc`, seeded from the
-stdlib snapshot like the `all_*` tables). Impl-method and trait-method
-signatures extend the existing `ImplHeader` / `TraitDeclHeader` on
-`TraitEnv`. Membership rule: "the `TypeId`-level signature of a source
-declaration" — anything else is rejected.
+Placement: `Signatures` is one struct, a field on `TypeSystem` (`Rc`, seeded
+from the stdlib snapshot like the `all_*` tables), keyed by the declaring
+node's globally-unique `AstId` with name-keyed indices layered on top.
+Membership rule: "the `TypeId`-level signature of a source declaration" —
+anything else is rejected. The existing flat `all_function_sigs` /
+`all_effect_op_sigs` / `all_globals` / `all_associated_constants` tables move
+into it, so the rule lives in one place instead of four.
+
+`Signatures` deliberately does *not* extend `TraitEnv`. The two are built in
+different phases over different alphabets: `TraitEnv::build` runs before any
+decl pass and indexes *names* ("which impls exist, on what receiver, for what
+trait"), then freezes behind `Arc`; signatures are `TypeId`-level and can only
+exist after the decl pass has interned types. Hanging signatures off
+`ImplHeader` would make `TraitEnv` a two-phase build-then-backfill structure
+and cost it the immutability its consumers rely on. Two maps under the same
+`(ModuleSource, AstId)` key compose just as well at the use site.
+
+### One canonical frame implies one way to leave it
+
+A signature's canonical frame is only enforceable if there is exactly one
+operation that instantiates it. Today substitution is open-coded per consumer
+— `type_resolution::substitute_type_params` and `expr::substitute_type_params`
+(AST `Type`, by name), `method_lookup::resolve_type_with_param_mapping`,
+`trait_query::build_type_param_mapping`, and the `TypeId`-level
+`TypeTable::substitute_type_params`. Migrating consumers onto the digest
+without first collapsing these would just mint new ad-hoc substitution sites
+and leave the frame invariant unverifiable.
+
+So `Signatures` entries are binders — a signature plus the `TypeParam` slots
+it is abstract over — and `TypeSystem::instantiate` is the only way to read
+one at a use site. `MethodInfo` stops being independently computed and becomes
+exactly `instantiate(impl_method_sig, receiver_args)`.
+
+The AST-level substitution helpers exist only because signatures were AST when
+consumed. They have no place once signatures are `TypeId`s, so their count is
+the sharper completion metric: `loaded_modules` measures what was unplugged,
+AST-level substitution helpers measure what was actually lowered.
 
 ### Scope — transient walk state with RAII-only mutation
 
@@ -233,7 +264,10 @@ Passing a narrow "resolution context" (`type_table` + reference sink + logger
 Slices land independently, each keeping `mise run test`, the WIR goldens, and
 the LSP query tests green. Converted consumers read the digest via
 `.expect(…)` — a missing entry is a loud panic, never a fallback to AST
-re-resolution (the reify Stage-7 precedent).
+re-resolution (the reify Stage-7 precedent). A completeness test asserts that
+after `annotate_decls` every free function and impl method in every loaded
+module has an entry, so a gap fails one deterministic test instead of
+panicking at whichever use site happens to reach it first.
 
 - [x] S1 `Scope` + guards (subsumes the parent WEP's Track B Stage E).
       Refinements: effect params live on `TraitContext` (restored by
@@ -257,10 +291,20 @@ re-resolution (the reify Stage-7 precedent).
       S5 impl/static digest; the imported-globals decl loop still reads
       the source module's AST (S5, needs visibility on the globals
       digest).
-- [ ] S5 `Signatures` stage B — impl methods: extend `ImplHeader`
-      (assoc types, `is_synthesize_request`, per-method canonical
-      signatures + `AstId`s); convert `method_lookup` / `method_call` /
-      `trait_query` consumers; delete `get_impl_block`.
+- [ ] S4.5 Header-only consumers → `ImplHeader`. Most `get_impl_block`
+      callers read only `ty` / `trait_type` / `associated_types` /
+      `type_params`, all of which the header already carries; they need no
+      digest and land ahead of it, shrinking S5's blast radius.
+- [ ] S4.6 One frame exit: the binder shape on `Signatures` entries plus
+      `TypeSystem::instantiate`; route the AST-level substitution helpers
+      through it. Prerequisite for S5 — without it each converted consumer
+      invents its own substitution.
+- [ ] S5 `Signatures` stage B — impl methods: per-method canonical
+      signatures keyed by the method's `AstId`, plus `associated_types`
+      and `is_synthesize_request` on the impl entry; convert
+      `method_lookup` / `method_call` / `trait_query` consumers;
+      `MethodInfo` becomes `instantiate(sig, receiver_args)`; delete
+      `get_impl_block`.
 - [ ] S6 `Signatures` stage C — trait decls: method signatures + `has_body` +
       `Rc` bodies; convert `find_trait_decl_methods_with_module` /
       `find_method_in_trait_bounds`; reify reads default bodies from the
@@ -274,11 +318,26 @@ re-resolution (the reify Stage-7 precedent).
 - [ ] S9 Rename `Elaborator` → `Annotator`; update `docs/compiler.md` and
       `wado-compiler/AGENTS.md`.
 
-Ordering: S1–S3 are mutually independent and independent of S4–S6. S4–S6
-build one digest each and can land per consumer category. S7 requires S4–S6.
-S8–S9 are last. Progress metric: `loaded_modules` reads outside reify
-(~40 → 0), manual scope save/restores (3 clusters → 0), `Elaborator` fields
-(19 → 6).
+Ordering: S1–S3 are mutually independent and independent of S4–S6. S4.5 is
+independent of everything. S4.6 gates S5. S4–S6 build one digest each and can
+land per consumer category. S7 requires S4–S6, and converts one query at a
+time rather than as a single cut. S8–S9 are last.
+
+Progress metric, measured at S4's completion:
+
+| Metric                                           | S4  | Target |
+| ------------------------------------------------ | --- | ------ |
+| `loaded_modules` reads outside reify / decl pass | 25  | 0      |
+| AST-level type-param substitution helpers        | 2   | 0      |
+| `get_impl_block` + callers                       | 15  | 0      |
+| `with_module_perspective` sites                  | 16  | 1      |
+| `suppress_reference_recording` sites             | 7   | 0      |
+| Manual scope save/restore clusters               | 0   | 0      |
+| `Elaborator` fields                              | 13  | 6      |
+
+Compile-time is a stated benefit (one signature resolution per declaration
+instead of per use site), so the baseline is captured before S5 rather than
+inferred after it.
 
 ## Consequences
 

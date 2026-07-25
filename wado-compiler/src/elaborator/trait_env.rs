@@ -234,7 +234,12 @@ pub(super) type TraitImplIndex = IndexMap<name::Receiver, Vec<(ModuleSource, Ast
 pub(super) struct ImplHeader {
     /// Trait name for `impl Trait for Type` blocks (via `get_type_name_static`
     /// on the trait reference); `None` for inherent `impl Type { … }` blocks.
+    /// The memoised head name of [`Self::trait_type`], so the index filters
+    /// that only ask "is this a trait impl?" need no allocation.
     pub(super) trait_name: Option<String>,
+    /// The full trait reference (`Index<K>` in `impl Index<K> for Map`), for
+    /// consumers that need its generic arguments rather than its head name.
+    pub(super) trait_type: Option<Type>,
     /// The impl target type (`impl_block.ty`).
     pub(super) ty: Type,
     /// The impl block's type parameters.
@@ -246,6 +251,9 @@ pub(super) struct ImplHeader {
     /// The block's `type X = …;` associated-type bindings, cloned so
     /// associated-type resolution reads them without the impl-block AST.
     pub(super) associated_types: Vec<ast::AssociatedTypeBinding>,
+    /// `impl Trait for Type;` — a body-less derivation request rather than a
+    /// real impl (WEP 2026-06-25 trait derivation).
+    pub(super) is_synthesize_request: bool,
 }
 
 /// Digested signature of a single method inside an [`ImplHeader`]. Holds the
@@ -829,6 +837,7 @@ impl TraitEnv {
                     (module_source.clone(), impl_block.id),
                     ImplHeader {
                         trait_name: impl_block.trait_type.as_ref().map(get_type_name_static),
+                        trait_type: impl_block.trait_type.clone(),
                         ty: impl_block.ty.clone(),
                         type_params: impl_block.type_params.clone(),
                         methods: impl_block
@@ -841,6 +850,7 @@ impl TraitEnv {
                             })
                             .collect(),
                         associated_types: impl_block.associated_types.clone(),
+                        is_synthesize_request: impl_block.is_synthesize_request,
                     },
                 );
                 // Joins `all_impl_index` before the trait/inherent split, so its
