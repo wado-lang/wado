@@ -22,13 +22,13 @@ enum Color {
 impl Serialize for Color;
 impl Deserialize for Color;
 
-test "variant rename_all kebab serialize" {
+test "variant name_policy kebab serialize" {
     assert to_string::<Command>(&Command::AddRemote(5)) matches { Ok(s) && s == `\{"add-remote":5\}` };
     assert to_string::<Command>(&Command::List) matches { Ok(s) && s == `"list"` };
     assert to_string::<Command>(&Command::Remove(9)) matches { Ok(s) && s == `\{"rm":9\}` };
 }
 
-test "variant rename_all kebab deserialize" {
+test "variant name_policy kebab deserialize" {
     assert from_string::<Command>(`\{"add-remote":7\}`) matches { Ok(Command::AddRemote(v)) && v == 7 };
     assert from_string::<Command>(`"list"`) matches { Ok(Command::List) };
     assert from_string::<Command>(`\{"rm":3\}`) matches { Ok(Command::Remove(v)) && v == 3 };
@@ -36,7 +36,7 @@ test "variant rename_all kebab deserialize" {
     assert from_string::<Command>(`\{"AddRemote":7\}`) matches { Err(_) };
 }
 
-test "enum rename_all snake_case roundtrips" {
+test "enum name_policy snake_case roundtrips" {
     assert to_string::<Color>(&Color::LightRed) matches { Ok(s) && s == `"light_red"` };
     assert from_string::<Color>(`"dark_blue"`) matches { Ok(Color::DarkBlue) };
     assert from_string::<Color>(`"LightRed"`) matches { Err(_) };
