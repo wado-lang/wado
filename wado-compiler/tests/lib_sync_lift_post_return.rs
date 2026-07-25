@@ -30,7 +30,8 @@ use wado_compiler::{CompilerOptions, OptLevel};
 use wasmtime::component::{Component, Val};
 use wasmtime::{Config, Engine, InstanceAllocationStrategy, PoolingAllocationConfig, Store};
 
-/// FQ of the synthesized library world. Mirrors `cm_catalog.rs`.
+/// FQ of the synthesized library world; any stable name works, the compiler
+/// only uses it to key the world it builds for `--lib`.
 const LIB_WORLD_FQ: &str = "wado-lang:cm-catalog/cm-catalog@0.0.23";
 
 /// Doubling `n` times from a 16-byte seed: `chunk(16)` returns 1 MiB.
@@ -134,7 +135,7 @@ fn run(opt_level: OptLevel) {
 
 // Both tests are ignored because codegen emits no `post-return`: they trap on
 // call 8 of 48, the payload having grown 1 MiB per call — one unreclaimed buffer
-// each. Remove the attributes with the fix.
+// each. Tracked as wado-lang/wado#1683; remove the attributes with the fix.
 
 #[test]
 #[ignore = "known leak: sync-lifted `--lib` exports never free their return buffer"]

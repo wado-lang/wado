@@ -28,7 +28,12 @@ fn grow_memory(new_offset: i32) {
     // If deficit exceeds normal growth, round up to next power of two
     let grow_bytes = if deficit > normal_grow { 1 << 32 - builtin::i32_clz(deficit - 1) } else { normal_grow };
     let grow_pages = (grow_bytes + 65535) / 65536;
-    builtin::memory_grow(grow_pages);
+    // `memory.grow` answers -1 when the host refuses. Trap here rather than let
+    // the caller hand out a pointer past the end of linear memory, which faults
+    // later in unrelated code.
+    if builtin::memory_grow(grow_pages) < 0 {
+        builtin::unreachable();
+    }
 }
 
 /// Bump allocator — advances a pointer with alignment.

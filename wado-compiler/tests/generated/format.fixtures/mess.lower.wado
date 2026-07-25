@@ -1047,7 +1047,9 @@ fn grow_memory(new_offset: i32) {
         normal_grow;
     };
     let grow_pages: i32 = ((grow_bytes + 65535) / 65536);
-    core::builtin::memory_grow(grow_pages);
+    if (core::builtin::memory_grow(grow_pages) < 0) {
+        core::builtin::unreachable();
+    }
 }
 
 pub export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {

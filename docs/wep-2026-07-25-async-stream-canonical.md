@@ -1,7 +1,7 @@
 # WEP: Async Canonical Options for `stream.read` / `stream.write`
 
-Supersedes the stream halves of [ReturnCode Semantics](./wep-2026-03-01-cm-resource-canonical-attrs.md)
-in WEP-2026-03-01, and its cancel-canonical decision.
+Makes the stream halves of [ReturnCode Semantics](./wep-2026-03-01-cm-resource-canonical-attrs.md)
+in WEP-2026-03-01 true, by lowering both stream copy canonicals with `async`.
 
 ## Context
 
@@ -70,6 +70,8 @@ trap_if(e.state != CopyState.COPYING or e.has_sync_waiter)
 A synchronous copy completes before the guest regains control, so the guest can
 never observe `COPYING`. The two methods are declared in `prelude/types.wado`,
 emitted with `async = false`, called from nowhere, and would trap if they were.
+Asynchronous copies do not change this on their own — see "Cancellation stays
+unreachable".
 
 ### The spec baseline is async
 
@@ -126,17 +128,24 @@ Creating and dropping a waitable set per blocked operation is a per-chunk cost o
 every stream transfer. A per-task set, joined and unjoined around each await,
 replaces it. This is a follow-up to the correctness change, not a precondition.
 
-### Cancellation
+### Cancellation stays unreachable
 
-With asynchronous copies the guest observes `COPYING`, so `Stream::cancel_read`
-and `cancel_write` become callable for the first time.
+`Stream::cancel_read` / `cancel_write` remain uncallable, and this change does
+not alter that. `cancel_copy` traps unless the end is `COPYING`:
 
-The cancel canonicals stay synchronous. `cancel_copy` rejects an asynchronous
-cancel only when the end sits in a waitable set, and the await helper unjoins
-before returning, so a synchronous cancel is always legal here. It is also the
-only correct choice for the current lowering: cancel is emitted as a void call
-with nowhere to put a BLOCKED result, which an asynchronous cancel could
-return.
+```python
+trap_if(e.state != CopyState.COPYING or e.has_sync_waiter)
+```
+
+The synthesized bindings await BLOCKED inline — `if result == BLOCKED { result =
+cm_await_blocked(handle) }` — so control only returns to user code once the copy
+has settled to `IDLE` or `DONE`. Asynchronous canonicals move where the wait
+happens, not whether user code can observe a copy in flight.
+
+Making cancel reachable is a separate change: the binding would have to return
+the BLOCKED state to user code rather than absorbing it, which means a different
+`Stream` API shape. Until then the two methods stay declared-but-untestable, as
+they were before this WEP.
 
 ### Validation
 
@@ -172,7 +181,8 @@ Positive:
   becomes live code with test coverage, instead of dead code shipped in every
   component.
 - Wado stops depending on the 🚝 gate for its core I/O path.
-- Multiplexing, overlapping transfers, and cancellation become expressible.
+- Multiplexing and overlapping transfers become expressible. Cancellation does
+  not — see "Cancellation stays unreachable".
 
 Negative:
 
@@ -196,8 +206,6 @@ Neutral:
       await path at both ends (`stream_await_blocked_roundtrip.wado`)
 - [x] Regenerate the golden fixtures
 - [ ] Reuse a per-task waitable set instead of new/drop per await
-- [ ] E2E coverage for `Stream::cancel_read` / `cancel_write`, reachable for the
-      first time now that copies are asynchronous
 
 ## Related WEPs
 
