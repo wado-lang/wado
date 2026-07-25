@@ -505,7 +505,7 @@ struct ReflectFieldInfo {
 }
 
 /// A struct selected for `ReflectStruct` synthesis: its name, per-field info, the
-/// struct's `#[serde(rename_all)]` policy, and declaration span.
+/// struct's `#[wire(name_policy)]`, and declaration span.
 type ReflectTarget = (String, Vec<ReflectFieldInfo>, Option<String>, Span);
 
 /// Select the structs in `module` that need a synthesized `ReflectStruct` impl:
@@ -547,7 +547,7 @@ fn generate_struct_reflect_methods(
     reflect_trait_name: &str,
     target: &ReflectTarget,
 ) -> Vec<TirFunction> {
-    let (name, fields, rename_all, span) = target;
+    let (name, fields, name_policy, span) = target;
     let span = *span;
     let field_infos: Vec<FieldInfo> = fields
         .iter()
@@ -604,7 +604,7 @@ fn generate_struct_reflect_methods(
     let wire_name_policy_fn = generate_wire_name_policy_fn(
         name,
         env.case_style_type,
-        rename_all,
+        name_policy,
         reflect_trait_name,
         &env.wire_name_policy_method,
         span,
@@ -650,7 +650,7 @@ impl ReflectSynthEnv {
         let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
         let items = tt.compiler_items();
         let (field_struct_module, field_struct_name) = {
-            let (m, n) = items.require_struct(CompilerItem::ReflectField);
+            let (m, n) = items.require_struct(CompilerItem::ReflectStructField);
             (m.clone(), n.to_string())
         };
         Self {
@@ -897,11 +897,11 @@ fn generate_struct_members_fn(
     )
 }
 
-/// Map a struct's `#[serde(rename_all)]` string to its `CaseStyle` case
+/// Map a `#[wire(name_policy)]` string to its `CaseStyle` case
 /// `(index, name)`. Mirrors `serde_synth::apply_rename_all`'s recognised
 /// strategies; any unknown string (and no attribute) falls back to `Identity`.
-fn case_style_variant(rename_all: &Option<String>) -> (u32, &'static str) {
-    match rename_all.as_deref() {
+fn case_style_variant(name_policy: &Option<String>) -> (u32, &'static str) {
+    match name_policy.as_deref() {
         None => (0, "Identity"),
         Some("camelCase") => (1, "Camel"),
         Some("snake_case") => (2, "Snake"),
@@ -913,21 +913,22 @@ fn case_style_variant(rename_all: &Option<String>) -> (u32, &'static str) {
     }
 }
 
-/// Build `Struct^ReflectStruct::wire_name_policy() -> CaseStyle` as
-/// `return CaseStyle::<variant>;` — the struct's `#[serde(rename_all)]` policy
-/// as a `CaseStyle` value (casing itself is resolved library-side).
+/// Build `T^Reflect*::wire_name_policy() -> CaseStyle` as
+/// `return CaseStyle::<variant>;` — the type's `#[wire(name_policy)]` as a
+/// `CaseStyle` value (casing itself is resolved library-side). Shared by all
+/// four reflect kinds.
 fn generate_wire_name_policy_fn(
-    struct_name: &str,
+    type_name: &str,
     case_style_type: TypeId,
-    rename_all: &Option<String>,
+    name_policy: &Option<String>,
     reflect_trait_name: &str,
     wire_name_policy_method: &str,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(struct_name, reflect_trait_name, wire_name_policy_method);
+    let method_info = trait_method_info(type_name, reflect_trait_name, wire_name_policy_method);
     let qualified_name = method_info.to_mangled_name();
 
-    let (case_index, case_name) = case_style_variant(rename_all);
+    let (case_index, case_name) = case_style_variant(name_policy);
     let construct = TirExpr::new(
         TirExprKind::EnumConstruct {
             enum_type: case_style_type,
@@ -1144,10 +1145,11 @@ fn generate_variant_reflect_impls(
 /// A variant selected for `ReflectVariant` synthesis.
 struct ReflectVariantTarget {
     name: String,
-    /// Per-case `(name, index, payload type, #[serde(rename)])`; unit cases
+    /// Per-case `(name, index, payload type, #[wire(name)])`; unit cases
     /// carry `()` as their payload.
     cases: Vec<(String, u32, TypeId, Option<String>)>,
     span: Span,
+    wire_name_policy: Option<String>,
 }
 
 /// Select the variants in `module` that need a synthesized `ReflectVariant`
@@ -1170,6 +1172,7 @@ fn collect_reflect_variant_targets(
                 .map(|c| (c.name.clone(), c.index, c.payload, c.wire_name_override.clone()))
                 .collect(),
             span: v.span,
+            wire_name_policy: v.wire_name_policy.clone(),
         })
         .collect()
 }
@@ -1183,11 +1186,14 @@ struct ReflectVariantSynthEnv {
     type_name_method: String,
     discriminant_method: String,
     cases_method: String,
+    case_style_type: TypeId,
+    wire_name_policy_method: String,
 }
 
 impl ReflectVariantSynthEnv {
     fn resolve(tt: &mut TypeTable) -> Self {
         let string_type = tt.make_compiler_struct(CompilerItem::String);
+        let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
         let items = tt.compiler_items();
         let (case_struct_module, case_struct_name) = {
             let (m, n) = items.require_struct(CompilerItem::ReflectVariantCase);
@@ -1205,6 +1211,10 @@ impl ReflectVariantSynthEnv {
                 .to_string(),
             cases_method: items
                 .method_name(CompilerItem::ReflectVariantMembers)
+                .to_string(),
+            case_style_type,
+            wire_name_policy_method: items
+                .method_name(CompilerItem::ReflectVariantWireNamePolicy)
                 .to_string(),
         }
     }
@@ -1289,7 +1299,16 @@ fn generate_variant_reflect_methods(
         span,
     );
 
-    let mut functions = vec![type_name_fn, discriminant_fn, cases_fn];
+    let wire_name_policy_fn = generate_wire_name_policy_fn(
+        &target.name,
+        env.case_style_type,
+        &target.wire_name_policy,
+        variant_trait_name,
+        &env.wire_name_policy_method,
+        span,
+    );
+
+    let mut functions = vec![type_name_fn, discriminant_fn, cases_fn, wire_name_policy_fn];
     functions.extend(generate_case_bridge_helpers(
         type_table,
         target,
@@ -1748,6 +1767,7 @@ fn generate_enum_reflect_impls(
                 .map(|c| (c.name.clone(), c.index, c.wire_name_override.clone()))
                 .collect(),
             span: e.span,
+            wire_name_policy: e.wire_name_policy.clone(),
         })
         .collect();
     if targets.is_empty() {
@@ -1776,10 +1796,11 @@ fn generate_enum_reflect_impls(
 /// An enum selected for `ReflectEnum` synthesis.
 struct ReflectEnumTarget {
     name: String,
-    /// Per-case `(name, index, #[serde(rename)])`; a case's discriminant is
+    /// Per-case `(name, index, #[wire(name)])`; a case's discriminant is
     /// its index.
     cases: Vec<(String, u32, Option<String>)>,
     span: Span,
+    wire_name_policy: Option<String>,
 }
 
 /// Module-level types and method names resolved once from the compiler-item
@@ -1792,11 +1813,14 @@ struct ReflectEnumSynthEnv {
     discriminant_method: String,
     from_discriminant_method: String,
     members_method: String,
+    case_style_type: TypeId,
+    wire_name_policy_method: String,
 }
 
 impl ReflectEnumSynthEnv {
     fn resolve(tt: &mut TypeTable) -> Self {
         let string_type = tt.make_compiler_struct(CompilerItem::String);
+        let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
         let items = tt.compiler_items();
         let (case_struct_module, case_struct_name) = {
             let (m, n) = items.require_struct(CompilerItem::ReflectEnumCase);
@@ -1817,6 +1841,10 @@ impl ReflectEnumSynthEnv {
                 .to_string(),
             members_method: items
                 .method_name(CompilerItem::ReflectEnumMembers)
+                .to_string(),
+            case_style_type,
+            wire_name_policy_method: items
+                .method_name(CompilerItem::ReflectEnumWireNamePolicy)
                 .to_string(),
         }
     }
@@ -1889,11 +1917,21 @@ fn generate_enum_reflect_methods(
         span,
     );
 
+    let wire_name_policy_fn = generate_wire_name_policy_fn(
+        &target.name,
+        env.case_style_type,
+        &target.wire_name_policy,
+        enum_trait_name,
+        &env.wire_name_policy_method,
+        span,
+    );
+
     vec![
         type_name_fn,
         discriminant_fn,
         from_discriminant_fn,
         members_fn,
+        wire_name_policy_fn,
     ]
 }
 
@@ -2146,6 +2184,7 @@ fn generate_flags_reflect_impls(
                     .map(|m| (m.name.clone(), m.bitmask))
                     .collect(),
                 span: f.span,
+                wire_name_policy: f.wire_name_policy.clone(),
             })
         })
         .collect();
@@ -2173,6 +2212,7 @@ struct ReflectFlagsTarget {
     /// Per-member `(name, bitmask)`.
     members: Vec<(String, u32)>,
     span: Span,
+    wire_name_policy: Option<String>,
 }
 
 /// Module-level types and method names resolved once from the compiler-item
@@ -2185,14 +2225,17 @@ struct ReflectFlagsSynthEnv {
     bits_method: String,
     from_bits_method: String,
     members_method: String,
+    case_style_type: TypeId,
+    wire_name_policy_method: String,
 }
 
 impl ReflectFlagsSynthEnv {
     fn resolve(tt: &mut TypeTable) -> Self {
         let string_type = tt.make_compiler_struct(CompilerItem::String);
+        let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
         let items = tt.compiler_items();
         let (bit_struct_module, bit_struct_name) = {
-            let (m, n) = items.require_struct(CompilerItem::ReflectFlagBit);
+            let (m, n) = items.require_struct(CompilerItem::ReflectFlagsBit);
             (m.clone(), n.to_string())
         };
         Self {
@@ -2210,6 +2253,10 @@ impl ReflectFlagsSynthEnv {
                 .to_string(),
             members_method: items
                 .method_name(CompilerItem::ReflectFlagsMembers)
+                .to_string(),
+            case_style_type,
+            wire_name_policy_method: items
+                .method_name(CompilerItem::ReflectFlagsWireNamePolicy)
                 .to_string(),
         }
     }
@@ -2275,7 +2322,22 @@ fn generate_flags_reflect_methods(
         span,
     );
 
-    vec![type_name_fn, bits_fn, from_bits_fn, members_fn]
+    let wire_name_policy_fn = generate_wire_name_policy_fn(
+        &target.name,
+        env.case_style_type,
+        &target.wire_name_policy,
+        flags_trait_name,
+        &env.wire_name_policy_method,
+        span,
+    );
+
+    vec![
+        type_name_fn,
+        bits_fn,
+        from_bits_fn,
+        members_fn,
+        wire_name_policy_fn,
+    ]
 }
 
 /// Build `Flags^ReflectFlags::members() -> Self::Members` as

@@ -78,7 +78,7 @@ internal trait ReflectStruct {
     #[compiler_item("reflect_struct_members")]
     fn members() -> Self::Members;
 
-    /// The struct's `#[wire(name_policy)]` policy (`Identity` if none).
+    /// The struct's `#[wire(name_policy)]` (`Identity` if none).
     #[compiler_item("reflect_struct_wire_name_policy")]
     fn wire_name_policy() -> CaseStyle;
 }
@@ -132,6 +132,10 @@ internal trait ReflectVariant {
     /// Returns the per-case members.
     #[compiler_item("reflect_variant_members")]
     fn members() -> Self::Members;
+
+    /// The variant's `#[wire(name_policy)]` (`Identity` if none).
+    #[compiler_item("reflect_variant_wire_name_policy")]
+    fn wire_name_policy() -> CaseStyle;
 }
 
 /// Compile-time enum introspection. The compiler synthesizes an impl for
@@ -158,6 +162,10 @@ internal trait ReflectEnum {
     /// Returns the per-case members.
     #[compiler_item("reflect_enum_members")]
     fn members() -> Self::Members;
+
+    /// The enum's `#[wire(name_policy)]` (`Identity` if none).
+    #[compiler_item("reflect_enum_wire_name_policy")]
+    fn wire_name_policy() -> CaseStyle;
 }
 
 /// Compile-time flags introspection. The compiler synthesizes an impl for
@@ -185,6 +193,10 @@ internal trait ReflectFlags {
     /// Returns the per-bit members.
     #[compiler_item("reflect_flags_members")]
     fn members() -> Self::Members;
+
+    /// The flags type's `#[wire(name_policy)]` (`Identity` if none).
+    #[compiler_item("reflect_flags_wire_name_policy")]
+    fn wire_name_policy() -> CaseStyle;
 }
 
 /// A case handle minted by `ReflectVariant::members()`: the payload type `P`
@@ -277,7 +289,7 @@ impl<T> Member for EnumCase<T> {
 /// A bit handle minted by `ReflectFlags::members()`: the member holds the
 /// single-bit flags value. `set` mints it and `is_set` tests a value for the
 /// bit. See WEP 2026-06-13 §3c.
-#[compiler_item("reflect_flag_bit")]
+#[compiler_item("reflect_flags_bit")]
 pub struct FlagBit<T> {
     bit: u64,
     value: T,
@@ -313,7 +325,7 @@ impl<T> Member for FlagBit<T> {
 
 /// A field handle minted by `ReflectStruct::members()`: the field type `F` is
 /// static, and `get` reads the field's value out of a struct. See WEP 2026-06-13.
-#[compiler_item("reflect_field")]
+#[compiler_item("reflect_struct_field")]
 pub struct Field<T, F> {
     index: i32,
     field_name: String,

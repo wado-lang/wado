@@ -4334,6 +4334,7 @@ pub struct TirFlags {
     pub type_id: TypeId,
     pub members: Vec<TirFlagsMember>,
     pub span: Span,
+    pub wire_name_policy: Option<String>,
 }
 
 /// A member of a flags type

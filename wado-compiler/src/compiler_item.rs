@@ -109,13 +109,13 @@ pub enum CompilerItem {
     ReflectVariantCase,
     /// `Field<T, F>` — the per-field member struct minted by
     /// `ReflectStruct::members()` (WEP 2026-06-13).
-    ReflectField,
+    ReflectStructField,
     /// `EnumCase<T>` — the per-case member struct minted by
     /// `ReflectEnum::members()` (WEP 2026-06-13 §3b).
     ReflectEnumCase,
     /// `FlagBit<T>` — the per-bit member struct minted by
     /// `ReflectFlags::members()` (WEP 2026-06-13 §3c).
-    ReflectFlagBit,
+    ReflectFlagsBit,
 
     // ── Variants (sum types) ──────────────────────────────────────────
     /// `Option<T>` — `Some(_)` / `None`.
@@ -319,6 +319,8 @@ pub enum CompilerItem {
     ReflectVariantDiscriminant,
     /// `ReflectVariant::members` — the per-case member tuple.
     ReflectVariantMembers,
+    /// `ReflectVariant::wire_name_policy` — the variant's `#[wire(name_policy)]`.
+    ReflectVariantWireNamePolicy,
     /// `ReflectEnum::type_name` — the per-enum type name.
     ReflectEnumTypeName,
     /// `ReflectEnum::discriminant` — the value's tag as `i32`.
@@ -328,6 +330,8 @@ pub enum CompilerItem {
     ReflectEnumFromDiscriminant,
     /// `ReflectEnum::members` — the per-case member list.
     ReflectEnumMembers,
+    /// `ReflectEnum::wire_name_policy` — the enum's `#[wire(name_policy)]`.
+    ReflectEnumWireNamePolicy,
     /// `ReflectFlags::type_name` — the per-flags type name.
     ReflectFlagsTypeName,
     /// `ReflectFlags::bits` — the value's bits, u64-normalized.
@@ -337,6 +341,8 @@ pub enum CompilerItem {
     ReflectFlagsFromBits,
     /// `ReflectFlags::members` — the per-bit member list.
     ReflectFlagsMembers,
+    /// `ReflectFlags::wire_name_policy` — the flags type's `#[wire(name_policy)]`.
+    ReflectFlagsWireNamePolicy,
     /// `String::push_str` — recognised by the WIR optimiser for
     /// string-building inlining.
     StringPushStr,
@@ -482,9 +488,9 @@ impl CompilerItem {
         Self::ReflectStruct,
         Self::ReflectVariant,
         Self::ReflectVariantCase,
-        Self::ReflectField,
+        Self::ReflectStructField,
         Self::ReflectEnumCase,
-        Self::ReflectFlagBit,
+        Self::ReflectFlagsBit,
         Self::ReflectEnum,
         Self::ReflectFlags,
         Self::Member,
@@ -548,14 +554,17 @@ impl CompilerItem {
         Self::ReflectVariantTypeName,
         Self::ReflectVariantDiscriminant,
         Self::ReflectVariantMembers,
+        Self::ReflectVariantWireNamePolicy,
         Self::ReflectEnumTypeName,
         Self::ReflectEnumDiscriminant,
         Self::ReflectEnumFromDiscriminant,
         Self::ReflectEnumMembers,
+        Self::ReflectEnumWireNamePolicy,
         Self::ReflectFlagsTypeName,
         Self::ReflectFlagsBits,
         Self::ReflectFlagsFromBits,
         Self::ReflectFlagsMembers,
+        Self::ReflectFlagsWireNamePolicy,
         Self::StringPushStr,
         Self::StringPushChar,
         Self::StringPushAscii,
@@ -628,9 +637,9 @@ impl CompilerItem {
             Self::ReflectStruct => "reflect_struct",
             Self::ReflectVariant => "reflect_variant",
             Self::ReflectVariantCase => "reflect_variant_case",
-            Self::ReflectField => "reflect_field",
+            Self::ReflectStructField => "reflect_struct_field",
             Self::ReflectEnumCase => "reflect_enum_case",
-            Self::ReflectFlagBit => "reflect_flag_bit",
+            Self::ReflectFlagsBit => "reflect_flags_bit",
             Self::ReflectEnum => "reflect_enum",
             Self::ReflectFlags => "reflect_flags",
             Self::Member => "member",
@@ -694,14 +703,17 @@ impl CompilerItem {
             Self::ReflectVariantTypeName => "reflect_variant_type_name",
             Self::ReflectVariantDiscriminant => "reflect_variant_discriminant",
             Self::ReflectVariantMembers => "reflect_variant_members",
+            Self::ReflectVariantWireNamePolicy => "reflect_variant_wire_name_policy",
             Self::ReflectEnumTypeName => "reflect_enum_type_name",
             Self::ReflectEnumDiscriminant => "reflect_enum_discriminant",
             Self::ReflectEnumFromDiscriminant => "reflect_enum_from_discriminant",
             Self::ReflectEnumMembers => "reflect_enum_members",
+            Self::ReflectEnumWireNamePolicy => "reflect_enum_wire_name_policy",
             Self::ReflectFlagsTypeName => "reflect_flags_type_name",
             Self::ReflectFlagsBits => "reflect_flags_bits",
             Self::ReflectFlagsFromBits => "reflect_flags_from_bits",
             Self::ReflectFlagsMembers => "reflect_flags_members",
+            Self::ReflectFlagsWireNamePolicy => "reflect_flags_wire_name_policy",
             Self::StringPushStr => "string_push_str",
             Self::StringPushChar => "string_push_char",
             Self::StringPushAscii => "string_push_ascii",
@@ -791,9 +803,9 @@ impl CompilerItem {
             | Self::ReflectStruct
             | Self::ReflectVariant
             | Self::ReflectVariantCase
-            | Self::ReflectField
+            | Self::ReflectStructField
             | Self::ReflectEnumCase
-            | Self::ReflectFlagBit
+            | Self::ReflectFlagsBit
             | Self::ReflectEnum
             | Self::ReflectFlags
             | Self::Member
@@ -812,14 +824,17 @@ impl CompilerItem {
             | Self::ReflectVariantTypeName
             | Self::ReflectVariantDiscriminant
             | Self::ReflectVariantMembers
+            | Self::ReflectVariantWireNamePolicy
             | Self::ReflectEnumTypeName
             | Self::ReflectEnumDiscriminant
             | Self::ReflectEnumFromDiscriminant
             | Self::ReflectEnumMembers
+            | Self::ReflectEnumWireNamePolicy
             | Self::ReflectFlagsTypeName
             | Self::ReflectFlagsBits
             | Self::ReflectFlagsFromBits
             | Self::ReflectFlagsMembers
+            | Self::ReflectFlagsWireNamePolicy
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringPushAscii
@@ -938,9 +953,9 @@ impl CompilerItem {
             | Self::KilnRequest
             | Self::String
             | Self::ReflectVariantCase
-            | Self::ReflectField
+            | Self::ReflectStructField
             | Self::ReflectEnumCase
-            | Self::ReflectFlagBit => CompilerItemKind::Struct,
+            | Self::ReflectFlagsBit => CompilerItemKind::Struct,
             Self::Option | Self::Result => CompilerItemKind::Variant,
             Self::Ordering | Self::Alignment | Self::CaseStyle => CompilerItemKind::Enum,
             Self::SerializeError | Self::DeserializeError => CompilerItemKind::Struct,
@@ -992,14 +1007,17 @@ impl CompilerItem {
             | Self::ReflectVariantTypeName
             | Self::ReflectVariantDiscriminant
             | Self::ReflectVariantMembers
+            | Self::ReflectVariantWireNamePolicy
             | Self::ReflectEnumTypeName
             | Self::ReflectEnumDiscriminant
             | Self::ReflectEnumFromDiscriminant
             | Self::ReflectEnumMembers
+            | Self::ReflectEnumWireNamePolicy
             | Self::ReflectFlagsTypeName
             | Self::ReflectFlagsBits
             | Self::ReflectFlagsFromBits
             | Self::ReflectFlagsMembers
+            | Self::ReflectFlagsWireNamePolicy
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringPushAscii

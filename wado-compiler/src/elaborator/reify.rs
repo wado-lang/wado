@@ -834,6 +834,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 })
                 .collect(),
             span: flags_decl.span,
+            wire_name_policy: wire_name_policy_of(
+                flags_decl.attributes.as_deref().unwrap_or_default(),
+            ),
         })
     }
 
