@@ -29,7 +29,7 @@ pub fn gen_highlight(
         w.line(&"let mut visitor = HighlightVisitor::new(mapping);");
         w.line(&"highlight_walk(&mut visitor, &result.tokens, &result.cst);");
         w.line(&"visitor.hl_cover_unvisited(&result.tokens);");
-        w.line(&"return highlight_html(input, &visitor.captures);");
+        w.line(&"return highlight_html(input, &visitor.captures, &visitor.capture_classes);");
         w.end();
         w.blank();
 
@@ -52,7 +52,7 @@ pub fn gen_highlight(
         w.begin(&"for let mut _i = 0; _i < tokens.len(); _i += 1");
         w.line(&"visitor.hl_visit_token(&tokens, _i);");
         w.end();
-        w.line(&"return highlight_html(input, &visitor.captures);");
+        w.line(&"return highlight_html(input, &visitor.captures, &visitor.capture_classes);");
         w.end();
     }
     w.blank();
