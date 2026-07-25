@@ -2826,7 +2826,7 @@ impl TypeTable {
     /// [`Self::mangle_type_arg_for_generic`] as it reads *after*
     /// [`Self::erase_newtypes_and_flags`]: every `Newtype` collapses to its
     /// ultimate base and every `Flags` to `u32`, recursively through composite
-    /// types. Lets pre-erasure synthesis (the `Field::get` bridge helpers) mint a
+    /// types. Lets pre-erasure synthesis (the `StructField::get` bridge helpers) mint a
     /// name that matches the post-erasure call site, whose `field_ty` reads
     /// through the erasure redirect map.
     pub fn mangle_type_arg_erased(&self, id: TypeId) -> String {
@@ -3844,7 +3844,7 @@ pub struct TirTypeParam {
     /// Default type if specified (e.g., `Effects = []`)
     pub default: Option<TypeId>,
     pub index: u32,
-    /// For a pack param bound by projection — `impl<T: Reflect<Fields = [..F]>,
+    /// For a pack param bound by projection — `impl<T: ReflectStruct<FieldTypes = [..F]>,
     /// ..F: Trait>` — records `(source param index, assoc type name)`. The pack
     /// is not supplied by the caller; monomorphization derives it by resolving
     /// the source param's associated type (e.g. `T::Fields`) to its tuple.
@@ -4269,8 +4269,8 @@ pub struct TirStruct {
     pub monomorph_info: Option<MonomorphInfo>,
     pub fields: Vec<TirField>,
     pub span: Span,
-    /// `#[serde(rename_all = "...")]` — naming strategy for all fields.
-    pub serde_rename_all: Option<String>,
+    /// `#[wire(name_policy = "...")]` — naming strategy for all fields.
+    pub wire_name_policy: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -4282,11 +4282,11 @@ pub struct TirField {
     pub span: Span,
     /// `#[secret]` — field not shown in debug inspect output.
     pub is_secret: bool,
-    /// `#[serde(rename = "name")]` — custom serialization name for this field.
-    pub serde_rename: Option<String>,
-    /// `#[serde(default)]` — use default value when field is missing during deserialization.
+    /// `#[wire(name = "name")]` — custom serialization name for this field.
+    pub wire_name_override: Option<String>,
+    /// `#[wire(default)]` — use default value when field is missing during deserialization.
     pub serde_default: bool,
-    /// `#[serde(positional)]` — field is resolved by position, not by name.
+    /// `#[wire(positional)]` — field is resolved by position, not by name.
     /// Format-agnostic ordinal hint: synthesized `FieldSchema::lookup` omits it
     /// (never matched by name) and `positional_at` enumerates it. Name-only and
     /// sequence-only formats ignore it; `core:args` binds it to a bare token.
@@ -4307,8 +4307,8 @@ pub struct TirEnum {
     pub monomorph_info: Option<MonomorphInfo>,
     pub cases: Vec<TirEnumCase>,
     pub span: Span,
-    /// `#[serde(rename_all = "...")]` — naming strategy for all cases.
-    pub serde_rename_all: Option<String>,
+    /// `#[wire(name_policy = "...")]` — naming strategy for all cases.
+    pub wire_name_policy: Option<String>,
 }
 
 /// A case in a TIR enum.
@@ -4318,8 +4318,8 @@ pub struct TirEnumCase {
     pub name: String,
     pub index: u32,
     pub span: Span,
-    /// `#[serde(rename = "...")]` — custom serialized name for this case.
-    pub serde_rename: Option<String>,
+    /// `#[wire(name = "...")]` — custom serialized name for this case.
+    pub wire_name_override: Option<String>,
 }
 
 /// A flags type declaration (bitmask type, like WIT flags)
@@ -4334,6 +4334,7 @@ pub struct TirFlags {
     pub type_id: TypeId,
     pub members: Vec<TirFlagsMember>,
     pub span: Span,
+    pub wire_name_policy: Option<String>,
 }
 
 /// A member of a flags type
@@ -4357,8 +4358,8 @@ pub struct TirVariantDecl {
     /// Cases of the variant (e.g., Some, None for Option)
     pub cases: Vec<TirVariantCase>,
     pub span: Span,
-    /// `#[serde(rename_all = "...")]` — naming strategy for all cases.
-    pub serde_rename_all: Option<String>,
+    /// `#[wire(name_policy = "...")]` — naming strategy for all cases.
+    pub wire_name_policy: Option<String>,
 }
 
 /// A case in a variant declaration
@@ -4376,8 +4377,8 @@ pub struct TirVariantCase {
     /// Payload type for this case. Unit variants have `()` (unit type) payload.
     pub payload: TypeId,
     pub span: Span,
-    /// `#[serde(rename = "...")]` — custom serialized name for this case.
-    pub serde_rename: Option<String>,
+    /// `#[wire(name = "...")]` — custom serialized name for this case.
+    pub wire_name_override: Option<String>,
 }
 
 #[derive(Debug, Clone)]

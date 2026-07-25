@@ -15,23 +15,23 @@ use { build_atn, dump_atn } from "./atn.wado";
 // CLI shape, parsed by `core:args` from the `Command` subcommand variant.
 // `grammars` is an optional variadic positional so the "no grammar files given"
 // check stays in `cmd_*` with its specific message; long options only (`-o` is
-// dropped). `rename_all` lower-cases the wire tags (`gen` / `dump`).
+// dropped). `name_policy` lower-cases the wire tags (`gen` / `dump`).
 struct GenArgs {
     trace: bool = false,
     output: Option<String> = null,
-    #[serde(positional)]
+    #[wire(positional)]
     grammars: List<String> = [],
 }
 impl Deserialize for GenArgs;
 
 struct DumpArgs {
     atn: bool = false,
-    #[serde(positional)]
+    #[wire(positional)]
     grammars: List<String> = [],
 }
 impl Deserialize for DumpArgs;
 
-#[serde(rename_all = "kebab-case")]
+#[wire(name_policy = "kebab-case")]
 variant Command {
     Gen(GenArgs),
     Dump(DumpArgs),

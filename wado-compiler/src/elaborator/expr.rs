@@ -3921,7 +3921,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 index: i as u32,
                 span: struct_lit.span,
                 is_secret: false,
-                serde_rename: None,
+                wire_name_override: None,
                 serde_default: false,
                 serde_positional: false,
                 default_expr: None,
@@ -3936,7 +3936,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             monomorph_info: None,
             fields: tir_fields,
             span: struct_lit.span,
-            serde_rename_all: None,
+            wire_name_policy: None,
         });
 
         self.record_generic_instantiation_with_mangle(

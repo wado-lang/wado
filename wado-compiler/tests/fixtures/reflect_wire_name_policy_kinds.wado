@@ -1,0 +1,47 @@
+// `wire_name_policy()` is on every reflect kind, not just struct: a library
+// derivation that resolves wire names for a variant / enum / flags needs the
+// type-level `#[wire(name_policy)]` the same way it does for a struct.
+
+#[wire(name_policy = "camelCase")]
+variant Shape {
+    UnitCircle(i32),
+    WideBox,
+}
+
+variant Plain {
+    One(i32),
+}
+
+#[wire(name_policy = "kebab-case")]
+enum Color {
+    DeepRed,
+    SkyBlue,
+}
+
+enum Bare {
+    Only,
+}
+
+#[wire(name_policy = "SCREAMING_SNAKE_CASE")]
+flags Perms {
+    can_read,
+    can_write,
+}
+
+flags Plainflags {
+    only_bit,
+}
+
+test "wire_name_policy is exposed by every reflect kind" {
+    assert ReflectVariant::<Shape>::wire_name_policy() == CaseStyle::Camel;
+    assert ReflectVariant::<Plain>::wire_name_policy() == CaseStyle::Identity;
+
+    assert ReflectEnum::<Color>::wire_name_policy() == CaseStyle::Kebab;
+    assert ReflectEnum::<Bare>::wire_name_policy() == CaseStyle::Identity;
+
+    assert ReflectFlags::<Perms>::wire_name_policy() == CaseStyle::ScreamingSnake;
+    assert ReflectFlags::<Plainflags>::wire_name_policy() == CaseStyle::Identity;
+}
+
+__DATA__
+{"test": {}}

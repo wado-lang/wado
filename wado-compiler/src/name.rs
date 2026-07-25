@@ -154,7 +154,7 @@ pub fn case_construct_helper_name(mangled_variant: &str, mangled_payload: &str) 
     format!("$case_construct${mangled_variant}${mangled_payload}")
 }
 
-/// The name of the synthesized `Field::<S, F>::get` helper for a struct and one
+/// The name of the synthesized `StructField::<S, F>::get` helper for a struct and one
 /// of its field types, both identified by their structural mangles (same
 /// identity discipline as [`case_extract_helper_name`]). Lowering rewrites
 /// `builtin::struct_field_get::<S, F>` calls to it (WEP 2026-06-13 §2).

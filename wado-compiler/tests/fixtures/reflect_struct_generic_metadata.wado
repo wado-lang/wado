@@ -1,0 +1,42 @@
+// Generic `ReflectStruct::<T>::…` resolution (WEP 2026-06-13): the trait-qualified
+// metadata call resolves for a generic `T: ReflectStruct`, not only a concrete struct.
+// `type_name()` is value-free (returns `String`); `members()` yields the
+// per-field `Member` face, so field names are read generically. The calls are
+// dispatched to `T`'s synthesized methods after `T` is monomorphized to a
+// concrete struct.
+
+trait Described {
+    fn describe(&self) -> String;
+}
+
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F> Described for T {
+    fn describe(&self) -> String {
+        let mut names: List<String> = [];
+        for let f of ReflectStruct::<T>::members() {
+            names.push(f.name());
+        }
+        return `${ReflectStruct::<T>::type_name()}(${names.join(",")})`;
+    }
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Person {
+    name: String,
+    age: i32,
+    active: bool,
+}
+
+test "generic ReflectStruct::<T> metadata resolves and monomorphizes per struct" {
+    let p = Point { x: 1, y: 2 };
+    assert p.describe() == "Point(x,y)";
+
+    let q = Person { name: "a", age: 1, active: true };
+    assert q.describe() == "Person(name,age,active)";
+}
+
+__DATA__
+{"test": {}}

@@ -1440,24 +1440,29 @@ pub struct HighlightMapping {
     pub overrides: List<HighlightOverride>,
 }
 
-/// A single highlight capture: a named range in the source text.
+/// A single highlight capture: a range in the source text tagged with an index
+/// into the visitor's `capture_names` / `capture_classes` tables.
 pub struct HighlightCapture {
-    pub capture: String,
+    pub capture_id: i32,
     pub start: i32,
     pub end: i32,
 }
 
-/// Internal override form with the rule resolved to an integer id so the
-/// per-token classify loop avoids a String compare on every iteration.
+/// Internal override form with the rule and capture resolved to integer ids.
 struct ResolvedOverride {
     rule_id: i32,
     token_kind: i32,
-    capture: String,
+    capture_id: i32,
 }
 
 /// HighlightVisitor collects highlight captures during a CST walk.
 pub struct HighlightVisitor {
-    defaults: List<String>,
+    /// Capture name per id, e.g. `punctuation.bracket`.
+    pub capture_names: List<String>,
+    /// `class` attribute text per id: the capture name with `.` → ` `.
+    pub capture_classes: List<String>,
+    /// Capture id per token kind, or -1 for a kind with no default capture.
+    default_ids: List<i32>,
     overrides: List<ResolvedOverride>,
     rule_stack: List<i32>,
     /// Token indices the tree walk classified, so `hl_cover_unvisited` can
@@ -1468,6 +1473,18 @@ pub struct HighlightVisitor {
 
 impl HighlightVisitor {
     pub fn new(mapping: HighlightMapping) -> HighlightVisitor {
+        let mut capture_names: List<String> = [];
+        let mut capture_classes: List<String> = [];
+        let mut default_ids: List<i32> = List::with_capacity(mapping.defaults.len());
+        for let d of &mapping.defaults {
+            if d.is_empty() {
+                default_ids.push(-1);
+            } else {
+                default_ids.push(capture_names.len());
+                capture_classes.push(class_text(d));
+                capture_names.push(*d);
+            }
+        }
         let mut overrides: List<ResolvedOverride> = List::with_capacity(mapping.overrides.len());
         for let ov of &mapping.overrides {
             let mut id: i32 = -1;
@@ -1482,14 +1499,15 @@ impl HighlightVisitor {
             if id < 0 {
                 continue;
             }
-            overrides.push(ResolvedOverride {
-                rule_id: id,
-                token_kind: ov.token_kind,
-                capture: ov.capture,
-            });
+            let capture_id = capture_names.len();
+            capture_classes.push(class_text(&ov.capture));
+            capture_names.push(ov.capture);
+            overrides.push(ResolvedOverride { rule_id: id, token_kind: ov.token_kind, capture_id });
         }
         return HighlightVisitor {
-            defaults: mapping.defaults,
+            capture_names,
+            capture_classes,
+            default_ids,
             overrides,
             rule_stack: [],
             visited: [],
@@ -1497,20 +1515,20 @@ impl HighlightVisitor {
         };
     }
 
-    fn classify(&self, kind: i32) -> String {
+    fn classify(&self, kind: i32) -> i32 {
         for let ov of &self.overrides {
             if ov.token_kind == kind {
                 for let rule_id of &self.rule_stack {
                     if *rule_id == ov.rule_id {
-                        return ov.capture;
+                        return ov.capture_id;
                     }
                 }
             }
         }
-        if kind >= 0 && kind < self.defaults.len() {
-            return self.defaults[kind];
+        if kind >= 0 && kind < self.default_ids.len() {
+            return self.default_ids[kind];
         }
-        return "";
+        return -1;
     }
 }
 
@@ -1531,19 +1549,21 @@ impl HighlightVisitor {
         }
         self.visited[idx] = true;
         for let mut t = toks.triv_lo[idx]; t < toks.triv_hi[idx]; t += 1 {
-            let cap = self.classify(toks.triv_kinds[t]);
-            if !cap.is_empty() {
+            let id = self.classify(toks.triv_kinds[t]);
+            if id >= 0 {
                 self.captures.push(
-                    HighlightCapture { capture: cap, start: toks.triv_starts[t], end: toks.triv_ends[t] },
+                    HighlightCapture { capture_id: id, start: toks.triv_starts[t], end: toks.triv_ends[t] },
                 );
             }
         }
         if toks.is_empty_text(idx) {
             return;
         }
-        let cap = self.classify(toks.kinds[idx]);
-        if !cap.is_empty() {
-            self.captures.push(HighlightCapture { capture: cap, start: toks.starts[idx], end: toks.ends[idx] });
+        let id = self.classify(toks.kinds[idx]);
+        if id >= 0 {
+            self.captures.push(
+                HighlightCapture { capture_id: id, start: toks.starts[idx], end: toks.ends[idx] },
+            );
         }
     }
 
@@ -1576,7 +1596,9 @@ fn escape_html_char(out: &mut String, c: char) {
     }
 }
 
-fn push_class(out: &mut String, capture: &String) {
+/// The `class` attribute text of a capture name: `keyword.select` → `keyword select`.
+fn class_text(capture: &String) -> String {
+    let mut out = String::with_capacity(capture.len());
     for let c of capture.chars() {
         if c == '.' {
             out.push(' ');
@@ -1584,11 +1606,13 @@ fn push_class(out: &mut String, capture: &String) {
             out.push(c);
         }
     }
+    return out;
 }
 
 /// Produce a highlighted HTML fragment from source text and captures.
-/// Captures must be sorted by start position (as produced by HighlightVisitor).
-pub fn highlight_html(source: &String, captures: &List<HighlightCapture>) -> String {
+/// Captures must be sorted by start position (as produced by HighlightVisitor);
+/// `classes` is the producing visitor's `capture_classes` table.
+pub fn highlight_html(source: &String, captures: &List<HighlightCapture>, classes: &List<String>) -> String {
     let mut out = String::with_capacity(source.len() * 5);
     let mut pos = 0;
     let mut iter = source.chars();
@@ -1600,7 +1624,7 @@ pub fn highlight_html(source: &String, captures: &List<HighlightCapture>) -> Str
             pos += 1;
         }
         out.push_str(&"<span class=\"");
-        push_class(&mut out, &cap.capture);
+        out.push_str(&classes[cap.capture_id]);
         out.push_str(&"\">");
         let end = cap.end;
         while pos < end {
@@ -18983,7 +19007,7 @@ pub fn highlight_result(result: &ParseResult, input: &String) -> String {
     let mut visitor = HighlightVisitor::new(mapping);
     highlight_walk(&mut visitor, &result.tokens, &result.cst);
     visitor.hl_cover_unvisited(&result.tokens);
-    return highlight_html(input, &visitor.captures);
+    return highlight_html(input, &visitor.captures, &visitor.capture_classes);
 }
 
 pub fn highlight(input: &String) -> String {

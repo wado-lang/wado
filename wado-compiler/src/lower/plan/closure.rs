@@ -527,7 +527,7 @@ impl ClosureLowerer {
                     index: i as u32,
                     span: collected.span,
                     is_secret: false,
-                    serde_rename: None,
+                    wire_name_override: None,
                     serde_default: false,
                     serde_positional: false,
                     default_expr: None,
@@ -542,7 +542,7 @@ impl ClosureLowerer {
                 monomorph_info: None,
                 fields,
                 span: collected.span,
-                serde_rename_all: None,
+                wire_name_policy: None,
             });
 
             // Use a qualified name to avoid collisions in the inliner's

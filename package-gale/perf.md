@@ -128,43 +128,61 @@ share); no over-fill regression.
   carries over to release largely intact, since the dev host does not inflate
   pure compute.
 
-### Live profile (post-flat-CST + column pre-size, `syntax_highlight`, 6 runs merged, 8861 leaf samples @1 ms)
+### Live profile (`syntax_highlight`, 1928 leaf samples @1 ms)
 
-`tree_build_node` / `List<CstChild>::push` are retired, and `List<i32>::grow` is
-gone (the column pre-size landed). `highlight_walk` is now a flat,
-allocation-free loop — ~8% self-time iterating the rows, down from the ~30%
-node-tree walk, but **not** free. The dev profile is noisy per-frame (see the
+`List<i32>::push` is the top frame. The dev profile is noisy per-frame (see the
 measurement note); mid-size frames swing ±several points across runs, so read the
 buckets, not the individual rows.
 
-|   Pct | Symbol                       | bucket                                   |
-| ----: | ---------------------------- | ---------------------------------------- |
-| 10.9% | `List<i32>::push`            | CST column build (+ `rule_stack`/trivia) |
-| 10.3% | `HighlightVisitor::classify` | highlight                                |
-|  9.0% | `String::grow`               | HTML output realloc (grows from empty)   |
-|  8.6% | `follow_yields`              | scan/predict (LL FOLLOW gate)            |
-|  7.8% | `highlight_walk`             | CST walk (flat, no alloc)                |
-|  5.6% | `TokenStream::new`           | SoA token-array alloc (WasmGC zero-fill) |
-|  4.2% | `String::push`               | HTML output build                        |
-|  2.8% | `TreeBuilder::finish`        | CST finalize + column copy               |
-|  2.8% | `_kind_set_8`                | kind-set membership                      |
-|  2.6% | `char::to_ascii_lowercase`   | case-insensitive keyword match           |
-|  2.5% | `scan_any_name`              | scan                                     |
-|  2.5% | `push_class`                 | highlight (HTML class emit)              |
+|   Pct | Symbol                             | bucket                                   |
+| ----: | ---------------------------------- | ---------------------------------------- |
+| 14.5% | `List<i32>::push`                  | CST column build (+ `rule_stack`/trivia) |
+|  6.2% | `TreeBuilder::finish`              | CST finalize + column copy               |
+|  6.2% | `HighlightVisitor::classify`       | highlight                                |
+|  5.0% | `_kind_set_8`                      | kind-set membership                      |
+|  4.4% | `char::to_ascii_lowercase`         | case-insensitive keyword match           |
+|  4.3% | `scan_any_name`                    | scan                                     |
+|  3.4% | `scan_expr`                        | scan                                     |
+|  3.3% | `highlight_html`                   | highlight (HTML output)                  |
+|  3.1% | `try_IDENTIFIER`                   | lexer                                    |
+|  2.7% | `List<i32>::pop`                   | CST/rule-stack                           |
+|  2.6% | `String::internal_reserve_uninit`  | HTML output realloc                      |
+|  2.4% | `follow_yields`                    | scan/predict (LL FOLLOW gate)            |
+|  2.4% | `TokenStream::new`                 | SoA token-array alloc (WasmGC zero-fill) |
+|  2.4% | `HighlightVisitor::hl_visit_token` | highlight                                |
 
-Rough buckets: **highlight** (`classify` + HTML output `String` grow/push +
-`push_class` + `highlight_html` + `to_ascii_lowercase` + `hl_visit_token`) ≈
-**~32%**; **CST build + walk** (`List<i32>` push/pop + `highlight_walk` +
-`finish` + `bubble_to_parent`) ≈ **~24%**; **scan/predict** (`follow_yields` +
-`scan_*` + kind-set) ≈ **~18%**; **token-array alloc** (`TokenStream::new`,
-inherent zero-fill, a non-lever) ≈ **~6%**. Highlight is the largest bucket.
+Rough buckets: **CST build + walk** (`List<i32>` push/pop + `finish` +
+`highlight_walk`) ≈ **~25%**; **highlight** (`classify` + `highlight_html` +
+`escape_html_char` + `hl_visit_token`) ≈ **~14%**; **scan/predict**
+(`follow_yields` + `scan_*` + kind-set) ≈ **~18%**; **lexer**
+(`to_ascii_lowercase` + `try_*` + `classify_keyword` + `to_chars`) ≈ **~11%**.
+CST column build is the largest bucket.
 
 ## What's next
 
-Highlight (`highlight.wado`) is the largest remaining bucket — the CST is no
-longer the bottleneck. Pick the current top frame off the live profile above
-rather than a fixed recipe here: the frames shift as levers land, and the
-mid-size ones are noisy, so re-measure before committing.
+Pick the current top frame off the live profile above rather than a fixed recipe
+here: the frames shift as levers land, and the mid-size ones are noisy, so
+re-measure before committing. Three candidates read off the profile above:
+
+- **`List<i32>::push` (14.5%, top frame).** The columns are already pre-sized, yet
+  every element still pays `push`'s `used >= repr.len()` grow check — ~10 columns per
+  token (`TokenStream`) plus 4 per CST row (`TreeBuilder::push_row`, `rows ≈ 3.44 ×
+  tokens`). `push_within_capacity` exists for exactly this ("a burst of appends after
+  one `reserve` pays a single capacity check instead of one per element"), but both
+  pre-sizes are heuristics (`4 × tokens`, `chars/4`) that a different input can exceed,
+  and `push_within_capacity` leaves an over-run to the array bounds check, i.e. a trap.
+  So the shape is **one capacity check per row/token with a grow fallback**, then
+  unchecked appends across the columns — 10 checks → 1, not 10 → 0.
+- **`char::to_ascii_lowercase` (4.4%).** `gen_keyword_check` (`lexer_gen.wado`) emits the
+  guard for every char from `kc = 0`, so each keyword arm re-tests the first char that the
+  enclosing dispatch already established; and that dispatch is a linear `else if` chain of
+  `eq_ignore_ascii_case` calls over the distinct first letters (~6–20 deep per length
+  bucket). Lowercase the first char once and `match` on it (br_table), and drop the
+  redundant `kc = 0` guard. Pure compute, so it carries to release intact.
+- **`HighlightVisitor::classify` (6.2%).** A non-inlined call per token that walks the
+  override list before the `default_ids[kind]` lookup, even when — as for SQLite — there
+  is exactly one override. Hoisting the common `default_ids` path to the call site
+  (overrides only when the kind is in an override's kind set) would cut it.
 
 ### Generation-time cost: the generator itself (2026-07)
 
@@ -354,6 +372,19 @@ ATN literal is a measured problem.)
   ~1–2%, below the `syntax_highlight` benchmark's noise. A live example of the
   dev-vs-release standing rule — unlike the CST-column pre-size, which lands a
   clear ~6% because `sqlite_parse` is build-only. Left at `* 5`.
+
+- **Run-at-a-time HTML escaping** (2026-07). `highlight_html` escapes char by char;
+  batching the stretches between escapable bytes into one `push_str_range_unchecked`
+  measured **flat** (median 2.93 vs 2.90 ms/iter). The captures are dense — ~2900 over
+  13366 chars, so the mean unescaped stretch is ~4.6 chars and the per-run bookkeeping
+  costs what the batching saves. Input-shape-bound: sparse captures would answer
+  differently.
+
+- **Index loops instead of `for x of &List<i32>`** (2026-07). Iterating by reference
+  boxes every element; rewriting `follow_yields`'s membership scan and `classify`'s
+  `rule_stack` scan as index loops removes every box and measured **within noise** (won
+  1 of 3 paired rounds). Another instance of the live-set standing rule — the boxes die
+  immediately, so the collector never traces them.
 
 ## Correctness items with a performance flavor
 

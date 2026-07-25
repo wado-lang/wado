@@ -136,21 +136,13 @@ fn "value_copy_mut_receiver_alias.wado/__test_0_by_value_arg_is_independent_of_t
     let t: ref "core:prelude//List<i32>";
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
-    let __match_8: ref null "core:prelude//List<i32>";
-    let __vc_payload_0: ref "core:prelude//List<i32>";
-    let v_20: ref "core:prelude//List<i32>";
+    let v_17: ref "core:prelude//List<i32>";
     let __sroa_w_payload: ref null "core:prelude//List<i32>";
     let __sroa_snapshot_used: i32;
     __sroa_w_payload = ref.as_non_null(__b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }; __b);
     n = 0;
-    __match_8 = (if ref.is_null(__sroa_w_payload) == 0 -> ref null "core:prelude//List<i32>" {
-        __vc_payload_0 = ref.as_non_null(__sroa_w_payload);
-        struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_7: ref Array<i32>; __array_clone_src_7 = __vc_payload_0.repr; let __array_clone_len_7: i32; __array_clone_len_7 = builtin::array_len(__array_clone_src_7); let __array_clone_dst_7: ref Array<i32>; __array_clone_dst_7 = builtin::array_new<i32>(__array_clone_len_7); builtin::array_copy<i32>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7); __array_clone_dst_7), used: __vc_payload_0.used };
-    } else {
-        __sroa_w_payload;
-    });
-    if ref.is_null(__match_8) == 0 {
-        t = ref.as_non_null(__match_8);
+    if ref.is_null(__sroa_w_payload) == 0 {
+        t = ref.as_non_null(__sroa_w_payload);
         let __array_clone_src_7: ref Array<i32>;
         __array_clone_src_7 = t.repr;
         let __array_clone_len_7: i32;
@@ -161,8 +153,8 @@ fn "value_copy_mut_receiver_alias.wado/__test_0_by_value_arg_is_independent_of_t
         drop(__array_clone_dst_7);
         __sroa_snapshot_used = t.used;
         if ref.is_null(__sroa_w_payload) == 0 {
-            v_20 = ref.as_non_null(__sroa_w_payload);
-            "core:prelude/list.wado/List<i32>::push"(v_20, 999);
+            v_17 = ref.as_non_null(__sroa_w_payload);
+            "core:prelude/list.wado/List<i32>::push"(v_17, 999);
         } else {
         }
         n = __sroa_snapshot_used;
@@ -194,12 +186,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b5: block {
-        l6: loop {
-            break_if b5 t <= 0_i64;
+    b4: block {
+        l5: loop {
+            break_if b4 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l6;
+            continue l5;
         };
     };
     return n;
@@ -213,13 +205,13 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b8: block {
-            l9: loop {
-                break_if b8 temp <= 0_i64;
+        b7: block {
+            l8: loop {
+                break_if b7 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l9;
+                continue l8;
             };
         };
     }
@@ -251,12 +243,12 @@ fn "core:prelude/string.wado/encode_char"(repr, pos, code) {
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b13: block {
-        l14: loop {
-            break_if b13 i >= len;
+    b12: block {
+        l13: loop {
+            break_if b12 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
             i = i + 1;
-            continue l14;
+            continue l13;
         };
     };
 }
@@ -335,20 +327,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b16: block {
-        l17: loop {
-            break_if b16 offset >= count;
+    b15: block {
+        l16: loop {
+            break_if b15 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b16 (if (result >> 4) == 0 -> i32 {
+            break_if b15 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l17;
+            continue l16;
         };
     };
 }
@@ -453,12 +445,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b25: block {
-        l26: loop {
-            break_if b25 i >= n;
+    b24: block {
+        l25: loop {
+            break_if b24 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l26;
+            continue l25;
         };
     };
 }

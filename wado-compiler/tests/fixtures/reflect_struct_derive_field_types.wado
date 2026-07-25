@@ -1,0 +1,56 @@
+// Field-value derivation over ReflectStruct (WEP 2026-06-13): the derivation reads
+// each field's VALUE via the `members()` walk (`StructField::get`), whose type is
+// the field pack element `F_k`. The inline bound
+// `impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Weight>` projects `F` from `T`'s
+// `FieldTypes` at monomorphization; the member walk dispatches `weight()` per concrete
+// field type.
+
+trait Weight {
+    fn weight(&self) -> i32;
+}
+
+impl Weight for i32 {
+    fn weight(&self) -> i32 {
+        return *self;
+    }
+}
+
+impl Weight for bool {
+    fn weight(&self) -> i32 {
+        if *self {
+            return 100;
+        }
+        return 0;
+    }
+}
+
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Weight> Weight for T {
+    fn weight(&self) -> i32 {
+        let mut total: i32 = 0;
+        for let f of ReflectStruct::<T>::members() {
+            total = total + f.get(self).weight();
+        }
+        return total;
+    }
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Mixed {
+    a: i32,
+    flag: bool,
+}
+
+test "field-value member walk sums field weights" {
+    let p = Point { x: 3, y: 4 };
+    assert p.weight() == 7;
+
+    let m = Mixed { a: 5, flag: true };
+    assert m.weight() == 105;
+}
+
+__DATA__
+{"test": {}}

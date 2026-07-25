@@ -38,9 +38,9 @@ struct core:prelude/format.wado//Formatter {  // TypeId(6)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct tuple//[core:prelude/traits.wado/Field<format_traits_on_bound_bounds.wado/P,i32>, core:prelude/traits.wado/Field<format_traits_on_bound_bounds.wado/P,i32>] {  // TypeId(7)
-    mut 0: ref "core:prelude/traits.wado//Field<format_traits_on_bound_bounds.wado/P,i32>",
-    mut 1: ref "core:prelude/traits.wado//Field<format_traits_on_bound_bounds.wado/P,i32>",
+struct tuple//[core:prelude/traits.wado/StructField<format_traits_on_bound_bounds.wado/P,i32>, core:prelude/traits.wado/StructField<format_traits_on_bound_bounds.wado/P,i32>] {  // TypeId(7)
+    mut 0: ref "core:prelude/traits.wado//StructField<format_traits_on_bound_bounds.wado/P,i32>",
+    mut 1: ref "core:prelude/traits.wado//StructField<format_traits_on_bound_bounds.wado/P,i32>",
 }
 
 variant format_traits_on_bound_bounds.wado//Shape {  // TypeId(8)
@@ -60,7 +60,7 @@ struct format_traits_on_bound_bounds.wado//P {  // TypeId(10)
 
 array Array<u64> (mut u64);  // TypeId(11)
 
-struct core:prelude/traits.wado//Field<format_traits_on_bound_bounds.wado/P,i32> {  // TypeId(12)
+struct core:prelude/traits.wado//StructField<format_traits_on_bound_bounds.wado/P,i32> {  // TypeId(12)
     mut index: i32,
     mut field_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
@@ -205,7 +205,7 @@ type "functype//format_traits_on_bound_bounds.wado/P^InspectAlt::inspect_alt" = 
 
 type "functype//format_traits_on_bound_bounds.wado/Color^Display::fmt" = fn(ref "core:prelude/types.wado//Box<format_traits_on_bound_bounds.wado/Color>", ref "core:prelude/format.wado//Formatter");  // TypeId(79)
 
-type "functype//format_traits_on_bound_bounds.wado/P^Reflect::field_tokens" = fn() -> ref "tuple//[core:prelude/traits.wado/Field<format_traits_on_bound_bounds.wado/P,i32>, core:prelude/traits.wado/Field<format_traits_on_bound_bounds.wado/P,i32>]";  // TypeId(80)
+type "functype//format_traits_on_bound_bounds.wado/P^ReflectStruct::members" = fn() -> ref "tuple//[core:prelude/traits.wado/StructField<format_traits_on_bound_bounds.wado/P,i32>, core:prelude/traits.wado/StructField<format_traits_on_bound_bounds.wado/P,i32>]";  // TypeId(80)
 
 type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(81)
 
@@ -1828,8 +1828,8 @@ fn "format_traits_on_bound_bounds.wado/Color^Display::fmt"(self, f) {
     }
 }
 
-fn "format_traits_on_bound_bounds.wado/P^Reflect::field_tokens"() {
-    return struct.new "tuple//[core:prelude/traits.wado/Field<format_traits_on_bound_bounds.wado/P,i32>, core:prelude/traits.wado/Field<format_traits_on_bound_bounds.wado/P,i32>]" { 0: struct.new "core:prelude/traits.wado//Field<format_traits_on_bound_bounds.wado/P,i32>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 1: struct.new "core:prelude/traits.wado//Field<format_traits_on_bound_bounds.wado/P,i32>" { index: 1, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 } };
+fn "format_traits_on_bound_bounds.wado/P^ReflectStruct::members"() {
+    return struct.new "tuple//[core:prelude/traits.wado/StructField<format_traits_on_bound_bounds.wado/P,i32>, core:prelude/traits.wado/StructField<format_traits_on_bound_bounds.wado/P,i32>]" { 0: struct.new "core:prelude/traits.wado//StructField<format_traits_on_bound_bounds.wado/P,i32>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 1: struct.new "core:prelude/traits.wado//StructField<format_traits_on_bound_bounds.wado/P,i32>" { index: 1, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 } };
 }
 
 fn "core:prelude/format.wado/Formatter::new"(buf) {
@@ -2176,9 +2176,9 @@ fn "core:prelude/format.wado/&format_traits_on_bound_bounds.wado/Shape^Inspect::
 fn "core:prelude/traits.wado/format_traits_on_bound_bounds.wado/P^Inspect::inspect"(self, f) {
     let wrote_field: bool;
     let has_secret: bool;
-    let __tuple_4: ref "tuple//[core:prelude/traits.wado/Field<format_traits_on_bound_bounds.wado/P,i32>, core:prelude/traits.wado/Field<format_traits_on_bound_bounds.wado/P,i32>]";
-    let field_6: ref "core:prelude/traits.wado//Field<format_traits_on_bound_bounds.wado/P,i32>";
-    let field_7: ref "core:prelude/traits.wado//Field<format_traits_on_bound_bounds.wado/P,i32>";
+    let __tuple_4: ref "tuple//[core:prelude/traits.wado/StructField<format_traits_on_bound_bounds.wado/P,i32>, core:prelude/traits.wado/StructField<format_traits_on_bound_bounds.wado/P,i32>]";
+    let field_6: ref "core:prelude/traits.wado//StructField<format_traits_on_bound_bounds.wado/P,i32>";
+    let field_7: ref "core:prelude/traits.wado//StructField<format_traits_on_bound_bounds.wado/P,i32>";
     let s_9: ref "core:prelude/string.wado//String";
     let s_14: ref "core:prelude/string.wado//String";
     let s_19: ref "core:prelude/string.wado//String";
@@ -2195,7 +2195,7 @@ fn "core:prelude/traits.wado/format_traits_on_bound_bounds.wado/P^Inspect::inspe
     "core:prelude/string.wado/String::push_str"(f.buf, s_9);
     wrote_field = 0;
     has_secret = 0;
-    __tuple_4 = "format_traits_on_bound_bounds.wado/P^Reflect::field_tokens"();
+    __tuple_4 = "format_traits_on_bound_bounds.wado/P^ReflectStruct::members"();
     field_6 = __tuple_4.0;
     if field_6.is_secret {
         has_secret = 1;

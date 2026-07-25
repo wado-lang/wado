@@ -1,0 +1,24 @@
+// `ReflectStruct` is sealed: a user `impl ReflectStruct for T` is a compile error
+// (the compiler synthesizes the impl for every eligible struct).
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl ReflectStruct for Point {
+    type FieldTypes = [i32, i32];
+    fn type_name() -> String {
+        return "forged";
+    }
+}
+
+test "unreachable" {
+    assert true;
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "cannot implement `ReflectStruct`: it is a sealed"
+}

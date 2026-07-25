@@ -1,0 +1,17 @@
+// `ReflectStruct::<T>::type_name()` takes no arguments; passing any is a clean
+// compile error, not a compiler ICE.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+test "unreachable" {
+    assert ReflectStruct::<Point>::type_name(999) == "Point";
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "expected 0 arguments, found 1"
+}

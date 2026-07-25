@@ -1,10 +1,10 @@
-// test: `#[serde(default)]` is rejected, guiding to a default field value.
+// test: `#[wire(default)]` is rejected, guiding to a default field value.
 use { Serialize, Deserialize } from "core:serde";
 
 struct Config {
     host: String,
 
-    #[serde(default)]
+    #[wire(default)]
     port: i32,
 }
 
@@ -14,4 +14,4 @@ impl Deserialize for Config;
 export fn run() {}
 
 __DATA__
-{"compile_error": "`#[serde(default)]` is not supported; give field 'port' a default value instead"}
+{"compile_error": "`#[wire(default)]` is not supported; give field 'port' a default value instead"}

@@ -50,7 +50,7 @@ regardless of use — compile-time and code-size waste for types the program
 never compares.
 
 Orthogonal to
-[Library-Defined Derivation (`Reflect`)](./wep-2026-06-13-reflect-derivation.md),
+[Library-Defined Derivation (`ReflectStruct`)](./wep-2026-06-13-reflect-derivation.md),
 which decides _how_ an impl is written. This WEP decides _when_ one is
 instantiated for a given `T`.
 
@@ -259,7 +259,7 @@ motivation is pure compile-time / code size, with no opt-out to weigh.
   countermeasures.
 - Errors move from the (absent) impl site to the bound site; reason chains
   keep them legible.
-- A future `Reflect`-based rewrite of the synthesized body must not let a
+- A future `ReflectStruct`-based rewrite of the synthesized body must not let a
   blanket `impl<T: Reflect> Trait for T` conflict with concrete impls — an
   open coherence question the current mechanism doesn't hit yet, since it
   instantiates the existing per-type synthesizer directly.
@@ -290,11 +290,11 @@ motivation is pure compile-time / code size, with no opt-out to weigh.
 
 Ships directly against the existing bespoke synthesizers
 (`synthesis::serde_synth`, `synthesis::traits`), not against
-[`Reflect`](./wep-2026-06-13-reflect-derivation.md), which remains unbuilt.
+[`ReflectStruct`](./wep-2026-06-13-reflect-derivation.md), which remains unbuilt.
 The original plan was to land this after migrating serde onto a
-`Reflect`-based impl, but the two turned out independent — this WEP only
+`ReflectStruct`-based impl, but the two turned out independent — this WEP only
 changes _when_ a request is created, not _how_ the body is written. A future
-`Reflect`-based rewrite can land later against the same plumbing.
+`ReflectStruct`-based rewrite can land later against the same plumbing.
 
 ## Alternatives Considered
 
@@ -338,5 +338,5 @@ changes _when_ a request is created, not _how_ the body is written. A future
 - Whether the debug traits should eventually gate generation after all (via a
   post-monomorphize discovery pass), should code size on debug output ever
   matter enough to justify the machinery.
-- Coherence interaction with concrete impls, relevant once a `Reflect`-based
+- Coherence interaction with concrete impls, relevant once a `ReflectStruct`-based
   rewrite of the synthesized body lands.

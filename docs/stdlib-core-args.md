@@ -8,7 +8,7 @@ Command-line argument parsing (WEP `wep-2026-06-22-core-args.md`).
 `core:args` is a non-self-describing, parse-only `Deserializer` over `argv`,
 peer to `core:json_nsd`. Argument types are ordinary `struct`s with
 `impl Deserialize for T;` — no bespoke derive. Struct fields become `--long`
-options; fields marked `#[serde(positional)]` are filled from bare tokens in
+options; fields marked `#[wire(positional)]` are filled from bare tokens in
 declaration order. Scalar tokens are converted with `LenientFromStr`.
 
 Supported: `--name value`, `--name=value`, `bool` flags (`--name`),
@@ -22,11 +22,11 @@ the next flag; a single `-` is a value, so negatives like `-5` work. A
 repeatable option always takes a value (there is no repeatable flag);
 `--flag` with no value is `MissingValue`.
 
-Subcommands are a `#[serde(positional)]` field whose type is a `variant`:
+Subcommands are a `#[wire(positional)]` field whose type is a `variant`:
 the leading bare token selects the case (externally tagged) and the rest is
 the payload, so `command [global-opts] subcommand [sub-opts]` works and
 nesting is free. The tag matches the case's wire name; keep the cases
-idiomatic PascalCase and apply `#[serde(rename_all = "kebab-case")]` (or
+idiomatic PascalCase and apply `#[wire(name_policy = "kebab-case")]` (or
 `rename` per case) for lowercase/kebab subcommands like `add-remote`.
 
 ## Positional declaration order is not validated
@@ -56,7 +56,7 @@ not their types or arity, so it cannot self-check (only over-supply —
 
 ```wado
 struct Options {
-    #[serde(positional)]
+    #[wire(positional)]
     input: String,
     verbose: bool = false,
     jobs: i32 = 1,

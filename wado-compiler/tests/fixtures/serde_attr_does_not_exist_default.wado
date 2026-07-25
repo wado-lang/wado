@@ -1,0 +1,14 @@
+// `default` is the one serde key with no `#[wire]` spelling: a field's own
+// default value is the single mechanism for an optional field, so the
+// diagnostic points there rather than at a `#[wire(default)]` that would
+// itself be rejected.
+
+struct Config {
+    #[serde(default)]
+    port: i32,
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "`default` has no `#[wire]` spelling"}

@@ -62,37 +62,28 @@ internal trait Default {
 /// every struct; it cannot be implemented in user code and is callable only in
 /// monomorphized contexts (`T` a concrete struct).
 /// See WEP 2026-06-13.
-#[compiler_item("reflect")]
-internal trait Reflect {
+#[compiler_item("reflect_struct")]
+internal trait ReflectStruct {
     /// The field types as a tuple `[F_0, F_1, ...]`.
-    type Fields;
+    type FieldTypes;
 
-
-    /// The per-field token tuple `[Field<Self, F_0>, ...]`.
-    type FieldTokens;
-    /// Returns the field values as a tuple.
-    #[compiler_item("reflect_fields")]
-    fn fields(&self) -> Self::Fields;
-
-    /// Returns the source field names.
-    #[compiler_item("reflect_field_names")]
-    fn field_names() -> List<String>;
+    /// The per-field member tuple `[StructField<Self, F_0>, ...]`.
+    type Members;
 
     /// Returns the struct name.
-    #[compiler_item("reflect_type_name")]
+    #[compiler_item("reflect_struct_type_name")]
     fn type_name() -> String;
 
+    /// Returns the per-field members.
+    #[compiler_item("reflect_struct_members")]
+    fn members() -> Self::Members;
 
-    /// Returns the per-field tokens.
-    #[compiler_item("reflect_field_tokens")]
-    fn field_tokens() -> Self::FieldTokens;
-
-    /// The struct's `#[serde(rename_all)]` policy (`Identity` if none).
-    #[compiler_item("reflect_wire_name_policy")]
+    /// The struct's `#[wire(name_policy)]` (`Identity` if none).
+    #[compiler_item("reflect_struct_wire_name_policy")]
     fn wire_name_policy() -> CaseStyle;
 }
 
-/// The wire-naming policy declared by `#[serde(rename_all = "...")]` (casing
+/// The wire-naming policy declared by `#[wire(name_policy = "...")]` (casing
 /// not applied here — `core:serde::wire_name` resolves it). See WEP 2026-06-13.
 #[compiler_item("case_style")]
 pub enum CaseStyle {
@@ -105,7 +96,7 @@ pub enum CaseStyle {
     ScreamingKebab,
 }
 
-/// The attr-reading face of a struct-field token. Sealed and
+/// The attr-reading face of a reflected member. Sealed and
 /// compiler-synthesized; user impls are rejected. See WEP 2026-06-13.
 #[compiler_item("member")]
 internal trait Member {
@@ -113,18 +104,9 @@ internal trait Member {
     #[compiler_item("member_name")]
     fn name(&self) -> String;
 
-    /// The raw `#[serde(rename)]` value (casing not applied), or `None`.
+    /// The raw `#[wire(name)]` value (casing not applied), or `None`.
     #[compiler_item("member_wire_name_override")]
     fn wire_name_override(&self) -> Option<String>;
-}
-
-/// Per-case descriptor returned by `ReflectVariant::case_meta()`, in
-/// declaration order. See WEP 2026-06-13 §3.
-#[compiler_item("variant_case_meta")]
-pub struct VariantCaseMeta {
-    pub name: String,
-    pub discriminant: i32,
-    pub is_unit: bool,
 }
 
 /// Compile-time variant introspection. The compiler synthesizes an impl for
@@ -134,34 +116,26 @@ pub struct VariantCaseMeta {
 #[compiler_item("reflect_variant")]
 internal trait ReflectVariant {
     /// The per-case payload tuple `[P_0, P_1, ...]`; unit cases are `()`.
-    type Cases;
+    type CasePayloads;
 
-    /// The per-case token tuple `[VariantCase<Self, P_0>, ...]`.
-    type CaseTokens;
+    /// The per-case member tuple `[VariantCase<Self, P_0>, ...]`.
+    type Members;
 
     /// Returns the variant name.
     #[compiler_item("reflect_variant_type_name")]
     fn type_name() -> String;
 
-    /// Returns the per-case descriptors.
-    #[compiler_item("reflect_variant_case_meta")]
-    fn case_meta() -> List<VariantCaseMeta>;
-
     /// Returns the live case's tag.
     #[compiler_item("reflect_variant_discriminant")]
     fn discriminant(&self) -> i32;
 
-    /// Returns the per-case tokens.
-    #[compiler_item("reflect_variant_cases")]
-    fn cases() -> Self::CaseTokens;
-}
+    /// Returns the per-case members.
+    #[compiler_item("reflect_variant_members")]
+    fn members() -> Self::Members;
 
-/// Per-case descriptor returned by `ReflectEnum::case_meta()`, in
-/// declaration order. See WEP 2026-06-13 §3b.
-#[compiler_item("enum_case_meta")]
-pub struct EnumCaseMeta {
-    pub name: String,
-    pub discriminant: i32,
+    /// The variant's `#[wire(name_policy)]` (`Identity` if none).
+    #[compiler_item("reflect_variant_wire_name_policy")]
+    fn wire_name_policy() -> CaseStyle;
 }
 
 /// Compile-time enum introspection. The compiler synthesizes an impl for
@@ -170,13 +144,12 @@ pub struct EnumCaseMeta {
 /// See WEP 2026-06-13 §3b.
 #[compiler_item("reflect_enum")]
 internal trait ReflectEnum {
+    /// The per-case member tuple `[EnumCase<Self>, ...]`.
+    type Members;
+
     /// Returns the enum name.
     #[compiler_item("reflect_enum_type_name")]
     fn type_name() -> String;
-
-    /// Returns the per-case descriptors.
-    #[compiler_item("reflect_enum_case_meta")]
-    fn case_meta() -> List<EnumCaseMeta>;
 
     /// Returns the value's tag.
     #[compiler_item("reflect_enum_discriminant")]
@@ -186,17 +159,13 @@ internal trait ReflectEnum {
     #[compiler_item("reflect_enum_from_discriminant")]
     fn from_discriminant(disc: i32) -> Option<Self>;
 
-    /// Returns the per-case tokens.
-    #[compiler_item("reflect_enum_case_tokens")]
-    fn case_tokens() -> List<EnumCase<Self>>;
-}
+    /// Returns the per-case members.
+    #[compiler_item("reflect_enum_members")]
+    fn members() -> Self::Members;
 
-/// Per-bit descriptor returned by `ReflectFlags::bit_meta()`, in
-/// declaration order. `bit` is u64-normalized. See WEP 2026-06-13 §3c.
-#[compiler_item("flag_bit_meta")]
-pub struct FlagBitMeta {
-    pub name: String,
-    pub bit: u64,
+    /// The enum's `#[wire(name_policy)]` (`Identity` if none).
+    #[compiler_item("reflect_enum_wire_name_policy")]
+    fn wire_name_policy() -> CaseStyle;
 }
 
 /// Compile-time flags introspection. The compiler synthesizes an impl for
@@ -205,13 +174,12 @@ pub struct FlagBitMeta {
 /// See WEP 2026-06-13 §3c.
 #[compiler_item("reflect_flags")]
 internal trait ReflectFlags {
+    /// The per-bit member tuple `[FlagsBit<Self>, ...]`.
+    type Members;
+
     /// Returns the flags type name.
     #[compiler_item("reflect_flags_type_name")]
     fn type_name() -> String;
-
-    /// Returns the per-bit descriptors.
-    #[compiler_item("reflect_flags_bit_meta")]
-    fn bit_meta() -> List<FlagBitMeta>;
 
     /// Returns the value's bits, u64-normalized.
     #[compiler_item("reflect_flags_bits")]
@@ -222,16 +190,20 @@ internal trait ReflectFlags {
     #[compiler_item("reflect_flags_from_bits")]
     fn from_bits(raw: u64) -> Option<Self>;
 
-    /// Returns the per-bit tokens.
-    #[compiler_item("reflect_flags_bit_tokens")]
-    fn bit_tokens() -> List<FlagBit<Self>>;
+    /// Returns the per-bit members.
+    #[compiler_item("reflect_flags_members")]
+    fn members() -> Self::Members;
+
+    /// The flags type's `#[wire(name_policy)]` (`Identity` if none).
+    #[compiler_item("reflect_flags_wire_name_policy")]
+    fn wire_name_policy() -> CaseStyle;
 }
 
-/// A case handle minted by `ReflectVariant::cases()`: the payload type `P`
+/// A case handle minted by `ReflectVariant::members()`: the payload type `P`
 /// is static, the case index is a value. `extract` / `construct` bridge a
 /// variant value and its payload in both directions.
 /// See WEP 2026-06-13 §3e.
-#[compiler_item("reflect_variant_case")]
+#[compiler_item("variant_case")]
 pub struct VariantCase<T, P> {
     index: i32,
     case_name: String,
@@ -240,8 +212,8 @@ pub struct VariantCase<T, P> {
 }
 
 impl<T, P> VariantCase<T, P> {
-    /// The case's declaration index (== its discriminant).
-    pub fn index(&self) -> i32 {
+    /// The case's tag.
+    pub fn discriminant(&self) -> i32 {
         return self.index;
     }
 
@@ -276,10 +248,10 @@ impl<T, P> Member for VariantCase<T, P> {
     }
 }
 
-/// A case handle minted by `ReflectEnum::case_tokens()`: an enum case carries
-/// no payload, so the token holds the case value itself. `make` mints it and
+/// A case handle minted by `ReflectEnum::members()`: an enum case carries
+/// no payload, so the member holds the case value itself. `make` mints it and
 /// `holds` tests a value's live case. See WEP 2026-06-13 §3b.
-#[compiler_item("reflect_enum_case")]
+#[compiler_item("enum_case")]
 pub struct EnumCase<T> {
     discriminant: i32,
     value: T,
@@ -314,17 +286,17 @@ impl<T> Member for EnumCase<T> {
     }
 }
 
-/// A bit handle minted by `ReflectFlags::bit_tokens()`: the token holds the
+/// A bit handle minted by `ReflectFlags::members()`: the member holds the
 /// single-bit flags value. `set` mints it and `is_set` tests a value for the
 /// bit. See WEP 2026-06-13 §3c.
-#[compiler_item("reflect_flag_bit")]
-pub struct FlagBit<T> {
+#[compiler_item("flags_bit")]
+pub struct FlagsBit<T> {
     bit: u64,
     value: T,
     member_name: String,
 }
 
-impl<T: ReflectFlags> FlagBit<T> {
+impl<T: ReflectFlags> FlagsBit<T> {
     /// The member's bitmask, u64-normalized.
     pub fn bit(&self) -> u64 {
         return self.bit;
@@ -341,7 +313,7 @@ impl<T: ReflectFlags> FlagBit<T> {
     }
 }
 
-impl<T> Member for FlagBit<T> {
+impl<T> Member for FlagsBit<T> {
     fn name(&self) -> String {
         return self.member_name;
     }
@@ -351,10 +323,10 @@ impl<T> Member for FlagBit<T> {
     }
 }
 
-/// A field handle minted by `Reflect::field_tokens()`: the field type `F` is
+/// A field handle minted by `ReflectStruct::members()`: the field type `F` is
 /// static, and `get` reads the field's value out of a struct. See WEP 2026-06-13.
-#[compiler_item("reflect_field")]
-pub struct Field<T, F> {
+#[compiler_item("struct_field")]
+pub struct StructField<T, F> {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -362,7 +334,7 @@ pub struct Field<T, F> {
     is_secret: bool,
 }
 
-impl<T, F> Field<T, F> {
+impl<T, F> StructField<T, F> {
     /// The field's declaration index.
     pub fn index(&self) -> i32 {
         return self.index;
@@ -384,7 +356,7 @@ impl<T, F> Field<T, F> {
     }
 }
 
-impl<T, F> Member for Field<T, F> {
+impl<T, F> Member for StructField<T, F> {
     fn name(&self) -> String {
         return self.field_name;
     }
@@ -570,15 +542,15 @@ internal trait Inspect {
     fn inspect(&self, f: &mut Formatter);
 }
 
-/// Struct debug formatting derived over `Reflect` (WEP 2026-06-13): walk the
-/// field tokens, writing `Name { field: value, ... }`. Secret fields are elided
-/// and reported with a trailing `, ..`.
-impl<T: Reflect<Fields = [..F]>, ..F: Inspect> Inspect for T {
+/// Struct debug formatting derived over `ReflectStruct` (WEP 2026-06-13): walk
+/// the field members, writing `Name { field: value, ... }`. Secret fields are
+/// elided and reported with a trailing `, ..`.
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for T {
     fn inspect(&self, f: &mut Formatter) {
-        f.write_str(&Reflect::<T>::type_name());
+        f.write_str(&ReflectStruct::<T>::type_name());
         let mut wrote_field = false;
         let mut has_secret = false;
-        for let field of Reflect::<T>::field_tokens() {
+        for let field of ReflectStruct::<T>::members() {
             if field.is_secret() {
                 has_secret = true;
             } else {

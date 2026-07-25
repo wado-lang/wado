@@ -1,6 +1,7 @@
-// Blanket derivation over ReflectEnum (WEP 2026-06-13 §3b): serialization is
-// case_meta()[discriminant()].name; deserialization is the reverse lookup
-// plus from_discriminant().
+// Blanket derivation over ReflectEnum (WEP 2026-06-13 §3b): the bound
+// `Members = [..C]` sources the member tuple's arity, so `members()` walks
+// the live case (serialize) and finds a case by name (deserialize, minting via
+// make()); from_tag() uses from_discriminant().
 
 trait CaseName {
     fn case_name(&self) -> String;
@@ -8,16 +9,21 @@ trait CaseName {
     fn from_tag(disc: i32) -> Option<Self>;
 }
 
-impl<T: ReflectEnum> CaseName for T {
+impl<T: ReflectEnum<Members = [..C]>, ..C> CaseName for T {
     fn case_name(&self) -> String {
-        let metas = ReflectEnum::<T>::case_meta();
-        return metas[ReflectEnum::<T>::discriminant(self)].name;
+        let mut out = "";
+        for let c of ReflectEnum::<T>::members() {
+            if c.holds(self) {
+                out = c.name();
+            }
+        }
+        return out;
     }
 
     fn by_name(name: String) -> Option<T> {
-        for let m of ReflectEnum::<T>::case_meta() {
-            if m.name == name {
-                return ReflectEnum::<T>::from_discriminant(m.discriminant);
+        for let c of ReflectEnum::<T>::members() {
+            if c.name() == name {
+                return Option::Some(c.make());
             }
         }
         return Option::None;

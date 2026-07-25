@@ -1,0 +1,13 @@
+// `#[serde(...)]` does not exist; the diagnostic names the `#[wire(...)]`
+// replacement so a migration is mechanical rather than a silent behaviour loss
+// (an unrecognized attribute is otherwise dropped without a word).
+
+#[serde(rename_all = "camelCase")]
+struct Config {
+    user_id: i32,
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "`#[serde]` does not exist; use `#[wire(name_policy = \"camelCase\")]`"}

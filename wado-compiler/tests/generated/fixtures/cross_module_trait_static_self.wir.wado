@@ -29,12 +29,12 @@ struct ./sub/cross_module_trait_static_self_lib.wado//Point {  // TypeId(4)
     mut y: i32,
 }
 
-struct tuple//[core:prelude/traits.wado/Field<./sub/cross_module_trait_static_self_lib.wado/Point,i32>, core:prelude/traits.wado/Field<./sub/cross_module_trait_static_self_lib.wado/Point,i32>] {  // TypeId(5)
-    mut 0: ref "core:prelude/traits.wado//Field<./sub/cross_module_trait_static_self_lib.wado/Point,i32>",
-    mut 1: ref "core:prelude/traits.wado//Field<./sub/cross_module_trait_static_self_lib.wado/Point,i32>",
+struct tuple//[core:prelude/traits.wado/StructField<./sub/cross_module_trait_static_self_lib.wado/Point,i32>, core:prelude/traits.wado/StructField<./sub/cross_module_trait_static_self_lib.wado/Point,i32>] {  // TypeId(5)
+    mut 0: ref "core:prelude/traits.wado//StructField<./sub/cross_module_trait_static_self_lib.wado/Point,i32>",
+    mut 1: ref "core:prelude/traits.wado//StructField<./sub/cross_module_trait_static_self_lib.wado/Point,i32>",
 }
 
-struct core:prelude/traits.wado//Field<./sub/cross_module_trait_static_self_lib.wado/Point,i32> {  // TypeId(6)
+struct core:prelude/traits.wado//StructField<./sub/cross_module_trait_static_self_lib.wado/Point,i32> {  // TypeId(6)
     mut index: i32,
     mut field_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
@@ -86,7 +86,7 @@ type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // Typ
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(28)
 
-type "functype//./sub/cross_module_trait_static_self_lib.wado/Point^Reflect::field_tokens" = fn() -> ref "tuple//[core:prelude/traits.wado/Field<./sub/cross_module_trait_static_self_lib.wado/Point,i32>, core:prelude/traits.wado/Field<./sub/cross_module_trait_static_self_lib.wado/Point,i32>]";  // TypeId(29)
+type "functype//./sub/cross_module_trait_static_self_lib.wado/Point^ReflectStruct::members" = fn() -> ref "tuple//[core:prelude/traits.wado/StructField<./sub/cross_module_trait_static_self_lib.wado/Point,i32>, core:prelude/traits.wado/StructField<./sub/cross_module_trait_static_self_lib.wado/Point,i32>]";  // TypeId(29)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(30)
 
@@ -343,8 +343,8 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-fn "./sub/cross_module_trait_static_self_lib.wado/Point^Reflect::field_tokens"() {
-    return struct.new "tuple//[core:prelude/traits.wado/Field<./sub/cross_module_trait_static_self_lib.wado/Point,i32>, core:prelude/traits.wado/Field<./sub/cross_module_trait_static_self_lib.wado/Point,i32>]" { 0: struct.new "core:prelude/traits.wado//Field<./sub/cross_module_trait_static_self_lib.wado/Point,i32>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 1: struct.new "core:prelude/traits.wado//Field<./sub/cross_module_trait_static_self_lib.wado/Point,i32>" { index: 1, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 } };
+fn "./sub/cross_module_trait_static_self_lib.wado/Point^ReflectStruct::members"() {
+    return struct.new "tuple//[core:prelude/traits.wado/StructField<./sub/cross_module_trait_static_self_lib.wado/Point,i32>, core:prelude/traits.wado/StructField<./sub/cross_module_trait_static_self_lib.wado/Point,i32>]" { 0: struct.new "core:prelude/traits.wado//StructField<./sub/cross_module_trait_static_self_lib.wado/Point,i32>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 1: struct.new "core:prelude/traits.wado//StructField<./sub/cross_module_trait_static_self_lib.wado/Point,i32>" { index: 1, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 } };
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
@@ -533,9 +533,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 fn "core:prelude/traits.wado/./sub/cross_module_trait_static_self_lib.wado/Point^Inspect::inspect"(self, f) {
     let wrote_field: bool;
     let has_secret: bool;
-    let __tuple_4: ref "tuple//[core:prelude/traits.wado/Field<./sub/cross_module_trait_static_self_lib.wado/Point,i32>, core:prelude/traits.wado/Field<./sub/cross_module_trait_static_self_lib.wado/Point,i32>]";
-    let field_6: ref "core:prelude/traits.wado//Field<./sub/cross_module_trait_static_self_lib.wado/Point,i32>";
-    let field_7: ref "core:prelude/traits.wado//Field<./sub/cross_module_trait_static_self_lib.wado/Point,i32>";
+    let __tuple_4: ref "tuple//[core:prelude/traits.wado/StructField<./sub/cross_module_trait_static_self_lib.wado/Point,i32>, core:prelude/traits.wado/StructField<./sub/cross_module_trait_static_self_lib.wado/Point,i32>]";
+    let field_6: ref "core:prelude/traits.wado//StructField<./sub/cross_module_trait_static_self_lib.wado/Point,i32>";
+    let field_7: ref "core:prelude/traits.wado//StructField<./sub/cross_module_trait_static_self_lib.wado/Point,i32>";
     let s_9: ref "core:prelude/string.wado//String";
     let s_14: ref "core:prelude/string.wado//String";
     let s_19: ref "core:prelude/string.wado//String";
@@ -552,7 +552,7 @@ fn "core:prelude/traits.wado/./sub/cross_module_trait_static_self_lib.wado/Point
     "core:prelude/string.wado/String::push_str"(f.buf, s_9);
     wrote_field = 0;
     has_secret = 0;
-    __tuple_4 = "./sub/cross_module_trait_static_self_lib.wado/Point^Reflect::field_tokens"();
+    __tuple_4 = "./sub/cross_module_trait_static_self_lib.wado/Point^ReflectStruct::members"();
     field_6 = __tuple_4.0;
     if field_6.is_secret {
         has_secret = 1;

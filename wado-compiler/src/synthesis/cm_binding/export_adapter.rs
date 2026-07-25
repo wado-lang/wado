@@ -1139,7 +1139,7 @@ fn synthetic_result_variant_decl(type_table: &TypeTable, result_type_id: TypeId)
         index,
         payload,
         span: synth_span(),
-        serde_rename: None,
+        wire_name_override: None,
     };
     TirVariantDecl {
         name: result_name,
@@ -1151,7 +1151,7 @@ fn synthetic_result_variant_decl(type_table: &TypeTable, result_type_id: TypeId)
             case(err_name, err_index, err_tid),
         ],
         span: synth_span(),
-        serde_rename_all: None,
+        wire_name_policy: None,
     }
 }
 

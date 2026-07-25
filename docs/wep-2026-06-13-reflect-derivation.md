@@ -1,20 +1,4 @@
-# WEP: Library-Defined Derivation over `Reflect`
-
-## Context
-
-Wado derives type-directed traits (`Eq`, `Ord`, `Inspect`, `Serialize`,
-`Deserialize`, `Default`) by bespoke compiler synthesis — one hardcoded
-synthesizer per trait. That does not scale, and it is closed to libraries: with
-no macros and no dynamic reflection, a package cannot introspect a type.
-[Jade](./wep-2026-06-13-jade.md) (type → JSON Schema) forces the issue — it is
-an ordinary package, so type→schema must be expressible as library code.
-
-`Reflect` is the escape: a sealed, compiler-synthesized facility that exposes a
-type's structure at compile time, so every derivation becomes a generic `impl`
-resolved at monomorphization. This WEP specifies that facility — the per-kind
-reflection traits, the `Member` token surface, library-side wire naming, and the
-built-in `#[validate]` attribute — plus the migration of the existing
-synthesizers onto it.
+# WEP: Library-Defined Derivation over `Reflect*`
 
 ## Principle
 
@@ -23,110 +7,135 @@ built-in `Inspect` / serde / `Default`, Jade's `JsonSchema`, user-written ones �
 is a generic library `impl`, static and monomorphized. No per-capability
 synthesizer, no macros, no dynamic reflection.
 
+Two channels serve a derivation: a payload pack (`FieldTypes` / `CasePayloads`)
+binds the per-member type variables `..F` / `..P` and drives the value-free
+`[..F::method()]` expansion; a member walk — a tuple of member handles — carries
+each member's value and metadata together.
+
 ```wado
-impl<T: Reflect<Fields = [..F]>, ..F: SomeTrait> SomeTrait for T {
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: SomeTrait> SomeTrait for T {
     fn method(&self) -> R {
-        let policy = Reflect::<T>::wire_name_policy();
-        for let f of Reflect::<T>::field_tokens() {   // value + metadata per field
-            // … wire_name(&f, policy) … f.get(self) …
+        for let f of ReflectStruct::<T>::members() {  // value + metadata per field
+            // … f.name() … f.get(self) …
         }
         let parts = [..F::method_of()];               // value-free, per field type
     }
 }
 ```
 
-Two channels serve a derivation: a type-level pack (`Fields` / `Cases`) drives
-the value-free `[..F::method()]` expansion, and a token walk carries each
-member's value and metadata together.
-
 ## Reflection traits
 
 One sealed, `internal`, compiler-synthesized trait per type kind, reached only
-through the trait-qualified form (`Reflect::<T>::…`, never `T::…`) so a type's
-own method namespace stays the author's. A user `impl` is a compile error, and
-the traits are callable only in monomorphized contexts. Reflection stays split
-by kind: a derivation handles each kind with different code, and a type is
-exactly one kind, so blanket impls over different kinds are disjoint.
+through the trait-qualified form (`ReflectStruct::<T>::…`, never `T::…`) so a type's own
+method namespace stays the author's. A user `impl` is a compile error, and the
+traits are callable only in monomorphized contexts (`T` a concrete type).
+Reflection stays split by kind: a type is exactly one kind, so blanket impls over
+different kinds are disjoint.
+
+Every kind spells its member channel the same way: `type Members` plus
+`fn members()`. A kind that has payloads adds a payload pack alongside it. The
+type's scalar facts and the value→member build direction round out each trait.
+Every per-member fact — name, wire override, doc, `is_unit` / `has_default` /
+`is_secret`, validation, value access — lives on the member, so no kind carries a
+parallel metadata list or value accessor.
 
 ```wado
-internal trait Reflect {
-    type Fields;                                 // [F_0, F_1, …]
-    type FieldTokens;                            // [Field<Self, F_0>, …]
+internal trait ReflectStruct {                    // struct
+    type FieldTypes;                             // payload pack [F_0, F_1, …]
+    type Members;                                // [StructField<Self, F_0>, …]
+    fn members() -> Self::Members;
+    fn construct(fields: Self::FieldTypes) -> Self;  // assemble from field values
     fn type_name() -> String;
-    fn field_names() -> List<String>;
-    fn fields(&self) -> Self::Fields;            // field values as a tuple
-    fn field_tokens() -> Self::FieldTokens;      // one token per field
-    fn wire_name_policy() -> CaseStyle;          // #[serde(rename_all)], casing not applied
-    fn construct(fields: Self::Fields) -> Self;  // assemble from field values (deserialize side)
-    // fn type_doc() -> Option<String>;          // deferred
+    fn wire_name_policy() -> CaseStyle;          // #[wire(name_policy)], casing not applied
 }
 
-internal trait ReflectVariant {
-    type Cases;                                  // payload pack [P_0, …]; unit cases are ()
-    type CaseTokens;                             // [VariantCase<Self, P_0>, …]
-    fn type_name() -> String;
+internal trait ReflectVariant {                  // variant
+    type CasePayloads;                           // payload pack [P_0, …]; unit cases are ()
+    type Members;                                // [VariantCase<Self, P_0>, …]
+    fn members() -> Self::Members;
     fn discriminant(&self) -> i32;
-    fn cases() -> Self::CaseTokens;
+    fn type_name() -> String;
+    fn wire_name_policy() -> CaseStyle;
 }
 
-internal trait ReflectEnum {
-    fn type_name() -> String;
-    fn case_tokens() -> List<EnumCase<Self>>;
+internal trait ReflectEnum {                     // enum
+    type Members;                                // [EnumCase<Self>, …]
+    fn members() -> Self::Members;
     fn discriminant(&self) -> i32;
     fn from_discriminant(disc: i32) -> Option<Self>;
+    fn type_name() -> String;
+    fn wire_name_policy() -> CaseStyle;
 }
 
-internal trait ReflectFlags {
-    fn type_name() -> String;
-    fn bit_tokens() -> List<FlagBit<Self>>;
-    fn bits(&self) -> u64;                       // u64-normalized regardless of width
+internal trait ReflectFlags {                    // flags
+    type Members;                                // [FlagsBit<Self>, …]
+    fn members() -> Self::Members;
+    fn bits(&self) -> u64;                        // u64-normalized regardless of width
     fn from_bits(raw: u64) -> Option<Self>;
+    fn type_name() -> String;
+    fn wire_name_policy() -> CaseStyle;
 }
 ```
 
+`members()` returns a tuple, walked by tuple `for-of`; a generic derivation binds
+one pack in its header, and the elaborator resolves the walk to the known member
+type so member methods stay callable. Which pack a derivation binds follows from
+whether the kind has payloads. A struct or variant member carries a payload type
+parameter, so its walk is a heterogeneous mapped pack (`[..StructField<T, F>]` /
+`[..VariantCase<T, P>]`) derived from the payload pack — and binding
+`FieldTypes = [..F]` / `CasePayloads = [..P]` is what lets a derivation constrain
+the payload types (`..F: SomeTrait`). An enum case and a flag bit carry no
+payload and nothing to constrain, so a derivation binds `Members = [..M]`
+directly, which serves only to source the arity. Either way `Members` is the
+single member channel; no kind carries a parallel metadata list. (A tuple carries
+no runtime index, so a homogeneous walk finds a member by `holds` rather than by
+discriminant index, matching the variant walk.)
+
+A generic derivation over a member walk binds a type pack, and both instance and
+`static` trait methods resolve through such a pack-bound blanket — a deserialize
+entry (`T::from_wire(…)`) dispatches the same way a walk does.
+
 `from_discriminant` / `from_bits` return `Option` because an unknown input is a
-normal deserialize error, not a bug. Struct and variant tokens carry a payload
-type parameter and form a mapped pack (`[..Field<T, F>]` / `[..VariantCase<T,
-P>]`); an enum case and a flag bit are atomic, so their tokens are homogeneous
-`List`s.
+normal deserialize error, not a bug. `construct` assembles a struct from its
+field-value tuple; `discriminant` / `bits` read the live tag off a value.
 
-## `Member` and the tokens
+## Members
 
-Every reflected member is a token implementing one sealed `Member` trait — the
+Every reflected member is a handle implementing the sealed `Member` trait — the
 shared attr-reading face, so wire-naming, validation, and doc logic is written
 once and reused across kinds.
 
 ```wado
 internal trait Member {
     fn name(&self) -> String;                        // source name
-    fn wire_name_override(&self) -> Option<String>;  // #[serde(rename)], casing not applied
-    // fn doc(&self) -> Option<String>;              // deferred
+    fn wire_name_override(&self) -> Option<String>;  // #[wire(name)], casing not applied
+    fn doc(&self) -> Option<String>;                 // /// doc comment
 }
 
-struct Field<T, F>       { … }  // Member + has_default() is_secret() validate() get(&self, v: &T) -> F
-struct VariantCase<T, P> { … }  // Member + is_unit() validate() holds(&v) extract(&v) -> P construct(P) -> T
+struct StructField<T, F> { … }  // Member + index() has_default() is_secret() validate() get(&self, v: &T) -> F
+struct VariantCase<T, P> { … }  // Member + discriminant() is_unit() validate() holds(&v) extract(&v) -> P construct(P) -> T
 struct EnumCase<T>       { … }  // Member + discriminant() holds(&v) make() -> T
-struct FlagBit<T>        { … }  // Member + bit() is_set(&v) set() -> T
+struct FlagsBit<T>        { … }  // Member + bit() is_set(&v) set() -> T
 ```
 
-Tokens are sealed to these four stdlib types and minted only by the `Reflect*`
-walk (their fields are private), so a program cannot forge a member. `validate()`
-is only on the value-bearing tokens. A `#[secret]` field reports `is_secret()`
-and takes the value-opaque `Secret<F>` projection in `Fields` (see
-[Struct Walkability](./wep-2026-07-10-struct-walkability.md)).
+Members are sealed to these four stdlib types and minted only by `members()`
+(their fields are private), so a program cannot forge one. `validate()` is only on
+the value-bearing members (`Field` / `VariantCase`). A `#[secret]` field reports
+`is_secret()` and takes the value-opaque `Secret<F>` projection in `FieldTypes`
+(see [Struct Walkability](./wep-2026-07-10-struct-walkability.md)).
 
-The value bridges (`get` / `extract` / `construct`) lower to a discriminant-keyed
-access, so a forged token can trap but never misread a payload; after inlining
-they fold to the code a hand-written impl would emit.
+The value bridges (`get` / `extract` / `construct` / `make` / `set`) lower to a
+discriminant-keyed access, so a forged member can trap but never misread a payload;
+after inlining they fold to the code a hand-written impl would emit.
 
-## Wire naming: the compiler exposes facts, casing lives in the library
+## Wire naming
 
 The reflection layer exposes only the authored facts — a member's `rename`
-override (`Member::wire_name_override`) and the type's `rename_all` policy
-(`Reflect::wire_name_policy` as a `CaseStyle`). A resolved wire name is policy,
-and casing is serialization vocabulary, not type structure, so it lives in
-`core:serde`; any schema library (Jade) calls the same helper, so wire names
-never diverge.
+override (`Member::wire_name_override`) and the type's `name_policy`
+(`wire_name_policy` as a `CaseStyle`, on every kind). A resolved wire name is policy, and
+casing is serialization vocabulary, not type structure, so it lives in
+`core:serde`; any schema library (Jade) calls the same helper, so wire names never
+diverge.
 
 ```wado
 pub fn wire_name<M: Member>(m: &M, policy: CaseStyle) -> String {
@@ -137,12 +146,11 @@ pub fn wire_name<M: Member>(m: &M, policy: CaseStyle) -> String {
 }
 ```
 
-`CaseStyle` is total (`Identity` when no `rename_all` is set). `apply_case`
-covers the six styles (`camelCase`, `snake_case`, `PascalCase`,
-`SCREAMING_SNAKE_CASE`, `kebab-case`, `SCREAMING-KEBAB-CASE`) and matches the
-compiler's legacy `apply_rename_all`, locked by a shared test corpus.
-(`core:args` reuses the same policy for CLI tags, so "wire name" is the
-boundary-facing name in general, not a serde-only concept.)
+`CaseStyle` is total (`Identity` when no `name_policy` is set). `apply_case` covers
+the six styles (`camelCase`, `snake_case`, `PascalCase`, `SCREAMING_SNAKE_CASE`,
+`kebab-case`, `SCREAMING-KEBAB-CASE`). `core:args` reuses the same policy for CLI
+tags, so "wire name" is the boundary-facing name in general, not a serde-only
+concept.
 
 ## `#[validate(…)]`
 
@@ -163,79 +171,19 @@ struct CreateUser {
 Recognized keys: `min_length` / `max_length`, `minimum` / `maximum` /
 `exclusive_minimum` / `exclusive_maximum`, `multiple_of`, `pattern`, `format`,
 `min_items` / `max_items`, `unique_items`. The compiler parses them into a
-`Validate` value — a struct of `Option` fields, one per key — and the closed
-vocabulary does two things:
+`Validate` value — a struct of `Option` fields, one per key — which is:
 
 - Enforced at the `Deserialize` boundary: a violation is a `DeserializeError`
-  (`InvalidValue`) with the field offset. The trust boundary — untrusted data
-  entering the program's types — is where a wire contract is honestly enforced;
-  trusted struct literals are deliberately not checked (that is the future
-  refinement feature's domain).
-- Exposed via the token: `Field::validate()` / `VariantCase::validate()`, so a
+  (`InvalidValue`) with the field offset. Trusted struct literals are not checked.
+- Exposed via the member: `StructField::validate()` / `VariantCase::validate()`, so a
   schema library emits the corresponding keywords.
 
-A closed vocabulary is what lets one annotation be both enforced (the compiler
-knows each key's boundary check) and introspected (each key's schema mapping).
-`description` is not a `#[validate]` concern — it comes from `///` doc comments
-via `Member::doc()` / `type_doc()`.
+`description` is not a `#[validate]` concern — it comes from `///` doc comments via
+`Member::doc()`.
 
-## Status
+## Related WEPs
 
-- [x] `Reflect` struct reflection — `Fields` / `fields` / `field_names` /
-      `type_name` / `field_tokens` / `wire_name_policy`; `Member` + `Field`
-      tokens.
-- [x] `ReflectVariant` / `ReflectEnum` / `ReflectFlags` + `VariantCase` tokens.
-- [x] `core:serde::wire_name` / `apply_case` (library-side casing, decision 2-B).
-- [x] `Member` on `VariantCase`; `EnumCase` / `FlagBit` tokens (enum / flags move
-      to the token walk).
-- [ ] `Reflect::construct(Fields) -> Self`.
-- [ ] `#[validate]` — parse to `Validate`, expose via the tokens, enforce at the
-      `Deserialize` boundary.
-- [ ] `Member::doc()` / `type_doc()` (needs a doc-comment → string path).
-- [x] Migrate struct `Inspect` onto a library blanket
-      (`impl<T: Reflect<Fields = [..F]>, ..F: Inspect> Inspect for T` in
-      `core:prelude/traits`): non-generic structs derive `Inspect` through the
-      field walk instead of a bespoke synthesizer. Format dispatch (`:?` /
-      `${}`, power-assert, auto-derive bodies) resolves the blanket coherently —
-      routed only when the receiver satisfies the `Reflect` bound, so tokens /
-      refs / non-`Reflect` types keep their own impls.
-- [ ] Migrate the remaining `Inspect` kinds (variant / enum / flags / generic
-      structs / newtypes) and serde / `Default` onto library impls over
-      `Reflect`.
-
-## Consequences
-
-Benefits: one mechanism replaces an open-ended series of synthesizers, so new
-derivations are ordinary library code; Jade needs no compiler change; the
-compiler's special-case surface shrinks as `Inspect` / serde / `Default`
-migrate; everything stays static and monomorphized; `#[validate]` is generic and
-always enforced, so a constraint is never silently ignored.
-
-Costs: the reflection layer still exposes serde's naming and `#[validate]`
-vocabularies as facts, so `Member` is coupled to them — full neutrality waits for
-user-defined attributes. Variant / enum / flags reflection is real compiler work.
-`#[validate]` enforcement grows core serde with a bounded validation vocabulary.
-A generic field-walk may monomorphize to less tight code than a hand-written
-synthesizer, so each migration checks generated-code parity, not just output
-parity.
-
-## Open questions
-
-- By-reference member reads: `get` / `extract` copy the value; a large payload
-  may want a `&`-returning sibling once the `Inspect` migration can measure the
-  copy cost.
-- The `#[validate]` recognized key set: which JSON Schema assertions earn a
-  first-class key versus hand-authoring on a `Schema` value.
-- Coherence: a blanket `impl<T: Reflect<Fields = [..F]>, ..F> Trait for T`
-  meeting concrete impls, under the variadic coherence rules of
-  [WEP 2026-03-14](./wep-2026-03-14-variadic-type-parameters.md).
-
-## Future directions
-
-- Refinement predicates — in-memory invariants on a `newtype`, enforced at
-  construction, distinct from `#[validate]`'s wire-boundary guard.
-- User-defined attributes `@[foo(…)]` — a distinct syntax for
-  library-interpreted attributes, kept visually separate from built-in `#[…]`,
-  exposed via `Reflect` as opaque metadata.
-- Renaming the serde attribute surface (`#[serde(rename)]` → `#[serde(wire)]`,
-  `#[serde(rename_all)]` → `#[serde(case)]`) to match the `wire_name` vocabulary.
+- [Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md)
+- [Struct Walkability — Field Walks over `ReflectStruct` and `#[secret]` Fields](./wep-2026-07-10-struct-walkability.md)
+- [Jade — JSON Schema for Wado](./wep-2026-06-13-jade.md)
+- [Serialization and Deserialization (Serde)](./wep-2026-02-28-serde.md)

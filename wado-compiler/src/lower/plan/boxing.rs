@@ -253,13 +253,13 @@ impl TypeBuilder {
                 index: 0,
                 span: Span::new(0, 0, 0, 0),
                 is_secret: false,
-                serde_rename: None,
+                wire_name_override: None,
                 serde_default: false,
                 serde_positional: false,
                 default_expr: None,
             }],
             span: Span::new(0, 0, 0, 0),
-            serde_rename_all: None,
+            wire_name_policy: None,
         };
 
         self.generated_structs.push(tir_struct);

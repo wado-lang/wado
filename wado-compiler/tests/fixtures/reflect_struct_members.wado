@@ -1,24 +1,24 @@
-// Reflect struct-field token walk (WEP 2026-06-13): `Reflect::<S>::field_tokens()`
-// returns one fat `Field<S, F>` token per field. Each token implements the sealed
+// Reflect struct-field member walk (WEP 2026-06-13): `ReflectStruct::<S>::members()`
+// returns one fat `StructField<S, F>` per field. Each member implements the sealed
 // `Member` trait (name / wire_name_override) and can read its field value via
 // `get`. A tuple for-of statically binds each field's type.
 
 struct Config {
-    #[serde(rename = "identifier")]
+    #[wire(name = "identifier")]
     id: i32,
     count: i32 = 0,
     #[secret]
     token: String,
 }
 
-test "field_tokens walks each field with metadata and value access" {
+test "members() walks each field with metadata and value access" {
     let c = Config { id: 42, count: 7, token: "sekret" };
     let mut names = "";
     let mut wires = "";
     let mut defaults = "";
     let mut secrets = "";
     let mut values = "";
-    for let f of Reflect::<Config>::field_tokens() {
+    for let f of ReflectStruct::<Config>::members() {
         names = `${names}${f.name()};`;
         wires = `${wires}${f.wire_name_override():?};`;
         defaults = `${defaults}${f.has_default()};`;

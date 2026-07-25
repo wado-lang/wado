@@ -3358,7 +3358,7 @@ impl Deserialize for User;    // compiler generates deserialize method
 
 The compiler inspects the type definition (struct, enum, variant, or flags) and synthesizes the appropriate method body. This is a compile error if a field or case's type doesn't implement the required trait.
 
-Struct field names are serialized verbatim by default (identity); see [Serialization Names](./wep-2026-02-28-serde.md#serialization-names) for `rename` / `rename_all` overrides.
+Struct field names are serialized verbatim by default (identity); see [Serialization Names](./wep-2026-02-28-serde.md#serialization-names) for `name` / `name_policy` overrides.
 
 ### Bound-Driven Serialize / Deserialize
 
@@ -3385,7 +3385,7 @@ let base = { user_id: 1, ip: "10.0.0.1" };
 let event = { ..base, level: "warn" };  // { user_id, ip, level } — auto-Serialize
 ```
 
-The explicit marker `impl Serialize for T;` still works — write it to force the impl with no bound present, or to attach `#[serde(rename_all = "...")]` customization. Like `Eq` / `Ord`'s marker (below), it is a conformance check: an ineligible field or case is a compile error at the marker's own span. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
+The explicit marker `impl Serialize for T;` still works — write it to force the impl with no bound present, or to attach `#[wire(name_policy = "...")]` customization. Like `Eq` / `Ord`'s marker (below), it is a conformance check: an ineligible field or case is a compile error at the marker's own span. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
 ### Bound-Driven Eq / Ord
 
@@ -3445,13 +3445,13 @@ The same `Serialize` and `Deserialize` trait impls work with both `core:json` an
 
 ### Command-Line Arguments (`core:args`)
 
-`core:args` is a non-self-describing, parse-only `Deserializer` over `argv`. Argument types are ordinary structs with `impl Deserialize for T;`: fields become `--long` options, and fields marked `#[serde(positional)]` are filled from bare tokens in declaration order (required, optional, or variadic). Scalar tokens are converted with `LenientFromStr`. See [WEP: Command-Line Argument Parsing](./wep-2026-06-22-core-args.md).
+`core:args` is a non-self-describing, parse-only `Deserializer` over `argv`. Argument types are ordinary structs with `impl Deserialize for T;`: fields become `--long` options, and fields marked `#[wire(positional)]` are filled from bare tokens in declaration order (required, optional, or variadic). Scalar tokens are converted with `LenientFromStr`. See [WEP: Command-Line Argument Parsing](./wep-2026-06-22-core-args.md).
 
 ```wado
 use { parse } from "core:args";
 
 struct Cli {
-    #[serde(positional)] input: String,
+    #[wire(positional)] input: String,
     jobs: i32 = 1,
     verbose: bool = false,
 }
@@ -4881,9 +4881,9 @@ test {
 }
 ```
 
-#### `#[serde(rename = "...")]` / `#[serde(rename_all = "...")]` / `#[serde(positional)]`
+#### `#[wire(name = "...")]` / `#[wire(name_policy = "...")]` / `#[wire(positional)]`
 
-Controls serialization/deserialization behavior for struct fields. `#[serde(rename = "...")]` overrides the wire-form key for a single field; `#[serde(rename_all = "...")]` (on a struct) renames every field by a convention (`"camelCase"`, `"snake_case"`, `"kebab-case"`, ...). A field is optional on deserialization when it has a default value (`f: T = expr`), falling back to that expression when absent — the single mechanism for optional fields. `#[serde(positional)]` marks a field as ordinal: it is resolved by position, never by name (name-only and sequence-only formats ignore the hint), which [`core:args`](./wep-2026-06-22-core-args.md) uses to bind a bare token to the field. See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md) and [`core:serde`](./stdlib-core-serde.md).
+Controls serialization/deserialization behavior for struct fields. `#[wire(name = "...")]` overrides the wire-form key for a single field; `#[wire(name_policy = "...")]` (on a struct) renames every field by a convention (`"camelCase"`, `"snake_case"`, `"kebab-case"`, ...). A field is optional on deserialization when it has a default value (`f: T = expr`), falling back to that expression when absent — the single mechanism for optional fields. `#[wire(positional)]` marks a field as ordinal: it is resolved by position, never by name (name-only and sequence-only formats ignore the hint), which [`core:args`](./wep-2026-06-22-core-args.md) uses to bind a bare token to the field. See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md) and [`core:serde`](./stdlib-core-serde.md).
 
 ### Standard Library Attributes
 
