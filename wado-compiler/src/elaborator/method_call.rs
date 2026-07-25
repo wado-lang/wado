@@ -2121,110 +2121,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Canonicalise the bare `struct_name` through the call site's import context so the
         // canonical decl key disambiguates two modules' same-named static methods.
         let static_key = self.canonical_decl_key(struct_name);
-        // Materialise the impl-block info out of the index borrow before
-        // entering the inherited type-param scope, so the borrow on
-        // `self.tysys.trait_env` releases before we touch `self` mutably.
-        let indexed: Option<(ModuleSource, ast::Type, ast::Function)> =
-            if let Some(methods) = self.tysys.trait_env.static_method_index.get(&static_key) {
-                methods.iter().find_map(|(name, ms, item_id, method_idx)| {
-                    if name != method_name {
-                        return None;
-                    }
-                    let module = self.loaded_modules.get(ms)?;
-                    let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id) else {
-                        return None;
-                    };
-                    Some((
-                        ms.clone(),
-                        impl_block.ty.clone(),
-                        impl_block.methods[*method_idx].clone(),
-                    ))
-                })
-            } else {
-                None
-            };
-        if let Some((ms, impl_ty, method)) = indexed {
-            // Inherited scope; only `type_params` is replaced.
-            let mut scope = self.enter_inherited_type_param_scope();
-            scope.annotate_ctx.trait_ctx.type_params.clear();
-
-            if let ast::Type::Generic(generic) = &impl_ty {
-                for (i, arg) in generic.args.iter().enumerate() {
-                    if let ast::Type::Named(named) = arg {
-                        let name = &named.name;
-                        if !scope.annotate_ctx.trait_ctx.type_params.contains_key(name) {
-                            let type_id = scope
-                                .tysys
-                                .type_table
-                                .borrow_mut()
-                                .make_type_param(name.clone(), i as u32);
-                            scope
-                                .annotate_ctx
-                                .trait_ctx
-                                .type_params
-                                .insert(name.clone(), (i as u32, type_id));
-                        }
-                    }
-                }
-            }
-
-            // Method-level type params (e.g. fn make<T>(...) -> T)
-            let m_offset = scope.annotate_ctx.trait_ctx.type_params.len();
-            for (i, tp) in method
-                .type_params
-                .iter()
-                .filter(|p| !p.is_effect)
-                .enumerate()
-            {
-                if scope
-                    .annotate_ctx
-                    .trait_ctx
-                    .type_params
-                    .contains_key(&tp.name)
-                {
-                    continue;
-                }
-                let idx = (m_offset + i) as u32;
-                let type_id = if tp.is_pack {
-                    scope
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_type_pack(tp.name.clone(), idx)
-                } else {
-                    scope
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_type_param(tp.name.clone(), idx)
-                };
-                scope
-                    .annotate_ctx
-                    .trait_ctx
-                    .type_params
-                    .insert(tp.name.clone(), (idx, type_id));
-            }
-
-            // Resolve the return type in the impl module's own
-            // perspective: the static method's signature refers to
-            // types imported by that module (`Counter` lives in `ms`,
-            // not in the call site's module). Using the caller's
-            // `resolve_type` would fail to canonicalise a return type
-            // the caller never `use`'d.
-            // Bind `Self` to the impl's concrete type (see the branch above),
-            // only when the return mentions `Self`.
-            if method
-                .return_type
-                .as_ref()
-                .is_some_and(|t| Self::ast_type_mentions_self(t))
-            {
-                scope.annotate_ctx.trait_ctx.self_type =
-                    Some(scope.resolve_return_type_in_module(&ms, Some(&impl_ty)));
-            }
-            let result = scope.resolve_return_type_in_module(&ms, method.return_type.as_ref());
-
-            drop(scope);
-            return result;
+        // The decl pass already resolved this signature in the impl's own
+        // frame — impl and method type params interned, `Self` bound to the
+        // impl target, the impl module's imports in scope. Re-deriving all of
+        // that here is what the digest exists to avoid.
+        let indexed_return = self
+            .tysys
+            .trait_env
+            .static_method_index
+            .get(&static_key)
+            .and_then(|methods| methods.iter().find(|e| e.name == method_name))
+            .and_then(|e| self.tysys.impl_method_sig(e.method_id))
+            .map(|sig| sig.decl.return_type.unwrap_or(TypeTable::UNIT));
+        if let Some(return_type) = indexed_return {
+            return return_type;
         }
 
         // Search resource declarations via pre-built index. Same canonical
@@ -2445,26 +2355,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the AST so the per-param elaborator can swap into its perspective —
         // a static method's signature references types the impl module
         // imports, not the caller's.
-        let indexed: Option<(ModuleSource, ast::Type, ast::Function)> = if let Some(methods) =
-            self.tysys.trait_env.static_method_index.get(&static_key)
-        {
-            let mut found = None;
-            for (name, module_source, item_id, method_idx) in methods {
-                if name == method_name
-                    && let Some(module) = self.loaded_modules.get(module_source)
-                    && let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id)
-                {
-                    let method = &impl_block.methods[*method_idx];
-                    found = Some((module_source.clone(), impl_block.ty.clone(), method.clone()));
-                    break;
-                }
-            }
-            found
-        } else {
-            None
-        };
-        if let Some((impl_module, impl_ty, method)) = indexed {
-            return self.resolve_static_method_params_in_scope(&impl_module, &impl_ty, &method);
+        // Static methods take no receiver, so the digest's canonical form —
+        // impl type params left abstract — is already the answer.
+        let indexed = self
+            .tysys
+            .trait_env
+            .static_method_index
+            .get(&static_key)
+            .and_then(|methods| methods.iter().find(|e| e.name == method_name))
+            .and_then(|e| self.tysys.impl_method_sig(e.method_id))
+            .map(|sig| sig.decl.param_types[sig.first_value_param()..].to_vec());
+        if let Some(param_types) = indexed {
+            return param_types;
         }
 
         Vec::new()
@@ -2555,15 +2457,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let static_key = static_key_hint
             .cloned()
             .unwrap_or_else(|| self.canonical_decl_key(struct_name));
-        if let Some(methods) = self.tysys.trait_env.static_method_index.get(&static_key) {
-            for (name, module_source, item_id, method_idx) in methods {
-                if name == method_name
-                    && let Some(module) = self.loaded_modules.get(module_source)
-                    && let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id)
-                {
-                    return extract(&impl_block.methods[*method_idx]);
-                }
-            }
+        // Names and defaults come out of the same record, so their order
+        // matches the parameter types by construction.
+        let indexed = self
+            .tysys
+            .trait_env
+            .static_method_index
+            .get(&static_key)
+            .and_then(|methods| methods.iter().find(|e| e.name == method_name))
+            .and_then(|e| self.tysys.impl_method_sig(e.method_id))
+            .map(|sig| {
+                sig.param_names
+                    .iter()
+                    .cloned()
+                    .zip(sig.param_defaults.iter().cloned())
+                    .collect()
+            });
+        if let Some(defaults) = indexed {
+            return defaults;
         }
 
         Vec::new()
@@ -2703,13 +2614,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Check indexed modules — index keyed by canonical decl key.
         let static_key = self.canonical_decl_key(struct_name);
         if let Some(methods) = self.tysys.trait_env.static_method_index.get(&static_key) {
-            for (name, module_source, item_id, method_idx) in methods {
-                if name == method_name
-                    && let Some(module) = self.loaded_modules.get(module_source)
-                    && let Some(Item::Impl(impl_block)) = module.item_by_id(*item_id)
+            // Still on the AST: this feeds `StaticMethodSig`, which unifies
+            // impl methods with resource methods, and resource declarations
+            // have no signature digest yet.
+            for entry in methods {
+                if entry.name == method_name
+                    && let Some(module) = self.loaded_modules.get(&entry.module)
+                    && let Some(Item::Impl(impl_block)) = module.item_by_id(entry.impl_id)
+                    && let Some(method) =
+                        impl_block.methods.iter().find(|m| m.id == entry.method_id)
                 {
                     let names = extract_impl_type_param_names(&impl_block.ty);
-                    return Some((names, impl_block.methods[*method_idx].clone()));
+                    return Some((names, method.clone()));
                 }
             }
         }
@@ -3052,7 +2968,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // accidentally claim this name.
         let static_key = self.canonical_decl_key(struct_name);
         if let Some(methods) = self.tysys.trait_env.static_method_index.get(&static_key)
-            && methods.iter().any(|(name, ..)| name == method_name)
+            && methods.iter().any(|e| e.name == method_name)
         {
             return true;
         }

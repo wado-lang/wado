@@ -33,11 +33,17 @@ pub(crate) struct DeclSig {
 pub(crate) struct MethodSig {
     pub(crate) decl: DeclSig,
     pub(crate) self_kind: crate::ast::SelfKind,
-    /// Names and mutability of the non-receiver parameters, in order.
-    /// `decl.param_types` includes the receiver at index 0 when there is
-    /// one, so these are offset by [`Self::first_value_param`].
+    /// Names, mutability and default expressions of the non-receiver
+    /// parameters, in order. `decl.param_types` includes the receiver at
+    /// index 0 when there is one, so these are offset by
+    /// [`Self::first_value_param`].
+    ///
+    /// They live in one record because callers pair them positionally with
+    /// each other and with the parameter types; kept apart, the ordering was
+    /// a coincidence of matching filters in separate lookups.
     pub(crate) param_names: Vec<String>,
     pub(crate) param_is_mut: Vec<bool>,
+    pub(crate) param_defaults: Vec<Option<crate::ast::Expr>>,
 }
 
 impl MethodSig {

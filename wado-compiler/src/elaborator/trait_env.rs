@@ -380,7 +380,20 @@ pub(super) type ResourceDeclIndex = IndexMap<DeclKey, (ModuleSource, AstId)>;
 /// impl block itself (an `AstId`); `method_index` stays a bare position
 /// into that block's own, TraitEnv-owned `ImplHeader::methods` — not a
 /// window into the mutable `module.items` a reload could reorder.
-pub(super) type StaticMethodIndex = IndexMap<DeclKey, Vec<(String, ModuleSource, AstId, usize)>>;
+/// A static (receiver-less) method reachable by name on a type.
+#[derive(Clone, Debug)]
+pub(super) struct StaticMethodEntry {
+    pub(super) name: String,
+    /// The module defining the impl — a static method's signature names types
+    /// that module imports, not the caller's.
+    pub(super) module: ModuleSource,
+    /// The impl block, for its [`ImplHeader`].
+    pub(super) impl_id: AstId,
+    /// The method itself: the key into the signature digest.
+    pub(super) method_id: AstId,
+}
+
+pub(super) type StaticMethodIndex = IndexMap<DeclKey, Vec<StaticMethodEntry>>;
 
 /// Pre-built index of static methods from resource declarations.
 /// Key: canonical receiver [`DeclKey`] → `[(method_name, ModuleSource,
@@ -923,7 +936,7 @@ impl TraitEnv {
                     // inherent statics. `f64::from_bits` and friends in
                     // `core:prelude/int128.wado` flow through this path.
                     let recv_key = canonical_key(module_source, &type_name);
-                    for (method_idx, method) in impl_block.methods.iter().enumerate() {
+                    for method in &impl_block.methods {
                         let has_self = method
                             .params
                             .iter()
@@ -932,19 +945,19 @@ impl TraitEnv {
                             static_method_index
                                 .entry(recv_key.clone())
                                 .or_default()
-                                .push((
-                                    method.name.clone(),
-                                    module_source.clone(),
-                                    impl_block.id,
-                                    method_idx,
-                                ));
+                                .push(StaticMethodEntry {
+                                    name: method.name.clone(),
+                                    module: module_source.clone(),
+                                    impl_id: impl_block.id,
+                                    method_id: method.id,
+                                });
                         }
                     }
                 } else {
                     // Inherent impl: already in `all_impl_index`; here only its
                     // static methods need the dedicated index.
                     let recv_key = canonical_key(module_source, &type_name);
-                    for (method_idx, method) in impl_block.methods.iter().enumerate() {
+                    for method in &impl_block.methods {
                         let has_self = method
                             .params
                             .iter()
@@ -953,12 +966,12 @@ impl TraitEnv {
                             static_method_index
                                 .entry(recv_key.clone())
                                 .or_default()
-                                .push((
-                                    method.name.clone(),
-                                    module_source.clone(),
-                                    impl_block.id,
-                                    method_idx,
-                                ));
+                                .push(StaticMethodEntry {
+                                    name: method.name.clone(),
+                                    module: module_source.clone(),
+                                    impl_id: impl_block.id,
+                                    method_id: method.id,
+                                });
                         }
                     }
                 }
