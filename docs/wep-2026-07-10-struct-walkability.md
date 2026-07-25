@@ -37,9 +37,8 @@ projection:
 
 ```wado
 fn walk_fields<T, ..F: Inspect>(s: &T) where T: ReflectStruct<FieldTypes = [..F]> {
-    let names = T::field_names();
-    for let [i, v] of s.fields().enumerate() {
-        println(`${names[i]} = ${v.inspect()}`);
+    for let f of ReflectStruct::<T>::members() {
+        println(`${f.name()} = ${f.get(s).inspect()}`);
     }
 }
 ```
@@ -51,12 +50,12 @@ user-defined visitor trait) — that is the meaningful form, matching Zig's
 `inline for` over `@typeInfo` in a static, monomorphized, no-dynamic-reflection
 model.
 
-Direct `for let v of my_struct` (without `.fields()`) is rejected:
+Direct `for let v of my_struct` (without `members()`) is rejected:
 
 - It would be ambiguous with a struct implementing `IntoIterator`.
 - It would make field declaration order silently semantic; reordering or adding
   a field changes behavior with no visible cue at the loop.
-- The `.fields()` projection marks the walk as a deliberate act on a nominal
+- The `members()` projection marks the walk as a deliberate act on a nominal
   type. Sugar can be added later without breaking anything.
 
 ### Nesting: trait recursion, not a recursive primitive
@@ -76,10 +75,9 @@ impl<T, ..F: Walk> Walk for T
 where T: ReflectStruct<FieldTypes = [..F]>
 {
     fn walk(&self, visitor: &mut Visitor) {
-        let names = T::field_names();
-        for let [i, f] of self.fields().enumerate() {
-            visitor.enter_field(names[i]);
-            f.walk(visitor);   // nested structs resolve to this same impl
+        for let f of ReflectStruct::<T>::members() {
+            visitor.enter_field(f.name());
+            f.get(self).walk(visitor);   // nested structs resolve to this same impl
             visitor.leave_field();
         }
     }
@@ -138,9 +136,8 @@ access are unchanged: `self.password` is still `String`.
 - Wrap-only: anyone can construct `Secret<T>` from a `T` (the inbound path
   `Deserialize` needs), no generic code can extract. An information diode.
 
-This preserves the pack arity and the index correspondence with
-`field_names()` / `field_meta()`. `FieldMeta` gains `secret: bool` so
-value-level derivation code can branch on it.
+This preserves the pack arity and the index correspondence with `members()`.
+`StructField` reports `is_secret()` so derivation code can branch on it.
 
 ### Channel consequences
 
@@ -165,7 +162,7 @@ implements:
 Why not plug the leak in `serde_synth` now: serde is slated to become
 `ReflectStruct`-based library code (WEP 2026-06-13 §5), so a secret-skip written into
 the bespoke synthesizer is thrown away at that migration. The skip belongs in
-the `ReflectStruct`-based serde, where it reads `FieldMeta::secret` and is correct by
+the `ReflectStruct`-based serde, where it reads `StructField::is_secret` and is correct by
 construction. The whole contract — serialize skip, `Eq`/`Ord` refusal,
 `Secret<T>` — therefore lands as one change on top of `ReflectStruct`, not dribbled
 into the synthesizers ahead of the rest (which would leave a half-migrated
@@ -189,10 +186,10 @@ coherence Rules 1–2). Struct walkability needs nothing beyond them; the
 `#[secret]` security upgrade needs the two staged items below.
 
 - [ ] Extend `ReflectStruct` to project a `#[secret]` field as `Secret<T>` in `Fields`
-      and add `FieldMeta::secret` (blocked on `ReflectStruct` synthesis).
+      and add `StructField::is_secret` (blocked on `ReflectStruct` synthesis).
 - [ ] Land the `#[secret]` security upgrade in one step — not piecemeal in the
       bespoke synthesizers ahead of the rest: serialize skip (in the
-      `ReflectStruct`-based serde, reading `FieldMeta::secret`), require
+      `ReflectStruct`-based serde, reading `StructField::is_secret`), require
       default/`Option` for serializability, and `Eq`/`Ord` auto-derive + marker
       refusal (a guard in trait synthesis). Resolve the unrolled-loop skip open
       question above. Deserialize is unchanged.

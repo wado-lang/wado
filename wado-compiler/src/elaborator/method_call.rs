@@ -1074,11 +1074,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        // ReflectStruct trait-qualified static call: `ReflectStruct::<T>::field_names()` /
+        // ReflectStruct trait-qualified static call: `ReflectStruct::<T>::members()` /
         // `type_name()`. `ReflectStruct` is a (sealed) trait, not a type, so
         // `target_type` would not resolve — intercept and route to the
         // concrete `T`'s synthesized `T^ReflectStruct::method`. This is the only
-        // spelling for ReflectStruct metadata; a bare `T::field_names()` never
+        // spelling for ReflectStruct metadata; a bare `T::members()` never
         // resolves, so struct namespaces stay clean.
         if let ast::Type::Generic(g) = &static_call.target_type
             && self.is_reflect_trait_call(&g.name, &static_call.method)

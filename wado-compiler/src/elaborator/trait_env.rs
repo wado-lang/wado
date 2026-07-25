@@ -273,11 +273,9 @@ pub(crate) enum BlanketReceiver {
 
 /// A reified blanket impl `impl<Param: Bounds, ..> Trait for <receiver>`.
 ///
-/// The single source of truth for "what kind of blanket is this", replacing the
-/// former per-query re-derivations (`has_universal_ref_blanket`,
-/// `blanket_impl_{module,param,bounds,arity}_for_trait`, and the caller-side
-/// `is_reflect_struct_blanket` / `is_ref_universal_blanket` predicates). Those
-/// are now selections over this descriptor.
+/// The single source of truth for "what kind of blanket is this": the queries
+/// that once re-derived it per call site are now selections over this
+/// descriptor.
 #[derive(Clone, Debug)]
 pub(crate) struct BlanketImpl {
     pub(crate) module: ModuleSource,
@@ -460,8 +458,7 @@ pub struct TraitEnv {
     pub(super) assoc_type_bound_index: IndexMap<String, Vec<ast::TraitBound>>,
     /// `trait_name` → reified blanket impls of that trait, in registration
     /// order. The single classification source for blanket dispatch (module,
-    /// receiver kind, param, bounds, arity); the `blanket_impl_*_for_trait`
-    /// queries, `has_universal_ref_blanket`, and `is_reflect_struct_blanket`
+    /// receiver kind, param, bounds); the `blanket_impl_*_for_trait` queries
     /// select over it. Used by the monomorphizer to find the home module of a
     /// generic dispatch when the receiver type has no dedicated `impl Trait for
     /// Type` block — the blanket provides the body, homed in the blanket's
