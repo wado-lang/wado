@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784966013127,
+  "lastUpdate": 1784978000646,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -43769,6 +43769,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 276401,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5e544a1a4d0f9ada1781232600fbf235da4cdf35",
+          "message": "Merge pull request #1681 from wado-lang/claude/benchmark-syntax-highlight-perf-wn5k0u\n\nperf(gale)!: carry highlight captures as ids, not capture-name Strings",
+          "timestamp": "2026-07-25T20:03:16+09:00",
+          "tree_id": "349cdd23ecc3e1823153c0cb9ff238d8f535f1cf",
+          "url": "https://github.com/wado-lang/wado/commit/5e544a1a4d0f9ada1781232600fbf235da4cdf35"
+        },
+        "date": 1784977999861,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1970,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8212,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16169,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276359,
             "unit": "bytes"
           }
         ]
