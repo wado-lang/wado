@@ -1,77 +1,157 @@
 //! Post-monomorphize reflect bridge synthesis.
 //!
 //! Every other synthesis phase runs before monomorphization. The reflect value
-//! bridges cannot: lowering rewrites `builtin::struct_field_get::<S, F>` to a
-//! helper named after the *concrete* struct and field mangles, and fields that
-//! share an erased field type share one index-dispatched helper. For a generic
-//! struct that grouping is only knowable per instantiation — `Pair<i32>` merges
-//! `left: T` and `right: i32` into one helper where `Pair<String>` keeps them
-//! apart — so the helpers are minted here, once each monomorphized struct
-//! exists (WEP 2026-06-13).
+//! bridges cannot: lowering names each one after the *concrete* subject and
+//! member type, and members sharing a mangled member type share one
+//! index-dispatched bridge. For a generic type that grouping is knowable only
+//! per instantiation — `Pair<i32>` merges `left: T` with `right: i32` where
+//! `Pair<String>` keeps them apart — and the two call sites are
+//! indistinguishable, so a single generic bridge could not be selected
+//! (WEP 2026-06-13).
+//!
+//! The two kinds are found differently. A generic struct is instantiated into
+//! its own monomorphized declaration, so its instances are read off the
+//! declaration list. A generic variant never is (WEP 2026-02-09), so its
+//! instances are read off the type table.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::flat_package::FlatPackage;
-use crate::tir::TypeId;
+use crate::hashmap::IndexMap;
+use crate::module_source::ModuleSource;
+use crate::tir::{ResolvedType, TirFunction, TypeId};
 
-use super::traits::{REFLECT_MEMBERS_ASSOC, generate_field_bridge_helpers};
+use super::traits::{
+    REFLECT_MEMBERS_ASSOC, generate_case_bridge_helpers, generate_field_bridge_helpers,
+};
 
-/// Mint the `$field_get$S$F` bridges of every monomorphized struct whose
-/// generic base carries a synthesized `ReflectStruct` impl.
+/// Mint the value bridges of every instantiated generic struct and variant whose
+/// base carries a synthesized reflect impl.
 pub fn synthesize_monomorphized_reflect_bridges(flat: &mut FlatPackage) {
-    let targets: Vec<(String, crate::module_source::ModuleSource, String)> = {
+    let mut generated = Vec::new();
+    collect_struct_bridges(flat, &mut generated);
+    collect_variant_bridges(flat, &mut generated);
+    flat.functions.extend(generated);
+}
+
+/// `$field_get$S$F` for each monomorphized struct instantiated from a
+/// `ReflectStruct`-derived generic base.
+fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<TirFunction>>>) {
+    let targets: Vec<(usize, String)> = {
         let tt = flat.type_table.borrow();
         flat.structs
             .iter()
-            .filter_map(|s| {
+            .enumerate()
+            .filter_map(|(i, s)| {
                 let base = &s.monomorph_info.as_ref()?.generic_name;
                 tt.has_generic_assoc_type_def(base, REFLECT_MEMBERS_ASSOC)
-                    .then(|| (s.name.clone(), s.module_source.clone(), base.clone()))
+                    .then(|| (i, base.clone()))
             })
             .collect()
     };
-    if targets.is_empty() {
-        return;
-    }
 
-    let mut generated = Vec::new();
-    for (name, module_source, base_name) in targets {
-        let Some(decl) = flat
-            .structs
-            .iter()
-            .find(|s| s.name == name && s.module_source == module_source)
-        else {
-            continue;
-        };
+    for (index, base_name) in targets {
+        let decl = &flat.structs[index];
+        let module_source = decl.module_source.clone();
         let fields: Vec<(String, TypeId, u32)> = decl
             .fields
             .iter()
             .map(|f| (f.name.clone(), f.type_id, f.index))
             .collect();
-        let span = decl.span;
-
-        let (struct_type, ref_struct_type) = {
+        let (subject, ref_subject) = {
             let mut tt = flat.type_table.borrow_mut();
-            let struct_type =
-                tt.make_monomorphized_struct(name.clone(), module_source.clone(), base_name);
-            let ref_struct_type = tt.make_ref(struct_type);
-            (struct_type, ref_struct_type)
+            let subject =
+                tt.make_monomorphized_struct(decl.name.clone(), module_source.clone(), base_name);
+            let ref_subject = tt.make_ref(subject);
+            (subject, ref_subject)
         };
-
-        for mut helper in generate_field_bridge_helpers(
-            &flat.type_table,
-            &fields,
-            struct_type,
-            ref_struct_type,
-            span,
-        ) {
-            // `link` — which assigns each synthesized function its home module —
-            // has already run, so the module is set here instead.
-            helper.module_source = module_source.clone();
-            generated.push(Rc::new(RefCell::new(helper)));
-        }
+        push_helpers(
+            generate_field_bridge_helpers(
+                &flat.type_table,
+                &fields,
+                subject,
+                ref_subject,
+                decl.span,
+            ),
+            &module_source,
+            generated,
+        );
     }
+}
 
-    flat.functions.extend(generated);
+/// `$case_extract$V$P` / `$case_construct$V$P` for each instantiation of a
+/// `ReflectVariant`-derived generic variant. A generic variant keeps a single
+/// declaration, so the instantiations are the `GenericInstance` types naming it.
+fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<TirFunction>>>) {
+    let instances: Vec<(TypeId, String, ModuleSource, Vec<TypeId>)> = {
+        let tt = flat.type_table.borrow();
+        tt.iter_type_ids()
+            .filter_map(|id| {
+                let ResolvedType::GenericInstance {
+                    name,
+                    module_source,
+                    type_args,
+                } = tt.get(id)
+                else {
+                    return None;
+                };
+                tt.has_generic_assoc_type_def(name, REFLECT_MEMBERS_ASSOC)
+                    .then(|| (id, name.clone(), module_source.clone(), type_args.clone()))
+            })
+            .collect()
+    };
+
+    for (subject, name, module_source, type_args) in instances {
+        let Some(decl) = flat
+            .variants
+            .iter()
+            .find(|v| v.name == name && v.module_source == module_source)
+        else {
+            continue;
+        };
+        let substitution: IndexMap<u32, TypeId> = decl
+            .type_params
+            .iter()
+            .zip(&type_args)
+            .map(|(param, &arg)| (param.index, arg))
+            .collect();
+        if substitution.is_empty() {
+            continue;
+        }
+        let span = decl.span;
+        let cases: Vec<(String, u32, TypeId, Option<String>)> = {
+            let mut tt = flat.type_table.borrow_mut();
+            decl.cases
+                .iter()
+                .map(|c| {
+                    (
+                        c.name.clone(),
+                        c.index,
+                        tt.substitute_type_params(c.payload, &substitution),
+                        c.wire_name_override.clone(),
+                    )
+                })
+                .collect()
+        };
+        let ref_subject = flat.type_table.borrow_mut().make_ref(subject);
+        push_helpers(
+            generate_case_bridge_helpers(&flat.type_table, &cases, subject, ref_subject, span),
+            &module_source,
+            generated,
+        );
+    }
+}
+
+/// `link` — which assigns each synthesized function its home module — has
+/// already run by this phase, so the module is set here instead.
+fn push_helpers(
+    helpers: Vec<TirFunction>,
+    module_source: &ModuleSource,
+    generated: &mut Vec<Rc<RefCell<TirFunction>>>,
+) {
+    for mut helper in helpers {
+        helper.module_source = module_source.clone();
+        generated.push(Rc::new(RefCell::new(helper)));
+    }
 }

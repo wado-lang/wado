@@ -647,7 +647,7 @@ fn generate_struct_reflect_methods(
 
     let mut functions = vec![type_name_fn, members_fn, wire_name_policy_fn];
     for f in &mut functions {
-        f.impl_type_params = type_params.clone();
+        f.impl_type_params.clone_from(type_params);
     }
     // A generic struct's field-get bridges are keyed by the *concrete* field
     // types, which only exist per instantiation, so they are minted post-
@@ -1213,9 +1213,12 @@ fn generate_variant_reflect_impls(
     module.functions.extend(generated);
 }
 
-/// A variant selected for `ReflectVariant` synthesis.
+/// A variant selected for `ReflectVariant` synthesis. `type_params` is empty for
+/// a plain variant and carries the declared parameters for a generic one, whose
+/// impl is synthesized once over `V<T, …>` and substituted per instantiation.
 struct ReflectVariantTarget {
     name: String,
+    type_params: Vec<TirTypeParam>,
     /// Per-case `(name, index, payload type, #[wire(name)])`; unit cases
     /// carry `()` as their payload.
     cases: Vec<(String, u32, TypeId, Option<String>)>,
@@ -1224,7 +1227,7 @@ struct ReflectVariantTarget {
 }
 
 /// Select the variants in `module` that need a synthesized `ReflectVariant`
-/// impl: non-generic and actually requested by a bound.
+/// impl: those actually requested by a bound, generic or not.
 fn collect_reflect_variant_targets(
     module: &TirModule,
     ctx: &SynthesisCtx<'_, '_, '_>,
@@ -1233,10 +1236,10 @@ fn collect_reflect_variant_targets(
     module
         .variants
         .iter()
-        .filter(|v| v.type_params.is_empty())
         .filter(|v| ctx.should_synthesize(&v.name, variant_trait_name))
         .map(|v| ReflectVariantTarget {
             name: v.name.clone(),
+            type_params: v.type_params.clone(),
             cases: v
                 .cases
                 .iter()
@@ -1323,9 +1326,16 @@ fn generate_variant_reflect_methods(
         span,
     );
 
+    let is_generic = !target.type_params.is_empty();
+
     let (variant_type, ref_variant_type, member_types, members_tuple_type) = {
         let mut tt = type_table.borrow_mut();
-        let variant_type = tt.make_variant(target.name.clone(), module_source.clone());
+        let variant_type = if is_generic {
+            let param_ids = make_type_param_ids(&target.type_params, &mut tt);
+            tt.make_generic_instance(target.name.clone(), module_source.clone(), param_ids)
+        } else {
+            tt.make_variant(target.name.clone(), module_source.clone())
+        };
         let ref_variant_type = tt.make_ref(variant_type);
         let member_types: Vec<TypeId> = target
             .cases
@@ -1341,15 +1351,15 @@ fn generate_variant_reflect_methods(
         let members_tuple_type = tt.make_tuple(member_types.clone());
         let payloads_tuple_type =
             tt.make_tuple(target.cases.iter().map(|(_, _, p, _)| *p).collect());
-        tt.register_assoc_type_resolution(
+        register_reflect_assoc_types(
+            &mut tt,
+            &target.name,
             variant_type,
-            REFLECT_CASE_PAYLOADS_ASSOC.to_string(),
-            payloads_tuple_type,
-        );
-        tt.register_assoc_type_resolution(
-            variant_type,
-            REFLECT_MEMBERS_ASSOC.to_string(),
-            members_tuple_type,
+            is_generic,
+            &[
+                (REFLECT_CASE_PAYLOADS_ASSOC, payloads_tuple_type),
+                (REFLECT_MEMBERS_ASSOC, members_tuple_type),
+            ],
         );
         (
             variant_type,
@@ -1387,13 +1397,21 @@ fn generate_variant_reflect_methods(
     );
 
     let mut functions = vec![type_name_fn, discriminant_fn, cases_fn, wire_name_policy_fn];
-    functions.extend(generate_case_bridge_helpers(
-        type_table,
-        target,
-        variant_type,
-        ref_variant_type,
-        span,
-    ));
+    for f in &mut functions {
+        f.impl_type_params.clone_from(&target.type_params);
+    }
+    // A generic variant's case bridges are keyed by the *concrete* payload
+    // types, which only exist per instantiation, so they are minted post-
+    // monomorphize by `synthesize_monomorphized_reflect_bridges`.
+    if !is_generic {
+        functions.extend(generate_case_bridge_helpers(
+            type_table,
+            &target.cases,
+            variant_type,
+            ref_variant_type,
+            span,
+        ));
+    }
     functions
 }
 
@@ -1503,9 +1521,9 @@ fn generate_variant_cases_fn(
 /// every distinct payload type of `target`. `Case::<V, P>::extract` and
 /// `::construct` bodies carry `builtin::variant_case_*` markers; lowering
 /// rewrites each monomorphized marker to its helper (WEP 2026-06-13 §3e).
-fn generate_case_bridge_helpers(
+pub(super) fn generate_case_bridge_helpers(
     type_table: &RefCell<TypeTable>,
-    target: &ReflectVariantTarget,
+    cases: &[(String, u32, TypeId, Option<String>)],
     variant_type: TypeId,
     ref_variant_type: TypeId,
     span: Span,
@@ -1516,7 +1534,7 @@ fn generate_case_bridge_helpers(
 
     let mut by_payload: crate::hashmap::IndexMap<String, (TypeId, Vec<(String, u32)>)> =
         crate::hashmap::IndexMap::default();
-    for (case_name, index, payload, _) in &target.cases {
+    for (case_name, index, payload, _) in cases {
         let mangled = type_table.borrow().mangle_type_arg_for_generic(*payload);
         by_payload
             .entry(mangled)

@@ -1133,6 +1133,20 @@ impl TraitEnv {
     /// blanket if the receiver satisfies these bounds — otherwise a type with
     /// its own (unregistered, auto-derived) impl, e.g. a closure's `Fn^Inspect`,
     /// would be misrouted to the blanket body.
+    /// The traits whose blanket impl is bounded on `bound_name` — the set of
+    /// derivations a type satisfying that bound would be claimed by.
+    pub(crate) fn traits_blanket_bounded_on(&self, bound_name: &str) -> Vec<&str> {
+        self.blanket_impls
+            .iter()
+            .filter(|(_, impls)| {
+                impls
+                    .iter()
+                    .any(|b| b.bounds.iter().any(|bound| bound == bound_name))
+            })
+            .map(|(trait_name, _)| trait_name.as_str())
+            .collect()
+    }
+
     pub(crate) fn blanket_impl_bounds_for_trait(
         &self,
         trait_name: &str,

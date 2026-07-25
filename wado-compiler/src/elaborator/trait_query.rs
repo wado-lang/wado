@@ -617,6 +617,37 @@ impl TypeSystem {
         }
     }
 
+    /// Coherence Rule 1 (WEP 2026-03-14 §5) for a generic base: a type that
+    /// writes its own impl of a trait derived over `reflect_trait` keeps it,
+    /// rather than being claimed by the derivation.
+    ///
+    /// Only generic bases need this. A plain type's own impl already wins,
+    /// because impl selection keys on its name; a generic instance's mangled
+    /// name (`TreeMap<String, i32>`) does not match the impl written for its
+    /// base, so without this the blanket takes types like `TreeMap` that have
+    /// hand-written `Inspect`.
+    fn has_own_impl_of_a_reflect_derivation(&self, base_name: &str, reflect_trait: &str) -> bool {
+        let receiver = Receiver::Type(base_name.to_string());
+        self.trait_env
+            .traits_blanket_bounded_on(reflect_trait)
+            .iter()
+            .any(|derived| self.trait_env.has_any_methodful_impl(&receiver, derived))
+    }
+
+    /// Whether every member type is determined by substituting the
+    /// declaration's own parameters.
+    ///
+    /// A member typed by an associated-type projection (an iterator adapter's
+    /// `fn mut(I::Item) -> U`) is not: resolving it needs the bound's impl,
+    /// which the per-instantiation substitution does not consult. Such a type is
+    /// not reflectable — its members cannot be named.
+    fn members_are_substitutable(&self, members: impl Iterator<Item = TypeId>) -> bool {
+        let tt = self.type_table.borrow();
+        !members
+            .into_iter()
+            .any(|ty| tt.contains_assoc_type_projection(ty))
+    }
+
     /// Whether `name` is one of the four sealed member handles `members()` mints
     /// (`StructField` / `VariantCase` / `EnumCase` / `FlagsBit`).
     ///
@@ -1102,9 +1133,18 @@ impl TypeSystem {
             ..
         } = &resolved
             && !self.is_sealed_reflect_member(name)
+            && !self.has_own_impl_of_a_reflect_derivation(name, trait_name)
             && match on_bound {
-                Some(OnBoundTrait::ReflectStruct) => scope.struct_fields(name).is_some(),
-                Some(OnBoundTrait::ReflectVariant) => scope.variant_case(name).is_some(),
+                Some(OnBoundTrait::ReflectStruct) => {
+                    scope.struct_fields(name).is_some_and(|info| {
+                        self.members_are_substitutable(info.fields.iter().map(|(_, ty, _)| *ty))
+                    })
+                }
+                Some(OnBoundTrait::ReflectVariant) => {
+                    scope.variant_case(name).is_some_and(|info| {
+                        self.members_are_substitutable(info.cases.iter().map(|c| c.payload))
+                    })
+                }
                 _ => false,
             }
         {

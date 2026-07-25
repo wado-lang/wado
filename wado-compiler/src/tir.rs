@@ -2391,6 +2391,38 @@ impl TypeTable {
         }
     }
 
+    /// Whether `id` (recursively) mentions an associated-type projection
+    /// (`I::Item`).
+    ///
+    /// Reflection requires every member's type to be determined by substituting
+    /// the declaration's own parameters. A projection is not: resolving it needs
+    /// the bound's impl, which positional substitution does not consult, so a
+    /// type carrying one is not reflectable.
+    pub fn contains_assoc_type_projection(&self, id: TypeId) -> bool {
+        match self.get(id) {
+            ResolvedType::AssocTypeProjection { .. } => true,
+            ResolvedType::BuiltinArray(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Reactive(inner) => self.contains_assoc_type_projection(*inner),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                params
+                    .iter()
+                    .any(|p| self.contains_assoc_type_projection(*p))
+                    || self.contains_assoc_type_projection(*return_type)
+            }
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => type_args
+                .iter()
+                .any(|t| self.contains_assoc_type_projection(*t)),
+            _ => false,
+        }
+    }
+
     /// Whether `id` (recursively) mentions a `TypeParam` / `TypePack` whose
     /// `index` equals `index`. Used to tell whether a method type parameter is
     /// inferable from an argument position (it appears in a value-parameter's

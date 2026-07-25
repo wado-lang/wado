@@ -128,6 +128,59 @@ The value bridges (`get` / `extract` / `construct` / `make` / `set`) lower to a
 discriminant-keyed access, so a forged member can trap but never misread a payload;
 after inlining they fold to the code a hand-written impl would emit.
 
+Reflection stops at these four handles: they are themselves generic structs, and
+a handle's own `Members` would mention `StructField<Self, …>`, growing `Self`
+without bound. They are not reflectable, by the same seal that rejects a user
+`impl`.
+
+## Generic types
+
+A generic type reflects through one generic impl over `S<T, …>`, not through a
+per-instantiation impl. `FieldTypes` / `CasePayloads` / `Members` bind the
+declaration's own parameters and each instantiation substitutes them:
+
+```wado
+struct Pair<T> { left: T, right: i32 }
+// FieldTypes = [T, i32]   →   Pair<String>: FieldTypes = [String, i32]
+```
+
+The trait shape is unchanged, so no reflection API is generic-specific. The
+alternative — synthesizing a concrete impl once `Pair<String>` exists — is
+circular: a derivation needs `Pair<String>: ReflectStruct` *while*
+monomorphizing, which is exactly when the instance appears.
+
+`type_name()` is the declared name (`"Pair"`, not `"Pair<String>"`), matching
+the plain-struct case and Rust's `{:?}`. Open: a schema library keying `$defs`
+per instantiation needs an identity that separates `Pair<String>` from
+`Pair<i32>`. That is a distinct fact (the instance's type arguments), not a
+different spelling of `type_name`, and waits for a consumer.
+
+Two rules bound what is reflectable, and both are load-bearing:
+
+- A type whose member types are not determined by substitution alone is not
+  reflectable. An iterator adapter's `pub f: fn mut(I::Item) -> U` needs the
+  bound's impl to resolve `I::Item`, which per-instantiation substitution does
+  not consult, so the member cannot be named.
+- Coherence Rule 1 applies to a generic base: a type that writes its own impl of
+  a derived trait keeps it. Only generic bases need this stated — a plain type's
+  own impl already wins because impl selection keys on its name, whereas a
+  generic instance's mangled name (`TreeMap<String, i32>`) does not match the
+  impl written for `TreeMap`, so without the rule the derivation takes it.
+
+Two further consequences follow from generic reflection being demand-driven
+rather than unconditional:
+
+- A plain struct's impl is synthesized unconditionally — the set is closed and
+  each impl is finite. A generic one is synthesized only where a bound demands
+  it, because the member handles above are generic structs too.
+- A generic type's value bridges (`$field_get$S$F`) are minted *after*
+  monomorphization — the only synthesis that is. Lowering names a bridge by the
+  concrete struct and field mangles, and fields sharing an erased field type
+  share one index-dispatched bridge: `Pair<i32>` merges `left: T` with
+  `right: i32`, `Pair<String>` keeps them apart. The grouping exists only per
+  instantiation, and the two call sites are indistinguishable, so a generic
+  bridge could not be selected.
+
 ## Wire naming
 
 The reflection layer exposes only the authored facts — a member's `rename`
