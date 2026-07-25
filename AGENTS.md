@@ -38,6 +38,12 @@ mise run benchmark-all     # runs all benchmarks and reports the results
 mise run report-wasm-size  # measures the size of the generated Wasm files and reports the results
 ```
 
+## Tooling
+
+- Never `pgrep` to check whether a job is alive — it matches the watcher's own command line, so the loop never exits. Have the job record its own completion: `cmd > run.log 2>&1; echo $? > run.done`.
+- Always redirect output to a file and read the file. Filtering a live command (`| tail`, `| grep`) discards everything you did not anticipate, and a filter that misses costs a full re-run — tens of minutes.
+- Run long jobs (`mise run test`, `test-wado`, `update-golden-fixtures`, `on-task-done`) through the harness's background mechanism, not `nohup ... &`, so completion is notified. Never foreground `sleep` to wait.
+
 ## General Rules
 
 - Write all documentation and comments in English, and keep them concise — cut filler and low-information words.
