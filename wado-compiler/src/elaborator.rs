@@ -1943,4 +1943,3 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.tysys.type_table
     }
 }
-
