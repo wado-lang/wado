@@ -20,7 +20,7 @@ compiler fills it in) is optional: a `T: Serialize` bound is satisfied
 structurally once every field or case of `T` implements the trait — how
 an anonymous struct, which has no name for a marker, becomes serializable.
 Write the marker to force the impl with no bound present, or alongside
-`#[serde(...)]` customization.
+`#[wire(...)]` customization.
 
 ```wado
 struct Point { x: i32, y: i32 }               // no marker needed
@@ -35,10 +35,10 @@ The field name as written is the single source of truth. Override per
 struct with `#[wire(name_policy = "...")]`, or per field with
 `#[wire(name = "...")]` (which takes precedence).
 
-`rename_all` strategies: `"camelCase"`, `"snake_case"`, `"PascalCase"`,
+`name_policy` strategies: `"camelCase"`, `"snake_case"`, `"PascalCase"`,
 `"SCREAMING_SNAKE_CASE"`, `"kebab-case"`, `"SCREAMING-KEBAB-CASE"`.
 
-The same `rename` / `rename_all` overrides apply to `enum` and `variant`
+The same `name` / `name_policy` overrides apply to `enum` and `variant`
 case names (default: the `PascalCase` name verbatim), e.g.
 `#[wire(name_policy = "kebab-case")]` makes `AddRemote` serialize as
 `"add-remote"`.
@@ -57,7 +57,7 @@ struct Event {
     event_type: String,       // wire key: "eventType"
 }
 
-// Per-field override (wins over rename_all)
+// Per-field override (wins over name_policy)
 #[wire(name_policy = "kebab-case")]
 struct Header {
     content_type: String,     // wire key: "content-type"
@@ -91,12 +91,12 @@ impl Deserialize for Config;
 ### `pub fn apply_case(style: CaseStyle, s: String) -> String`
 
 Apply a `CaseStyle` to an identifier. `Identity` returns `s` unchanged.
-Matches Rust's `heck` (the compiler's `apply_rename_all`).
+Matches Rust's `heck` (the compiler's `apply_name_policy`).
 
 ### `pub fn wire_name<M: Member>(m: &M, policy: CaseStyle) -> String`
 
 Resolve a member's wire name: its `#[wire(name)]` override wins,
-else the type's `rename_all` policy applies, else identity.
+else the type's `name_policy` applies, else identity.
 
 ## Traits
 
