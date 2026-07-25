@@ -346,7 +346,7 @@ fn serialized_field_name(f: &crate::tir::TirField, struct_def: &crate::tir::TirS
     })
 }
 
-/// Apply a `rename_all` strategy. Source-casing-agnostic, so it works for both
+/// Apply a `name_policy` strategy. Source-casing-agnostic, so it works for both
 /// `snake_case` struct fields and `PascalCase` enum/variant cases (Wado casing is
 /// convention, not a rule, so the source form is open).
 fn apply_name_policy(s: &str, strategy: &str) -> String {
@@ -373,12 +373,12 @@ fn apply_name_policy(s: &str, strategy: &str) -> String {
 fn serialized_case_name(
     name: &str,
     wire_name_override: &Option<String>,
-    rename_all: &Option<String>,
+    name_policy: &Option<String>,
 ) -> String {
     if let Some(r) = wire_name_override {
         return r.clone();
     }
-    match rename_all {
+    match name_policy {
         Some(strategy) => apply_name_policy(name, strategy),
         None => name.to_string(),
     }
@@ -4052,7 +4052,7 @@ mod tests {
     #[test]
     fn serialized_case_name_precedence() {
         let kebab = Some("kebab-case".to_string());
-        // Per-case rename wins over rename_all wins over the verbatim name.
+        // Per-case name wins over name_policy wins over the verbatim name.
         assert_eq!(
             serialized_case_name("Remove", &Some("rm".to_string()), &kebab),
             "rm"
