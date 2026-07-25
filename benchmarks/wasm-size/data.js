@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784980418596,
+  "lastUpdate": 1785022413486,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -43857,6 +43857,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 276359,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "64a5477020fe1d95e36b44ae36d7a718260e0aff",
+          "message": "Merge pull request #1687 from wado-lang/claude/wasi-clocks-wait-for-ymr1n4\n\nfix(cm): lower stream copy canonicals with the `async` option",
+          "timestamp": "2026-07-26T08:23:18+09:00",
+          "tree_id": "2e457ec744a04d562f3558d1b5440cc0eecb52e3",
+          "url": "https://github.com/wado-lang/wado/commit/64a5477020fe1d95e36b44ae36d7a718260e0aff"
+        },
+        "date": 1785022412720,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1983,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8225,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16183,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276373,
             "unit": "bytes"
           }
         ]
