@@ -1156,13 +1156,9 @@ impl TraitEnv {
         })
     }
 
-    /// The associated-type names a value blanket projects into type packs —
-    /// `impl<T: Bound<Assoc = [..P]>, ..P> Trait for T` yields `["Assoc"]`, in
-    /// header order. Empty for a blanket with no projected pack. This is the
-    /// general form of the former `ReflectStruct`-struct-only `[T, Fields]` keying:
-    /// it also covers `ReflectEnum<Members = [..C]>` /
-    /// `ReflectFlags<Members = [..B]>`, so dispatch keys such a blanket by
-    /// `[T, T::Assoc, …]` uniformly without hard-coding any one trait.
+    /// The associated-type names a value blanket projects into type packs, in
+    /// header order — `impl<T: Bound<Assoc = [..P]>, ..P> Trait for T` yields
+    /// `["Assoc"]`. Empty for a blanket that projects none.
     pub(crate) fn blanket_projected_pack_assocs(
         &self,
         trait_name: &str,

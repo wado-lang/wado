@@ -129,15 +129,11 @@ struct SubstitutedCall {
 /// instantiation location is what lets the variadic-tuple guard and the
 /// ref-blanket dispatch both keep working under the
 /// `(ModuleSource, String)` template keying.
-/// Augment a blanket's impl args with the type packs it keys on. A blanket
-/// `impl<T: Bound<Assoc = [..P]>, ..P> Trait for T` is instantiated under
-/// `[T, T::Assoc, …]`, but a call site (and auto-derive bodies) supply `[T]`
-/// only; appending the resolved packs makes both keys identical so the shared
-/// blanket instance is queued and looked up under one key, not split across two.
-/// General over the blanket's own projected assocs (`ReflectStruct<FieldTypes>`,
-/// `ReflectEnum<Members>`, `ReflectFlags<Members>`, …); a blanket that
-/// projects nothing (`impl<I: Iterator> IntoIterator for I`) is returned
-/// unchanged, so iterator / serde blankets are untouched.
+/// Append the type packs a blanket keys on to its impl args.
+/// `impl<T: Bound<Assoc = [..P]>, ..P> Trait for T` instantiates under
+/// `[T, T::Assoc, …]` while a call site supplies `[T]`, so without this the
+/// queueing and rewrite sides key the same instance differently. A blanket that
+/// projects nothing is returned unchanged.
 pub(super) fn blanket_impl_args_with_projected_packs(
     args: &[TypeId],
     trait_env: &TraitEnv,
@@ -156,14 +152,9 @@ pub(super) fn blanket_impl_args_with_projected_packs(
     out
 }
 
-/// Whether `generic_name` names a bare-`T` blanket *template*
-/// (`param^Trait::method`) for `trait_name` that keys on projected type packs —
-/// `impl<T: Bound<Assoc = [..P]>, ..P> Trait for T`, instantiated under
-/// `[T, T::Assoc, …]`. The general form of the former `ReflectStruct`-struct-only
-/// check: covers `ReflectStruct<FieldTypes>` / `ReflectEnum<Members>` /
-/// `ReflectFlags<Members>`, and excludes both one-arg blankets
-/// (`impl<I: Iterator> IntoIterator for I`) and non-template (concrete / shape /
-/// ref) dispatches, whose `generic_name` is not the blanket param's template.
+/// Whether `generic_name` is the bare-`T` blanket template for `trait_name` and
+/// that blanket projects type packs. Excludes one-arg blankets and concrete /
+/// shape / ref dispatches, whose `generic_name` is not the param's template.
 pub(super) fn is_pack_blanket_dispatch(
     trait_env: &TraitEnv,
     trait_name: &str,
@@ -603,10 +594,6 @@ impl Monomorphizer {
                             } else {
                                 monomorph.impl_type_args.clone()
                             };
-                            // A blanket that projects type packs is instantiated
-                            // under `[T, T::Assoc, …]`; the recorded impl args carry
-                            // only `[T]`, so append the packs to match the template's
-                            // arity (and the rewrite-side lookup key).
                             let blanket_trait = info
                                 .base_trait_name
                                 .as_deref()

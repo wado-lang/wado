@@ -2826,7 +2826,7 @@ impl TypeTable {
     /// [`Self::mangle_type_arg_for_generic`] as it reads *after*
     /// [`Self::erase_newtypes_and_flags`]: every `Newtype` collapses to its
     /// ultimate base and every `Flags` to `u32`, recursively through composite
-    /// types. Lets pre-erasure synthesis (the `Field::get` bridge helpers) mint a
+    /// types. Lets pre-erasure synthesis (the `StructField::get` bridge helpers) mint a
     /// name that matches the post-erasure call site, whose `field_ty` reads
     /// through the erasure redirect map.
     pub fn mangle_type_arg_erased(&self, id: TypeId) -> String {

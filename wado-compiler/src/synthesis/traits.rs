@@ -722,9 +722,8 @@ fn synthesize_reflect_kind(
     }
 }
 
-/// Build a homogeneous member-tuple member (`members()` / `members()`) as
-/// `return [Member { .. }, ..];` — one `Member<Self>` struct literal per case /
-/// bit, packed into `members_tuple_type` (the trait's `Members` associated type).
+/// `members()` for a payload-free kind: one member struct literal per case /
+/// bit, packed into the trait's `Members` tuple.
 fn generate_reflect_member_tuple_fn(
     method_info: LocalMethodName,
     member_struct_name: &str,
@@ -966,7 +965,7 @@ fn generate_wire_name_policy_fn(
 }
 
 /// Synthesize the `$field_get$S$F` helpers for every distinct field type of a
-/// struct. `Field::<S, F>::get`'s body carries a `builtin::struct_field_get`
+/// struct. `StructField::<S, F>::get`'s body carries a `builtin::struct_field_get`
 /// marker; lowering rewrites each monomorphized marker to its helper
 /// (WEP 2026-06-13 §2). Extract-only and guard-free — every struct field is
 /// always present.

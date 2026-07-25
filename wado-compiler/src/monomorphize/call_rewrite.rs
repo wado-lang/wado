@@ -315,8 +315,6 @@ impl Monomorphizer {
                 if monomorph.is_blanket {
                     names_to_try.insert(0, monomorph.generic_name.clone());
                 }
-                // A blanket that projects type packs is keyed by `[T, T::Assoc, …]`;
-                // the recorded impl args carry only `[T]`, so append the packs.
                 let blanket_trait = info
                     .base_trait_name
                     .as_deref()

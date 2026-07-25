@@ -1345,10 +1345,8 @@ impl Parser {
 
         self.expect(&TokenKind::RBracket)?;
 
-        // Every attribute in every position is minted here, so rejecting
-        // `#[serde]` at this one point needs no walk and cannot miss a
-        // declaration form. Recorded rather than returned: the attribute still
-        // parses, so the item does not cascade into recovery errors.
+        // Recorded, not returned: the attribute still parses, so the item does
+        // not cascade into recovery errors.
         if name == "serde" {
             self.errors.push(ParseError {
                 message: serde_attr_advice(&args),
@@ -8535,9 +8533,8 @@ line 2
     }
 }
 
-/// Why `#[serde(...)]` is refused, and what to write instead. `default` is
-/// called out separately: it has no `#[wire]` spelling at all, since a field's
-/// own default value is the single mechanism for an optional field.
+/// Why `#[serde(...)]` is refused, and what to write instead. `default` has no
+/// `#[wire]` spelling: a field's own default value replaces it.
 fn serde_attr_advice(args: &[AttrArg]) -> String {
     let is_default = |arg: &AttrArg| matches!(arg, AttrArg::Ident(name) if name == "default");
     let has_default = args.iter().any(is_default);

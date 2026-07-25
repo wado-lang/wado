@@ -175,7 +175,7 @@ Recognized keys: `min_length` / `max_length`, `minimum` / `maximum` /
 
 - Enforced at the `Deserialize` boundary: a violation is a `DeserializeError`
   (`InvalidValue`) with the field offset. Trusted struct literals are not checked.
-- Exposed via the member: `Field::validate()` / `VariantCase::validate()`, so a
+- Exposed via the member: `StructField::validate()` / `VariantCase::validate()`, so a
   schema library emits the corresponding keywords.
 
 `description` is not a `#[validate]` concern — it comes from `///` doc comments via
