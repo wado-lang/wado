@@ -146,7 +146,7 @@ struct Pair<T> { left: T, right: i32 }
 
 The trait shape is unchanged, so no reflection API is generic-specific. The
 alternative — synthesizing a concrete impl once `Pair<String>` exists — is
-circular: a derivation needs `Pair<String>: ReflectStruct` *while*
+circular: a derivation needs `Pair<String>: ReflectStruct` _while_
 monomorphizing, which is exactly when the instance appears.
 
 `type_name()` is the declared name (`"Pair"`, not `"Pair<String>"`), matching
@@ -174,7 +174,7 @@ rather than unconditional:
   each impl is finite. A generic one is synthesized only where a bound demands
   it, because the member handles above are generic structs too.
 - A generic type's value bridges (`$field_get$S$F`, `$case_extract$V$P`,
-  `$case_construct$V$P`) are minted *after* monomorphization — the only synthesis
+  `$case_construct$V$P`) are minted _after_ monomorphization — the only synthesis
   that is. Lowering names a bridge by the concrete subject and member mangles,
   and members sharing a mangled member type share one index-dispatched bridge:
   `Pair<i32>` merges `left: T` with `right: i32`, `Pair<String>` keeps them
