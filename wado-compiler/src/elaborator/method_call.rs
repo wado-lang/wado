@@ -2287,31 +2287,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         static_key_hint: Option<&crate::elaborator::trait_env::DeclKey>,
     ) -> Vec<TypeId> {
-        // Check in current module's impl blocks first (highest priority)
-        let found: Option<(ast::Type, ast::Function)> =
-            self.current_module_items.iter().find_map(|item| {
-                if let Item::Impl(impl_block) = item {
-                    let impl_struct_name = self.get_type_name(&impl_block.ty);
-                    if impl_struct_name == struct_name {
-                        for method in &impl_block.methods {
-                            let has_self = method
-                                .params
-                                .iter()
-                                .any(|p| p.self_kind != ast::SelfKind::None);
-                            if method.name == method_name && !has_self {
-                                return Some((impl_block.ty.clone(), method.clone()));
-                            }
-                        }
-                    }
-                }
-                None
-            });
-
-        if let Some((impl_ty, method)) = found {
-            let current_module = self.current_module_source.clone();
-            return self.resolve_static_method_params_in_scope(&current_module, &impl_ty, &method);
-        }
-
         // O(1) lookup via pre-built static method index. The index is
         // keyed by the receiver's canonical decl key so two same-named
         // structs in different modules each resolve to their own
