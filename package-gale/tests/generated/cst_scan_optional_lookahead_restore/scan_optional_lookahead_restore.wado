@@ -2202,6 +2202,19 @@ fn _parse_item__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     return;
 }
 
+fn _parse_item__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_name(tokens, pos, &FOLLOW_MASK_2, 0);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
+    pos += 1;
+    pos = scan_inner(tokens, pos, &FOLLOW_MASK_3, 0);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn _parse_item__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let name = _parse_name(p, follow);
@@ -2256,6 +2269,65 @@ fn _parse_item__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     return;
 }
 
+fn _parse_item__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_name(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos] == TK_LIT_AS && pos + 1 < tokens.len() && _kind_set_2(tokens[pos + 1]) {
+        let sol_4_save = pos;
+        sol_4_done: {
+            sol_4: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_AS { break sol_4; }
+                pos += 1;
+                pos = scan_alias(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_4; }
+                break sol_4_done;
+            }
+            pos = sol_4_save;
+        }
+    } else if pos < tokens.len() && _kind_set_2(tokens[pos]) {
+        let sol_5_save = pos;
+        sol_5_done: {
+            sol_5: {
+                pos = scan_alias(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_5; }
+                break sol_5_done;
+            }
+            pos = sol_5_save;
+        }
+    }
+    if pos < tokens.len() && _kind_set_1(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+        let sp = pos;
+        let gp_6 = pos;
+        let sgk_6 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if _kind_set_1(sgk_6) {
+            sg_6: {
+                pos = gp_6;
+                sg_6_0: {
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_IDX { break sg_6_0; }
+                    pos += 1;
+                    pos = scan_name(tokens, pos, follow, 0);
+                    if pos < 0 { break sg_6_0; }
+                    break sg_6;
+                }
+                pos = gp_6;
+                sg_6_1: {
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_NO { break sg_6_1; }
+                    pos += 1;
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_IDX { break sg_6_1; }
+                    pos += 1;
+                    break sg_6;
+                }
+                pos = -1;
+            }
+        } else {
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; }
+    }
+    return pos;
+}
+
 fn _parse_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
     if kind == TK_ID {
@@ -2263,11 +2335,27 @@ fn _parse_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             if _kind_set_3(p.peek_at(1)) {
                 return _parse_item__inner_alt_0(p, follow);
             } else if p.peek_at(1) == TK_LIT_LPAREN {
-                if _kind_set_1(p.peek_at(2)) {
-                    return _parse_item__inner_alt_0(p, follow);
-                } else if _kind_set_4(p.peek_at(2)) {
+                let _sd_tokens = &p.kinds;
+                let _sd_pos = p.pos;
+                let _sd_p_1 = _parse_item__inner_scan_1(_sd_tokens, _sd_pos);
+                let _sd_p_0 = _parse_item__inner_scan_0(_sd_tokens, _sd_pos);
+                let mut _sd_best_i: i32 = -1;
+                let mut _sd_best_p: i32 = -1;
+                if _sd_p_0 > _sd_best_p {
+                    _sd_best_p = _sd_p_0;
+                    _sd_best_i = 0;
+                }
+                if _sd_p_1 > _sd_best_p {
+                    _sd_best_p = _sd_p_1;
+                    _sd_best_i = 1;
+                }
+                if _sd_best_i == 1 {
                     return _parse_item__inner_alt_1(p, follow);
                 }
+                if _sd_best_i == 0 {
+                    return _parse_item__inner_alt_0(p, follow);
+                }
+                return _parse_item__inner_alt_0(p, follow);
             }
         }
     }
@@ -2457,10 +2545,6 @@ fn _kind_set_2(k: i32) -> bool {
 
 fn _kind_set_3(k: i32) -> bool {
     return k matches { TK_ID | TK_LIT_AS | TK_LIT_IDX | TK_LIT_NO };
-}
-
-fn _kind_set_4(k: i32) -> bool {
-    return k matches { TK_LIT_LPAREN | TK_NUMBER };
 }
 
 global EMPTY_SYNC: List<i32> = [];

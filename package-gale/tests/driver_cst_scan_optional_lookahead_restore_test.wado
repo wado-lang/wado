@@ -27,11 +27,9 @@ test "tree: rewind still lets the outer tournament pick the longer alt" {
     ");
 }
 
-// A separate defect, kept here because the grammar exhibits it: the parse
-// side commits to alt 1 from a depth-2 static prefix (`_kind_set(peek_at(2))`)
-// even though `( ( ( ( x ) ) ) )` only reaches `alias`. The decision belongs
-// to the longest-match tournament the scan side already runs.
-#[TODO]
+// The rejection case for the same decision: only `alias` reaches the `x`, so
+// the parse side must not commit to alt 1 from the depth-2 static prefix. The
+// '(' branch halts `Ambiguous` and the tournament picks.
 test "tree: the same optional matches when its body succeeds" {
     assert_tree(&"f ( ( ( ( x ) ) ) )", &"
         (s (stmt (item (name f) (alias ( (alias ( (alias ( (alias ( (alias x) )) )) )) )))))

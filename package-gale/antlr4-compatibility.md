@@ -390,7 +390,7 @@ section) is the only complete answer.
 
 ### Soundness invariants
 
-Four invariants any LL-related change must respect. Each was violated
+Six invariants any LL-related change must respect. Each was violated
 once and broke a real grammar; the guards live as inline conservatism at
 the relevant sites.
 
@@ -433,6 +433,28 @@ the relevant sites.
    winner and mis-parses grammars with no scan cycle at all — SQLite's
    `CREATE TABLE` and RustParser's `crate : item*` both regress. Fixture
    `tests/grammars/scan_group_recursion.g4`.
+6. A nullable `Repeat` whose body can consume more than one token is
+   walked into, not skipped to `pos + 1`. Skipping claims the whole repeat
+   matched a single token, so the walk keeps separating alternatives on
+   lookahead that actually sits inside the body — `item : name
+   ( 'as'? alias )? … | name '(' inner ')'` resolved `f ( …` from the
+   token after the `'('` as if `alias` were one token, and committed to
+   the wrong alt. Entering the body reaches the real opacity and hands the
+   decision to the tournament. A single-token body keeps the cheap skip,
+   which is exact for it — widening this to every repeat would downgrade
+   decisions the static path resolves correctly today.
+7. A scan-side optional rewinds to its entry position when its body
+   fails. A failed optional means "skip", so leaving the callee's `-1` (or
+   a half-consumed position) in `pos` both mis-scans the elements after it
+   and traps the next bounds guard, which tests only `pos < tokens.len()`.
+   SQLite's `table_or_subquery` hit this on every `FROM f(...)`: alt 0's
+   `( K_AS? table_alias )?` gate admits `'('` because `table_alias` is
+   parenthesizable, and `table_alias` then fails on the argument.
+
+Invariants 6 and 7 share one fixture,
+`tests/grammars/scan_optional_lookahead_restore.g4` — the rewind is what
+lets the tournament run at all, and the walk is what routes the decision
+to it.
 
 Termination is a checked property, not only inline conservatism:
 `check_left_recursion` (grammar-check phase) rejects hidden (`a : x? a`, a

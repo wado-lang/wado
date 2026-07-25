@@ -21,20 +21,6 @@ Grammar-authoring DX follow-ups:
 
 The K-prefix follow-mask path closes the multi-token tail-greedy gap at the outer alternative position, but a rule reference inside a `Repeat` body still falls back to the 1-token mask path. The fixed-point "next iteration | exit-to-caller" computation that would let it gate is straightforward but not yet plumbed. Few real grammars need it; revisit when a descriptor surfaces a regression.
 
-### Parse-side dispatch over-commits where the scan side runs a tournament
-
-A rule whose alternatives lowering reports as an overlap tournament can still
-get a static k-prefix dispatch tree on the parse side, and that tree commits on
-a prefix too short to separate the alts. Fixture
-`tests/grammars/scan_optional_lookahead_restore.g4`: `item`'s alts both open
-with the same rule ref and a `'('` chain, the warning says "resolved by
-longest-match scan tournament", yet `_parse_item__inner` picks alt 1 from
-`peek_at(2)` and so mis-parses `f ( ( ( ( x ) ) ) )` (only `alias` reaches the
-`x`). Pinned `#[TODO]` in
-`tests/driver_cst_scan_optional_lookahead_restore_test.wado`. The dispatch
-builder must mark the decision ambiguous and fall through to the tournament the
-scan side already emits.
-
 ### Multi-alt rule-reference expansion in the caller-side mask analysis
 
 The K-prefix caller-side mask analysis halts at a multi-alternative rule reference because a per-depth union of the alternatives' prefixes would over-yield by matching cross-alternative sequences no real alternative admits. A per-alternative sequence representation could extend the walk safely — useful when a caller's continuation passes through a multi-alternative rule like `expr : literal | name`.

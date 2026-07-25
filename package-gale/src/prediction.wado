@@ -402,6 +402,34 @@ fn sll_config_first(c: &SllConfig, ctx: &mut GenContext) -> List<i32> {
     return ctx.first_ids_of_elements_from(&c.elements, c.pos);
 }
 
+/// Alternatives to walk into for a nullable `Repeat` whose body can consume
+/// more than one token — a `RuleRef` to a multi-token rule, or a `Group`
+/// (whose alternatives are opaque at the repeat's own position). Skipping such
+/// a body to `pos + 1` would claim the whole repeat matched a single token, so
+/// prediction would keep separating alternatives on lookahead that actually
+/// sits inside the body: `item : name ( 'as'? alias )? … | name '(' inner ')'`
+/// resolved `f ( … ` from the token after the '(' as if `alias` were one token
+/// (`tests/grammars/scan_optional_lookahead_restore.g4`). Returning the body's
+/// alternatives lets the normal walk reach the real opacity and hand the
+/// decision to the scan tournament. A single-token body keeps the cheap skip,
+/// which is exact for it.
+fn repeat_entry_alts(rep: &RepeatElement, ctx: &mut GenContext) -> Option<List<Alternative>> {
+    if let RuleRef(rr) = rep.element {
+        let mut stv: List<String> = [];
+        if ctx.rule_is_single_token(&rr.name, &mut stv) {
+            return null;
+        }
+        if let Some(inner_rule) = ctx.find_rule(&rr.name) {
+            return Option::Some(inner_rule.alternatives);
+        }
+        return null;
+    }
+    if let Group(g) = rep.element {
+        return Option::Some(g.alternatives);
+    }
+    return null;
+}
+
 /// Advance a config by one token, expanding RuleRefs into the rule's alternatives.
 fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i32 = 0) -> List<SllConfig> {
     // Limit inline expansion depth to prevent explosion from recursive rules.
@@ -425,37 +453,29 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
         let mut results: List<SllConfig> = [];
         let mut visiting: List<String> = [];
         if ctx.first_ids_of_element(elem, &mut visiting).contains(&token) {
-            // A multi-token RuleRef inner is entered via the return stack rather than skipped to pos+1.
+            // A multi-token inner is entered via the return stack rather than skipped to pos+1.
             let mut entered = false;
             if let Repeat(rep) = elem {
-                if let RuleRef(rr) = rep.element {
-                    let mut stv: List<String> = [];
-                    if !ctx.rule_is_single_token(&rr.name, &mut stv) && c.return_stack.len() < 1 {
-                        let inner_rule = ctx.find_rule(&rr.name);
-                        let inner_alt_count = if let Some(r) = inner_rule {
-                            r.alternatives.len();
-                        } else {
-                            0;
-                        };
-                        if inner_alt_count <= 8 {
+                if c.return_stack.len() < 1 {
+                    let inner_alts = repeat_entry_alts(rep, ctx);
+                    if let Some(inner_alts) = inner_alts {
+                        if inner_alts.len() <= 8 {
                             entered = true;
                             let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
-                            if let Some(inner_rule) = inner_rule {
-                                for let alt of inner_rule.alternatives {
-                                    let mut v2: List<String> = [];
-                                    if !ctx.first_ids_of_alt(&alt, &mut v2).contains(&token) {
-                                        continue;
-                                    }
-                                    let exp = SllConfig {
-                                        ..*c,
-                                        elements: alt.elements,
-                                        pos: 0,
-                                        return_stack: new_stack,
-                                    };
-                                    let advanced = sll_advance(&exp, token, ctx, inline_depth + 1);
-                                    for let a of advanced {
-                                        results.push(a);
-                                    }
+                            for let alt of inner_alts {
+                                let mut v2: List<String> = [];
+                                if !ctx.first_ids_of_alt(&alt, &mut v2).contains(&token) {
+                                    continue;
+                                }
+                                let exp = SllConfig {
+                                    ..*c,
+                                    elements: alt.elements,
+                                    pos: 0,
+                                    return_stack: new_stack,
+                                };
+                                let advanced = sll_advance(&exp, token, ctx, inline_depth + 1);
+                                for let a of advanced {
+                                    results.push(a);
                                 }
                             }
                         }
