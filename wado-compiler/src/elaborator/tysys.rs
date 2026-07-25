@@ -131,6 +131,10 @@ pub(crate) struct TypeSystem {
     /// carries each method's `ast_id`, so a dispatch query goes header →
     /// signature without ever reaching for the impl AST.
     pub(crate) all_impl_method_sigs: Rc<IndexMap<crate::ast::AstId, super::sig::MethodSig>>,
+    /// Every module's `interface` / `resource` operation signatures, keyed by
+    /// the declaration's `AstId`. A decl-pass product, so a module's
+    /// operations are readable before its bodies are walked.
+    pub(crate) all_effect_ops: Rc<IndexMap<crate::ast::AstId, Vec<crate::tir::TirEffectOp>>>,
 
     /// Per-module `__DATA__` section contents; modules without one have
     /// no entry.
@@ -144,6 +148,15 @@ impl TypeSystem {
         ast_id: crate::ast::AstId,
     ) -> Option<&super::sig::MethodSig> {
         self.all_impl_method_sigs.get(&ast_id)
+    }
+
+    /// Operation signatures of the `interface` / `resource` declared at
+    /// `ast_id`, in any loaded module.
+    pub(crate) fn effect_ops(
+        &self,
+        ast_id: crate::ast::AstId,
+    ) -> Option<&[crate::tir::TirEffectOp]> {
+        self.all_effect_ops.get(&ast_id).map(Vec::as_slice)
     }
 
     /// Canonical signature of the free function `name` declared in

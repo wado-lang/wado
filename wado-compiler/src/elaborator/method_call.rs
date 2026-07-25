@@ -1846,27 +1846,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_module: &ModuleSource,
         method_name: &str,
     ) -> Option<String> {
-        let module = self.loaded_modules.get(struct_module)?;
-        for item in &module.items {
-            if let crate::ast::Item::Resource(resource) = item
-                && resource.name == struct_name
-            {
-                for method in &resource.methods {
-                    let has_self = method.params.iter().any(|p| {
-                        matches!(&p.ty, crate::ast::Type::Reference(r) | crate::ast::Type::MutReference(r)
-                            if matches!(&**r, crate::ast::Type::Named(n) if n.name == "Self" || n.name == resource.name))
-                            || matches!(&p.ty, crate::ast::Type::Named(n) if n.name == "Self" || n.name == resource.name)
-                    });
-                    if method.name == method_name && !has_self {
-                        return method
-                            .attrs
-                            .iter()
-                            .find_map(crate::ast::Attribute::cm_identifier);
-                    }
-                }
-            }
-        }
-        None
+        // The index already holds only the receiver-less methods, so the
+        // caller needs no second `self`-detection pass over the AST.
+        let (_, _, decl_id, _) = self
+            .tysys
+            .trait_env
+            .resource_static_method_index
+            .get(&(struct_module.clone(), struct_name.to_string()))?
+            .iter()
+            .find(|(name, ..)| name == method_name)?;
+        self.tysys
+            .effect_ops(*decl_id)?
+            .iter()
+            .find(|op| op.name == method_name)?
+            .cm_name
+            .clone()
     }
 
     /// Check if a static method exists directly for a given type name (no newtype fallback).
@@ -2138,51 +2132,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Search resource declarations via pre-built index. Same canonical
-        // key disambiguation as the inherent-impl path above.
-        if let Some(methods) = self
+        // key disambiguation as the inherent-impl path above. The decl pass
+        // resolved these in the resource's own frame, so a generic resource's
+        // `Option<T>` is already a `TypeParam` here.
+        let indexed_resource_return = self
             .tysys
             .trait_env
             .resource_static_method_index
             .get(&static_key)
-        {
-            for (name, ms, item_id, method_idx) in methods {
-                if name == method_name
-                    && let Some(module) = self.loaded_modules.get(ms)
-                    && let Some(Item::Resource(resource)) = module.item_by_id(*item_id)
-                {
-                    let method = &resource.methods[*method_idx];
-
-                    // Inherited scope; only `type_params` is replaced.
-                    let mut scope = self.enter_inherited_type_param_scope();
-                    scope.annotate_ctx.trait_ctx.type_params.clear();
-
-                    for (i, param) in resource.type_params.iter().enumerate() {
-                        let name = &param.name;
-                        if !scope.annotate_ctx.trait_ctx.type_params.contains_key(name) {
-                            let type_id = scope
-                                .tysys
-                                .type_table
-                                .borrow_mut()
-                                .make_type_param(name.clone(), i as u32);
-                            scope
-                                .annotate_ctx
-                                .trait_ctx
-                                .type_params
-                                .insert(name.clone(), (i as u32, type_id));
-                        }
-                    }
-
-                    let result = method
-                        .return_type
-                        .as_ref()
-                        .map(|t| scope.resolve_type(t))
-                        .unwrap_or(TypeTable::UNIT);
-
-                    drop(scope);
-
-                    return result;
-                }
-            }
+            .and_then(|methods| {
+                methods
+                    .iter()
+                    .find(|(name, ..)| name == method_name)
+                    .and_then(|(name, _, item_id, _)| {
+                        self.tysys
+                            .effect_ops(*item_id)?
+                            .iter()
+                            .find(|op| op.name == *name)
+                            .map(|op| op.return_type)
+                    })
+            });
+        if let Some(return_type) = indexed_resource_return {
+            return return_type;
         }
 
         // Auto-derived `Default::default()` returns the struct type itself.
