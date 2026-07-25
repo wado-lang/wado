@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784978000646,
+  "lastUpdate": 1784980418596,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -43793,6 +43793,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5e544a1a4d0f9ada1781232600fbf235da4cdf35"
         },
         "date": 1784977999861,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1970,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8212,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16169,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276359,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "48cd4e9489fa10fb074f2a2193dfe20727447e9d",
+          "message": "Merge pull request #1682 from wado-lang/claude/reflection-api-review-cfj229\n\nrefactor(reflect)!: unify the reflection API on members, rename the serde attribute to wire",
+          "timestamp": "2026-07-25T20:43:45+09:00",
+          "tree_id": "7f145c4f4f1cbd1c467e12510273c2d2ce19f527",
+          "url": "https://github.com/wado-lang/wado/commit/48cd4e9489fa10fb074f2a2193dfe20727447e9d"
+        },
+        "date": 1784980417807,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
