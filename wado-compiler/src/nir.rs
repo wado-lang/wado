@@ -103,7 +103,8 @@ impl FunctionRef {
             | "array_clone_shallow"
             | "select"
             | "copy_value"
-            | "is_uninitialized" => Some(format!("builtin::{generic_name}")),
+            | "is_uninitialized"
+            | "black_box" => Some(format!("builtin::{generic_name}")),
             _ => None,
         }
     }

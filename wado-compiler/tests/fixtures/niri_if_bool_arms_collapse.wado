@@ -8,15 +8,11 @@
 // regardless of whether the if-form or the rewritten form is in
 // effect, for both the cond-preserving and the negated case.
 //
-// The conds come from `global mut` seeds: a mutable global is
-// `Lattice::NonConst` to const-folding, so the cond survives to the
-// bool-arms rule instead of the const-condition splice rule firing
-// first. `#[inline(never)]` then keeps the call itself in the WIR.
+// `black_box` keeps the cond off const-folding's radar, so the const-condition
+// splice rule cannot fire before the bool-arms rule sees the `if`;
+// `#[inline(never)]` keeps the call itself in the WIR.
 
 use { println, Stdout } from "core:cli";
-
-global mut POS_SEED: i32 = 7;
-global mut NEG_SEED: i32 = -1;
 
 #[inline(never)]
 fn opaque_pos(x: i32) -> bool {
@@ -30,26 +26,26 @@ fn opaque_neg(x: i32) -> bool {
 
 export fn run() with Stdout {
     // true/false → cond
-    let a = if opaque_pos(POS_SEED) {
+    let a = if opaque_pos(builtin::black_box(7)) {
         true;
     } else {
         false;
     };
 
     // false/true → !cond
-    let b = if opaque_neg(POS_SEED) {
+    let b = if opaque_neg(builtin::black_box(7)) {
         false;
     } else {
         true;
     };
 
     // Same shape with the polarity that produces `false`.
-    let c = if opaque_pos(NEG_SEED) {
+    let c = if opaque_pos(builtin::black_box(-1)) {
         true;
     } else {
         false;
     };
-    let d = if opaque_neg(NEG_SEED) {
+    let d = if opaque_neg(builtin::black_box(-1)) {
         false;
     } else {
         true;
@@ -66,7 +62,7 @@ __DATA__
 {
     "stdout": "true true false false\n",
     "wir_expect:O2": [
-        "/opaque_pos\"(global:niri_if_bool_arms_collapse.wado::POS_SEED);",
-        "/opaque_neg\"(global:niri_if_bool_arms_collapse.wado::POS_SEED) == 0;"
+        "/opaque_pos\"(7);",
+        "/opaque_neg\"(7) == 0;"
     ]
 }

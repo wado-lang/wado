@@ -220,6 +220,14 @@ fn f32_reinterpret_i32(i: i32) -> f32;
 /// Traps unconditionally, marking unreachable code.
 fn unreachable() -> !;
 
+/// Returns `value` unchanged while hiding it from the optimizer.
+///
+/// The result is never a compile-time constant, so a computation reading it
+/// survives instead of folding away. Emits no instruction. Mirrors Rust's
+/// `std::hint::black_box`; use it to keep a test or benchmark measuring the
+/// work it names.
+fn black_box<T>(value: T) -> T;
+
 /// True while a lazy-initialized global still holds its `null` placeholder.
 ///
 /// The only argument that carries meaning is a global whose slot starts

@@ -5,12 +5,10 @@
 //
 // This extends the Box<T> parameter SROA to all single-field structs.
 
-use { println, Stdout } from "core:cli";
+// `black_box` keeps the constructed values off const-folding's radar so the
+// methods below survive into the WIR to be matched.
 
-// `SEED` is a `global mut` (always 0): const-folding treats a mutable global
-// as `NonConst`, so the constructed values stay opaque and the methods below
-// survive into the WIR to be matched.
-global mut SEED: i32 = 0;
+use { println, Stdout } from "core:cli";
 
 // Single-field structs with different field names
 struct Wrapper {
@@ -101,9 +99,9 @@ fn process_wrapper(w: &Wrapper) -> i32 {
 #[inline("never")]
 fn conditional_wrapper(flag: bool) -> i32 {
     let w = if flag {
-        Wrapper { inner: 10 + SEED }
+        Wrapper { inner: builtin::black_box(10) }
     } else {
-        Wrapper { inner: 20 + SEED }
+        Wrapper { inner: builtin::black_box(20) }
     };
     return w.get();
 }
@@ -128,8 +126,8 @@ fn sum_wrappers() -> i32 {
 // Edge case 10: Multiple different single-field structs in same function
 #[inline("never")]
 fn mixed_single_fields() -> i32 {
-    let w = Wrapper { inner: 42 + SEED };
-    let f = Flag { set: SEED == 0 };
+    let w = Wrapper { inner: builtin::black_box(42) };
+    let f = Flag { set: builtin::black_box(true) };
     let result = if f.is_set() {
         w.get()
     } else {
@@ -140,12 +138,12 @@ fn mixed_single_fields() -> i32 {
 
 export fn run() with Stdout {
     // Basic method calls
-    let w = Wrapper { inner: 42 + SEED };
+    let w = Wrapper { inner: builtin::black_box(42) };
     assert w.get() == 42;
     assert w.doubled() == 84;
 
     // Float single-field struct
-    let a = Amount { value: 19.5 + SEED as f64 };
+    let a = Amount { value: builtin::black_box(19.5) };
     assert a.as_cents() == 1950;
 
     // String single-field struct
@@ -153,9 +151,9 @@ export fn run() with Stdout {
     assert l.len() == 5;
 
     // Bool single-field struct
-    let f = Flag { set: SEED == 0 };
+    let f = Flag { set: builtin::black_box(true) };
     assert f.is_set() == true;
-    let f2 = Flag { set: SEED != 0 };
+    let f2 = Flag { set: builtin::black_box(false) };
     assert f2.is_set() == false;
 
     // Chain of function calls
@@ -164,12 +162,12 @@ export fn run() with Stdout {
     assert process_wrapper(&w) == 210;
 
     // Conditional construction
-    assert conditional_wrapper(SEED == 0) == 10;
-    assert conditional_wrapper(SEED != 0) == 20;
+    assert conditional_wrapper(builtin::black_box(true)) == 10;
+    assert conditional_wrapper(builtin::black_box(false)) == 20;
 
     // Amount addition
-    let a1 = Amount { value: 10.5 + SEED as f64 };
-    let a2 = Amount { value: 20.3 + SEED as f64 };
+    let a1 = Amount { value: builtin::black_box(10.5) };
+    let a2 = Amount { value: builtin::black_box(20.3) };
     let sum = add_amounts(&a1, &a2);
     assert sum == 30.8;
 
@@ -180,11 +178,11 @@ export fn run() with Stdout {
     assert mixed_single_fields() == 42;
 
     // Template string with single-field struct field (exercises Box<T> path too)
-    let w2 = Wrapper { inner: 99 + SEED };
+    let w2 = Wrapper { inner: builtin::black_box(99) };
     assert `${w2.inner}` == "99";
 
     // &mut self should NOT be SROA'd but must work correctly
-    let mut w3 = Wrapper { inner: 0 + SEED };
+    let mut w3 = Wrapper { inner: builtin::black_box(0) };
     w3.set(77);
     assert w3.inner == 77;
 

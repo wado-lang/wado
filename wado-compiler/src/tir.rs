@@ -3079,7 +3079,9 @@ impl FunctionRef {
         match generic_name {
             "array_get" | "array_get_ref" | "array_get_mut_ref" | "array_set" | "array_new"
             | "array_len" | "array_copy" | "array_fill" | "array_clone" | "select"
-            | "copy_value" | "is_uninitialized" => Some(format!("builtin::{generic_name}")),
+            | "copy_value" | "is_uninitialized" | "black_box" => {
+                Some(format!("builtin::{generic_name}"))
+            }
             _ => None,
         }
     }
