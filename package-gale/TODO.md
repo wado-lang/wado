@@ -21,6 +21,20 @@ Grammar-authoring DX follow-ups:
 
 The K-prefix follow-mask path closes the multi-token tail-greedy gap at the outer alternative position, but a rule reference inside a `Repeat` body still falls back to the 1-token mask path. The fixed-point "next iteration | exit-to-caller" computation that would let it gate is straightforward but not yet plumbed. Few real grammars need it; revisit when a descriptor surfaces a regression.
 
+### Parse-side dispatch over-commits where the scan side runs a tournament
+
+A rule whose alternatives lowering reports as an overlap tournament can still
+get a static k-prefix dispatch tree on the parse side, and that tree commits on
+a prefix too short to separate the alts. Fixture
+`tests/grammars/scan_optional_lookahead_restore.g4`: `item`'s alts both open
+with the same rule ref and a `'('` chain, the warning says "resolved by
+longest-match scan tournament", yet `_parse_item__inner` picks alt 1 from
+`peek_at(2)` and so mis-parses `f ( ( ( ( x ) ) ) )` (only `alias` reaches the
+`x`). Pinned `#[TODO]` in
+`tests/driver_cst_scan_optional_lookahead_restore_test.wado`. The dispatch
+builder must mark the decision ambiguous and fall through to the tournament the
+scan side already emits.
+
 ### Multi-alt rule-reference expansion in the caller-side mask analysis
 
 The K-prefix caller-side mask analysis halts at a multi-alternative rule reference because a per-depth union of the alternatives' prefixes would over-yield by matching cross-alternative sequences no real alternative admits. A per-alternative sequence representation could extend the walk safely — useful when a caller's continuation passes through a multi-alternative rule like `expr : literal | name`.
@@ -81,6 +95,7 @@ Add a failing test before fixing.
 The highest-risk bugs: a static-prediction edge or a parse/scan asymmetry that can mis-parse valid input. Several need their own focused PR with full-corpus validation rather than a quick patch (the prediction design notes the static path always has edges).
 
 - [ ] SLL prediction under-approximates and emits incomplete dispatch trees, so valid input is rejected (codegen emits a dispatch with no else-fallback): `+`/`*` repeats collapse to "consumes exactly one token" (`a : X+ Y | X Z` mispredicts on `X X Y`), and the opaque-rule expansion path drops at-end alternatives its template keeps.
+- [ ] The `sqlite` Stage B′ `#[TODO]`s (see `antlr4-compatibility.md`) are four independent divergences, each worth its own fixture: `column_def` skips `type_name?` where ANTLR4 enters it (`a NOT NULL`, `a CONSTRAINT c NOT NULL`); `type_name`'s non-greedy `name+?` stops after one name, rejecting `a UNSIGNED BIG INT`; the `BETWEEN` operands climb from too high a precedence, so `a NOT BETWEEN 1 AND 2 AND b` brackets the wrong way (a silent mis-parse, no diagnostic); and `IN`'s bare `table_name` branch (`a IN t`) plus the `sql_stmt_list` `';'` separators are rejected outright.
 - [ ] Scan/parse EOF asymmetry: the parse side matches EOF without advancing, the scan side advances unconditionally — so a scan over-counts by one whenever EOF is the last matched element, which can flip a tournament tie.
 - [ ] Tournament / scan-gate call sites never forward the runtime caller-FOLLOW argument while the corresponding parse calls do — violating the documented scan/parse lockstep invariant on FOLLOW-gated grammars.
 - [ ] A simple-CST group threads the caller's FOLLOW on the scan side but an empty FOLLOW on the parse-op path, and the two code comments contradict each other about which is sound. Decide once, fix the other side, pin with a fixture.

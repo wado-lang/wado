@@ -8411,16 +8411,26 @@ fn scan_use_tree(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPT
             pos = start;
             try_0: {
                 if pos < tokens.len() && _kind_set_9(tokens[pos]) && pos + 1 < tokens.len() && tokens[pos + 1] == TK_PATHSEP {
-                    sol_6: {
-                        pos = scan_simple_path(tokens, pos, &EMPTY_FOLLOW, 0);
-                        if pos < 0 { break sol_6; }
-                        if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sol_6; }
-                        pos += 1;
+                    let sol_6_save = pos;
+                    sol_6_done: {
+                        sol_6: {
+                            pos = scan_simple_path(tokens, pos, &EMPTY_FOLLOW, 0);
+                            if pos < 0 { break sol_6; }
+                            if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sol_6; }
+                            pos += 1;
+                            break sol_6_done;
+                        }
+                        pos = sol_6_save;
                     }
                 } else if pos < tokens.len() && tokens[pos] == TK_PATHSEP {
-                    sol_7: {
-                        if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sol_7; }
-                        pos += 1;
+                    let sol_7_save = pos;
+                    sol_7_done: {
+                        sol_7: {
+                            if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sol_7; }
+                            pos += 1;
+                            break sol_7_done;
+                        }
+                        pos = sol_7_save;
                     }
                 }
                 let gp_8 = pos;
@@ -8521,16 +8531,26 @@ fn scan_use_tree(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPT
             pos = start;
             try_0: {
                 if pos < tokens.len() && _kind_set_9(tokens[pos]) && pos + 1 < tokens.len() && tokens[pos + 1] == TK_PATHSEP {
-                    sol_13: {
-                        pos = scan_simple_path(tokens, pos, &EMPTY_FOLLOW, 0);
-                        if pos < 0 { break sol_13; }
-                        if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sol_13; }
-                        pos += 1;
+                    let sol_13_save = pos;
+                    sol_13_done: {
+                        sol_13: {
+                            pos = scan_simple_path(tokens, pos, &EMPTY_FOLLOW, 0);
+                            if pos < 0 { break sol_13; }
+                            if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sol_13; }
+                            pos += 1;
+                            break sol_13_done;
+                        }
+                        pos = sol_13_save;
                     }
                 } else if pos < tokens.len() && tokens[pos] == TK_PATHSEP {
-                    sol_14: {
-                        if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sol_14; }
-                        pos += 1;
+                    let sol_14_save = pos;
+                    sol_14_done: {
+                        sol_14: {
+                            if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sol_14; }
+                            pos += 1;
+                            break sol_14_done;
+                        }
+                        pos = sol_14_save;
                     }
                 }
                 let gp_15 = pos;
@@ -8668,16 +8688,26 @@ fn scan_function_qualifiers(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
         if pos < 0 { pos = sp; }
     }
     if pos < tokens.len() && tokens[pos] == TK_KW_EXTERN && pos + 1 < tokens.len() && _kind_set_23(tokens[pos + 1]) {
-        sol_19: {
-            if pos >= tokens.len() || tokens[pos] != TK_KW_EXTERN { break sol_19; }
-            pos += 1;
-            pos = scan_abi(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break sol_19; }
+        let sol_19_save = pos;
+        sol_19_done: {
+            sol_19: {
+                if pos >= tokens.len() || tokens[pos] != TK_KW_EXTERN { break sol_19; }
+                pos += 1;
+                pos = scan_abi(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_19; }
+                break sol_19_done;
+            }
+            pos = sol_19_save;
         }
     } else if pos < tokens.len() && tokens[pos] == TK_KW_EXTERN {
-        sol_20: {
-            if pos >= tokens.len() || tokens[pos] != TK_KW_EXTERN { break sol_20; }
-            pos += 1;
+        let sol_20_save = pos;
+        sol_20_done: {
+            sol_20: {
+                if pos >= tokens.len() || tokens[pos] != TK_KW_EXTERN { break sol_20; }
+                pos += 1;
+                break sol_20_done;
+            }
+            pos = sol_20_save;
         }
     }
     return pos;
@@ -8834,16 +8864,26 @@ fn scan_self_param(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
 fn scan_shorthand_self(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_AND && pos + 1 < tokens.len() && _kind_set_27(tokens[pos + 1]) {
-        sol_26: {
-            if pos >= tokens.len() || tokens[pos] != TK_AND { break sol_26; }
-            pos += 1;
-            pos = scan_lifetime(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break sol_26; }
+        let sol_26_save = pos;
+        sol_26_done: {
+            sol_26: {
+                if pos >= tokens.len() || tokens[pos] != TK_AND { break sol_26; }
+                pos += 1;
+                pos = scan_lifetime(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_26; }
+                break sol_26_done;
+            }
+            pos = sol_26_save;
         }
     } else if pos < tokens.len() && tokens[pos] == TK_AND {
-        sol_27: {
-            if pos >= tokens.len() || tokens[pos] != TK_AND { break sol_27; }
-            pos += 1;
+        let sol_27_save = pos;
+        sol_27_done: {
+            sol_27: {
+                if pos >= tokens.len() || tokens[pos] != TK_AND { break sol_27; }
+                pos += 1;
+                break sol_27_done;
+            }
+            pos = sol_27_save;
         }
     }
     if pos < tokens.len() && tokens[pos] == TK_KW_MUT {
@@ -9442,16 +9482,26 @@ fn scan_trait_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
         if pos < 0 { pos = sp; }
     }
     if pos < tokens.len() && tokens[pos] == TK_COLON && pos + 1 < tokens.len() && _kind_set_35(tokens[pos + 1]) {
-        sol_39: {
-            if pos >= tokens.len() || tokens[pos] != TK_COLON { break sol_39; }
-            pos += 1;
-            pos = scan_type_param_bounds(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break sol_39; }
+        let sol_39_save = pos;
+        sol_39_done: {
+            sol_39: {
+                if pos >= tokens.len() || tokens[pos] != TK_COLON { break sol_39; }
+                pos += 1;
+                pos = scan_type_param_bounds(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_39; }
+                break sol_39_done;
+            }
+            pos = sol_39_save;
         }
     } else if pos < tokens.len() && tokens[pos] == TK_COLON {
-        sol_40: {
-            if pos >= tokens.len() || tokens[pos] != TK_COLON { break sol_40; }
-            pos += 1;
+        let sol_40_save = pos;
+        sol_40_done: {
+            sol_40: {
+                if pos >= tokens.len() || tokens[pos] != TK_COLON { break sol_40; }
+                pos += 1;
+                break sol_40_done;
+            }
+            pos = sol_40_save;
         }
     }
     if pos < tokens.len() && tokens[pos] == TK_KW_WHERE {
@@ -9793,16 +9843,26 @@ fn scan_type_param(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
     pos = scan_identifier(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_COLON && pos + 1 < tokens.len() && _kind_set_35(tokens[pos + 1]) {
-        sol_47: {
-            if pos >= tokens.len() || tokens[pos] != TK_COLON { break sol_47; }
-            pos += 1;
-            pos = scan_type_param_bounds(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break sol_47; }
+        let sol_47_save = pos;
+        sol_47_done: {
+            sol_47: {
+                if pos >= tokens.len() || tokens[pos] != TK_COLON { break sol_47; }
+                pos += 1;
+                pos = scan_type_param_bounds(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_47; }
+                break sol_47_done;
+            }
+            pos = sol_47_save;
         }
     } else if pos < tokens.len() && tokens[pos] == TK_COLON {
-        sol_48: {
-            if pos >= tokens.len() || tokens[pos] != TK_COLON { break sol_48; }
-            pos += 1;
+        let sol_48_save = pos;
+        sol_48_done: {
+            sol_48: {
+                if pos >= tokens.len() || tokens[pos] != TK_COLON { break sol_48; }
+                pos += 1;
+                break sol_48_done;
+            }
+            pos = sol_48_save;
         }
     }
     if pos < tokens.len() && tokens[pos] == TK_EQ && !(follow_yields(tokens, pos, follow, TK_EOF)) {
@@ -12954,16 +13014,26 @@ fn scan_struct_pattern_elements(tokens: &Array<i32>, pos: i32, follow: &List<Lis
                 pos = scan_struct_pattern_fields(tokens, pos, follow, 0);
                 if pos < 0 { break try_0; }
                 if pos < tokens.len() && tokens[pos] == TK_COMMA && pos + 1 < tokens.len() && _kind_set_66(tokens[pos + 1]) {
-                    sol_89: {
-                        if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sol_89; }
-                        pos += 1;
-                        pos = scan_struct_pattern_et_cetera(tokens, pos, &EMPTY_FOLLOW, 0);
-                        if pos < 0 { break sol_89; }
+                    let sol_89_save = pos;
+                    sol_89_done: {
+                        sol_89: {
+                            if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sol_89; }
+                            pos += 1;
+                            pos = scan_struct_pattern_et_cetera(tokens, pos, &EMPTY_FOLLOW, 0);
+                            if pos < 0 { break sol_89; }
+                            break sol_89_done;
+                        }
+                        pos = sol_89_save;
                     }
                 } else if pos < tokens.len() && tokens[pos] == TK_COMMA {
-                    sol_90: {
-                        if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sol_90; }
-                        pos += 1;
+                    let sol_90_save = pos;
+                    sol_90_done: {
+                        sol_90: {
+                            if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sol_90; }
+                            pos += 1;
+                            break sol_90_done;
+                        }
+                        pos = sol_90_save;
                     }
                 }
                 if pos > best { best = pos; }
@@ -12976,16 +13046,26 @@ fn scan_struct_pattern_elements(tokens: &Array<i32>, pos: i32, follow: &List<Lis
                 pos = scan_struct_pattern_fields(tokens, pos, follow, 0);
                 if pos < 0 { break try_0; }
                 if pos < tokens.len() && tokens[pos] == TK_COMMA && pos + 1 < tokens.len() && _kind_set_66(tokens[pos + 1]) {
-                    sol_91: {
-                        if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sol_91; }
-                        pos += 1;
-                        pos = scan_struct_pattern_et_cetera(tokens, pos, &EMPTY_FOLLOW, 0);
-                        if pos < 0 { break sol_91; }
+                    let sol_91_save = pos;
+                    sol_91_done: {
+                        sol_91: {
+                            if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sol_91; }
+                            pos += 1;
+                            pos = scan_struct_pattern_et_cetera(tokens, pos, &EMPTY_FOLLOW, 0);
+                            if pos < 0 { break sol_91; }
+                            break sol_91_done;
+                        }
+                        pos = sol_91_save;
                     }
                 } else if pos < tokens.len() && tokens[pos] == TK_COMMA {
-                    sol_92: {
-                        if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sol_92; }
-                        pos += 1;
+                    let sol_92_save = pos;
+                    sol_92_done: {
+                        sol_92: {
+                            if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sol_92; }
+                            pos += 1;
+                            break sol_92_done;
+                        }
+                        pos = sol_92_save;
                     }
                 }
                 break scan_alts;
@@ -13754,16 +13834,26 @@ fn scan_function_type_qualifiers(tokens: &Array<i32>, pos: i32, follow: &List<Li
         if pos < 0 { pos = sp; }
     }
     if pos < tokens.len() && tokens[pos] == TK_KW_EXTERN && pos + 1 < tokens.len() && _kind_set_23(tokens[pos + 1]) {
-        sol_105: {
-            if pos >= tokens.len() || tokens[pos] != TK_KW_EXTERN { break sol_105; }
-            pos += 1;
-            pos = scan_abi(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break sol_105; }
+        let sol_105_save = pos;
+        sol_105_done: {
+            sol_105: {
+                if pos >= tokens.len() || tokens[pos] != TK_KW_EXTERN { break sol_105; }
+                pos += 1;
+                pos = scan_abi(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_105; }
+                break sol_105_done;
+            }
+            pos = sol_105_save;
         }
     } else if pos < tokens.len() && tokens[pos] == TK_KW_EXTERN {
-        sol_106: {
-            if pos >= tokens.len() || tokens[pos] != TK_KW_EXTERN { break sol_106; }
-            pos += 1;
+        let sol_106_save = pos;
+        sol_106_done: {
+            sol_106: {
+                if pos >= tokens.len() || tokens[pos] != TK_KW_EXTERN { break sol_106; }
+                pos += 1;
+                break sol_106_done;
+            }
+            pos = sol_106_save;
         }
     }
     return pos;
@@ -16778,16 +16868,26 @@ fn _parse_use_tree__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPT
 fn _parse_use_tree__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _kind_set_9(tokens[pos]) && pos + 1 < tokens.len() && tokens[pos + 1] == TK_PATHSEP {
-        sol_139: {
-            pos = scan_simple_path(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break sol_139; }
-            if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sol_139; }
-            pos += 1;
+        let sol_139_save = pos;
+        sol_139_done: {
+            sol_139: {
+                pos = scan_simple_path(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_139; }
+                if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sol_139; }
+                pos += 1;
+                break sol_139_done;
+            }
+            pos = sol_139_save;
         }
     } else if pos < tokens.len() && tokens[pos] == TK_PATHSEP {
-        sol_140: {
-            if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sol_140; }
-            pos += 1;
+        let sol_140_save = pos;
+        sol_140_done: {
+            sol_140: {
+                if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sol_140; }
+                pos += 1;
+                break sol_140_done;
+            }
+            pos = sol_140_save;
         }
     }
     let gp_141 = pos;
@@ -23335,16 +23435,26 @@ fn _parse_struct_pattern_elements__inner_scan_0(tokens: &Array<i32>, pos: i32, f
     pos = scan_struct_pattern_fields(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_COMMA && pos + 1 < tokens.len() && _kind_set_66(tokens[pos + 1]) {
-        sol_170: {
-            if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sol_170; }
-            pos += 1;
-            pos = scan_struct_pattern_et_cetera(tokens, pos, &EMPTY_FOLLOW, 0);
-            if pos < 0 { break sol_170; }
+        let sol_170_save = pos;
+        sol_170_done: {
+            sol_170: {
+                if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sol_170; }
+                pos += 1;
+                pos = scan_struct_pattern_et_cetera(tokens, pos, &EMPTY_FOLLOW, 0);
+                if pos < 0 { break sol_170; }
+                break sol_170_done;
+            }
+            pos = sol_170_save;
         }
     } else if pos < tokens.len() && tokens[pos] == TK_COMMA {
-        sol_171: {
-            if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sol_171; }
-            pos += 1;
+        let sol_171_save = pos;
+        sol_171_done: {
+            sol_171: {
+                if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sol_171; }
+                pos += 1;
+                break sol_171_done;
+            }
+            pos = sol_171_save;
         }
     }
     return pos;

@@ -266,8 +266,20 @@ only at regeneration time — the trees are committed, so CI needs none.
 
 Pinned grammars:
 
-- **`sqlite`** — 14 cases. Inputs omit the trailing `;` so the
-  `sql_stmt_list` trailing-separator shape stays out of scope.
+- **`sqlite`** — 112 cases, weighted towards the decisions `gale dump`
+  reports as `Ambiguous(...)`: the `sql_stmt` alternatives that only a
+  full scan of the first `select_core` separates (`compound` vs
+  `factored`, `delete_stmt` vs `delete_stmt_limited`), `any_name`'s
+  `'(' any_name ')'` competing with `'(' expr ')'`, the `FROM`
+  comma-list vs `join_clause` tie, `type_name`'s non-greedy `name+?`,
+  and the `expr` precedence climb. 7 are `#[TODO]`, in three groups:
+  `column_def` enters `type_name?` too reluctantly (ANTLR4 reads
+  `a NOT NULL` as `type_name(NOT)` + `constraint(NULL)`, and takes three
+  names for `a UNSIGNED BIG INT`); the `expr … BETWEEN … AND …` operands
+  climb from too high a precedence, so `a NOT BETWEEN 1 AND 2 AND b`
+  brackets as `(a BETWEEN 1 AND 2) AND b` instead of
+  `a BETWEEN (1 AND 2) AND b`; and `IN`'s bare `table_name` branch plus
+  the `sql_stmt_list` `';'` separators are rejected outright.
 - **`json`** — 11 cases; Gale's JSON parser matches ANTLR4 exactly.
 
 Both lock the generated trees against regressions.
