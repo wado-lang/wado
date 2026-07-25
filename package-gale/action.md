@@ -14,7 +14,7 @@ Java translation (java2wado) starts from "the Java subset that appears in ANTLR 
 - Descriptor corpus: small Java — prints, member arithmetic, lookahead tests, assignments to `returns` values. Attribute surface: `$ctx`, `$label.field`, `$TOKEN.text`, `$TOKEN.int`, `$text`, `$_p`, rule args / `returns` fields.
 - Real-world grammars (RustLexer/Parser, TypeScriptLexer/Parser, ANTLRv4Lexer): every action is `{this.method()}` into a hand-written `superClass` base **outside the `.g4`**. Action translation alone runs none of them; the base class must exist in Wado (see SuperClass).
 
-## Architecture: four layers
+## Architecture
 
 1. IR retention. Action / predicate source (text, span, position, language tag), rule signatures (args / `returns` / `locals`), prequels (`@init` / `@after`), and lexer-rule actions are retained in the IR instead of discarded.
 2. Attribute resolution (language-independent). `$x`, `$x.text`, `$ctx`, `$_p`, `$text` are ANTLR semantics, not host-language semantics, so Gale resolves them itself before any host translation.

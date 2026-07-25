@@ -66,18 +66,16 @@ only ever dropped in tail position (followed by closing parens /
 whitespace), so an `<EOF>` that is genuine token _text_ mid-tree is left
 untouched.
 
-The contract is verified at three layered stages.
-
 ## Stages of Compatibility
 
-The contract is verified at three layered stages — A, B, C. Higher
+The contract is verified at layered stages — A, B, C. Higher
 stages depend on lower stages already being green. Stage A and Stage B
 are entirely Stage-C-independent; gaps surfaced by them are Gale bugs
 that should be fixed before Stage C lands.
 
 ### Stage A — syntactic compatibility plus generated-parser/lexer behaviour
 
-> **Claim:** Four independent sub-claims about the generated code:
+> **Claim:** the generated code satisfies each of these independently:
 >
 > - **(a)** Every well-formed `.g4` file accepted by upstream `antlr4`
 >   is accepted by Gale's `g4::parse` (modulo the action-body exception
@@ -101,7 +99,7 @@ that should be fixed before Stage C lands.
 Stage A is the hard contract. Any breakage here is a Gale bug, not a
 feature gap.
 
-Three test sources cover Stage A:
+Test sources covering Stage A:
 
 1. **Hand-curated grammars** in `tests/grammars/` (JSON, SQLite, CSS3,
    HTML, ANTLR4, Rust, TypeScript, plus LL fixtures). Each is exercised
@@ -130,7 +128,7 @@ Three test sources cover Stage A:
      action-print prefix lines (`<writeln(...)>` echoes from `{ ... }`
      action bodies), the test is emitted and auto-`#[TODO]`-marked.
 
-   The three variants are **mutually exclusive** on `[type]` +
+   The variants are **mutually exclusive** on `[type]` +
    `[errors]`, so at most one variant per descriptor is emitted. A
    single `[stage_a_todo]` / `[stage_a_skip]` triage entry keyed by
    `Category/Name` unambiguously addresses whichever variant fires.
@@ -146,7 +144,7 @@ package tests.
 > same input, a `to_string_tree()` output equal to the one ANTLR4
 > would produce.
 
-Two test sources cover Stage B:
+Test sources covering Stage B:
 
 1. **Hand-curated driver tests** under `tests/` — each fixture invokes
    the generator at compile time via `use ... with { generator: ... }`,
@@ -266,15 +264,15 @@ only at regeneration time — the trees are committed, so CI needs none.
 
 Pinned grammars:
 
-- **`sqlite`** — 112 cases, weighted towards the decisions `gale dump`
-  reports as `Ambiguous(...)`: the `sql_stmt` alternatives that only a
-  full scan of the first `select_core` separates (`compound` vs
-  `factored`, `delete_stmt` vs `delete_stmt_limited`), `any_name`'s
+- **`sqlite`** — weighted towards the decisions `gale dump` reports as
+  `Ambiguous(...)`: the `sql_stmt` alternatives that only a full scan of
+  the first `select_core` separates (`compound` vs `factored`,
+  `delete_stmt` vs `delete_stmt_limited`), `any_name`'s
   `'(' any_name ')'` competing with `'(' expr ')'`, the `FROM`
   comma-list vs `join_clause` tie, `type_name`'s non-greedy `name+?`,
-  and the `expr` precedence climb. 7 are `#[TODO]`; the divergences
-  behind them are itemised in [`TODO.md`](./TODO.md).
-- **`json`** — 11 cases; Gale's JSON parser matches ANTLR4 exactly.
+  and the `expr` precedence climb. The `#[TODO]` divergences are
+  itemised in [`TODO.md`](./TODO.md).
+- **`json`** — Gale's JSON parser matches ANTLR4 exactly.
 
 Adding a grammar is config + a cases file, but only for a **clean single
 combined grammar with `WS -> skip`**. Out of scope, with reasons recorded
@@ -382,9 +380,9 @@ section) is the only complete answer.
 
 ### Soundness invariants
 
-Six invariants any LL-related change must respect. Each was violated
-once and broke a real grammar; the guards live as inline conservatism at
-the relevant sites.
+Invariants any LL-related change must respect. Each was violated once
+and broke a real grammar; the guards live as inline conservatism at the
+relevant sites.
 
 1. Single-token tail-greedy inner. A multi-token-inner Repeat can
    legitimately re-enter on its own first token at a deeper position

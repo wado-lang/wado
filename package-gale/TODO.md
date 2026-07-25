@@ -27,7 +27,7 @@ The K-prefix caller-side mask analysis halts at a multi-alternative rule referen
 
 ## Stage B′ — JVM-oracle integration
 
-The Stage B′ pipeline covers 78 tests across `FullContextParsing`, `LeftRecursion`, `ParserErrors`, `ParserExec`, `SemPredEvalParser`, and `Sets`, with the remaining prediction divergences pinned as oracle-todo. The infrastructure (design in [`antlr4-compatibility.md`](./antlr4-compatibility.md)) is in place; Java is needed only at extract time, not in CI.
+The Stage B′ pipeline covers `FullContextParsing`, `LeftRecursion`, `ParserErrors`, `ParserExec`, `SemPredEvalParser`, and `Sets`, with the remaining prediction divergences pinned as oracle-todo. The infrastructure (design in [`antlr4-compatibility.md`](./antlr4-compatibility.md)) is in place; Java is needed only at extract time, not in CI.
 
 Remaining:
 
@@ -35,7 +35,7 @@ Remaining:
 
 ## Composite (slave-grammar) descriptors
 
-All 17 `CompositeLexers` / `CompositeParsers` descriptors short-circuit on the presence of imported slave grammars. Two independent blockers:
+Every `CompositeLexers` / `CompositeParsers` descriptor short-circuits on the presence of imported slave grammars. Independent blockers:
 
 - **Importer multi-input plumbing.** A grammar import (`import S;`) must resolve against the sibling slave-grammar files. Kiln already supports multi-input; lift the short-circuit once resolution lands.
 - **Host-side output (Stage C).** Every composite descriptor's expected output is a host-side artefact — action prints, token dumps, or empty — so none survive the Stage B output normalizer. Re-evaluate once Stage C lands.
