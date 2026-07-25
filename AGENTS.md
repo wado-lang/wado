@@ -38,6 +38,47 @@ mise run benchmark-all     # runs all benchmarks and reports the results
 mise run report-wasm-size  # measures the size of the generated Wasm files and reports the results
 ```
 
+## Tooling
+
+Rules for driving the shell, learned from failures that cost real time.
+
+### Never use `pgrep` to test whether a job is alive
+
+`pgrep -f <pattern>` matches the watcher's own command line, so a
+`until ! pgrep -f foo` loop never exits and the job looks alive forever after it
+finished. Have the job record its own completion instead:
+
+```sh
+cmd > run.log 2>&1; echo $? > run.done
+```
+
+Then wait on `[ -f run.done ]` and read the exit code from it.
+
+### Never pipe command output through `tail` or `head` when you need to read a failure
+
+The line you need is almost always outside the cut. A test harness prints the
+assertion message first and the backtrace after it, so `| tail -20` shows the
+backtrace and hides the reason. Select by content:
+
+```sh
+cargo test --test e2e 2>&1 | grep -E "test result|compilation failed|panicked at"
+```
+
+Redirect to a file and grep that when the output is large. `tail -f` on a log is
+fine; `| tail -n` on the output you are trying to understand is not.
+
+### Run long jobs through the harness, not `&`
+
+Use the tool's own background mechanism so completion arrives as a notification,
+and a progress monitor when you want intermediate events. A process detached
+with `nohup ... &` is untracked: nothing tells you when it ends, and the sentinel
+file above becomes the only way to find out. Never `sleep` in the foreground to
+wait for something.
+
+Jobs worth backgrounding: `mise run test`, `mise run test-wado`,
+`mise run update-golden-fixtures`, `mise run on-task-done`, full `cargo test`
+runs. All exceed a couple of minutes.
+
 ## General Rules
 
 - Write all documentation and comments in English, and keep them concise — cut filler and low-information words.
