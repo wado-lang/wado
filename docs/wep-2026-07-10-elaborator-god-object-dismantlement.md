@@ -359,13 +359,19 @@ declaration rather than at whichever use site reaches it first.
       complete by the time any consumer reads it. The resource return-type
       and `#[cm(...)]` lookups now read it.
 
-      Still open: `find_static_method_def`'s `StaticMethodSig` path, which
-      needs parameter defaults (`TirEffectOp` has names, types and
-      mutability but not defaults), and the weak `effect_op_sigs`, which
-      resolves the same declarations in a bare scope. Retiring the latter
-      has to reconcile the receiver parameter — `effect_op_sigs` resolves
-      the AST's `self` param type, `resolve_effect_ops` synthesises
-      `&Self`.
+      Still open, and bigger than first estimated:
+
+      - `find_static_method_def`'s `StaticMethodSig` path. The missing
+        piece is not parameter defaults. Its consumers do *generic
+        inference*, reading `ast::GenericParam`'s `default`,
+        `has_fn_bound()` and `is_effect` per type param, plus the value
+        params, to decide which slots are still unresolved. A digest can
+        only absorb that by carrying type-param bound metadata, which is
+        inference input rather than signature — so this belongs with the
+        substitution-helper removal, not with the signature digests.
+      - The weak `effect_op_sigs`. Retiring it has to reconcile the
+        receiver: it resolves the AST's `self` param type, while
+        `resolve_effect_ops` synthesises `&Self`.
 - [ ] S5b-5 The current-module scan branches. An in-code comment claims
       they exist because the current module is "not in the pre-built index".
       That is stale: `TraitEnv::build` walks every module in `modules`, and
