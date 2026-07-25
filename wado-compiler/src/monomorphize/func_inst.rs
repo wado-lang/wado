@@ -249,7 +249,7 @@ fn lookup_template_with_trait_fallback<'a, V>(
 pub(super) struct InstantiationCollector<'a> {
     pub mono: &'a mut Monomorphizer,
     pub generic_functions: &'a IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>>,
-    pub type_table: &'a TypeTable,
+    pub type_table: &'a mut TypeTable,
 }
 
 impl TirRefVisitor for InstantiationCollector<'_> {
@@ -487,11 +487,11 @@ impl Monomorphizer {
         module: &TirModule,
         generic_functions: &IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>>,
     ) {
-        let type_table = module.type_table.borrow();
+        let mut type_table = module.type_table.borrow_mut();
         let mut collector = InstantiationCollector {
             mono: self,
             generic_functions,
-            type_table: &type_table,
+            type_table: &mut type_table,
         };
         for func_rc in &module.functions {
             let func = func_rc.borrow();
@@ -518,7 +518,7 @@ impl Monomorphizer {
         &mut self,
         expr: &TirExpr,
         generic_functions: &IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>>,
-        type_table: &TypeTable,
+        type_table: &mut TypeTable,
     ) {
         match &expr.kind {
             TirExprKind::Call {
@@ -677,12 +677,15 @@ impl Monomorphizer {
                 ) && monomorph.is_blanket
                     && (!monomorph.impl_type_args.is_empty()
                         || !monomorph.method_type_args.is_empty())
-                    && type_table
-                        .resolve_assoc_type(
-                            type_table.peel_refs(receiver.type_id),
-                            crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC,
-                        )
-                        .is_some()
+                    && {
+                        let receiver_ty = type_table.peel_refs(receiver.type_id);
+                        type_table
+                            .resolve_assoc_type_of_instance(
+                                receiver_ty,
+                                crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC,
+                            )
+                            .is_some()
+                    }
                 {
                     let mut names_to_try = vec![MethodName::format_local(
                         &info.base_struct_name(),
@@ -1495,7 +1498,8 @@ impl Monomorphizer {
                 // which precedes the pack and is already bound.
                 let projected = substitution
                     .get(src_idx)
-                    .and_then(|&src| type_table.resolve_assoc_type(src, assoc_name))
+                    .copied()
+                    .and_then(|src| type_table.resolve_assoc_type_of_instance(src, assoc_name))
                     .unwrap_or_else(|| type_table.make_tuple(vec![]));
                 substitution.insert(param.index, projected);
             } else if param.is_pack {
@@ -3122,7 +3126,13 @@ impl Monomorphizer {
                 } if !args.is_empty()
             ) || matches!(type_table.get(resolved), ResolvedType::BuiltinArray(_))
         };
-        let monomorph_info = if self.functions.has_impl(&new_info) || receiver_has_type_args {
+        // A generic-instance receiver normally reaches a generic impl on its own
+        // type, which the receiver scan instantiates — but when it reaches a
+        // blanket instead (`blanket_module` is set only when the type has no
+        // impl of its own), nothing else queues that instance, so it still
+        // needs `monomorph_info`.
+        let served_by_receiver_scan = receiver_has_type_args && blanket_module.is_none();
+        let monomorph_info = if self.functions.has_impl(&new_info) || served_by_receiver_scan {
             None
         } else {
             // Blanket impl: choose the right generic_name for lookup.

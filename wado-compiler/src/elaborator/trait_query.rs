@@ -617,6 +617,25 @@ impl TypeSystem {
         }
     }
 
+    /// Whether `name` is one of the four sealed member handles `members()` mints
+    /// (`StructField` / `VariantCase` / `EnumCase` / `FlagsBit`).
+    ///
+    /// They are generic structs, so they would otherwise be reflectable — and a
+    /// member handle's own `Members` mentions `StructField<Self, …>`, so
+    /// reflecting one grows `Self` without bound. Reflection stops at them.
+    fn is_sealed_reflect_member(&self, name: &str) -> bool {
+        let tt = self.type_table.borrow();
+        let items = tt.compiler_items();
+        [
+            CompilerItem::ReflectStructField,
+            CompilerItem::ReflectVariantCase,
+            CompilerItem::ReflectEnumCase,
+            CompilerItem::ReflectFlagsBit,
+        ]
+        .iter()
+        .any(|item| items.struct_name(*item) == name)
+    }
+
     pub(super) fn classify_on_bound_trait(
         &self,
         scope: &TypeLookup,
@@ -1066,6 +1085,28 @@ impl TypeSystem {
             ..
         } = &resolved
             && on_bound == Some(OnBoundTrait::ReflectFlags)
+        {
+            self.type_table
+                .borrow_mut()
+                .record_bound_driven_synth_request(name, module_source, trait_name);
+            return true;
+        }
+
+        // A generic instance reflects through its base declaration: `Pair<String>`
+        // is a struct because `Pair` is. The synthesized impl is generic over the
+        // declared parameters, so the instance inherits it by substitution. Only
+        // structs and variants can be generic.
+        if let ResolvedType::GenericInstance {
+            name,
+            module_source,
+            ..
+        } = &resolved
+            && !self.is_sealed_reflect_member(name)
+            && match on_bound {
+                Some(OnBoundTrait::ReflectStruct) => scope.struct_fields(name).is_some(),
+                Some(OnBoundTrait::ReflectVariant) => scope.variant_case(name).is_some(),
+                _ => false,
+            }
         {
             self.type_table
                 .borrow_mut()

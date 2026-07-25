@@ -1981,6 +1981,33 @@ impl TypeTable {
         Some(self.substitute_type_params(def_type_id, &subst))
     }
 
+    /// Whether a generic definition of `assoc_name` is registered for
+    /// `base_name` — i.e. the generic type carries a synthesized impl binding
+    /// that associated type.
+    pub fn has_generic_assoc_type_def(&self, base_name: &str, assoc_name: &str) -> bool {
+        self.generic_assoc_type_defs
+            .contains_key(&(base_name.to_string(), assoc_name.to_string()))
+    }
+
+    /// Resolve an associated type for whatever form the subject currently has.
+    ///
+    /// A plain or already-monomorphized type has its resolutions registered
+    /// directly; a `GenericInstance` still carries its type args, so the generic
+    /// definition is substituted on demand. Reflection projections
+    /// (`FieldTypes` / `Members` / `CasePayloads`) hit both forms — the same
+    /// receiver reads as an instance before monomorphization substitutes it and
+    /// as a struct after.
+    pub fn resolve_assoc_type_of_instance(
+        &mut self,
+        concrete_id: TypeId,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        if let Some(resolved) = self.resolve_assoc_type(concrete_id, assoc_name) {
+            return Some(resolved);
+        }
+        self.resolve_generic_assoc_type_mono(concrete_id, assoc_name)
+    }
+
     /// Substitute `TypeParam` and `TypePack` indices in `type_id` using `substitution`.
     ///
     /// Returns a new `TypeId` with the substitutions applied. Missing indices

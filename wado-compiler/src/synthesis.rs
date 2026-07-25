@@ -14,6 +14,7 @@ pub mod cm_binding;
 pub mod common;
 pub mod effect_dispatch;
 pub mod from_synth;
+pub mod reflect_bridge;
 pub mod resource_cleanup;
 pub mod serde_synth;
 pub mod template;

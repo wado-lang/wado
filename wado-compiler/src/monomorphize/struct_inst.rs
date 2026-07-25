@@ -34,6 +34,7 @@ impl Monomorphizer {
 
         // Find the GenericInstance TypeId and record the substitution early
         // so that substitute_type can use it for self-references
+        let mut instance_ids = Vec::new();
         for id in type_table.iter_type_ids() {
             if let ResolvedType::GenericInstance {
                 name,
@@ -48,6 +49,7 @@ impl Monomorphizer {
                 self.structs
                     .type_to_mangled_name
                     .insert(id, mangled_name.clone());
+                instance_ids.push(id);
             }
         }
 
@@ -64,6 +66,14 @@ impl Monomorphizer {
         // this monomorphized struct, which carries no type args) can still be
         // resolved by `resolve_assoc_type`.
         type_table.register_monomorphized_assoc_types(concrete_type_id, &key.name, &substitution);
+
+        // Register them on the `GenericInstance` spelling too: a reflect
+        // projection (`FieldTypes` / `Members`) is read off receivers that are
+        // still spelled as instances at the call sites this pass has not yet
+        // substituted, and those readers hold the table immutably.
+        for id in instance_ids {
+            type_table.register_monomorphized_assoc_types(id, &key.name, &substitution);
+        }
 
         // Substitute types in fields (now self-references can be resolved)
         let fields: Vec<TirField> = generic

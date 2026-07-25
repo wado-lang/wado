@@ -895,6 +895,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             base_struct_name = impl_name;
         }
 
+        // A blanket impl is parameterized by its own `T`, not by the receiver's
+        // type args: `Pair<String>` reaching `impl<T: …> Row for T` instantiates
+        // `T^Row::row` at `T = Pair<String>`, not `T<String>^Row::row`. Drop the
+        // receiver's arguments so the mangled name matches the template.
+        let impl_type_arg_names = if blanket_type_param.is_some() {
+            Vec::new()
+        } else {
+            impl_type_arg_names
+        };
+
         let mangled_method_name =
             MethodName::format_local(&receiver_struct_name, trait_name.as_deref(), method_name);
 

@@ -1204,6 +1204,14 @@ fn type_is_reflect(type_id: TypeId, tt: &TypeTable, allow_pre_reflect_struct: bo
     {
         return true;
     }
+    // A generic instance's projection lives on its base declaration and is
+    // substituted per instantiation, which may not have happened yet. The
+    // definition's presence is the fact — the substitution is mechanical.
+    if let ResolvedType::GenericInstance { name, .. } = tt.get(type_id)
+        && tt.has_generic_assoc_type_def(name, crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC)
+    {
+        return true;
+    }
     allow_pre_reflect_struct && matches!(tt.get(type_id), ResolvedType::Struct { .. })
 }
 

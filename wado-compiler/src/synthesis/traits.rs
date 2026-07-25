@@ -479,6 +479,16 @@ fn generate_struct_reflect_impls(
 
     let mut generated = Vec::new();
     for target in &targets {
+        // A plain struct's impl is unconditional — the set is closed and each
+        // impl is finite. A generic one is demand-driven: its `Members` mention
+        // `StructField<S<T>, …>`, so synthesizing every generic struct would
+        // reflect `StructField` itself into an ever-deepening `Self` and
+        // diverge at monomorphization.
+        if !target.type_params.is_empty()
+            && !ctx.should_synthesize(&target.name, reflect_trait_name)
+        {
+            continue;
+        }
         let methods = generate_struct_reflect_methods(
             &module.type_table,
             &env,
@@ -487,7 +497,7 @@ fn generate_struct_reflect_impls(
             target,
         );
         generated.extend(methods.into_iter().map(|f| Rc::new(RefCell::new(f))));
-        ctx.record_impl(&target.0, reflect_trait_name);
+        ctx.record_impl(&target.name, reflect_trait_name);
     }
 
     module.functions.extend(generated);
@@ -504,35 +514,43 @@ struct ReflectFieldInfo {
     has_default: bool,
 }
 
-/// A struct selected for `ReflectStruct` synthesis: its name, per-field info, the
-/// struct's `#[wire(name_policy)]`, and declaration span.
-type ReflectTarget = (String, Vec<ReflectFieldInfo>, Option<String>, Span);
+/// A struct selected for `ReflectStruct` synthesis. `type_params` is empty for a
+/// plain struct and carries the declared parameters for a generic one, whose
+/// impl is synthesized once over `S<T, …>` and substituted per instantiation.
+struct ReflectTarget {
+    name: String,
+    type_params: Vec<TirTypeParam>,
+    fields: Vec<ReflectFieldInfo>,
+    wire_name_policy: Option<String>,
+    span: Span,
+}
 
 /// Select the structs in `module` that need a synthesized `ReflectStruct` impl:
-/// every non-generic, non-monomorphized struct (all are unconditionally
-/// `ReflectStruct`-derived).
+/// every declared struct, generic or not (all are unconditionally
+/// `ReflectStruct`-derived). Monomorphized instances are skipped — they inherit
+/// the generic impl through substitution.
 fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
     module
         .structs
         .iter()
-        .filter(|s| s.type_params.is_empty() && s.monomorph_info.is_none())
-        .map(|s| {
-            (
-                s.name.clone(),
-                s.fields
-                    .iter()
-                    .map(|f| ReflectFieldInfo {
-                        name: f.name.clone(),
-                        type_id: f.type_id,
-                        index: f.index,
-                        wire_name_override: f.wire_name_override.clone(),
-                        is_secret: f.is_secret,
-                        has_default: f.default_expr.is_some(),
-                    })
-                    .collect(),
-                s.wire_name_policy.clone(),
-                s.span,
-            )
+        .filter(|s| s.monomorph_info.is_none())
+        .map(|s| ReflectTarget {
+            name: s.name.clone(),
+            type_params: s.type_params.clone(),
+            fields: s
+                .fields
+                .iter()
+                .map(|f| ReflectFieldInfo {
+                    name: f.name.clone(),
+                    type_id: f.type_id,
+                    index: f.index,
+                    wire_name_override: f.wire_name_override.clone(),
+                    is_secret: f.is_secret,
+                    has_default: f.default_expr.is_some(),
+                })
+                .collect(),
+            wire_name_policy: s.wire_name_policy.clone(),
+            span: s.span,
         })
         .collect()
 }
@@ -547,8 +565,15 @@ fn generate_struct_reflect_methods(
     reflect_trait_name: &str,
     target: &ReflectTarget,
 ) -> Vec<TirFunction> {
-    let (name, fields, name_policy, span) = target;
+    let ReflectTarget {
+        name,
+        type_params,
+        fields,
+        wire_name_policy: name_policy,
+        span,
+    } = target;
     let span = *span;
+    let is_generic = !type_params.is_empty();
     let field_infos: Vec<FieldInfo> = fields
         .iter()
         .map(|f| (f.name.clone(), f.type_id, f.index))
@@ -564,14 +589,14 @@ fn generate_struct_reflect_methods(
 
     let (struct_type, ref_struct_type, member_types, members_tuple_type) = {
         let mut tt = type_table.borrow_mut();
-        let struct_type = tt.make_struct(name.clone(), module_source.clone());
+        let struct_type = if is_generic {
+            let param_ids = make_type_param_ids(type_params, &mut tt);
+            tt.make_generic_instance(name.clone(), module_source.clone(), param_ids)
+        } else {
+            tt.make_struct(name.clone(), module_source.clone())
+        };
         let ref_struct_type = tt.make_ref(struct_type);
         let fields_tuple_type = tt.make_tuple(fields.iter().map(|f| f.type_id).collect());
-        tt.register_assoc_type_resolution(
-            struct_type,
-            REFLECT_FIELD_TYPES_ASSOC.to_string(),
-            fields_tuple_type,
-        );
         let member_types: Vec<TypeId> = fields
             .iter()
             .map(|f| {
@@ -583,10 +608,15 @@ fn generate_struct_reflect_methods(
             })
             .collect();
         let members_tuple_type = tt.make_tuple(member_types.clone());
-        tt.register_assoc_type_resolution(
+        register_reflect_assoc_types(
+            &mut tt,
+            name,
             struct_type,
-            REFLECT_MEMBERS_ASSOC.to_string(),
-            members_tuple_type,
+            is_generic,
+            &[
+                (REFLECT_FIELD_TYPES_ASSOC, fields_tuple_type),
+                (REFLECT_MEMBERS_ASSOC, members_tuple_type),
+            ],
         );
         (
             struct_type,
@@ -616,14 +646,49 @@ fn generate_struct_reflect_methods(
     );
 
     let mut functions = vec![type_name_fn, members_fn, wire_name_policy_fn];
-    functions.extend(generate_field_bridge_helpers(
-        type_table,
-        &field_infos,
-        struct_type,
-        ref_struct_type,
-        span,
-    ));
+    for f in &mut functions {
+        f.impl_type_params = type_params.clone();
+    }
+    // A generic struct's field-get bridges are keyed by the *concrete* field
+    // types, which only exist per instantiation, so they are minted post-
+    // monomorphize by `synthesize_monomorphized_reflect_bridges`.
+    if !is_generic {
+        functions.extend(generate_field_bridge_helpers(
+            type_table,
+            &field_infos,
+            struct_type,
+            ref_struct_type,
+            span,
+        ));
+    }
     functions
+}
+
+/// Record a reflect kind's associated tuple types for `self_type`.
+///
+/// A non-generic type resolves them directly by its `TypeId`. A generic one
+/// registers them as generic definitions keyed by the base name, so
+/// `resolve_generic_assoc_type_mono` substitutes the instance's type args and
+/// `register_monomorphized_assoc_types` re-keys the result onto each
+/// monomorphized struct.
+fn register_reflect_assoc_types(
+    tt: &mut TypeTable,
+    base_name: &str,
+    self_type: TypeId,
+    is_generic: bool,
+    assocs: &[(&str, TypeId)],
+) {
+    for (assoc_name, resolved) in assocs {
+        if is_generic {
+            tt.register_generic_assoc_type_def(
+                base_name.to_string(),
+                (*assoc_name).to_string(),
+                *resolved,
+            );
+        } else {
+            tt.register_assoc_type_resolution(self_type, (*assoc_name).to_string(), *resolved);
+        }
+    }
 }
 
 /// The member-tuple associated type, spelled `Members` on every reflect trait.
@@ -969,7 +1034,7 @@ fn generate_wire_name_policy_fn(
 /// marker; lowering rewrites each monomorphized marker to its helper
 /// (WEP 2026-06-13 §2). Extract-only and guard-free — every struct field is
 /// always present.
-fn generate_field_bridge_helpers(
+pub(super) fn generate_field_bridge_helpers(
     type_table: &RefCell<TypeTable>,
     fields: &[FieldInfo],
     struct_type: TypeId,

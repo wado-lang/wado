@@ -1478,6 +1478,11 @@ fn compile_after_load<H: CompilerHost>(
         monomorphize(&mut flat);
     }
 
+    // === Phase 9a: Reflect bridges of monomorphized structs ===
+    // The only synthesis that must follow monomorphize: a generic struct's
+    // field-get bridges are keyed by its concrete field types.
+    synthesis::reflect_bridge::synthesize_monomorphized_reflect_bridges(&mut flat);
+
     // === Phase 9b: Erase Newtypes and Flags ===
     // After monomorphize (which needs distinct Newtype/Flags types for trait dispatch)
     // and before lower/optimize/codegen (which expect Newtypes → base type; Flags → u32).
@@ -1922,6 +1927,8 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 let _span = logger.span("monomorphize");
                 monomorphize(&mut flat);
             }
+
+            synthesis::reflect_bridge::synthesize_monomorphized_reflect_bridges(&mut flat);
 
             // Erase Newtypes and Flags (after monomorphize, before lower)
             flat.type_table.borrow_mut().erase_newtypes_and_flags();
