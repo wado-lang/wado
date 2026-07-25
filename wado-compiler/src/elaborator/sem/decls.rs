@@ -56,6 +56,7 @@ impl ModuleDecls {
         self.associated_constants
             .clone_from(&other.associated_constants);
         self.effect_op_sigs.clone_from(&other.effect_op_sigs);
+        self.impl_method_sigs.clone_from(&other.impl_method_sigs);
         self.function_sigs = std::rc::Rc::clone(&other.function_sigs);
         self.current_module_globals
             .clone_from(&other.current_module_globals);
@@ -92,6 +93,12 @@ pub(crate) struct ModuleDecls {
     /// This module's own interface / resource operation signatures, keyed
     /// `(decl name, op name)`, resolved once in the declaring perspective.
     pub(crate) effect_op_sigs: IndexMap<(String, String), (Vec<TypeId>, Option<TypeId>)>,
+    /// Canonical signatures of the methods in this module's `impl` blocks,
+    /// keyed by the method's globally-unique `AstId`. Resolved once in the
+    /// impl's frame — impl type params in their positional slots, the
+    /// method's own after them, `Self` bound to the impl target — so a use
+    /// site instantiates instead of re-resolving the method AST.
+    pub(crate) impl_method_sigs: IndexMap<crate::ast::AstId, DeclSig>,
 
     /// Names of generic structs declared in this module (used to decide
     /// whether a struct reference needs generic-instance handling).

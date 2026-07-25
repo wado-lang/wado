@@ -18,6 +18,8 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Elaborator;
+use super::scope::TypeParamScope;
+use super::sig::DeclSig;
 use super::types::{FunctionContext, TypeError};
 
 /// Extract the [`CompilerItem`] marker — if any — from a declaration's
@@ -479,7 +481,402 @@ pub(super) fn register_builtin_type_compiler_item<H: CompilerHost>(
     }
 }
 
+/// Everything an impl method's signature resolves against: the impl's
+/// `TypeParam` scheme in its positional slots, the method's own params
+/// numbered after them, and `Self` bound to the impl target.
+///
+/// Built in one place so the decl pass (which records the canonical
+/// signature) and the body walk (which resolves the method against it)
+/// cannot disagree about slot numbering.
+pub(super) struct MethodFrame {
+    pub(super) impl_type_params: Vec<crate::tir::TirTypeParam>,
+    /// The method's own slots, in index order, starting after the impl's.
+    pub(super) method_type_params: Vec<(String, TypeId)>,
+}
+
+impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
+    /// Register the impl's and the method's type parameters into this
+    /// scope and bind `Self`, yielding the frame the method's parameter
+    /// and return types resolve in.
+    pub(super) fn enter_impl_method_frame(
+        &mut self,
+        func: &Function,
+        impl_type: &Type,
+        trait_type: Option<&Type>,
+        impl_is_concrete: bool,
+        impl_declared_params: &[ast::GenericParam],
+    ) -> MethodFrame {
+        let saved = &self.saved().clone();
+        let mut type_param_list = Vec::new();
+        // First, collect type params from impl block's generic type (e.g., impl Box<T>)
+        // Also build impl_type_params for the TirFunction
+        // For ref-type impls (e.g., impl Trait for &Container<T>), unwrap the reference first.
+        let mut impl_type_params = Vec::new();
+        let impl_type_inner = match impl_type {
+            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
+            other => other,
+        };
+        if let ast::Type::Generic(generic) = impl_type_inner
+            && !impl_is_concrete
+        {
+            for (i, arg) in generic.args.iter().enumerate() {
+                if let ast::Type::Named(named) = arg {
+                    let name = &named.name;
+                    let is_declared_param = impl_declared_params.iter().any(|p| &p.name == name);
+                    if !self.annotate_ctx.trait_ctx.type_params.contains_key(name)
+                        && (is_declared_param
+                            || !self
+                                .tysys
+                                .is_known_type_name_in(&self.current_module_source, name))
+                    {
+                        let type_id = self
+                            .tysys
+                            .type_table
+                            .borrow_mut()
+                            .make_type_param(name.clone(), i as u32);
+                        self.annotate_ctx
+                            .trait_ctx
+                            .type_params
+                            .insert(name.clone(), (i as u32, type_id));
+                        // Store impl type param info for later monomorphization
+                        impl_type_params.push(crate::tir::TirTypeParam {
+                            name: name.clone(),
+                            is_effect: false,
+                            is_pack: false,
+                            bounds: vec![],
+                            default: None, // Impl type params don't have defaults
+                            index: i as u32,
+                            projected_from: None,
+                        });
+                    }
+                }
+            }
+        } else if let ast::Type::Named(named) = impl_type {
+            // Blanket impl case: `impl<I: Iterator> IntoIterator for I`
+            // The impl type is a type parameter itself, registered by the caller,
+            // now living in the saved (parent) self.
+            if let Some(&(idx, _)) = saved.type_params.get(&named.name) {
+                let type_id = self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_type_param(named.name.clone(), idx);
+                self.annotate_ctx
+                    .trait_ctx
+                    .type_params
+                    .insert(named.name.clone(), (idx, type_id));
+                let bounds = self
+                    .saved()
+                    .type_param_bounds
+                    .get(&named.name)
+                    .map(|bs| bs.iter().map(|b| b.name.clone()).collect())
+                    .unwrap_or_default();
+                impl_type_params.push(crate::tir::TirTypeParam {
+                    name: named.name.clone(),
+                    is_effect: false,
+                    is_pack: false,
+                    bounds,
+                    default: None,
+                    index: idx,
+                    projected_from: None,
+                });
+
+                // A pack `F` bound only via `T`'s associated type
+                // (`impl<T: Trait<Assoc = [..F]>, ..F: …>`) is not caller-supplied;
+                // monomorphization projects it from `T::Assoc`.
+                let projections: Vec<(String, String)> = impl_declared_params
+                    .iter()
+                    .find(|p| p.name == named.name)
+                    .into_iter()
+                    .flat_map(|t_param| &t_param.bounds)
+                    .flat_map(|bound| &bound.assoc_types)
+                    .filter_map(|assoc| match &assoc.ty {
+                        ast::Type::Tuple(elems) => Some((elems, assoc.name.clone())),
+                        _ => None,
+                    })
+                    .flat_map(|(elems, assoc_name)| {
+                        elems.iter().filter_map(move |elem| match elem {
+                            ast::Type::TypePackSpread(f_name, _) => {
+                                Some((f_name.clone(), assoc_name.clone()))
+                            }
+                            _ => None,
+                        })
+                    })
+                    .collect();
+                for (f_name, assoc_name) in projections {
+                    let Some(&(f_idx, _)) = saved.type_params.get(&f_name) else {
+                        continue;
+                    };
+                    let f_type_id = self
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_type_pack(f_name.clone(), f_idx);
+                    self.annotate_ctx
+                        .trait_ctx
+                        .type_params
+                        .insert(f_name.clone(), (f_idx, f_type_id));
+                    let f_bounds = self
+                        .saved()
+                        .type_param_bounds
+                        .get(&f_name)
+                        .map(|bs| bs.iter().map(|b| b.name.clone()).collect())
+                        .unwrap_or_default();
+                    impl_type_params.push(crate::tir::TirTypeParam {
+                        name: f_name,
+                        is_effect: false,
+                        is_pack: true,
+                        bounds: f_bounds,
+                        default: None,
+                        index: f_idx,
+                        projected_from: Some((idx, assoc_name)),
+                    });
+                }
+            }
+        } else if let ast::Type::Reference(boxed) | ast::Type::MutReference(boxed) = impl_type {
+            // Reference impl case: `impl<T: Bound> Trait for &T` / `impl<T: Bound> Trait for &mut T`
+            // The inner type T is a type parameter registered by the caller.
+            if let ast::Type::Named(named) = boxed.as_ref()
+                && let Some(&(idx, _)) = saved.type_params.get(&named.name)
+            {
+                let type_id = self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_type_param(named.name.clone(), idx);
+                self.annotate_ctx
+                    .trait_ctx
+                    .type_params
+                    .insert(named.name.clone(), (idx, type_id));
+                let bounds = self
+                    .saved()
+                    .type_param_bounds
+                    .get(&named.name)
+                    .map(|bs| bs.iter().map(|b| b.name.clone()).collect())
+                    .unwrap_or_default();
+                impl_type_params.push(crate::tir::TirTypeParam {
+                    name: named.name.clone(),
+                    is_effect: false,
+                    is_pack: false,
+                    bounds,
+                    default: None,
+                    index: idx,
+                    projected_from: None,
+                });
+            }
+        } else if let ast::Type::Tuple(elements) = impl_type {
+            // Variadic tuple impl: `impl<..T: Trait> Trait for [..T]`
+            // Extract type pack params from the tuple's TypePackSpread elements.
+            for elem in elements {
+                if let ast::Type::TypePackSpread(name, _) = elem
+                    && let Some(&(idx, _)) = saved.type_params.get(name)
+                {
+                    let type_id = self
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_type_pack(name.clone(), idx);
+                    self.annotate_ctx
+                        .trait_ctx
+                        .type_params
+                        .insert(name.clone(), (idx, type_id));
+                    let bounds = self
+                        .saved()
+                        .type_param_bounds
+                        .get(name)
+                        .map(|bs| bs.iter().map(|b| b.name.clone()).collect())
+                        .unwrap_or_default();
+                    impl_type_params.push(crate::tir::TirTypeParam {
+                        name: name.clone(),
+                        is_effect: false,
+                        is_pack: true,
+                        bounds,
+                        default: None,
+                        index: idx,
+                        projected_from: None,
+                    });
+                }
+            }
+        }
+
+        // Populate bounds from the impl block's type_params
+        // (inherited from outer self - second-pass sets these up).
+        // The caller sets up bounds BEFORE calling resolve_method, so the saved
+        // self contains the caller's bounds. We start from those and add
+        // method-level bounds on top.
+        let saved_bounds = saved.type_param_bounds.clone();
+        self.annotate_ctx.trait_ctx.type_param_bounds = saved_bounds;
+
+        // Bind the trait's own type parameters to the impl's concrete trait
+        // args so that references like `T` inside a default method body resolve
+        // to the impl's instantiation (e.g., `impl Maker<i32> for IntMaker`
+        // binds the trait's `T` to `i32`). Impl type params were registered
+        // above, so `Maker<Container<U>>` in `impl<U> Maker<Container<U>> for
+        // Foo<U>` resolves correctly.
+        if let Some(trait_t) = trait_type {
+            self.bind_trait_type_params_from_impl(trait_t);
+        }
+
+        // Set effect params in self (for resolving effect names in function types)
+        let effect_params: Vec<_> = func.type_params.iter().filter(|p| p.is_effect).collect();
+        if effect_params.len() > 1 {
+            let _ = self.emit(TypeError::InvalidLiteral {
+                message: "multiple effect parameters are not allowed; use a single effect parameter instead".to_string(),
+                span: effect_params[1].span,
+            });
+        }
+        self.annotate_ctx
+            .trait_ctx
+            .install_effect_params(&func.type_params);
+
+        let offset = method_param_offset(&impl_type_params) as usize;
+        let mut next_idx = offset as u32;
+        for param in &func.type_params {
+            if param.is_effect {
+                continue;
+            }
+            let idx = next_idx;
+            let fn_bound_sig = if param.is_pack {
+                None
+            } else {
+                param.bounds.iter().find_map(|b| b.fn_signature.as_ref())
+            };
+            let (type_id, consumed_index) = if param.is_pack {
+                (
+                    self.tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_type_pack(param.name.clone(), idx),
+                    true,
+                )
+            } else if let Some(sig) = fn_bound_sig {
+                (self.resolve_type(&ast::Type::Function(sig.clone())), false)
+            } else {
+                (
+                    self.tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_type_param(param.name.clone(), idx),
+                    true,
+                )
+            };
+            self.annotate_ctx
+                .trait_ctx
+                .type_params
+                .insert(param.name.clone(), (idx, type_id));
+            // Only push *real* type params (TypeParam-ids) into the
+            // inference cache list. Eagerly-resolved fn-bound params have a
+            // concrete Function type and aren't generics anymore.
+            if fn_bound_sig.is_none() {
+                type_param_list.push((param.name.clone(), type_id));
+            }
+            // Record only "real" trait bounds — `fn`/`fn mut` bounds are
+            // already realised in the parameter's type itself.
+            let real_bounds: Vec<ast::TraitBound> = param
+                .bounds
+                .iter()
+                .filter(|b| b.fn_signature.is_none())
+                .cloned()
+                .collect();
+            if !real_bounds.is_empty() {
+                self.annotate_ctx
+                    .trait_ctx
+                    .type_param_bounds
+                    .insert(param.name.clone(), real_bounds);
+            }
+            if consumed_index {
+                next_idx += 1;
+            }
+        }
+
+        // Set up Self type for the impl block
+        // This allows `&Self` to resolve correctly in method parameters
+        let resolved_self_type = self.resolve_type(impl_type);
+        self.annotate_ctx.trait_ctx.self_type = Some(resolved_self_type);
+        MethodFrame {
+            impl_type_params,
+            method_type_params: type_param_list,
+        }
+    }
+}
 impl<H: CompilerHost> Elaborator<'_, H> {
+    /// Resolve and record the canonical signature of every method in
+    /// `impl_block`, in the impl's own frame.
+    ///
+    /// The decl pass runs this for every impl block so a dispatch query
+    /// instantiates a recorded signature instead of re-resolving the method
+    /// AST under the *caller's* perspective (WEP 2026-07-10).
+    pub(super) fn record_impl_method_sigs(&mut self, impl_block: &ast::ImplBlock) {
+        if impl_block.is_synthesize_request {
+            return;
+        }
+        let mut block = self.enter_inherited_type_param_scope();
+        block.annotate_ctx.trait_ctx.type_params.clear();
+        block.annotate_ctx.trait_ctx.type_param_bounds.clear();
+        block.register_impl_block_params(impl_block);
+
+        // A method signature may name `Self::Item`, so the block's
+        // associated-type bindings have to be in scope before it resolves.
+        block.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
+        for binding in &impl_block.associated_types {
+            let type_id = block.resolve_type(&binding.ty);
+            block
+                .annotate_ctx
+                .trait_ctx
+                .assoc_type_bindings
+                .insert(binding.name.clone(), type_id);
+        }
+
+        let impl_is_concrete = block.impl_is_concrete_instantiation(
+            &impl_block.ty,
+            &impl_block.type_params,
+            &block.current_module_source.clone(),
+        );
+
+        for method in &impl_block.methods {
+            let mut frame_scope = block.enter_inherited_type_param_scope();
+            frame_scope.annotate_ctx.trait_ctx.type_params.clear();
+            let frame = frame_scope.enter_impl_method_frame(
+                method,
+                &impl_block.ty,
+                impl_block.trait_type.as_ref(),
+                impl_is_concrete,
+                &impl_block.type_params,
+            );
+            let param_types: Vec<TypeId> = method
+                .params
+                .iter()
+                .map(|p| frame_scope.resolve_type(&p.ty))
+                .collect();
+            let return_type = method
+                .return_type
+                .as_ref()
+                .map(|t| frame_scope.resolve_type(t));
+            // Slots in index order: the impl's, then the method's own.
+            let mut type_params: Vec<(String, TypeId)> = frame
+                .impl_type_params
+                .iter()
+                .filter_map(|tp| {
+                    frame_scope
+                        .annotate_ctx
+                        .trait_ctx
+                        .type_params
+                        .get(&tp.name)
+                        .map(|&(_, id)| (tp.name.clone(), id))
+                })
+                .collect();
+            type_params.extend(frame.method_type_params.iter().cloned());
+            frame_scope.sem.decls.impl_method_sigs.insert(
+                method.id,
+                DeclSig {
+                    type_params,
+                    param_types,
+                    return_type,
+                },
+            );
+        }
+    }
+
     /// Recursively check whether `type_id` mentions a `fn(...)` / `fn mut(...)`
     /// closure type. Used to reject closures crossing the Component Model
     /// boundary (export/import function signatures, CM-exposed record fields,
@@ -1430,6 +1827,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_type: Option<&Type>,
         impl_is_concrete: bool,
         impl_declared_params: &[ast::GenericParam],
+        recorded_sig: Option<&DeclSig>,
     ) -> Option<TirFunction> {
         // Use an inherited scope so the caller's `assoc_type_bindings` (set up
         // for the surrounding impl block) remain visible — `Self::Output` etc.
@@ -1441,7 +1839,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Local item declarations (`Stmt::Item`) are scoped to a single
         // function/method: clear the previous one's leftovers.
         scope.sem.decls.clear_fn_local_items();
-        let mut type_param_list = Vec::new();
 
         // Bare base trait name (e.g. `"Stream"` for an `impl Stream<u8>`).
         // Distinct from `trait_name`, which is the full mangled form
@@ -1453,201 +1850,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // resources apart.
         let base_trait_name: Option<String> = trait_type.map(|t| scope.get_type_name(t));
 
-        // First, collect type params from impl block's generic type (e.g., impl Box<T>)
-        // Also build impl_type_params for the TirFunction
-        // For ref-type impls (e.g., impl Trait for &Container<T>), unwrap the reference first.
-        let mut impl_type_params = Vec::new();
-        let impl_type_inner = match impl_type {
-            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
-            other => other,
-        };
-        if let ast::Type::Generic(generic) = impl_type_inner
-            && !impl_is_concrete
-        {
-            for (i, arg) in generic.args.iter().enumerate() {
-                if let ast::Type::Named(named) = arg {
-                    let name = &named.name;
-                    let is_declared_param = impl_declared_params.iter().any(|p| &p.name == name);
-                    if !scope.annotate_ctx.trait_ctx.type_params.contains_key(name)
-                        && (is_declared_param
-                            || !scope
-                                .tysys
-                                .is_known_type_name_in(&scope.current_module_source, name))
-                    {
-                        let type_id = scope
-                            .tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_type_param(name.clone(), i as u32);
-                        scope
-                            .annotate_ctx
-                            .trait_ctx
-                            .type_params
-                            .insert(name.clone(), (i as u32, type_id));
-                        // Store impl type param info for later monomorphization
-                        impl_type_params.push(crate::tir::TirTypeParam {
-                            name: name.clone(),
-                            is_effect: false,
-                            is_pack: false,
-                            bounds: vec![],
-                            default: None, // Impl type params don't have defaults
-                            index: i as u32,
-                            projected_from: None,
-                        });
-                    }
-                }
-            }
-        } else if let ast::Type::Named(named) = impl_type {
-            // Blanket impl case: `impl<I: Iterator> IntoIterator for I`
-            // The impl type is a type parameter itself, registered by the caller,
-            // now living in the saved (parent) scope.
-            if let Some(&(idx, _)) = scope.saved().type_params.get(&named.name) {
-                let type_id = scope
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_type_param(named.name.clone(), idx);
-                scope
-                    .annotate_ctx
-                    .trait_ctx
-                    .type_params
-                    .insert(named.name.clone(), (idx, type_id));
-                let bounds = scope
-                    .saved()
-                    .type_param_bounds
-                    .get(&named.name)
-                    .map(|bs| bs.iter().map(|b| b.name.clone()).collect())
-                    .unwrap_or_default();
-                impl_type_params.push(crate::tir::TirTypeParam {
-                    name: named.name.clone(),
-                    is_effect: false,
-                    is_pack: false,
-                    bounds,
-                    default: None,
-                    index: idx,
-                    projected_from: None,
-                });
-
-                // A pack `F` bound only via `T`'s associated type
-                // (`impl<T: Trait<Assoc = [..F]>, ..F: …>`) is not caller-supplied;
-                // monomorphization projects it from `T::Assoc`.
-                let projections: Vec<(String, String)> = impl_declared_params
-                    .iter()
-                    .find(|p| p.name == named.name)
-                    .into_iter()
-                    .flat_map(|t_param| &t_param.bounds)
-                    .flat_map(|bound| &bound.assoc_types)
-                    .filter_map(|assoc| match &assoc.ty {
-                        ast::Type::Tuple(elems) => Some((elems, assoc.name.clone())),
-                        _ => None,
-                    })
-                    .flat_map(|(elems, assoc_name)| {
-                        elems.iter().filter_map(move |elem| match elem {
-                            ast::Type::TypePackSpread(f_name, _) => {
-                                Some((f_name.clone(), assoc_name.clone()))
-                            }
-                            _ => None,
-                        })
-                    })
-                    .collect();
-                for (f_name, assoc_name) in projections {
-                    let Some(&(f_idx, _)) = scope.saved().type_params.get(&f_name) else {
-                        continue;
-                    };
-                    let f_type_id = scope
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_type_pack(f_name.clone(), f_idx);
-                    scope
-                        .annotate_ctx
-                        .trait_ctx
-                        .type_params
-                        .insert(f_name.clone(), (f_idx, f_type_id));
-                    let f_bounds = scope
-                        .saved()
-                        .type_param_bounds
-                        .get(&f_name)
-                        .map(|bs| bs.iter().map(|b| b.name.clone()).collect())
-                        .unwrap_or_default();
-                    impl_type_params.push(crate::tir::TirTypeParam {
-                        name: f_name,
-                        is_effect: false,
-                        is_pack: true,
-                        bounds: f_bounds,
-                        default: None,
-                        index: f_idx,
-                        projected_from: Some((idx, assoc_name)),
-                    });
-                }
-            }
-        } else if let ast::Type::Reference(boxed) | ast::Type::MutReference(boxed) = impl_type {
-            // Reference impl case: `impl<T: Bound> Trait for &T` / `impl<T: Bound> Trait for &mut T`
-            // The inner type T is a type parameter registered by the caller.
-            if let ast::Type::Named(named) = boxed.as_ref()
-                && let Some(&(idx, _)) = scope.saved().type_params.get(&named.name)
-            {
-                let type_id = scope
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_type_param(named.name.clone(), idx);
-                scope
-                    .annotate_ctx
-                    .trait_ctx
-                    .type_params
-                    .insert(named.name.clone(), (idx, type_id));
-                let bounds = scope
-                    .saved()
-                    .type_param_bounds
-                    .get(&named.name)
-                    .map(|bs| bs.iter().map(|b| b.name.clone()).collect())
-                    .unwrap_or_default();
-                impl_type_params.push(crate::tir::TirTypeParam {
-                    name: named.name.clone(),
-                    is_effect: false,
-                    is_pack: false,
-                    bounds,
-                    default: None,
-                    index: idx,
-                    projected_from: None,
-                });
-            }
-        } else if let ast::Type::Tuple(elements) = impl_type {
-            // Variadic tuple impl: `impl<..T: Trait> Trait for [..T]`
-            // Extract type pack params from the tuple's TypePackSpread elements.
-            for elem in elements {
-                if let ast::Type::TypePackSpread(name, _) = elem
-                    && let Some(&(idx, _)) = scope.saved().type_params.get(name)
-                {
-                    let type_id = scope
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_type_pack(name.clone(), idx);
-                    scope
-                        .annotate_ctx
-                        .trait_ctx
-                        .type_params
-                        .insert(name.clone(), (idx, type_id));
-                    let bounds = scope
-                        .saved()
-                        .type_param_bounds
-                        .get(name)
-                        .map(|bs| bs.iter().map(|b| b.name.clone()).collect())
-                        .unwrap_or_default();
-                    impl_type_params.push(crate::tir::TirTypeParam {
-                        name: name.clone(),
-                        is_effect: false,
-                        is_pack: true,
-                        bounds,
-                        default: None,
-                        index: idx,
-                        projected_from: None,
-                    });
-                }
-            }
-        }
+        let frame = scope.enter_impl_method_frame(
+            func,
+            impl_type,
+            trait_type,
+            impl_is_concrete,
+            impl_declared_params,
+        );
+        let impl_type_params = frame.impl_type_params;
+        let type_param_list = frame.method_type_params;
 
         // Record the impl-type-param scheme for reify to read back instead of
         // recomputing it (single source of truth = this original path). Keyed
@@ -1661,112 +1872,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .method_impl_type_params
             .insert(method_key, impl_type_params.clone());
 
-        // Populate bounds from the impl block's type_params
-        // (inherited from outer scope - second-pass sets these up).
-        // The caller sets up bounds BEFORE calling resolve_method, so the saved
-        // scope contains the caller's bounds. We start from those and add
-        // method-level bounds on top.
-        let saved_bounds = scope.saved().type_param_bounds.clone();
-        scope.annotate_ctx.trait_ctx.type_param_bounds = saved_bounds;
-
-        // Bind the trait's own type parameters to the impl's concrete trait
-        // args so that references like `T` inside a default method body resolve
-        // to the impl's instantiation (e.g., `impl Maker<i32> for IntMaker`
-        // binds the trait's `T` to `i32`). Impl type params were registered
-        // above, so `Maker<Container<U>>` in `impl<U> Maker<Container<U>> for
-        // Foo<U>` resolves correctly.
-        if let Some(trait_t) = trait_type {
-            scope.bind_trait_type_params_from_impl(trait_t);
-        }
-
-        // Set effect params in scope (for resolving effect names in function types)
-        let effect_params: Vec<_> = func.type_params.iter().filter(|p| p.is_effect).collect();
-        if effect_params.len() > 1 {
-            let _ = scope.emit(TypeError::InvalidLiteral {
-                message: "multiple effect parameters are not allowed; use a single effect parameter instead".to_string(),
-                span: effect_params[1].span,
-            });
-        }
-        scope
-            .annotate_ctx
-            .trait_ctx
-            .install_effect_params(&func.type_params);
-
-        let offset = method_param_offset(&impl_type_params) as usize;
-        let mut next_idx = offset as u32;
-        for param in &func.type_params {
-            if param.is_effect {
-                continue;
-            }
-            let idx = next_idx;
-            let fn_bound_sig = if param.is_pack {
-                None
-            } else {
-                param.bounds.iter().find_map(|b| b.fn_signature.as_ref())
-            };
-            let (type_id, consumed_index) = if param.is_pack {
-                (
-                    scope
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_type_pack(param.name.clone(), idx),
-                    true,
-                )
-            } else if let Some(sig) = fn_bound_sig {
-                (scope.resolve_type(&ast::Type::Function(sig.clone())), false)
-            } else {
-                (
-                    scope
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_type_param(param.name.clone(), idx),
-                    true,
-                )
-            };
-            scope
-                .annotate_ctx
-                .trait_ctx
-                .type_params
-                .insert(param.name.clone(), (idx, type_id));
-            // Only push *real* type params (TypeParam-ids) into the
-            // inference cache list. Eagerly-resolved fn-bound params have a
-            // concrete Function type and aren't generics anymore.
-            if fn_bound_sig.is_none() {
-                type_param_list.push((param.name.clone(), type_id));
-            }
-            // Record only "real" trait bounds — `fn`/`fn mut` bounds are
-            // already realised in the parameter's type itself.
-            let real_bounds: Vec<ast::TraitBound> = param
-                .bounds
-                .iter()
-                .filter(|b| b.fn_signature.is_none())
-                .cloned()
-                .collect();
-            if !real_bounds.is_empty() {
-                scope
-                    .annotate_ctx
-                    .trait_ctx
-                    .type_param_bounds
-                    .insert(param.name.clone(), real_bounds);
-            }
-            if consumed_index {
-                next_idx += 1;
-            }
-        }
-
-        // Set up Self type for the impl block
-        // This allows `&Self` to resolve correctly in method parameters
-        let resolved_self_type = scope.resolve_type(impl_type);
-        scope.annotate_ctx.trait_ctx.self_type = Some(resolved_self_type);
-
-        // Resolve return type
-        let return_type = func
-            .return_type
-            .as_ref()
-            .map(|t| scope.resolve_type(t))
-            .unwrap_or(TypeTable::UNIT);
+        // A method the impl block declares has its canonical signature from
+        // the decl pass, resolved in this same frame; reading it back is what
+        // keeps the two passes from drifting. A trait *default* method being
+        // synthesised into this impl has no such entry: its signature is
+        // canonical per impl, not per declaration, so it resolves here until
+        // the trait-decl digest (S6) gives it a per-impl key.
+        let return_type = match recorded_sig {
+            Some(sig) => sig.return_type.unwrap_or(TypeTable::UNIT),
+            None => func
+                .return_type
+                .as_ref()
+                .map(|t| scope.resolve_type(t))
+                .unwrap_or(TypeTable::UNIT),
+        };
 
         // Update the function_return_types with the resolved return type
         // (This replaces the potentially incorrect type from static resolution)

@@ -126,12 +126,26 @@ pub(crate) struct TypeSystem {
     /// name → `(declared type, is_mut)`.
     pub(crate) all_globals: Rc<IndexMap<ModuleSource, IndexMap<String, (TypeId, bool)>>>,
 
+    /// Program-wide canonical signatures of `impl`-block methods, keyed by
+    /// the method's globally-unique `AstId`. `TraitEnv::impl_headers`
+    /// carries each method's `ast_id`, so a dispatch query goes header →
+    /// signature without ever reaching for the impl AST.
+    pub(crate) all_impl_method_sigs: Rc<IndexMap<crate::ast::AstId, super::sig::DeclSig>>,
+
     /// Per-module `__DATA__` section contents; modules without one have
     /// no entry.
     pub(crate) data_sections: Rc<IndexMap<ModuleSource, String>>,
 }
 
 impl TypeSystem {
+    /// Canonical signature of the impl method declared at `ast_id`.
+    pub(crate) fn impl_method_sig(
+        &self,
+        ast_id: crate::ast::AstId,
+    ) -> Option<&super::sig::DeclSig> {
+        self.all_impl_method_sigs.get(&ast_id)
+    }
+
     /// Canonical signature of the free function `name` declared in
     /// `module`.
     pub(crate) fn function_sig(
