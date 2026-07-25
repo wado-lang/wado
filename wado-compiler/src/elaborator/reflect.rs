@@ -139,7 +139,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut tt = self.tysys.type_table.borrow_mut();
             let (field_module, field_name) = {
                 let items = tt.compiler_items();
-                let (m, n) = items.require_struct(crate::compiler_item::CompilerItem::ReflectStructField);
+                let (m, n) =
+                    items.require_struct(crate::compiler_item::CompilerItem::ReflectStructField);
                 (m.clone(), n.to_string())
             };
             let members: Vec<TypeId> = field_types
@@ -210,7 +211,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let items = tt.compiler_items();
             (
                 items.trait_name(CompilerItem::ReflectStruct).to_string(),
-                items.method_name(CompilerItem::ReflectStructTypeName).to_string(),
+                items
+                    .method_name(CompilerItem::ReflectStructTypeName)
+                    .to_string(),
                 items
                     .method_name(CompilerItem::ReflectStructMembers)
                     .to_string(),
@@ -402,7 +405,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method == items.method_name(crate::compiler_item::CompilerItem::ReflectStructTypeName)
             || method == items.method_name(crate::compiler_item::CompilerItem::ReflectStructMembers)
             || method
-                == items.method_name(crate::compiler_item::CompilerItem::ReflectStructWireNamePolicy)
+                == items
+                    .method_name(crate::compiler_item::CompilerItem::ReflectStructWireNamePolicy)
     }
 
     /// Whether `prefix::method` names a `ReflectVariant` trait-qualified static
@@ -420,7 +424,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method == items.method_name(crate::compiler_item::CompilerItem::ReflectVariantTypeName)
             || method
                 == items.method_name(crate::compiler_item::CompilerItem::ReflectVariantDiscriminant)
-            || method == items.method_name(crate::compiler_item::CompilerItem::ReflectVariantMembers)
+            || method
+                == items.method_name(crate::compiler_item::CompilerItem::ReflectVariantMembers)
             || method
                 == items
                     .method_name(crate::compiler_item::CompilerItem::ReflectVariantWireNamePolicy)
@@ -571,7 +576,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         use crate::compiler_item::CompilerItem;
         let method = static_call.method.clone();
-        let (trait_name, type_name_method, discriminant_method, cases_method, wire_name_policy_method) = {
+        let (
+            trait_name,
+            type_name_method,
+            discriminant_method,
+            cases_method,
+            wire_name_policy_method,
+        ) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
@@ -605,7 +616,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else if is_discriminant {
             TypeTable::I32
         } else if method == cases_method {
-            let Some(members_ty) = self.variant_members_bound_ty(self_ty, type_param_name, &trait_name)
+            let Some(members_ty) =
+                self.variant_members_bound_ty(self_ty, type_param_name, &trait_name)
             else {
                 let _ = self.emit(TypeError::UnknownFunction {
                     name: format!(
@@ -922,12 +934,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         if *method == wire_name_policy_method {
-            self.reject_reflect_metadata_args(static_call, ctx).then(|| {
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_compiler_enum(CompilerItem::CaseStyle)
-            })
+            self.reject_reflect_metadata_args(static_call, ctx)
+                .then(|| {
+                    self.tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_compiler_enum(CompilerItem::CaseStyle)
+                })
         } else if *method == type_name_method {
             self.reject_reflect_metadata_args(static_call, ctx)
                 .then(|| {

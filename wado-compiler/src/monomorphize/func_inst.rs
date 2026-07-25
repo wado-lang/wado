@@ -607,8 +607,10 @@ impl Monomorphizer {
                             // under `[T, T::Assoc, …]`; the recorded impl args carry
                             // only `[T]`, so append the packs to match the template's
                             // arity (and the rewrite-side lookup key).
-                            let blanket_trait =
-                                info.base_trait_name.as_deref().or(info.trait_name.as_deref());
+                            let blanket_trait = info
+                                .base_trait_name
+                                .as_deref()
+                                .or(info.trait_name.as_deref());
                             let impl_type_args = match blanket_trait {
                                 Some(tn)
                                     if monomorph.is_blanket

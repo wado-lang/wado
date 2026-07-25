@@ -588,7 +588,12 @@ fn generate_struct_reflect_methods(
             REFLECT_MEMBERS_ASSOC.to_string(),
             members_tuple_type,
         );
-        (struct_type, ref_struct_type, member_types, members_tuple_type)
+        (
+            struct_type,
+            ref_struct_type,
+            member_types,
+            members_tuple_type,
+        )
     };
 
     let members_fn = generate_struct_members_fn(
@@ -658,7 +663,9 @@ impl ReflectSynthEnv {
             case_style_type,
             member_struct_name,
             member_struct_module,
-            type_name_method: items.method_name(CompilerItem::ReflectStructTypeName).to_string(),
+            type_name_method: items
+                .method_name(CompilerItem::ReflectStructTypeName)
+                .to_string(),
             members_method: items
                 .method_name(CompilerItem::ReflectStructMembers)
                 .to_string(),
@@ -1169,7 +1176,14 @@ fn collect_reflect_variant_targets(
             cases: v
                 .cases
                 .iter()
-                .map(|c| (c.name.clone(), c.index, c.payload, c.wire_name_override.clone()))
+                .map(|c| {
+                    (
+                        c.name.clone(),
+                        c.index,
+                        c.payload,
+                        c.wire_name_override.clone(),
+                    )
+                })
                 .collect(),
             span: v.span,
             wire_name_policy: v.wire_name_policy.clone(),
@@ -1341,59 +1355,61 @@ fn generate_variant_cases_fn(
         .cases
         .iter()
         .zip(member_types)
-        .map(|((case_name, index, payload, wire_name_override), member_type)| {
-            let wire_override = {
-                let tt = type_table.borrow();
-                let items = tt.compiler_items();
-                match wire_name_override {
-                    Some(rename) => crate::synthesis::common::option_some(
-                        TirExpr::new(
-                            TirExprKind::StringLiteral(rename.clone()),
+        .map(
+            |((case_name, index, payload, wire_name_override), member_type)| {
+                let wire_override = {
+                    let tt = type_table.borrow();
+                    let items = tt.compiler_items();
+                    match wire_name_override {
+                        Some(rename) => crate::synthesis::common::option_some(
+                            TirExpr::new(
+                                TirExprKind::StringLiteral(rename.clone()),
+                                env.string_type,
+                                span,
+                            ),
+                            option_string_type,
+                            items,
+                        ),
+                        None => crate::synthesis::common::option_none(option_string_type, items),
+                    }
+                };
+                let case_fields = vec![
+                    reflect_meta_int_field("index", u64::from(*index), TypeTable::I32, 0, span),
+                    TirStructField {
+                        name: "case_name".to_string(),
+                        value: TirExpr::new(
+                            TirExprKind::StringLiteral(case_name.clone()),
                             env.string_type,
                             span,
                         ),
-                        option_string_type,
-                        items,
-                    ),
-                    None => crate::synthesis::common::option_none(option_string_type, items),
-                }
-            };
-            let case_fields = vec![
-                reflect_meta_int_field("index", u64::from(*index), TypeTable::I32, 0, span),
-                TirStructField {
-                    name: "case_name".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::StringLiteral(case_name.clone()),
-                        env.string_type,
-                        span,
-                    ),
-                    field_index: 1,
-                },
-                TirStructField {
-                    name: "wire_override".to_string(),
-                    value: wire_override,
-                    field_index: 2,
-                },
-                TirStructField {
-                    name: "is_unit".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::BoolLiteral(*payload == TypeTable::UNIT),
-                        TypeTable::BOOL,
-                        span,
-                    ),
-                    field_index: 3,
-                },
-            ];
-            TirExpr::new(
-                TirExprKind::StructLiteral {
-                    struct_type: *member_type,
-                    struct_name: env.member_struct_name.clone(),
-                    fields: case_fields,
-                },
-                *member_type,
-                span,
-            )
-        })
+                        field_index: 1,
+                    },
+                    TirStructField {
+                        name: "wire_override".to_string(),
+                        value: wire_override,
+                        field_index: 2,
+                    },
+                    TirStructField {
+                        name: "is_unit".to_string(),
+                        value: TirExpr::new(
+                            TirExprKind::BoolLiteral(*payload == TypeTable::UNIT),
+                            TypeTable::BOOL,
+                            span,
+                        ),
+                        field_index: 3,
+                    },
+                ];
+                TirExpr::new(
+                    TirExprKind::StructLiteral {
+                        struct_type: *member_type,
+                        struct_name: env.member_struct_name.clone(),
+                        fields: case_fields,
+                    },
+                    *member_type,
+                    span,
+                )
+            },
+        )
         .collect();
     let tuple = TirExpr::new(
         TirExprKind::TupleLiteral { elements },

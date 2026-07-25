@@ -2994,7 +2994,13 @@ fn generate_variant_serialize(
     let wire_names: Vec<String> = variant_def
         .cases
         .iter()
-        .map(|c| serialized_case_name(&c.name, &c.wire_name_override, &variant_def.wire_name_policy))
+        .map(|c| {
+            serialized_case_name(
+                &c.name,
+                &c.wire_name_override,
+                &variant_def.wire_name_policy,
+            )
+        })
         .collect();
     let payload_ref_types: Vec<TypeId> = cases
         .iter()
@@ -3267,7 +3273,13 @@ fn generate_variant_deserialize(
     let wire_names = variant_def
         .cases
         .iter()
-        .map(|c| serialized_case_name(&c.name, &c.wire_name_override, &variant_def.wire_name_policy))
+        .map(|c| {
+            serialized_case_name(
+                &c.name,
+                &c.wire_name_override,
+                &variant_def.wire_name_policy,
+            )
+        })
         .collect();
     let type_params = variant_def.type_params.clone();
     Some(generate_variant_family_deserialize(

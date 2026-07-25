@@ -1345,6 +1345,17 @@ impl Parser {
 
         self.expect(&TokenKind::RBracket)?;
 
+        // Every attribute in every position is minted here, so rejecting
+        // `#[serde]` at this one point needs no walk and cannot miss a
+        // declaration form. Recorded rather than returned: the attribute still
+        // parses, so the item does not cascade into recovery errors.
+        if name == "serde" {
+            self.errors.push(ParseError {
+                message: serde_attr_advice(&args),
+                span: start_span,
+            });
+        }
+
         let cm_boundary = parse_cm_boundary(&name, &args).map_err(|message| ParseError {
             message,
             span: start_span,
@@ -8522,4 +8533,51 @@ line 2
         let module = parse(source).unwrap();
         assert!(first_let_stmt(&module).else_block.is_none());
     }
+}
+
+/// Why `#[serde(...)]` is refused, and what to write instead. `default` is
+/// called out separately: it has no `#[wire]` spelling at all, since a field's
+/// own default value is the single mechanism for an optional field.
+fn serde_attr_advice(args: &[AttrArg]) -> String {
+    let is_default = |arg: &AttrArg| matches!(arg, AttrArg::Ident(name) if name == "default");
+    let has_default = args.iter().any(is_default);
+    let wire_args: Vec<String> = args
+        .iter()
+        .filter(|arg| !is_default(arg))
+        .map(|arg| match arg {
+            AttrArg::KeyValue(key, value) => {
+                let key = match key.as_str() {
+                    "rename_all" => "name_policy",
+                    "rename" => "name",
+                    other => other,
+                };
+                format!("{key} = \"{value}\"")
+            }
+            AttrArg::Ident(name) => name.clone(),
+            AttrArg::Str(value) => format!("\"{value}\""),
+            AttrArg::Number(value) => value.clone(),
+            AttrArg::KeyArray(key, values) => {
+                let items: Vec<String> = values.iter().map(|v| format!("\"{v}\"")).collect();
+                format!("{key} = [{}]", items.join(", "))
+            }
+        })
+        .collect();
+
+    let mut advice = String::from("`#[serde]` does not exist");
+    if !has_default || !wire_args.is_empty() {
+        let spelling = if wire_args.is_empty() {
+            "#[wire]".to_string()
+        } else {
+            format!("#[wire({})]", wire_args.join(", "))
+        };
+        advice.push_str(&format!(
+            "; use `{spelling}` (`rename_all` is `name_policy`, `rename` is `name`)"
+        ));
+    }
+    if has_default {
+        advice.push_str(
+            "; `default` has no `#[wire]` spelling \u{2014} give the field a default value instead, e.g. `field: T = <value>`",
+        );
+    }
+    advice
 }

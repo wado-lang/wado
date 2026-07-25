@@ -1525,41 +1525,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// diagnostics, but builds no TIR — reify (`reify_module`) is the sole
     /// `TirModule` producer, and it reads these facts. Requires
     /// [`Self::annotate_module_decls`] to have populated this module's
-    /// Reject `#[serde(...)]` on a declaration or any of its members, naming
-    /// the `#[wire(...)]` spelling to use. An attribute Wado does not know is
-    /// dropped without a word, so leaving this one unrecognized would silently
-    /// strip the behaviour it was written for.
-    fn reject_serde_attrs(&mut self, item: &Item) {
-        let mut attrs: Vec<&ast::Attribute> = Vec::new();
-        match item {
-            Item::Struct(decl) => {
-                attrs.extend(&decl.attrs);
-                attrs.extend(decl.fields.iter().flat_map(|f| &f.attrs));
-            }
-            Item::Enum(decl) => {
-                attrs.extend(&decl.attrs);
-                attrs.extend(decl.cases.iter().flat_map(|c| &c.attrs));
-            }
-            Item::Variant(decl) => {
-                attrs.extend(&decl.attrs);
-                attrs.extend(decl.cases.iter().flat_map(|c| &c.attrs));
-            }
-            Item::Flags(decl) => {
-                attrs.extend(decl.attributes.iter().flatten());
-                attrs.extend(decl.flags.iter().flat_map(|m| &m.attrs));
-            }
-            _ => return,
-        }
-        let offenders: Vec<(String, crate::Span)> = attrs
-            .into_iter()
-            .filter(|a| a.name == "serde")
-            .map(|a| (wire_spelling_of(a), a.span))
-            .collect();
-        for (suggestion, span) in offenders {
-            let _ = self.emit(TypeError::SerdeAttrDoesNotExist { suggestion, span });
-        }
-    }
-
     /// `ModuleSemantics` first.
     pub fn annotate_module_bodies(&mut self, module: &'a Module, module_source: ModuleSource) {
         self.current_module_source = module_source;
@@ -1568,7 +1533,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let mut test_count = 0usize;
         for item in &module.items {
-            self.reject_serde_attrs(item);
             match item {
                 Item::Function(func) => {
                     self.resolve_function(func);
@@ -1980,34 +1944,3 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 }
 
-/// The `#[wire(...)]` spelling of a `#[serde(...)]` attribute: serde's key
-/// names map onto wire's (`rename_all` -> `name_policy`, `rename` -> `name`),
-/// and the rest carry over verbatim.
-fn wire_spelling_of(attr: &ast::Attribute) -> String {
-    let args: Vec<String> = attr
-        .args
-        .iter()
-        .map(|arg| match arg {
-            ast::AttrArg::KeyValue(key, value) => {
-                let key = match key.as_str() {
-                    "rename_all" => "name_policy",
-                    "rename" => "name",
-                    other => other,
-                };
-                format!("{key} = \"{value}\"")
-            }
-            ast::AttrArg::Ident(name) => name.clone(),
-            ast::AttrArg::Str(value) => format!("\"{value}\""),
-            ast::AttrArg::Number(value) => value.clone(),
-            ast::AttrArg::KeyArray(key, values) => {
-                let items: Vec<String> = values.iter().map(|v| format!("\"{v}\"")).collect();
-                format!("{key} = [{}]", items.join(", "))
-            }
-        })
-        .collect();
-    if args.is_empty() {
-        "#[wire]".to_string()
-    } else {
-        format!("#[wire({})]", args.join(", "))
-    }
-}
