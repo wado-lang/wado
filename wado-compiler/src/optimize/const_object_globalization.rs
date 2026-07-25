@@ -106,6 +106,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         funcs: &project.functions,
         type_table: &type_table,
         hoistable_pure: &hoistable_pure,
+        structs: &project.structs,
     };
     let mut candidates: Vec<Candidate> = Vec::new();
     for (fi, f) in project.functions.iter().enumerate() {
@@ -722,7 +723,8 @@ fn contains_aggregate(body: &Body, expr: ExprId, gate: &Gate<'_>) -> bool {
     match &body.exprs[expr].kind {
         ExprKind::Call { func_id, .. }
             if gate.is_hoistable_pure(*func_id)
-                && gate.is_reference_type(body.exprs[expr].type_id) =>
+                && gate.is_reference_type(body.exprs[expr].type_id)
+                && gate.owns_heap_storage(body.exprs[expr].type_id) =>
         {
             true
         }
@@ -756,6 +758,7 @@ struct Gate<'a> {
     type_table: &'a Rc<RefCell<TypeTable>>,
     /// Indexed by `func_id.index()`. See [`is_hoistable_shape`].
     hoistable_pure: &'a [bool],
+    structs: &'a [crate::nir::NirStruct],
 }
 
 /// Shape preconditions a callee must meet on top of `FnEffect::is_pure`.
@@ -781,6 +784,67 @@ impl Gate<'_> {
             self.type_table.borrow().get(ty),
             ResolvedType::Primitive(_) | ResolvedType::Unit | ResolvedType::Never
         )
+    }
+
+    /// Whether a value of `ty` owns heap storage worth building only once.
+    ///
+    /// Hoisting is not free: it costs a global, an init flag, a guard branch,
+    /// and an object that stays live for the whole program. That only pays
+    /// when rebuilding the value would re-allocate — i.e. when it (transitively)
+    /// owns a GC array, as `String` and `List` do.
+    ///
+    /// A small aggregate of scalars owns nothing: `multi_value_return` already
+    /// lifts such a return into Wasm multi-values and allocates *nothing*, so
+    /// hoisting it is strictly worse. This is the existing "skip scalars"
+    /// rationale one level up — skip whatever the backend can keep in registers.
+    fn owns_heap_storage(&self, ty: TypeId) -> bool {
+        let mut seen = IndexSet::default();
+        self.owns_heap_storage_inner(ty, &mut seen)
+    }
+
+    fn owns_heap_storage_inner(&self, ty: TypeId, seen: &mut IndexSet<TypeId>) -> bool {
+        if !seen.insert(ty) {
+            return false;
+        }
+        let tt = self.type_table.borrow();
+        let inner = match tt.get(ty) {
+            ResolvedType::BuiltinArray(_) => return true,
+            // Nothing to own.
+            ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Function { .. }
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocTypeProjection { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => return false,
+            // Transparent wrappers.
+            ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Newtype { base_type: inner, .. }
+            | ResolvedType::Reactive(inner) => Some(*inner),
+            // Struct / tuple: decided by the fields below. Anything else
+            // (a variant and its payloads, a generic instance) cannot be
+            // walked here, so assume it owns storage — `Option<String>` and
+            // friends live there.
+            _ => None,
+        };
+        if let Some(inner) = inner {
+            drop(tt);
+            return self.owns_heap_storage_inner(inner, seen);
+        }
+        let fields = super::multi_value_return::aggregate_field_info(ty, &tt, self.structs);
+        drop(tt);
+        match fields {
+            Some((field_types, _, _)) => field_types
+                .into_iter()
+                .any(|f| self.owns_heap_storage_inner(f, seen)),
+            None => true,
+        }
     }
 
     fn is_hoistable_pure(&self, func_id: crate::nir::FuncId) -> bool {

@@ -211,7 +211,7 @@ fn candidate_info(
     })
 }
 
-fn aggregate_field_info(
+pub(super) fn aggregate_field_info(
     return_type: TypeId,
     type_table: &TypeTable,
     structs: &[NirStruct],
