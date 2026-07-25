@@ -1549,6 +1549,24 @@ impl CompilerItems {
         self.require_variant(item).1
     }
 
+    /// Whether `name` is one of the four reflection member handles.
+    ///
+    /// They are generic structs whose own `Members` would mention
+    /// `StructField<Self, …>`, growing `Self` without bound, so they are not
+    /// reflectable. This is the seal that keeps reflection terminating, and both
+    /// the bound check and reflect synthesis read it — synthesis covers every
+    /// declaration except these, so nothing has to be demanded first.
+    pub fn is_sealed_reflect_member(&self, name: &str) -> bool {
+        [
+            CompilerItem::ReflectStructField,
+            CompilerItem::ReflectVariantCase,
+            CompilerItem::ReflectEnumCase,
+            CompilerItem::ReflectFlagsBit,
+        ]
+        .iter()
+        .any(|item| self.struct_name(*item) == name)
+    }
+
     /// Name-only convenience for a [`CompilerItemKind::Enum`] item.
     pub fn enum_name(&self, item: CompilerItem) -> &str {
         self.require_enum(item).1

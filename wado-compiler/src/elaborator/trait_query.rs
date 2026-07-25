@@ -634,37 +634,10 @@ impl TypeSystem {
             .any(|derived| self.trait_env.has_any_methodful_impl(&receiver, derived))
     }
 
-    /// Whether every member type is determined by substituting the
-    /// declaration's own parameters.
-    ///
-    /// A member typed by an associated-type projection (an iterator adapter's
-    /// `fn mut(I::Item) -> U`) is not: resolving it needs the bound's impl,
-    /// which the per-instantiation substitution does not consult. Such a type is
-    /// not reflectable — its members cannot be named.
-    fn members_are_substitutable(&self, members: impl Iterator<Item = TypeId>) -> bool {
-        let tt = self.type_table.borrow();
-        !members
-            .into_iter()
-            .any(|ty| tt.contains_assoc_type_projection(ty))
-    }
-
-    /// Whether `name` is one of the four sealed member handles `members()` mints
-    /// (`StructField` / `VariantCase` / `EnumCase` / `FlagsBit`).
-    ///
-    /// They are generic structs, so they would otherwise be reflectable — and a
-    /// member handle's own `Members` mentions `StructField<Self, …>`, so
-    /// reflecting one grows `Self` without bound. Reflection stops at them.
-    fn is_sealed_reflect_member(&self, name: &str) -> bool {
-        let tt = self.type_table.borrow();
-        let items = tt.compiler_items();
-        [
-            CompilerItem::ReflectStructField,
-            CompilerItem::ReflectVariantCase,
-            CompilerItem::ReflectEnumCase,
-            CompilerItem::ReflectFlagsBit,
-        ]
-        .iter()
-        .any(|item| items.struct_name(*item) == name)
+    /// Whether a declaration can be reflected, via the shared eligibility
+    /// predicate reflect synthesis reads.
+    fn is_reflect_eligible(&self, name: &str, members: impl Iterator<Item = TypeId>) -> bool {
+        self.type_table.borrow().is_reflect_eligible(name, members)
     }
 
     pub(super) fn classify_on_bound_trait(
@@ -1132,19 +1105,16 @@ impl TypeSystem {
             module_source,
             ..
         } = &resolved
-            && !self.is_sealed_reflect_member(name)
             && !self.has_own_impl_of_a_reflect_derivation(name, trait_name)
             && match on_bound {
                 Some(OnBoundTrait::ReflectStruct) => {
                     scope.struct_fields(name).is_some_and(|info| {
-                        self.members_are_substitutable(info.fields.iter().map(|(_, ty, _)| *ty))
+                        self.is_reflect_eligible(name, info.fields.iter().map(|(_, ty, _)| *ty))
                     })
                 }
-                Some(OnBoundTrait::ReflectVariant) => {
-                    scope.variant_case(name).is_some_and(|info| {
-                        self.members_are_substitutable(info.cases.iter().map(|c| c.payload))
-                    })
-                }
+                Some(OnBoundTrait::ReflectVariant) => scope.variant_case(name).is_some_and(|info| {
+                    self.is_reflect_eligible(name, info.cases.iter().map(|c| c.payload))
+                }),
                 _ => false,
             }
         {

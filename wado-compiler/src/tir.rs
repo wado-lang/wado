@@ -1984,6 +1984,23 @@ impl TypeTable {
     /// Whether a generic definition of `assoc_name` is registered for
     /// `base_name` — i.e. the generic type carries a synthesized impl binding
     /// that associated type.
+    /// Whether a declaration named `name` with these member types can be
+    /// reflected. The single eligibility predicate: the bound check and reflect
+    /// synthesis both read it, so synthesis covers exactly what the bound
+    /// accepts without a demand channel between them.
+    ///
+    /// Two exclusions, both load-bearing. A member handle is sealed — its own
+    /// `Members` would mention `StructField<Self, …>` and grow `Self` without
+    /// bound. A member typed by an associated-type projection (an iterator
+    /// adapter's `fn mut(I::Item) -> U`) is not determined by substituting the
+    /// declaration's own parameters, so its members cannot be named.
+    pub fn is_reflect_eligible(&self, name: &str, members: impl Iterator<Item = TypeId>) -> bool {
+        !self.compiler_items().is_sealed_reflect_member(name)
+            && !members
+                .into_iter()
+                .any(|ty| self.contains_assoc_type_projection(ty))
+    }
+
     pub fn has_generic_assoc_type_def(&self, base_name: &str, assoc_name: &str) -> bool {
         self.generic_assoc_type_defs
             .contains_key(&(base_name.to_string(), assoc_name.to_string()))

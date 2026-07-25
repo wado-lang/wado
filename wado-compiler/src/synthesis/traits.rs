@@ -479,13 +479,13 @@ fn generate_struct_reflect_impls(
 
     let mut generated = Vec::new();
     for target in &targets {
-        // A plain struct's impl is unconditional — the set is closed and each
-        // impl is finite. A generic one is demand-driven: its `Members` mention
-        // `StructField<S<T>, …>`, so synthesizing every generic struct would
-        // reflect `StructField` itself into an ever-deepening `Self` and
-        // diverge at monomorphization.
-        if !target.type_params.is_empty()
-            && !ctx.should_synthesize(&target.name, reflect_trait_name)
+        // Every eligible declaration is reflected, generic or not — the same
+        // predicate the bound check reads, so no demand channel is needed
+        // between them.
+        if !module
+            .type_table
+            .borrow()
+            .is_reflect_eligible(&target.name, target.fields.iter().map(|f| f.type_id))
         {
             continue;
         }
