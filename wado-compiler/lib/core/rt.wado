@@ -222,15 +222,12 @@ internal fn write_escaped_string(s: String, f: &mut Formatter) {
 // These functions implement the Component Model ABI for resource operations.
 // Synthesis rewrites #[cm("...")] method calls to call these adapters.
 
-/// Await a BLOCKED `stream.read` / `stream.write` / `future.read` /
-/// `future.write`. Joins the handle to a fresh waitable set, waits for the
-/// transfer to complete, then unjoins before dropping the set — the set cannot
-/// be dropped while a waitable is still joined to it.
+/// Await a BLOCKED stream or future copy. Returns the copy result in the same
+/// `(count << 4) | status` packing the canonical returns directly, so callers
+/// read the blocked and non-blocked paths identically.
 ///
-/// Returns the copy-result the event delivered, in the same
-/// `(count << 4) | status` packing the canonical returns directly, so the
-/// caller's status check distinguishes COMPLETED from DROPPED / CANCELLED on
-/// the blocked path exactly as on the non-blocked path.
+/// The handle must be unjoined before the set is dropped; a set still holding a
+/// waitable cannot be deleted.
 internal fn cm_await_blocked(handle: i32) -> i32 {
     let ws = builtin::waitable_set_new();
     builtin::waitable_join(handle, ws);

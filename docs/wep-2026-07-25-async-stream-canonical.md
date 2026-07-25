@@ -101,18 +101,18 @@ Emit `CanonicalOption::Async` for `stream.read` and `stream.write`, matching
 
 ### Await helper
 
-Fold `wait_for_blocked` into `future_await_blocked` as a single `core:rt` helper.
-The two bodies are identical apart from the missing unjoin, and the unjoin is
-required for both:
+Replace `wait_for_blocked` and `future_await_blocked` with one `core:rt` helper,
+`cm_await_blocked`. The two bodies are identical apart from the unjoin, which
+both need:
 
 ```wado
 internal fn cm_await_blocked(handle: i32) -> i32 {
     let ws = builtin::waitable_set_new();
     builtin::waitable_join(handle, ws);
     let evt_ptr = builtin::realloc(0, 0, 4, 8);
-    builtin::waitable_set_wait(ws, evt_ptr);
+    let code = builtin::waitable_set_wait(ws, evt_ptr);
     let status = builtin::i32_load(evt_ptr + 4);
-    builtin::realloc(evt_ptr, 8, 4, 0);
+    let freed = builtin::realloc(evt_ptr, 8, 4, 0);
     builtin::waitable_join(handle, 0);
     builtin::waitable_set_drop(ws);
     return status;
@@ -146,30 +146,6 @@ Making cancel reachable is a separate change: the binding would have to return
 the BLOCKED state to user code rather than absorbing it, which means a different
 `Stream` API shape. Until then the two methods stay declared-but-untestable, as
 they were before this WEP.
-
-### Validation
-
-Both halves of the decision were prototyped and measured before this WEP landed.
-
-Adding `CanonicalOption::Async` alone makes the dormant path live and fails 17
-fixtures at each of O0 and O2 — every HTTP and stream fixture that transfers a
-body — each with `resource has children`, the trap predicted above:
-
-```
-test result: FAILED. 230 passed; 34 failed
-    fixture_test_o0::stream_http_response_body_wado ... resource has children
-```
-
-Adding the missing `waitable_join(handle, 0)` to the await helper turns the same
-set green:
-
-```
-test result: ok. 264 passed; 0 failed; 396 ignored
-```
-
-The dormant BLOCKED branch is therefore reachable, correct once the unjoin is
-restored, and exercised by the existing HTTP and stream fixtures the moment
-streams go asynchronous.
 
 ## Consequences
 

@@ -533,7 +533,6 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
                     TypeTable::I32,
                 ),
             )),
-            // if result == BLOCKED { result = cm_await_blocked(handle) }
             await_if_blocked(result_idx, "result", handle_idx),
             // offset += packed count (the copied-element count)
             expr_stmt(assign(
@@ -660,8 +659,8 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
     }
 }
 
-/// `if <status> == BLOCKED { <status> = <awaiter>(handle) }` — re-reads the
-/// packed result after the host signals readiness.
+/// `if <status> == BLOCKED { <status> = cm_await_blocked(handle) }` — re-reads
+/// the packed result after the host signals readiness.
 fn await_if_blocked(status_idx: u32, status_name: &str, handle_idx: u32) -> TirStmt {
     if_stmt(
         is_blocked(local_ref(status_idx, status_name, TypeTable::I32)),
@@ -1266,7 +1265,6 @@ fn synthesize_stream_read_func(
         stream_read_call,
     ));
 
-    // if result == BLOCKED { result = cm_await_blocked(handle); }
     stmts.push(await_if_blocked(result_idx, "result", handle_idx));
 
     // let count = packed count of result

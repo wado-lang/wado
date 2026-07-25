@@ -1,21 +1,14 @@
 //! Return-buffer reclamation for synchronously-lifted `--lib` exports.
 //!
-//! A non-`async` `--lib` export is lifted with `sync_lift` (see
-//! `WorldExportPlan::sync_lift`). When such an export returns a memory-backed
-//! value — `string`, `list<T>`, a composite via outptr — the guest allocates the
-//! payload with `realloc` and hands the host a pointer. The Canonical ABI's only
-//! mechanism for telling the guest that the host has finished reading, so the
-//! payload can be freed, is the `post-return` canonical option:
+//! A non-`async` `--lib` export is lifted with `sync_lift`. When it returns a
+//! memory-backed value — `string`, `list<T>`, a composite via outptr — the guest
+//! allocates the payload with `realloc` and hands the host a pointer. The
+//! Canonical ABI's only mechanism for telling the guest that the host has
+//! finished reading is the `post-return` option of `canon lift`
+//! (`CanonicalABI.md`).
 //!
-//! > The `(post-return ...)` option may only be present in `canon lift` when
-//! > `async` is not present and specifies a core function to be called with the
-//! > original return values after they have finished being read, allowing memory
-//! > to be deallocated and destructors called.
-//!
-//! Codegen never emits it, so nothing frees the payload. The library world
-//! defaults to the `freelist` allocator precisely because "a library is consumed
-//! by a long-running host; reclaim memory" (`select_allocator`), and this is the
-//! one buffer it cannot reclaim.
+//! Codegen never emits it, so nothing frees the payload — in the very allocator
+//! the library world picks in order to reclaim memory (`freelist`).
 //!
 //! The test caps guest memory well below the total payload it returns, so a
 //! per-call leak exhausts the cap while correct reclamation stays flat.
@@ -133,9 +126,8 @@ fn run(opt_level: OptLevel) {
     });
 }
 
-// Both tests are ignored because codegen emits no `post-return`: they trap on
-// call 8 of 48, the payload having grown 1 MiB per call — one unreclaimed buffer
-// each. Tracked as wado-lang/wado#1683; remove the attributes with the fix.
+// Ignored until wado-lang/wado#1683: with no `post-return`, both trap on call 8
+// of 48, one unreclaimed 1 MiB buffer per call. Remove the attributes with the fix.
 
 #[test]
 #[ignore = "known leak: sync-lifted `--lib` exports never free their return buffer"]

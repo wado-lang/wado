@@ -1,17 +1,14 @@
 //! Allocation past the linear-memory limit must trap at the allocator.
 //!
-//! `grow_memory` discarded `memory.grow`'s `-1` failure result and advanced
-//! `heap_offset` regardless, so an allocation the host refused to back returned
-//! a pointer past the end of linear memory. The guest then wandered on and
-//! faulted somewhere unrelated — typically inside allocator metadata, several
-//! frames away from the allocation that actually failed. All three allocators
-//! share `grow_memory` and so shared the bug.
+//! `grow_memory` discarded `memory.grow`'s failure result and advanced
+//! `heap_offset` regardless, so a refused allocation returned a pointer past the
+//! end of linear memory and faulted later, several frames from the allocation
+//! that failed. All three allocators share `grow_memory`.
 //!
-//! The request is driven from the host: lowering a `string` argument into the
-//! guest calls the guest's `realloc` for the whole payload, so a large argument
-//! against a small memory cap exercises the failure path without needing any
-//! GC-heap headroom (the pooling allocator forces the GC heap and linear memory
-//! to share one reservation, so the guest cannot build such a value itself).
+//! The failing allocation is driven from the host: lowering a `string` argument
+//! calls the guest's `realloc` for the whole payload. The guest cannot build
+//! such a value itself — the pooling allocator makes the GC heap and linear
+//! memory share one reservation.
 
 #![allow(unused_crate_dependencies)]
 

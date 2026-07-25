@@ -1,12 +1,11 @@
 //! The stream copy canonicals must carry the `async` option.
 //!
-//! Without it the canonical never hands BLOCKED back to the guest — it suspends
-//! the calling thread instead — so the BLOCKED branch synthesis emits around
-//! every stream read and write, and `core:rt`'s `cm_await_blocked` behind it,
-//! become unreachable code shipped in every component. Runtime fixtures cannot
-//! catch that regression: they behave identically either way, because the
-//! runtime simply blocks somewhere else. The option is only observable in the
-//! emitted component, so it is asserted here.
+//! Without it the canonical never hands BLOCKED back to the guest, so the
+//! BLOCKED branch around every stream read and write — and `core:rt`'s
+//! `cm_await_blocked` behind it — is unreachable code shipped in every
+//! component. Runtime fixtures cannot catch the regression: they pass either
+//! way, since the host blocks instead. The option is only observable in the
+//! emitted component.
 //!
 //! See `docs/wep-2026-07-25-async-stream-canonical.md`.
 

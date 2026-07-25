@@ -227,12 +227,10 @@ an effect or concept with `FutureReadable<T>` + `FutureWritable<T>` as the resou
 
 ### Error Handling: ReturnCode Semantics
 
-The BLOCKED rows below described an intent the stream lowering did not meet:
-streams were lowered without the `async` canonical option, so they never
-received BLOCKED and the await path was dead. See
-[Async Canonical Options for `stream.read` / `stream.write`](./wep-2026-07-25-async-stream-canonical.md),
-which makes the stream rows true by lowering both stream copy canonicals with
-`async`.
+The BLOCKED rows below did not hold for streams until
+[Async Canonical Options for `stream.read` / `stream.write`](./wep-2026-07-25-async-stream-canonical.md):
+streams were lowered without the `async` option, so they never received BLOCKED
+and the await path was dead.
 
 All CM stream/future read/write operations return a 32-bit `ReturnCode`:
 

@@ -1,9 +1,8 @@
 // Test: the BLOCKED await path for both stream directions.
-// With async stream canonicals, `stream.read` on a request body that has not
-// arrived and `stream.write` on a response body the host is not yet draining
-// both return BLOCKED and go through `core:rt`'s `cm_await_blocked`. Reading
-// the body one byte at a time forces repeated awaits on the read side, and
-// writing it back one byte at a time forces them on the write side.
+// With async stream canonicals, reading a request body that has not arrived and
+// writing a response body the host is not yet draining both return BLOCKED and
+// go through `core:rt`'s `cm_await_blocked`. One byte at a time forces repeated
+// awaits on each side.
 use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
