@@ -82,7 +82,7 @@ It may include TODOs on WIP.
 - [Base64 Encoding API](./wep-2026-02-27-base64-api.md)
 - [Serialization and Deserialization (Serde)](./wep-2026-02-28-serde.md)
 - [Documentation Generation (`wado doc`)](./wep-2026-02-28-doc-command.md)
-- [Redesign Wasm CM Builtins as Resource Canonical Attributes](./wep-2026-03-01-cm-resource-canonical-attrs.md)
+- [Redesign Wasm CM Builtins as Resource Canonical Attributes](./wep-2026-03-01-cm-resource-canonical-attrs.md) (stream BLOCKED protocol superseded by Async Stream Canonical)
 - [Compile-Time File Inclusion (`#include_str`)](./wep-2026-03-02-include-str.md)
 - [Gale — Grammar Adaptive LL Engine](./wep-2026-03-02-gale.md)
 - [Range Object](./wep-2026-03-03-range-object.md)
@@ -145,3 +145,4 @@ It may include TODOs on WIP.
 - [Effect Reconstruction from CM Component Imports](./wep-2026-07-15-cm-import-effect-reconstruction.md)
 - [Byte Literals (`b'x'` and `b"..."`)](./wep-2026-07-19-byte-literal.md)
 - [`let ... else` Statements](./wep-2026-07-22-let-else.md)
+- [Async Canonical Options for `stream.read` / `stream.write`](./wep-2026-07-25-async-stream-canonical.md)
