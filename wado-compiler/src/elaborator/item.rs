@@ -800,6 +800,53 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     }
 }
 impl<H: CompilerHost> Elaborator<'_, H> {
+    /// Resolve one method parameter's type. A receiver comes from the impl
+    /// target — the parser desugars `self` / `&self` / `&mut self` into
+    /// `Self`-based annotations — and anything else from its annotation.
+    fn resolve_method_param_type(&mut self, param: &ast::Param, impl_type: &Type) -> TypeId {
+        match param.self_kind {
+            ast::SelfKind::Value => self.resolve_type(impl_type),
+            ast::SelfKind::Ref => {
+                let inner = self.resolve_type(impl_type);
+                self.tysys.type_table.borrow_mut().make_ref(inner)
+            }
+            ast::SelfKind::MutRef => {
+                let inner = self.resolve_type(impl_type);
+                self.tysys.type_table.borrow_mut().make_mut_ref(inner)
+            }
+            ast::SelfKind::None => self.resolve_type(&param.ty),
+        }
+    }
+
+    /// A by-value `self` transfers ownership, so it is legal on a resource
+    /// and on a concrete aggregate that transitively owns one (the consuming
+    /// method hands that resource off). A plain value type must borrow with
+    /// `&self`. Generic aggregates resolve to `GenericInstance` rather than a
+    /// concrete value type, so they are already permitted.
+    fn check_self_by_value(&mut self, self_ty: TypeId, span: Span) {
+        let (is_resource, is_concrete_value, type_name) = {
+            let tt = self.tysys.type_table.borrow();
+            use crate::tir::ResolvedType;
+            let resolved = tt.get(self_ty);
+            (
+                matches!(
+                    resolved,
+                    ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. }
+                ),
+                matches!(
+                    resolved,
+                    ResolvedType::Struct { .. }
+                        | ResolvedType::Enum { .. }
+                        | ResolvedType::Variant { .. }
+                ),
+                tt.type_name(self_ty),
+            )
+        };
+        if is_concrete_value && !is_resource && !self.tysys.carries_resource(self_ty) {
+            let _ = self.emit(TypeError::SelfByValueOnNonResource { type_name, span });
+        }
+    }
+
     /// Resolve and record the canonical signature of every method in
     /// `impl_block`, in the impl's own frame.
     ///
@@ -1976,62 +2023,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
+        // Parameter types come from the decl pass for a method the impl block
+        // declares; a synthesised trait default resolves its own (S5a).
+        let param_types: Vec<TypeId> = match recorded_sig {
+            Some(sig) => sig.param_types.clone(),
+            None => func
+                .params
+                .iter()
+                .map(|param| scope.resolve_method_param_type(param, impl_type))
+                .collect(),
+        };
+
         // Resolve parameters (including &self). Defaults are resolved in the
         // method's lexical scope with earlier parameters already bound.
         let mut params = Vec::new();
-        for param in &func.params {
-            let type_id = match param.self_kind {
-                ast::SelfKind::Value => {
-                    // by-value self: the impl type itself, transferred. Legal
-                    // only on a resource; a value type must borrow with `&self`.
-                    let self_ty = scope.resolve_type(impl_type);
-                    let (is_resource, is_concrete_value, type_name) = {
-                        let tt = scope.tysys.type_table.borrow();
-                        use crate::tir::ResolvedType;
-                        let resolved = tt.get(self_ty);
-                        (
-                            matches!(
-                                resolved,
-                                ResolvedType::Resource { .. }
-                                    | ResolvedType::GenericResource { .. }
-                            ),
-                            matches!(
-                                resolved,
-                                ResolvedType::Struct { .. }
-                                    | ResolvedType::Enum { .. }
-                                    | ResolvedType::Variant { .. }
-                            ),
-                            tt.type_name(self_ty),
-                        )
-                    };
-                    // A by-value `self` is legal on a resource, and on a
-                    // concrete aggregate that transitively owns one (its
-                    // consuming method hands that resource off). Generic
-                    // aggregates resolve to `GenericInstance`, not a concrete
-                    // value type, so they are already permitted here.
-                    if is_concrete_value && !is_resource && !scope.tysys.carries_resource(self_ty) {
-                        let _ = scope.emit(TypeError::SelfByValueOnNonResource {
-                            type_name,
-                            span: param.span,
-                        });
-                    }
-                    self_ty
-                }
-                ast::SelfKind::Ref => {
-                    // &self: wrap impl type in immutable reference
-                    let inner_type = scope.resolve_type(impl_type);
-                    scope.tysys.type_table.borrow_mut().make_ref(inner_type)
-                }
-                ast::SelfKind::MutRef => {
-                    // &mut self: wrap impl type in mutable reference
-                    let inner_type = scope.resolve_type(impl_type);
-                    scope.tysys.type_table.borrow_mut().make_mut_ref(inner_type)
-                }
-                ast::SelfKind::None => {
-                    // Regular parameter
-                    scope.resolve_type(&param.ty)
-                }
-            };
+        for (param, &type_id) in func.params.iter().zip(param_types.iter()) {
+            if param.self_kind == ast::SelfKind::Value {
+                scope.check_self_by_value(type_id, param.span);
+            }
             // Reject parameter defaults on trait-impl methods: defaults live
             // on the trait declaration only (WEP 2026-04-11).
             if trait_name.is_some()
