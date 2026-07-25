@@ -337,7 +337,7 @@ fn synthesize_dispatch_struct(
         index: 0,
         span: synth_span(),
         is_secret: false,
-        serde_rename: None,
+        wire_name_override: None,
         serde_default: false,
         serde_positional: false,
         default_expr: None,
@@ -359,7 +359,7 @@ fn synthesize_dispatch_struct(
             index: field_index,
             span: synth_span(),
             is_secret: false,
-            serde_rename: None,
+            wire_name_override: None,
             serde_default: false,
             serde_positional: false,
             default_expr: None,
@@ -381,7 +381,7 @@ fn synthesize_dispatch_struct(
         monomorph_info: None,
         fields,
         span: synth_span(),
-        serde_rename_all: None,
+        wire_name_policy: None,
     });
 
     DispatchPlan {

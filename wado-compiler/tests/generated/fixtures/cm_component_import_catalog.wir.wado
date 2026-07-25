@@ -185,9 +185,9 @@ struct tuple//[core:prelude/types.wado/Option<u32>, u8] {  // TypeId(39)
     mut 1: u8,
 }
 
-struct tuple//[core:prelude/traits.wado/Field<./sub/cm-catalog.wasm/Point,f64>, core:prelude/traits.wado/Field<./sub/cm-catalog.wasm/Point,f64>] {  // TypeId(40)
-    mut 0: ref "core:prelude/traits.wado//Field<./sub/cm-catalog.wasm/Point,f64>",
-    mut 1: ref "core:prelude/traits.wado//Field<./sub/cm-catalog.wasm/Point,f64>",
+struct tuple//[core:prelude/traits.wado/StructField<./sub/cm-catalog.wasm/Point,f64>, core:prelude/traits.wado/StructField<./sub/cm-catalog.wasm/Point,f64>] {  // TypeId(40)
+    mut 0: ref "core:prelude/traits.wado//StructField<./sub/cm-catalog.wasm/Point,f64>",
+    mut 1: ref "core:prelude/traits.wado//StructField<./sub/cm-catalog.wasm/Point,f64>",
 }
 
 struct tuple//[[core:prelude/types.wado/Option<u32>,u8], [core:prelude/types.wado/Option<u32>,u8]] {  // TypeId(41)
@@ -234,7 +234,7 @@ array Array<./sub/cm-catalog.wasm/Point> (mut ref "./sub/cm-catalog.wasm//Point"
 
 array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(53)
 
-struct core:prelude/traits.wado//Field<./sub/cm-catalog.wasm/Single,u64> {  // TypeId(54)
+struct core:prelude/traits.wado//StructField<./sub/cm-catalog.wasm/Single,u64> {  // TypeId(54)
     mut index: i32,
     mut field_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
@@ -242,7 +242,7 @@ struct core:prelude/traits.wado//Field<./sub/cm-catalog.wasm/Single,u64> {  // T
     mut is_secret: bool,
 }
 
-struct core:prelude/traits.wado//Field<./sub/cm-catalog.wasm/Point,f64> {  // TypeId(55)
+struct core:prelude/traits.wado//StructField<./sub/cm-catalog.wasm/Point,f64> {  // TypeId(55)
     mut index: i32,
     mut field_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
@@ -665,7 +665,7 @@ type "functype//./sub/cm-catalog.wasm/Perms^Inspect::inspect" = fn(ref "core:pre
 
 type "functype//./sub/cm-catalog.wasm/Meters^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<f64>", ref "core:prelude/format.wado//Formatter");  // TypeId(234)
 
-type "functype//./sub/cm-catalog.wasm/Point^Reflect::field_tokens" = fn() -> ref "tuple//[core:prelude/traits.wado/Field<./sub/cm-catalog.wasm/Point,f64>, core:prelude/traits.wado/Field<./sub/cm-catalog.wasm/Point,f64>]";  // TypeId(235)
+type "functype//./sub/cm-catalog.wasm/Point^ReflectStruct::members" = fn() -> ref "tuple//[core:prelude/traits.wado/StructField<./sub/cm-catalog.wasm/Point,f64>, core:prelude/traits.wado/StructField<./sub/cm-catalog.wasm/Point,f64>]";  // TypeId(235)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(236)
 
@@ -1083,7 +1083,7 @@ global global:core:prelude/types.wado::__const_obj_412: ref null "core:prelude/s
 global global:core:prelude/traits.wado::__const_obj_429: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 };
 global global:core:prelude/traits.wado::__const_obj_430: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 };
 global global:core:prelude/traits.wado::__const_obj_431: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 123, 32), used: 3 };
-global mut global:core:prelude/traits.wado::__const_obj_432: ref null "core:prelude/traits.wado//Field<./sub/cm-catalog.wasm/Single,u64>" = ref.null none;
+global mut global:core:prelude/traits.wado::__const_obj_432: ref null "core:prelude/traits.wado//StructField<./sub/cm-catalog.wasm/Single,u64>" = ref.null none;
 global global:core:prelude/traits.wado::__const_obj_433: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(83, 105, 110, 103, 108, 101), used: 6 };
 global global:core:prelude/traits.wado::__const_obj_434: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 123, 125), used: 3 };
 global global:core:prelude/traits.wado::__const_obj_435: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 123, 32, 46, 46, 32, 125), used: 7 };
@@ -4637,8 +4637,8 @@ fn "./sub/cm-catalog.wasm/Meters^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push_str"(f.buf, s);
 }
 
-fn "./sub/cm-catalog.wasm/Point^Reflect::field_tokens"() {
-    return struct.new "tuple//[core:prelude/traits.wado/Field<./sub/cm-catalog.wasm/Point,f64>, core:prelude/traits.wado/Field<./sub/cm-catalog.wasm/Point,f64>]" { 0: struct.new "core:prelude/traits.wado//Field<./sub/cm-catalog.wasm/Point,f64>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 1: struct.new "core:prelude/traits.wado//Field<./sub/cm-catalog.wasm/Point,f64>" { index: 1, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 } };
+fn "./sub/cm-catalog.wasm/Point^ReflectStruct::members"() {
+    return struct.new "tuple//[core:prelude/traits.wado/StructField<./sub/cm-catalog.wasm/Point,f64>, core:prelude/traits.wado/StructField<./sub/cm-catalog.wasm/Point,f64>]" { 0: struct.new "core:prelude/traits.wado//StructField<./sub/cm-catalog.wasm/Point,f64>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 1: struct.new "core:prelude/traits.wado//StructField<./sub/cm-catalog.wasm/Point,f64>" { index: 1, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 } };
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
@@ -6215,11 +6215,11 @@ fn "core:prelude/traits.wado/./sub/cm-catalog.wasm/Single^Inspect::inspect"(self
     let s_18: ref "core:prelude/string.wado//String";
     let self_23: u64;
     let s_28: ref "core:prelude/string.wado//String";
-    let __sroa___tuple_4_0: ref "core:prelude/traits.wado//Field<./sub/cm-catalog.wasm/Single,u64>";
+    let __sroa___tuple_4_0: ref "core:prelude/traits.wado//StructField<./sub/cm-catalog.wasm/Single,u64>";
     let index: i32;
     s_8 = global:core:prelude/traits.wado::__const_obj_433;
     "core:prelude/string.wado/String::push_str"(f.buf, s_8);
-    __sroa___tuple_4_0 = struct.new "core:prelude/traits.wado//Field<./sub/cm-catalog.wasm/Single,u64>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value"), used: 5 }, wire_override: ref.null none, has_default: 0, is_secret: 0 };
+    __sroa___tuple_4_0 = struct.new "core:prelude/traits.wado//StructField<./sub/cm-catalog.wasm/Single,u64>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value"), used: 5 }, wire_override: ref.null none, has_default: 0, is_secret: 0 };
     global:core:prelude/traits.wado::__const_obj_432 = __sroa___tuple_4_0;
     s_13 = global:core:prelude/traits.wado::__const_obj_431;
     "core:prelude/string.wado/String::push_str"(f.buf, s_13);
@@ -6239,9 +6239,9 @@ fn "core:prelude/traits.wado/./sub/cm-catalog.wasm/Single^Inspect::inspect"(self
 fn "core:prelude/traits.wado/./sub/cm-catalog.wasm/Point^Inspect::inspect"(self, f) {
     let wrote_field: bool;
     let has_secret: bool;
-    let __tuple_4: ref "tuple//[core:prelude/traits.wado/Field<./sub/cm-catalog.wasm/Point,f64>, core:prelude/traits.wado/Field<./sub/cm-catalog.wasm/Point,f64>]";
-    let field_6: ref "core:prelude/traits.wado//Field<./sub/cm-catalog.wasm/Point,f64>";
-    let field_7: ref "core:prelude/traits.wado//Field<./sub/cm-catalog.wasm/Point,f64>";
+    let __tuple_4: ref "tuple//[core:prelude/traits.wado/StructField<./sub/cm-catalog.wasm/Point,f64>, core:prelude/traits.wado/StructField<./sub/cm-catalog.wasm/Point,f64>]";
+    let field_6: ref "core:prelude/traits.wado//StructField<./sub/cm-catalog.wasm/Point,f64>";
+    let field_7: ref "core:prelude/traits.wado//StructField<./sub/cm-catalog.wasm/Point,f64>";
     let s_9: ref "core:prelude/string.wado//String";
     let s_14: ref "core:prelude/string.wado//String";
     let s_19: ref "core:prelude/string.wado//String";
@@ -6256,7 +6256,7 @@ fn "core:prelude/traits.wado/./sub/cm-catalog.wasm/Point^Inspect::inspect"(self,
     "core:prelude/string.wado/String::push_str"(f.buf, s_9);
     wrote_field = 0;
     has_secret = 0;
-    __tuple_4 = "./sub/cm-catalog.wasm/Point^Reflect::field_tokens"();
+    __tuple_4 = "./sub/cm-catalog.wasm/Point^ReflectStruct::members"();
     field_6 = __tuple_4.0;
     if field_6.is_secret {
         has_secret = 1;

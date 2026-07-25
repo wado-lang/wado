@@ -576,7 +576,7 @@ impl Translator<'_> {
             monomorph_info: s.monomorph_info.as_ref().map(convert_monomorph_info),
             fields: s.fields.iter().map(|f| fctx.convert_field(f)).collect(),
             span: s.span,
-            serde_rename_all: s.serde_rename_all.clone(),
+            wire_name_policy: s.wire_name_policy.clone(),
         }
     }
 
@@ -2186,7 +2186,7 @@ impl FunctionTranslator<'_, '_> {
             index: field.index,
             span: field.span,
             is_secret: field.is_secret,
-            serde_rename: field.serde_rename.clone(),
+            wire_name_override: field.wire_name_override.clone(),
             serde_default: field.serde_default,
         }
     }

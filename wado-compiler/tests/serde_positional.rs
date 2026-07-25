@@ -1,7 +1,7 @@
 //! Synthesized `FieldSchema` positional resolution (WEP
 //! `wep-2026-02-28-serde.md` §"Per-Field Positional Resolution").
 //!
-//! `#[serde(positional)]` marks a struct field as ordinal. For every
+//! `#[wire(positional)]` marks a struct field as ordinal. For every
 //! deserializable struct the synthesiser emits `FieldSchema::positional_at`
 //! enumerating positional fields in declaration order, and `lookup` omits them
 //! (a positional field is never matched by name). These functions are reachable
@@ -71,8 +71,8 @@ const SOURCE: &str = r#"
 use { Deserialize } from "core:serde";
 
 struct Cli {
-    #[serde(positional)] input: String,
-    #[serde(positional)] out: String = "out.txt",
+    #[wire(positional)] input: String,
+    #[wire(positional)] out: String = "out.txt",
     jobs: i32 = 1,
     verbose: bool = false,
 }

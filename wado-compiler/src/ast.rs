@@ -1169,7 +1169,7 @@ pub struct GlobalDecl {
 /// Examples:
 /// - `#[cm("wasi:cli/stdout")]`          → `[Str("wasi:cli/stdout")]`
 /// - `#[inline(always)]`                           → `[Ident("always")]`
-/// - `#[serde(rename = "type")]`                   → `[KeyValue("rename", "type")]`
+/// - `#[wire(name = "type")]`                   → `[KeyValue("name", "type")]`
 /// - `#[canonical("wasi", "stream-new")]`          → `[Str("wasi"), Str("stream-new")]`
 /// - `#[timeout_ms(120000)]`                       → `[Number("120000")]`
 /// - `#![generated(sources = ["a.wit", "b.wit"])]` → `[KeyArray("sources", ["a.wit", "b.wit"])]`
@@ -1207,8 +1207,8 @@ pub struct Attribute {
     /// Arguments passed to the attribute.
     ///
     /// - `#[canonical("wasi", "stream-new")]` → `[Str("wasi"), Str("stream-new")]`
-    /// - `#[serde(rename = "type")]`           → `[KeyValue("rename", "type")]`
-    /// - `#[serde(default)]`                   → `[Ident("default")]`
+    /// - `#[wire(name = "type")]`           → `[KeyValue("name", "type")]`
+    /// - `#[wire(default)]`                   → `[Ident("default")]`
     pub args: Vec<AttrArg>,
     /// Component Model boundary metadata, populated by the parser when the
     /// attribute is `#[cm(...)]` or `#[canonical(...)]`. A `Some` value means
@@ -1221,7 +1221,7 @@ pub struct Attribute {
 impl Attribute {
     /// Find the value of a key-value argument by key name.
     ///
-    /// For `#[serde(rename = "type")]`, `attr.kv_value("rename")` returns `Some("type")`.
+    /// For `#[wire(name = "type")]`, `attr.kv_value("name")` returns `Some("type")`.
     pub fn kv_value(&self, key: &str) -> Option<&str> {
         self.args.iter().find_map(|arg| {
             if let AttrArg::KeyValue(k, v) = arg {
@@ -1234,7 +1234,7 @@ impl Attribute {
 
     /// Return true if any arg matches the given name as an identifier, string, or key in a key-value pair.
     ///
-    /// For `#[serde(default)]`, `attr.has_arg("default")` returns `true`.
+    /// For `#[wire(default)]`, `attr.has_arg("default")` returns `true`.
     pub fn has_arg(&self, name: &str) -> bool {
         self.args.iter().any(|arg| match arg {
             AttrArg::Str(s) | AttrArg::Ident(s) | AttrArg::Number(s) => s == name,

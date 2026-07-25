@@ -8,11 +8,11 @@ use { Deserialize } from "core:serde";
 use { parse, ArgsError, ArgsErrorKind } from "core:args";
 
 struct Cli {
-    #[serde(positional)]
+    #[wire(positional)]
     input: String,
-    #[serde(positional)]
+    #[wire(positional)]
     out: String = "out.txt",
-    #[serde(positional)]
+    #[wire(positional)]
     rest: List<String> = [],
     jobs: i32 = 1,
     verbose: bool = false,
@@ -117,10 +117,10 @@ test "malformed empty option name reports a clear error" {
 // maps the rank-th positional to its field index across the option fields.
 struct Mixed {
     jobs: i32 = 1,  // field 0 (option)
-    #[serde(positional)]
+    #[wire(positional)]
     a: String,  // field 1 (positional rank 0)
     dry_run: bool = false,  // field 2 (option, dash-folded)
-    #[serde(positional)]
+    #[wire(positional)]
     b: String,  // field 3 (positional rank 1)
 }
 impl Deserialize for Mixed;
@@ -154,9 +154,9 @@ test "too many positionals reports TooManyPositionals" {
 }
 
 struct Variadic {
-    #[serde(positional)]
+    #[wire(positional)]
     first: String,
-    #[serde(positional)]
+    #[wire(positional)]
     rest: List<String> = [],
 }
 impl Deserialize for Variadic;
@@ -195,7 +195,7 @@ test "double dash forces remaining tokens positional" {
 // Repeatable `List<T>` options: each `--name v` appends; occurrences may be
 // interspersed with other options.
 struct Repeatable {
-    #[serde(positional)]
+    #[wire(positional)]
     input: String,
     include: List<String> = [],  // repeatable, optional (>=0)
     n: List<i32> = [],  // repeatable, typed
@@ -258,10 +258,10 @@ test "required repeatable absent reports MissingArgument" {
     assert r matches { Err(e) && e.kind == ArgsErrorKind::MissingArgument };
 }
 
-// Subcommands: a `#[serde(positional)]` variant field. The leading bare token
+// Subcommands: a `#[wire(positional)]` variant field. The leading bare token
 // selects the case (externally tagged); the payload parses from the rest.
 struct AddArgs {
-    #[serde(positional)]
+    #[wire(positional)]
     path: String,
     all: bool = false,
 }
@@ -272,7 +272,7 @@ variant RemoteCmd {
     List,
 }
 struct AddRemoteArgs {
-    #[serde(positional)]
+    #[wire(positional)]
     name: String,
 }
 impl Deserialize for AddRemoteArgs;
@@ -288,7 +288,7 @@ impl Deserialize for Command;
 struct App {
     verbose: bool = false,
     jobs: i32 = 1,
-    #[serde(positional)]
+    #[wire(positional)]
     command: Command,
 }
 impl Deserialize for App;
@@ -330,9 +330,9 @@ test "unknown subcommand reports UnknownSubcommand" {
     assert r matches { Err(e) && e.kind == ArgsErrorKind::UnknownSubcommand };
 }
 
-// `#[serde(rename_all)]` on the subcommand variant gives idiomatic lowercase /
+// `#[wire(name_policy)]` on the subcommand variant gives idiomatic lowercase /
 // kebab tags while the cases stay PascalCase — serde-general, no args support.
-#[serde(rename_all = "kebab-case")]
+#[wire(name_policy = "kebab-case")]
 variant KebabCmd {
     AddRemote(AddRemoteArgs),
     List,
@@ -340,12 +340,12 @@ variant KebabCmd {
 impl Deserialize for KebabCmd;
 
 struct KebabApp {
-    #[serde(positional)]
+    #[wire(positional)]
     command: KebabCmd,
 }
 impl Deserialize for KebabApp;
 
-test "kebab subcommand tag from rename_all" {
+test "kebab subcommand tag from name_policy" {
     let r = parse::<KebabApp>(["add-remote", "origin"]);
     if let Ok(c) = r {
         assert c.command matches { AddRemote(a) && a.name == "origin" };

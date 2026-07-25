@@ -273,11 +273,9 @@ pub(crate) enum BlanketReceiver {
 
 /// A reified blanket impl `impl<Param: Bounds, ..> Trait for <receiver>`.
 ///
-/// The single source of truth for "what kind of blanket is this", replacing the
-/// former per-query re-derivations (`has_universal_ref_blanket`,
-/// `blanket_impl_{module,param,bounds,arity}_for_trait`, and the caller-side
-/// `is_reflect_struct_blanket` / `is_ref_universal_blanket` predicates). Those
-/// are now selections over this descriptor.
+/// The single source of truth for "what kind of blanket is this": the queries
+/// that once re-derived it per call site are now selections over this
+/// descriptor.
 #[derive(Clone, Debug)]
 pub(crate) struct BlanketImpl {
     pub(crate) module: ModuleSource,
@@ -289,21 +287,6 @@ pub(crate) struct BlanketImpl {
     pub(crate) param: String,
     /// Bound trait names on the receiver param.
     pub(crate) bounds: Vec<String>,
-    /// Impl-level type-param count (`2` for the `Reflect` struct blanket
-    /// `impl<T: Reflect<Fields = [..F]>, ..F> Trait for T`).
-    pub(crate) arity: usize,
-}
-
-impl BlanketImpl {
-    /// Whether this is the `Reflect`-derived struct blanket
-    /// (`impl<T: Reflect<Fields = [..F]>, ..F> Trait for T`): a value receiver
-    /// keyed `[T, Fields]` (arity 2) with a `Reflect` bound. Distinguishes it
-    /// from a one-arg value blanket like `impl<I: Iterator> IntoIterator for I`.
-    pub(crate) fn is_reflect_struct(&self, reflect_trait_name: &str) -> bool {
-        self.receiver == BlanketReceiver::Value
-            && self.arity == 2
-            && self.bounds.iter().any(|b| b == reflect_trait_name)
-    }
 }
 
 /// Classify a blanket impl's receiver, or `None` for a concrete/shape impl
@@ -475,8 +458,7 @@ pub struct TraitEnv {
     pub(super) assoc_type_bound_index: IndexMap<String, Vec<ast::TraitBound>>,
     /// `trait_name` → reified blanket impls of that trait, in registration
     /// order. The single classification source for blanket dispatch (module,
-    /// receiver kind, param, bounds, arity); the `blanket_impl_*_for_trait`
-    /// queries, `has_universal_ref_blanket`, and `is_reflect_struct_blanket`
+    /// receiver kind, param, bounds); the `blanket_impl_*_for_trait` queries
     /// select over it. Used by the monomorphizer to find the home module of a
     /// generic dispatch when the receiver type has no dedicated `impl Trait for
     /// Type` block — the blanket provides the body, homed in the blanket's
@@ -887,7 +869,6 @@ impl TraitEnv {
                                 receiver,
                                 param,
                                 bounds,
-                                arity: impl_block.type_params.len(),
                             });
                     }
                     // A value blanket (`impl<T: Bound> Trait for T`) has no
@@ -1175,19 +1156,39 @@ impl TraitEnv {
         })
     }
 
-    /// Whether the value blanket for `trait_name` (preferring `type_module`) is
-    /// the `Reflect`-derived struct blanket keyed `[T, Fields]`. Callers pass
-    /// the registry's `Reflect` trait name (this layer has no `CompilerItem`
-    /// registry). Consolidates the former caller-side `arity == 2 && bounds
-    /// contains Reflect` re-derivations.
-    pub(crate) fn is_reflect_struct_blanket(
+    /// The associated-type names a value blanket projects into type packs, in
+    /// header order — `impl<T: Bound<Assoc = [..P]>, ..P> Trait for T` yields
+    /// `["Assoc"]`. Empty for a blanket that projects none.
+    pub(crate) fn blanket_projected_pack_assocs(
         &self,
         trait_name: &str,
         type_module: Option<&ModuleSource>,
-        reflect_trait_name: &str,
-    ) -> bool {
-        self.value_blanket_for_trait(trait_name, type_module)
-            .is_some_and(|b| b.is_reflect_struct(reflect_trait_name))
+    ) -> Vec<String> {
+        let Some(blanket) = self.value_blanket_for_trait(trait_name, type_module) else {
+            return Vec::new();
+        };
+        let Some(header) = self
+            .impl_headers
+            .get(&(blanket.module.clone(), blanket.ast_id))
+        else {
+            return Vec::new();
+        };
+        header
+            .type_params
+            .iter()
+            .flat_map(|tp| &tp.bounds)
+            .flat_map(|bound| &bound.assoc_types)
+            .filter_map(|assoc| match &assoc.ty {
+                ast::Type::Tuple(elems)
+                    if elems
+                        .iter()
+                        .any(|e| matches!(e, ast::Type::TypePackSpread(..))) =>
+                {
+                    Some(assoc.name.clone())
+                }
+                _ => None,
+            })
+            .collect()
     }
 
     /// Like [`impl_module_for`] but only returns a hit when the impl block

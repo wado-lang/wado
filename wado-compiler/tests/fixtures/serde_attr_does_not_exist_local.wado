@@ -1,0 +1,17 @@
+// The `#[serde]` rejection is minted in the parser, so it reaches a
+// declaration nested in a function body just as it does a top-level one —
+// a walk over module items would not.
+
+test "local struct" {
+    struct Options {
+        #[serde(positional)]
+        input: String,
+    }
+    assert true;
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "`#[serde]` does not exist; use `#[wire(positional)]`"
+}

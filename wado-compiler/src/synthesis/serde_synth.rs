@@ -331,25 +331,25 @@ use super::common::{
 /// Wire-form name for a struct field.
 ///
 /// Single source of truth for the serialized key: an explicit
-/// `#[serde(rename = "...")]` wins; otherwise `#[serde(rename_all = "...")]`
+/// `#[wire(name = "...")]` wins; otherwise `#[wire(name_policy = "...")]`
 /// applies its case strategy; otherwise the Wado source field name is used
 /// verbatim (identity — `user_id` stays `"user_id"`, `userId` stays
 /// `"userId"`). Used by both the serialize and deserialize synthesisers so the
 /// two never disagree.
 fn serialized_field_name(f: &crate::tir::TirField, struct_def: &crate::tir::TirStruct) -> String {
-    f.serde_rename.clone().unwrap_or_else(|| {
-        if let Some(strategy) = &struct_def.serde_rename_all {
-            apply_rename_all(&f.name, strategy)
+    f.wire_name_override.clone().unwrap_or_else(|| {
+        if let Some(strategy) = &struct_def.wire_name_policy {
+            apply_name_policy(&f.name, strategy)
         } else {
             f.name.clone()
         }
     })
 }
 
-/// Apply a `rename_all` strategy. Source-casing-agnostic, so it works for both
+/// Apply a `name_policy` strategy. Source-casing-agnostic, so it works for both
 /// `snake_case` struct fields and `PascalCase` enum/variant cases (Wado casing is
 /// convention, not a rule, so the source form is open).
-fn apply_rename_all(s: &str, strategy: &str) -> String {
+fn apply_name_policy(s: &str, strategy: &str) -> String {
     use heck::{
         ToKebabCase, ToLowerCamelCase, ToShoutyKebabCase, ToShoutySnakeCase, ToSnakeCase,
         ToUpperCamelCase,
@@ -367,19 +367,19 @@ fn apply_rename_all(s: &str, strategy: &str) -> String {
     }
 }
 
-/// Serialized name of an enum / variant case. `#[serde(rename = "...")]` wins;
-/// otherwise `#[serde(rename_all = "...")]` applies its strategy; otherwise the
+/// Serialized name of an enum / variant case. `#[wire(name = "...")]` wins;
+/// otherwise `#[wire(name_policy = "...")]` applies its strategy; otherwise the
 /// case name is used verbatim.
 fn serialized_case_name(
     name: &str,
-    serde_rename: &Option<String>,
-    rename_all: &Option<String>,
+    wire_name_override: &Option<String>,
+    name_policy: &Option<String>,
 ) -> String {
-    if let Some(r) = serde_rename {
+    if let Some(r) = wire_name_override {
         return r.clone();
     }
-    match rename_all {
-        Some(strategy) => apply_rename_all(name, strategy),
+    match name_policy {
+        Some(strategy) => apply_name_policy(name, strategy),
         None => name.to_string(),
     }
 }
@@ -1434,7 +1434,7 @@ fn generate_struct_deserialize(
     let compiler_items = tt.compiler_items().clone();
     drop(tt);
 
-    // `#[serde(positional)]` flags, aligned with `fields` (enumerate index ==
+    // `#[wire(positional)]` flags, aligned with `fields` (enumerate index ==
     // field index used by the deserialize loop). A positional field is ordinal:
     // `lookup` omits it, `positional_at` enumerates it.
     let positional_flags: Vec<bool> = struct_def
@@ -2177,7 +2177,7 @@ fn generate_lookup_function(
 
 /// `impl FieldSchema for <Type> { fn positional_at(rank: i32) -> Option<i32> }`
 /// — the static, per-type ordinal-field matcher. Maps the `rank`-th
-/// `#[serde(positional)]` field (in declaration order) to its field index;
+/// `#[wire(positional)]` field (in declaration order) to its field index;
 /// returns `null` for an out-of-range rank, and for every rank when the type
 /// has no positional fields. `positional_flags` is aligned with the deserialize
 /// loop's field indices, so the returned index drives the same `field == i`
@@ -2272,7 +2272,7 @@ fn generate_enum_serialize(
     let wire_names: Vec<String> = enum_def
         .cases
         .iter()
-        .map(|c| serialized_case_name(&c.name, &c.serde_rename, &enum_def.serde_rename_all))
+        .map(|c| serialized_case_name(&c.name, &c.wire_name_override, &enum_def.wire_name_policy))
         .collect();
 
     drop(tt);
@@ -2451,7 +2451,7 @@ fn generate_enum_deserialize(
     let wire_names = enum_def
         .cases
         .iter()
-        .map(|c| serialized_case_name(&c.name, &c.serde_rename, &enum_def.serde_rename_all))
+        .map(|c| serialized_case_name(&c.name, &c.wire_name_override, &enum_def.wire_name_policy))
         .collect();
     Some(generate_variant_family_deserialize(
         module,
@@ -2994,7 +2994,13 @@ fn generate_variant_serialize(
     let wire_names: Vec<String> = variant_def
         .cases
         .iter()
-        .map(|c| serialized_case_name(&c.name, &c.serde_rename, &variant_def.serde_rename_all))
+        .map(|c| {
+            serialized_case_name(
+                &c.name,
+                &c.wire_name_override,
+                &variant_def.wire_name_policy,
+            )
+        })
         .collect();
     let payload_ref_types: Vec<TypeId> = cases
         .iter()
@@ -3267,7 +3273,13 @@ fn generate_variant_deserialize(
     let wire_names = variant_def
         .cases
         .iter()
-        .map(|c| serialized_case_name(&c.name, &c.serde_rename, &variant_def.serde_rename_all))
+        .map(|c| {
+            serialized_case_name(
+                &c.name,
+                &c.wire_name_override,
+                &variant_def.wire_name_policy,
+            )
+        })
         .collect();
     let type_params = variant_def.type_params.clone();
     Some(generate_variant_family_deserialize(
@@ -4016,7 +4028,7 @@ mod tests {
     /// heck changes, this fails first and the Wado vectors are updated in step.
     #[test]
     fn rename_all_edge_corpus_locks_heck_output() {
-        let snake = |s: &str| apply_rename_all(s, "snake_case");
+        let snake = |s: &str| apply_name_policy(s, "snake_case");
         assert_eq!(snake("userID"), "user_id");
         assert_eq!(snake("HTTPStatus"), "http_status");
         assert_eq!(snake("parseHTTP"), "parse_http");
@@ -4024,18 +4036,18 @@ mod tests {
         assert_eq!(snake("iOS"), "i_os");
         assert_eq!(snake("field2Name"), "field2_name");
         assert_eq!(snake("Apple2Banana"), "apple2_banana");
-        assert_eq!(apply_rename_all("HTTPStatus", "camelCase"), "httpStatus");
-        assert_eq!(apply_rename_all("userID", "PascalCase"), "UserId");
+        assert_eq!(apply_name_policy("HTTPStatus", "camelCase"), "httpStatus");
+        assert_eq!(apply_name_policy("userID", "PascalCase"), "UserId");
     }
 
     #[test]
     fn rename_all_from_snake_field() {
-        assert_eq!(apply_rename_all("user_name", "camelCase"), "userName");
-        assert_eq!(apply_rename_all("user_name", "snake_case"), "user_name");
-        assert_eq!(apply_rename_all("user_name", "PascalCase"), "UserName");
-        assert_eq!(apply_rename_all("user_name", "kebab-case"), "user-name");
+        assert_eq!(apply_name_policy("user_name", "camelCase"), "userName");
+        assert_eq!(apply_name_policy("user_name", "snake_case"), "user_name");
+        assert_eq!(apply_name_policy("user_name", "PascalCase"), "UserName");
+        assert_eq!(apply_name_policy("user_name", "kebab-case"), "user-name");
         assert_eq!(
-            apply_rename_all("user_name", "SCREAMING_SNAKE_CASE"),
+            apply_name_policy("user_name", "SCREAMING_SNAKE_CASE"),
             "USER_NAME"
         );
     }
@@ -4043,16 +4055,16 @@ mod tests {
     #[test]
     fn rename_all_from_pascal_case() {
         // PascalCase source, not the snake_case of struct fields.
-        assert_eq!(apply_rename_all("AddRemote", "kebab-case"), "add-remote");
-        assert_eq!(apply_rename_all("AddRemote", "snake_case"), "add_remote");
-        assert_eq!(apply_rename_all("AddRemote", "camelCase"), "addRemote");
-        assert_eq!(apply_rename_all("List", "kebab-case"), "list");
+        assert_eq!(apply_name_policy("AddRemote", "kebab-case"), "add-remote");
+        assert_eq!(apply_name_policy("AddRemote", "snake_case"), "add_remote");
+        assert_eq!(apply_name_policy("AddRemote", "camelCase"), "addRemote");
+        assert_eq!(apply_name_policy("List", "kebab-case"), "list");
     }
 
     #[test]
     fn serialized_case_name_precedence() {
         let kebab = Some("kebab-case".to_string());
-        // Per-case rename wins over rename_all wins over the verbatim name.
+        // Per-case name wins over name_policy wins over the verbatim name.
         assert_eq!(
             serialized_case_name("Remove", &Some("rm".to_string()), &kebab),
             "rm"

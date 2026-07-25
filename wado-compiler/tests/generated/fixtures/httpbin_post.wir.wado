@@ -347,9 +347,9 @@ struct tuple//[core:prelude/string.wado/String, core:value/Value] {  // TypeId(5
     mut 1: ref "core:value//Value",
 }
 
-struct tuple//[core:prelude/traits.wado/Field<core:serde/SerializeError,core:serde/SerializeErrorKind>, core:prelude/traits.wado/Field<core:serde/SerializeError,core:prelude/string.wado/String>] {  // TypeId(56)
-    mut 0: ref "core:prelude/traits.wado//Field<core:serde/SerializeError,core:serde/SerializeErrorKind>",
-    mut 1: ref "core:prelude/traits.wado//Field<core:serde/SerializeError,core:prelude/string.wado/String>",
+struct tuple//[core:prelude/traits.wado/StructField<core:serde/SerializeError,core:serde/SerializeErrorKind>, core:prelude/traits.wado/StructField<core:serde/SerializeError,core:prelude/string.wado/String>] {  // TypeId(56)
+    mut 0: ref "core:prelude/traits.wado//StructField<core:serde/SerializeError,core:serde/SerializeErrorKind>",
+    mut 1: ref "core:prelude/traits.wado//StructField<core:serde/SerializeError,core:prelude/string.wado/String>",
 }
 
 array Array<core:value/Value> (mut ref "core:value//Value");  // TypeId(57)
@@ -366,7 +366,7 @@ array Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:v
 
 array Array<core:collections/TreeMapNode<core:prelude/string.wado/String>> (mut ref "core:collections//TreeMapNode<core:prelude/string.wado/String>");  // TypeId(63)
 
-struct core:prelude/traits.wado//Field<core:serde/SerializeError,core:prelude/string.wado/String> {  // TypeId(64)
+struct core:prelude/traits.wado//StructField<core:serde/SerializeError,core:prelude/string.wado/String> {  // TypeId(64)
     mut index: i32,
     mut field_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
@@ -374,7 +374,7 @@ struct core:prelude/traits.wado//Field<core:serde/SerializeError,core:prelude/st
     mut is_secret: bool,
 }
 
-struct core:prelude/traits.wado//Field<core:serde/SerializeError,core:serde/SerializeErrorKind> {  // TypeId(65)
+struct core:prelude/traits.wado//StructField<core:serde/SerializeError,core:serde/SerializeErrorKind> {  // TypeId(65)
     mut index: i32,
     mut field_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
@@ -928,7 +928,7 @@ type "functype//core:prelude/string.wado/String^Ord::cmp" = fn(ref "core:prelude
 
 type "functype//core:serde/SerializeErrorKind^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:serde/SerializeErrorKind>", ref "core:prelude/format.wado//Formatter");  // TypeId(258)
 
-type "functype//core:serde/SerializeError^Reflect::field_tokens" = fn() -> ref "tuple//[core:prelude/traits.wado/Field<core:serde/SerializeError,core:serde/SerializeErrorKind>, core:prelude/traits.wado/Field<core:serde/SerializeError,core:prelude/string.wado/String>]";  // TypeId(259)
+type "functype//core:serde/SerializeError^ReflectStruct::members" = fn() -> ref "tuple//[core:prelude/traits.wado/StructField<core:serde/SerializeError,core:serde/SerializeErrorKind>, core:prelude/traits.wado/StructField<core:serde/SerializeError,core:prelude/string.wado/String>]";  // TypeId(259)
 
 type "functype//core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(260)
 
@@ -5841,8 +5841,8 @@ fn "core:serde/SerializeErrorKind^Inspect::inspect"(self, f) {
     }
 }
 
-fn "core:serde/SerializeError^Reflect::field_tokens"() {
-    return struct.new "tuple//[core:prelude/traits.wado/Field<core:serde/SerializeError,core:serde/SerializeErrorKind>, core:prelude/traits.wado/Field<core:serde/SerializeError,core:prelude/string.wado/String>]" { 0: struct.new "core:prelude/traits.wado//Field<core:serde/SerializeError,core:serde/SerializeErrorKind>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(107, 105, 110, 100), used: 4 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 1: struct.new "core:prelude/traits.wado//Field<core:serde/SerializeError,core:prelude/string.wado/String>" { index: 1, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("message"), used: 7 }, wire_override: ref.null none, has_default: 0, is_secret: 0 } };
+fn "core:serde/SerializeError^ReflectStruct::members"() {
+    return struct.new "tuple//[core:prelude/traits.wado/StructField<core:serde/SerializeError,core:serde/SerializeErrorKind>, core:prelude/traits.wado/StructField<core:serde/SerializeError,core:prelude/string.wado/String>]" { 0: struct.new "core:prelude/traits.wado//StructField<core:serde/SerializeError,core:serde/SerializeErrorKind>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(107, 105, 110, 100), used: 4 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 1: struct.new "core:prelude/traits.wado//StructField<core:serde/SerializeError,core:prelude/string.wado/String>" { index: 1, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("message"), used: 7 }, wire_override: ref.null none, has_default: 0, is_secret: 0 } };
 }
 
 fn "core:prelude/format.wado/Formatter::new"(buf) {
@@ -6820,9 +6820,9 @@ fn "core:prelude/slice.wado/ArrayRefIter<core:value/Value>^Iterator::next"(self)
 fn "core:prelude/traits.wado/core:serde/SerializeError^Inspect::inspect"(self, f) {
     let wrote_field: bool;
     let has_secret: bool;
-    let __tuple_4: ref "tuple//[core:prelude/traits.wado/Field<core:serde/SerializeError,core:serde/SerializeErrorKind>, core:prelude/traits.wado/Field<core:serde/SerializeError,core:prelude/string.wado/String>]";
-    let field_6: ref "core:prelude/traits.wado//Field<core:serde/SerializeError,core:serde/SerializeErrorKind>";
-    let field_7: ref "core:prelude/traits.wado//Field<core:serde/SerializeError,core:prelude/string.wado/String>";
+    let __tuple_4: ref "tuple//[core:prelude/traits.wado/StructField<core:serde/SerializeError,core:serde/SerializeErrorKind>, core:prelude/traits.wado/StructField<core:serde/SerializeError,core:prelude/string.wado/String>]";
+    let field_6: ref "core:prelude/traits.wado//StructField<core:serde/SerializeError,core:serde/SerializeErrorKind>";
+    let field_7: ref "core:prelude/traits.wado//StructField<core:serde/SerializeError,core:prelude/string.wado/String>";
     let s_9: ref "core:prelude/string.wado//String";
     let s_14: ref "core:prelude/string.wado//String";
     let s_19: ref "core:prelude/string.wado//String";
@@ -6837,7 +6837,7 @@ fn "core:prelude/traits.wado/core:serde/SerializeError^Inspect::inspect"(self, f
     "core:prelude/string.wado/String::push_str"(f.buf, s_9);
     wrote_field = 0;
     has_secret = 0;
-    __tuple_4 = "core:serde/SerializeError^Reflect::field_tokens"();
+    __tuple_4 = "core:serde/SerializeError^ReflectStruct::members"();
     field_6 = __tuple_4.0;
     if field_6.is_secret {
         has_secret = 1;

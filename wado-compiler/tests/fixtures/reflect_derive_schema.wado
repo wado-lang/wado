@@ -1,5 +1,5 @@
 // Pack-map `[..F::method()]` where the method's return type is pack-independent
-// (WEP 2026-06-13 §1). A derivation over `Reflect` maps a static method over the
+// (WEP 2026-06-13 §1). A derivation over `ReflectStruct` maps a static method over the
 // field-type pack `F`, producing a homogeneous tuple of the return type. This is
 // the shape a schema derivation uses (`[..F::json_schema()]`). The mapped pack
 // carries the return type and the pack's arity; monomorphization expands it per
@@ -25,7 +25,7 @@ trait Schema {
     fn schema(&self) -> String;
 }
 
-impl<T: Reflect<Fields = [..F]>, ..F: Tag> Schema for T {
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Tag> Schema for T {
     fn schema(&self) -> String {
         let mut out: String = "";
         for let t of [..F::tag()] {

@@ -1161,7 +1161,7 @@ fn method_call_info_for_type(
 }
 
 /// Whether `type_id` satisfies a blanket impl's receiver-param `bounds`. Only
-/// the `Reflect` bound is checked structurally (via the `Fields` associated
+/// the `ReflectStruct` bound is checked structurally (via the `Fields` associated
 /// type registered for every reflected struct); other bounds are treated as
 /// satisfiable, preserving existing blanket dispatch (e.g. `IntoIterator`).
 pub(crate) fn receiver_satisfies_blanket_bounds(
@@ -1172,12 +1172,12 @@ pub(crate) fn receiver_satisfies_blanket_bounds(
     receiver_satisfies_blanket_bounds_inner(type_id, &bounds, tt, false)
 }
 
-/// A `Reflect` bound is satisfied by any non-generic `struct` (which is
-/// unconditionally `Reflect`-derived). At monomorphize time this is the
+/// A `ReflectStruct` bound is satisfied by any non-generic `struct` (which is
+/// unconditionally `ReflectStruct`-derived). At monomorphize time this is the
 /// registered `Fields` associated type; during trait synthesis, which runs
 /// before `synthesize_reflect` registers it, `allow_pre_reflect_struct` lets a
 /// plain `ResolvedType::Struct` stand in — an original declared struct is always
-/// Reflect-eligible, and only originals appear at synthesis time (monomorphized
+/// ReflectStruct-eligible, and only originals appear at synthesis time (monomorphized
 /// generics like a token `EnumCase<Color>` are not `ResolvedType::Struct` there).
 pub(crate) fn receiver_satisfies_blanket_bounds_inner(
     type_id: TypeId,
@@ -1188,7 +1188,7 @@ pub(crate) fn receiver_satisfies_blanket_bounds_inner(
     if bounds.is_empty() {
         return true;
     }
-    let reflect_name = tt.compiler_items().trait_name(CompilerItem::Reflect);
+    let reflect_name = tt.compiler_items().trait_name(CompilerItem::ReflectStruct);
     for bound in bounds {
         if bound == reflect_name && !type_is_reflect(type_id, tt, allow_pre_reflect_struct) {
             return false;
@@ -1199,7 +1199,7 @@ pub(crate) fn receiver_satisfies_blanket_bounds_inner(
 
 fn type_is_reflect(type_id: TypeId, tt: &TypeTable, allow_pre_reflect_struct: bool) -> bool {
     if tt
-        .resolve_assoc_type(type_id, crate::synthesis::traits::REFLECT_FIELDS_ASSOC)
+        .resolve_assoc_type(type_id, crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC)
         .is_some()
     {
         return true;
@@ -1226,7 +1226,7 @@ fn type_module_hint_tt(type_id: TypeId, tt: &TypeTable) -> Option<ModuleSource> 
 /// per-type impl provides it but a blanket does and the receiver satisfies the
 /// blanket's receiver-param bound. Shared by template expansion and the
 /// auto-derive body synthesizer so both route blanket-derived calls (e.g. a
-/// newtype's `Inspect` delegating to a `Reflect`-derived base struct)
+/// newtype's `Inspect` delegating to a `ReflectStruct`-derived base struct)
 /// identically. Returns the blanket dispatch info and its home module.
 pub(crate) fn blanket_dispatch_for(
     trait_env: &TraitEnv,
@@ -1264,7 +1264,7 @@ pub(crate) fn blanket_dispatch_for(
             .to_mangled_name();
     let mut impl_type_args = vec![type_id];
     if let Some(fields) =
-        tt.resolve_assoc_type(type_id, crate::synthesis::traits::REFLECT_FIELDS_ASSOC)
+        tt.resolve_assoc_type(type_id, crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC)
     {
         impl_type_args.push(fields);
     }
@@ -1280,7 +1280,7 @@ pub(crate) fn blanket_dispatch_for(
 }
 
 /// When no concrete or synthesized impl provides `trait_name` for `type_id` but
-/// a blanket impl does (e.g. the `impl<T: Reflect<Fields = [..F]>, ..F: Inspect>
+/// a blanket impl does (e.g. the `impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect>
 /// Inspect for T` struct derive), route the call through the blanket — the same
 /// shape the `&T` / `&mut T` arms above build for the ref blankets.
 fn blanket_method_call_info(

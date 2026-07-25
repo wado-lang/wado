@@ -1,0 +1,47 @@
+// Blanket derivation over `ReflectStruct` (WEP 2026-06-13 §2): a generic
+// `members()` walk reads each field's name (via the `Member` face) and its
+// value (via `StructField::get`), exercising the generic resolution.
+
+trait Row {
+    fn row(&self) -> String;
+}
+
+impl Row for i32 {
+    fn row(&self) -> String {
+        return `${*self}`;
+    }
+}
+
+impl Row for String {
+    fn row(&self) -> String {
+        return *self;
+    }
+}
+
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Row> Row for T {
+    fn row(&self) -> String {
+        let mut out = "";
+        for let f of ReflectStruct::<T>::members() {
+            let wire = match f.wire_name_override() {
+                Option::Some(w) => w,
+                Option::None => f.name(),
+            };
+            out = `${out}${wire}=${f.get(self).row()};`;
+        }
+        return out;
+    }
+}
+
+struct User {
+    #[wire(name = "user_id")]
+    id: i32,
+    name: String,
+}
+
+test "blanket derivation walks members() with metadata and values" {
+    let u = User { id: 7, name: "ada" };
+    assert u.row() == "user_id=7;name=ada;";
+}
+
+__DATA__
+{"test": {}}

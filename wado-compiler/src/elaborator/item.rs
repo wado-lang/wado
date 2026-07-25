@@ -575,9 +575,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(serde_default) = field
                 .attrs
                 .iter()
-                .find(|a| a.name == "serde" && a.has_arg("default"))
+                .find(|a| a.name == "wire" && a.has_arg("default"))
             {
-                let _ = scope.emit(TypeError::SerdeDefaultAttr {
+                let _ = scope.emit(TypeError::WireDefaultAttr {
                     field: field.name.clone(),
                     span: serde_default.span,
                 });
@@ -635,7 +635,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             monomorph_info: None,
             fields: vec![],
             span: struct_decl.span,
-            serde_rename_all: None,
+            wire_name_policy: None,
         }
     }
 
@@ -916,7 +916,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_params: vec![],
             cases: vec![],
             span: variant_decl.span,
-            serde_rename_all: None,
+            wire_name_policy: None,
         }
     }
 

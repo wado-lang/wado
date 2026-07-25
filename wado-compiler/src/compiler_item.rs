@@ -104,27 +104,18 @@ pub enum CompilerItem {
     /// codegen (CM binding, serde, format) refers to it through this
     /// item so the Rust side never hard-codes the struct name.
     String,
-    /// `VariantCaseMeta` — the per-case descriptor struct returned by
-    /// `ReflectVariant::case_meta()`; the synthesis builds its literals.
-    VariantCaseMeta,
-    /// `EnumCaseMeta` — the per-case descriptor struct returned by
-    /// `ReflectEnum::case_meta()`; the synthesis builds its literals.
-    EnumCaseMeta,
-    /// `FlagBitMeta` — the per-bit descriptor struct returned by
-    /// `ReflectFlags::bit_meta()`; the synthesis builds its literals.
-    FlagBitMeta,
-    /// `Case<T, P>` — the per-case token struct minted by
-    /// `ReflectVariant::cases()` (WEP 2026-06-13 §3e).
+    /// `Case<T, P>` — the per-case member struct minted by
+    /// `ReflectVariant::members()` (WEP 2026-06-13 §3e).
     ReflectVariantCase,
-    /// `Field<T, F>` — the per-field token struct minted by
-    /// `Reflect::field_tokens()` (WEP 2026-06-13).
-    ReflectField,
-    /// `EnumCase<T>` — the per-case token struct minted by
-    /// `ReflectEnum::case_tokens()` (WEP 2026-06-13 §3b).
+    /// `StructField<T, F>` — the per-field member struct minted by
+    /// `ReflectStruct::members()` (WEP 2026-06-13).
+    ReflectStructField,
+    /// `EnumCase<T>` — the per-case member struct minted by
+    /// `ReflectEnum::members()` (WEP 2026-06-13 §3b).
     ReflectEnumCase,
-    /// `FlagBit<T>` — the per-bit token struct minted by
-    /// `ReflectFlags::bit_tokens()` (WEP 2026-06-13 §3c).
-    ReflectFlagBit,
+    /// `FlagsBit<T>` — the per-bit member struct minted by
+    /// `ReflectFlags::members()` (WEP 2026-06-13 §3c).
+    ReflectFlagsBit,
 
     // ── Variants (sum types) ──────────────────────────────────────────
     /// `Option<T>` — `Some(_)` / `None`.
@@ -137,17 +128,17 @@ pub enum CompilerItem {
     /// dispatch and by the trait-synthesis pass that emits
     /// `T^Ord::cmp` bodies.
     Ordering,
-    /// `CaseStyle` — the `#[serde(rename_all)]` policy returned by
-    /// `Reflect::wire_name_policy()` (WEP 2026-06-13). Casing is resolved
+    /// `CaseStyle` — the `#[wire(name_policy)]` policy returned by
+    /// `ReflectStruct::wire_name_policy()` (WEP 2026-06-13). Casing is resolved
     /// library-side by `core:serde::wire_name`.
     CaseStyle,
 
     // ── Traits ────────────────────────────────────────────────────────
     /// `Default` — `Default::default()` synthesis anchor.
     Default,
-    /// `Reflect` — compile-time struct-introspection anchor; the
-    /// per-struct `impl Reflect for S` synthesis points at it.
-    Reflect,
+    /// `ReflectStruct` — compile-time struct-introspection anchor; the
+    /// per-struct `impl ReflectStruct for S` synthesis points at it.
+    ReflectStruct,
     /// `ReflectVariant` — compile-time variant-introspection anchor; the
     /// per-variant `impl ReflectVariant for V` synthesis points at it.
     ReflectVariant,
@@ -158,7 +149,7 @@ pub enum CompilerItem {
     /// per-flags `impl ReflectFlags for F` synthesis points at it.
     ReflectFlags,
     /// `Member` — the sealed attr-reading face implemented by every
-    /// `Field<T, F>` token (WEP 2026-06-13).
+    /// `StructField<T, F>` member (WEP 2026-06-13).
     Member,
     /// `Ref` — sealed marker for reference-identity types (GC references);
     /// its `Output: Ref` bound gates the reference-returning index traits.
@@ -309,52 +300,49 @@ pub enum CompilerItem {
     /// `array.new_fixed`.
     ListPush,
     /// `List::from_tuple` — collects a homogeneous tuple into a `List<T>`;
-    /// synthesized `Reflect::field_names` calls it.
+    /// synthesized `ReflectEnum::members` / `ReflectFlags::members`
+    /// call it.
     ListFromTuple,
-    /// `Reflect::fields` — the per-struct field-value tuple projection.
-    ReflectFields,
-    /// `Reflect::field_names` — the per-struct source-name list.
-    ReflectFieldNames,
-    /// `Reflect::type_name` — the per-struct type name.
-    ReflectTypeName,
-    /// `Reflect::field_tokens` — the per-field token tuple.
-    ReflectFieldTokens,
-    /// `Reflect::wire_name_policy` — the struct's `#[serde(rename_all)]` policy.
-    ReflectWireNamePolicy,
-    /// `Member::name` — the token's source field name.
+    /// `ReflectStruct::type_name` — the per-struct type name.
+    ReflectStructTypeName,
+    /// `ReflectStruct::members` — the per-field member tuple.
+    ReflectStructMembers,
+    /// `ReflectStruct::wire_name_policy` — the struct's `#[wire(name_policy)]` policy.
+    ReflectStructWireNamePolicy,
+    /// `Member::name` — the member's source field name.
     MemberName,
-    /// `Member::wire_name_override` — the token's raw `#[serde(rename)]` value.
+    /// `Member::wire_name_override` — the member's raw `#[wire(name)]` value.
     MemberWireNameOverride,
     /// `ReflectVariant::type_name` — the per-variant type name.
     ReflectVariantTypeName,
-    /// `ReflectVariant::case_meta` — the per-variant case-descriptor list.
-    ReflectVariantCaseMeta,
     /// `ReflectVariant::discriminant` — the live case's tag as `i32`.
     ReflectVariantDiscriminant,
-    /// `ReflectVariant::cases` — the per-case token tuple.
-    ReflectVariantCases,
+    /// `ReflectVariant::members` — the per-case member tuple.
+    ReflectVariantMembers,
+    /// `ReflectVariant::wire_name_policy` — the variant's `#[wire(name_policy)]`.
+    ReflectVariantWireNamePolicy,
     /// `ReflectEnum::type_name` — the per-enum type name.
     ReflectEnumTypeName,
-    /// `ReflectEnum::case_meta` — the per-enum case-descriptor list.
-    ReflectEnumCaseMeta,
     /// `ReflectEnum::discriminant` — the value's tag as `i32`.
     ReflectEnumDiscriminant,
     /// `ReflectEnum::from_discriminant` — the reverse bridge; unknown
     /// tags return `None`.
     ReflectEnumFromDiscriminant,
-    /// `ReflectEnum::case_tokens` — the per-case token list.
-    ReflectEnumCaseTokens,
+    /// `ReflectEnum::members` — the per-case member list.
+    ReflectEnumMembers,
+    /// `ReflectEnum::wire_name_policy` — the enum's `#[wire(name_policy)]`.
+    ReflectEnumWireNamePolicy,
     /// `ReflectFlags::type_name` — the per-flags type name.
     ReflectFlagsTypeName,
-    /// `ReflectFlags::bit_meta` — the per-flags bit-descriptor list.
-    ReflectFlagsBitMeta,
     /// `ReflectFlags::bits` — the value's bits, u64-normalized.
     ReflectFlagsBits,
     /// `ReflectFlags::from_bits` — the reverse bridge; unknown bits
     /// return `None`.
     ReflectFlagsFromBits,
-    /// `ReflectFlags::bit_tokens` — the per-bit token list.
-    ReflectFlagsBitTokens,
+    /// `ReflectFlags::members` — the per-bit member list.
+    ReflectFlagsMembers,
+    /// `ReflectFlags::wire_name_policy` — the flags type's `#[wire(name_policy)]`.
+    ReflectFlagsWireNamePolicy,
     /// `String::push_str` — recognised by the WIR optimiser for
     /// string-building inlining.
     StringPushStr,
@@ -497,17 +485,14 @@ impl CompilerItem {
         Self::Ordering,
         Self::CaseStyle,
         Self::Default,
-        Self::Reflect,
+        Self::ReflectStruct,
         Self::ReflectVariant,
-        Self::VariantCaseMeta,
         Self::ReflectVariantCase,
-        Self::ReflectField,
+        Self::ReflectStructField,
         Self::ReflectEnumCase,
-        Self::ReflectFlagBit,
+        Self::ReflectFlagsBit,
         Self::ReflectEnum,
-        Self::EnumCaseMeta,
         Self::ReflectFlags,
-        Self::FlagBitMeta,
         Self::Member,
         Self::Ref,
         Self::RefMut,
@@ -561,27 +546,25 @@ impl CompilerItem {
         Self::AlignmentRight,
         Self::ListPush,
         Self::ListFromTuple,
-        Self::ReflectFields,
-        Self::ReflectFieldNames,
-        Self::ReflectTypeName,
-        Self::ReflectFieldTokens,
-        Self::ReflectWireNamePolicy,
+        Self::ReflectStructTypeName,
+        Self::ReflectStructMembers,
+        Self::ReflectStructWireNamePolicy,
         Self::MemberName,
         Self::MemberWireNameOverride,
         Self::ReflectVariantTypeName,
-        Self::ReflectVariantCaseMeta,
         Self::ReflectVariantDiscriminant,
-        Self::ReflectVariantCases,
+        Self::ReflectVariantMembers,
+        Self::ReflectVariantWireNamePolicy,
         Self::ReflectEnumTypeName,
-        Self::ReflectEnumCaseMeta,
         Self::ReflectEnumDiscriminant,
         Self::ReflectEnumFromDiscriminant,
-        Self::ReflectEnumCaseTokens,
+        Self::ReflectEnumMembers,
+        Self::ReflectEnumWireNamePolicy,
         Self::ReflectFlagsTypeName,
-        Self::ReflectFlagsBitMeta,
         Self::ReflectFlagsBits,
         Self::ReflectFlagsFromBits,
-        Self::ReflectFlagsBitTokens,
+        Self::ReflectFlagsMembers,
+        Self::ReflectFlagsWireNamePolicy,
         Self::StringPushStr,
         Self::StringPushChar,
         Self::StringPushAscii,
@@ -651,17 +634,14 @@ impl CompilerItem {
             Self::Ordering => "ordering",
             Self::CaseStyle => "case_style",
             Self::Default => "default",
-            Self::Reflect => "reflect",
+            Self::ReflectStruct => "reflect_struct",
             Self::ReflectVariant => "reflect_variant",
-            Self::VariantCaseMeta => "variant_case_meta",
-            Self::ReflectVariantCase => "reflect_variant_case",
-            Self::ReflectField => "reflect_field",
-            Self::ReflectEnumCase => "reflect_enum_case",
-            Self::ReflectFlagBit => "reflect_flag_bit",
+            Self::ReflectVariantCase => "variant_case",
+            Self::ReflectStructField => "struct_field",
+            Self::ReflectEnumCase => "enum_case",
+            Self::ReflectFlagsBit => "flags_bit",
             Self::ReflectEnum => "reflect_enum",
-            Self::EnumCaseMeta => "enum_case_meta",
             Self::ReflectFlags => "reflect_flags",
-            Self::FlagBitMeta => "flag_bit_meta",
             Self::Member => "member",
             Self::Ref => "ref",
             Self::RefMut => "ref_mut",
@@ -715,27 +695,25 @@ impl CompilerItem {
             Self::AlignmentRight => "alignment_right",
             Self::ListPush => "list_push",
             Self::ListFromTuple => "list_from_tuple",
-            Self::ReflectFields => "reflect_fields",
-            Self::ReflectFieldNames => "reflect_field_names",
-            Self::ReflectTypeName => "reflect_type_name",
-            Self::ReflectFieldTokens => "reflect_field_tokens",
-            Self::ReflectWireNamePolicy => "reflect_wire_name_policy",
+            Self::ReflectStructTypeName => "reflect_struct_type_name",
+            Self::ReflectStructMembers => "reflect_struct_members",
+            Self::ReflectStructWireNamePolicy => "reflect_struct_wire_name_policy",
             Self::MemberName => "member_name",
             Self::MemberWireNameOverride => "member_wire_name_override",
             Self::ReflectVariantTypeName => "reflect_variant_type_name",
-            Self::ReflectVariantCaseMeta => "reflect_variant_case_meta",
             Self::ReflectVariantDiscriminant => "reflect_variant_discriminant",
-            Self::ReflectVariantCases => "reflect_variant_cases",
+            Self::ReflectVariantMembers => "reflect_variant_members",
+            Self::ReflectVariantWireNamePolicy => "reflect_variant_wire_name_policy",
             Self::ReflectEnumTypeName => "reflect_enum_type_name",
-            Self::ReflectEnumCaseMeta => "reflect_enum_case_meta",
             Self::ReflectEnumDiscriminant => "reflect_enum_discriminant",
             Self::ReflectEnumFromDiscriminant => "reflect_enum_from_discriminant",
-            Self::ReflectEnumCaseTokens => "reflect_enum_case_tokens",
+            Self::ReflectEnumMembers => "reflect_enum_members",
+            Self::ReflectEnumWireNamePolicy => "reflect_enum_wire_name_policy",
             Self::ReflectFlagsTypeName => "reflect_flags_type_name",
-            Self::ReflectFlagsBitMeta => "reflect_flags_bit_meta",
             Self::ReflectFlagsBits => "reflect_flags_bits",
             Self::ReflectFlagsFromBits => "reflect_flags_from_bits",
-            Self::ReflectFlagsBitTokens => "reflect_flags_bit_tokens",
+            Self::ReflectFlagsMembers => "reflect_flags_members",
+            Self::ReflectFlagsWireNamePolicy => "reflect_flags_wire_name_policy",
             Self::StringPushStr => "string_push_str",
             Self::StringPushChar => "string_push_char",
             Self::StringPushAscii => "string_push_ascii",
@@ -822,17 +800,14 @@ impl CompilerItem {
             | Self::Ordering
             | Self::CaseStyle
             | Self::Default
-            | Self::Reflect
+            | Self::ReflectStruct
             | Self::ReflectVariant
-            | Self::VariantCaseMeta
             | Self::ReflectVariantCase
-            | Self::ReflectField
+            | Self::ReflectStructField
             | Self::ReflectEnumCase
-            | Self::ReflectFlagBit
+            | Self::ReflectFlagsBit
             | Self::ReflectEnum
-            | Self::EnumCaseMeta
             | Self::ReflectFlags
-            | Self::FlagBitMeta
             | Self::Member
             | Self::Ref
             | Self::RefMut
@@ -841,27 +816,25 @@ impl CompilerItem {
             | Self::From
             | Self::ListPush
             | Self::ListFromTuple
-            | Self::ReflectFields
-            | Self::ReflectFieldNames
-            | Self::ReflectTypeName
-            | Self::ReflectFieldTokens
-            | Self::ReflectWireNamePolicy
+            | Self::ReflectStructTypeName
+            | Self::ReflectStructMembers
+            | Self::ReflectStructWireNamePolicy
             | Self::MemberName
             | Self::MemberWireNameOverride
             | Self::ReflectVariantTypeName
-            | Self::ReflectVariantCaseMeta
             | Self::ReflectVariantDiscriminant
-            | Self::ReflectVariantCases
+            | Self::ReflectVariantMembers
+            | Self::ReflectVariantWireNamePolicy
             | Self::ReflectEnumTypeName
-            | Self::ReflectEnumCaseMeta
             | Self::ReflectEnumDiscriminant
             | Self::ReflectEnumFromDiscriminant
-            | Self::ReflectEnumCaseTokens
+            | Self::ReflectEnumMembers
+            | Self::ReflectEnumWireNamePolicy
             | Self::ReflectFlagsTypeName
-            | Self::ReflectFlagsBitMeta
             | Self::ReflectFlagsBits
             | Self::ReflectFlagsFromBits
-            | Self::ReflectFlagsBitTokens
+            | Self::ReflectFlagsMembers
+            | Self::ReflectFlagsWireNamePolicy
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringPushAscii
@@ -979,20 +952,17 @@ impl CompilerItem {
             | Self::RangeInclusive
             | Self::KilnRequest
             | Self::String
-            | Self::VariantCaseMeta
             | Self::ReflectVariantCase
-            | Self::ReflectField
+            | Self::ReflectStructField
             | Self::ReflectEnumCase
-            | Self::ReflectFlagBit
-            | Self::EnumCaseMeta
-            | Self::FlagBitMeta => CompilerItemKind::Struct,
+            | Self::ReflectFlagsBit => CompilerItemKind::Struct,
             Self::Option | Self::Result => CompilerItemKind::Variant,
             Self::Ordering | Self::Alignment | Self::CaseStyle => CompilerItemKind::Enum,
             Self::SerializeError | Self::DeserializeError => CompilerItemKind::Struct,
             Self::SerializeErrorKind | Self::DeserializeErrorKind => CompilerItemKind::Enum,
             Self::Formatter => CompilerItemKind::Struct,
             Self::Default
-            | Self::Reflect
+            | Self::ReflectStruct
             | Self::ReflectVariant
             | Self::ReflectEnum
             | Self::ReflectFlags
@@ -1029,27 +999,25 @@ impl CompilerItem {
             | Self::UpperExp => CompilerItemKind::Trait,
             Self::ListPush
             | Self::ListFromTuple
-            | Self::ReflectFields
-            | Self::ReflectFieldNames
-            | Self::ReflectTypeName
-            | Self::ReflectFieldTokens
-            | Self::ReflectWireNamePolicy
+            | Self::ReflectStructTypeName
+            | Self::ReflectStructMembers
+            | Self::ReflectStructWireNamePolicy
             | Self::MemberName
             | Self::MemberWireNameOverride
             | Self::ReflectVariantTypeName
-            | Self::ReflectVariantCaseMeta
             | Self::ReflectVariantDiscriminant
-            | Self::ReflectVariantCases
+            | Self::ReflectVariantMembers
+            | Self::ReflectVariantWireNamePolicy
             | Self::ReflectEnumTypeName
-            | Self::ReflectEnumCaseMeta
             | Self::ReflectEnumDiscriminant
             | Self::ReflectEnumFromDiscriminant
-            | Self::ReflectEnumCaseTokens
+            | Self::ReflectEnumMembers
+            | Self::ReflectEnumWireNamePolicy
             | Self::ReflectFlagsTypeName
-            | Self::ReflectFlagsBitMeta
             | Self::ReflectFlagsBits
             | Self::ReflectFlagsFromBits
-            | Self::ReflectFlagsBitTokens
+            | Self::ReflectFlagsMembers
+            | Self::ReflectFlagsWireNamePolicy
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringPushAscii

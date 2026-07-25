@@ -1,0 +1,38 @@
+// VariantCase implements Member (WEP 2026-06-13 §3): each case member carries
+// its source name, `#[wire(name)]` override, and unit-ness alongside the
+// payload bridge, so `core:serde::wire_name` resolves a case tag uniformly.
+
+use { wire_name } from "core:serde";
+
+#[wire(name_policy = "kebab-case")]
+variant Command {
+    AddRemote(i32),
+    List,
+    #[wire(name = "rm")]
+    Remove(i32),
+}
+
+test "Member exposes case name and rename override" {
+    let cs = ReflectVariant::<Command>::members();
+    assert cs.0.name() == "AddRemote";
+    assert cs.0.wire_name_override() matches { None };
+    assert cs.2.name() == "Remove";
+    assert cs.2.wire_name_override() matches { Some(o) && o == "rm" };
+}
+
+test "is_unit distinguishes payloadless cases" {
+    let cs = ReflectVariant::<Command>::members();
+    assert !cs.0.is_unit();
+    assert cs.1.is_unit();
+    assert !cs.2.is_unit();
+}
+
+test "wire_name resolves a case tag via the shared Member helper" {
+    let cs = ReflectVariant::<Command>::members();
+    assert wire_name(&cs.0, CaseStyle::Kebab) == "add-remote";
+    assert wire_name(&cs.1, CaseStyle::Kebab) == "list";
+    assert wire_name(&cs.2, CaseStyle::Kebab) == "rm";
+}
+
+__DATA__
+{"test": {}}

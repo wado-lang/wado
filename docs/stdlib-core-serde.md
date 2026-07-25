@@ -20,7 +20,7 @@ compiler fills it in) is optional: a `T: Serialize` bound is satisfied
 structurally once every field or case of `T` implements the trait — how
 an anonymous struct, which has no name for a marker, becomes serializable.
 Write the marker to force the impl with no bound present, or alongside
-`#[serde(...)]` customization.
+`#[wire(...)]` customization.
 
 ```wado
 struct Point { x: i32, y: i32 }               // no marker needed
@@ -32,15 +32,15 @@ let json = to_string(&Point { x: 1, y: 2 });  // Ok("{\"x\":1,\"y\":2}")
 By default the wire-form key is the Wado source field name verbatim
 (identity): `user_name` stays `"user_name"`, `userId` stays `"userId"`.
 The field name as written is the single source of truth. Override per
-struct with `#[serde(rename_all = "...")]`, or per field with
-`#[serde(rename = "...")]` (which takes precedence).
+struct with `#[wire(name_policy = "...")]`, or per field with
+`#[wire(name = "...")]` (which takes precedence).
 
-`rename_all` strategies: `"camelCase"`, `"snake_case"`, `"PascalCase"`,
+`name_policy` strategies: `"camelCase"`, `"snake_case"`, `"PascalCase"`,
 `"SCREAMING_SNAKE_CASE"`, `"kebab-case"`, `"SCREAMING-KEBAB-CASE"`.
 
-The same `rename` / `rename_all` overrides apply to `enum` and `variant`
+The same `name` / `name_policy` overrides apply to `enum` and `variant`
 case names (default: the `PascalCase` name verbatim), e.g.
-`#[serde(rename_all = "kebab-case")]` makes `AddRemote` serialize as
+`#[wire(name_policy = "kebab-case")]` makes `AddRemote` serialize as
 `"add-remote"`.
 
 ```wado
@@ -51,17 +51,17 @@ struct User {
 }
 
 // Per-struct convention (e.g. camelCase for a JS-facing API)
-#[serde(rename_all = "camelCase")]
+#[wire(name_policy = "camelCase")]
 struct Event {
     created_at: String,       // wire key: "createdAt"
     event_type: String,       // wire key: "eventType"
 }
 
-// Per-field override (wins over rename_all)
-#[serde(rename_all = "kebab-case")]
+// Per-field override (wins over name_policy)
+#[wire(name_policy = "kebab-case")]
 struct Header {
     content_type: String,     // wire key: "content-type"
-    #[serde(rename = "X-Trace-Id")]
+    #[wire(name = "X-Trace-Id")]
     trace_id: String,         // wire key: "X-Trace-Id"
 }
 ```
@@ -91,12 +91,12 @@ impl Deserialize for Config;
 ### `pub fn apply_case(style: CaseStyle, s: String) -> String`
 
 Apply a `CaseStyle` to an identifier. `Identity` returns `s` unchanged.
-Matches Rust's `heck` (the compiler's `apply_rename_all`).
+Matches Rust's `heck` (the compiler's `apply_name_policy`).
 
 ### `pub fn wire_name<M: Member>(m: &M, policy: CaseStyle) -> String`
 
-Resolve a member's wire name: its `#[serde(rename)]` override wins,
-else the type's `rename_all` policy applies, else identity.
+Resolve a member's wire name: its `#[wire(name)]` override wins,
+else the type's `name_policy` applies, else identity.
 
 ## Traits
 
@@ -211,7 +211,7 @@ by every format.
 `lookup` is a static method resolved at monomorphization, so the call is
 direct and inlinable — no closure value, no per-decode allocation.
 
-A field marked `#[serde(positional)]` is ordinal, not nominal: `lookup`
+A field marked `#[wire(positional)]` is ordinal, not nominal: `lookup`
 omits it (it is never matched by name) and `positional_at` enumerates the
 positional fields in declaration order. Name-only and sequence-only formats
 ignore `positional_at` and stay backward compatible; `core:args` consults it
@@ -221,7 +221,7 @@ to bind bare tokens to positional fields.
 
 #### `fn positional_at(rank: i32) -> Option<i32>`
 
-Field index of the `rank`-th `#[serde(positional)]` field (in
+Field index of the `rank`-th `#[wire(positional)]` field (in
 declaration order), or `null` when `rank` is out of range. Returns
 `null` for every `rank` when the type has no positional fields.
 
